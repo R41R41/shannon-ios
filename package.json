@@ -1,0 +1,14 @@
+{
+  "name": "shannon-ios",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "check": "pnpm --filter @shannon/cognition check",
+    "test": "pnpm --filter @shannon/cognition test"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
