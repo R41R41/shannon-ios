@@ -106,6 +106,118 @@ public struct ConversationHistoryResponseDTO: Codable, Equatable, Sendable {
     public let state: CompanionStateDTO
 }
 
+public enum ShannonMemoryKindDTO: String, Codable, CaseIterable, Equatable, Sendable {
+    case userFact = "user-fact"
+    case interest
+    case experience
+    case relationship
+
+    public var japaneseName: String {
+        switch self {
+        case .userFact: "あなたについて"
+        case .interest: "シャノンの興味"
+        case .experience: "思い出"
+        case .relationship: "ふたりの関係"
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .userFact: "person.text.rectangle"
+        case .interest: "sparkles"
+        case .experience: "bubble.left.and.bubble.right"
+        case .relationship: "heart.text.square"
+        }
+    }
+}
+
+public enum ShannonMemoryStatusDTO: String, Codable, Equatable, Sendable {
+    case active
+    case forgotten
+    case rejected
+}
+
+public struct ShannonMemoryEvidenceDTO: Codable, Equatable, Sendable {
+    public let quote: String
+    public let observedAt: String
+    public let source: String
+}
+
+public struct ShannonMemoryItemDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let kind: ShannonMemoryKindDTO
+    public let text: String
+    public let confidence: Double?
+    public let relevance: Double?
+    public let status: ShannonMemoryStatusDTO
+    public let pinned: Bool
+    public let createdAt: String
+    public let updatedAt: String
+    public let changeReason: String
+    public let evidence: [ShannonMemoryEvidenceDTO]
+}
+
+public struct ShannonSleepChangeDTO: Codable, Equatable, Identifiable, Sendable {
+    public let kind: ShannonMemoryKindDTO
+    public let memoryId: String
+    public let text: String
+    public let reason: String
+    public let evidence: String?
+
+    public var id: String { "\(kind.rawValue):\(memoryId):\(text)" }
+}
+
+public struct ShannonSleepContradictionDTO: Codable, Equatable, Identifiable, Sendable {
+    public let kind: ShannonMemoryKindDTO
+    public let memoryId: String
+    public let currentText: String
+    public let candidateText: String
+    public let reason: String
+    public let evidence: String
+
+    public var id: String { "\(kind.rawValue):\(memoryId):\(candidateText)" }
+}
+
+public struct ShannonSleepReportDTO: Codable, Equatable, Identifiable, Sendable {
+    public let dayKey: String
+    public let completedAt: String
+    public let learned: [ShannonSleepChangeDTO]
+    public let updated: [ShannonSleepChangeDTO]
+    public let interestChanges: [ShannonSleepChangeDTO]
+    public let contradictions: [ShannonSleepContradictionDTO]
+
+    public var id: String { "\(dayKey):\(completedAt)" }
+}
+
+public struct ShannonMemoryDashboardDTO: Codable, Equatable, Sendable {
+    public let generatedAt: String
+    public let items: [ShannonMemoryItemDTO]
+    public let sleepReports: [ShannonSleepReportDTO]
+}
+
+public enum ShannonMemoryActionDTO: String, Codable, Equatable, Sendable {
+    case correct
+    case forget
+    case pin
+    case unpin
+    case reject
+    case restore
+}
+
+public struct ShannonMemoryMutationDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let memoryId: String
+    public let action: ShannonMemoryActionDTO
+    public let text: String?
+
+    public init(scopeKey: String, memoryId: String, action: ShannonMemoryActionDTO, text: String? = nil) {
+        self.scopeKey = scopeKey
+        self.memoryId = memoryId
+        self.action = action
+        self.text = text
+    }
+}
+
 public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public enum Role: Equatable, Sendable {
         case user

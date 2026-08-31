@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>シャノンの記憶 · Transparency v4</title>
+  <style>
+    :root{color-scheme:light;--ink:#211c27;--muted:#706778;--primary:#6750a4;--deep:#33235f;--soft:#eee8fa;--mint:#dff5ed;--mint-ink:#226a58;--amber:#fff0d4;--rose:#f9dedc;--surface:#fffdfef0;--line:#ded6e4;--shadow:#45384f12}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 7% 0,#e8def8 0,transparent 34rem),radial-gradient(circle at 100% 14%,#dff5ed 0,transparent 34rem),#f8f6fa;color:var(--ink);font:15px/1.72 -apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif}main{width:min(1120px,calc(100% - 30px));margin:auto;padding:58px 0 86px}h1,h2,h3,p{margin-top:0}h1{max-width:850px;margin-bottom:18px;font-size:clamp(2.7rem,7vw,5.7rem);line-height:.97;letter-spacing:-.06em}h2{font-size:1.65rem;letter-spacing:-.025em}h3{font-size:1.04rem}.eyebrow{color:var(--primary);font-size:.76rem;font-weight:850;letter-spacing:.15em}.lead{max-width:780px;color:var(--muted);font-size:1.1rem}.status{display:flex;flex-wrap:wrap;gap:9px;margin:26px 0 44px}.pill{padding:8px 13px;border-radius:999px;background:var(--mint);color:var(--mint-ink);font-weight:760}.pill.primary{background:var(--soft);color:var(--deep)}section{margin-top:18px;padding:30px;border:1px solid #ffffffb8;border-radius:30px;background:var(--surface);box-shadow:0 18px 52px var(--shadow);backdrop-filter:blur(18px)}.four,.grid3{display:grid;gap:14px}.four{grid-template-columns:repeat(4,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.card{position:relative;padding:21px;border-radius:21px;background:#faf8fc}.card.done{background:var(--mint)}.number{display:grid;width:34px;height:34px;margin-bottom:14px;place-items:center;border-radius:11px;background:var(--primary);color:white;font-weight:850}.card p{margin:0;color:var(--muted);font-size:.91rem}.done p{color:#3f6d60}.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:center}.node{min-height:148px;padding:20px;border-radius:21px;background:var(--soft)}.node:nth-of-type(3){background:var(--mint)}.node:nth-of-type(5){background:#e8efff}.node b{display:block;margin-bottom:8px}.node small{color:var(--muted)}.arrow{color:#998ca4;font-size:1.35rem}.screen{padding:22px;border-radius:24px;background:#211d27;color:#f8f3fb}.screen-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid #ffffff20}.chip-row{display:flex;gap:7px;overflow:hidden;margin:16px 0}.chip{white-space:nowrap;padding:6px 10px;border-radius:99px;background:#3c3545;color:#d9cedf;font-size:.78rem}.chip.on{background:#d0bcff;color:#27174a}.memory-row{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:start;margin-top:9px;padding:14px;border-radius:17px;background:#2b2630}.icon{display:grid;width:42px;height:42px;place-items:center;border-radius:50%;background:#4a4054}.meta{color:#bdb2c2;font-size:.75rem}.sleep{margin-bottom:12px;padding:16px;border-radius:18px;background:#4f378b}.law{display:grid;grid-template-columns:190px 1fr;gap:18px;padding:13px 0;border-bottom:1px solid var(--line)}.law b{color:var(--primary)}.law:last-child{border:0}.tag{display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:99px;background:var(--soft);font-size:.78rem}.warning{padding:17px 19px;border-radius:18px;background:var(--amber);color:#74501d}.danger{background:var(--rose);color:#72251f}code{font:.88em ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}a{color:var(--primary);font-weight:650}footer{padding:30px 4px 0;color:var(--muted);font-size:.84rem}@media(max-width:900px){.four{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}}@media(max-width:600px){main{padding-top:34px}.four{grid-template-columns:1fr}section{padding:22px}.law{grid-template-columns:1fr;gap:4px}}
+  </style>
+</head>
+<body><main>
+  <p class="eyebrow">SHANNON · MEMORY TRANSPARENCY V4</p>
+  <h1>覚えることを、<br>隠さない。</h1>
+  <p class="lead">シャノンが何を知り、なぜそう思い、眠っている間に何が変わったか。ユーザーが見て、直して、境界を決められるところまでを一つの機能として完成させた。</p>
+  <div class="status"><span class="pill">✓ Azure API / worker</span><span class="pill">✓ iPhone Release</span><span class="pill">✓ 29 API tests</span><span class="pill">✓ 15 iOS tests</span><span class="pill primary">2026-08-31 反映済み</span></div>
+
+  <section><h2>4段階を、すべて完成</h2><div class="four">
+    <article class="card done"><div class="number">1</div><h3>記憶を見る</h3><p>ユーザー情報、シャノンの興味、思い出、ふたりの関係を種類別に表示。固定した記憶を先頭へ。</p></article>
+    <article class="card done"><div class="number">2</div><h3>根拠を見る</h3><p>会話の引用、確信度、作成・更新時刻、変化理由を詳細画面で確認できる。</p></article>
+    <article class="card done"><div class="number">3</div><h3>境界を決める</h3><p>訂正、忘却、固定、事実ではない、復元を永続化。会話プロンプトにも即時反映。</p></article>
+    <article class="card done"><div class="number">4</div><h3>睡眠の変化を見る</h3><p>新しく覚えたこと、深まった理解、興味の変化、上書きせず保留した矛盾を一日単位で表示。</p></article>
+  </div></section>
+
+  <section><h2>ひとつの共有状態として流れる</h2><div class="flow">
+    <div class="node"><b>会話中 · FCA</b><small>返答は現在の共有状態を読むだけ。睡眠分析を待たないため、応答速度を邪魔しない。</small></div><div class="arrow">→</div>
+    <div class="node"><b>共有状態 + 追記ログ</b><small>事実、興味、関係、想起、ユーザーの境界を同じ状態遷移として保存。根拠はログから構成する。</small></div><div class="arrow">→</div>
+    <div class="node"><b>夜間 · 睡眠バッチ</b><small>その日の明示情報だけを整理。ユーザーが否定・忘却した内容は覚え直さず、矛盾レポートへ。</small></div>
+  </div><p class="warning">予測と予測誤差はv1.0には入れていない。睡眠バッチは、ユーザー理解・関係理解・明示的な関心の更新だけに限定する。</p></section>
+
+  <section><h2>iPhoneの導線</h2><div class="grid3">
+    <div class="screen"><div class="screen-head"><b>シャノンの記憶</b><span>↻</span></div><div class="sleep">☾ 眠っている間に考えたこと<br><span class="meta">3件の理解が変化・1件を矛盾として保留</span></div><div class="chip-row"><span class="chip on">すべて</span><span class="chip">あなた</span><span class="chip">興味</span><span class="chip">思い出</span></div><div class="memory-row"><span class="icon">♡</span><span><b>話を聞いてから提案してほしい</b><br><span class="meta">ふたりの関係 · 確信 65%</span></span><span>›</span></div></div>
+    <div class="card"><h3>一覧</h3><p>チャット上部の脳アイコンから開く。Materialのsurface階層、filter chip、48pt以上の操作領域、VoiceOverラベルを使用。</p><p><span class="tag">すべて</span><span class="tag">あなたについて</span><span class="tag">シャノンの興味</span><span class="tag">思い出</span><span class="tag">ふたりの関係</span></p></div>
+    <div class="card"><h3>詳細と操作</h3><p>「そう思った根拠」「確信度」「記憶の履歴」を先に示し、その下に操作を置く。忘却と否定は確認ダイアログを必須にした。</p><p><span class="tag">固定</span><span class="tag">訂正</span><span class="tag">忘れる</span><span class="tag">事実ではない</span><span class="tag">復元</span></p></div>
+  </div></section>
+
+  <section><h2>操作の意味</h2>
+    <div class="law"><b>訂正</b><span>元データを破壊せず、ユーザーの正しい表現をoverrideとして保存。プロンプト・一覧は訂正版を使い、根拠と変更理由を残す。</span></div>
+    <div class="law"><b>忘れる</b><span><code>forgotten</code>として会話生成から除外。睡眠バッチも同じ内容を自動再学習しない。あとから復元可能。</span></div>
+    <div class="law"><b>事実ではない</b><span><code>rejected</code>として強い否定境界を保存。同じ候補が再登場しても採用せず、睡眠レポートの矛盾として可視化。</span></div>
+    <div class="law"><b>固定</b><span>重要な記憶を一覧とプロンプトで優先。思い出は通常の想起から外れてもactive memoryに維持する。</span></div>
+    <div class="law"><b>復元</b><span>非表示・否定状態を<code>active</code>へ戻す。訂正表現は保持するため、復元で古い誤りへ巻き戻らない。</span></div>
+  </section>
+
+  <section><h2>睡眠後に見える4つ</h2><div class="four">
+    <article class="card"><h3>新しく覚えた</h3><p>初めて明示された、持続的なユーザー情報または望ましい関わり方。</p></article>
+    <article class="card"><h3>理解が深まった</h3><p>同じ内容が再確認され、確信度が上がったこと。上限を設けて断定を避ける。</p></article>
+    <article class="card"><h3>興味が動いた</h3><p>「最近〜に興味がある」のような明示情報だけを、シャノンの関心へ反映。</p></article>
+    <article class="card"><h3>矛盾を保留した</h3><p>現在理解と反対の発言、またはユーザー境界に反する候補。自動上書きせず両方を表示。</p></article>
+  </div></section>
+
+  <section><h2>実装と検証</h2>
+    <div class="law"><b>共有状態</b><span><a href="../packages/cognition/src/types.ts">types.ts</a> · <a href="../packages/cognition/src/prompt.ts">prompt.ts</a> · relationship / memoryControlを追加。</span></div>
+    <div class="law"><b>API</b><span><a href="../services/api/src/memoryService.ts">memoryService.ts</a> · <code>GET /v1/memories</code> / <code>POST /v1/memories/action</code>。</span></div>
+    <div class="law"><b>睡眠</b><span><a href="../services/api/src/sleepConsolidation.ts">sleepConsolidation.ts</a> · facts / relationships / interests / contradictions。</span></div>
+    <div class="law"><b>iOS</b><span><a href="../apps/ios/Sources/ShannonAppCore/ShannonMemoryView.swift">ShannonMemoryView.swift</a> · 一覧、詳細、操作、睡眠レポート。</span></div>
+    <div class="law"><b>自動テスト</b><span>認知核10件、API 29件、iOS 15件。型検査、署名付きRelease build、Azure隔離SQLiteテストに成功。</span></div>
+    <div class="law"><b>反映先</b><span>Azure <code>/home/azureuser/shannon-ios</code> · API/worker active。iPhone <code>com.r41r41.shannon</code>へインストール・起動済み。</span></div>
+    <p class="warning danger">本番E2Eのために合成記憶をユーザー領域へ書き込むことは行っていない。永続化E2Eは隔離SQLiteで検証し、本番はサービス起動・ログ・既存認証境界を確認した。</p>
+  </section>
+  <footer>Shannon Memory Transparency v4 · completed and deployed 2026-08-31 JST</footer>
+</main></body></html>

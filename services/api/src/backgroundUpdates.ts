@@ -44,8 +44,11 @@ export class TurnRefinementProcessor {
     });
 
     const recalledIds = new Set(recalled.map(memory => memory.id));
+    const pinnedIds = new Set(current.memoryControls
+      .filter(control => control.kind === 'experience' && control.status === 'active' && control.pinned)
+      .map(control => control.memoryId));
     for (const memory of current.activeMemories) {
-      if (!recalledIds.has(memory.id)) {
+      if (!recalledIds.has(memory.id) && !pinnedIds.has(memory.id)) {
         this.stateStore.apply(scopeKey, { type: 'memory-deactivated', memoryId: memory.id });
       }
     }

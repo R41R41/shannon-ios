@@ -4,6 +4,8 @@ import type {
   CompanionStateSnapshot,
   ShannonEmotion,
   ShannonTemperament,
+  MemoryControl,
+  RelationshipInsight,
   UserFact,
 } from './types.js';
 
@@ -25,6 +27,8 @@ export const INITIAL_SHANNON_EMOTION: Readonly<ShannonEmotion> = Object.freeze({
 const MAX_INTERESTS = 12;
 const MAX_USER_FACTS = 24;
 const MAX_ACTIVE_MEMORIES = 8;
+const MAX_RELATIONSHIPS = 24;
+const MAX_MEMORY_CONTROLS = 160;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) return minimum;
@@ -54,6 +58,28 @@ function cleanMemory(memory: ActiveMemory): ActiveMemory {
   });
 }
 
+function cleanRelationship(relationship: RelationshipInsight): RelationshipInsight {
+  return Object.freeze({
+    id: cleanText(relationship.id, 120),
+    statement: cleanText(relationship.statement, 320),
+    confidence: clamp(relationship.confidence, 0, 1),
+    observedAt: relationship.observedAt,
+    ...(relationship.evidence ? { evidence: cleanText(relationship.evidence, 320) } : {}),
+  });
+}
+
+function cleanControl(control: MemoryControl): MemoryControl {
+  return Object.freeze({
+    memoryId: cleanText(control.memoryId, 120),
+    kind: control.kind,
+    status: control.status,
+    pinned: control.pinned,
+    updatedAt: control.updatedAt,
+    changeReason: cleanText(control.changeReason, 240),
+    ...(control.overrideText ? { overrideText: cleanText(control.overrideText, 320) } : {}),
+  });
+}
+
 export function createInitialCompanionState(scopeKey: string, nowIso: string): CompanionStateSnapshot {
   if (!scopeKey.trim()) throw new Error('scopeKey is required');
   return freezeSnapshot({
@@ -65,6 +91,8 @@ export function createInitialCompanionState(scopeKey: string, nowIso: string): C
     interests: [],
     userFacts: [],
     activeMemories: [],
+    relationships: [],
+    memoryControls: [],
   });
 }
 
@@ -103,6 +131,36 @@ export function reduceCompanionState(
       next = { ...current, userFacts };
       break;
     }
+    case 'relationship-upserted': {
+      const relationship = cleanRelationship(event.relationship);
+      if (!relationship.id || !relationship.statement) return current;
+      const previous = current.relationships.find(item => item.id === relationship.id);
+      if (previous
+        && previous.statement === relationship.statement
+        && previous.confidence === relationship.confidence
+        && previous.observedAt === relationship.observedAt
+        && previous.evidence === relationship.evidence) return current;
+      const relationships = [relationship, ...current.relationships.filter(item => item.id !== relationship.id)]
+        .slice(0, MAX_RELATIONSHIPS);
+      next = { ...current, relationships };
+      break;
+    }
+    case 'memory-control-upserted': {
+      const control = cleanControl(event.control);
+      if (!control.memoryId || !control.changeReason) return current;
+      const previous = current.memoryControls.find(item => item.memoryId === control.memoryId);
+      if (previous
+        && previous.kind === control.kind
+        && previous.status === control.status
+        && previous.pinned === control.pinned
+        && previous.updatedAt === control.updatedAt
+        && previous.changeReason === control.changeReason
+        && previous.overrideText === control.overrideText) return current;
+      const memoryControls = [control, ...current.memoryControls.filter(item => item.memoryId !== control.memoryId)]
+        .slice(0, MAX_MEMORY_CONTROLS);
+      next = { ...current, memoryControls };
+      break;
+    }
     case 'memory-activated': {
       const memory = cleanMemory(event.memory);
       if (!memory.id || !memory.summary) return current;
@@ -125,5 +183,7 @@ export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionState
   const interests = Object.freeze([...snapshot.interests]);
   const userFacts = Object.freeze(snapshot.userFacts.map(item => Object.freeze({ ...item })));
   const activeMemories = Object.freeze(snapshot.activeMemories.map(item => Object.freeze({ ...item })));
-  return Object.freeze({ ...snapshot, temperament, emotion, interests, userFacts, activeMemories });
+  const relationships = Object.freeze(snapshot.relationships.map(item => Object.freeze({ ...item })));
+  const memoryControls = Object.freeze(snapshot.memoryControls.map(item => Object.freeze({ ...item })));
+  return Object.freeze({ ...snapshot, temperament, emotion, interests, userFacts, activeMemories, relationships, memoryControls });
 }

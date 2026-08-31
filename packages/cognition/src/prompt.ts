@@ -1,4 +1,5 @@
 import type { CompanionStateSnapshot } from './types.js';
+import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.js';
 
 export const SHANNON_CORE_PROMPT = `あなたは「シャノン」という名前のAIである。
 与えられた現在の状態と文脈をもとに、自然に会話・行動する。
@@ -33,16 +34,36 @@ export function buildCompanionStatePrompt(
   options: CompanionPromptOptions = {},
 ): string {
   const maximumCharacters = Math.max(0, options.maximumCharacters ?? 2_400);
+  const interests = snapshot.interests.flatMap(interest => {
+    const id = memoryIdentifier('interest', interest);
+    const text = visibleMemoryText(snapshot, id, interest);
+    return text ? [{ text, pinned: memoryControlFor(snapshot, id)?.pinned === true }] : [];
+  }).sort((left, right) => Number(right.pinned) - Number(left.pinned));
+  const facts = snapshot.userFacts.flatMap(fact => {
+    const text = visibleMemoryText(snapshot, fact.id, fact.statement);
+    return text ? [{ ...fact, statement: text, pinned: memoryControlFor(snapshot, fact.id)?.pinned === true }] : [];
+  }).sort((left, right) => Number(right.pinned) - Number(left.pinned));
+  const relationships = snapshot.relationships.flatMap(relationship => {
+    const text = visibleMemoryText(snapshot, relationship.id, relationship.statement);
+    return text ? [{ ...relationship, statement: text, pinned: memoryControlFor(snapshot, relationship.id)?.pinned === true }] : [];
+  }).sort((left, right) => Number(right.pinned) - Number(left.pinned));
+  const activeMemories = snapshot.activeMemories.flatMap(memory => {
+    const text = visibleMemoryText(snapshot, memory.id, memory.summary);
+    return text ? [{ ...memory, summary: text, pinned: memoryControlFor(snapshot, memory.id)?.pinned === true }] : [];
+  }).sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.relevance - left.relevance);
   return fitSections([
     `[Shannon shared state v${snapshot.version}]`,
     `気質: 好奇心 ${fixed(snapshot.temperament.curiosity)} / 自発性 ${fixed(snapshot.temperament.initiative)} / 親密さ ${fixed(snapshot.temperament.closeness)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
-    snapshot.interests.length ? `現在の関心: ${snapshot.interests.join('、')}` : '現在の関心: まだ形成されていない',
-    snapshot.userFacts.length
-      ? `ユーザーについて分かっていること:\n${snapshot.userFacts.map(fact => `- ${fact.statement} (確信 ${fixed(fact.confidence)})`).join('\n')}`
+    interests.length ? `現在の関心: ${interests.map(item => item.text).join('、')}` : '現在の関心: まだ形成されていない',
+    facts.length
+      ? `ユーザーについて分かっていること:\n${facts.map(fact => `- ${fact.statement} (確信 ${fixed(fact.confidence)})`).join('\n')}`
       : 'ユーザーについて分かっていること: まだない',
-    snapshot.activeMemories.length
-      ? `今、想起されている記憶:\n${snapshot.activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
+    relationships.length
+      ? `関係について分かっていること:\n${relationships.map(relationship => `- ${relationship.statement} (確信 ${fixed(relationship.confidence)})`).join('\n')}`
+      : '関係について分かっていること: まだない',
+    activeMemories.length
+      ? `今、想起されている記憶:\n${activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
       : '今、想起されている記憶: なし',
   ], maximumCharacters);
 }

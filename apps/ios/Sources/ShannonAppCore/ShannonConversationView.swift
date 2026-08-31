@@ -3,8 +3,10 @@ import SwiftUI
 public struct ShannonConversationView: View {
     @State private var model: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel?
+    @State private var memoryModel: ShannonMemoryModel
     @State private var showsStateDetails = false
     @State private var showsConnectionDetails = false
+    @State private var showsMemories = false
     @FocusState private var composerIsFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
@@ -12,10 +14,12 @@ public struct ShannonConversationView: View {
 
     public init(
         model: ShannonConversationModel = ShannonConversationModel(),
-        connectionModel: ShannonConnectionModel? = nil
+        connectionModel: ShannonConnectionModel? = nil,
+        memoryModel: ShannonMemoryModel = ShannonMemoryModel()
     ) {
         _model = State(initialValue: model)
         _connectionModel = State(initialValue: connectionModel)
+        _memoryModel = State(initialValue: memoryModel)
     }
 
     public var body: some View {
@@ -28,6 +32,7 @@ public struct ShannonConversationView: View {
                     isThinking: model.isSending,
                     stateVersion: model.state?.version,
                     stateAction: { showsStateDetails = true },
+                    memoryAction: { showsMemories = true },
                     connectionAction: connectionModel == nil ? nil : { showsConnectionDetails = true }
                 )
 
@@ -57,6 +62,9 @@ public struct ShannonConversationView: View {
                 if let connectionModel {
                     ShannonConnectionView(model: connectionModel)
                 }
+            }
+            .sheet(isPresented: $showsMemories) {
+                ShannonMemoryView(model: memoryModel)
             }
             .task {
                 connectionModel?.refreshFromKeychain()
@@ -176,6 +184,7 @@ private struct ShannonTopAppBar: View {
     let isThinking: Bool
     let stateVersion: Int?
     let stateAction: () -> Void
+    let memoryAction: () -> Void
     let connectionAction: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -218,6 +227,15 @@ private struct ShannonTopAppBar: View {
                     .padding(.vertical, 6)
                     .background(palette.secondaryContainer, in: Capsule())
             }
+
+            Button(action: memoryAction) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(palette.primary)
+                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("シャノンの記憶")
 
             if let connectionAction {
                 Button(action: connectionAction) {

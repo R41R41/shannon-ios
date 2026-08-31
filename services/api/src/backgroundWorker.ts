@@ -3,7 +3,7 @@ import type { CompanionStateStore } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
-import { consolidateUserFacts, type SleepMemoryAnalyzer } from './sleepConsolidation.js';
+import { consolidateSleepMemory, type SleepMemoryAnalyzer } from './sleepConsolidation.js';
 
 export interface BackgroundWorkerOptions {
   workerId?: string;
@@ -71,13 +71,13 @@ export class ShannonBackgroundWorker {
       return;
     }
     const messages = this.jobStore.dailyUserMessages(job.scopeKey, job.payload.startAt, job.payload.endAt);
-    const facts = await consolidateUserFacts(
+    const outcome = await consolidateSleepMemory(
       this.sleepAnalyzer,
       messages,
       this.stateStore.snapshot(job.scopeKey),
       job.payload.endAt,
     );
-    this.jobStore.applySleepFacts(job, this.workerId, completedAt, facts);
+    this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome);
   }
 
   private enqueueDueSleep(now: Date): void {

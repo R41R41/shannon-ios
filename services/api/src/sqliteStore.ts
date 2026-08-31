@@ -12,7 +12,6 @@ import {
   type CompanionStateSnapshot,
   type CompanionStateStore,
   type ShannonMessageEmotion,
-  type UserFact,
 } from '@shannon/cognition';
 import type {
   BackgroundJobPayload,
@@ -27,6 +26,7 @@ import type {
   StoredConversationMessage,
   TurnPersistenceContext,
 } from './conversationStore.js';
+import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 
 const SCHEMA_VERSION = 2;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
@@ -419,17 +419,24 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     return Object.freeze(rows.map(row => Object.freeze({ content: row.content, observedAt: row.observed_at })));
   }
 
-  applySleepFacts(
+  applySleepOutcome(
     job: ClaimedBackgroundJob,
     workerId: string,
     completedAt: string,
-    facts: readonly UserFact[],
+    outcome: SleepConsolidationOutcome,
   ): void {
     this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
-      for (const fact of facts) this.apply(job.scopeKey, { type: 'user-fact-upserted', fact });
+      for (const fact of outcome.facts) this.apply(job.scopeKey, { type: 'user-fact-upserted', fact });
+      for (const relationship of outcome.relationships) {
+        this.apply(job.scopeKey, { type: 'relationship-upserted', relationship });
+      }
+      for (const interest of outcome.interests) this.apply(job.scopeKey, { type: 'interest-observed', interest });
       this.insertEvent(job.scopeKey, 'sleep.completed', completedAt, {
         dayKey: job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : null,
-        appliedFactIds: facts.map(fact => fact.id),
+        appliedFactIds: outcome.facts.map(fact => fact.id),
+        appliedRelationshipIds: outcome.relationships.map(relationship => relationship.id),
+        appliedInterests: outcome.interests,
+        ...outcome.report,
       });
     });
   }
@@ -634,7 +641,11 @@ function parseSnapshot(raw: string, expectedScopeKey: string): CompanionStateSna
     || !Array.isArray(row.activeMemories)) {
     throw new Error('SHANNON_STATE_CORRUPT');
   }
-  return freezeSnapshot(row as CompanionStateSnapshot);
+  return freezeSnapshot({
+    ...(row as CompanionStateSnapshot),
+    relationships: Array.isArray(row.relationships) ? row.relationships : [],
+    memoryControls: Array.isArray(row.memoryControls) ? row.memoryControls : [],
+  });
 }
 
 function freezeStoredMessage(row: MessageRow): StoredConversationMessage {

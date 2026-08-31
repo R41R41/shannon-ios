@@ -11,6 +11,7 @@ struct ShannonApp: App {
 #endif
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
+    @State private var memoryModel: ShannonMemoryModel
 
     init() {
 #if os(iOS)
@@ -25,6 +26,7 @@ struct ShannonApp: App {
             connectionStore: connectionStore
         )
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _connectionModel = State(initialValue: ShannonConnectionModel(
             baseURL: ShannonRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
@@ -34,7 +36,11 @@ struct ShannonApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ShannonConversationView(model: conversationModel, connectionModel: connectionModel)
+            ShannonConversationView(
+                model: conversationModel,
+                connectionModel: connectionModel,
+                memoryModel: memoryModel
+            )
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }

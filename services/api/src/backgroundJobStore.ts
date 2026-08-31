@@ -1,4 +1,4 @@
-import type { UserFact } from '@shannon/cognition';
+import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 
 export interface TurnRefinementJobPayload {
   kind: 'turn-refinement';
@@ -40,11 +40,11 @@ export interface BackgroundJobStore {
   ): void;
   failClaimedBackgroundJob(job: ClaimedBackgroundJob, workerId: string, nowIso: string, errorCode: string): void;
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[];
-  applySleepFacts(
+  applySleepOutcome(
     job: ClaimedBackgroundJob,
     workerId: string,
     completedAt: string,
-    facts: readonly UserFact[],
+    outcome: SleepConsolidationOutcome,
   ): void;
   pendingBackgroundJobCount(): number;
 }

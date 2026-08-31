@@ -31,6 +31,28 @@ export interface ActiveMemory {
   observedAt: string;
 }
 
+export interface RelationshipInsight {
+  id: string;
+  statement: string;
+  confidence: number;
+  observedAt: string;
+  evidence?: string;
+}
+
+export type MemoryKind = 'user-fact' | 'interest' | 'experience' | 'relationship';
+export type MemoryStatus = 'active' | 'forgotten' | 'rejected';
+
+/** A durable boundary or correction explicitly supplied by the user. */
+export interface MemoryControl {
+  memoryId: string;
+  kind: MemoryKind;
+  status: MemoryStatus;
+  pinned: boolean;
+  updatedAt: string;
+  changeReason: string;
+  overrideText?: string;
+}
+
 export interface CompanionStateSnapshot {
   scopeKey: string;
   version: number;
@@ -40,12 +62,16 @@ export interface CompanionStateSnapshot {
   interests: readonly string[];
   userFacts: readonly UserFact[];
   activeMemories: readonly ActiveMemory[];
+  relationships: readonly RelationshipInsight[];
+  memoryControls: readonly MemoryControl[];
 }
 
 export type CompanionStateEvent =
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
   | { type: 'interest-observed'; interest: string }
   | { type: 'user-fact-upserted'; fact: UserFact }
+  | { type: 'relationship-upserted'; relationship: RelationshipInsight }
+  | { type: 'memory-control-upserted'; control: MemoryControl }
   | { type: 'memory-activated'; memory: ActiveMemory }
   | { type: 'memory-deactivated'; memoryId: string };
 
@@ -53,4 +79,3 @@ export interface CompanionStateStore {
   snapshot(scopeKey: string): CompanionStateSnapshot;
   apply(scopeKey: string, event: CompanionStateEvent): CompanionStateSnapshot;
 }
-

@@ -31,7 +31,12 @@ export type {
   CompanionStateEvent,
   CompanionStateSnapshot,
   CompanionStateStore,
+  MemoryControl,
+  MemoryKind,
+  MemoryStatus,
+  RelationshipInsight,
   ShannonEmotion,
   ShannonTemperament,
   UserFact,
 } from './types.js';
+export { memoryIdentifier, visibleMemoryText, memoryControlFor } from './memory.js';
