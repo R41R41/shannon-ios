@@ -9,6 +9,8 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `POST /v1/events`
 - `POST /v1/chat`（現在は`local-stub`。LLM未接続）
 
+`POST /v1/chat`は、返信本文と同時に`messageEmotion`を返す。これは返信生成時の共有状態から作った不変のスナップショットで、iOS側が過去の投稿ごとの表情を再現するために使う。
+
 次の実装順:
 
 1. ユーザーscopeつき共有状態の永続store

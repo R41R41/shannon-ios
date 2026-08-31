@@ -1,4 +1,4 @@
-import type { CompanionStateEvent, CompanionStateSnapshot } from '@shannon/cognition';
+import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
 
 export interface ApiRequest {
   method: 'GET' | 'POST';
@@ -21,6 +21,7 @@ export interface ChatResponse {
   mode: 'local-stub';
   reply: string;
   snapshotVersion: number;
+  messageEmotion: ShannonMessageEmotion;
   systemPrompt: string;
   state: CompanionStateSnapshot;
 }
@@ -29,4 +30,3 @@ export interface StateEventRequest {
   scopeKey: string;
   event: CompanionStateEvent;
 }
-

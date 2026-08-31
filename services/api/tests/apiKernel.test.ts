@@ -17,7 +17,10 @@ describe('Shannon local API kernel', () => {
       scopeKey: 'owner-a', event: { type: 'interest-observed', interest: '脳科学' },
     } });
     const second = api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '続き' } });
-    expect(first).toMatchObject({ status: 200, body: { mode: 'local-stub', snapshotVersion: 0 } });
+    expect(first).toMatchObject({
+      status: 200,
+      body: { mode: 'local-stub', snapshotVersion: 0, messageEmotion: { expression: 'calm' } },
+    });
     expect(second).toMatchObject({ status: 200, body: { mode: 'local-stub', snapshotVersion: 1 } });
     expect(JSON.stringify(first.body)).not.toContain('脳科学');
     expect(JSON.stringify(second.body)).toContain('脳科学');
@@ -41,4 +44,3 @@ describe('Shannon local API kernel', () => {
     expect(api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'a', message: 'x'.repeat(8_001) } }).status).toBe(400);
   });
 });
-

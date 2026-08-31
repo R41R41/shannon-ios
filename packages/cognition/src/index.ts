@@ -12,6 +12,12 @@ export {
   buildCompanionStatePrompt,
   type CompanionPromptOptions,
 } from './prompt.js';
+export {
+  createShannonMessageEmotion,
+  deriveShannonExpression,
+  type ShannonExpression,
+  type ShannonMessageEmotion,
+} from './expression.js';
 export type {
   ActiveMemory,
   CompanionStateEvent,
@@ -21,4 +27,3 @@ export type {
   ShannonTemperament,
   UserFact,
 } from './types.js';
-

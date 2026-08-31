@@ -1,6 +1,7 @@
 import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
+  createShannonMessageEmotion,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
@@ -86,6 +87,7 @@ export class ShannonApiKernel {
         mode: 'local-stub',
         reply: LOCAL_REPLY,
         snapshotVersion: captured.version,
+        messageEmotion: createShannonMessageEmotion(captured.emotion, captured.temperament),
         systemPrompt: assembleShannonSystemPrompt(captured),
         state: captured,
       };

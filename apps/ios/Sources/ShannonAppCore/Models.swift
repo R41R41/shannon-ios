@@ -15,6 +15,24 @@ public struct ShannonEmotionDTO: Codable, Equatable, Sendable {
     public let openness: Double
 }
 
+public enum ShannonExpressionDTO: String, Codable, CaseIterable, Equatable, Sendable {
+    case joyful
+    case curious
+    case tender
+    case calm
+    case concerned
+    case sad
+    case sleepy
+    case neutral
+}
+
+public struct ShannonMessageEmotionDTO: Codable, Equatable, Sendable {
+    public let valence: Double
+    public let arousal: Double
+    public let openness: Double
+    public let expression: ShannonExpressionDTO
+}
+
 public struct UserFactDTO: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let statement: String
@@ -55,24 +73,76 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public let mode: String
     public let reply: String
     public let snapshotVersion: Int
+    public let messageEmotion: ShannonMessageEmotionDTO
     public let systemPrompt: String
     public let state: CompanionStateDTO
 }
 
 public struct ConversationMessage: Equatable, Identifiable, Sendable {
-    public enum Role: Sendable {
+    public enum Role: Equatable, Sendable {
         case user
         case shannon
+    }
+
+    public enum DeliveryState: Equatable, Sendable {
+        case sending
+        case sent
+        case failed
+    }
+
+    public struct EmotionSnapshot: Equatable, Sendable {
+        public let valence: Double
+        public let arousal: Double
+        public let openness: Double
+        public let expression: ShannonExpressionDTO
+        public let stateVersion: Int
+
+        public init(
+            valence: Double,
+            arousal: Double,
+            openness: Double,
+            expression: ShannonExpressionDTO,
+            stateVersion: Int
+        ) {
+            self.valence = valence
+            self.arousal = arousal
+            self.openness = openness
+            self.expression = expression
+            self.stateVersion = stateVersion
+        }
     }
 
     public let id: UUID
     public let role: Role
     public let text: String
+    public let sentAt: Date
+    public let deliveryState: DeliveryState
+    public let emotionSnapshot: EmotionSnapshot?
 
-    public init(id: UUID = UUID(), role: Role, text: String) {
+    public init(
+        id: UUID = UUID(),
+        role: Role,
+        text: String,
+        sentAt: Date = Date(),
+        deliveryState: DeliveryState = .sent,
+        emotionSnapshot: EmotionSnapshot? = nil
+    ) {
         self.id = id
         self.role = role
         self.text = text
+        self.sentAt = sentAt
+        self.deliveryState = deliveryState
+        self.emotionSnapshot = emotionSnapshot
+    }
+
+    public func withDeliveryState(_ deliveryState: DeliveryState) -> ConversationMessage {
+        ConversationMessage(
+            id: id,
+            role: role,
+            text: text,
+            sentAt: sentAt,
+            deliveryState: deliveryState,
+            emotionSnapshot: emotionSnapshot
+        )
     }
 }
-

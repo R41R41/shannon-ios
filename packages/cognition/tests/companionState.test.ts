@@ -5,6 +5,7 @@ import {
   SHANNON_CORE_PROMPT,
   assembleShannonSystemPrompt,
   buildCompanionStatePrompt,
+  deriveShannonExpression,
 } from '../src/index.js';
 
 describe('Shannon companion shared state', () => {
@@ -49,5 +50,19 @@ describe('Shannon companion shared state', () => {
     expect(statePrompt.length).toBeLessThanOrEqual(220);
     expect(fullPrompt).not.toContain('予測');
   });
-});
 
+  it('derives stable message expressions from the captured emotion', () => {
+    expect(deriveShannonExpression(
+      { valence: 0.7, arousal: 0.8, openness: 0.5 },
+      INITIAL_SHANNON_TEMPERAMENT,
+    )).toBe('joyful');
+    expect(deriveShannonExpression(
+      { valence: -0.5, arousal: 0.7, openness: 0.2 },
+      INITIAL_SHANNON_TEMPERAMENT,
+    )).toBe('concerned');
+    expect(deriveShannonExpression(
+      { valence: 0, arousal: 0.3, openness: 0.35 },
+      INITIAL_SHANNON_TEMPERAMENT,
+    )).toBe('calm');
+  });
+});
