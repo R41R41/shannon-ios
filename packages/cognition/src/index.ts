@@ -16,6 +16,7 @@ export {
   createShannonMessageEmotion,
   deriveShannonExpression,
   type ShannonExpression,
+  type ShannonExpressionContext,
   type ShannonMessageEmotion,
 } from './expression.js';
 export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';

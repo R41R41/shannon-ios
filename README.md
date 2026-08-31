@@ -12,7 +12,7 @@
 
 ## 構成
 
-- `apps/ios`: SwiftUI会話画面、API client、ViewModel、8表情リソースのSwift Package。
+- `apps/ios`: SwiftUI会話画面、API client、ViewModel、22表情リソースのSwift Package。
 - `apps/ios-app`: 実機起動用のXcodeアプリ。`apps/ios`をローカルPackageとして利用する。
 - `services/api`: ローカルAPI。SQLiteで会話・共有状態・追記型経験ログを永続化し、将来はworkerを分離してAzure VMで動かす。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。

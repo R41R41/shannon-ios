@@ -17,9 +17,23 @@ public struct ShannonEmotionDTO: Codable, Equatable, Sendable {
 
 public enum ShannonExpressionDTO: String, Codable, CaseIterable, Equatable, Sendable {
     case joyful
+    case excited
+    case amused
+    case laughing
+    case bashful
+    case embarrassed
+    case relieved
+    case surprised
     case curious
+    case thinking
+    case confused
+    case determined
     case tender
     case calm
+    case jealous
+    case wry
+    case exasperated
+    case annoyed
     case concerned
     case sad
     case sleepy

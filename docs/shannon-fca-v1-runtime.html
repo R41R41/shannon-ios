@@ -56,7 +56,7 @@
         <div class="node"><h3>1 · Input</h3><small>iPhoneから届いた発言とユーザーscope</small></div><div class="arrow">→</div>
         <div class="node"><h3>2 · Capture</h3><small>共有状態を一度だけ取得。実行中は不変</small></div><div class="arrow">→</div>
         <div class="node"><h3>3 · FCA</h3><small>固定prompt + 可変state + 直近20会話を固定LLMへ</small></div><div class="arrow">→</div>
-        <div class="node"><h3>4 · Reply</h3><small>本文と、入力への軽量な反応表情を返す。共有状態はまだ変更しない</small></div>
+        <div class="node"><h3>4 · Reply</h3><small>本文と、入力＋返答に合う22種の反応表情を返す。追加LLM呼び出しはしない</small></div>
       </div>
     </section>
 
@@ -104,6 +104,7 @@
         <dt>経験ログ</dt><dd>会話完了・感情・興味・想起をappend-onlyで保存</dd>
         <dt>ファイル権限</dt><dd>DB・WAL・SHMは<code>0600</code></dd>
         <dt>実機認証</dt><dd>LAN待受はBearer必須・秘密値はGit対象外</dd>
+        <dt>投稿表情</dt><dd>22種。連続感情を基底に、ユーザー発言とシャノンの返答から投稿別に確定</dd>
         <dt>次の段階</dt><dd>Aether型のAzure HTTPS・端末ペアリング、その後worker分離と睡眠バッチ</dd>
       </dl>
     </section>

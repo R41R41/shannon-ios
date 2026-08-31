@@ -252,7 +252,7 @@ private struct ShannonMessageRow: View {
             if message.role == .shannon {
                 ShannonAvatarView(
                     expression: message.emotionSnapshot?.expression ?? .neutral,
-                    size: 40
+                    size: 48
                 )
             } else {
                 Spacer(minLength: 56)
@@ -323,7 +323,7 @@ private struct ShannonTypingIndicator: View {
         let palette = M3Palette.resolve(colorScheme)
 
         HStack(alignment: .bottom, spacing: M3Spacing.small) {
-            ShannonAvatarView(expression: expression, size: 40)
+            ShannonAvatarView(expression: expression, size: 48)
             HStack(spacing: M3Spacing.small) {
                 ProgressView()
                     .controlSize(.small)

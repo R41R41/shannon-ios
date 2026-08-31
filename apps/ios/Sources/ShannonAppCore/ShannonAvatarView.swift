@@ -22,6 +22,7 @@ public struct ShannonAvatarView: View {
         avatarImage
             .resizable()
             .scaledToFill()
+            .scaleEffect(expression.avatarScale)
             .frame(width: size, height: size)
             .clipShape(Circle())
             .overlay {

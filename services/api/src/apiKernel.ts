@@ -137,6 +137,7 @@ export class ShannonApiKernel {
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
         captured.temperament,
+        { userMessage: message, shannonReply: completion.reply },
       );
       const response: ChatResponse = {
         mode: completion.mode,

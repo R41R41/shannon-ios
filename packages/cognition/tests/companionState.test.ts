@@ -103,6 +103,33 @@ describe('Shannon companion shared state', () => {
     expect(initial.emotion).toEqual({ valence: 0, arousal: 0.3, openness: 0.35 });
   });
 
+  it('selects specific anime reactions from both sides of the completed turn', () => {
+    const emotion = { valence: 0, arousal: 0.3, openness: 0.35 };
+    const cases = [
+      ['完成が楽しみ！', 'いいね、わくわくする。', 'excited'],
+      ['その話、面白いね', 'ふふ、私もそう思う。', 'amused'],
+      ['これは本当に爆笑した', '笑いが止まらないね。', 'laughing'],
+      ['褒められてどう？', 'えへへ、そんなこと言われると照れ笑いしちゃう。', 'bashful'],
+      ['かわいいね', 'ちょっと照れてしまう。', 'embarrassed'],
+      ['無事に直ったよ', 'よかった、ほっとした。', 'relieved'],
+      ['急に予定が変わった', 'えっ、それはびっくり。', 'surprised'],
+      ['次の設計を少し考えてみて', '一度整理するね。', 'thinking'],
+      ['説明が理解できない', 'どういうことか私も少し困惑してる。', 'confused'],
+      ['実装を続けよう', 'うん、やろう。任せて。', 'determined'],
+      ['他のAIと話してきた', '少しだけ、やきもちかも。', 'jealous'],
+      ['また同じミスをした', 'はは……ちょっと苦笑い。', 'wry'],
+      ['三回目も忘れた', 'やれやれ、困った人だなあ。', 'exasperated'],
+      ['理不尽な対応だった', 'それは納得いかない。むっとする。', 'annoyed'],
+    ] as const;
+
+    for (const [userMessage, shannonReply, expected] of cases) {
+      expect(deriveShannonExpression(emotion, INITIAL_SHANNON_TEMPERAMENT, {
+        userMessage,
+        shannonReply,
+      })).toBe(expected);
+    }
+  });
+
   it('uses the same continuous law for icon projection and background state', () => {
     const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
     const initial = store.snapshot('scope-a');
