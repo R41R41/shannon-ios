@@ -5,7 +5,10 @@ import {
   SHANNON_CORE_PROMPT,
   assembleShannonSystemPrompt,
   buildCompanionStatePrompt,
+  deriveEmotionDelta,
+  deriveResonantInterest,
   deriveShannonExpression,
+  selectActiveMemories,
 } from '../src/index.js';
 
 describe('Shannon companion shared state', () => {
@@ -64,5 +67,27 @@ describe('Shannon companion shared state', () => {
       { valence: 0, arousal: 0.3, openness: 0.35 },
       INITIAL_SHANNON_TEMPERAMENT,
     )).toBe('calm');
+  });
+
+  it('updates emotion with baseline drift plus stimulus cues', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    const state = store.apply('scope-a', {
+      type: 'emotion-adjusted',
+      delta: { valence: -0.4, arousal: 0.4, openness: 0 },
+    });
+    const delta = deriveEmotionDelta(state, '実は今日は少し疲れた。でも話せて嬉しい！');
+    expect(delta.valence).toBeGreaterThan(-0.1);
+    expect(delta.arousal).toBeGreaterThan(0);
+    expect(delta.openness).toBeGreaterThan(0);
+  });
+
+  it('recalls only sufficiently related past experiences', () => {
+    const recalled = selectActiveMemories('創作の続きを考えたい', [
+      { id: 'old', summary: '雨の日に読んだ本の話', observedAt: '2026-08-29T00:00:00.000Z' },
+      { id: 'recent', summary: '創作を休んだあと、続きを書けた', observedAt: '2026-08-30T00:00:00.000Z' },
+    ]);
+    expect(recalled.map(memory => memory.id)).toEqual(['recent']);
+    expect(deriveResonantInterest('創作の続きを考えたい', recalled)).toBe('創作');
+    expect(deriveResonantInterest('天気の話', recalled)).toBeNull();
   });
 });

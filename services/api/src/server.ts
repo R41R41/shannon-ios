@@ -1,7 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createLocalApiKernel } from './apiKernel.js';
+import { createConfiguredChatModel } from './chatModel.js';
 
-const kernel = createLocalApiKernel();
+const kernel = createLocalApiKernel(() => new Date().toISOString(), {
+  chatModel: createConfiguredChatModel(),
+});
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
 
@@ -13,7 +16,7 @@ createServer(async (request, response) => {
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     const body = request.method === 'POST' ? await readJson(request) : undefined;
-    const result = kernel.dispatch({
+    const result = await kernel.dispatch({
       method: request.method,
       path: url.pathname,
       query: url.searchParams,
@@ -21,9 +24,14 @@ createServer(async (request, response) => {
     });
     sendJson(response, result.status, result.body);
   } catch (error) {
-    sendJson(response, 400, {
-      error: 'INVALID_REQUEST',
-      message: error instanceof Error ? error.message : 'request failed',
+    if (error instanceof SyntaxError || (error instanceof Error && error.message === 'request body too large')) {
+      sendJson(response, 400, { error: 'INVALID_REQUEST', message: error.message });
+      return;
+    }
+    console.error('Shannon request failed', error);
+    sendJson(response, 502, {
+      error: 'MODEL_UNAVAILABLE',
+      message: 'Shannonの言語モデルに接続できませんでした。',
     });
   }
 }).listen(port, host, () => {

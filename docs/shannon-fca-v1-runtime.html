@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon FCA v1 Runtime</title>
+  <style>
+    :root { color-scheme: light; --ink:#25212c; --muted:#706979; --line:#ded7e8; --purple:#7356a4; --soft:#f2edfa; --mint:#dff3ec; --blue:#e9efff; --amber:#fff0d4; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:radial-gradient(circle at 10% 0,#ece2ff 0,transparent 35rem),radial-gradient(circle at 100% 12%,#dff5ee 0,transparent 32rem),#faf9fb; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif; line-height:1.65; }
+    main { width:min(1100px,calc(100% - 30px)); margin:auto; padding:54px 0 80px; }
+    h1,h2,h3,p { margin-top:0; } h1 { max-width:820px; margin-bottom:15px; font-size:clamp(2.5rem,7vw,5.2rem); line-height:.98; letter-spacing:-.06em; } h2 { font-size:1.55rem; letter-spacing:-.025em; } h3 { margin-bottom:7px; font-size:1rem; }
+    .eyebrow { color:var(--purple); font-size:.78rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+    .lead { max-width:760px; color:var(--muted); font-size:1.08rem; }
+    .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:34px; }
+    .avatar { width:132px; height:132px; border:7px solid white; border-radius:36px; object-fit:cover; box-shadow:0 20px 45px #51386e25; }
+    .status { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0 40px; }
+    .pill { padding:9px 14px; border:1px solid #bfe5d8; border-radius:999px; color:#286c5c; background:#edfaf6; font-size:.88rem; font-weight:650; }
+    .pill.wait { color:#855a18; border-color:#efd39f; background:#fff8e9; }
+    section { margin-top:18px; padding:28px; border:1px solid #ffffffaa; border-radius:28px; background:#ffffffd9; box-shadow:0 18px 45px #45384f0d; backdrop-filter:blur(16px); }
+    .lane { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; align-items:stretch; }
+    .node { min-height:145px; padding:18px; border-radius:20px; background:var(--soft); }
+    .node:nth-child(3) { background:var(--blue); } .node:nth-child(5) { background:var(--mint); } .node:nth-child(7) { background:#f3f1f5; }
+    .node small { display:block; color:var(--muted); line-height:1.45; }
+    .arrow { display:grid; place-items:center; color:#988ba7; font-size:1.3rem; }
+    .split { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .card { padding:22px; border-radius:22px; background:#faf8fc; }
+    .card.mint { background:var(--mint); } .card.amber { background:var(--amber); }
+    .law { display:grid; grid-template-columns:160px 1fr; gap:10px; padding:12px 0; border-bottom:1px solid var(--line); }
+    .law:last-child { border-bottom:0; } .law b { color:var(--purple); }
+    code { font-family:"SFMono-Regular",Consolas,monospace; font-size:.9em; }
+    .facts { display:grid; grid-template-columns:190px 1fr; margin:0; } .facts dt,.facts dd { margin:0; padding:11px 0; border-bottom:1px solid var(--line); } .facts dt { color:var(--muted); } .facts dd { font-weight:630; overflow-wrap:anywhere; }
+    footer { padding:28px 4px 0; color:var(--muted); font-size:.84rem; }
+    @media(max-width:820px){ main{padding-top:32px}.avatar{width:92px;height:92px;border-radius:28px}.lane{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.split{grid-template-columns:1fr}.law,.facts{grid-template-columns:1fr}.law b,.facts dt{padding-bottom:0;border-bottom:0}section{padding:22px}.hero{align-items:center} }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Shannon · FCA Runtime v1</p>
+        <h1>答える私と、<br>変わっていく私。</h1>
+        <p class="lead">返答するFCAは、その瞬間に確定しているShannonだけを見る。感情と記憶は別の流れで静かに更新され、次に話すShannonへ渡される。</p>
+      </div>
+      <img class="avatar" src="../design/character-concepts/chat-icons/shannon-chat-icon-02-icon-chibi-lavender.png" alt="Shannon Icon Chibi">
+    </header>
+
+    <div class="status">
+      <span class="pill">✓ FCAスナップショット</span><span class="pill">✓ 直近会話</span><span class="pill">✓ 連続感情</span><span class="pill">✓ 非同期記憶想起</span><span class="pill">✓ 共鳴する興味</span><span class="pill">✓ OpenAI adapter</span><span class="pill wait">APIキー設定待ち</span>
+    </div>
+
+    <section>
+      <h2>Response lane — ユーザーが待つ流れ</h2>
+      <div class="lane">
+        <div class="node"><h3>1 · Input</h3><small>iPhoneから届いた発言とユーザーscope</small></div><div class="arrow">→</div>
+        <div class="node"><h3>2 · Capture</h3><small>共有状態を一度だけ取得。実行中は不変</small></div><div class="arrow">→</div>
+        <div class="node"><h3>3 · FCA</h3><small>固定prompt + 可変state + 直近20会話を固定LLMへ</small></div><div class="arrow">→</div>
+        <div class="node"><h3>4 · Reply</h3><small>本文と、そのFCA時点の感情・表情を返す</small></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Background lane — 待たせずに変わる流れ</h2>
+      <div class="split">
+        <div class="card mint"><h3>感情</h3><p>快・不快、活性、開放性を連続値で保持。基準状態への自然な減衰に、発言から受けた刺激を加える。</p><code>次の感情 = 今の感情 + 減衰 + 刺激</code></div>
+        <div class="card"><h3>記憶想起</h3><p>今回の発言と過去経験の文字特徴を比較し、重なりと新しさから最大3件を活性化する。現在の返答には割り込まない。</p><code>関連度 = 意味の手掛かり × 0.88 + 新しさ × 0.12</code></div>
+      </div>
+      <div class="law"><b>順序</b><span>同じscopeの更新は必ず直列。別scopeは独立。</span></div>
+      <div class="law"><b>影響</b><span>完了した共有状態だけを、次のFCA開始時に取得。</span></div>
+      <div class="law"><b>興味</b><span>現在の話題が想起された過去経験と共鳴したときだけ、Shannonの関心へ昇格。</span></div>
+      <div class="law"><b>v1の境界</b><span>予測なし、Web検索なし、スキルなし、ユーザー情報の自動確定なし。</span></div>
+    </section>
+
+    <section>
+      <h2>固定部分と変わる部分</h2>
+      <div class="split">
+        <div class="card amber"><h3>固定</h3><p>Shannonという名前、状態と文脈から自然に会話すること、ユーザー固有情報は提示された根拠だけで扱うこと。LLMモデルもv1では固定。</p></div>
+        <div class="card"><h3>可変</h3><p>気質、連続感情、興味、睡眠バッチで確定したユーザー情報、現在想起中の記憶、直近会話。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>現在の実装値</h2>
+      <dl class="facts">
+        <dt>既定LLM</dt><dd><code>gpt-5.6-luna</code>（環境変数で固定値を変更可能）</dd>
+        <dt>API</dt><dd>OpenAI Responses API / <code>store: false</code></dd>
+        <dt>会話窓</dt><dd>直近20メッセージ</dd>
+        <dt>記憶想起</dt><dd>最大3件・FCA外で実行</dd>
+        <dt>状態</dt><dd>現在はメモリ内。再起動で消える</dd>
+        <dt>次の段階</dt><dd>SQLite永続化、経験ログ、睡眠バッチ</dd>
+      </dl>
+    </section>
+    <footer>Updated 2026-08-31 · Implementation status after FCA v1 runtime integration</footer>
+  </main>
+</body>
+</html>

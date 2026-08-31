@@ -6,9 +6,10 @@ import {
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
+import { BackgroundUpdateCoordinator } from './backgroundUpdates.js';
+import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
+import { InMemoryConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
-
-const LOCAL_REPLY = 'うん、聞いてるよ。今はまだローカル接続の確認中だけど、ここから少しずつ覚えていける。';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -53,12 +54,39 @@ function optionalFiniteNumber(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value));
 }
 
-export class ShannonApiKernel {
-  constructor(private readonly stateStore: CompanionStateStore) {}
+export interface ShannonApiKernelOptions {
+  chatModel?: ShannonChatModel;
+  conversationStore?: InMemoryConversationStore;
+  background?: BackgroundUpdateCoordinator;
+}
 
-  dispatch(request: ApiRequest): ApiResponse {
+export class ShannonApiKernel {
+  private readonly chatModel: ShannonChatModel;
+  private readonly conversationStore: InMemoryConversationStore;
+  private readonly background: BackgroundUpdateCoordinator;
+
+  constructor(
+    private readonly stateStore: CompanionStateStore,
+    private readonly now: CompanionClock,
+    options: ShannonApiKernelOptions = {},
+  ) {
+    this.chatModel = options.chatModel ?? new LocalStubChatModel();
+    this.conversationStore = options.conversationStore ?? new InMemoryConversationStore();
+    this.background = options.background
+      ?? new BackgroundUpdateCoordinator(this.stateStore, this.conversationStore);
+  }
+
+  async dispatch(request: ApiRequest): Promise<ApiResponse> {
     if (request.method === 'GET' && request.path === '/health') {
-      return { status: 200, body: { ok: true, service: 'shannon-ios-api', mode: 'local' } };
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          service: 'shannon-ios-api',
+          mode: 'local',
+          llm: { mode: this.chatModel.mode, model: this.chatModel.model },
+        },
+      };
     }
 
     if (request.method === 'GET' && request.path === '/v1/state') {
@@ -82,24 +110,49 @@ export class ShannonApiKernel {
       if (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 8_000) {
         return badRequest('message must be 1..8000 characters');
       }
+
+      const message = body.message.trim();
       const captured = this.stateStore.snapshot(body.scopeKey);
+      const systemPrompt = assembleShannonSystemPrompt(captured);
+      const completion = await this.chatModel.generate({
+        scopeKey: body.scopeKey,
+        systemPrompt,
+        history: this.conversationStore.history(body.scopeKey),
+        message,
+      });
       const response: ChatResponse = {
-        mode: 'local-stub',
-        reply: LOCAL_REPLY,
+        mode: completion.mode,
+        model: completion.model,
+        reply: completion.reply,
         snapshotVersion: captured.version,
         messageEmotion: createShannonMessageEmotion(captured.emotion, captured.temperament),
-        systemPrompt: assembleShannonSystemPrompt(captured),
+        systemPrompt,
         state: captured,
       };
+
+      this.background.schedule({
+        scopeKey: body.scopeKey,
+        capturedState: captured,
+        userMessage: message,
+        shannonReply: completion.reply,
+        completedAt: this.now(),
+      });
       return { status: 200, body: response };
     }
 
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
+
+  waitForBackground(scopeKey: string): Promise<void> {
+    return this.background.waitForIdle(scopeKey);
+  }
 }
 
-export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString()): ShannonApiKernel {
-  return new ShannonApiKernel(new InMemoryCompanionStateStore(now));
+export function createLocalApiKernel(
+  now: CompanionClock = () => new Date().toISOString(),
+  options: ShannonApiKernelOptions = {},
+): ShannonApiKernel {
+  return new ShannonApiKernel(new InMemoryCompanionStateStore(now), now, options);
 }
 
 function badRequest(message: string): ApiResponse {

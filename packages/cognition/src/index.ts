@@ -18,6 +18,13 @@ export {
   type ShannonExpression,
   type ShannonMessageEmotion,
 } from './expression.js';
+export { deriveEmotionDelta } from './affect.js';
+export {
+  deriveResonantInterest,
+  scoreMemoryRelevance,
+  selectActiveMemories,
+  type RecallCandidate,
+} from './recall.js';
 export type {
   ActiveMemory,
   CompanionStateEvent,

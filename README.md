@@ -27,6 +27,8 @@ pnpm test
 pnpm dev:api
 ```
 
+実際のLLMを使う場合は`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ`OPENAI_API_KEY`を設定する。v1の既定モデルは`gpt-5.6-luna`。
+
 別のターミナルでiOSコアを検証する。
 
 ```sh
@@ -34,7 +36,7 @@ cd apps/ios
 swift test
 ```
 
-ローカルAPIは `http://127.0.0.1:4317` で起動する。現在の `/v1/chat` はLLM未接続の `local-stub`。
+ローカルAPIは `http://127.0.0.1:4317` で起動する。APIキーがない場合だけ`/v1/chat`は`local-stub`へ戻る。
 
 ## iPhone実機
 
@@ -53,3 +55,5 @@ pnpm dev:api:device
 LAN公開は開発時だけ利用する。現在のAPIは認証を持たないため、信頼できないネットワークでは起動しない。
 
 ブラウザで確認できる実機手順は [`docs/shannon-ios-device-runbook.html`](docs/shannon-ios-device-runbook.html) にまとめている。
+
+FCA・感情・記憶がどう分離して動くかは [`docs/shannon-fca-v1-runtime.html`](docs/shannon-fca-v1-runtime.html) で視覚的に確認できる。

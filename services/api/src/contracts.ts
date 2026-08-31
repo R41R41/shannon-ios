@@ -1,4 +1,5 @@
 import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
+import type { ShannonChatMode } from './chatModel.js';
 
 export interface ApiRequest {
   method: 'GET' | 'POST';
@@ -18,7 +19,8 @@ export interface ChatRequest {
 }
 
 export interface ChatResponse {
-  mode: 'local-stub';
+  mode: ShannonChatMode;
+  model: string;
   reply: string;
   snapshotVersion: number;
   messageEmotion: ShannonMessageEmotion;
