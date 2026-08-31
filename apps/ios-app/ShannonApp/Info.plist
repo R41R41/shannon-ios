@@ -31,6 +31,8 @@
     <string>開発中のシャノンAPIへ接続するため、同じネットワーク上のMacを検出します。</string>
     <key>ShannonAPIBaseURL</key>
     <string>$(SHANNON_API_BASE_URL)</string>
+    <key>ShannonAPIToken</key>
+    <string>$(SHANNON_API_TOKEN)</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UILaunchScreen</key>

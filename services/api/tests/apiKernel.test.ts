@@ -74,6 +74,13 @@ describe('Shannon local API kernel', () => {
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '創作を進められて嬉しい！' },
     });
     expect(first).toMatchObject({ body: { snapshotVersion: 0 } });
+    const durableBeforeBackground = await api.dispatch({
+      method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    });
+    expect(durableBeforeBackground).toMatchObject({
+      status: 200,
+      body: { messages: [{ role: 'user' }, { role: 'assistant' }], state: { version: 0 } },
+    });
     await api.waitForBackground('owner-a');
 
     const second = await api.dispatch({

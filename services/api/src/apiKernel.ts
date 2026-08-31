@@ -2,13 +2,14 @@ import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
   createShannonMessageEmotion,
+  projectEmotionReaction,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { BackgroundUpdateCoordinator } from './backgroundUpdates.js';
 import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
-import { InMemoryConversationStore } from './conversationStore.js';
+import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
@@ -56,13 +57,14 @@ function optionalFiniteNumber(value: unknown): boolean {
 
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
-  conversationStore?: InMemoryConversationStore;
+  stateStore?: CompanionStateStore;
+  conversationStore?: ConversationStore;
   background?: BackgroundUpdateCoordinator;
 }
 
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
-  private readonly conversationStore: InMemoryConversationStore;
+  private readonly conversationStore: ConversationStore;
   private readonly background: BackgroundUpdateCoordinator;
 
   constructor(
@@ -95,6 +97,18 @@ export class ShannonApiKernel {
       return { status: 200, body: this.stateStore.snapshot(scopeKey) };
     }
 
+    if (request.method === 'GET' && request.path === '/v1/conversation') {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      return {
+        status: 200,
+        body: {
+          messages: this.conversationStore.conversationHistory(scopeKey),
+          state: this.stateStore.snapshot(scopeKey),
+        },
+      };
+    }
+
     if (request.method === 'POST' && request.path === '/v1/events') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const body = request.body as unknown as StateEventRequest;
@@ -120,23 +134,30 @@ export class ShannonApiKernel {
         history: this.conversationStore.history(body.scopeKey),
         message,
       });
+      const messageEmotion = createShannonMessageEmotion(
+        projectEmotionReaction(captured, message),
+        captured.temperament,
+      );
       const response: ChatResponse = {
         mode: completion.mode,
         model: completion.model,
         reply: completion.reply,
         snapshotVersion: captured.version,
-        messageEmotion: createShannonMessageEmotion(captured.emotion, captured.temperament),
+        messageEmotion,
         systemPrompt,
         state: captured,
       };
 
-      this.background.schedule({
+      const completedTurn = {
         scopeKey: body.scopeKey,
         capturedState: captured,
         userMessage: message,
         shannonReply: completion.reply,
+        messageEmotion: response.messageEmotion,
         completedAt: this.now(),
-      });
+      };
+      const experience = this.background.recordTurn(completedTurn);
+      this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };
     }
 
@@ -152,7 +173,7 @@ export function createLocalApiKernel(
   now: CompanionClock = () => new Date().toISOString(),
   options: ShannonApiKernelOptions = {},
 ): ShannonApiKernel {
-  return new ShannonApiKernel(new InMemoryCompanionStateStore(now), now, options);
+  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now), now, options);
 }
 
 function badRequest(message: string): ApiResponse {

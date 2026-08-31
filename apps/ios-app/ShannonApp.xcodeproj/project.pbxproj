@@ -265,6 +265,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SHANNON_API_BASE_URL = "http://arairyounoMacBook-Neo.local:4317";
+				SHANNON_API_TOKEN = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -292,6 +293,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SHANNON_API_BASE_URL = "http://arairyounoMacBook-Neo.local:4317";
+				SHANNON_API_TOKEN = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;

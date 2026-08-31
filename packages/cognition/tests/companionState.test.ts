@@ -8,6 +8,7 @@ import {
   deriveEmotionDelta,
   deriveResonantInterest,
   deriveShannonExpression,
+  projectEmotionReaction,
   selectActiveMemories,
 } from '../src/index.js';
 
@@ -80,6 +81,37 @@ describe('Shannon companion shared state', () => {
     expect(delta.valence).toBeGreaterThan(-0.1);
     expect(delta.arousal).toBeGreaterThan(0);
     expect(delta.openness).toBeGreaterThan(0);
+  });
+
+  it('projects visibly different expressions without mutating the shared state', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    const initial = store.snapshot('scope-a');
+    const cases = [
+      ['できた、最高！', 'joyful'],
+      ['ありがとう', 'tender'],
+      ['これ、どうして？', 'curious'],
+      ['不安で怖い', 'concerned'],
+      ['悲しい', 'sad'],
+      ['もう眠い', 'sleepy'],
+      ['今日は普通の日', 'calm'],
+    ] as const;
+
+    for (const [message, expected] of cases) {
+      const projected = projectEmotionReaction(initial, message);
+      expect(deriveShannonExpression(projected, initial.temperament)).toBe(expected);
+    }
+    expect(initial.emotion).toEqual({ valence: 0, arousal: 0.3, openness: 0.35 });
+  });
+
+  it('uses the same continuous law for icon projection and background state', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    const initial = store.snapshot('scope-a');
+    const projected = projectEmotionReaction(initial, '完成して嬉しい！');
+    const persisted = store.apply('scope-a', {
+      type: 'emotion-adjusted',
+      delta: deriveEmotionDelta(initial, '完成して嬉しい！'),
+    });
+    expect(persisted.emotion).toEqual(projected);
   });
 
   it('recalls only sufficiently related past experiences', () => {

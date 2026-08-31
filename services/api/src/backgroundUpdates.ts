@@ -4,14 +4,17 @@ import {
   selectActiveMemories,
   type CompanionStateSnapshot,
   type CompanionStateStore,
+  type ShannonMessageEmotion,
 } from '@shannon/cognition';
-import { InMemoryConversationStore } from './conversationStore.js';
+import type { ConversationStore } from './conversationStore.js';
+import type { ShannonExperience } from './conversationStore.js';
 
 export interface CompletedTurn {
   scopeKey: string;
   capturedState: CompanionStateSnapshot;
   userMessage: string;
   shannonReply: string;
+  messageEmotion: ShannonMessageEmotion;
   completedAt: string;
 }
 
@@ -20,14 +23,36 @@ export class BackgroundUpdateCoordinator {
 
   constructor(
     private readonly stateStore: CompanionStateStore,
-    private readonly conversationStore: InMemoryConversationStore,
+    private readonly conversationStore: ConversationStore,
     private readonly reportError: (error: unknown) => void = error => console.error('Shannon background update failed', error),
   ) {}
 
-  schedule(turn: CompletedTurn): void {
+  recordTurn(turn: CompletedTurn): ShannonExperience {
+    return this.conversationStore.appendTurn(
+      turn.scopeKey,
+      turn.userMessage,
+      turn.shannonReply,
+      turn.completedAt,
+      {
+        messageEmotion: turn.messageEmotion,
+        capturedStateVersion: turn.capturedState.version,
+      },
+    );
+  }
+
+  schedule(turn: CompletedTurn, recordedExperienceId?: string): void {
     const previous = this.queues.get(turn.scopeKey) ?? Promise.resolve();
     const next = previous
-      .then(() => this.applyTurn(turn))
+      .then(() => new Promise<void>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            this.applyTurn(turn, recordedExperienceId);
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }))
       .catch(this.reportError);
     this.queues.set(turn.scopeKey, next);
     void next.finally(() => {
@@ -39,8 +64,9 @@ export class BackgroundUpdateCoordinator {
     await (this.queues.get(scopeKey) ?? Promise.resolve());
   }
 
-  private applyTurn(turn: CompletedTurn): void {
-    const candidates = this.conversationStore.experienceCandidates(turn.scopeKey);
+  private applyTurn(turn: CompletedTurn, recordedExperienceId?: string): void {
+    const candidates = this.conversationStore.experienceCandidates(turn.scopeKey)
+      .filter(candidate => candidate.id !== recordedExperienceId);
     const recalled = selectActiveMemories(turn.userMessage, candidates);
     const current = this.stateStore.snapshot(turn.scopeKey);
 
@@ -64,12 +90,5 @@ export class BackgroundUpdateCoordinator {
     if (resonantInterest) {
       this.stateStore.apply(turn.scopeKey, { type: 'interest-observed', interest: resonantInterest });
     }
-
-    this.conversationStore.appendTurn(
-      turn.scopeKey,
-      turn.userMessage,
-      turn.shannonReply,
-      turn.completedAt,
-    );
   }
 }

@@ -63,6 +63,47 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertEqual(model.messages.first?.deliveryState, .sent)
         XCTAssertNil(model.errorMessage)
     }
+
+    func testLoadsPersistedConversationAndExpressionOnce() async {
+        let history = ConversationHistoryResponseDTO(
+            messages: [
+                StoredConversationMessageDTO(
+                    id: "26F3D19A-A881-40C4-99BB-6C738E86CC05",
+                    role: "user",
+                    content: "昨日の話",
+                    observedAt: "2026-08-30T21:00:00.000Z",
+                    messageEmotion: nil,
+                    stateVersion: nil
+                ),
+                StoredConversationMessageDTO(
+                    id: "8B9CD590-9BF3-43C5-B8D4-A98685F8551E",
+                    role: "assistant",
+                    content: "覚えているよ",
+                    observedAt: "2026-08-30T21:00:01.000Z",
+                    messageEmotion: ShannonMessageEmotionDTO(
+                        valence: 0.4,
+                        arousal: 0.6,
+                        openness: 0.5,
+                        expression: .joyful
+                    ),
+                    stateVersion: 4
+                ),
+            ],
+            state: TestFixtures.state(version: 5)
+        )
+        let client = HistoryClient(history: history)
+        let model = ShannonConversationModel(client: client)
+
+        await model.loadConversationIfNeeded()
+        await model.loadConversationIfNeeded()
+
+        XCTAssertEqual(model.messages.map(\.text), ["昨日の話", "覚えているよ"])
+        XCTAssertEqual(model.messages.last?.emotionSnapshot?.expression, .joyful)
+        XCTAssertEqual(model.currentExpression, .joyful)
+        XCTAssertEqual(model.state?.version, 5)
+        let loadCount = await client.loadCount
+        XCTAssertEqual(loadCount, 1)
+    }
 }
 
 private struct StubClient: ShannonAPIClientProtocol {
@@ -86,6 +127,24 @@ private actor SequenceClient: ShannonAPIClientProtocol {
     }
 }
 
+private actor HistoryClient: ShannonAPIClientProtocol {
+    let history: ConversationHistoryResponseDTO
+    private(set) var loadCount = 0
+
+    init(history: ConversationHistoryResponseDTO) {
+        self.history = history
+    }
+
+    func send(message: String, scopeKey: String) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func loadConversation(scopeKey: String) async throws -> ConversationHistoryResponseDTO {
+        loadCount += 1
+        return history
+    }
+}
+
 private enum TestFixtures {
     static func chatResponse(
         version: Int = 0,
@@ -103,23 +162,27 @@ private enum TestFixtures {
                 expression: expression
             ),
             systemPrompt: "prompt",
-            state: CompanionStateDTO(
-                scopeKey: "local-owner",
-                version: version,
-                updatedAt: "2026-08-31T00:00:00.000Z",
-                temperament: ShannonTemperamentDTO(
-                    curiosity: 0.65,
-                    initiative: 0.25,
-                    closeness: 0.15,
-                    calmness: 0.60,
-                    needForContinuity: 0.70,
-                    confidenceAboutUser: 0.05
-                ),
-                emotion: ShannonEmotionDTO(valence: 0, arousal: 0.3, openness: 0.35),
-                interests: [],
-                userFacts: [],
-                activeMemories: []
-            )
+            state: state(version: version)
+        )
+    }
+
+    static func state(version: Int) -> CompanionStateDTO {
+        CompanionStateDTO(
+            scopeKey: "local-owner",
+            version: version,
+            updatedAt: "2026-08-31T00:00:00.000Z",
+            temperament: ShannonTemperamentDTO(
+                curiosity: 0.65,
+                initiative: 0.25,
+                closeness: 0.15,
+                calmness: 0.60,
+                needForContinuity: 0.70,
+                confidenceAboutUser: 0.05
+            ),
+            emotion: ShannonEmotionDTO(valence: 0, arousal: 0.3, openness: 0.35),
+            interests: [],
+            userFacts: [],
+            activeMemories: []
         )
     }
 }

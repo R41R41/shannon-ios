@@ -46,6 +46,9 @@ public struct ShannonConversationView: View {
             .sheet(isPresented: $showsStateDetails) {
                 ShannonStateSheet(state: model.state, expression: model.currentExpression)
             }
+            .task {
+                await model.loadConversationIfNeeded()
+            }
         }
     }
 
@@ -53,7 +56,12 @@ public struct ShannonConversationView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: M3Spacing.large) {
-                    if model.messages.isEmpty {
+                    if model.isLoadingHistory {
+                        ProgressView("これまでの会話を思い出している…")
+                            .tint(palette.primary)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .padding(.top, 72)
+                    } else if model.messages.isEmpty {
                         ShannonEmptyConversation()
                             .padding(.top, 56)
                     }

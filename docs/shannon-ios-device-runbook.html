@@ -150,11 +150,11 @@
     <section>
       <h2>開発中のつながり方</h2>
       <div class="flow">
-        <div class="flow-card"><b>Shannon iPhone</b><small>会話UI・投稿ごとの表情・入力体験</small></div>
+        <div class="flow-card"><b>シャノン iPhone</b><small>会話UI・投稿ごとの表情・入力体験</small></div>
         <div class="arrow">→</div>
         <div class="flow-card"><b>同じWi-Fi</b><small>Macのローカル名を使って接続</small></div>
         <div class="arrow">→</div>
-        <div class="flow-card"><b>Mac上のAPI</b><small>FCA・感情・記憶を実行。鍵の設定時は固定LLMへ接続</small></div>
+        <div class="flow-card"><b>Mac上のAPI</b><small>Bearer認証後にFCA・感情・記憶を実行。鍵の設定時は固定LLMへ接続</small></div>
       </div>
       <p class="note">iPhoneから初めて接続するときは「ローカルネットワーク上のデバイスの検索および接続」を許可してください。</p>
     </section>
@@ -173,10 +173,11 @@ pnpm dev:api:device</code></pre>
     <section>
       <h2>設定値</h2>
       <dl class="facts">
-        <dt>アプリ</dt><dd>Shannon</dd>
+        <dt>アプリ</dt><dd>シャノン</dd>
         <dt>Bundle ID</dt><dd><code>com.r41r41.shannon</code></dd>
         <dt>最低iOS</dt><dd>iOS 17.0</dd>
         <dt>開発API</dt><dd><code>http://arairyounoMacBook-Neo.local:4317</code></dd>
+        <dt>開発時の保護</dt><dd><code>SHANNON_API_TOKEN</code>によるBearer認証（Gitには保存しない）</dd>
         <dt>Xcodeプロジェクト</dt><dd><code>apps/ios-app/ShannonApp.xcodeproj</code></dd>
         <dt>現在の応答</dt><dd><span class="ok">FCA v1</span> — APIキー未設定時だけlocal-stub</dd>
       </dl>
@@ -185,13 +186,13 @@ pnpm dev:api:device</code></pre>
     <section>
       <h2>うまく話せないとき</h2>
       <div class="steps">
-        <div class="step"><h3>APIの窓を見る</h3><p><code>listening on http://0.0.0.0:4317</code> が表示されているか確認します。</p></div>
+        <div class="step"><h3>APIの窓を見る</h3><p><code>listening on http://192.168.x.x:4317</code> のように、MacのプライベートLANアドレスが表示されているか確認します。全インターフェースには公開しません。</p></div>
         <div class="step"><h3>権限を確認</h3><p>iPhoneの「設定 → プライバシーとセキュリティ → ローカルネットワーク」でShannonを有効にします。</p></div>
         <div class="step"><h3>Wi-Fiを確認</h3><p>ゲストWi-Fiなど、端末同士の通信を遮断するネットワークでは接続できないことがあります。</p></div>
       </div>
     </section>
 
-    <footer>Updated 2026-08-31 · Shannon iOS v1 local development</footer>
+    <footer>Updated 2026-08-31 · シャノン iOS v1 authenticated local development</footer>
   </main>
 </body>
 </html>

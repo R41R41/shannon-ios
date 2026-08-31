@@ -1,4 +1,5 @@
-import type { RecallCandidate } from '@shannon/cognition';
+import { randomUUID } from 'node:crypto';
+import type { RecallCandidate, ShannonMessageEmotion } from '@shannon/cognition';
 import type { ShannonConversationItem } from './chatModel.js';
 
 export interface ShannonExperience extends RecallCandidate {
@@ -6,37 +7,85 @@ export interface ShannonExperience extends RecallCandidate {
   shannonReply: string;
 }
 
-export class InMemoryConversationStore {
-  private readonly conversations = new Map<string, ShannonConversationItem[]>();
+export interface StoredConversationMessage extends ShannonConversationItem {
+  id: string;
+  observedAt: string;
+  messageEmotion?: ShannonMessageEmotion;
+  stateVersion?: number;
+}
+
+export interface TurnPersistenceContext {
+  messageEmotion: ShannonMessageEmotion;
+  capturedStateVersion: number;
+}
+
+export interface ConversationStore {
+  history(scopeKey: string): readonly ShannonConversationItem[];
+  conversationHistory(scopeKey: string): readonly StoredConversationMessage[];
+  experienceCandidates(scopeKey: string): readonly ShannonExperience[];
+  appendTurn(
+    scopeKey: string,
+    userMessage: string,
+    shannonReply: string,
+    observedAt: string,
+    context?: TurnPersistenceContext,
+  ): ShannonExperience;
+}
+
+export class InMemoryConversationStore implements ConversationStore {
+  private readonly conversations = new Map<string, StoredConversationMessage[]>();
   private readonly experiences = new Map<string, ShannonExperience[]>();
-  private readonly experienceSequences = new Map<string, number>();
 
   constructor(
-    private readonly maximumConversationItems = 20,
-    private readonly maximumExperiences = 200,
+    private readonly maximumConversationItems = 200,
+    private readonly maximumExperiences = 1_000,
+    private readonly maximumModelConversationItems = 20,
   ) {}
 
   history(scopeKey: string): readonly ShannonConversationItem[] {
-    return Object.freeze((this.conversations.get(scopeKey) ?? []).map(item => Object.freeze({ ...item })));
+    return Object.freeze(this.conversationHistory(scopeKey)
+      .slice(-this.maximumModelConversationItems)
+      .map(item => Object.freeze({ role: item.role, content: item.content })));
+  }
+
+  conversationHistory(scopeKey: string): readonly StoredConversationMessage[] {
+    return Object.freeze((this.conversations.get(scopeKey) ?? []).map(item => Object.freeze({
+      ...item,
+      ...(item.messageEmotion ? { messageEmotion: Object.freeze({ ...item.messageEmotion }) } : {}),
+    })));
   }
 
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] {
     return Object.freeze((this.experiences.get(scopeKey) ?? []).map(item => Object.freeze({ ...item })));
   }
 
-  appendTurn(scopeKey: string, userMessage: string, shannonReply: string, observedAt: string): ShannonExperience {
+  appendTurn(
+    scopeKey: string,
+    userMessage: string,
+    shannonReply: string,
+    observedAt: string,
+    context?: TurnPersistenceContext,
+  ): ShannonExperience {
+    const turnId = randomUUID();
     const conversation = this.conversations.get(scopeKey) ?? [];
     conversation.push(
-      { role: 'user', content: userMessage },
-      { role: 'assistant', content: shannonReply },
+      { id: randomUUID(), role: 'user', content: userMessage, observedAt },
+      {
+        id: randomUUID(),
+        role: 'assistant',
+        content: shannonReply,
+        observedAt,
+        ...(context ? {
+          messageEmotion: Object.freeze({ ...context.messageEmotion }),
+          stateVersion: context.capturedStateVersion,
+        } : {}),
+      },
     );
     this.conversations.set(scopeKey, conversation.slice(-this.maximumConversationItems));
 
     const experiences = this.experiences.get(scopeKey) ?? [];
-    const sequence = (this.experienceSequences.get(scopeKey) ?? 0) + 1;
-    this.experienceSequences.set(scopeKey, sequence);
     const experience: ShannonExperience = Object.freeze({
-      id: `${scopeKey}:${observedAt}:${sequence}`,
+      id: turnId,
       userMessage,
       shannonReply,
       summary: summarizeExperience(userMessage, shannonReply),
@@ -51,5 +100,5 @@ export class InMemoryConversationStore {
 function summarizeExperience(userMessage: string, shannonReply: string): string {
   const user = userMessage.replace(/\s+/g, ' ').trim().slice(0, 220);
   const shannon = shannonReply.replace(/\s+/g, ' ').trim().slice(0, 140);
-  return `ユーザー: ${user} / Shannon: ${shannon}`;
+  return `ユーザー: ${user} / シャノン: ${shannon}`;
 }

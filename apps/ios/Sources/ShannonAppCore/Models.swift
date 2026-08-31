@@ -78,6 +78,20 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public let state: CompanionStateDTO
 }
 
+public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
+    public let id: String
+    public let role: String
+    public let content: String
+    public let observedAt: String
+    public let messageEmotion: ShannonMessageEmotionDTO?
+    public let stateVersion: Int?
+}
+
+public struct ConversationHistoryResponseDTO: Codable, Equatable, Sendable {
+    public let messages: [StoredConversationMessageDTO]
+    public let state: CompanionStateDTO
+}
+
 public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public enum Role: Equatable, Sendable {
         case user

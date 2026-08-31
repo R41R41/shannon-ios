@@ -21,13 +21,13 @@ export function deriveShannonExpression(
   emotion: ShannonEmotion,
   temperament: ShannonTemperament,
 ): ShannonExpression {
-  if (emotion.valence >= 0.45 && emotion.arousal >= 0.5) return 'joyful';
-  if (emotion.valence <= -0.35 && emotion.arousal >= 0.5) return 'concerned';
-  if (emotion.valence <= -0.3) return 'sad';
-  if (emotion.arousal <= 0.18) return 'sleepy';
-  if (emotion.valence >= 0.22 && emotion.openness >= 0.5) return 'tender';
-  if (temperament.curiosity >= 0.7 && emotion.arousal >= 0.38) return 'curious';
-  if (temperament.calmness >= 0.55 && emotion.arousal <= 0.42) return 'calm';
+  if (emotion.valence >= 0.24 && emotion.arousal >= 0.4) return 'joyful';
+  if (emotion.valence <= -0.24 && emotion.arousal >= 0.36) return 'concerned';
+  if (emotion.valence <= -0.14) return 'sad';
+  if (emotion.arousal <= 0.2) return 'sleepy';
+  if (emotion.valence >= 0.1 && emotion.openness >= 0.37) return 'tender';
+  if (temperament.curiosity >= 0.6 && emotion.arousal >= 0.36) return 'curious';
+  if (temperament.calmness >= 0.55 && emotion.arousal <= 0.43) return 'calm';
   return 'neutral';
 }
 

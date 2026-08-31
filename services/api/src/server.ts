@@ -1,15 +1,30 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { networkInterfaces } from 'node:os';
+import { bearerAuthorized, configuredApiToken } from './apiAuth.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { createConfiguredChatModel } from './chatModel.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 
-const kernel = createLocalApiKernel(() => new Date().toISOString(), {
+const now = () => new Date().toISOString();
+const persistentStore = new SQLiteShannonStore({
+  path: configuredDatabasePath(),
+  now,
+});
+const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(),
+  stateStore: persistentStore,
+  conversationStore: persistentStore,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
+const apiToken = configuredApiToken(host, process.env.SHANNON_API_TOKEN);
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   try {
+    if (!bearerAuthorized(request.headers.authorization, apiToken)) {
+      sendJson(response, 401, { error: 'UNAUTHORIZED' });
+      return;
+    }
     if (request.method !== 'GET' && request.method !== 'POST') {
       sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return;
@@ -34,9 +49,25 @@ createServer(async (request, response) => {
       message: 'Shannonの言語モデルに接続できませんでした。',
     });
   }
-}).listen(port, host, () => {
-  console.log(`Shannon local API listening on http://${host}:${port}`);
 });
+
+server.listen(port, host, () => {
+  console.log(`Shannon local API listening on http://${host}:${port}`);
+  console.log('Shannon persistence ready: sqlite');
+});
+
+let shuttingDown = false;
+function shutdown(): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => {
+    persistentStore.close();
+    process.exitCode = 0;
+  });
+}
+
+process.once('SIGINT', shutdown);
+process.once('SIGTERM', shutdown);
 
 function parsePort(value: string | undefined): number {
   if (!value) return 4317;
@@ -45,10 +76,35 @@ function parsePort(value: string | undefined): number {
   return parsed;
 }
 
-function parseHost(value: string | undefined): '127.0.0.1' | '0.0.0.0' {
+function parseHost(value: string | undefined): string {
   if (!value) return '127.0.0.1';
-  if (value === '127.0.0.1' || value === '0.0.0.0') return value;
-  throw new Error('SHANNON_API_HOST must be 127.0.0.1 or 0.0.0.0');
+  if (value === '127.0.0.1') return value;
+  if (value === 'lan') return privateLanAddress();
+  throw new Error('SHANNON_API_HOST must be 127.0.0.1 or lan');
+}
+
+function privateLanAddress(): string {
+  const interfaces = networkInterfaces();
+  const preferred = interfaces.en0?.find(address => address.family === 'IPv4' && !address.internal);
+  if (preferred && isPrivateIPv4(preferred.address)) return preferred.address;
+
+  for (const addresses of Object.values(interfaces)) {
+    const address = addresses?.find(candidate => (
+      candidate.family === 'IPv4' && !candidate.internal && isPrivateIPv4(candidate.address)
+    ));
+    if (address) return address.address;
+  }
+  throw new Error('No private LAN IPv4 address is available for the iPhone API');
+}
+
+function isPrivateIPv4(value: string): boolean {
+  const octets = value.split('.').map(Number);
+  if (octets.length !== 4 || octets.some(octet => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  return octets[0] === 10
+    || (octets[0] === 172 && (octets[1] ?? 0) >= 16 && (octets[1] ?? 0) <= 31)
+    || (octets[0] === 192 && octets[1] === 168);
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {

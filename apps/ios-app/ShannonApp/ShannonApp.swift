@@ -7,7 +7,10 @@ struct ShannonApp: App {
         WindowGroup {
             ShannonConversationView(
                 model: ShannonConversationModel(
-                    client: ShannonAPIClient(baseURL: ShannonRuntimeConfiguration.apiBaseURL)
+                    client: ShannonAPIClient(
+                        baseURL: ShannonRuntimeConfiguration.apiBaseURL,
+                        apiToken: ShannonRuntimeConfiguration.apiToken
+                    )
                 )
             )
         }
@@ -23,5 +26,11 @@ private enum ShannonRuntimeConfiguration {
             return url
         }
         return URL(string: "http://127.0.0.1:4317")!
+    }()
+
+    static let apiToken: String? = {
+        let configured = Bundle.main.object(forInfoDictionaryKey: "ShannonAPIToken") as? String
+        guard let configured, !configured.isEmpty, !configured.contains("$(") else { return nil }
+        return configured
     }()
 }

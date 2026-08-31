@@ -18,7 +18,7 @@ export {
   type ShannonExpression,
   type ShannonMessageEmotion,
 } from './expression.js';
-export { deriveEmotionDelta } from './affect.js';
+export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';
 export {
   deriveResonantInterest,
   scoreMemoryRelevance,
