@@ -12,8 +12,8 @@
 
 ## 構成
 
-- `apps/ios`: SwiftUIアプリ。XcodeプロジェクトはUI実装開始時に追加する。
-- `services/api`: Azure VMで動かす専用API。永続化とworkerをここへ置く。
+- `apps/ios`: SwiftUI会話画面、API client、ViewModel。現在はSwift Packageとして検証する。
+- `services/api`: ローカルAPI。将来は永続化とworkerを追加してAzure VMで動かす。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
 
@@ -23,5 +23,14 @@
 pnpm install
 pnpm check
 pnpm test
+pnpm dev:api
 ```
 
+別のターミナルでiOSコアを検証する。
+
+```sh
+cd apps/ios
+swift test
+```
+
+ローカルAPIは `http://127.0.0.1:4317` で起動する。現在の `/v1/chat` はLLM未接続の `local-stub`。

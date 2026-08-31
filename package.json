@@ -4,10 +4,13 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "check": "pnpm --filter @shannon/cognition check",
-    "test": "pnpm --filter @shannon/cognition test"
+    "check": "pnpm -r check",
+    "test": "pnpm -r test",
+    "dev:api": "pnpm --filter @shannon/api dev"
   },
   "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }

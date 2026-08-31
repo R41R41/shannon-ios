@@ -6,6 +6,6 @@ coverage/
 .env.*
 !.env.example
 DerivedData/
+.build/
 *.xcuserstate
 xcuserdata/
-
