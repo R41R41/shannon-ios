@@ -8,6 +8,17 @@ final class ShannonExpressionAssetTests: XCTestCase {
                 ShannonExpressionAssets.url(for: expression),
                 "Missing image for \(expression.rawValue)"
             )
+#if canImport(UIKit)
+            XCTAssertNotNil(
+                ShannonExpressionAssets.uiImage(for: expression),
+                "Unreadable image for \(expression.rawValue)"
+            )
+#elseif canImport(AppKit)
+            XCTAssertNotNil(
+                ShannonExpressionAssets.nsImage(for: expression),
+                "Unreadable image for \(expression.rawValue)"
+            )
+#endif
         }
     }
 
@@ -18,4 +29,3 @@ final class ShannonExpressionAssetTests: XCTestCase {
         XCTAssertEqual(ShannonExpressionDTO.neutral.assetName, "shannon-expression-neutral")
     }
 }
-

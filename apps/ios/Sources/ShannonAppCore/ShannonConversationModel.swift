@@ -84,7 +84,7 @@ public final class ShannonConversationModel {
             )
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)
-            errorMessage = "Shannonに接続できませんでした。ローカルAPIを確認してください。"
+            errorMessage = "シャノンに接続できませんでした。ローカルAPIを確認してください。"
         }
         isSending = false
     }

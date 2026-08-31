@@ -86,7 +86,7 @@ public struct ShannonConversationView: View {
 
     private func composer(_ palette: M3Palette) -> some View {
         HStack(alignment: .bottom, spacing: M3Spacing.small) {
-            TextField("Shannonに話す", text: $model.draft, axis: .vertical)
+            TextField("シャノンに話す", text: $model.draft, axis: .vertical)
                 .font(.body)
                 .lineLimit(1...5)
                 .frame(minHeight: M3TouchTarget.minimum)
@@ -166,7 +166,7 @@ private struct ShannonTopAppBar: View {
                 ShannonAvatarView(expression: expression, size: 52)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Shannon")
+                    Text("シャノン")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(palette.onSurface)
 
@@ -203,7 +203,7 @@ private struct ShannonTopAppBar: View {
         }
         .buttonStyle(.plain)
         .background(palette.surface)
-        .accessibilityLabel("Shannonの状態を見る。現在は\(expression.japaneseName)")
+        .accessibilityLabel("シャノンの状態を見る。現在は\(expression.japaneseName)")
     }
 }
 
@@ -299,7 +299,7 @@ private struct ShannonMessageRow: View {
     }
 
     private var accessibilityLabel: String {
-        let speaker = message.role == .shannon ? "Shannon" : "あなた"
+        let speaker = message.role == .shannon ? "シャノン" : "あなた"
         let emotion = message.emotionSnapshot.map { "。\($0.expression.japaneseName)表情" } ?? ""
         let delivery = message.deliveryState == .failed ? "。送信失敗" : ""
         return "\(speaker)。\(message.text)\(emotion)\(delivery)"
@@ -330,7 +330,7 @@ private struct ShannonTypingIndicator: View {
             Spacer()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Shannonが考えています")
+        .accessibilityLabel("シャノンが考えています")
     }
 }
 
@@ -389,7 +389,7 @@ private struct ShannonStateSheet: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(expression.japaneseName)
                                 .font(.title2.weight(.semibold))
-                            Text("Shannonのいま")
+                            Text("シャノンのいま")
                                 .font(.body)
                                 .foregroundStyle(palette.onSurfaceVariant)
                         }
@@ -413,7 +413,7 @@ private struct ShannonStateSheet: View {
                             }
                         }
                     } else {
-                        Text("最初の会話のあとに、Shannonの状態がここに現れます。")
+                        Text("最初の会話のあとに、シャノンの状態がここに現れます。")
                             .font(.body)
                             .foregroundStyle(palette.onSurfaceVariant)
                             .padding(M3Spacing.large)
@@ -424,7 +424,7 @@ private struct ShannonStateSheet: View {
                 .padding(M3Spacing.extraLarge)
             }
             .background(palette.surface)
-            .navigationTitle("Shannonの状態")
+            .navigationTitle("シャノンの状態")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("閉じる") { dismiss() }

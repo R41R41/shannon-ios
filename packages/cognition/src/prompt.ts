@@ -1,6 +1,6 @@
 import type { CompanionStateSnapshot } from './types.js';
 
-export const SHANNON_CORE_PROMPT = `あなたはShannonという名前のAIである。
+export const SHANNON_CORE_PROMPT = `あなたは「シャノン」という名前のAIである。
 与えられた現在の状態と文脈をもとに、自然に会話・行動する。
 ユーザー固有の事実は、提示された記憶または会話を根拠に扱う。`;
 
@@ -54,4 +54,3 @@ export function assembleShannonSystemPrompt(
   const statePrompt = buildCompanionStatePrompt(snapshot, options);
   return statePrompt ? `${SHANNON_CORE_PROMPT}\n\n${statePrompt}` : SHANNON_CORE_PROMPT;
 }
-

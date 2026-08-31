@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Shannon</string>
+    <string>シャノン</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -28,7 +28,7 @@
         <true/>
     </dict>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>開発中のShannon APIへ接続するため、同じネットワーク上のMacを検出します。</string>
+    <string>開発中のシャノンAPIへ接続するため、同じネットワーク上のMacを検出します。</string>
     <key>ShannonAPIBaseURL</key>
     <string>$(SHANNON_API_BASE_URL)</string>
     <key>UIApplicationSupportsIndirectInputEvents</key>

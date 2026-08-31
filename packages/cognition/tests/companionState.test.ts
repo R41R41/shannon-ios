@@ -50,6 +50,7 @@ describe('Shannon companion shared state', () => {
     const statePrompt = buildCompanionStatePrompt(store.snapshot('scope-a'), { maximumCharacters: 220 });
     const fullPrompt = assembleShannonSystemPrompt(store.snapshot('scope-a'), { maximumCharacters: 220 });
     expect(fullPrompt.startsWith(SHANNON_CORE_PROMPT)).toBe(true);
+    expect(SHANNON_CORE_PROMPT).toContain('「シャノン」という名前');
     expect(statePrompt.length).toBeLessThanOrEqual(220);
     expect(fullPrompt).not.toContain('予測');
   });

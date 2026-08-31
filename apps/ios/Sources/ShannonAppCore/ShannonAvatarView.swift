@@ -1,4 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public struct ShannonAvatarView: View {
     public let expression: ShannonExpressionDTO
@@ -14,7 +19,7 @@ public struct ShannonAvatarView: View {
     public var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        Image(expression.assetName, bundle: .module)
+        avatarImage
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
@@ -27,5 +32,20 @@ public struct ShannonAvatarView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(expression.accessibilityDescription)
     }
-}
 
+    private var avatarImage: Image {
+#if canImport(UIKit)
+        if let image = ShannonExpressionAssets.uiImage(for: expression) {
+            return Image(uiImage: image)
+        }
+        return Image(systemName: "person.crop.circle.fill")
+#elseif canImport(AppKit)
+        if let image = ShannonExpressionAssets.nsImage(for: expression) {
+            return Image(nsImage: image)
+        }
+        return Image(systemName: "person.crop.circle.fill")
+#else
+        return Image(systemName: "person.crop.circle.fill")
+#endif
+    }
+}
