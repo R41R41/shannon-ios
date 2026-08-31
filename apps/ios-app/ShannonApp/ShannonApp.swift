@@ -1,19 +1,45 @@
 import ShannonAppCore
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 @main
 struct ShannonApp: App {
     var body: some Scene {
         WindowGroup {
-            ShannonConversationView(
-                model: ShannonConversationModel(
-                    client: ShannonAPIClient(
-                        baseURL: ShannonRuntimeConfiguration.apiBaseURL,
-                        apiToken: ShannonRuntimeConfiguration.apiToken
-                    )
-                )
-            )
+            ShannonRootView()
         }
+    }
+}
+
+private struct ShannonRootView: View {
+    @State private var conversationModel: ShannonConversationModel
+    @State private var connectionModel: ShannonConnectionModel
+
+    init() {
+        let connectionStore = ShannonKeychainConnectionStore()
+        let client = ShannonAPIClient(
+            baseURL: ShannonRuntimeConfiguration.apiBaseURL,
+            apiToken: ShannonRuntimeConfiguration.apiToken,
+            connectionStore: connectionStore
+        )
+        _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        _connectionModel = State(initialValue: ShannonConnectionModel(
+            baseURL: ShannonRuntimeConfiguration.apiBaseURL,
+            store: connectionStore,
+            deviceName: {
+#if os(iOS)
+                UIDevice.current.name
+#else
+                "Apple device"
+#endif
+            }
+        ))
+    }
+
+    var body: some View {
+        ShannonConversationView(model: conversationModel, connectionModel: connectionModel)
     }
 }
 private enum ShannonRuntimeConfiguration {

@@ -7,7 +7,8 @@
     "check": "pnpm -r check",
     "test": "pnpm -r test",
     "dev:api": "pnpm --filter @shannon/api dev",
-    "dev:api:device": "SHANNON_API_HOST=lan pnpm --filter @shannon/api dev"
+    "dev:api:device": "SHANNON_API_HOST=lan pnpm --filter @shannon/api dev",
+    "auth": "pnpm --filter @shannon/api auth"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

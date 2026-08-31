@@ -6,7 +6,8 @@
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "dev": "tsx --env-file-if-exists=../../.env src/server.ts"
+    "dev": "tsx --env-file-if-exists=../../.env src/server.ts",
+    "auth": "tsx --env-file-if-exists=../../.env src/authCli.ts"
   },
   "dependencies": {
     "@shannon/cognition": "workspace:*"

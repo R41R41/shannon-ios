@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon · Azure Pairing Architecture</title>
+  <style>
+    :root{color-scheme:light;--ink:#211c27;--muted:#706778;--primary:#6750a4;--soft:#eee8fa;--mint:#ddf4ec;--amber:#fff0d6;--surface:#fffbfe;--line:#ded6e4}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 8% 0,#e9e1fb,transparent 34rem),radial-gradient(circle at 100% 18%,#dff4ee,transparent 32rem),#f8f6fa;color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}main{width:min(1100px,calc(100% - 30px));margin:auto;padding:54px 0 80px}h1,h2,h3,p{margin-top:0}h1{max-width:900px;font-size:clamp(2.5rem,7vw,5.2rem);line-height:.98;letter-spacing:-.06em}.eyebrow{color:var(--primary);font-size:.78rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase}.lead{max-width:780px;color:var(--muted);font-size:1.08rem}.status{display:flex;flex-wrap:wrap;gap:9px;margin:25px 0}.pill{padding:8px 13px;border-radius:999px;background:#edfaf6;color:#286c5c;font-weight:700}.pill.wait{background:var(--amber);color:#875a17}section{margin-top:18px;padding:28px;border:1px solid #ffffffaa;border-radius:28px;background:#ffffffdc;box-shadow:0 18px 45px #45384f0d}.flow{display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;align-items:center;gap:10px}.node{min-height:150px;padding:20px;border-radius:20px;background:var(--soft)}.node.mint{background:var(--mint)}.arrow{text-align:center;color:#988ba7;font-size:1.4rem}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{padding:20px;border-radius:20px;background:#faf8fc}.card code{overflow-wrap:anywhere}.law{display:grid;grid-template-columns:180px 1fr;margin-top:10px;padding:13px 0;border-bottom:1px solid var(--line)}.law b{color:var(--primary)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}footer{padding:28px 4px 0;color:var(--muted);font-size:.84rem}@media(max-width:800px){main{padding-top:32px}.flow,.grid{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}section{padding:22px}.law{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <p class="eyebrow">Shannon · Remote Connection Milestone</p>
+  <h1>Macから離れても、<br>同じシャノンへ。</h1>
+  <p class="lead">Azure常駐APIとiPhoneを、短命な接続コードで一度だけ結ぶ。以降は端末固有トークンをKeychainから使い、会話・感情・記憶の所有者境界はサーバーが強制する。</p>
+  <div class="status"><span class="pill">✓ ペアリング実装</span><span class="pill">✓ Keychain実装</span><span class="pill">✓ scope強制</span><span class="pill">✓ 失効・期限</span><span class="pill">✓ 隔離E2E</span><span class="pill wait">VM適用は保留</span><span class="pill wait">実機反映は保留</span></div>
+
+  <section><h2>一度だけの接続</h2><div class="flow">
+    <div class="node"><h3>1 · Azureで発行</h3><p>48bitのランダムコード。30分で失効し、失敗10回でロック。</p><code>ABCD-EF12-3456</code></div><div class="arrow">→</div>
+    <div class="node mint"><h3>2 · iPhoneで入力</h3><p>HTTPSだけを許可。成功時に端末トークンを一度だけ受け取る。</p><code>POST /companion/v1/pair</code></div><div class="arrow">→</div>
+    <div class="node"><h3>3 · Keychainへ</h3><p>この端末・ロック解除中だけ利用可能。APIキーと接続コードは保存しない。</p><code>WhenUnlockedThisDeviceOnly</code></div>
+  </div></section>
+
+  <section><h2>毎回の会話</h2><div class="grid">
+    <div class="card"><h3>iPhone</h3><p>Keychainの端末トークンをBearerとして送る。保存した接続先と現在の接続先が完全一致するときだけ利用。</p></div>
+    <div class="card"><h3>HTTPS境界</h3><p><code>sh4nnon.com/companion/</code> だけをloopback APIへ転送。nginx access logは無効。</p></div>
+    <div class="card"><h3>Shannon API</h3><p>トークンから所有者scopeを復元し、クライアントが送ったscopeを上書き。別ユーザーの記憶へ到達できない。</p></div>
+  </div>
+  <div class="law"><b>DBに残るもの</b><span>コードとトークンのHMAC-SHA256、端末ID、scope、期限、最終利用時刻。</span></div>
+  <div class="law"><b>DBに残らないもの</b><span>接続コード、端末トークン、OpenAI APIキーの平文。</span></div>
+  <div class="law"><b>端末上の秘密</b><span>端末トークンのみ。接続解除でKeychainから削除。</span></div>
+  <div class="law"><b>利用制限</b><span>1端末20会話/分、同時LLM処理は全体2件まで。ペアリング試行も20回/分に制限。</span></div>
+  </section>
+
+  <section><h2>Azure配置境界</h2><div class="grid">
+    <div class="card"><h3>既存系と分離</h3><p>新規フォルダ、データディレクトリ、systemd unit、4319番loopbackポートを使用。既存Shannon/Aetherを変更しない。</p></div>
+    <div class="card"><h3>Nodeを分離</h3><p>VMの既存Node 20は維持。<code>node:sqlite</code>対応のNode 24を専用runtimeとして配置する。</p></div>
+    <div class="card"><h3>まだ行わないこと</h3><p>VMへのファイル配置、nginx reload、systemd enable、iPhoneへの新ビルド導入。次のまとまったリリースで実行する。</p></div>
+  </div></section>
+  <footer>Updated 2026-08-31 · Pairing foundation complete; production application intentionally deferred</footer>
+</main></body></html>

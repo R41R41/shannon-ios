@@ -17,6 +17,7 @@
 - `services/api`: ローカルAPI。SQLiteで会話・共有状態・追記型経験ログを永続化し、将来はworkerを分離してAzure VMで動かす。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
+- `deploy/azure`: 既存サービスから分離したsystemd・nginx・秘密値配置のレビュー用テンプレート。
 
 ## 開発
 
@@ -55,8 +56,10 @@ pnpm dev:api:device
 
 この接続は開発時だけ利用する。APIはMacのプライベートLANアドレスだけで待受し、32文字以上の`SHANNON_API_TOKEN`をBearer認証に使う。秘密値は`.env`とビルド時設定だけに置き、Gitへ追加しない。
 
-Aether本番版と同様に、Shannonの本番接続はAzure上のHTTPSへ移し、一時接続コードから端末固有トークンを発行してiOS Keychainへ保存する。現在のビルド埋め込みトークンはローカル実機開発だけの暫定方式。
+Aether本番版と同様の一時接続コード、端末固有トークン、iOS Keychain保存は実装済み。現在のビルド埋め込みトークンはローカル実機開発だけの暫定方式として残し、Azure適用と実機更新はまとまったリリース時に行う。
 
 ブラウザで確認できる実機手順は [`docs/shannon-ios-device-runbook.html`](docs/shannon-ios-device-runbook.html) にまとめている。
 
 FCA・感情・記憶がどう分離して動くかは [`docs/shannon-fca-v1-runtime.html`](docs/shannon-fca-v1-runtime.html) で視覚的に確認できる。
+
+Azure接続とペアリングの安全境界は [`docs/shannon-azure-pairing.html`](docs/shannon-azure-pairing.html) にまとめている。

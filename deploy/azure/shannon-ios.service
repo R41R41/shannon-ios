@@ -1,0 +1,36 @@
+[Unit]
+Description=Shannon iOS paired companion API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-ios
+Environment=NODE_ENV=production
+Environment=SHANNON_API_HOST=127.0.0.1
+Environment=SHANNON_API_PORT=4319
+Environment=SHANNON_AUTH_MODE=paired
+Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/server.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+ReadWritePaths=/home/azureuser/shannon-ios-data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bearerAuthorized, configuredApiToken } from '../src/apiAuth.js';
+import { bearerAuthorized, configuredApiToken, configuredAuthMode } from '../src/apiAuth.js';
 
 describe('device API authentication', () => {
   const token = '0123456789abcdef0123456789abcdef';
@@ -8,6 +8,13 @@ describe('device API authentication', () => {
     expect(configuredApiToken('127.0.0.1', undefined)).toBeNull();
     expect(() => configuredApiToken('192.168.2.129', undefined)).toThrow('required');
     expect(configuredApiToken('192.168.2.129', token)).toBe(token);
+  });
+
+  it('selects an explicit production pairing boundary', () => {
+    expect(configuredAuthMode('127.0.0.1', {})).toBe('none');
+    expect(configuredAuthMode('192.168.2.129', { SHANNON_API_TOKEN: token })).toBe('fixed');
+    expect(configuredAuthMode('127.0.0.1', { SHANNON_AUTH_MODE: 'paired' })).toBe('paired');
+    expect(() => configuredAuthMode('192.168.2.129', { SHANNON_AUTH_MODE: 'none' })).toThrow('loopback');
   });
 
   it('rejects missing, malformed, short, and incorrect credentials', () => {

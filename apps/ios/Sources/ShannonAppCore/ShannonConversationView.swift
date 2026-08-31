@@ -2,14 +2,20 @@ import SwiftUI
 
 public struct ShannonConversationView: View {
     @State private var model: ShannonConversationModel
+    @State private var connectionModel: ShannonConnectionModel?
     @State private var showsStateDetails = false
+    @State private var showsConnectionDetails = false
     @FocusState private var composerIsFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: ShannonConversationModel = ShannonConversationModel()) {
+    public init(
+        model: ShannonConversationModel = ShannonConversationModel(),
+        connectionModel: ShannonConnectionModel? = nil
+    ) {
         _model = State(initialValue: model)
+        _connectionModel = State(initialValue: connectionModel)
     }
 
     public var body: some View {
@@ -21,7 +27,8 @@ public struct ShannonConversationView: View {
                     expression: model.currentExpression,
                     isThinking: model.isSending,
                     stateVersion: model.state?.version,
-                    action: { showsStateDetails = true }
+                    stateAction: { showsStateDetails = true },
+                    connectionAction: connectionModel == nil ? nil : { showsConnectionDetails = true }
                 )
 
                 messageList(palette)
@@ -46,7 +53,13 @@ public struct ShannonConversationView: View {
             .sheet(isPresented: $showsStateDetails) {
                 ShannonStateSheet(state: model.state, expression: model.currentExpression)
             }
+            .sheet(isPresented: $showsConnectionDetails) {
+                if let connectionModel {
+                    ShannonConnectionView(model: connectionModel)
+                }
+            }
             .task {
+                connectionModel?.refreshFromKeychain()
                 await model.loadConversationIfNeeded()
             }
         }
@@ -162,56 +175,70 @@ private struct ShannonTopAppBar: View {
     let expression: ShannonExpressionDTO
     let isThinking: Bool
     let stateVersion: Int?
-    let action: () -> Void
+    let stateAction: () -> Void
+    let connectionAction: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        Button(action: action) {
-            HStack(spacing: M3Spacing.medium) {
-                ShannonAvatarView(expression: expression, size: 52)
+        HStack(spacing: M3Spacing.medium) {
+            Button(action: stateAction) {
+                HStack(spacing: M3Spacing.medium) {
+                    ShannonAvatarView(expression: expression, size: 52)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("シャノン")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(palette.onSurface)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("シャノン")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(palette.onSurface)
 
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(isThinking ? palette.tertiary : Color(hex: 0x2E7D32))
-                            .frame(width: 8, height: 8)
-                        Text(isThinking ? "考えている…" : "ここにいる・\(expression.japaneseName)")
-                            .font(.caption)
-                            .foregroundStyle(palette.onSurfaceVariant)
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(isThinking ? palette.tertiary : Color(hex: 0x2E7D32))
+                                .frame(width: 8, height: 8)
+                            Text(isThinking ? "考えている…" : "ここにいる・\(expression.japaneseName)")
+                                .font(.caption)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
                     }
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("シャノンの状態を見る。現在は\(expression.japaneseName)")
 
-                Spacer(minLength: M3Spacing.small)
+            Spacer(minLength: M3Spacing.small)
 
-                if let stateVersion {
-                    Text("v\(stateVersion)")
-                        .font(.caption2.monospacedDigit().weight(.medium))
-                        .foregroundStyle(palette.onSecondaryContainer)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(palette.secondaryContainer, in: Capsule())
+            if let stateVersion {
+                Text("v\(stateVersion)")
+                    .font(.caption2.monospacedDigit().weight(.medium))
+                    .foregroundStyle(palette.onSecondaryContainer)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(palette.secondaryContainer, in: Capsule())
+            }
+
+            if let connectionAction {
+                Button(action: connectionAction) {
+                    Image(systemName: "link.circle")
+                        .font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(palette.primary)
+                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
                 }
-
+                .buttonStyle(.plain)
+                .accessibilityLabel("シャノンとの接続設定")
+            } else {
                 Image(systemName: "info.circle")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(palette.primary)
                     .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
             }
-            .padding(.leading, M3Spacing.large)
-            .padding(.trailing, M3Spacing.small)
-            .padding(.vertical, M3Spacing.small)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(.leading, M3Spacing.large)
+        .padding(.trailing, M3Spacing.small)
+        .padding(.vertical, M3Spacing.small)
         .background(palette.surface)
-        .accessibilityLabel("シャノンの状態を見る。現在は\(expression.japaneseName)")
     }
 }
 

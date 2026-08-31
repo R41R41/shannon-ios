@@ -184,6 +184,16 @@ pnpm dev:api:device</code></pre>
     </section>
 
     <section>
+      <h2>次の一括反映で変わること</h2>
+      <div class="steps">
+        <div class="step"><h3>接続コード</h3><p>Azureで発行した12桁のコードを、チャット上部の接続画面へ入力します。30分間、一度だけ利用できます。</p></div>
+        <div class="step"><h3>Keychain</h3><p>端末固有トークンだけを、このiPhoneのKeychainへ保存します。APIキーや接続コードは保存しません。</p></div>
+        <div class="step"><h3>Macから独立</h3><p>HTTPSのAzure APIへ接続するため、同じWi-FiやMac上の開発サーバーが不要になります。</p></div>
+      </div>
+      <p class="note">この機能はコードとテストまで完成していますが、ユーザー方針により今回のiPhoneには未反映です。worker・睡眠バッチとまとめて次の大きなチェックポイントで導入します。</p>
+    </section>
+
+    <section>
       <h2>うまく話せないとき</h2>
       <div class="steps">
         <div class="step"><h3>APIの窓を見る</h3><p><code>listening on http://192.168.x.x:4317</code> のように、MacのプライベートLANアドレスが表示されているか確認します。全インターフェースには公開しません。</p></div>
@@ -192,7 +202,7 @@ pnpm dev:api:device</code></pre>
       </div>
     </section>
 
-    <footer>Updated 2026-08-31 · シャノン iOS v1 authenticated local development</footer>
+    <footer>Updated 2026-08-31 · Local device remains unchanged; paired Azure client prepared for a later bundled release</footer>
   </main>
 </body>
 </html>
