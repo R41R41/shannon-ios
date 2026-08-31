@@ -3,6 +3,7 @@ import { createLocalApiKernel } from './apiKernel.js';
 
 const kernel = createLocalApiKernel();
 const port = parsePort(process.env.SHANNON_API_PORT);
+const host = parseHost(process.env.SHANNON_API_HOST);
 
 createServer(async (request, response) => {
   try {
@@ -25,8 +26,8 @@ createServer(async (request, response) => {
       message: error instanceof Error ? error.message : 'request failed',
     });
   }
-}).listen(port, '127.0.0.1', () => {
-  console.log(`Shannon local API listening on http://127.0.0.1:${port}`);
+}).listen(port, host, () => {
+  console.log(`Shannon local API listening on http://${host}:${port}`);
 });
 
 function parsePort(value: string | undefined): number {
@@ -34,6 +35,12 @@ function parsePort(value: string | undefined): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) throw new Error('SHANNON_API_PORT is invalid');
   return parsed;
+}
+
+function parseHost(value: string | undefined): '127.0.0.1' | '0.0.0.0' {
+  if (!value) return '127.0.0.1';
+  if (value === '127.0.0.1' || value === '0.0.0.0') return value;
+  throw new Error('SHANNON_API_HOST must be 127.0.0.1 or 0.0.0.0');
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {

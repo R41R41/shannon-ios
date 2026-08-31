@@ -12,7 +12,8 @@
 
 ## 構成
 
-- `apps/ios`: SwiftUI会話画面、API client、ViewModel。現在はSwift Packageとして検証する。
+- `apps/ios`: SwiftUI会話画面、API client、ViewModel、8表情リソースのSwift Package。
+- `apps/ios-app`: 実機起動用のXcodeアプリ。`apps/ios`をローカルPackageとして利用する。
 - `services/api`: ローカルAPI。将来は永続化とworkerを追加してAzure VMで動かす。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
@@ -34,3 +35,21 @@ swift test
 ```
 
 ローカルAPIは `http://127.0.0.1:4317` で起動する。現在の `/v1/chat` はLLM未接続の `local-stub`。
+
+## iPhone実機
+
+MacとiPhoneを同じネットワークへ接続し、実機用にAPIをLAN公開する。
+
+```sh
+pnpm dev:api:device
+```
+
+次に`apps/ios-app/ShannonApp.xcodeproj`をXcodeで開き、接続したiPhoneを実行先にして`ShannonApp`を起動する。
+
+- Bundle ID: `com.r41r41.shannon`
+- Team: `66TZ23L7ZJ`
+- Debug API: `http://arairyounoMacBook-Neo.local:4317`
+
+LAN公開は開発時だけ利用する。現在のAPIは認証を持たないため、信頼できないネットワークでは起動しない。
+
+ブラウザで確認できる実機手順は [`docs/shannon-ios-device-runbook.html`](docs/shannon-ios-device-runbook.html) にまとめている。

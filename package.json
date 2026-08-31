@@ -6,7 +6,8 @@
   "scripts": {
     "check": "pnpm -r check",
     "test": "pnpm -r test",
-    "dev:api": "pnpm --filter @shannon/api dev"
+    "dev:api": "pnpm --filter @shannon/api dev",
+    "dev:api:device": "SHANNON_API_HOST=0.0.0.0 pnpm --filter @shannon/api dev"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

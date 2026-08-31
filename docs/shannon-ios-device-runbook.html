@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon iPhone 実機ガイド</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25222b;
+      --muted: #716b7a;
+      --surface: rgba(255, 255, 255, 0.86);
+      --line: rgba(89, 73, 108, 0.14);
+      --lavender: #7357a6;
+      --lavender-soft: #eee8fa;
+      --mint: #2f806e;
+      --mint-soft: #e4f5f0;
+      --amber: #a56d20;
+      --amber-soft: #fff2db;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, #eee7ff 0, transparent 30rem),
+        radial-gradient(circle at 100% 18%, #def4ee 0, transparent 34rem),
+        #f8f7fa;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", sans-serif;
+      line-height: 1.65;
+    }
+
+    main { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 56px 0 80px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 760px; margin-bottom: 14px; font-size: clamp(2.35rem, 7vw, 5rem); line-height: .98; letter-spacing: -.055em; }
+    h2 { margin-bottom: 20px; font-size: 1.55rem; letter-spacing: -.025em; }
+    h3 { margin-bottom: 8px; font-size: 1.02rem; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; font-size: .9em; }
+
+    .eyebrow { margin-bottom: 18px; color: var(--lavender); font-size: .78rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+    .lead { max-width: 720px; color: var(--muted); font-size: 1.08rem; }
+    .hero { padding: 22px 0 42px; }
+    .hero-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+    .avatar {
+      width: 132px;
+      height: 132px;
+      flex: 0 0 132px;
+      border: 7px solid rgba(255,255,255,.9);
+      border-radius: 36px;
+      object-fit: cover;
+      box-shadow: 0 22px 50px rgba(74, 56, 96, .18);
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 28px 0 44px;
+    }
+    .status-card, section {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: 0 16px 45px rgba(63, 54, 74, .07);
+      backdrop-filter: blur(16px);
+    }
+    .status-card { padding: 18px; border-radius: 22px; }
+    .status-card strong { display: block; margin-bottom: 3px; font-size: 1.12rem; }
+    .status-card span { color: var(--muted); font-size: .88rem; }
+    .dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; background: #39a77e; box-shadow: 0 0 0 5px #dff4ec; }
+
+    section { margin-top: 18px; padding: 28px; border-radius: 28px; }
+    .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 14px; align-items: center; }
+    .flow-card { min-height: 135px; padding: 20px; border-radius: 20px; background: #f7f4fc; }
+    .flow-card:nth-child(3) { background: var(--mint-soft); }
+    .flow-card:nth-child(5) { background: #edf2ff; }
+    .flow-card b { display: block; margin-bottom: 6px; }
+    .flow-card small { color: var(--muted); }
+    .arrow { color: #968aa2; font-size: 1.4rem; }
+
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: step; }
+    .step { padding: 20px; border-radius: 20px; background: #faf9fb; counter-increment: step; }
+    .step::before {
+      content: counter(step);
+      display: grid;
+      width: 30px;
+      height: 30px;
+      margin-bottom: 14px;
+      place-items: center;
+      border-radius: 10px;
+      color: white;
+      background: var(--lavender);
+      font-size: .82rem;
+      font-weight: 750;
+    }
+    .step p { margin-bottom: 0; color: var(--muted); font-size: .92rem; }
+
+    pre {
+      overflow-x: auto;
+      margin: 12px 0 0;
+      padding: 18px;
+      border-radius: 18px;
+      color: #f7f3ff;
+      background: #292530;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .82rem;
+      line-height: 1.6;
+    }
+    .note { margin-top: 18px; padding: 16px 18px; border-radius: 18px; color: #72501c; background: var(--amber-soft); }
+    .facts { display: grid; grid-template-columns: 190px 1fr; gap: 0; margin: 0; }
+    .facts dt, .facts dd { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .facts dt { color: var(--muted); }
+    .facts dd { font-weight: 630; overflow-wrap: anywhere; }
+    .ok { color: var(--mint); }
+    footer { padding: 28px 4px 0; color: var(--muted); font-size: .85rem; }
+
+    @media (max-width: 760px) {
+      main { width: min(100% - 22px, 640px); padding-top: 32px; }
+      .hero-row { align-items: center; }
+      .avatar { width: 92px; height: 92px; flex-basis: 92px; border-radius: 28px; }
+      .status, .steps { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); text-align: center; }
+      section { padding: 22px; border-radius: 24px; }
+      .facts { grid-template-columns: 1fr; }
+      .facts dt { padding-bottom: 0; border-bottom: 0; }
+      .facts dd { padding-top: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Shannon · Device Runbook</p>
+      <div class="hero-row">
+        <div>
+          <h1>Shannonを、<br>手のひらへ。</h1>
+          <p class="lead">チャット画面と表情アイコンを、実際のiPhoneで試すための現在地と最短手順。開発中はMacがShannonのローカルサーバーになります。</p>
+        </div>
+        <img class="avatar" src="../design/character-concepts/chat-icons/shannon-chat-icon-02-icon-chibi-lavender.png" alt="Shannon Icon Chibi">
+      </div>
+    </header>
+
+    <div class="status" aria-label="実機反映ステータス">
+      <div class="status-card"><strong><i class="dot"></i>実機ビルド成功</strong><span>iOS 17以降・arm64</span></div>
+      <div class="status-card"><strong><i class="dot"></i>署名成功</strong><span>Apple Development</span></div>
+      <div class="status-card"><strong><i class="dot"></i>iPhoneへ導入済み</strong><span>iPhone 15で起動確認</span></div>
+    </div>
+
+    <section>
+      <h2>開発中のつながり方</h2>
+      <div class="flow">
+        <div class="flow-card"><b>Shannon iPhone</b><small>会話UI・投稿ごとの表情・入力体験</small></div>
+        <div class="arrow">→</div>
+        <div class="flow-card"><b>同じWi-Fi</b><small>Macのローカル名を使って接続</small></div>
+        <div class="arrow">→</div>
+        <div class="flow-card"><b>Mac上のAPI</b><small>現在はlocal-stub。次にLLMとFCAを接続</small></div>
+      </div>
+      <p class="note">iPhoneから初めて接続するときは「ローカルネットワーク上のデバイスの検索および接続」を許可してください。</p>
+    </section>
+
+    <section>
+      <h2>次回の起動は3ステップ</h2>
+      <div class="steps">
+        <div class="step"><h3>同じネットワークへ</h3><p>MacとiPhoneを同じWi-Fiに接続します。USB接続はビルド時には安定しますが、API通信はWi-Fiを使います。</p></div>
+        <div class="step"><h3>APIを起動</h3><p>リポジトリ直下で実機用コマンドを実行します。このウィンドウは開いたままにします。</p></div>
+        <div class="step"><h3>Shannonを開く</h3><p>iPhoneのホーム画面からShannonを開きます。更新時はXcodeで実行先をiPhoneにして▶︎を押します。</p></div>
+      </div>
+      <pre><code>cd /Users/arairyo/Documents/Codex/2026-08-31/shannon-ios
+pnpm dev:api:device</code></pre>
+    </section>
+
+    <section>
+      <h2>設定値</h2>
+      <dl class="facts">
+        <dt>アプリ</dt><dd>Shannon</dd>
+        <dt>Bundle ID</dt><dd><code>com.r41r41.shannon</code></dd>
+        <dt>最低iOS</dt><dd>iOS 17.0</dd>
+        <dt>開発API</dt><dd><code>http://arairyounoMacBook-Neo.local:4317</code></dd>
+        <dt>Xcodeプロジェクト</dt><dd><code>apps/ios-app/ShannonApp.xcodeproj</code></dd>
+        <dt>現在の応答</dt><dd><span class="ok">local-stub</span> — UIと接続を検証する段階</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>うまく話せないとき</h2>
+      <div class="steps">
+        <div class="step"><h3>APIの窓を見る</h3><p><code>listening on http://0.0.0.0:4317</code> が表示されているか確認します。</p></div>
+        <div class="step"><h3>権限を確認</h3><p>iPhoneの「設定 → プライバシーとセキュリティ → ローカルネットワーク」でShannonを有効にします。</p></div>
+        <div class="step"><h3>Wi-Fiを確認</h3><p>ゲストWi-Fiなど、端末同士の通信を遮断するネットワークでは接続できないことがあります。</p></div>
+      </div>
+    </section>
+
+    <footer>Updated 2026-08-31 · Shannon iOS v1 local development</footer>
+  </main>
+</body>
+</html>
