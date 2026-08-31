@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>シャノン Release · 2026-08-31</title>
+  <style>
+    :root{--ink:#211c27;--muted:#706778;--primary:#6750a4;--mint:#ddf4ec;--amber:#fff0d6;--soft:#eee8fa;--line:#ded6e4}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 8% 0,#e9e1fb,transparent 34rem),radial-gradient(circle at 100% 18%,#dff4ee,transparent 32rem),#f8f6fa;color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}main{width:min(1080px,calc(100% - 30px));margin:auto;padding:52px 0 80px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.5rem,7vw,5rem);line-height:1;letter-spacing:-.055em}.eyebrow{color:var(--primary);font-size:.78rem;font-weight:800;letter-spacing:.14em}.lead{max-width:760px;color:var(--muted);font-size:1.08rem}.status{display:flex;flex-wrap:wrap;gap:9px;margin:25px 0}.pill{padding:8px 13px;border-radius:999px;background:var(--mint);color:#286c5c;font-weight:750}.pill.wait{background:var(--amber);color:#855a18}section{margin-top:18px;padding:28px;border:1px solid #ffffffaa;border-radius:28px;background:#ffffffdc;box-shadow:0 18px 45px #45384f0d}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{padding:20px;border-radius:20px;background:#faf8fc}.card:nth-child(2){background:var(--soft)}.card:nth-child(3){background:var(--mint)}.law{display:grid;grid-template-columns:190px 1fr;padding:13px 0;border-bottom:1px solid var(--line)}.law b{color:var(--primary)}code{font:.88em ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}pre{overflow:auto;padding:18px;border-radius:18px;background:#292530;color:#f7f0ff;font-size:.82rem}footer{padding:28px 4px 0;color:var(--muted);font-size:.84rem}@media(max-width:760px){main{padding-top:32px}.grid,.law{grid-template-columns:1fr}section{padding:22px}}
+  </style>
+</head>
+<body><main>
+  <p class="eyebrow">SHANNON · BUNDLED RELEASE</p>
+  <h1>Azureへ常駐し、<br>iPhoneへ。</h1>
+  <p class="lead">端末ペアリング、表情差分、独立認知worker、睡眠バッチを初めて一つのReleaseとして反映した記録。</p>
+  <div class="status"><span class="pill">✓ Azure API</span><span class="pill">✓ HTTPS</span><span class="pill">✓ worker</span><span class="pill">✓ 実LLM</span><span class="pill">✓ iPhone Release</span><span class="pill wait">端末コード入力待ち</span></div>
+
+  <section><h2>反映されたもの</h2><div class="grid">
+    <div class="card"><h3>Response lane</h3><p><code>https://sh4nnon.com/companion</code>。一度きりのコードとKeychain端末トークンで接続。</p></div>
+    <div class="card"><h3>Background lane</h3><p>感情・記憶想起・関心更新をAPIから分離。SQLite leaseで再開可能。</p></div>
+    <div class="card"><h3>Sleep</h3><p>日本時間3時以降、一日分のユーザー発言から根拠付きユーザー情報だけを更新。</p></div>
+  </div></section>
+
+  <section><h2>検証結果</h2>
+    <div class="law"><b>配備revision</b><span><code>df6b94d</code></span></div>
+    <div class="law"><b>Azure tests</b><span>認知核10件＋API 27件、型検査すべて成功。</span></div>
+    <div class="law"><b>公開E2E</b><span>pair 200 / chat 200 / OpenAI <code>gpt-5.6-luna</code> / scope強制 / worker v0→v1。</span></div>
+    <div class="law"><b>iPhone</b><span>iPhone 15へ署名済みReleaseをインストールし、Bundle ID <code>com.r41r41.shannon</code>で起動。</span></div>
+    <div class="law"><b>既存サービス</b><span>既存Shannon・Aetherのフォルダ、Node v20、ポート、systemdサービスは変更なし。</span></div>
+  </section>
+
+  <section><h2>配置と境界</h2>
+    <div class="law"><b>Application</b><span><code>/home/azureuser/shannon-ios</code></span></div>
+    <div class="law"><b>Runtime</b><span><code>/home/azureuser/shannon-ios-runtime</code> · Node v24.20.0 · checksum verified</span></div>
+    <div class="law"><b>Data</b><span><code>/home/azureuser/shannon-ios-data/shannon.sqlite</code> · owner-only</span></div>
+    <div class="law"><b>Secrets</b><span><code>/home/azureuser/.config/shannon-ios/api.env</code> · mode 0600 · Git外</span></div>
+    <div class="law"><b>Services</b><span><code>shannon-ios.service</code> / <code>shannon-ios-worker.service</code></span></div>
+    <div class="law"><b>Nginx backup</b><span><code>/etc/nginx/backups/shannon.conf.before-shannon-ios-20260831-2104</code></span></div>
+  </section>
+
+  <section><h2>ロールバック</h2><p>必要時のみVM上で実行する。データは消さず、サービス停止と公開経路の復元だけを行う。</p>
+<pre>sudo systemctl disable --now shannon-ios.service shannon-ios-worker.service
+sudo cp -a /etc/nginx/backups/shannon.conf.before-shannon-ios-20260831-2104 /etc/nginx/sites-enabled/shannon.conf
+sudo nginx -t &amp;&amp; sudo systemctl reload nginx</pre>
+  </section>
+  <footer>Deployed 2026-08-31 JST · Device pairing completion pending</footer>
+</main></body></html>
