@@ -98,6 +98,7 @@ public struct ShannonKeychainConnectionStore: ShannonConnectionStoreProtocol, Se
 public enum ShannonConnectionError: Error, Equatable, LocalizedError {
     case insecureServer
     case invalidCode
+    case invalidConnectionLink
     case invalidResponse
     case rejected(status: Int)
     case expiredCredential
@@ -109,7 +110,9 @@ public enum ShannonConnectionError: Error, Equatable, LocalizedError {
         case .insecureServer:
             "安全なHTTPS接続先が設定されていません。"
         case .invalidCode:
-            "12桁の接続コードを入力してください。"
+            "接続情報が正しくありません。"
+        case .invalidConnectionLink:
+            "このリンクはシャノンの接続リンクではありません。"
         case .invalidResponse:
             "接続情報を受け取れませんでした。"
         case .rejected(let status) where status == 401:
@@ -138,7 +141,6 @@ public enum ShannonConnectionStatus: Equatable, Sendable {
 @MainActor
 @Observable
 public final class ShannonConnectionModel {
-    public var pairingCode = ""
     public private(set) var status: ShannonConnectionStatus = .disconnected
 
     public let baseURL: URL
@@ -190,18 +192,30 @@ public final class ShannonConnectionModel {
         }
     }
 
-    public func pair() async {
-        if case .connecting = status { return }
-        let normalized = pairingCode.replacingOccurrences(of: "-", with: "")
+    @discardableResult
+    public func connect(using url: URL) async -> Bool {
+        if isConnected { return true }
+        guard let code = Self.pairingCode(from: url) else {
+            status = .failed(message: ShannonConnectionError.invalidConnectionLink.localizedDescription)
+            return false
+        }
+        return await pair(code: code)
+    }
+
+    @discardableResult
+    public func pair(code: String) async -> Bool {
+        if isConnected { return true }
+        if case .connecting = status { return false }
+        let normalized = code.replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: " ", with: "")
             .uppercased()
         guard normalized.range(of: "^[A-F0-9]{12}$", options: .regularExpression) != nil else {
             status = .failed(message: ShannonConnectionError.invalidCode.localizedDescription)
-            return
+            return false
         }
         guard Self.isAllowedPairingURL(baseURL) else {
             status = .failed(message: ShannonConnectionError.insecureServer.localizedDescription)
-            return
+            return false
         }
 
         status = .connecting
@@ -233,11 +247,27 @@ public final class ShannonConnectionModel {
                 expiresAt: expiresAt
             )
             try store.save(credential)
-            pairingCode = ""
             status = .connected(deviceName: paired.displayName)
+            return true
         } catch {
             status = .failed(message: userMessage(for: error))
+            return false
         }
+    }
+
+    public static func pairingCode(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == "shannon",
+              url.host?.lowercased() == "connect",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
+            return nil
+        }
+        let normalized = code.replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .uppercased()
+        return normalized.range(of: "^[A-F0-9]{12}$", options: .regularExpression) != nil
+            ? normalized
+            : nil
     }
 
     public func disconnect() {

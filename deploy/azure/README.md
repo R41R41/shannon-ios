@@ -24,8 +24,16 @@ cd /home/azureuser/shannon-ios
 set -a
 . /home/azureuser/.config/shannon-ios/api.env
 set +a
+export SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
 /home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/authCli.ts issue-code owner
 ```
+
+The command prints a `shannon://connect?...` link for one-tap setup. During a
+trusted development-device install, pass the one-time code to the app process as
+`SHANNON_PAIRING_CODE`; the app consumes it once and stores only the resulting
+device token in Keychain. Never omit `SHANNON_DATABASE_PATH`: paired-mode CLI
+commands fail closed when it is absent so they cannot silently write to the
+repository-local development database.
 
 List or revoke devices with `list` and `revoke <device-id>`. The database stores
 only HMAC digests of codes and tokens. Back up `shannon.sqlite` and its WAL/SHM

@@ -6,18 +6,18 @@ import UIKit
 
 @main
 struct ShannonApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ShannonRootView()
-        }
-    }
-}
-
-private struct ShannonRootView: View {
+#if os(iOS)
+    @UIApplicationDelegateAdaptor(ShannonAppDelegate.self) private var appDelegate
+#endif
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
 
     init() {
+#if os(iOS)
+        let deviceDisplayName = UIDevice.current.name
+#else
+        let deviceDisplayName = "Apple device"
+#endif
         let connectionStore = ShannonKeychainConnectionStore()
         let client = ShannonAPIClient(
             baseURL: ShannonRuntimeConfiguration.apiBaseURL,
@@ -28,20 +28,57 @@ private struct ShannonRootView: View {
         _connectionModel = State(initialValue: ShannonConnectionModel(
             baseURL: ShannonRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
-            deviceName: {
-#if os(iOS)
-                UIDevice.current.name
-#else
-                "Apple device"
-#endif
-            }
+            deviceName: { deviceDisplayName }
         ))
     }
 
-    var body: some View {
-        ShannonConversationView(model: conversationModel, connectionModel: connectionModel)
+    var body: some Scene {
+        WindowGroup {
+            ShannonConversationView(model: conversationModel, connectionModel: connectionModel)
+                .onOpenURL { url in
+                    Task { await connectionModel.connect(using: url) }
+                }
+#if os(iOS)
+                .task {
+                    if let url = ShannonAppDelegate.takePendingConnectionURL() {
+                        await connectionModel.connect(using: url)
+                    } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
+                        await connectionModel.pair(code: code)
+                    }
+                }
+#endif
+        }
     }
 }
+
+#if os(iOS)
+@MainActor
+private final class ShannonAppDelegate: NSObject, UIApplicationDelegate {
+    private static var pendingConnectionURL: URL?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        Self.pendingConnectionURL = launchOptions?[.url] as? URL
+        return true
+    }
+
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        Self.pendingConnectionURL = url
+        return true
+    }
+
+    static func takePendingConnectionURL() -> URL? {
+        defer { pendingConnectionURL = nil }
+        return pendingConnectionURL
+    }
+}
+#endif
 private enum ShannonRuntimeConfiguration {
     static let apiBaseURL: URL = {
         let configured = Bundle.main.object(forInfoDictionaryKey: "ShannonAPIBaseURL") as? String
@@ -58,5 +95,10 @@ private enum ShannonRuntimeConfiguration {
         let configured = Bundle.main.object(forInfoDictionaryKey: "ShannonAPIToken") as? String
         guard let configured, !configured.isEmpty, !configured.contains("$(") else { return nil }
         return configured
+    }()
+
+    static let launchPairingCode: String? = {
+        let code = ProcessInfo.processInfo.environment["SHANNON_PAIRING_CODE"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return code?.isEmpty == false ? code : nil
     }()
 }

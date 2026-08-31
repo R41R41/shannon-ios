@@ -62,7 +62,7 @@ pnpm dev:api:device
 
 この接続は開発時だけ利用する。APIはMacのプライベートLANアドレスだけで待受し、32文字以上の`SHANNON_API_TOKEN`をBearer認証に使う。秘密値は`.env`とビルド時設定だけに置き、Gitへ追加しない。
 
-Aether本番版と同様の一時接続コード、端末固有トークン、iOS Keychain保存は実装済み。現在のビルド埋め込みトークンはローカル実機開発だけの暫定方式として残し、Azure適用と実機更新はまとまったリリース時に行う。
+Aether本番版と同様の一時接続情報、端末固有トークン、iOS Keychain保存を実装済み。通常は専用リンクを一度開くだけで接続し、信頼済みMacからの実機配備では起動時に自動適用する。以後のアップデートではKeychainを引き継ぐため再設定しない。
 
 ブラウザで確認できる実機手順は [`docs/shannon-ios-device-runbook.html`](docs/shannon-ios-device-runbook.html) にまとめている。
 

@@ -2,6 +2,9 @@ import { configuredAuthPepper, SQLiteDeviceAuthStore } from './deviceAuth.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 
 const command = process.argv[2];
+if (process.env.SHANNON_AUTH_MODE === 'paired' && !process.env.SHANNON_DATABASE_PATH?.trim()) {
+  throw new Error('SHANNON_DATABASE_PATH is required for paired authentication commands');
+}
 const auth = new SQLiteDeviceAuthStore({
   path: configuredDatabasePath(),
   pepper: configuredAuthPepper(),
@@ -11,6 +14,7 @@ try {
   if (command === 'issue-code') {
     const issued = auth.issuePairingCode(process.argv[3] || process.env.SHANNON_OWNER_SCOPE_KEY || 'owner');
     console.log(`接続コード: ${issued.code}`);
+    console.log(`接続リンク: shannon://connect?code=${encodeURIComponent(issued.code)}`);
     console.log(`有効期限: ${issued.expiresAt}`);
     console.log(`所有者scope: ${issued.scopeKey}`);
   } else if (command === 'list') {

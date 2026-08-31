@@ -47,7 +47,7 @@
     </header>
 
     <div class="status">
-      <span class="pill">✓ OpenAI実応答</span><span class="pill">✓ 端末ペアリング</span><span class="pill">✓ Keychain</span><span class="pill">✓ SQLite永続化</span><span class="pill">✓ 独立worker</span><span class="pill">✓ 再開可能ジョブ</span><span class="pill">✓ 睡眠バッチ</span><span class="pill">✓ 連続感情</span><span class="pill">✓ 投稿別の反応表情</span><span class="pill">✓ 非同期記憶想起</span><span class="pill wait">Azure・実機反映は保留</span>
+      <span class="pill">✓ OpenAI実応答</span><span class="pill">✓ 自動ペアリング</span><span class="pill">✓ Keychain</span><span class="pill">✓ SQLite永続化</span><span class="pill">✓ 独立worker</span><span class="pill">✓ 再開可能ジョブ</span><span class="pill">✓ 睡眠バッチ</span><span class="pill">✓ 連続感情</span><span class="pill">✓ 投稿別の反応表情</span><span class="pill">✓ 非同期記憶想起</span><span class="pill">✓ Azure・実機反映済み</span>
     </div>
 
     <section>
@@ -106,9 +106,9 @@
         <dt>ファイル権限</dt><dd>DB・WAL・SHMは<code>0600</code></dd>
         <dt>実機認証</dt><dd>LAN待受はBearer必須・秘密値はGit対象外</dd>
         <dt>投稿表情</dt><dd>22種。連続感情を基底に、ユーザー発言とシャノンの返答から投稿別に確定</dd>
-        <dt>遠隔接続</dt><dd>使い捨てコード・端末トークン・Keychain・scope強制まで実装済み。Azure適用は保留</dd>
+        <dt>遠隔接続</dt><dd>一回限りの自動接続・端末トークン・Keychain・scope強制をAzureと実機へ反映済み</dd>
         <dt>睡眠分析</dt><dd>OpenAI strict JSON Schema。キーなし時は明示自己申告だけのローカル規則</dd>
-        <dt>次の段階</dt><dd>記憶の閲覧・訂正・忘却UIを加え、十分な変更量になった段階でAzure・実機へ一括反映</dd>
+        <dt>次の段階</dt><dd>記憶の閲覧・訂正・忘却UIを加え、シャノンが何を学んだかをユーザーが確認できるようにする</dd>
       </dl>
     </section>
     <footer>Updated 2026-08-31 · Durable FCA, independent cognition worker, and nightly consolidation</footer>

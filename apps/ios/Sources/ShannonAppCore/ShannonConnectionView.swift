@@ -19,46 +19,18 @@ public struct ShannonConnectionView: View {
 
                     if !model.isConnected {
                         VStack(alignment: .leading, spacing: M3Spacing.medium) {
-                            Text("接続コード")
+                            Label("最初の一度だけ", systemImage: "link.badge.plus")
                                 .font(.title3.weight(.semibold))
-                            Text("Azure VMで発行した12桁のコードを入力します。コードは30分間、一度だけ使えます。")
+                            Text("シャノン専用の接続リンクを開くと、このiPhoneは自動で結ばれます。コード入力や毎回の設定は必要ありません。")
                                 .font(.callout)
                                 .foregroundStyle(palette.onSurfaceVariant)
-
-                            TextField("ABCD-EF12-3456", text: $model.pairingCode)
-                                .font(.title3.monospaced().weight(.semibold))
-                                .textFieldStyle(.plain)
-                                .autocorrectionDisabled()
-                                .padding(.horizontal, M3Spacing.large)
-                                .frame(minHeight: 56)
-                                .background(
-                                    palette.surfaceContainerHigh,
-                                    in: RoundedRectangle(cornerRadius: M3Shape.medium, style: .continuous)
-                                )
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: M3Shape.medium, style: .continuous)
-                                        .stroke(palette.outline, lineWidth: 1)
-                                }
-                                .accessibilityLabel("12桁の接続コード")
-
-                            Button {
-                                Task { await model.pair() }
-                            } label: {
+                            if case .connecting = model.status {
                                 HStack(spacing: M3Spacing.small) {
-                                    if case .connecting = model.status {
-                                        ProgressView().tint(palette.onPrimary)
-                                    } else {
-                                        Image(systemName: "link")
-                                    }
-                                    Text("シャノンと接続")
+                                    ProgressView().tint(palette.primary)
+                                    Text("安全に接続しています…")
+                                        .font(.callout.weight(.medium))
                                 }
-                                .font(.headline)
-                                .foregroundStyle(palette.onPrimary)
-                                .frame(maxWidth: .infinity, minHeight: 52)
-                                .background(palette.primary, in: Capsule())
                             }
-                            .buttonStyle(.plain)
-                            .disabled(model.pairingCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isConnecting)
                         }
                         .padding(M3Spacing.large)
                         .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
@@ -94,11 +66,6 @@ public struct ShannonConnectionView: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-
-    private var isConnecting: Bool {
-        if case .connecting = model.status { return true }
-        return false
     }
 
     @ViewBuilder

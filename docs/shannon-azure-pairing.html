@@ -12,11 +12,11 @@
   <p class="eyebrow">Shannon · Remote Connection Milestone</p>
   <h1>Macから離れても、<br>同じシャノンへ。</h1>
   <p class="lead">Azure常駐APIとiPhoneを、短命な接続コードで一度だけ結ぶ。以降は端末固有トークンをKeychainから使い、会話・感情・記憶の所有者境界はサーバーが強制する。</p>
-  <div class="status"><span class="pill">✓ ペアリング実装</span><span class="pill">✓ Keychain実装</span><span class="pill">✓ scope強制</span><span class="pill">✓ 失効・期限</span><span class="pill">✓ 隔離E2E</span><span class="pill wait">VM適用は保留</span><span class="pill wait">実機反映は保留</span></div>
+  <div class="status"><span class="pill">✓ ワンタップ接続</span><span class="pill">✓ Keychain</span><span class="pill">✓ scope強制</span><span class="pill">✓ 失効・期限</span><span class="pill">✓ Azure稼働</span><span class="pill">✓ 実機接続済み</span></div>
 
   <section><h2>一度だけの接続</h2><div class="flow">
     <div class="node"><h3>1 · Azureで発行</h3><p>48bitのランダムコード。30分で失効し、失敗10回でロック。</p><code>ABCD-EF12-3456</code></div><div class="arrow">→</div>
-    <div class="node mint"><h3>2 · iPhoneで入力</h3><p>HTTPSだけを許可。成功時に端末トークンを一度だけ受け取る。</p><code>POST /companion/v1/pair</code></div><div class="arrow">→</div>
+    <div class="node mint"><h3>2 · 一度だけ開く</h3><p>専用リンク、または信頼済みMacから自動受け渡し。手入力せず、HTTPSで端末トークンを一度だけ受け取る。</p><code>shannon://connect</code></div><div class="arrow">→</div>
     <div class="node"><h3>3 · Keychainへ</h3><p>この端末・ロック解除中だけ利用可能。APIキーと接続コードは保存しない。</p><code>WhenUnlockedThisDeviceOnly</code></div>
   </div></section>
 
@@ -34,7 +34,7 @@
   <section><h2>Azure配置境界</h2><div class="grid">
     <div class="card"><h3>既存系と分離</h3><p>新規フォルダ、データディレクトリ、systemd unit、4319番loopbackポートを使用。既存Shannon/Aetherを変更しない。</p></div>
     <div class="card"><h3>Nodeを分離</h3><p>VMの既存Node 20は維持。<code>node:sqlite</code>対応のNode 24を専用runtimeとして配置する。</p></div>
-    <div class="card"><h3>まだ行わないこと</h3><p>VMへのファイル配置、nginx reload、systemd enable、iPhoneへの新ビルド導入。次のまとまったリリースで実行する。</p></div>
+    <div class="card"><h3>現在の状態</h3><p>Azure常駐API・worker・HTTPS経路・iPhone Releaseを反映済み。端末トークンはKeychainに保存され、次回更新へ引き継ぐ。</p></div>
   </div></section>
-  <footer>Updated 2026-08-31 · Pairing foundation complete; production application intentionally deferred</footer>
+  <footer>Updated 2026-08-31 · One-tap pairing deployed and verified on iPhone</footer>
 </main></body></html>

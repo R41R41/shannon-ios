@@ -11,10 +11,10 @@
   <p class="eyebrow">SHANNON · BUNDLED RELEASE</p>
   <h1>Azureへ常駐し、<br>iPhoneへ。</h1>
   <p class="lead">端末ペアリング、表情差分、独立認知worker、睡眠バッチを初めて一つのReleaseとして反映した記録。</p>
-  <div class="status"><span class="pill">✓ Azure API</span><span class="pill">✓ HTTPS</span><span class="pill">✓ worker</span><span class="pill">✓ 実LLM</span><span class="pill">✓ iPhone Release</span><span class="pill wait">端末コード入力待ち</span></div>
+  <div class="status"><span class="pill">✓ Azure API</span><span class="pill">✓ HTTPS</span><span class="pill">✓ worker</span><span class="pill">✓ 実LLM</span><span class="pill">✓ iPhone Release</span><span class="pill">✓ 自動接続済み</span></div>
 
   <section><h2>反映されたもの</h2><div class="grid">
-    <div class="card"><h3>Response lane</h3><p><code>https://sh4nnon.com/companion</code>。一度きりのコードとKeychain端末トークンで接続。</p></div>
+    <div class="card"><h3>Response lane</h3><p><code>https://sh4nnon.com/companion</code>。一度きりの接続情報を自動で受け取り、端末トークンだけをKeychainへ保存。</p></div>
     <div class="card"><h3>Background lane</h3><p>感情・記憶想起・関心更新をAPIから分離。SQLite leaseで再開可能。</p></div>
     <div class="card"><h3>Sleep</h3><p>日本時間3時以降、一日分のユーザー発言から根拠付きユーザー情報だけを更新。</p></div>
   </div></section>
@@ -41,5 +41,5 @@
 sudo cp -a /etc/nginx/backups/shannon.conf.before-shannon-ios-20260831-2104 /etc/nginx/sites-enabled/shannon.conf
 sudo nginx -t &amp;&amp; sudo systemctl reload nginx</pre>
   </section>
-  <footer>Deployed 2026-08-31 JST · Device pairing completion pending</footer>
+  <footer>Deployed 2026-08-31 JST · Device paired without manual setup</footer>
 </main></body></html>

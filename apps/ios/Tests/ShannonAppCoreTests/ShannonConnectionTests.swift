@@ -35,15 +35,13 @@ final class ShannonConnectionTests: XCTestCase {
             session: session,
             deviceName: { "Test iPhone" }
         )
-        model.pairingCode = "abcd-1234-ef90"
+        let connected = await model.connect(using: URL(string: "shannon://connect?code=abcd-1234-ef90")!)
 
-        await model.pair()
-
+        XCTAssertTrue(connected)
         XCTAssertTrue(model.isConnected)
         XCTAssertEqual(model.statusLabel, "接続済み・Test iPhone")
         XCTAssertEqual(try store.load()?.scopeKey, "owner-a")
         XCTAssertEqual(try store.load()?.baseURL.absoluteString, "https://shannon.example/companion")
-        XCTAssertEqual(model.pairingCode, "")
     }
 
     func testAPIClientUsesKeychainTokenAndBoundScope() async throws {
@@ -91,12 +89,44 @@ final class ShannonConnectionTests: XCTestCase {
             baseURL: URL(string: "https://shannon.example")!,
             store: MemoryConnectionStore()
         )
-        model.pairingCode = "short"
-        await model.pair()
+        let connected = await model.pair(code: "short")
+        XCTAssertFalse(connected)
         guard case .failed(let message) = model.status else {
             return XCTFail("Invalid code must fail locally")
         }
-        XCTAssertTrue(message.contains("12桁"))
+        XCTAssertTrue(message.contains("正しく"))
+    }
+
+    func testConnectionLinkAcceptsOnlyShannonConnectURLs() async {
+        XCTAssertEqual(
+            ShannonConnectionModel.pairingCode(from: URL(string: "shannon://connect?code=abcd-EF12-3456")!),
+            "ABCDEF123456"
+        )
+        XCTAssertNil(ShannonConnectionModel.pairingCode(from: URL(string: "https://example.com/connect?code=ABCDEF123456")!))
+        XCTAssertNil(ShannonConnectionModel.pairingCode(from: URL(string: "shannon://other?code=ABCDEF123456")!))
+        XCTAssertNil(ShannonConnectionModel.pairingCode(from: URL(string: "shannon://connect?code=short")!))
+    }
+
+    func testProvisioningDoesNotReplaceAnExistingConnection() async {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let original = ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: String(repeating: "d", count: 43),
+            deviceID: "existing-device",
+            scopeKey: "owner",
+            displayName: "Existing iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        )
+        let store = MemoryConnectionStore(credential: original)
+        let session = stubSession { _ in
+            XCTFail("An existing Keychain connection must not be paired again")
+            throw ShannonConnectionError.invalidResponse
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        let connected = await model.pair(code: "ABCD-EF12-3456")
+        XCTAssertTrue(connected)
+        XCTAssertEqual(try? store.load(), original)
     }
 }
 
