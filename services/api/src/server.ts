@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { networkInterfaces } from 'node:os';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { createLocalApiKernel } from './apiKernel.js';
+import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { configuredAuthPepper, normalizePairingCode, SQLiteDeviceAuthStore } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
@@ -15,6 +16,7 @@ const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(),
   stateStore: persistentStore,
   conversationStore: persistentStore,
+  background: new DurableBackgroundDispatcher(persistentStore, persistentStore),
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);

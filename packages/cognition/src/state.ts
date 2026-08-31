@@ -93,6 +93,12 @@ export function reduceCompanionState(
     case 'user-fact-upserted': {
       const fact = cleanFact(event.fact);
       if (!fact.id || !fact.statement) return current;
+      const previous = current.userFacts.find(item => item.id === fact.id);
+      if (previous
+        && previous.statement === fact.statement
+        && previous.confidence === fact.confidence
+        && previous.observedAt === fact.observedAt
+        && previous.evidence === fact.evidence) return current;
       const userFacts = [fact, ...current.userFacts.filter(item => item.id !== fact.id)].slice(0, MAX_USER_FACTS);
       next = { ...current, userFacts };
       break;
@@ -121,4 +127,3 @@ export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionState
   const activeMemories = Object.freeze(snapshot.activeMemories.map(item => Object.freeze({ ...item })));
   return Object.freeze({ ...snapshot, temperament, emotion, interests, userFacts, activeMemories });
 }
-

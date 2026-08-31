@@ -23,6 +23,7 @@ describe('Shannon local API kernel', () => {
         service: 'shannon-ios-api',
         mode: 'local',
         llm: { mode: 'local-stub', model: 'local-stub' },
+        background: { mode: 'in-process' },
       },
     });
   });

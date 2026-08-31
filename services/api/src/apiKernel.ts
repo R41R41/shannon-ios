@@ -7,7 +7,7 @@ import {
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
-import { BackgroundUpdateCoordinator } from './backgroundUpdates.js';
+import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backgroundUpdates.js';
 import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
@@ -59,13 +59,13 @@ export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   stateStore?: CompanionStateStore;
   conversationStore?: ConversationStore;
-  background?: BackgroundUpdateCoordinator;
+  background?: TurnBackgroundService;
 }
 
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
   private readonly conversationStore: ConversationStore;
-  private readonly background: BackgroundUpdateCoordinator;
+  private readonly background: TurnBackgroundService;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -87,6 +87,7 @@ export class ShannonApiKernel {
           service: 'shannon-ios-api',
           mode: 'local',
           llm: { mode: this.chatModel.mode, model: this.chatModel.model },
+          background: { mode: this.background.mode },
         },
       };
     }

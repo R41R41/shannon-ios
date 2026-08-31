@@ -8,6 +8,7 @@
     "test": "pnpm -r test",
     "dev:api": "pnpm --filter @shannon/api dev",
     "dev:api:device": "SHANNON_API_HOST=lan pnpm --filter @shannon/api dev",
+    "worker": "pnpm --filter @shannon/api worker",
     "auth": "pnpm --filter @shannon/api auth"
   },
   "devDependencies": {

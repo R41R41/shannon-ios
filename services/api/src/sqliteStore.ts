@@ -12,7 +12,14 @@ import {
   type CompanionStateSnapshot,
   type CompanionStateStore,
   type ShannonMessageEmotion,
+  type UserFact,
 } from '@shannon/cognition';
+import type {
+  BackgroundJobPayload,
+  BackgroundJobStore,
+  ClaimedBackgroundJob,
+  DailyUserMessage,
+} from './backgroundJobStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
 import type {
   ConversationStore,
@@ -21,7 +28,7 @@ import type {
   TurnPersistenceContext,
 } from './conversationStore.js';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -43,6 +50,13 @@ interface EventRow {
   event_type: string;
   observed_at: string;
   payload_json: string;
+}
+
+interface BackgroundJobRow {
+  job_id: string;
+  scope_key: string;
+  payload_json: string;
+  attempts: number;
 }
 
 interface TurnPayload {
@@ -79,7 +93,7 @@ export interface SQLiteShannonStoreOptions {
  * Durable adapter only. Cognition remains in packages/cognition; this class
  * stores immutable snapshots, conversation messages, and append-only events.
  */
-export class SQLiteShannonStore implements CompanionStateStore, ConversationStore {
+export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore {
   private readonly database: DatabaseSync;
   private readonly maximumModelConversationItems: number;
   private readonly maximumDisplayedConversationItems: number;
@@ -244,21 +258,205 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     })));
   }
 
+  enqueueTurnRefinement(
+    scopeKey: string,
+    experienceId: string,
+    userMessage: string,
+    observedAt: string,
+  ): void {
+    const payload: BackgroundJobPayload = { kind: 'turn-refinement', experienceId, userMessage };
+    this.database.prepare(`
+      INSERT OR IGNORE INTO background_jobs
+        (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at)
+      VALUES (?, ?, ?, 'turn-refinement', ?, 'pending', ?, 0, ?)
+    `).run(randomUUID(), `turn:${experienceId}`, scopeKey, JSON.stringify(payload), observedAt, observedAt);
+  }
+
+  recoverUnqueuedTurnRefinements(nowIso: string): number {
+    const rows = this.database.prepare(`
+      SELECT event_id, scope_key, observed_at, payload_json
+      FROM experience_events
+      WHERE event_type = 'turn.completed'
+        AND NOT EXISTS (
+          SELECT 1 FROM background_jobs WHERE dedupe_key = 'turn:' || experience_events.event_id
+        )
+      ORDER BY sequence ASC
+      LIMIT 500
+    `).all() as unknown as EventRow[];
+    let recovered = 0;
+    this.transaction(() => {
+      for (const row of rows) {
+        const turn = parseTurnPayload(row.payload_json);
+        if (!turn) continue;
+        const payload: BackgroundJobPayload = {
+          kind: 'turn-refinement',
+          experienceId: row.event_id,
+          userMessage: turn.userMessage,
+        };
+        const result = this.database.prepare(`
+          INSERT OR IGNORE INTO background_jobs
+            (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at)
+          VALUES (?, ?, ?, 'turn-refinement', ?, 'pending', ?, 0, ?)
+        `).run(
+          randomUUID(),
+          `turn:${row.event_id}`,
+          row.scope_key,
+          JSON.stringify(payload),
+          nowIso,
+          row.observed_at,
+        );
+        recovered += Number(result.changes);
+      }
+    });
+    return recovered;
+  }
+
+  enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string): number {
+    const scopes = this.database.prepare(`
+      SELECT DISTINCT scope_key
+      FROM conversation_messages
+      WHERE role = 'user' AND observed_at >= ? AND observed_at < ?
+    `).all(startAt, endAt) as unknown as Array<{ scope_key: string }>;
+    const insert = this.database.prepare(`
+      INSERT OR IGNORE INTO background_jobs
+        (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at)
+      VALUES (?, ?, ?, 'sleep-consolidation', ?, 'pending', ?, 0, ?)
+    `);
+    let inserted = 0;
+    this.transaction(() => {
+      for (const row of scopes) {
+        const payload: BackgroundJobPayload = { kind: 'sleep-consolidation', dayKey, startAt, endAt };
+        const result = insert.run(
+          randomUUID(),
+          `sleep:${row.scope_key}:${dayKey}`,
+          row.scope_key,
+          JSON.stringify(payload),
+          nowIso,
+          nowIso,
+        );
+        inserted += Number(result.changes);
+      }
+    });
+    return inserted;
+  }
+
+  claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string): ClaimedBackgroundJob | null {
+    return this.transaction(() => {
+      const row = this.database.prepare(`
+        SELECT job_id, scope_key, payload_json, attempts
+        FROM background_jobs
+        WHERE ((status = 'pending' AND available_at <= ?)
+           OR (status = 'leased' AND lease_until <= ?))
+          AND NOT EXISTS (
+            SELECT 1 FROM background_jobs AS active
+            WHERE active.scope_key = background_jobs.scope_key
+              AND active.status = 'leased'
+              AND active.lease_until > ?
+          )
+        ORDER BY sequence ASC
+        LIMIT 1
+      `).get(nowIso, nowIso, nowIso) as unknown as BackgroundJobRow | undefined;
+      if (!row) return null;
+      const changed = this.database.prepare(`
+        UPDATE background_jobs
+        SET status = 'leased', lease_owner = ?, lease_until = ?, attempts = attempts + 1
+        WHERE job_id = ? AND ((status = 'pending' AND available_at <= ?) OR (status = 'leased' AND lease_until <= ?))
+      `).run(workerId, leaseUntilIso, row.job_id, nowIso, nowIso);
+      if (Number(changed.changes) !== 1) return null;
+      return Object.freeze({
+        id: row.job_id,
+        scopeKey: row.scope_key,
+        payload: parseBackgroundJobPayload(row.payload_json),
+        attempts: Number(row.attempts) + 1,
+      });
+    });
+  }
+
+  completeClaimedBackgroundJob(
+    job: ClaimedBackgroundJob,
+    workerId: string,
+    completedAt: string,
+    operation: () => void,
+  ): void {
+    this.transaction(() => {
+      this.assertJobLease(job.id, workerId);
+      operation();
+      this.markJobCompleted(job.id, workerId, completedAt);
+    });
+  }
+
+  failClaimedBackgroundJob(
+    job: ClaimedBackgroundJob,
+    workerId: string,
+    nowIso: string,
+    errorCode: string,
+  ): void {
+    const permanent = job.attempts >= 5;
+    const retryAt = new Date(Date.parse(nowIso) + Math.min(300, 2 ** job.attempts) * 1_000).toISOString();
+    this.database.prepare(`
+      UPDATE background_jobs
+      SET status = ?, available_at = ?, lease_owner = NULL, lease_until = NULL,
+          completed_at = ?, last_error = ?
+      WHERE job_id = ? AND status = 'leased' AND lease_owner = ?
+    `).run(
+      permanent ? 'failed' : 'pending',
+      retryAt,
+      permanent ? nowIso : null,
+      errorCode.slice(0, 120),
+      job.id,
+      workerId,
+    );
+  }
+
+  dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] {
+    const rows = this.database.prepare(`
+      SELECT content, observed_at
+      FROM conversation_messages
+      WHERE scope_key = ? AND role = 'user' AND observed_at >= ? AND observed_at < ?
+      ORDER BY sequence ASC
+      LIMIT 200
+    `).all(scopeKey, startAt, endAt) as unknown as Array<{ content: string; observed_at: string }>;
+    return Object.freeze(rows.map(row => Object.freeze({ content: row.content, observedAt: row.observed_at })));
+  }
+
+  applySleepFacts(
+    job: ClaimedBackgroundJob,
+    workerId: string,
+    completedAt: string,
+    facts: readonly UserFact[],
+  ): void {
+    this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
+      for (const fact of facts) this.apply(job.scopeKey, { type: 'user-fact-upserted', fact });
+      this.insertEvent(job.scopeKey, 'sleep.completed', completedAt, {
+        dayKey: job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : null,
+        appliedFactIds: facts.map(fact => fact.id),
+      });
+    });
+  }
+
+  pendingBackgroundJobCount(): number {
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM background_jobs WHERE status IN ('pending', 'leased')
+    `).get() as unknown as { count: number };
+    return Number(row.count);
+  }
+
   close(): void {
     if (!this.database.isOpen) return;
-    this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    this.database.exec('PRAGMA wal_checkpoint(PASSIVE)');
     secureDatabaseFiles(this.options.path);
     this.database.close();
   }
 
   private migrate(): void {
     const version = this.database.prepare('PRAGMA user_version').get() as unknown as { user_version: number };
-    if (Number(version.user_version) > SCHEMA_VERSION) {
+    const previousVersion = Number(version.user_version);
+    if (previousVersion > SCHEMA_VERSION) {
       throw new Error(`SHANNON_DATABASE_SCHEMA_TOO_NEW:${version.user_version}`);
     }
-    if (Number(version.user_version) === SCHEMA_VERSION) return;
+    if (previousVersion === SCHEMA_VERSION) return;
     this.transaction(() => {
-      this.database.exec(`
+      if (previousVersion < 1) this.database.exec(`
         CREATE TABLE IF NOT EXISTS companion_states (
           scope_key TEXT PRIMARY KEY,
           version INTEGER NOT NULL CHECK (version >= 0),
@@ -296,9 +494,77 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         CREATE INDEX IF NOT EXISTS experience_events_scope_type_sequence
           ON experience_events (scope_key, event_type, sequence);
 
-        PRAGMA user_version = 1;
       `);
+      if (previousVersion < 2) this.database.exec(`
+        CREATE TABLE IF NOT EXISTS background_jobs (
+          sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id TEXT NOT NULL UNIQUE,
+          dedupe_key TEXT NOT NULL UNIQUE,
+          scope_key TEXT NOT NULL,
+          job_kind TEXT NOT NULL CHECK (job_kind IN ('turn-refinement', 'sleep-consolidation')),
+          payload_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'leased', 'completed', 'failed')),
+          available_at TEXT NOT NULL,
+          lease_owner TEXT,
+          lease_until TEXT,
+          attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+          created_at TEXT NOT NULL,
+          completed_at TEXT,
+          last_error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS background_jobs_claim
+          ON background_jobs (status, available_at, sequence);
+      `);
+      if (previousVersion === 1) {
+        const historicalTurns = this.database.prepare(`
+          SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json
+          FROM experience_events
+          WHERE event_type = 'turn.completed'
+          ORDER BY sequence ASC
+        `).all() as unknown as EventRow[];
+        const markHistorical = this.database.prepare(`
+          INSERT OR IGNORE INTO background_jobs
+            (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at, completed_at)
+          VALUES (?, ?, ?, 'turn-refinement', ?, 'completed', ?, 0, ?, ?)
+        `);
+        for (const row of historicalTurns) {
+          const turn = parseTurnPayload(row.payload_json);
+          if (!turn) continue;
+          const payload: BackgroundJobPayload = {
+            kind: 'turn-refinement',
+            experienceId: row.event_id,
+            userMessage: turn.userMessage,
+          };
+          markHistorical.run(
+            randomUUID(),
+            `turn:${row.event_id}`,
+            row.scope_key,
+            JSON.stringify(payload),
+            row.observed_at,
+            row.observed_at,
+            row.observed_at,
+          );
+        }
+      }
+      this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
+  }
+
+  private assertJobLease(jobId: string, workerId: string): void {
+    const row = this.database.prepare(`
+      SELECT 1 AS held FROM background_jobs
+      WHERE job_id = ? AND status = 'leased' AND lease_owner = ?
+    `).get(jobId, workerId);
+    if (!row) throw new Error('BACKGROUND_JOB_LEASE_LOST');
+  }
+
+  private markJobCompleted(jobId: string, workerId: string, completedAt: string): void {
+    const changed = this.database.prepare(`
+      UPDATE background_jobs
+      SET status = 'completed', completed_at = ?, lease_owner = NULL, lease_until = NULL, last_error = NULL
+      WHERE job_id = ? AND status = 'leased' AND lease_owner = ?
+    `).run(completedAt, jobId, workerId);
+    if (Number(changed.changes) !== 1) throw new Error('BACKGROUND_JOB_LEASE_LOST');
   }
 
   private insertEvent(
@@ -315,6 +581,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   }
 
   private transaction<T>(operation: () => T): T {
+    if (this.database.isTransaction) return operation();
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const result = operation();
@@ -401,6 +668,24 @@ function parseTurnPayload(raw: string): TurnPayload | null {
     || typeof row.shannonReply !== 'string'
     || typeof row.summary !== 'string') return null;
   return row as TurnPayload;
+}
+
+function parseBackgroundJobPayload(raw: string): BackgroundJobPayload {
+  const value = parseJson(raw);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('BACKGROUND_JOB_CORRUPT');
+  const row = value as Partial<BackgroundJobPayload> & Record<string, unknown>;
+  if (row.kind === 'turn-refinement'
+    && typeof row.experienceId === 'string'
+    && typeof row.userMessage === 'string') {
+    return { kind: row.kind, experienceId: row.experienceId, userMessage: row.userMessage };
+  }
+  if (row.kind === 'sleep-consolidation'
+    && typeof row.dayKey === 'string'
+    && typeof row.startAt === 'string'
+    && typeof row.endAt === 'string') {
+    return { kind: row.kind, dayKey: row.dayKey, startAt: row.startAt, endAt: row.endAt };
+  }
+  throw new Error('BACKGROUND_JOB_CORRUPT');
 }
 
 function validMessageEmotion(value: unknown): value is ShannonMessageEmotion {

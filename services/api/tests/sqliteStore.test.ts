@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
@@ -130,6 +131,24 @@ describe('SQLite Shannon persistence', () => {
     ]);
     await secondApi.waitForBackground('owner-a');
     secondStore.close();
+  });
+
+  it('migrates schema v1 without replaying background effects already applied by the old API', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:00.000Z' });
+    first.appendTurn('owner-a', '完成して嬉しい！', 'よかった。', '2026-08-31T00:00:00.000Z');
+    first.apply('owner-a', { type: 'emotion-adjusted', delta: { valence: 0.14 } });
+    first.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.exec('DROP TABLE background_jobs; PRAGMA user_version = 1;');
+    legacy.close();
+
+    const migrated = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:01:00.000Z' });
+    expect(migrated.recoverUnqueuedTurnRefinements('2026-08-31T00:01:00.000Z')).toBe(0);
+    expect(migrated.pendingBackgroundJobCount()).toBe(0);
+    expect(migrated.snapshot('owner-a').emotion.valence).toBe(0.14);
+    migrated.close();
   });
 });
 

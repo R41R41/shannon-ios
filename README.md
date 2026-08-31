@@ -14,7 +14,7 @@
 
 - `apps/ios`: SwiftUI会話画面、API client、ViewModel、22表情リソースのSwift Package。
 - `apps/ios-app`: 実機起動用のXcodeアプリ。`apps/ios`をローカルPackageとして利用する。
-- `services/api`: ローカルAPI。SQLiteで会話・共有状態・追記型経験ログを永続化し、将来はworkerを分離してAzure VMで動かす。
+- `services/api`: APIと独立worker。SQLiteで会話・共有状態・追記型経験ログ・再開可能な背景ジョブを永続化する。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
 - `deploy/azure`: 既存サービスから分離したsystemd・nginx・秘密値配置のレビュー用テンプレート。
@@ -26,6 +26,12 @@ pnpm install
 pnpm check
 pnpm test
 pnpm dev:api
+```
+
+別ターミナルで背景workerを起動する。APIは感情・想起・睡眠処理を待たない。
+
+```sh
+pnpm worker
 ```
 
 実際のLLMを使う場合は`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ`OPENAI_API_KEY`を設定する。v1の既定モデルは`gpt-5.6-luna`。
@@ -63,3 +69,5 @@ Aether本番版と同様の一時接続コード、端末固有トークン、iO
 FCA・感情・記憶がどう分離して動くかは [`docs/shannon-fca-v1-runtime.html`](docs/shannon-fca-v1-runtime.html) で視覚的に確認できる。
 
 Azure接続とペアリングの安全境界は [`docs/shannon-azure-pairing.html`](docs/shannon-azure-pairing.html) にまとめている。
+
+独立workerと睡眠バッチは [`docs/shannon-background-sleep.html`](docs/shannon-background-sleep.html) で視覚的に確認できる。

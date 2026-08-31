@@ -47,7 +47,7 @@
     </header>
 
     <div class="status">
-      <span class="pill">✓ OpenAI実応答</span><span class="pill">✓ 端末ペアリング</span><span class="pill">✓ Keychain</span><span class="pill">✓ SQLite永続化</span><span class="pill">✓ 追記型経験ログ</span><span class="pill">✓ 会話復元</span><span class="pill">✓ 連続感情</span><span class="pill">✓ 投稿別の反応表情</span><span class="pill">✓ 非同期記憶想起</span><span class="pill wait">次: Azure適用・worker・睡眠バッチ</span>
+      <span class="pill">✓ OpenAI実応答</span><span class="pill">✓ 端末ペアリング</span><span class="pill">✓ Keychain</span><span class="pill">✓ SQLite永続化</span><span class="pill">✓ 独立worker</span><span class="pill">✓ 再開可能ジョブ</span><span class="pill">✓ 睡眠バッチ</span><span class="pill">✓ 連続感情</span><span class="pill">✓ 投稿別の反応表情</span><span class="pill">✓ 非同期記憶想起</span><span class="pill wait">Azure・実機反映は保留</span>
     </div>
 
     <section>
@@ -63,13 +63,14 @@
     <section>
       <h2>Background lane — 待たせずに変わる流れ</h2>
       <div class="split">
-        <div class="card mint"><h3>感情</h3><p>快・不快、活性、開放性を連続値で保持。投稿アイコンは同じ法則で即時投影し、共有状態への反映は返答後に直列実行する。</p><code>次の感情 = 今の感情 + 減衰 + 刺激</code></div>
-        <div class="card"><h3>記憶想起</h3><p>今回の発言と過去経験の文字特徴を比較し、重なりと新しさから最大3件を活性化する。現在の返答には割り込まない。</p><code>関連度 = 意味の手掛かり × 0.88 + 新しさ × 0.12</code></div>
+        <div class="card mint"><h3>感情</h3><p>快・不快、活性、開放性を連続値で保持。投稿アイコンは同じ法則で即時投影し、共有状態への反映は独立workerが行う。</p><code>次の感情 = 今の感情 + 減衰 + 刺激</code></div>
+        <div class="card"><h3>記憶想起</h3><p>workerが今回の発言と過去経験を比較し、重なりと新しさから最大3件を活性化する。API応答には割り込まない。</p><code>関連度 = 意味の手掛かり × 0.88 + 新しさ × 0.12</code></div>
       </div>
-      <div class="law"><b>順序</b><span>同じscopeの更新は必ず直列。別scopeは独立。</span></div>
+      <div class="law"><b>順序</b><span>SQLite leaseにより同じscopeの更新は必ず直列。processが落ちても期限後に再開。</span></div>
       <div class="law"><b>影響</b><span>完了した共有状態だけを、次のFCA開始時に取得。</span></div>
       <div class="law"><b>興味</b><span>現在の話題が想起された過去経験と共鳴したときだけ、Shannonの関心へ昇格。</span></div>
-      <div class="law"><b>v1の境界</b><span>予測なし、Web検索なし、スキルなし、ユーザー情報の自動確定なし。</span></div>
+      <div class="law"><b>睡眠</b><span>日本時間3時以降に前日のユーザー発言だけを振り返り、原文根拠が一致する持続的情報だけを更新。</span></div>
+      <div class="law"><b>v1の境界</b><span>予測なし、Web検索なし、スキルなし。睡眠バッチはユーザー情報以外を変更しない。</span></div>
     </section>
 
     <section>
@@ -77,10 +78,10 @@
       <div class="triple">
         <div class="card mint"><h3>共有状態</h3><p>感情・興味・ユーザー情報・活性記憶を、scopeごとの不変スナップショットとして保存。</p><code>companion_states</code></div>
         <div class="card"><h3>会話</h3><p>ユーザーとシャノンの発言、時刻、その投稿時の表情を保存。iPhone起動時に最大200件を復元。</p><code>conversation_messages</code></div>
-        <div class="card amber"><h3>経験ログ</h3><p>会話完了と状態変化を削除・上書きせず順番に追記。睡眠バッチが一日を再生する材料になる。</p><code>experience_events</code></div>
+        <div class="card amber"><h3>経験とジョブ</h3><p>会話と状態変化を追記し、背景処理はlease付きジョブとして保存。未投入の会話も経験から回収する。</p><code>experience_events + background_jobs</code></div>
       </div>
       <div class="law"><b>FCAへ渡す会話</b><span>保存件数とは分離し、直近20メッセージだけに制限。</span></div>
-      <div class="law"><b>障害時の順序</b><span>LLM完了後、HTTP返却前に会話と経験を保存。その後に感情・想起を更新するため、背景処理に失敗しても会話は失わない。</span></div>
+      <div class="law"><b>障害時の順序</b><span>LLM完了後、HTTP返却前に会話と経験を保存。ジョブ投入直前にAPIが落ちてもworkerが経験ログから回収する。</span></div>
       <div class="law"><b>データ境界</b><span>scopeごとに状態・会話・経験を分離。DBと付随ファイルは所有者だけが読み書き可能。</span></div>
     </section>
 
@@ -99,17 +100,18 @@
         <dt>API</dt><dd>OpenAI Responses API / <code>store: false</code></dd>
         <dt>会話窓</dt><dd>直近20メッセージ</dd>
         <dt>記憶想起</dt><dd>最大3件・FCA外で実行</dd>
-        <dt>永続化</dt><dd>Node標準SQLite / WAL / schema v1</dd>
+        <dt>永続化</dt><dd>Node標準SQLite / WAL / schema v2</dd>
         <dt>会話復元</dt><dd>表示は最大200件、FCAへ渡すのは直近20件</dd>
         <dt>経験ログ</dt><dd>会話完了・感情・興味・想起をappend-onlyで保存</dd>
         <dt>ファイル権限</dt><dd>DB・WAL・SHMは<code>0600</code></dd>
         <dt>実機認証</dt><dd>LAN待受はBearer必須・秘密値はGit対象外</dd>
         <dt>投稿表情</dt><dd>22種。連続感情を基底に、ユーザー発言とシャノンの返答から投稿別に確定</dd>
         <dt>遠隔接続</dt><dd>使い捨てコード・端末トークン・Keychain・scope強制まで実装済み。Azure適用は保留</dd>
-        <dt>次の段階</dt><dd>worker分離と睡眠バッチをまとめ、その後Azure・実機へ一括反映</dd>
+        <dt>睡眠分析</dt><dd>OpenAI strict JSON Schema。キーなし時は明示自己申告だけのローカル規則</dd>
+        <dt>次の段階</dt><dd>記憶の閲覧・訂正・忘却UIを加え、十分な変更量になった段階でAzure・実機へ一括反映</dd>
       </dl>
     </section>
-    <footer>Updated 2026-08-31 · Durable, authenticated FCA runtime with continuous affect</footer>
+    <footer>Updated 2026-08-31 · Durable FCA, independent cognition worker, and nightly consolidation</footer>
   </main>
 </body>
 </html>
