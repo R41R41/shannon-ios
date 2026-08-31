@@ -9,3 +9,4 @@ DerivedData/
 .build/
 *.xcuserstate
 xcuserdata/
+/design/character-concepts/drafts/

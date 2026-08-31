@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Icon Chibi — Expression Set</title>
+  <style>
+    :root{--primary:#6750a4;--container:#eaddff;--surface:#fffbfe;--low:#f7f2fa;--high:#ece6f0;--ink:#1d1b20;--muted:#49454f;--line:#cac4d0;--shadow:#21005d22}*{box-sizing:border-box}body{margin:0;background:#f2eef7;color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{max-width:1080px;margin:auto;padding:30px 18px 80px}.hero{padding:45px;border-radius:30px;background:linear-gradient(135deg,#21005d,#6750a4 64%,#7d5260);color:#fff;box-shadow:0 20px 60px var(--shadow)}.kicker{margin:0 0 8px;color:#eaddff;font-size:.75rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase}h1{margin:0;font-size:clamp(2.2rem,5vw,4rem);line-height:1.06;letter-spacing:-.05em}.lead{max-width:720px;margin:17px 0 0;color:#f2ebff}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-top:24px}.card{padding:18px;border:1px solid var(--line);border-radius:22px;background:var(--surface);box-shadow:0 7px 18px #21005d0b}.avatar{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;border:1px solid var(--line)}h2{margin:14px 0 2px;font-size:1rem}.enum{color:var(--primary);font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.desc{margin:8px 0 0;color:var(--muted);font-size:.82rem}.flow{display:grid;grid-template-columns:1fr 35px 1fr 35px 1fr;align-items:center;margin-top:26px;padding:24px;border:1px solid var(--line);border-radius:22px;background:var(--surface)}.node{padding:18px;border-radius:16px;background:var(--low);text-align:center}.node.primary{background:var(--container);color:#21005d}.arrow{text-align:center;color:var(--primary);font-size:1.4rem}.note{margin-top:18px;padding:17px 20px;border-left:4px solid var(--primary);border-radius:0 14px 14px 0;background:var(--container);color:#21005d}footer{margin-top:24px;color:var(--muted);font-size:.82rem}@media(max-width:760px){.hero{padding:31px 24px}.grid{grid-template-columns:repeat(2,1fr)}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}}
+  </style>
+</head>
+<body><main>
+  <header class="hero"><p class="kicker">Canonical expression assets · 2026-08-31</p><h1>同じShannon、<br>8つの気持ち。</h1><p class="lead">Icon Chibiをマスターに、髪・輪郭・衣装・背景を固定。返信時の感情スナップショットから1枚を選び、その発言をした瞬間の表情として保存する。</p></header>
+  <section class="grid">
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-neutral.png" alt="いつもの表情"><h2>いつもの表情</h2><div class="enum">neutral</div><p class="desc">基準となる、穏やかな微笑み。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-joyful.png" alt="うれしい表情"><h2>うれしい</h2><div class="enum">joyful</div><p class="desc">閉じた弧の目、開いた笑顔、強めの頬染め。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-curious.png" alt="興味津々の表情"><h2>興味津々</h2><div class="enum">curious</div><p class="desc">左右差のある眉、大きな目、小さな丸い口。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-tender.png" alt="やさしい表情"><h2>やさしい</h2><div class="enum">tender</div><p class="desc">目を合わせた柔らかな視線と、温かい頬。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-calm.png" alt="穏やかな表情"><h2>穏やか</h2><div class="enum">calm</div><p class="desc">目を閉じた安定感。眠気とは違う静けさ。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-concerned.png" alt="心配する表情"><h2>心配</h2><div class="enum">concerned</div><p class="desc">寄った眉と迷う口。恐怖ではなく気遣い。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-sad.png" alt="かなしい表情"><h2>かなしい</h2><div class="enum">sad</div><p class="desc">下がった視線と、こぼれる直前の涙。</p></article>
+    <article class="card"><img class="avatar" src="../../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-sleepy.png" alt="眠そうな表情"><h2>眠そう</h2><div class="enum">sleepy</div><p class="desc">重いまぶたと、力の抜けた小さな口。</p></article>
+  </section>
+  <section class="flow"><div class="node">共有感情<br><small>valence / arousal / openness</small></div><div class="arrow">→</div><div class="node primary"><strong>expressionを確定</strong><br><small>返信時のsnapshot</small></div><div class="arrow">→</div><div class="node">投稿に保存<br><small>過去の顔は変えない</small></div></section>
+  <div class="note"><strong>UIルール：</strong>ヘッダーは最新の表情、各返信は保存された表情を表示する。画像が欠けた場合はテストで検出する。</div>
+  <footer>Resources: apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-&lt;name&gt;.png</footer>
+</main></body></html>

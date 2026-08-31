@@ -8,7 +8,8 @@ SwiftUIアプリのコア。現在はSwift Packageとして、Material 3ベー�
 - Material 3のsemantic color、surface階層、shape scaleをSwiftUI tokenとして実装
 - ライト／ダークモード、Dynamic Type、VoiceOver、Reduce Motionに対応
 - Shannonの各返信に、送信時の感情スナップショットと表情を固定保存
-- 8表情のコードネイティブなShannonアバター
+- Icon Chibiを基準に生成した8表情のShannonアバター
+- 返信時の`expression`から、同名の同梱PNGを自動選択
 - 空状態、考え中、送信中、送信済み、送信失敗、重複しない再送
 - ヘッダーから現在状態のボトムシートを表示
 

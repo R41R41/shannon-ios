@@ -1,6 +1,10 @@
 import Foundation
 
 extension ShannonExpressionDTO {
+    var assetName: String {
+        "shannon-expression-\(rawValue)"
+    }
+
     var japaneseName: String {
         switch self {
         case .joyful: "うれしい"
@@ -19,3 +23,8 @@ extension ShannonExpressionDTO {
     }
 }
 
+enum ShannonExpressionAssets {
+    static func url(for expression: ShannonExpressionDTO) -> URL? {
+        Bundle.module.url(forResource: expression.assetName, withExtension: "png")
+    }
+}

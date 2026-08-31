@@ -11,8 +11,10 @@ let package = Package(
         .library(name: "ShannonAppCore", targets: ["ShannonAppCore"]),
     ],
     targets: [
-        .target(name: "ShannonAppCore"),
+        .target(
+            name: "ShannonAppCore",
+            resources: [.process("Resources")]
+        ),
         .testTarget(name: "ShannonAppCoreTests", dependencies: ["ShannonAppCore"]),
     ]
 )
-
