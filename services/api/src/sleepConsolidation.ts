@@ -55,16 +55,27 @@ export function captureImmediateExplicitMemory(
   userMessage: string,
   current: CompanionStateSnapshot,
   observedAt: string,
+  supplementalProposals: readonly UserFactProposal[] = [],
 ): ImmediateMemoryOutcome {
   const source = normalize(userMessage).slice(0, 2_000);
-  return consolidateProposals(extractExplicitMemoryProposals(source), source, current, observedAt, 0.72);
+  return consolidateProposals(
+    deduplicateProposals([...extractExplicitMemoryProposals(source), ...supplementalProposals]),
+    source,
+    current,
+    observedAt,
+    0.72,
+  );
 }
 
 export function extractExplicitMemoryProposals(value: string): UserFactProposal[] {
   const text = normalize(value).slice(0, 2_000);
   if (!text) return [];
   const proposals: UserFactProposal[] = [];
-  for (const sentence of text.split(/[。！？]+/u).map(item => item.trim()).filter(Boolean)) {
+  const utterances = text.match(/[^。！？!?]+[。！？!?]?/gu) ?? [];
+  for (const utterance of utterances) {
+    if (/[？?]\s*$/u.test(utterance)) continue;
+    const sentence = utterance.replace(/[。！!]\s*$/u, '').trim();
+    if (!sentence) continue;
     for (const pattern of EXPLICIT_FACT_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'user-fact');
     for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'relationship');
     for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'interest');
@@ -268,12 +279,39 @@ export async function consolidateSleepMemory(
 
 const SLEEP_INSTRUCTIONS = `その日のユーザー発言を振り返る。
 factsにはユーザーが明示した持続的な情報、relationshipsにはシャノンに望む関わり方、interestsにはユーザーが明示した最近の関心だけを入れる。
+日本語では主語が省略される。「寿司が好き」「大きな音が嫌い」「好物はカレー」「苦手な食べ物は納豆」のような直接表現はユーザー本人の持続的な好みとしてfactsに入れる。
+質問、第三者についての話、伝聞、過去だけの好み、「たぶん」「かもしれない」など不確かな表現は入れない。
 推測、診断、センシティブ属性、秘密、一時的な気分、シャノンの発言由来の情報は含めない。
 evidenceは入力中に完全一致する短いユーザー発言をそのまま返す。確信がなければ各配列を空にする。`;
 
 const EXPLICIT_FACT_PATTERNS = [
+  {
+    pattern: /^(?:好きな食べ物|一番好きな食べ物|好物)(?:は|：|:)(?:、)?(.{1,60}?)(?:です|だ)?$/u,
+    statement: (value: string) => `ユーザーの好きな食べ物は${value}`,
+    accept: directPreferenceValue,
+  },
+  {
+    pattern: /^(?:苦手な食べ物|嫌いな食べ物)(?:は|：|:)(?:、)?(.{1,60}?)(?:です|だ)?$/u,
+    statement: (value: string) => `ユーザーが苦手な食べ物は${value}`,
+    accept: directPreferenceValue,
+  },
+  {
+    pattern: /^(?:食べ物なら|食べ物だと)(.{1,60}?)(?:が)?(?:一番)?(?:大)?好き(?:です|だ|なんだ)?(?:よ)?$/u,
+    statement: (value: string) => `ユーザーの好きな食べ物は${value}`,
+    accept: directPreferenceValue,
+  },
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が好き|を好む)/u, statement: (value: string) => `ユーザーは${value}が好き` },
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が苦手|が嫌い)/u, statement: (value: string) => `ユーザーは${value}が苦手` },
+  {
+    pattern: /^([^はが、]{1,60}?)(?:が)?(?:一番)?(?:大)?好き(?:です|だ|なんだ)?(?:よ)?$/u,
+    statement: (value: string) => `ユーザーは${value}が好き`,
+    accept: directPreferenceValue,
+  },
+  {
+    pattern: /^([^はが、]{1,60}?)(?:が)(?:苦手|嫌い)(?:です|だ|なんだ)?(?:よ)?$/u,
+    statement: (value: string) => `ユーザーは${value}が苦手`,
+    accept: directPreferenceValue,
+  },
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:をしている|をやっている)/u, statement: (value: string) => `ユーザーは${value}をしている` },
   { pattern: /(?:僕の|私の|自分の)?名前は(?:、)?(.{1,60})/u, statement: (value: string) => `ユーザーの名前は${value}` },
   { pattern: /(?:僕の|私の|自分の)?(?:仕事|職業)は(?:、)?(.{1,100})/u, statement: (value: string) => `ユーザーの仕事は${value}` },
@@ -282,6 +320,7 @@ const EXPLICIT_FACT_PATTERNS = [
 ] as const;
 
 const RELATIONSHIP_PATTERNS = [
+  { pattern: /(?:^|[。！？、])([^。！？、]{1,80}?)(?:ないでほしい|ないで欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}ないでほしい` },
   { pattern: /(?:^|[。！？、])([^。！？、]{1,80}?)(?:しないでほしい|しないで欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}しないでほしい` },
   { pattern: /(?:^|[。！？、])([^。！？、]{1,80}?)(?:してほしい|して欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}してほしい` },
   { pattern: /(?:アドバイス|助言)(?:は|が)?(?:いらない|不要)/u, statement: () => 'ユーザーは求めていない時の助言を望まない' },
@@ -291,7 +330,11 @@ const INTEREST_PATTERNS = [
   { pattern: /(?:^|[。！？、])(?:最近|いま|今)([^。！？、]{1,100}?)(?:に興味がある|が気になっている)/u, statement: (value: string) => value },
 ] as const;
 
-interface RulePattern { pattern: RegExp; statement: (value: string) => string }
+interface RulePattern {
+  pattern: RegExp;
+  statement: (value: string) => string;
+  accept?: (value: string, text: string) => boolean;
+}
 
 function appendRuleProposal(
   proposals: UserFactProposal[],
@@ -303,7 +346,12 @@ function appendRuleProposal(
   if (!match) return;
   const value = (match[1] ?? '').trim().replace(/[。！？].*$/u, '').slice(0, 100);
   if (match[1] !== undefined && !value) return;
+  if (pattern.accept && !pattern.accept(value, text)) return;
   proposals.push({ kind, statement: pattern.statement(value), evidence: text.slice(0, 240) });
+}
+
+function directPreferenceValue(value: string): boolean {
+  return !/(?:食べ物なら|食べ物だと|たぶん|多分|かも|かな|気がする|彼|彼女|あの人|友達|家族|母|父|兄|姉|弟|妹|さん|くん|ちゃん|何|どれ)/u.test(value);
 }
 
 function consolidateProposals(

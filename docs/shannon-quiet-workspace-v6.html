@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Quiet Workspace v6</title>
+  <style>
+    :root{--ink:#172027;--muted:#52636d;--blue:#00779e;--pale:#eaf7fd;--line:#bfd2dc;--ok:#d9f4e8}*{box-sizing:border-box}body{margin:0;background:linear-gradient(150deg,#cceeff 0,#f7fcff 34rem);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}main{width:min(980px,calc(100% - 30px));margin:auto;padding:52px 0 80px}h1{margin:.2em 0;font-size:clamp(2.5rem,8vw,5rem);line-height:1;letter-spacing:-.055em}h2{margin:0 0 16px;font-size:1.45rem}.lead{max-width:720px;color:var(--muted);font-size:1.08rem}.status{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0}.pill{padding:7px 12px;border-radius:999px;background:var(--ok);font-weight:700}section{margin:16px 0;padding:26px;border:1px solid #fff;border-radius:26px;background:#ffffffd9;box-shadow:0 18px 50px #15506c16}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{padding:18px;border-radius:18px;background:var(--pale)}.card b{display:block;margin-bottom:5px;color:var(--blue)}.card p{margin:0;color:var(--muted)}.flow{display:flex;align-items:stretch;gap:9px}.node{flex:1;padding:18px;border-radius:18px;background:var(--pale)}.arrow{align-self:center;color:var(--blue);font-size:1.4rem}.row{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.row b{color:var(--blue)}code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace}a{color:var(--blue)}footer{padding:24px 4px;color:var(--muted);font-size:.85rem}@media(max-width:720px){.grid{grid-template-columns:1fr}.flow{display:grid}.arrow{transform:rotate(90deg);text-align:center}.row{grid-template-columns:1fr;gap:3px}}
+  </style>
+</head>
+<body><main>
+  <small>SHANNON · QUIET WORKSPACE V6</small>
+  <h1>説明を減らし、<br>会話と記憶を前へ。</h1>
+  <p class="lead">全ページ共通の半透明ナビゲーション、1段の入力欄、機能だけを置いた設定画面。明示された好みは返信後のworkerが即時に共有状態へ反映する。</p>
+  <div class="status"><span class="pill">Cognition 10/10</span><span class="pill">API 60/60</span><span class="pill">Swift 15/15</span><span class="pill">実LLM 27/27</span></div>
+
+  <section><h2>画面</h2><div class="grid">
+    <article class="card"><b>共通ナビ</b><p>トーク、メモリー、歯車を全ページの最上部に重ねる。背景は半透明で、スクロール内容が背後に残る。</p></article>
+    <article class="card"><b>トーク</b><p>状態行と説明文を削除。入力欄は「メッセージ」と送信ボタンだけの1段構成。</p></article>
+    <article class="card"><b>メモリー</b><p>「わたしが覚えていること」カードを削除。種類、記憶、根拠、操作だけを残す。</p></article>
+    <article class="card"><b>設定</b><p>状態と接続への導線を集約。チャット上部にあった状態・version・接続アイコンは置かない。</p></article>
+    <article class="card"><b>キーボード</b><p>会話面タップ、対話的スクロール、ページ移動のいずれでも入力状態を解除できる。</p></article>
+    <article class="card"><b>横移動</b><p>iOS標準ページングでトーク、メモリー、設定をスワイプでき、上部ボタンとも選択状態を共有する。</p></article>
+  </div></section>
+
+  <section><h2>即時記憶</h2><div class="flow">
+    <div class="node"><b>FCA</b><br>返信を先に返す。記憶抽出を待たない。</div><div class="arrow">→</div>
+    <div class="node"><b>worker</b><br>軽量規則とLLMを組み合わせ、直接述べた情報だけを抽出。</div><div class="arrow">→</div>
+    <div class="node"><b>共有状態</b><br>次の返答と「あなたについて」に反映。</div>
+  </div></section>
+
+  <section><h2>対話試験</h2>
+    <div class="row"><b>拾う</b><span>「好きな食べ物は寿司」「好物はラーメン」「寿司が好き」「大きな音が嫌い」「結論から話してほしい」など。</span></div>
+    <div class="row"><b>拾わない</b><span>質問、第三者の好み、伝聞、過去だけの好み、不確かな表現、一時的な出来事。</span></div>
+    <div class="row"><b>故障時</b><span>即時LLMが失敗しても、感情更新と軽量規則による記憶更新は継続する。</span></div>
+    <div class="row"><b>実LLM</b><span><code>gpt-5.6-luna</code>で27件を評価し、27件通過。試験は本番記憶を書き換えない。</span></div>
+  </section>
+
+  <section><h2>実装</h2>
+    <div class="row"><b>UI</b><span><a href="../apps/ios/Sources/ShannonAppCore/ShannonConversationView.swift">ShannonConversationView.swift</a> · <a href="../apps/ios/Sources/ShannonAppCore/ShannonMemoryView.swift">ShannonMemoryView.swift</a></span></div>
+    <div class="row"><b>記憶抽出</b><span><a href="../services/api/src/sleepConsolidation.ts">sleepConsolidation.ts</a> · <a href="../services/api/src/backgroundWorker.ts">backgroundWorker.ts</a></span></div>
+    <div class="row"><b>対話ケース</b><span><a href="../services/api/tests/explicitMemoryDialogueCases.ts">explicitMemoryDialogueCases.ts</a> · <a href="../services/api/tests/explicitMemoryLiveEval.ts">explicitMemoryLiveEval.ts</a></span></div>
+  </section>
+  <footer>Shannon Quiet Workspace v6 · implementation and verification record · 2026-09-01 JST</footer>
+</main></body></html>

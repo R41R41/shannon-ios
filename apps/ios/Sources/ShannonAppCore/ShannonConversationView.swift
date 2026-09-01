@@ -25,9 +25,11 @@ public struct ShannonConversationView: View {
     public var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        VStack(spacing: 0) {
-            ShannonWorkspaceSwitcher(selection: $selectedPage)
+        ZStack(alignment: .top) {
             workspacePages(palette)
+
+            ShannonWorkspaceSwitcher(selection: $selectedPage)
+                .padding(.top, M3Spacing.extraSmall)
         }
         .background(palette.surface)
         .foregroundStyle(palette.onSurface)
@@ -55,31 +57,31 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         TabView(selection: $selectedPage) {
             talkPage(palette).tag(ShannonWorkspacePage.talk)
-            ShannonMemoryView(model: memoryModel, showsDismissButton: false)
+            ShannonMemoryView(
+                model: memoryModel,
+                showsDismissButton: false,
+                workspaceTopInset: ShannonWorkspaceChrome.contentTopInset
+            )
                 .tag(ShannonWorkspacePage.memory)
+            settingsPage(palette).tag(ShannonWorkspacePage.settings)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
 #else
         switch selectedPage {
         case .talk: talkPage(palette)
-        case .memory: ShannonMemoryView(model: memoryModel, showsDismissButton: false)
+        case .memory:
+            ShannonMemoryView(
+                model: memoryModel,
+                showsDismissButton: false,
+                workspaceTopInset: ShannonWorkspaceChrome.contentTopInset
+            )
+        case .settings: settingsPage(palette)
         }
 #endif
     }
 
     private func talkPage(_ palette: M3Palette) -> some View {
         VStack(spacing: 0) {
-            ShannonTopAppBar(
-                expression: model.currentExpression,
-                isThinking: model.isSending,
-                stateVersion: model.state?.version,
-                stateAction: { showsStateDetails = true },
-                memoryAction: {
-                    withAnimation(reduceMotion ? nil : .snappy) { selectedPage = .memory }
-                },
-                connectionAction: connectionModel == nil ? nil : { showsConnectionDetails = true }
-            )
-
             messageList(palette)
 
             if let errorMessage = model.errorMessage {
@@ -111,7 +113,6 @@ public struct ShannonConversationView: View {
                             .padding(.top, 72)
                     } else if model.messages.isEmpty {
                         ShannonEmptyConversation()
-                            .padding(.top, 56)
                     }
 
                     ForEach(model.messages) { message in
@@ -127,7 +128,8 @@ public struct ShannonConversationView: View {
                     Color.clear.frame(height: 1).id("conversation-bottom")
                 }
                 .padding(.horizontal, M3Spacing.large)
-                .padding(.vertical, M3Spacing.extraLarge)
+                .padding(.top, ShannonWorkspaceChrome.contentTopInset)
+                .padding(.bottom, M3Spacing.extraLarge)
             }
             .scrollIndicators(.hidden)
             .shannonKeyboardDismissMode()
@@ -144,49 +146,40 @@ public struct ShannonConversationView: View {
     }
 
     private func composer(_ palette: M3Palette) -> some View {
-        VStack(spacing: M3Spacing.extraSmall) {
-            TextField("シャノンに話す", text: $model.draft, axis: .vertical)
+        HStack(alignment: .bottom, spacing: M3Spacing.extraSmall) {
+            TextField("メッセージ", text: $model.draft, axis: .vertical)
                 .font(.body)
                 .lineLimit(1...5)
-                .frame(minHeight: 38)
+                .frame(minHeight: 40)
                 .focused($composerIsFocused)
-                .padding(.horizontal, M3Spacing.small)
-                .padding(.top, M3Spacing.small)
+                .padding(.leading, M3Spacing.medium)
+                .padding(.vertical, M3Spacing.small)
                 .onSubmit { sendDraft() }
                 .submitLabel(.send)
                 .accessibilityHint("複数行入力できます")
 
-            HStack {
-                Text("会話から記憶と感情が少しずつ育ちます")
-                    .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .lineLimit(1)
-                Spacer(minLength: M3Spacing.small)
-                Button(action: sendDraft) {
-                    ZStack {
-                        Circle()
-                            .fill(model.canSendDraft ? palette.primary : palette.surfaceContainerHigh)
-                        if model.isSending {
-                            ProgressView()
-                                .tint(palette.onSurfaceVariant)
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(model.canSendDraft ? palette.onPrimary : palette.onSurfaceVariant)
-                        }
+            Button(action: sendDraft) {
+                ZStack {
+                    Circle()
+                        .fill(model.canSendDraft ? palette.primary : palette.surface)
+                    if model.isSending {
+                        ProgressView()
+                            .tint(palette.onSurfaceVariant)
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(model.canSendDraft ? palette.onPrimary : palette.onSurfaceVariant)
                     }
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
                 }
-                .buttonStyle(.plain)
-                .disabled(!model.canSendDraft)
-                .accessibilityLabel(model.isSending ? "送信中" : "送信")
+                .frame(width: 40, height: 40)
             }
-            .padding(.leading, M3Spacing.small)
+            .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+            .buttonStyle(.plain)
+            .disabled(!model.canSendDraft)
+            .accessibilityLabel(model.isSending ? "送信中" : "送信")
         }
-        .padding(.leading, M3Spacing.small)
-        .padding(.trailing, M3Spacing.extraSmall)
-        .padding(.bottom, M3Spacing.extraSmall)
+        .padding(M3Spacing.extraSmall)
         .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous)
@@ -194,7 +187,44 @@ public struct ShannonConversationView: View {
         }
         .padding(.horizontal, M3Spacing.medium)
         .padding(.vertical, M3Spacing.small)
-        .background(palette.surface)
+        .background(.ultraThinMaterial)
+    }
+
+    private func settingsPage(_ palette: M3Palette) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: M3Spacing.large) {
+                Text("設定")
+                    .font(.largeTitle.bold())
+                    .padding(.horizontal, M3Spacing.extraSmall)
+
+                Button { showsStateDetails = true } label: {
+                    ShannonSettingsRow(
+                        title: "シャノンの状態",
+                        detail: model.state == nil
+                            ? model.currentExpression.japaneseName
+                            : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
+                        symbol: "waveform.path.ecg"
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if let connectionModel {
+                    Button { showsConnectionDetails = true } label: {
+                        ShannonSettingsRow(
+                            title: "接続",
+                            detail: connectionModel.statusLabel,
+                            symbol: "link"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, M3Spacing.large)
+            .padding(.top, ShannonWorkspaceChrome.contentTopInset)
+            .padding(.bottom, M3Spacing.huge)
+        }
+        .scrollIndicators(.hidden)
+        .background(palette.surfaceContainerLow)
     }
 
     private func sendDraft() {
@@ -212,10 +242,27 @@ public struct ShannonConversationView: View {
 private enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     case talk
     case memory
+    case settings
 
     var id: Int { rawValue }
-    var title: String { self == .talk ? "トーク" : "メモリー" }
-    var symbol: String { self == .talk ? "bubble.left.and.bubble.right.fill" : "brain.head.profile.fill" }
+    var title: String {
+        switch self {
+        case .talk: "トーク"
+        case .memory: "メモリー"
+        case .settings: "設定"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .talk: "bubble.left.and.bubble.right.fill"
+        case .memory: "brain.head.profile.fill"
+        case .settings: "gearshape.fill"
+        }
+    }
+}
+
+private enum ShannonWorkspaceChrome {
+    static let contentTopInset: CGFloat = 72
 }
 
 private struct ShannonWorkspaceSwitcher: View {
@@ -226,110 +273,91 @@ private struct ShannonWorkspaceSwitcher: View {
     var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        HStack(spacing: M3Spacing.extraSmall) {
-            ForEach(ShannonWorkspacePage.allCases) { page in
-                Button {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = page }
-                } label: {
-                    Label(page.title, systemImage: page.symbol)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(selection == page ? palette.onPrimary : palette.onSurfaceVariant)
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .background(selection == page ? palette.primary : Color.clear, in: Capsule())
+        HStack(spacing: M3Spacing.small) {
+            HStack(spacing: M3Spacing.extraSmall) {
+                ForEach([ShannonWorkspacePage.talk, .memory]) { page in
+                    workspaceButton(page, palette: palette)
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == page ? .isSelected : [])
             }
+            .frame(maxWidth: .infinity)
+            .padding(M3Spacing.extraSmall)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            }
+
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = .settings }
+            } label: {
+                Image(systemName: ShannonWorkspacePage.settings.symbol)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(selection == .settings ? palette.onPrimary : palette.onSurfaceVariant)
+                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .background(selection == .settings ? palette.primary : Color.clear, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay {
+                Circle().stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            }
+            .accessibilityLabel("設定")
+            .accessibilityAddTraits(selection == .settings ? .isSelected : [])
         }
-        .padding(M3Spacing.extraSmall)
-        .background(palette.surfaceContainerHigh, in: Capsule())
         .padding(.horizontal, M3Spacing.large)
-        .padding(.vertical, M3Spacing.small)
-        .background(palette.surface)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(palette.outlineVariant.opacity(0.55)).frame(height: 0.5)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func workspaceButton(_ page: ShannonWorkspacePage, palette: M3Palette) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = page }
+        } label: {
+            Label(page.title, systemImage: page.symbol)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(selection == page ? palette.onPrimary : palette.onSurfaceVariant)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(selection == page ? palette.primary : Color.clear, in: Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == page ? .isSelected : [])
     }
 }
 
-private struct ShannonTopAppBar: View {
-    let expression: ShannonExpressionDTO
-    let isThinking: Bool
-    let stateVersion: Int?
-    let stateAction: () -> Void
-    let memoryAction: () -> Void
-    let connectionAction: (() -> Void)?
-
+private struct ShannonSettingsRow: View {
+    let title: String
+    let detail: String
+    let symbol: String
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
         HStack(spacing: M3Spacing.medium) {
-            Button(action: stateAction) {
-                HStack(spacing: M3Spacing.medium) {
-                    ShannonAvatarView(expression: expression, size: 52)
+            Image(systemName: symbol)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(palette.primary)
+                .frame(width: 44, height: 44)
+                .background(palette.secondaryContainer, in: Circle())
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("シャノン")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(palette.onSurface)
-
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(isThinking ? palette.tertiary : Color(hex: 0x2E7D32))
-                                .frame(width: 8, height: 8)
-                            Text(isThinking ? "考えている…" : "ここにいる・\(expression.japaneseName)")
-                                .font(.caption)
-                                .foregroundStyle(palette.onSurfaceVariant)
-                        }
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("シャノンの状態を見る。現在は\(expression.japaneseName)")
-
-            Spacer(minLength: M3Spacing.small)
-
-            if let stateVersion {
-                Text("v\(stateVersion)")
-                    .font(.caption2.monospacedDigit().weight(.medium))
-                    .foregroundStyle(palette.onSecondaryContainer)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(palette.secondaryContainer, in: Capsule())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(palette.onSurface)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
             }
 
-            Button(action: memoryAction) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(palette.primary)
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("シャノンの記憶")
-
-            if let connectionAction {
-                Button(action: connectionAction) {
-                    Image(systemName: "link.circle")
-                        .font(.system(size: 21, weight: .medium))
-                        .foregroundStyle(palette.primary)
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("シャノンとの接続設定")
-            } else {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(palette.primary)
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .foregroundStyle(palette.onSurfaceVariant)
         }
-        .padding(.leading, M3Spacing.large)
-        .padding(.trailing, M3Spacing.small)
-        .padding(.vertical, M3Spacing.small)
-        .background(palette.surface)
+        .padding(M3Spacing.large)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.large)
+                .stroke(palette.outlineVariant.opacity(0.7), lineWidth: 0.7)
+        }
     }
 }
 
@@ -345,27 +373,11 @@ private extension View {
 }
 
 private struct ShannonEmptyConversation: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
-
-        VStack(spacing: M3Spacing.large) {
-            ShannonAvatarView(expression: .curious, size: 88)
-            VStack(spacing: M3Spacing.small) {
-                Text("今日は、どんな日？")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
-                Text("まだ知らないことが多いから、\nあなたの言葉で少しずつ教えてほしい。")
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .lineSpacing(3)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(M3Spacing.extraLarge)
-        .accessibilityElement(children: .combine)
+        ShannonAvatarView(expression: .curious, size: 96)
+            .frame(maxWidth: .infinity)
+            .padding(M3Spacing.extraLarge)
+            .accessibilityLabel("シャノン")
     }
 }
 

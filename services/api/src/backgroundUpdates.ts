@@ -9,7 +9,7 @@ import {
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
-import { captureImmediateExplicitMemory } from './sleepConsolidation.js';
+import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 
 export interface CompletedTurn {
   scopeKey: string;
@@ -33,7 +33,13 @@ export class TurnRefinementProcessor {
     private readonly conversationStore: ConversationStore,
   ) {}
 
-  process(scopeKey: string, userMessage: string, recordedExperienceId?: string, observedAt?: string): void {
+  process(
+    scopeKey: string,
+    userMessage: string,
+    recordedExperienceId?: string,
+    observedAt?: string,
+    supplementalProposals: readonly UserFactProposal[] = [],
+  ): void {
     const candidates = this.conversationStore.experienceCandidates(scopeKey)
       .filter(candidate => candidate.id !== recordedExperienceId);
     const recalled = selectActiveMemories(userMessage, candidates);
@@ -48,6 +54,7 @@ export class TurnRefinementProcessor {
       userMessage,
       current,
       observedAt ?? new Date().toISOString(),
+      supplementalProposals,
     );
     for (const fact of immediate.facts) {
       this.stateStore.apply(scopeKey, { type: 'user-fact-upserted', fact, source: 'conversation' });

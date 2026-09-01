@@ -3,7 +3,11 @@ import type { CompanionStateStore } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob } from './backgroundJobStore.js';
 import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
-import { consolidateSleepMemory, type SleepMemoryAnalyzer } from './sleepConsolidation.js';
+import {
+  consolidateSleepMemory,
+  type SleepMemoryAnalyzer,
+  type UserFactProposal,
+} from './sleepConsolidation.js';
 
 export interface BackgroundWorkerOptions {
   workerId?: string;
@@ -65,8 +69,24 @@ export class ShannonBackgroundWorker {
   private async process(job: ClaimedBackgroundJob, completedAt: string): Promise<void> {
     if (job.payload.kind === 'turn-refinement') {
       const payload = job.payload;
+      let supplementalProposals: UserFactProposal[] = [];
+      if (this.sleepAnalyzer.mode === 'openai') {
+        try {
+          supplementalProposals = [...await this.sleepAnalyzer.analyze([
+            { content: payload.userMessage, observedAt: completedAt },
+          ])];
+        } catch {
+          this.reportError('IMMEDIATE_MEMORY_LLM_FAILED');
+        }
+      }
       this.jobStore.completeClaimedBackgroundJob(job, this.workerId, completedAt, () => {
-        this.processor.process(job.scopeKey, payload.userMessage, payload.experienceId, completedAt);
+        this.processor.process(
+          job.scopeKey,
+          payload.userMessage,
+          payload.experienceId,
+          completedAt,
+          supplementalProposals,
+        );
       });
       return;
     }

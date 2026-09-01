@@ -87,6 +87,59 @@ describe('Shannon durable background worker', () => {
     store.close();
   });
 
+  it('uses the asynchronous model analyzer for natural facts outside the fast local rules', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
+    const message = '食事でいちばん気分が上がるのは、お寿司かな';
+    store.appendTurn('owner-a', message, 'そうなんだね。', '2026-09-01T10:00:00.000Z');
+    const worker = new ShannonBackgroundWorker(
+      store,
+      store,
+      store,
+      {
+        mode: 'openai',
+        analyze: async () => [{
+          kind: 'user-fact',
+          statement: 'ユーザーの好きな食べ物は寿司',
+          evidence: message,
+        }],
+      },
+      { workerId: 'immediate-llm-worker', now: () => new Date('2026-09-01T10:00:01.000Z') },
+    );
+
+    expect(await worker.runOnce()).toBe('processed');
+    expect(store.snapshot('owner-a').userFacts).toEqual([
+      expect.objectContaining({ statement: 'ユーザーの好きな食べ物は寿司', confidence: 0.72 }),
+    ]);
+    store.close();
+  });
+
+  it('keeps emotion and local memory updates running when immediate model analysis fails', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
+    store.appendTurn('owner-a', '寿司が好き。完成して嬉しい！', 'よかった。', '2026-09-01T10:00:00.000Z');
+    const errors: string[] = [];
+    const worker = new ShannonBackgroundWorker(
+      store,
+      store,
+      store,
+      { mode: 'openai', analyze: async () => { throw new Error('network'); } },
+      {
+        workerId: 'immediate-llm-fallback-worker',
+        now: () => new Date('2026-09-01T10:00:01.000Z'),
+        reportError: code => errors.push(code),
+      },
+    );
+
+    expect(await worker.runOnce()).toBe('processed');
+    expect(store.snapshot('owner-a').userFacts).toEqual([
+      expect.objectContaining({ statement: 'ユーザーは寿司が好き' }),
+    ]);
+    expect(store.snapshot('owner-a').emotion.valence).toBeGreaterThan(0);
+    expect(errors).toContain('IMMEDIATE_MEMORY_LLM_FAILED');
+    store.close();
+  });
+
   it('reclaims an expired lease without duplicating the job', () => {
     const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-08-31T00:00:00.000Z' });
     store.enqueueTurnRefinement('owner-a', 'turn-a', 'こんにちは', '2026-08-31T00:00:00.000Z');

@@ -4,96 +4,105 @@ public struct ShannonMemoryView: View {
     @State private var model: ShannonMemoryModel
     @State private var filter: MemoryFilter = .all
     private let showsDismissButton: Bool
+    private let workspaceTopInset: CGFloat
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
     public init(
         model: ShannonMemoryModel = ShannonMemoryModel(),
-        showsDismissButton: Bool = true
+        showsDismissButton: Bool = true,
+        workspaceTopInset: CGFloat = 0
     ) {
         _model = State(initialValue: model)
         self.showsDismissButton = showsDismissButton
+        self.workspaceTopInset = workspaceTopInset
     }
 
     public var body: some View {
         let palette = M3Palette.resolve(colorScheme)
         NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: M3Spacing.large) {
-                    memoryHero(palette)
-                    if let report = model.latestSleepReport {
-                        NavigationLink {
-                            ShannonSleepReportView(report: report)
-                        } label: {
-                            SleepSummaryCard(report: report, palette: palette)
+            if showsDismissButton {
+                memoryContent(palette)
+                    .navigationTitle("シャノンの記憶")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("閉じる") { dismiss() }
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { Task { await model.reload() } } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .disabled(model.isLoading)
+                            .accessibilityLabel("記憶を更新")
+                        }
+                    }
+            } else {
+                memoryContent(palette)
+            }
+        }
+    }
+
+    private func memoryContent(_ palette: M3Palette) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: M3Spacing.large) {
+                if workspaceTopInset > 0 {
+                    HStack {
+                        Text("メモリー")
+                            .font(.largeTitle.bold())
+                        Spacer()
+                        Button { Task { await model.reload() } } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
                         }
                         .buttonStyle(.plain)
+                        .disabled(model.isLoading)
+                        .accessibilityLabel("記憶を更新")
                     }
-                    filterChips(palette)
-
-                    if model.isLoading && model.dashboard == nil {
-                        ProgressView("記憶をたどっている…")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 64)
-                    } else if filteredActiveItems.isEmpty {
-                        emptyState(palette)
-                    } else {
-                        memorySection("いま覚えていること", items: filteredActiveItems, palette: palette)
-                    }
-
-                    if filter == .all && !model.hiddenItems.isEmpty {
-                        memorySection("あなたが境界を決めた記憶", items: model.hiddenItems, palette: palette)
-                    }
-
-                    if let error = model.errorMessage {
-                        MemoryErrorCard(message: error, palette: palette) {
-                            Task { await model.reload() }
-                        }
-                    }
+                    .padding(.horizontal, M3Spacing.extraSmall)
                 }
-                .padding(M3Spacing.large)
-            }
-            .background(palette.surfaceContainerLow)
-            .navigationTitle("シャノンの記憶")
-            .toolbar {
-                if showsDismissButton {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("閉じる") { dismiss() }
+
+                if let report = model.latestSleepReport {
+                    NavigationLink {
+                        ShannonSleepReportView(report: report)
+                    } label: {
+                        SleepSummaryCard(report: report, palette: palette)
                     }
+                    .buttonStyle(.plain)
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { Task { await model.reload() } } label: {
-                        Image(systemName: "arrow.clockwise")
+                filterChips(palette)
+
+                if model.isLoading && model.dashboard == nil {
+                    ProgressView("読み込み中…")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 64)
+                } else if filteredActiveItems.isEmpty {
+                    emptyState(palette)
+                } else {
+                    memorySection("いま覚えていること", items: filteredActiveItems, palette: palette)
+                }
+
+                if filter == .all && !model.hiddenItems.isEmpty {
+                    memorySection("あなたが境界を決めた記憶", items: model.hiddenItems, palette: palette)
+                }
+
+                if let error = model.errorMessage {
+                    MemoryErrorCard(message: error, palette: palette) {
+                        Task { await model.reload() }
                     }
-                    .disabled(model.isLoading)
-                    .accessibilityLabel("記憶を更新")
                 }
             }
-            .task { await model.loadIfNeeded() }
-            .refreshable { await model.reload() }
+            .padding(.horizontal, M3Spacing.large)
+            .padding(.top, max(M3Spacing.large, workspaceTopInset))
+            .padding(.bottom, M3Spacing.large)
         }
+        .background(palette.surfaceContainerLow)
+        .task { await model.loadIfNeeded() }
+        .refreshable { await model.reload() }
     }
 
     private var filteredActiveItems: [ShannonMemoryItemDTO] {
         guard let kind = filter.kind else { return model.activeItems }
         return model.activeItems.filter { $0.kind == kind }
-    }
-
-    private func memoryHero(_ palette: M3Palette) -> some View {
-        HStack(alignment: .center, spacing: M3Spacing.large) {
-            ShannonAvatarView(expression: .thinking, size: 72)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("わたしが覚えていること")
-                    .font(.title3.weight(.semibold))
-                Text("根拠を見たり、違うことは直したりできるよ。")
-                    .font(.subheadline)
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(M3Spacing.large)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.primaryContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
     }
 
     private func filterChips(_ palette: M3Palette) -> some View {
@@ -137,9 +146,7 @@ public struct ShannonMemoryView: View {
 
     private func emptyState(_ palette: M3Palette) -> some View {
         ContentUnavailableView {
-            Label("まだ記憶がないみたい", systemImage: filter.symbol)
-        } description: {
-            Text(filter == .all ? "会話を重ねると、ここに少しずつ現れます。" : "この種類の記憶はまだありません。")
+            Label("記憶はありません", systemImage: filter.symbol)
         }
         .foregroundStyle(palette.onSurfaceVariant)
         .padding(.vertical, M3Spacing.huge)

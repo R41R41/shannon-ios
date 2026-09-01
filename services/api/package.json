@@ -6,6 +6,7 @@
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:llm-memory": "tsx --env-file-if-exists=../../.env tests/explicitMemoryLiveEval.ts",
     "dev": "tsx --env-file-if-exists=../../.env src/server.ts",
     "worker": "tsx --env-file-if-exists=../../.env src/worker.ts",
     "auth": "tsx --env-file-if-exists=../../.env src/authCli.ts"
