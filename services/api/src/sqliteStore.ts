@@ -426,11 +426,15 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     outcome: SleepConsolidationOutcome,
   ): void {
     this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
-      for (const fact of outcome.facts) this.apply(job.scopeKey, { type: 'user-fact-upserted', fact });
-      for (const relationship of outcome.relationships) {
-        this.apply(job.scopeKey, { type: 'relationship-upserted', relationship });
+      for (const fact of outcome.facts) {
+        this.apply(job.scopeKey, { type: 'user-fact-upserted', fact, source: 'sleep' });
       }
-      for (const interest of outcome.interests) this.apply(job.scopeKey, { type: 'interest-observed', interest });
+      for (const relationship of outcome.relationships) {
+        this.apply(job.scopeKey, { type: 'relationship-upserted', relationship, source: 'sleep' });
+      }
+      for (const interest of outcome.interests) {
+        this.apply(job.scopeKey, { type: 'interest-observed', interest, source: 'sleep' });
+      }
       this.insertEvent(job.scopeKey, 'sleep.completed', completedAt, {
         dayKey: job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : null,
         appliedFactIds: outcome.facts.map(fact => fact.id),

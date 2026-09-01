@@ -36,20 +36,40 @@ export class LocalRuleSleepMemoryAnalyzer implements SleepMemoryAnalyzer {
   readonly mode = 'local-rules' as const;
 
   async analyze(messages: readonly DailyUserMessage[]): Promise<readonly UserFactProposal[]> {
-    const proposals: UserFactProposal[] = [];
-    for (const message of messages) {
-      const text = message.content.replace(/\s+/g, ' ').trim().slice(0, 2_000);
-      for (const pattern of EXPLICIT_FACT_PATTERNS) {
-        const match = text.match(pattern.pattern);
-        const value = match?.[1]?.trim().replace(/[。！？].*$/u, '').slice(0, 100);
-        if (!value || value.length < 1) continue;
-        proposals.push({ kind: 'user-fact', statement: pattern.statement(value), evidence: text.slice(0, 240) });
-      }
-      for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, text, pattern, 'relationship');
-      for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, text, pattern, 'interest');
-    }
-    return deduplicateProposals(proposals).slice(0, 16);
+    return deduplicateProposals(messages.flatMap(message => extractExplicitMemoryProposals(message.content))).slice(0, 16);
   }
+}
+
+export interface ImmediateMemoryOutcome {
+  facts: readonly UserFact[];
+  relationships: readonly RelationshipInsight[];
+  interests: readonly string[];
+}
+
+/**
+ * Cheap, deterministic capture for facts the user stated directly. This runs in
+ * the turn-refinement worker, never in the FCA response lane. Anything inferred
+ * or contradictory remains a sleep-batch concern.
+ */
+export function captureImmediateExplicitMemory(
+  userMessage: string,
+  current: CompanionStateSnapshot,
+  observedAt: string,
+): ImmediateMemoryOutcome {
+  const source = normalize(userMessage).slice(0, 2_000);
+  return consolidateProposals(extractExplicitMemoryProposals(source), source, current, observedAt, 0.72);
+}
+
+export function extractExplicitMemoryProposals(value: string): UserFactProposal[] {
+  const text = normalize(value).slice(0, 2_000);
+  if (!text) return [];
+  const proposals: UserFactProposal[] = [];
+  for (const sentence of text.split(/[。！？]+/u).map(item => item.trim()).filter(Boolean)) {
+    for (const pattern of EXPLICIT_FACT_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'user-fact');
+    for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'relationship');
+    for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'interest');
+  }
+  return deduplicateProposals(proposals);
 }
 
 interface OpenAISleepMemoryAnalyzerOptions {
@@ -194,9 +214,10 @@ export async function consolidateSleepMemory(
 ): Promise<SleepConsolidationOutcome> {
   const proposals = await analyzer.analyze(messages);
   const source = messages.map(message => normalize(message.content)).join('\n');
-  const facts: UserFact[] = [];
-  const relationships: RelationshipInsight[] = [];
-  const interests: string[] = [];
+  const consolidated = consolidateProposals(proposals, source, current, observedAt, 0.55);
+  const facts = [...consolidated.facts];
+  const relationships = [...consolidated.relationships];
+  const interests = [...consolidated.interests];
   const learned: SleepChange[] = [];
   const updated: SleepChange[] = [];
   const interestChanges: SleepChange[] = [];
@@ -226,14 +247,11 @@ export async function consolidateSleepMemory(
     }
     if (kind === 'user-fact') {
       const previous = current.userFacts.find(item => item.id === id);
-      facts.push({ id, statement, confidence: Math.min(0.85, previous ? previous.confidence + 0.1 : 0.55), observedAt, evidence });
       (previous ? updated : learned).push(makeChange(kind, id, statement, previous ? '同じ内容が再確認された' : '明示されたユーザー情報を学習', evidence));
     } else if (kind === 'relationship') {
       const previous = current.relationships.find(item => item.id === id);
-      relationships.push({ id, statement, confidence: Math.min(0.85, previous ? previous.confidence + 0.1 : 0.55), observedAt, evidence });
       (previous ? updated : learned).push(makeChange(kind, id, statement, previous ? '関わり方が再確認された' : '望ましい関わり方を学習', evidence));
     } else if (!current.interests.includes(statement)) {
-      interests.push(statement);
       interestChanges.push(makeChange(kind, id, statement, '明示された関心からシャノンの関心が動いた', evidence));
     }
   }
@@ -257,16 +275,20 @@ const EXPLICIT_FACT_PATTERNS = [
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が好き|を好む)/u, statement: (value: string) => `ユーザーは${value}が好き` },
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が苦手|が嫌い)/u, statement: (value: string) => `ユーザーは${value}が苦手` },
   { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:をしている|をやっている)/u, statement: (value: string) => `ユーザーは${value}をしている` },
+  { pattern: /(?:僕の|私の|自分の)?名前は(?:、)?(.{1,60})/u, statement: (value: string) => `ユーザーの名前は${value}` },
+  { pattern: /(?:僕の|私の|自分の)?(?:仕事|職業)は(?:、)?(.{1,100})/u, statement: (value: string) => `ユーザーの仕事は${value}` },
+  { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:に住んでいる|在住)/u, statement: (value: string) => `ユーザーは${value}に住んでいる` },
+  { pattern: /(?:僕の|私の|自分の)?誕生日は(?:、)?(.{1,60})/u, statement: (value: string) => `ユーザーの誕生日は${value}` },
 ] as const;
 
 const RELATIONSHIP_PATTERNS = [
-  { pattern: /(.{1,80}?)(?:してほしい|して欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}してほしい` },
-  { pattern: /(.{1,80}?)(?:しないでほしい|しないで欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}しないでほしい` },
+  { pattern: /(?:^|[。！？、])([^。！？、]{1,80}?)(?:しないでほしい|しないで欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}しないでほしい` },
+  { pattern: /(?:^|[。！？、])([^。！？、]{1,80}?)(?:してほしい|して欲しい)/u, statement: (value: string) => `ユーザーはシャノンに${value}してほしい` },
   { pattern: /(?:アドバイス|助言)(?:は|が)?(?:いらない|不要)/u, statement: () => 'ユーザーは求めていない時の助言を望まない' },
 ] as const;
 
 const INTEREST_PATTERNS = [
-  { pattern: /(?:最近|いま|今)(.{1,100}?)(?:に興味がある|が気になっている)/u, statement: (value: string) => value },
+  { pattern: /(?:^|[。！？、])(?:最近|いま|今)([^。！？、]{1,100}?)(?:に興味がある|が気になっている)/u, statement: (value: string) => value },
 ] as const;
 
 interface RulePattern { pattern: RegExp; statement: (value: string) => string }
@@ -275,13 +297,57 @@ function appendRuleProposal(
   proposals: UserFactProposal[],
   text: string,
   pattern: RulePattern,
-  kind: 'relationship' | 'interest',
+  kind: 'user-fact' | 'relationship' | 'interest',
 ): void {
   const match = text.match(pattern.pattern);
   if (!match) return;
   const value = (match[1] ?? '').trim().replace(/[。！？].*$/u, '').slice(0, 100);
   if (match[1] !== undefined && !value) return;
   proposals.push({ kind, statement: pattern.statement(value), evidence: text.slice(0, 240) });
+}
+
+function consolidateProposals(
+  proposals: readonly UserFactProposal[],
+  source: string,
+  current: CompanionStateSnapshot,
+  observedAt: string,
+  initialConfidence: number,
+): ImmediateMemoryOutcome {
+  const facts: UserFact[] = [];
+  const relationships: RelationshipInsight[] = [];
+  const interests: string[] = [];
+  for (const proposal of proposals) {
+    const kind = proposal.kind ?? 'user-fact';
+    const statement = normalize(proposal.statement).slice(0, 160);
+    const evidence = normalize(proposal.evidence).slice(0, 240);
+    if (!statement || !evidence || !source.includes(evidence)) continue;
+    const id = memoryId(kind, statement);
+    const control = current.memoryControls.find(item => item.memoryId === id);
+    if (control && control.status !== 'active') continue;
+    if (conflictingCurrent(current, kind, statement)) continue;
+    if (kind === 'user-fact') {
+      const previous = current.userFacts.find(item => item.id === id);
+      facts.push({
+        id, statement,
+        confidence: Math.min(0.9, previous ? previous.confidence + 0.08 : initialConfidence),
+        observedAt, evidence,
+      });
+    } else if (kind === 'relationship') {
+      const previous = current.relationships.find(item => item.id === id);
+      relationships.push({
+        id, statement,
+        confidence: Math.min(0.9, previous ? previous.confidence + 0.08 : initialConfidence),
+        observedAt, evidence,
+      });
+    } else if (!current.interests.includes(statement)) {
+      interests.push(statement);
+    }
+  }
+  return Object.freeze({
+    facts: Object.freeze(facts.slice(0, 8)),
+    relationships: Object.freeze(relationships.slice(0, 6)),
+    interests: Object.freeze(interests.slice(0, 6)),
+  });
 }
 
 function parseProposalRows(value: unknown, kind: UserFactProposal['kind']): UserFactProposal[] {

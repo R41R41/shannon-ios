@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>シャノン · Blue Workspace v5</title>
+  <style>
+    :root{color-scheme:light;--ink:#171c1f;--muted:#526069;--primary:#00658a;--primary-soft:#c3e8ff;--surface:#f8fcff;--surface-2:#eaf4f9;--line:#c0c8cd;--mint:#def6ed;--rose:#f9dedc;--shadow:#15445b18}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 8% 0,#c3e8ff 0,transparent 35rem),radial-gradient(circle at 100% 18%,#e3dfff 0,transparent 32rem),var(--surface);color:var(--ink);font:15px/1.72 -apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif}main{width:min(1120px,calc(100% - 30px));margin:auto;padding:58px 0 86px}h1,h2,h3,p{margin-top:0}h1{max-width:890px;margin-bottom:18px;font-size:clamp(2.8rem,7vw,5.8rem);line-height:.96;letter-spacing:-.06em}h2{font-size:1.65rem;letter-spacing:-.025em}h3{font-size:1.02rem}.eyebrow{color:var(--primary);font-size:.76rem;font-weight:850;letter-spacing:.15em}.lead{max-width:800px;color:var(--muted);font-size:1.1rem}.status{display:flex;flex-wrap:wrap;gap:9px;margin:26px 0 44px}.pill{padding:8px 13px;border-radius:999px;background:var(--mint);color:#236653;font-weight:760}.pill.blue{background:var(--primary-soft);color:#00344a}section{margin-top:18px;padding:30px;border:1px solid #ffffffbf;border-radius:30px;background:#ffffffdd;box-shadow:0 18px 52px var(--shadow);backdrop-filter:blur(18px)}.grid,.three{display:grid;gap:14px}.grid{grid-template-columns:repeat(2,1fr)}.three{grid-template-columns:repeat(3,1fr)}.card{padding:21px;border-radius:21px;background:var(--surface-2)}.card:nth-child(2n){background:#edf6ff}.card p{margin:0;color:var(--muted);font-size:.92rem}.phone{max-width:390px;margin:auto;padding:14px;border-radius:42px;background:#171c1f;box-shadow:0 28px 70px #17445f2b}.screen{overflow:hidden;min-height:650px;border-radius:32px;background:#f0f8fc}.switch{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:16px;padding:4px;border-radius:99px;background:#e3eef4}.tab{padding:10px;text-align:center;border-radius:99px;color:#526069;font-weight:750}.tab.on{background:var(--primary);color:white}.profile{display:flex;align-items:center;gap:12px;padding:8px 16px 14px;background:white}.avatar{width:54px;height:54px;border:1px solid var(--line);border-radius:50%;object-fit:cover;background:white}.profile small{color:var(--muted)}.empty{display:grid;min-height:390px;padding:60px 26px;place-items:center;text-align:center}.empty img{width:92px;height:92px;border-radius:50%;object-fit:cover;background:white}.empty p{color:var(--muted)}.composer{margin:10px;padding:13px;border:1px solid var(--line);border-radius:28px;background:#e3eef4;color:var(--muted)}.composer b{display:block;margin-bottom:24px;color:#8a9297;font-size:1.05rem}.memory{padding:4px 16px 24px}.hero{display:flex;align-items:center;gap:12px;padding:16px;border-radius:22px;background:var(--primary-soft)}.chips{display:flex;gap:7px;overflow:hidden;margin:16px 0}.chip{white-space:nowrap;padding:7px 11px;border-radius:99px;background:#e3eef4;color:#526069;font-size:.78rem}.chip.on{background:var(--primary);color:white}.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:center}.node{min-height:150px;padding:20px;border-radius:21px;background:var(--surface-2)}.node:nth-of-type(3){background:var(--primary-soft)}.node:nth-of-type(5){background:var(--mint)}.arrow{color:#78909c;font-size:1.35rem}.law{display:grid;grid-template-columns:190px 1fr;gap:18px;padding:13px 0;border-bottom:1px solid var(--line)}.law b{color:var(--primary)}.law:last-child{border:0}.note{padding:17px 19px;border-radius:18px;background:#fff1d8;color:#76521c}code{font:.88em ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}a{color:var(--primary);font-weight:650}footer{padding:30px 4px 0;color:var(--muted);font-size:.84rem}@media(max-width:820px){.grid,.three,.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}}@media(max-width:600px){main{padding-top:34px}section{padding:22px}.law{grid-template-columns:1fr;gap:4px}}
+  </style>
+</head>
+<body><main>
+  <p class="eyebrow">SHANNON · BLUE WORKSPACE V5</p>
+  <h1>話すことと、<br>覚えることを隣り合わせに。</h1>
+  <p class="lead">シャノンの髪色をアプリ全体の水色へ。トークと記憶を横に並べ、明示された好みや事実は夜を待たず共有状態へ届く。</p>
+  <div class="status"><span class="pill">✓ Cognition 10 tests</span><span class="pill">✓ API 30 tests</span><span class="pill">✓ iOS 15 tests</span><span class="pill blue">✓ iPhone Simulator visual QA</span></div>
+
+  <section><h2>ひとつのアプリ、ふたつの部屋</h2><div class="grid">
+    <div class="phone"><div class="screen"><div class="switch"><span class="tab on">▣ トーク</span><span class="tab">♟ メモリー</span></div><div class="profile"><img class="avatar" src="../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-curious.png" alt="シャノン"><div><b>シャノン</b><br><small>● ここにいる・興味津々</small></div></div><div class="empty"><div><img src="../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-curious.png" alt="興味津々のシャノン"><h3>今日は、どんな日？</h3><p>あなたの言葉で少しずつ教えてほしい。</p></div></div><div class="composer"><b>シャノンに話す</b><small>会話から記憶と感情が少しずつ育ちます　↑</small></div></div></div>
+    <div class="phone"><div class="screen"><div class="switch"><span class="tab">▣ トーク</span><span class="tab on">♟ メモリー</span></div><div class="memory"><h2>シャノンの記憶</h2><div class="hero"><img class="avatar" src="../apps/ios/Sources/ShannonAppCore/Resources/shannon-expression-thinking.png" alt="考え中のシャノン"><div><b>わたしが覚えていること</b><br><small>根拠を見たり、違うことは直したりできるよ。</small></div></div><div class="chips"><span class="chip on">すべて</span><span class="chip">あなたについて</span><span class="chip">シャノン</span></div><div class="empty"><div><h3>まだ記憶がないみたい</h3><p>会話を重ねると、ここに少しずつ現れます。</p></div></div></div></div></div>
+  </div><p class="note">iOSでは標準のページングを使う。画面はスワイプ量に追従し、上の切替ボタンからも同じ空間へ移動できる。メモリーを開くたびに共有状態を再取得する。</p></section>
+
+  <section><h2>今回なくした摩擦</h2><div class="three">
+    <article class="card"><h3>紫から、シャノンの水色へ</h3><p>Material 3のprimary、container、surface、outlineを髪色由来の青系へ統一。dark modeも同じ色相で設計。</p></article>
+    <article class="card"><h3>画像の背景を白へ</h3><p>全22表情を表示時に共通処理し、元画像の薄紫キャンバスを白へ正規化。青い髪、肌、黒い輪郭は維持する。</p></article>
+    <article class="card"><h3>キーボードを閉じやすく</h3><p>会話面のタップで入力状態を解除。スクロールはinteractive dismiss。ページ移動時にもフォーカスを外す。</p></article>
+    <article class="card"><h3>Aether型の入力ドック</h3><p>本文から独立した角丸コンテナへ入力欄と送信操作をまとめ、1〜5行で成長。48ptの送信領域を保つ。</p></article>
+    <article class="card"><h3>即時の明示記憶</h3><p>「僕は水色が好き」「結論から話してほしい」など、直接述べた内容だけを返信後のworkerで即時保存。</p></article>
+    <article class="card"><h3>推測は夜まで保留</h3><p>即時更新は決定的な規則だけ。矛盾、推測、センシティブ属性は自動確定せず、従来どおり睡眠整理の境界を守る。</p></article>
+  </div></section>
+
+  <section><h2>FCAを遅くしない流れ</h2><div class="flow">
+    <div class="node"><b>FCA response lane</b><p>現在の共有状態を読み、返信と表情を返す。記憶抽出は待たない。</p></div><div class="arrow">→</div>
+    <div class="node"><b>Turn refinement worker</b><p>返信後、感情・想起に加えて明示事実、好み、関わり方、最近の関心を抽出。</p></div><div class="arrow">→</div>
+    <div class="node"><b>Shared state</b><p>根拠を「会話由来」として保存。次のFCAとメモリー画面が同じ状態を読む。</p></div>
+  </div></section>
+
+  <section><h2>即時に覚える範囲</h2>
+    <div class="law"><b>好み</b><span>「僕は○○が好き／苦手」。文単位で複数の好みも分離する。</span></div>
+    <div class="law"><b>基本事実</b><span>名前、仕事・職業、居住地、誕生日、継続している活動。</span></div>
+    <div class="law"><b>関わり方</b><span>「○○してほしい／しないでほしい」「求めていない助言はいらない」。</span></div>
+    <div class="law"><b>最近の関心</b><span>「最近○○に興味がある／気になっている」。シャノンのinterestへ反映。</span></div>
+    <div class="law"><b>矛盾と境界</b><span>既存理解と反対、または忘却・否定済みの内容は即時上書きしない。</span></div>
+  </section>
+
+  <section><h2>実装の所在</h2>
+    <div class="law"><b>Workspace / composer</b><span><a href="../apps/ios/Sources/ShannonAppCore/ShannonConversationView.swift">ShannonConversationView.swift</a></span></div>
+    <div class="law"><b>Material color</b><span><a href="../apps/ios/Sources/ShannonAppCore/Material3Theme.swift">Material3Theme.swift</a></span></div>
+    <div class="law"><b>White avatar canvas</b><span><a href="../apps/ios/Sources/ShannonAppCore/ShannonExpression.swift">ShannonExpression.swift</a> · <a href="../apps/ios/Sources/ShannonAppCore/ShannonAvatarView.swift">ShannonAvatarView.swift</a></span></div>
+    <div class="law"><b>Immediate memory</b><span><a href="../services/api/src/sleepConsolidation.ts">sleepConsolidation.ts</a> · <a href="../services/api/src/backgroundUpdates.ts">backgroundUpdates.ts</a></span></div>
+    <div class="law"><b>Memory provenance</b><span><a href="../services/api/src/memoryService.ts">memoryService.ts</a> · 「会話からすぐに更新」と「睡眠中に更新」を区別。</span></div>
+  </section>
+  <footer>Shannon Blue Workspace v5 · implementation and verification record · 2026-09-01 JST</footer>
+</main></body></html>

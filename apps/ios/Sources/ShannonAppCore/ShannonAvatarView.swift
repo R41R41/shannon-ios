@@ -19,10 +19,13 @@ public struct ShannonAvatarView: View {
     public var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        avatarImage
-            .resizable()
-            .scaledToFill()
-            .scaleEffect(expression.avatarScale)
+        ZStack {
+            Circle().fill(Color.white)
+            avatarImage
+                .resizable()
+                .scaledToFill()
+                .scaleEffect(expression.avatarScale)
+        }
             .frame(width: size, height: size)
             .clipShape(Circle())
             .overlay {

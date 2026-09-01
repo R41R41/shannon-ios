@@ -66,7 +66,7 @@ export class ShannonBackgroundWorker {
     if (job.payload.kind === 'turn-refinement') {
       const payload = job.payload;
       this.jobStore.completeClaimedBackgroundJob(job, this.workerId, completedAt, () => {
-        this.processor.process(job.scopeKey, payload.userMessage, payload.experienceId);
+        this.processor.process(job.scopeKey, payload.userMessage, payload.experienceId, completedAt);
       });
       return;
     }

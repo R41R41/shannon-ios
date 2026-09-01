@@ -268,7 +268,11 @@ function buildItem(seed: ItemSeed, control?: MemoryControl, metadata?: MemoryMet
     createdAt: metadata?.createdAt ?? seed.observedAt,
     updatedAt,
     changeReason: control?.changeReason ?? metadata?.changeReason ?? defaultReason(seed.kind),
-    evidence: seed.evidence ? [{ quote: seed.evidence, observedAt: seed.observedAt, source: seed.kind === 'experience' ? 'conversation' : 'sleep' }] : [],
+    evidence: seed.evidence ? [{
+      quote: seed.evidence,
+      observedAt: seed.observedAt,
+      source: seed.kind === 'experience' || metadata?.changeReason.startsWith('会話から') ? 'conversation' : 'sleep',
+    }] : [],
   };
 }
 
@@ -300,14 +304,14 @@ function buildMetadata(events: readonly MemoryHistoryEvent[]): Map<string, Memor
     let reason = '共有状態を更新';
     if (stateEvent.type === 'user-fact-upserted') {
       id = stringValue(objectValue(stateEvent.fact)?.id);
-      reason = '睡眠中にユーザー理解を更新';
+      reason = stateEvent.source === 'conversation' ? '会話からすぐにユーザー理解を更新' : '睡眠中にユーザー理解を更新';
     } else if (stateEvent.type === 'relationship-upserted') {
       id = stringValue(objectValue(stateEvent.relationship)?.id);
-      reason = '睡眠中に関係の理解を更新';
+      reason = stateEvent.source === 'conversation' ? '会話からすぐに関係の理解を更新' : '睡眠中に関係の理解を更新';
     } else if (stateEvent.type === 'interest-observed') {
       const interest = stringValue(stateEvent.interest);
       id = interest ? `interest:${interest}` : null;
-      reason = '会話との共鳴で関心を更新';
+      reason = stateEvent.source === 'conversation' ? '会話からすぐに関心を更新' : '会話との共鳴で関心を更新';
     } else if (stateEvent.type === 'memory-control-upserted') {
       id = stringValue(objectValue(stateEvent.control)?.memoryId);
       reason = stringValue(objectValue(stateEvent.control)?.changeReason) ?? 'ユーザー操作で更新';

@@ -33,6 +33,7 @@ export type {
   CompanionStateStore,
   MemoryControl,
   MemoryKind,
+  MemoryLearningSource,
   MemoryStatus,
   RelationshipInsight,
   ShannonEmotion,

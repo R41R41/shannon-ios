@@ -50,6 +50,43 @@ describe('Shannon durable background worker', () => {
     workerStore.close();
   });
 
+  it('captures directly stated preferences and relationship wishes in the first turn-refinement job', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
+    store.appendTurn(
+      'owner-a',
+      '僕は水色が好き。結論から話してほしい。最近エージェント設計に興味がある。',
+      '覚えておくね。',
+      '2026-09-01T10:00:00.000Z',
+    );
+    const worker = new ShannonBackgroundWorker(
+      store,
+      store,
+      store,
+      new LocalRuleSleepMemoryAnalyzer(),
+      { workerId: 'immediate-memory-worker', now: () => new Date('2026-09-01T10:00:01.000Z') },
+    );
+
+    expect(await worker.runOnce()).toBe('processed');
+
+    const snapshot = store.snapshot('owner-a');
+    expect(snapshot.userFacts).toEqual([
+      expect.objectContaining({ statement: 'ユーザーは水色が好き', confidence: 0.72 }),
+    ]);
+    expect(snapshot.relationships).toEqual([
+      expect.objectContaining({ statement: 'ユーザーはシャノンに結論から話してほしい', confidence: 0.72 }),
+    ]);
+    expect(snapshot.interests).toContain('エージェント設計');
+    const dashboard = new (await import('../src/memoryService.js')).ShannonMemoryService(
+      store, store, () => '2026-09-01T10:00:02.000Z',
+    ).dashboard('owner-a');
+    expect(dashboard.items.find(item => item.kind === 'user-fact')).toMatchObject({
+      changeReason: '会話からすぐにユーザー理解を更新',
+      evidence: [expect.objectContaining({ source: 'conversation' })],
+    });
+    store.close();
+  });
+
   it('reclaims an expired lease without duplicating the job', () => {
     const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-08-31T00:00:00.000Z' });
     store.enqueueTurnRefinement('owner-a', 'turn-a', 'こんにちは', '2026-08-31T00:00:00.000Z');
@@ -115,10 +152,14 @@ describe('Shannon durable background worker', () => {
       { workerId: 'sleep-worker', timeZone: 'Asia/Tokyo', sleepHour: 3, now: () => now },
     );
     expect(await worker.runOnce()).toBe('processed'); // recovered turn refinement
+    expect(store.snapshot('owner-a').userFacts).toEqual([
+      expect.objectContaining({ statement: 'ユーザーは青い照明が好き', confidence: 0.72 }),
+    ]);
     expect(await worker.runOnce()).toBe('processed'); // sleep consolidation
     expect(store.snapshot('owner-a').userFacts).toEqual([
-      expect.objectContaining({ statement: 'ユーザーは青い照明が好き', confidence: 0.55 }),
+      expect.objectContaining({ statement: 'ユーザーは青い照明が好き' }),
     ]);
+    expect(store.snapshot('owner-a').userFacts[0]?.confidence).toBeCloseTo(0.8, 5);
     expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
     expect(await worker.runOnce()).toBe('idle');
     store.close();

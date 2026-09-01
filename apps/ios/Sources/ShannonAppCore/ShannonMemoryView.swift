@@ -3,11 +3,16 @@ import SwiftUI
 public struct ShannonMemoryView: View {
     @State private var model: ShannonMemoryModel
     @State private var filter: MemoryFilter = .all
+    private let showsDismissButton: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(model: ShannonMemoryModel = ShannonMemoryModel()) {
+    public init(
+        model: ShannonMemoryModel = ShannonMemoryModel(),
+        showsDismissButton: Bool = true
+    ) {
         _model = State(initialValue: model)
+        self.showsDismissButton = showsDismissButton
     }
 
     public var body: some View {
@@ -51,8 +56,10 @@ public struct ShannonMemoryView: View {
             .background(palette.surfaceContainerLow)
             .navigationTitle("シャノンの記憶")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { dismiss() }
+                if showsDismissButton {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("閉じる") { dismiss() }
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await model.reload() } } label: {

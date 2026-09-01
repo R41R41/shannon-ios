@@ -41,6 +41,7 @@ export interface RelationshipInsight {
 
 export type MemoryKind = 'user-fact' | 'interest' | 'experience' | 'relationship';
 export type MemoryStatus = 'active' | 'forgotten' | 'rejected';
+export type MemoryLearningSource = 'conversation' | 'sleep';
 
 /** A durable boundary or correction explicitly supplied by the user. */
 export interface MemoryControl {
@@ -68,9 +69,9 @@ export interface CompanionStateSnapshot {
 
 export type CompanionStateEvent =
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
-  | { type: 'interest-observed'; interest: string }
-  | { type: 'user-fact-upserted'; fact: UserFact }
-  | { type: 'relationship-upserted'; relationship: RelationshipInsight }
+  | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }
+  | { type: 'user-fact-upserted'; fact: UserFact; source?: MemoryLearningSource }
+  | { type: 'relationship-upserted'; relationship: RelationshipInsight; source?: MemoryLearningSource }
   | { type: 'memory-control-upserted'; control: MemoryControl }
   | { type: 'memory-activated'; memory: ActiveMemory }
   | { type: 'memory-deactivated'; memoryId: string };

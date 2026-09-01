@@ -6,7 +6,7 @@ public struct ShannonConversationView: View {
     @State private var memoryModel: ShannonMemoryModel
     @State private var showsStateDetails = false
     @State private var showsConnectionDetails = false
-    @State private var showsMemories = false
+    @State private var selectedPage: ShannonWorkspacePage = .talk
     @FocusState private var composerIsFocused: Bool
 
     @Environment(\.colorScheme) private var colorScheme
@@ -25,52 +25,79 @@ public struct ShannonConversationView: View {
     public var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        NavigationStack {
-            VStack(spacing: 0) {
-                ShannonTopAppBar(
-                    expression: model.currentExpression,
-                    isThinking: model.isSending,
-                    stateVersion: model.state?.version,
-                    stateAction: { showsStateDetails = true },
-                    memoryAction: { showsMemories = true },
-                    connectionAction: connectionModel == nil ? nil : { showsConnectionDetails = true }
-                )
-
-                messageList(palette)
-
-                if let errorMessage = model.errorMessage {
-                    ShannonSnackbar(
-                        message: errorMessage,
-                        showsRetry: model.hasFailedMessage,
-                        retry: { Task { await model.retryLastFailed() } },
-                        dismiss: model.dismissError
-                    )
-                    .padding(.horizontal, M3Spacing.large)
-                    .padding(.bottom, M3Spacing.small)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
-                composer(palette)
-            }
-            .background(palette.surface)
-            .foregroundStyle(palette.onSurface)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
-            .sheet(isPresented: $showsStateDetails) {
-                ShannonStateSheet(state: model.state, expression: model.currentExpression)
-            }
-            .sheet(isPresented: $showsConnectionDetails) {
-                if let connectionModel {
-                    ShannonConnectionView(model: connectionModel)
-                }
-            }
-            .sheet(isPresented: $showsMemories) {
-                ShannonMemoryView(model: memoryModel)
-            }
-            .task {
-                connectionModel?.refreshFromKeychain()
-                await model.loadConversationIfNeeded()
+        VStack(spacing: 0) {
+            ShannonWorkspaceSwitcher(selection: $selectedPage)
+            workspacePages(palette)
+        }
+        .background(palette.surface)
+        .foregroundStyle(palette.onSurface)
+        .onChange(of: selectedPage) {
+            composerIsFocused = false
+            guard selectedPage == .memory else { return }
+            Task { await memoryModel.reload() }
+        }
+        .sheet(isPresented: $showsStateDetails) {
+            ShannonStateSheet(state: model.state, expression: model.currentExpression)
+        }
+        .sheet(isPresented: $showsConnectionDetails) {
+            if let connectionModel {
+                ShannonConnectionView(model: connectionModel)
             }
         }
+        .task {
+            connectionModel?.refreshFromKeychain()
+            await model.loadConversationIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private func workspacePages(_ palette: M3Palette) -> some View {
+#if os(iOS)
+        TabView(selection: $selectedPage) {
+            talkPage(palette).tag(ShannonWorkspacePage.talk)
+            ShannonMemoryView(model: memoryModel, showsDismissButton: false)
+                .tag(ShannonWorkspacePage.memory)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+#else
+        switch selectedPage {
+        case .talk: talkPage(palette)
+        case .memory: ShannonMemoryView(model: memoryModel, showsDismissButton: false)
+        }
+#endif
+    }
+
+    private func talkPage(_ palette: M3Palette) -> some View {
+        VStack(spacing: 0) {
+            ShannonTopAppBar(
+                expression: model.currentExpression,
+                isThinking: model.isSending,
+                stateVersion: model.state?.version,
+                stateAction: { showsStateDetails = true },
+                memoryAction: {
+                    withAnimation(reduceMotion ? nil : .snappy) { selectedPage = .memory }
+                },
+                connectionAction: connectionModel == nil ? nil : { showsConnectionDetails = true }
+            )
+
+            messageList(palette)
+
+            if let errorMessage = model.errorMessage {
+                ShannonSnackbar(
+                    message: errorMessage,
+                    showsRetry: model.hasFailedMessage,
+                    retry: { Task { await model.retryLastFailed() } },
+                    dismiss: model.dismissError
+                )
+                .padding(.horizontal, M3Spacing.large)
+                .padding(.bottom, M3Spacing.small)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            composer(palette)
+        }
+        .background(palette.surface)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
     }
 
     private func messageList(_ palette: M3Palette) -> some View {
@@ -103,7 +130,10 @@ public struct ShannonConversationView: View {
                 .padding(.vertical, M3Spacing.extraLarge)
             }
             .scrollIndicators(.hidden)
+            .shannonKeyboardDismissMode()
             .background(palette.surfaceContainerLow)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { composerIsFocused = false })
             .onChange(of: model.messages.count) {
                 scrollToBottom(proxy)
             }
@@ -114,57 +144,57 @@ public struct ShannonConversationView: View {
     }
 
     private func composer(_ palette: M3Palette) -> some View {
-        HStack(alignment: .bottom, spacing: M3Spacing.small) {
+        VStack(spacing: M3Spacing.extraSmall) {
             TextField("シャノンに話す", text: $model.draft, axis: .vertical)
                 .font(.body)
                 .lineLimit(1...5)
-                .frame(minHeight: M3TouchTarget.minimum)
+                .frame(minHeight: 38)
                 .focused($composerIsFocused)
-                .padding(.horizontal, M3Spacing.large)
-                .padding(.vertical, 13)
-                .background(
-                    palette.surfaceContainerHigh,
-                    in: RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous)
-                        .stroke(
-                            composerIsFocused ? palette.primary : Color.clear,
-                            lineWidth: composerIsFocused ? 2 : 0
-                        )
-                }
+                .padding(.horizontal, M3Spacing.small)
+                .padding(.top, M3Spacing.small)
                 .onSubmit { sendDraft() }
                 .submitLabel(.send)
                 .accessibilityHint("複数行入力できます")
 
-            Button(action: sendDraft) {
-                ZStack {
-                    Circle()
-                        .fill(model.canSendDraft ? palette.primary : palette.surfaceContainerHigh)
-                    if model.isSending {
-                        ProgressView()
-                            .tint(palette.onSurfaceVariant)
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(model.canSendDraft ? palette.onPrimary : palette.onSurfaceVariant)
+            HStack {
+                Text("会話から記憶と感情が少しずつ育ちます")
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .lineLimit(1)
+                Spacer(minLength: M3Spacing.small)
+                Button(action: sendDraft) {
+                    ZStack {
+                        Circle()
+                            .fill(model.canSendDraft ? palette.primary : palette.surfaceContainerHigh)
+                        if model.isSending {
+                            ProgressView()
+                                .tint(palette.onSurfaceVariant)
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(model.canSendDraft ? palette.onPrimary : palette.onSurfaceVariant)
+                        }
                     }
+                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
                 }
-                .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                .buttonStyle(.plain)
+                .disabled(!model.canSendDraft)
+                .accessibilityLabel(model.isSending ? "送信中" : "送信")
             }
-            .buttonStyle(.plain)
-            .disabled(!model.canSendDraft)
-            .accessibilityLabel(model.isSending ? "送信中" : "送信")
+            .padding(.leading, M3Spacing.small)
         }
-        .padding(.horizontal, M3Spacing.large)
-        .padding(.vertical, M3Spacing.medium)
+        .padding(.leading, M3Spacing.small)
+        .padding(.trailing, M3Spacing.extraSmall)
+        .padding(.bottom, M3Spacing.extraSmall)
+        .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous)
+                .stroke(composerIsFocused ? palette.primary : palette.outlineVariant, lineWidth: composerIsFocused ? 2 : 0.7)
+        }
+        .padding(.horizontal, M3Spacing.medium)
+        .padding(.vertical, M3Spacing.small)
         .background(palette.surface)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(palette.outlineVariant.opacity(0.7))
-                .frame(height: 0.5)
-        }
     }
 
     private func sendDraft() {
@@ -175,6 +205,49 @@ public struct ShannonConversationView: View {
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
             proxy.scrollTo("conversation-bottom", anchor: .bottom)
+        }
+    }
+}
+
+private enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
+    case talk
+    case memory
+
+    var id: Int { rawValue }
+    var title: String { self == .talk ? "トーク" : "メモリー" }
+    var symbol: String { self == .talk ? "bubble.left.and.bubble.right.fill" : "brain.head.profile.fill" }
+}
+
+private struct ShannonWorkspaceSwitcher: View {
+    @Binding var selection: ShannonWorkspacePage
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let palette = M3Palette.resolve(colorScheme)
+
+        HStack(spacing: M3Spacing.extraSmall) {
+            ForEach(ShannonWorkspacePage.allCases) { page in
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { selection = page }
+                } label: {
+                    Label(page.title, systemImage: page.symbol)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(selection == page ? palette.onPrimary : palette.onSurfaceVariant)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(selection == page ? palette.primary : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == page ? .isSelected : [])
+            }
+        }
+        .padding(M3Spacing.extraSmall)
+        .background(palette.surfaceContainerHigh, in: Capsule())
+        .padding(.horizontal, M3Spacing.large)
+        .padding(.vertical, M3Spacing.small)
+        .background(palette.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(palette.outlineVariant.opacity(0.55)).frame(height: 0.5)
         }
     }
 }
@@ -257,6 +330,17 @@ private struct ShannonTopAppBar: View {
         .padding(.trailing, M3Spacing.small)
         .padding(.vertical, M3Spacing.small)
         .background(palette.surface)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func shannonKeyboardDismissMode() -> some View {
+#if os(iOS)
+        scrollDismissesKeyboard(.interactively)
+#else
+        self
+#endif
     }
 }
 

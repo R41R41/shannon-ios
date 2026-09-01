@@ -9,6 +9,7 @@ import {
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
+import { captureImmediateExplicitMemory } from './sleepConsolidation.js';
 
 export interface CompletedTurn {
   scopeKey: string;
@@ -32,7 +33,7 @@ export class TurnRefinementProcessor {
     private readonly conversationStore: ConversationStore,
   ) {}
 
-  process(scopeKey: string, userMessage: string, recordedExperienceId?: string): void {
+  process(scopeKey: string, userMessage: string, recordedExperienceId?: string, observedAt?: string): void {
     const candidates = this.conversationStore.experienceCandidates(scopeKey)
       .filter(candidate => candidate.id !== recordedExperienceId);
     const recalled = selectActiveMemories(userMessage, candidates);
@@ -42,6 +43,21 @@ export class TurnRefinementProcessor {
       type: 'emotion-adjusted',
       delta: deriveEmotionDelta(current, userMessage),
     });
+
+    const immediate = captureImmediateExplicitMemory(
+      userMessage,
+      current,
+      observedAt ?? new Date().toISOString(),
+    );
+    for (const fact of immediate.facts) {
+      this.stateStore.apply(scopeKey, { type: 'user-fact-upserted', fact, source: 'conversation' });
+    }
+    for (const relationship of immediate.relationships) {
+      this.stateStore.apply(scopeKey, { type: 'relationship-upserted', relationship, source: 'conversation' });
+    }
+    for (const interest of immediate.interests) {
+      this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
+    }
 
     const recalledIds = new Set(recalled.map(memory => memory.id));
     const pinnedIds = new Set(current.memoryControls
@@ -96,7 +112,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
       .then(() => new Promise<void>((resolve, reject) => {
         setImmediate(() => {
           try {
-            this.processor.process(turn.scopeKey, turn.userMessage, recordedExperienceId);
+            this.processor.process(turn.scopeKey, turn.userMessage, recordedExperienceId, turn.completedAt);
             resolve();
           } catch (error) {
             reject(error);
