@@ -82,6 +82,14 @@ enum ShannonExpressionAssets {
 #endif
 }
 
+enum ShannonDialogueAssets {
+    static let stagePortraitName = "shannon-dialogue-stage-v2"
+
+    static var stagePortraitURL: URL? {
+        Bundle.module.url(forResource: stagePortraitName, withExtension: "png")
+    }
+}
+
 #if canImport(UIKit)
 private extension UIImage {
     /// Generated portraits use a pale lavender canvas. Normalize that canvas to

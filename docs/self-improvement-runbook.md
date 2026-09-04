@@ -1,0 +1,103 @@
+# Shannon self-improvement runbook
+
+Revision: 2026-09-04
+
+This is the operational authority for user-directed Shannon changes.
+
+## Definition of done
+
+A task is complete only after every applicable layer succeeds:
+
+1. **Source** — requested behavior is implemented without overwriting unrelated work.
+2. **Regression** — API typecheck/tests and Swift package tests pass for cross-layer changes.
+3. **App build** — the unsigned generic iOS build succeeds for iOS changes.
+4. **Azure delivery** — production files are backed up, deployed, services restarted, and the health endpoint succeeds when server delivery was requested.
+5. **Physical device** — a signed build is installed and launched on the connected iPhone when device delivery was requested. A successful compile alone is not device completion.
+6. **Background behavior** — an agent task remains queryable after the app backgrounds or the Agent Host restarts when task orchestration changed.
+
+If a prerequisite is unavailable, keep the task non-complete and report the exact remaining action.
+
+## Local verification
+
+Use the single repository entry point:
+
+```sh
+scripts/verify.sh api
+scripts/verify.sh ios
+scripts/verify.sh app
+scripts/verify.sh all
+```
+
+- `api`: TypeScript typecheck and deterministic API tests.
+- `ios`: Swift package tests.
+- `app`: generic unsigned iOS application build.
+- `all`: all three in sequence.
+
+Real-LLM evaluations are opt-in because they cost money. Run them only for changes to extraction, proposal decisions, or model behavior and record that cost-bearing tests were intentionally used.
+
+## Mac Agent Host
+
+The launchd label is `com.shannon.agent-host`. After changing Agent Host or bridge code:
+
+1. Run API verification.
+2. Restart the launch agent.
+3. Confirm it is running.
+4. Confirm its authenticated heartbeat reaches Azure.
+5. For lifecycle changes, start a harmless task and verify start, progress, reconnect, and completion events.
+
+The Agent Host must launch Codex only inside an allowlisted project. Its saved state contains task, Codex thread, turn, and pending-approval checkpoint identifiers used for reattachment after restart.
+
+An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Discard the expired request, preserve the Shannon task goal, continue from the same working tree in a clean Codex thread, publish a `started` recovery event so Azure clears the stale approval, and ask for a fresh approval only if the remaining operation still requires it. A clean thread is intentional: the expired request can leave an unmatched tool call in the old Codex history.
+
+If a saved turn is no longer active after restart, resume the same Codex thread automatically and inspect the working tree before continuing. Do not create a duplicate task or repeat changes that are already present.
+
+## Azure delivery
+
+Production locations:
+
+```text
+/home/azureuser/shannon-ios/
+/home/azureuser/shannon-ios-data/shannon.sqlite
+/home/azureuser/.config/shannon-ios/api.env
+```
+
+Before a schema or persistence change:
+
+1. Record the service state and health result.
+2. Make a timestamped copy of the SQLite database and its WAL/SHM companions when present.
+3. Deploy only reviewed files; never upload local `.env` files or DerivedData.
+4. Run the production typecheck/tests needed by the change.
+5. Restart only affected services: `shannon-ios.service`, `shannon-ios-worker.service`, and/or `shannon-ios-world.service`.
+6. Verify health, logs, database access, and preserved conversation/task counts.
+
+Recovery means restoring the backed-up database and the previous source files, then restarting the same affected services.
+
+## Physical iPhone delivery
+
+1. Discover the currently connected device; do not assume a stale identifier.
+2. Build with the configured signing team and bundle identifier `com.r41r41.shannon`.
+3. Install over the existing app. Do not uninstall it, because that can remove local cache and Keychain state.
+4. Launch the installed bundle.
+5. Check conversation restoration, pairing, the changed flow, and one adjacent flow.
+
+## Data-preservation checks
+
+For persistence-affecting work, compare before/after evidence for:
+
+- conversation thread and message counts
+- knowledge and memory records
+- active/past agent tasks
+- device pairing registrations
+- API health and worker startup
+
+Migrations must be additive, idempotent, and safe to retry after interruption.
+
+## Completion report
+
+Report:
+
+- what changed in user terms
+- which verification targets passed
+- whether Azure and/or the iPhone were actually updated
+- what was deliberately not run, especially live-LLM tests
+- any remaining blocker without presenting it as completion

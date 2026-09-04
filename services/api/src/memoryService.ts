@@ -7,6 +7,11 @@ import {
   type MemoryStatus,
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
+import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
+import type { PersonalityProfile } from './knowledgeStore.js';
+import type { WorldItem, WorldReader } from './worldStore.js';
+import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from './llmUsage.js';
+import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from './initiativeStore.js';
 
 export interface MemoryEvidence {
   quote: string;
@@ -56,8 +61,30 @@ export interface SleepReport {
 
 export interface MemoryDashboard {
   generatedAt: string;
+  currentState: ReturnType<CompanionStateStore['snapshot']>;
+  knowledge: readonly KnowledgeAnswer[];
+  personalityProfile: PersonalityProfile | null;
+  activity: readonly ActivityItem[];
+  world: readonly WorldItem[];
   items: readonly MemoryItem[];
   sleepReports: readonly SleepReport[];
+  usage: {
+    monthKey: string;
+    estimatedCostUsd: number;
+    backgroundCostUsd: number;
+    backgroundBudgetUsd: number;
+    backgroundRemainingUsd: number;
+    rows: readonly LlmUsageSummaryRow[];
+  } | null;
+  evaluation: InitiativeEvaluationSummary | null;
+}
+
+export interface ActivityItem {
+  id: string;
+  type: string;
+  title: string;
+  detail?: string;
+  occurredAt: string;
 }
 
 export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore';
@@ -80,6 +107,10 @@ export interface MemoryHistorySource {
   events(scopeKey: string): readonly MemoryHistoryEvent[];
 }
 
+export interface ActivityHistorySource {
+  activityTimeline(scopeKey: string): readonly ActivityItem[];
+}
+
 export interface ShannonMemoryStore {
   dashboard(scopeKey: string): MemoryDashboard;
   mutate(scopeKey: string, mutation: MemoryMutation): MemoryDashboard;
@@ -90,6 +121,11 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     private readonly stateStore: CompanionStateStore,
     private readonly history: MemoryHistorySource | ConversationStore | null,
     private readonly now: () => string,
+    private readonly knowledgeStore: KnowledgeStore | null = null,
+    private readonly worldReader: WorldReader | null = null,
+    private readonly usageReader: LlmUsageReader | null = null,
+    private readonly backgroundBudgetUsd = configuredBackgroundBudgetUsd(),
+    private readonly initiativeEvaluationReader: InitiativeEvaluationReader | null = null,
   ) {}
 
   dashboard(scopeKey: string): MemoryDashboard {
@@ -154,10 +190,30 @@ export class ShannonMemoryService implements ShannonMemoryStore {
 
     items.sort((left, right) => Number(right.pinned) - Number(left.pinned)
       || right.updatedAt.localeCompare(left.updatedAt));
+    const generatedAt = this.now();
+    const monthKey = generatedAt.slice(0, 7);
+    const usageRows = this.usageReader?.llmUsageSummary(scopeKey, monthKey) ?? [];
+    const backgroundCostUsd = this.usageReader?.backgroundLlmCostUsd(monthKey) ?? 0;
     return Object.freeze({
-      generatedAt: this.now(),
+      generatedAt,
+      currentState: state,
+      knowledge: this.knowledgeStore?.knowledgeAnswers(scopeKey) ?? Object.freeze([]),
+      personalityProfile: this.knowledgeStore?.personalityProfile(scopeKey) ?? null,
+      activity: isActivityHistorySource(this.history)
+        ? this.history.activityTimeline(scopeKey)
+        : Object.freeze(buildActivity(events, experiences)),
+      world: this.worldReader?.latestItems(40) ?? Object.freeze([]),
       items: Object.freeze(items.map(item => Object.freeze({ ...item, evidence: Object.freeze([...item.evidence]) }))),
       sleepReports: Object.freeze(parseSleepReports(events).slice(0, 30)),
+      usage: this.usageReader ? Object.freeze({
+        monthKey,
+        estimatedCostUsd: usageRows.reduce((sum, row) => sum + row.estimatedCostUsd, 0),
+        backgroundCostUsd,
+        backgroundBudgetUsd: this.backgroundBudgetUsd,
+        backgroundRemainingUsd: Math.max(0, this.backgroundBudgetUsd - backgroundCostUsd),
+        rows: Object.freeze([...usageRows]),
+      }) : null,
+      evaluation: this.initiativeEvaluationReader?.initiativeEvaluation(30, generatedAt) ?? null,
     });
   }
 
@@ -170,6 +226,9 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const timestamp = this.now();
     const control = actionControl(item, previous, mutation, timestamp);
     this.stateStore.apply(scopeKey, { type: 'memory-control-upserted', control });
+    if (item.kind === 'user-fact' && mutation.action === 'correct' && control.overrideText) {
+      this.knowledgeStore?.correctKnowledge(scopeKey, item.id, control.overrideText, timestamp);
+    }
     if (item.kind === 'experience' && control.status === 'active' && control.pinned) {
       this.stateStore.apply(scopeKey, {
         type: 'memory-activated',
@@ -183,6 +242,39 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     }
     return this.dashboard(scopeKey);
   }
+}
+
+function buildActivity(
+  events: readonly MemoryHistoryEvent[],
+  experiences: readonly ShannonExperience[],
+): ActivityItem[] {
+  const activities: ActivityItem[] = experiences.slice(-60).map(experience => ({
+    id: experience.id,
+    type: 'conversation',
+    title: 'トーク',
+    detail: experience.summary,
+    occurredAt: experience.observedAt,
+  }));
+  for (const event of events) {
+    if (event.type === 'sleep.completed') {
+      const payload = objectValue(event.payload);
+      activities.push({
+        id: event.id,
+        type: 'sleep',
+        title: '睡眠バッチ',
+        detail: stringValue(payload?.dayKey) ?? undefined,
+        occurredAt: event.observedAt,
+      });
+    } else if (event.type === 'state.user-fact-upserted') {
+      activities.push({
+        id: event.id,
+        type: 'knowledge',
+        title: '知識を更新',
+        occurredAt: event.observedAt,
+      });
+    }
+  }
+  return activities.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)).slice(0, 100);
 }
 
 function actionControl(
@@ -287,6 +379,10 @@ function defaultReason(kind: MemoryKind): string {
 
 function isHistorySource(value: MemoryHistorySource | ConversationStore | null): value is MemoryHistorySource {
   return value !== null && 'events' in value && typeof value.events === 'function';
+}
+
+function isActivityHistorySource(value: MemoryHistorySource | ConversationStore | null): value is MemoryHistorySource & ActivityHistorySource {
+  return value !== null && 'activityTimeline' in value && typeof value.activityTimeline === 'function';
 }
 
 function buildMetadata(events: readonly MemoryHistoryEvent[]): Map<string, MemoryMetadata> {

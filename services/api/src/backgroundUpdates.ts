@@ -10,13 +10,16 @@ import type { ConversationStore } from './conversationStore.js';
 import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
+import type { ShannonTaskDecision } from './chatModel.js';
 
 export interface CompletedTurn {
   scopeKey: string;
+  threadId: string;
   capturedState: CompanionStateSnapshot;
   userMessage: string;
   shannonReply: string;
   messageEmotion: ShannonMessageEmotion;
+  taskDecision?: ShannonTaskDecision;
   completedAt: string;
 }
 
@@ -103,12 +106,14 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
   recordTurn(turn: CompletedTurn): ShannonExperience {
     return this.conversationStore.appendTurn(
       turn.scopeKey,
+      turn.threadId,
       turn.userMessage,
       turn.shannonReply,
       turn.completedAt,
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
       },
     );
   }
@@ -150,12 +155,14 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
   recordTurn(turn: CompletedTurn): ShannonExperience {
     return this.conversationStore.appendTurn(
       turn.scopeKey,
+      turn.threadId,
       turn.userMessage,
       turn.shannonReply,
       turn.completedAt,
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
       },
     );
   }
@@ -170,7 +177,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
     );
   }
 
-  async waitForIdle(): Promise<void> {
+  async waitForIdle(_scopeKey: string): Promise<void> {
     // A separate process owns the durable queue; the response lane never waits for it.
   }
 }

@@ -74,6 +74,20 @@ public final class ShannonMemoryModel {
         }
     }
 
+    public func correctKnowledge(answerID: String, answer: String) async -> Bool {
+        guard mutatingMemoryID == nil else { return false }
+        mutatingMemoryID = answerID
+        errorMessage = nil
+        defer { mutatingMemoryID = nil }
+        do {
+            dashboard = try await client.correctKnowledge(scopeKey: scopeKey, answerId: answerID, answer: answer)
+            return true
+        } catch {
+            errorMessage = "知識を訂正できませんでした。"
+            return false
+        }
+    }
+
     public func dismissError() {
         errorMessage = nil
     }

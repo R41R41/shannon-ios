@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Improvement Map v10</title>
+  <style>
+    :root{color-scheme:light;--ink:#14262e;--muted:#5d7078;--blue:#65c7e9;--blue2:#dff6ff;--line:#d9e8ed;--soft:#f6fbfd;--green:#dff7ec;--greenInk:#176647;--amber:#fff2d8;--amberInk:#7b5514;--red:#ffe4e1;--redInk:#8a342c;--shadow:#24434f14}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 80% -10%,#dff7ff 0,transparent 34rem),#fff;color:var(--ink);font:15px/1.72 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}main{width:min(1120px,calc(100% - 30px));margin:auto;padding:50px 0 100px}h1,h2,h3,p{margin-top:0}h1{max-width:900px;margin:12px 0 20px;font-size:clamp(2.55rem,7vw,5.6rem);line-height:.98;letter-spacing:-.06em}h2{margin:0 0 20px;font-size:1.7rem;letter-spacing:-.03em}h3{font-size:1.02rem}.eyebrow{color:#087ba5;font-weight:850;font-size:.76rem;letter-spacing:.14em}.lead{max-width:780px;color:var(--muted);font-size:1.1rem}.status{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}.pill{padding:7px 11px;border-radius:99px;background:var(--blue2);color:#116e8e;font-weight:750;font-size:.82rem}section{margin-top:18px;padding:30px;border:1px solid var(--line);border-radius:28px;background:#fffffff0;box-shadow:0 18px 48px var(--shadow)}.grid2,.grid3,.grid4{display:grid;gap:14px}.grid2{grid-template-columns:repeat(2,1fr)}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}.card{padding:20px;border-radius:20px;background:var(--soft);border:1px solid transparent}.card.done{background:var(--green);color:var(--greenInk)}.card.fix{background:var(--red);color:var(--redInk)}.card.next{background:var(--amber);color:var(--amberInk)}.card p,.muted{color:var(--muted);font-size:.92rem}.card.done p{color:#39765f}.card.fix p{color:#8b534e}.tag{display:inline-block;margin-bottom:12px;padding:4px 8px;border-radius:8px;background:#fff9;font-size:.72rem;font-weight:850;letter-spacing:.05em}.timeline{display:grid;grid-template-columns:6fr 1fr 16fr 1fr;gap:4px}.time{min-height:112px;padding:18px;border-radius:18px;background:var(--soft);position:relative}.time.sleep{background:#25334a;color:#fff}.time.drowsy{background:#dce9f5}.time.day{background:linear-gradient(135deg,#e3f9ff,#fff4e3)}.hours{font-weight:850;font-size:1.25rem}.state{margin-top:9px;font-size:.88rem}.priority{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.priority span{padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:720}.priority b{color:#65bddd}.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:center}.node{min-height:145px;padding:20px;border-radius:20px;background:var(--blue2)}.node b{display:block;margin-bottom:7px}.arrow{font-size:1.4rem;color:#54afd0}.phone{max-width:360px;margin:auto;padding:14px;border:2px solid #1e2b30;border-radius:38px;background:#fbfdfe;box-shadow:0 22px 50px #1b45541f}.phoneTop{height:34px;text-align:center;font-size:.75rem;color:var(--muted)}.stage{height:510px;border-radius:25px;overflow:hidden;position:relative;background:linear-gradient(#f6fdff,#e8f8fe 58%,#fff);border:1px solid var(--line)}.character{position:absolute;left:50%;bottom:72px;transform:translateX(-50%);width:220px;height:360px;border-radius:100px 100px 40px 40px;background:linear-gradient(#75d4f4,#effbff);display:grid;place-items:center;font-size:4.8rem}.bubble{position:absolute;top:55px;left:18px;right:18px;padding:16px 18px;background:#fff;border-radius:20px 20px 20px 5px;box-shadow:0 12px 30px #17475a19}.composer{position:absolute;left:12px;right:12px;bottom:12px;height:50px;border-radius:25px;background:#fff;border:1px solid var(--line)}table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:18px;overflow:hidden}th,td{padding:13px 15px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--soft);font-size:.82rem}tr:last-child td{border-bottom:0}.recommend{padding:18px 20px;border-left:5px solid var(--blue);border-radius:0 18px 18px 0;background:var(--blue2)}.idea{counter-increment:ideas}.idea:before{content:counter(ideas,decimal-leading-zero);display:grid;width:34px;height:34px;margin-bottom:12px;place-items:center;border-radius:50%;background:var(--blue);font-weight:900}.ideas{counter-reset:ideas}code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#eaf2f5;padding:2px 6px;border-radius:6px}a{color:#087da7;font-weight:650}.decision{display:grid;grid-template-columns:180px 1fr;gap:18px;padding:14px 0;border-bottom:1px solid var(--line)}.decision:last-child{border-bottom:0}.decision b{color:#087da7}@media(max-width:850px){.grid3,.grid4{grid-template-columns:repeat(2,1fr)}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}.timeline{grid-template-columns:1fr 1fr}.decision{grid-template-columns:1fr;gap:2px}}@media(max-width:590px){main{padding-top:28px}.grid2,.grid3,.grid4,.timeline{grid-template-columns:1fr}section{padding:21px}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">SHANNON / IMPROVEMENT MAP v10</div>
+    <h1>機能ではなく、<br>気配を育てる。</h1>
+    <p class="lead">これまでの決定、現在の実装、次に試したいアイデアを統合。「Motion &amp; Presence」——画面遷移、アイコン、対話モード、メモリー整理まで実装し、実機へ反映した。</p>
+    <div class="status"><span class="pill">A–D 実装済み</span><span class="pill">実機反映済み</span><span class="pill">自動試験 108件通過</span><span class="pill">Langfuseは別バッチ</span></div>
+  </header>
+
+  <section>
+    <h2>まず、現在地</h2>
+    <div class="grid3">
+      <article class="card done"><span class="tag">実装済み</span><h3>人格の基礎</h3><p>共有感情、明示知識の即時反映、睡眠整理、QA知識DB、複数トーク、履歴維持。</p></article>
+      <article class="card done"><span class="tag">実装済み</span><h3>生活とコスト</h3><p>World探索、RSS上限、利用量表示、背景月額ブレーカー。会話は予算超過でも継続。</p></article>
+      <article class="card done"><span class="tag">実装済み</span><h3>存在感のUX</h3><p>連続ページ切替、80%ドロワー、対話画像と吹き出し、アイコン生活リズムを実装。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>今回実装した確定要件</h2>
+    <div class="grid2">
+      <article class="card"><h3>アプリアイコン</h3><p>0–6時は眠っている、6–7時と23–0時は眠そう、7–23時は感情に適した候補またはランダム。深夜に起動すると30分だけ眠そうになる。</p></article>
+      <article class="card"><h3>トーク ↔ メモリー</h3><p>Aetherと同じく、ページ本体・トグルの選択面・文字色を同じ進捗値で連続移動。確定時に軽い振動。</p></article>
+      <article class="card"><h3>トーク一覧</h3><p>結果だけ切り替えるのではなく、指に追随して左から80%幅で入る。影とスクリーン暗転も同じ進捗で動く。</p></article>
+      <article class="card"><h3>対話モード</h3><p>シャノン画像を確実に表示し、画像上に成立した吹き出しを置く。長文、生成中、キーボード表示にも耐える。</p></article>
+      <article class="card"><h3>メモリー</h3><p>ページ先頭の大見出し「メモリー」を削除。共通トグル直下から「いま／知識／記憶」に入る。</p></article>
+      <article class="card"><h3>Langfuse</h3><p>候補へ戻す。ただし空き容量だけで判断せず、CPU・RAM・保存先・会話本文の送信範囲を先に決める。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>アイコンの生活リズム</h2>
+    <div class="timeline">
+      <div class="time sleep"><div class="hours">0:00–6:00</div><div class="state">眠っている<br>専用アイコン実装済み</div></div>
+      <div class="time drowsy"><div class="hours">6–7</div><div class="state">眠そう</div></div>
+      <div class="time day"><div class="hours">7:00–23:00</div><div class="state">現在感情を中心に、相性のよい候補から変化。完全ランダムにはしない。</div></div>
+      <div class="time drowsy"><div class="hours">23–0</div><div class="state">眠そう</div></div>
+    </div>
+    <h3 style="margin-top:24px">推奨する判定順</h3>
+    <div class="priority"><span>固定・手動</span><b>›</b><span>時刻／深夜覚醒</span><b>›</b><span>特別日</span><b>›</b><span>感情70%</span><b>›</b><span>相性ランダム30%</span></div>
+    <p class="muted" style="margin-top:14px">昼間のランダムは「同じアイコンを直近2回避ける」「悲しい時に爆笑を出さない」の制約付き。時刻境界は6時間クールダウンより優先し、通常感情の変更だけ従来の6時間条件を維持する。</p>
+    <div class="recommend" style="margin-top:20px"><b>iOS上の現実的な挙動</b><br>アプリ起動・復帰時には必ず正しい候補へ更新。0–6時に開いたら<code>awakeUntil = now + 30分</code>を保存し、起動中なら30分後に再判定する。アプリ停止中の「ちょうど30分後」は保証しない。Appleの背景タスクは指定時刻より早く動かないことしか保証せず、正確な実行時刻は保証しないため、次回起動時に整合させる。なお公式仕様では代替アイコン変更時にシステム通知が表示されるため、自動変更頻度は実機で要確認。</div>
+    <p class="muted">根拠: <a href="https://developer.apple.com/documentation/xcode/configuring-your-app-to-use-alternate-app-icons">Apple Alternate App Icons</a> / <a href="https://developer.apple.com/documentation/backgroundtasks/bgtaskrequest/earliestbegindate">BGTask earliestBeginDate</a></p>
+  </section>
+
+  <section>
+    <h2>Aetherから持ってくるもの</h2>
+    <div class="flow">
+      <div class="node"><b>ひとつのページ進捗</b><span class="muted">トーク0 ↔ メモリー1。指の移動量を0…1として保持。</span></div><div class="arrow">→</div>
+      <div class="node"><b>全UIが追随</b><span class="muted">ページ、トグル背景、ラベル色、影を同じ値から描画。</span></div><div class="arrow">→</div>
+      <div class="node"><b>確定は一度だけ</b><span class="muted">閾値／速度で着地し、着地時だけLight haptic。1操作1遷移。</span></div>
+    </div>
+    <table style="margin-top:22px">
+      <thead><tr><th>要素</th><th>現在のShannon</th><th>Aether準拠の完成形</th></tr></thead>
+      <tbody>
+        <tr><td>ページ切替</td><td><code>TabView(.page)</code>へ選択値を渡す</td><td>実ページを常時マウントし、interactive progressを共通化</td></tr>
+        <tr><td>トグル</td><td>選択後にカプセルが切り替わる</td><td>選択カプセルが指と同時に連続移動し、文字色も補間</td></tr>
+        <tr><td>振動</td><td>なし</td><td>ページ着地はLight、一覧開閉はSelection。途中キャンセルでは鳴らさない</td></tr>
+        <tr><td>一覧</td><td>条件成立後に<code>.move</code> transition</td><td>指追随の80%ドロワー＋移動する影＋残り20%のscrim</td></tr>
+        <tr><td>ジェスチャー競合</td><td>TabViewと独立DragGesture</td><td>開始位置で一覧／ページを先に決定し、1ドラッグ1意図に固定</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>対話モードを「成立」させる</h2>
+    <div class="grid2" style="align-items:center">
+      <div class="phone"><div class="phoneTop">トーク　　メモリー　　⚙︎</div><div class="stage"><div class="bubble">うん、それは面白い。<br>もう少し聞かせて。</div><div class="character">◕‿◕</div><div class="composer"></div></div></div>
+      <div>
+        <div class="decision"><b>画像が出ない問題</b><span>現在の素材はキャラクターシート全体で余白が大きく、固定Spacerにも依存。対話専用の縦長・単体・透過素材に交換し、GeometryReader基準で常時配置する。</span></div>
+        <div class="decision"><b>吹き出し</b><span>単なる角丸Textをやめ、tailを口元方向へ向ける。最大高さを決め、長文は内部スクロールまたはタップで展開。</span></div>
+        <div class="decision"><b>生成中</b><span>画像を消さず、呼吸する3点リーダーを同じ吹き出し内に表示。応答到着時に内容だけクロスフェード。</span></div>
+        <div class="decision"><b>感情</b><span>返答に保存された表情snapshotに合わせて顔差分を切替。履歴を開き直しても、その発言時の顔を再現。</span></div>
+        <div class="decision"><b>キーボード</b><span>キャラクターを少し縮小・上方移動し、吹き出しと入力欄が重ならない。画面外タップで入力終了。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>メモリー画面の整理</h2>
+    <div class="grid3">
+      <article class="card"><h3>いまのシャノン</h3><p>感情、活力、興味、性格分析、今月のコスト。数値の羅列より「現在もっとも強いもの」を先に見せる。</p></article>
+      <article class="card"><h3>知識</h3><p>ユーザー／世界／シャノン自身。質問・回答・確信度・根拠・更新日。便利さ優先で手動訂正可能。</p></article>
+      <article class="card"><h3>記憶</h3><p>会話、睡眠、調べごと、購読などの活動履歴。古いログ一覧ではなく「今日／今週」のまとまりを作る。</p></article>
+    </div>
+    <div class="recommend" style="margin-top:18px"><b>削るもの：</b>ページ上部の「メモリー」という大見出し、説明だけのセクション、売り文句。残すのは共通トグル、更新状態、内容そのもの。</div>
+  </section>
+
+  <section>
+    <h2>さらに試したいアイデア</h2>
+    <div class="grid3 ideas">
+      <article class="card idea"><h3>小さなシャノンWidget</h3><p>アプリアイコンより更新自由度が高い場所で、現在表情・起きている／寝ている・一言だけを表示。生活感との相性が最もよい。</p></article>
+      <article class="card idea"><h3>Live2D前の2.5D</h3><p>1枚絵＋目・口・髪の数層で、呼吸、瞬き、視線、微小パララックスを実装。Live2D導入前に対話体験を検証できる。</p></article>
+      <article class="card idea"><h3>起こされた反応</h3><p>深夜初回だけ、眠そうな短いリアクションを表情と文体へ弱く反映。ただし返答品質や重要な相談を犠牲にしない。</p></article>
+      <article class="card idea"><h3>トークごとの部屋</h3><p>スレッドにテーマ色や小物をひとつ持たせる。仕事、創作、雑談で背景の気配が少しだけ変わり、一覧識別にも使える。</p></article>
+      <article class="card idea"><h3>記憶の「なぜ？」</h3><p>知識カードを押すと、根拠となる発言と更新理由を短く表示。訂正は同じ場所から可能だが、通常画面は静かに保つ。</p></article>
+      <article class="card idea"><h3>沈黙も状態にする</h3><p>返事のない期間を不機嫌にはせず、次回会った時の小さな話題や興味として表現。通知を増やさず連続性を出す。</p></article>
+      <article class="card idea"><h3>表情履歴</h3><p>今日よく現れた表情を記憶画面に小さく残す。感情数値より「今日はこういう日だった」が直感的に伝わる。</p></article>
+      <article class="card idea"><h3>会話の距離感</h3><p>対話モードの構図を、親密さではなく会話状況で変える。真剣な話は近く、考え中は横を向くなど、演出を意味に結び付ける。</p></article>
+      <article class="card idea"><h3>静かな通知</h3><p>最新情報を逐次通知せず、シャノンが「話したいもの」を1日最大1件だけ選ぶ。興味が薄ければ何もしない。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>Langfuseはどう戻すか</h2>
+    <div class="grid2">
+      <article class="card done"><span class="tag">残す</span><h3>Shannon内の計測と停止</h3><p>SQLiteのtoken／費用記録と月額ブレーカーを正本にする。Langfuse障害でも予算防御は動く。</p></article>
+      <article class="card next"><span class="tag">候補</span><h3>観測・比較・評価</h3><p>trace、レイテンシ、エラー、モデル別費用、睡眠抽出品質をLangfuseで横断比較する。</p></article>
+    </div>
+    <table style="margin-top:20px">
+      <thead><tr><th>選択肢</th><th>向く段階</th><th>判断</th></tr></thead>
+      <tbody>
+        <tr><td>Langfuse Cloud</td><td>早く評価画面を使いたい</td><td>第一候補。本文を既定で送らず、モデル・token・時間・status・匿名traceだけ送る。</td></tr>
+        <tr><td>同じAzure VMへself-host</td><td>十分なCPU/RAMも増設できる</td><td>非推奨。公式の最小構成はWeb/Worker各4GiB、Postgres 4GiB、Redis 1.5GiB、ClickHouse 8GiB等で、空きディスクだけでは足りない。</td></tr>
+        <tr><td>別VM／managed data stores</td><td>プライバシーと長期運用を優先</td><td>self-hostするならこちら。Shannon本体と障害領域を分離する。</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Langfuseは費用・アラート・Metrics APIを提供するが、Shannonの強制停止機構の代替にはしない。参考: <a href="https://langfuse.com/docs/observability/features/token-and-cost-tracking">Token &amp; Cost Tracking</a> / <a href="https://langfuse.com/self-hosting/configuration/scaling">Minimum Infrastructure Requirements</a></p>
+  </section>
+
+  <section>
+    <h2>完了した一括実装</h2>
+    <div class="grid4">
+      <article class="card done"><span class="tag">A · 完了</span><h3>Icon Rhythm</h3><p>眠っている新規素材、時刻state machine、深夜30分、昼の制約付き変化。</p></article>
+      <article class="card done"><span class="tag">B · 完了</span><h3>Spatial Shell</h3><p>Aether型pager、追随トグル、haptics、80% thread drawer。</p></article>
+      <article class="card done"><span class="tag">C · 完了</span><h3>Dialogue Stage</h3><p>専用縦長素材、吹き出し、生成中、長文、keyboard、表情差分。</p></article>
+      <article class="card done"><span class="tag">D · 完了</span><h3>Memory Polish</h3><p>大見出し削除、3領域の情報密度調整、更新日と活動時期の整理。</p></article>
+    </div>
+    <h3 style="margin-top:24px">このバッチの合格条件</h3>
+    <p>ページ遷移の中間点、ドロワー50%地点、対話モードの空／生成中／短文／長文、深夜・朝・昼・夜のアイコン判定、Reduce Motion、キーボード表示を自動試験とスクリーンショットで確認。最後にまとめて実機へ1回だけ反映する。</p>
+  </section>
+
+  <section>
+    <h2>今回採用した3点</h2>
+    <div class="decision"><b>特別日と睡眠</b><span><strong>推奨：</strong>睡眠を優先。誕生日アイコンは7–23時だけ出す。これなら「本当に生活している」規則が崩れない。</span></div>
+    <div class="decision"><b>昼のランダム度</b><span><strong>推奨：</strong>感情70%・相性ランダム30%。完全ランダムよりシャノンらしく、同じ表情固定にもなりにくい。</span></div>
+    <div class="decision"><b>対話の構図</b><span><strong>推奨：</strong>顔を大きく、腰上まで。吹き出しは上部、入力欄は最下部。Live2D導入時も同じレイアウトを使える。</span></div>
+  </section>
+</main></body>
+</html>

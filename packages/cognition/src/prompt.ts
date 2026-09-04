@@ -17,6 +17,7 @@ function fitSections(sections: readonly string[], maximumCharacters: number): st
   if (maximumCharacters < 1) return '';
   let result = '';
   for (const section of sections) {
+    if (!section) continue;
     const separator = result ? '\n' : '';
     if (result.length + separator.length + section.length <= maximumCharacters) {
       result += separator + section;
@@ -55,7 +56,8 @@ export function buildCompanionStatePrompt(
     `[Shannon shared state v${snapshot.version}]`,
     `気質: 好奇心 ${fixed(snapshot.temperament.curiosity)} / 自発性 ${fixed(snapshot.temperament.initiative)} / 親密さ ${fixed(snapshot.temperament.closeness)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
-    interests.length ? `現在の関心: ${interests.map(item => item.text).join('、')}` : '現在の関心: まだ形成されていない',
+    interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
+    interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
     facts.length
       ? `ユーザーについて分かっていること:\n${facts.map(fact => `- ${fact.statement} (確信 ${fixed(fact.confidence)})`).join('\n')}`
       : 'ユーザーについて分かっていること: まだない',

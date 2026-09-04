@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 実装ロードマップ v11</title>
+  <style>
+    :root{--ink:#17252b;--muted:#5f7078;--blue:#56c5ec;--deep:#08789f;--soft:#eaf8fd;--line:#cbdce3;--green:#dff5ea;--amber:#fff0d1;--violet:#eeeaff}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,#d8f5ff,transparent 34rem),#fff;color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}main{width:min(1120px,calc(100% - 30px));margin:auto;padding:52px 0 90px}h1,h2,h3,p{margin-top:0}h1{max-width:880px;font-size:clamp(2.6rem,7vw,5.5rem);line-height:.98;letter-spacing:-.055em}.lead{max-width:780px;color:var(--muted);font-size:1.08rem}.eyebrow{color:var(--deep);font-size:.78rem;font-weight:850;letter-spacing:.15em}.pills{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 44px}.pill{padding:7px 12px;border-radius:99px;background:var(--soft);color:var(--deep);font-weight:750}.pill.done{background:var(--green);color:#247052}.pill.defer{background:var(--amber);color:#7c5514}section{margin-top:18px;padding:28px;border:1px solid var(--line);border-radius:28px;background:#ffffffed;box-shadow:0 18px 50px #163f5111}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{padding:20px;border-radius:20px;background:var(--soft)}.card.done{background:var(--green)}.card.next{background:var(--violet)}.num{font-size:.75rem;font-weight:900;letter-spacing:.1em;color:var(--deep)}.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr;gap:10px;align-items:center}.node{min-height:145px;padding:19px;border-radius:20px;background:var(--soft)}.node.stop{background:var(--amber)}.arrow{color:#69acc3;font-size:1.4rem;text-align:center}.screen{max-width:390px;margin:auto;padding:18px;border:2px solid #20333b;border-radius:36px;background:#f7fcfe}.head{display:flex;gap:8px;align-items:center}.toggle{flex:1;padding:10px;border-radius:99px;background:#e9f1f4;text-align:center;font-weight:800}.toggle.on{background:var(--deep);color:#fff}.memory{margin-top:14px;padding:18px;border-radius:22px;background:linear-gradient(135deg,#dff7ff,#fff)}.memory b{display:block;margin-bottom:8px}.row{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.row b{color:var(--deep)}code{font:.86em ui-monospace,SFMono-Regular,Menlo,monospace;background:#edf4f7;padding:2px 6px;border-radius:6px}.warning{padding:17px 19px;border-radius:17px;background:var(--amber);color:#68470f}footer{padding:28px 4px 0;color:var(--muted);font-size:.84rem}@media(max-width:820px){.grid{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.row{grid-template-columns:1fr;gap:3px}section{padding:22px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · IMPLEMENTATION ROADMAP v11 · 2026-09-04</div>
+  <h1>まず「毎日会いたくなる」を作り、次に世界とAetherをつなぐ。</h1>
+  <p class="lead">Widgetは今回から外す。UIの違和感、内面の見え方、自発行動を先に完成させ、Aether連携はユーザーのメモを壊さない読み取り境界から始める。</p>
+  <div class="pills"><span class="pill done">v0.2 実装済み</span><span class="pill done">v0.3 実装済み</span><span class="pill done">v0.4 ローカル実装済み</span><span class="pill done">v0.5 ローカル実装済み</span><span class="pill done">v0.9 計測実装済み</span><span class="pill done">v1.0 実機通知確認済み</span><span class="pill defer">Widget 延期</span></div>
+
+  <section><h2>今回まとまった実装</h2><div class="grid">
+    <article class="card done"><div class="num">v0.2 · UI CORRECTNESS</div><h3>操作の基礎</h3><p>入力中の誤遷移を防止。日付区切り、過去話題カード、最終会話時刻、ライト／ダーク、睡眠レポートの重なりを整理。対話画面は縦長のシャノンを中心に再構成。</p></article>
+    <article class="card done"><div class="num">v0.3 · INNER LIFE</div><h3>シャノンの頭の中</h3><p>「今日の関心」をFCAへ常時反映。現在状態は関心と頭に浮かぶ記憶を主役にし、数値メーターは詳細へ退避。睡眠記録をシャノン日記として見せる。</p></article>
+    <article class="card done"><div class="num">v0.4 · INITIATIVE</div><h3>話す／黙るの一本化</h3><p>世界探索から候補を選び、価値がある時だけ会話へ保存。夜間沈黙、会話中の割り込み防止、1日1件の停止規則をコードだけで実行する。</p></article>
+  </div></section>
+
+  <section><h2>自発行動の一本ループ</h2><div class="flow">
+    <div class="node"><b>1 · 集める</b><br>RSS、HN、arXivなど。本文取得と重複排除はLLMなし。</div><div class="arrow">→</div>
+    <div class="node"><b>2 · 比べる</b><br>今日の関心、鮮度、情報源、自発性と照合。</div><div class="arrow">→</div>
+    <div class="node stop"><b>3 · 黙る判断</b><br>23〜7時、会話後90分、既に1件話した日は停止。</div><div class="arrow">→</div>
+    <div class="node"><b>4 · 届ける</b><br>表情を固定して会話・未読箱へ保存し、登録済みiPhoneへAPNs通知。</div>
+  </div><p class="warning" style="margin-top:18px">自発文と通知判定はコードだけなので追加LLM費用は0。APNsキーはAzure VMへ所有者専用権限で配置済み。物理iPhoneで通知、バッジ、通知タップ後のトーク遷移まで確認した。</p></section>
+
+  <section><h2>メモリーは「DB」ではなく頭の中として見せる</h2><div class="screen"><div class="head"><div class="toggle on">トーク</div><div class="toggle">メモリー</div><span>⚙︎</span></div><div class="memory"><b>いまのシャノン</b><p>今日の関心：AIエージェント<br>頭に浮かんでいること：昨日話した創作の続き</p><small>▸ 感情の詳細</small></div><div class="memory"><b>シャノンの日記</b><p>眠っている間に、あなたの好みを少し整理した。</p></div></div></section>
+
+  <section><h2>v0.5 Aether Link · 読む／提案する境界が完成</h2>
+    <div class="row"><b>読み取り ✓</b><span>Aether設定で明示的にONにした場合だけ、最大24件の短い文脈を本人専用VMの橋へ同期。Shannonは通常3件、Aetherについて尋ねた時でも5件までしかFCAへ入れない。</span></div>
+    <div class="row"><b>漏らさない ✓</b><span>送信対象はID・更新時刻・タイトル・480文字以内の平文化した抜粋・タグ・種類・状態。本文フィールドや未知の項目が混ざればサーバーが拒否する。</span></div>
+    <div class="row"><b>費用 ✓</b><span>抽出・重複回避・関連性選択はすべてコード。連携そのものはLLMを呼ばず、Shannonの通常会話も従来どおり1回だけ。</span></div>
+    <div class="row"><b>提案 ✓</b><span>Shannonの返答を長押しして明示的に送ると、所有者だけが読める保留箱へ届く。自動で提案を量産せず、本文の改行やMarkdownも保つ。</span></div>
+    <div class="row"><b>承認更新 ✓</b><span>Aether設定で新規メモ保存・既存メモへの追記案・却下を選ぶ。追記は元の更新時刻を再確認し、差分画面で採用した時だけローカルSQLiteへ書く。</span></div>
+    <div class="row"><b>理由</b><span>Aetherのメモ本体はiPhone内SQLiteにある。App Groupのネイティブ依存を先に増やすより、既存の本人専用VM認証を使う方が安全に段階導入できる。</span></div>
+  </section>
+
+  <section><h2>v0.9 Evaluation · 本文を集めずに傾向を見る</h2>
+    <div class="row"><b>対話品質</b><span>明示知識の抽出・訂正・矛盾・否定・複数ターンなど28対話パターンを含む自動試験を継続する。実LLM試験は明示実行だけにし、通常の検証では費用を発生させない。</span></div>
+    <div class="row"><b>費用</b><span>会話と睡眠を別レーンでtoken・推定費用として集計。睡眠側は月間ブレーカーを正本にし、外部観測の障害で停止規則を失わない。</span></div>
+    <div class="row"><b>沈黙判断</b><span>自発ループごとに候補数・配信数・停止理由だけを最大90日保存。会話本文、記憶、URLは評価ログへ複製しない。</span></div>
+    <div class="row"><b>画面</b><span>メモリーの「いまのシャノン」に、直近30日の話しかけた割合・候補数・静かにした回数を表示する。</span></div>
+    <div class="row"><b>Langfuse</b><span>現時点では未接続。複数モデルやプロンプトの比較が必要になった時にCloudを任意導入し、匿名trace・model・token・時間・statusだけを送る。本文と記憶は既定で送らない。</span></div>
+  </section>
+
+  <section><h2>v1.0 Daily Companion · 通知経路を実装</h2>
+    <div class="row"><b>iPhone登録 ✓</b><span>起動時に通知許可を確認し、APNsが返す端末トークンを本人のペアリング認証でサーバーへ送る。トークンは起動ごとに取得し直し、アプリ内へ永続キャッシュしない。</span></div>
+    <div class="row"><b>配信 ✓</b><span>世界探索 → 黙る判断 → 会話保存の後、未読の自発メッセージだけをHTTP/2でAPNsへ送る。通知本文には該当トークIDと固定済み表情を含める。</span></div>
+    <div class="row"><b>開く ✓</b><span>通知をタップすると該当トークへ移動し、そこで初めて既読化。単なる起動時取得では未読を消さず、トーク切替とホーム画面バッジを同期する。</span></div>
+    <div class="row"><b>壊れにくさ ✓</b><span>一時障害は5分・30分・2時間の最大3回再試行。APNsが端末の失効を返した場合は登録を停止し、次回アプリ起動時の新トークンで復帰する。</span></div>
+    <div class="row"><b>秘密情報 ✓</b><span><code>.p8</code>はGit対象外。Key ID・Team ID・Bundle ID・鍵パスはVMの所有者専用環境ファイルにだけ置く。未設定時は通知だけ無効になり、探索・会話・未読箱は動き続ける。</span></div>
+    <div class="row"><b>実配信 ✓</b><span>2026-09-04、Apple DeveloperでSandbox＋Production対応キーを発行しAzure VMへ配置。APNsはHTTP 200で受理し、物理iPhoneで通知表示・バッジ・通知タップ遷移を確認した。参考：<a href="https://developer.apple.com/documentation/usernotifications/registering-your-app-with-apns">端末登録</a> / <a href="https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns">APNs送信</a></span></div>
+    <div class="row"><b>自然運用 ✓</b><span>同日7:00:57、テスト送信とは別に通常の世界探索ループが80件から1件を選択。会話保存とAPNs配信を1回で完了し、8:12にユーザーが開いて既読になった。</span></div>
+    <div class="row"><b>省負荷運用 ✓</b><span>通知の再送確認は毎分のまま、自発判断だけを状況別に予約する。夜間は7時、配信済みなら翌7時、候補不足や会話直後なら15分後まで休み、空振りDB書き込みを抑える。SIGTERM時は待機と外部取得を即時中断し、安全に再起動する。</span></div>
+  </section>
+
+  <section><h2>以後の順番</h2><div class="grid">
+    <article class="card done"><div class="num">v0.5 · DONE LOCAL</div><h3>Aether Link</h3><p>読み取り、提案箱、差分確認、承認更新まで完成。</p></article>
+    <article class="card done"><div class="num">v0.9 · DONE LOCAL</div><h3>Evaluation</h3><p>対話試験、費用、沈黙判断、自発会話率をローカル計測。</p></article>
+    <article class="card done"><div class="num">v1.0 · DONE LIVE</div><h3>Daily Companion</h3><p>端末登録、APNs配信、未読バッジ、通知タップ遷移、再試行を実鍵・物理iPhoneで確認済み。</p></article>
+    <article class="card"><div class="num">v2.0</div><h3>Self Extension</h3><p>隔離環境でスキルコードを提案・評価・更新。</p></article>
+    <article class="card"><div class="num">LATER</div><h3>Widget</h3><p>静止画タイムラインと瞬き差分。Live2D常時再生はしない。</p></article>
+  </div></section>
+
+  <footer>検証済み：Shannon API/Cognition 99件、Swift 31件、Shannon Simulator／物理iPhone向け全体ビルド。APNs実鍵のAzure VM配置、端末登録、物理iPhoneへの実通知、通常の自発通知、バッジ、通知タップ遷移まで完了。</footer>
+</main></body></html>

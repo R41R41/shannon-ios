@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon — 実機反映完了</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f6fbff;--surface:rgba(255,255,255,.82);--ink:#16303d;--muted:#607987;--line:#cce8f5;--blue:#62c8ee;--deep:#238ab3;--ok:#16835d;--wait:#a56b0b;--shadow:0 18px 55px rgba(41,119,150,.13)}
+    @media(prefers-color-scheme:dark){:root{--bg:#0d171d;--surface:rgba(22,36,43,.88);--ink:#e9f8ff;--muted:#9bb4c0;--line:#284753;--blue:#6bd2f7;--deep:#8cddfa;--ok:#6cddb1;--wait:#ffd178;--shadow:0 18px 55px rgba(0,0,0,.25)}}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#dff6ff 0,transparent 34%),var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.7}
+    main{width:min(1080px,calc(100% - 32px));margin:0 auto;padding:56px 0 80px}.eyebrow{color:var(--deep);font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{font-size:clamp(2rem,6vw,4.6rem);line-height:1.04;margin:.2em 0}.lead{max-width:760px;color:var(--muted);font-size:1.08rem}.hero,.card,.flow{background:var(--surface);border:1px solid var(--line);border-radius:28px;box-shadow:var(--shadow);backdrop-filter:blur(18px)}.hero{padding:clamp(24px,5vw,56px);position:relative;overflow:hidden}.hero:after{content:"";position:absolute;width:180px;height:180px;border-radius:50%;right:-45px;top:-55px;background:linear-gradient(140deg,var(--blue),transparent);opacity:.35}.meter{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:30px}.meter span{height:9px;border-radius:9px;background:var(--blue)}.meter-label{display:flex;justify-content:space-between;color:var(--muted);font-size:.82rem;margin-top:8px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:24px}.card{padding:24px}.card h2{margin:0 0 10px;font-size:1.08rem}.state{display:inline-flex;gap:7px;align-items:center;font-size:.78rem;font-weight:800;border-radius:999px;padding:5px 10px;background:color-mix(in srgb,var(--ok) 12%,transparent);color:var(--ok)}.state.wait{color:var(--wait);background:color-mix(in srgb,var(--wait) 12%,transparent)}.dot{width:8px;height:8px;border-radius:50%;background:currentColor}.facts{display:grid;gap:11px;margin-top:17px}.fact{display:flex;justify-content:space-between;gap:16px;padding-top:11px;border-top:1px solid var(--line)}.fact span{color:var(--muted)}.fact b{text-align:right}.flow{padding:28px;margin-top:24px}.flow h2{margin-top:0}.steps{display:flex;align-items:stretch;gap:10px}.step{flex:1;border:1px solid var(--line);border-radius:18px;padding:15px;background:color-mix(in srgb,var(--blue) 8%,transparent)}.step small{display:block;color:var(--muted)}.arrow{align-self:center;color:var(--deep);font-size:1.3rem}.final{border-color:color-mix(in srgb,var(--wait) 60%,var(--line));background:color-mix(in srgb,var(--wait) 8%,transparent)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.84em;background:color-mix(in srgb,var(--blue) 12%,transparent);padding:.15em .42em;border-radius:7px;overflow-wrap:anywhere}.note{margin-top:24px;padding:20px 22px;border-left:4px solid var(--wait);background:color-mix(in srgb,var(--wait) 8%,transparent);border-radius:0 18px 18px 0}.note b{color:var(--wait)}a{color:var(--deep)}footer{margin-top:30px;color:var(--muted);font-size:.8rem}@media(max-width:720px){main{padding-top:24px}.grid{grid-template-columns:1fr}.steps{flex-direction:column}.arrow{transform:rotate(90deg)}.fact{display:block}.fact b{display:block;text-align:left;margin-top:3px}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div class="eyebrow">Device release · v1.4</div>
+    <h1>iPhoneへの反映まで<br>完了。</h1>
+    <p class="lead">ShannonのCodex連携をAzureへ配置し、Mac側の常駐Hostと署名済みiPhone Releaseを接続。会話履歴や記憶を消さず、iPhone 15への上書きインストールと起動まで完了した。</p>
+    <div class="meter" aria-label="5段階中4段階"><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="meter-label"><b>5 / 5 完了</b><span>2026-09-04 12:51 JST</span></div>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <span class="state"><i class="dot"></i>完了</span>
+      <h2>Azureバックエンド</h2>
+      <div class="facts">
+        <div class="fact"><span>API / background / world</span><b>3サービス active</b></div>
+        <div class="fact"><span>Codex作業テーブル</span><b>4テーブル作成済み</b></div>
+        <div class="fact"><span>ロールバック</span><b>コード＋SQLite退避済み</b></div>
+      </div>
+    </article>
+    <article class="card">
+      <span class="state"><i class="dot"></i>保持確認</span>
+      <h2>既存データ</h2>
+      <div class="facts">
+        <div class="fact"><span>対話</span><b>2スレッド / 25メッセージ</b></div>
+        <div class="fact"><span>端末認証</span><b>2台分を維持</b></div>
+        <div class="fact"><span>知識・観察</span><b>既存件数を維持</b></div>
+      </div>
+    </article>
+    <article class="card">
+      <span class="state"><i class="dot"></i>全件成功</span>
+      <h2>自動テスト</h2>
+      <div class="facts">
+        <div class="fact"><span>TypeScript</span><b>型検査 成功</b></div>
+        <div class="fact"><span>バックエンド</span><b>112 tests</b></div>
+        <div class="fact"><span>iOS</span><b>38 tests</b></div>
+      </div>
+    </article>
+    <article class="card">
+      <span class="state"><i class="dot"></i>転送可能</span>
+      <h2>iPhone Release</h2>
+      <div class="facts">
+        <div class="fact"><span>構成</span><b>Release / arm64</b></div>
+        <div class="fact"><span>Bundle ID</span><b><code>com.r41r41.shannon</code></b></div>
+        <div class="fact"><span>署名</span><b>Apple Development</b></div>
+      </div>
+    </article>
+    <article class="card">
+      <span class="state"><i class="dot"></i>常駐中</span>
+      <h2>Mac Codex Host</h2>
+      <div class="facts">
+        <div class="fact"><span>Host</span><b><code>shannon-mac</code></b></div>
+        <div class="fact"><span>心拍</span><b>Azureで継続受信</b></div>
+        <div class="fact"><span>許可プロジェクト</span><b><code>shannon-ios</code>のみ</b></div>
+      </div>
+    </article>
+    <article class="card">
+      <span class="state"><i class="dot"></i>反映済み</span>
+      <h2>荒井稜のiPhone</h2>
+      <div class="facts">
+        <div class="fact"><span>端末</span><b>iPhone 15</b></div>
+        <div class="fact"><span>アプリ</span><b>Shannon 0.1.0 (2)</b></div>
+        <div class="fact"><span>起動</span><b>プロセス生存確認済み</b></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="flow">
+    <h2>実際の流れ</h2>
+    <div class="steps">
+      <div class="step"><b>Shannon</b><small>作業を提案</small></div><div class="arrow">→</div>
+      <div class="step"><b>Azure</b><small>命令と進捗を保管</small></div><div class="arrow">→</div>
+      <div class="step"><b>Mac Host</b><small>Codexへ安全に接続</small></div><div class="arrow">→</div>
+      <div class="step"><b>承認</b><small>必要時だけiPhoneへ</small></div><div class="arrow">→</div>
+      <div class="step"><b>実機転送</b><small>完了</small></div>
+    </div>
+    <p>Mac設定は <code>~/Library/Application Support/Shannon</code> と <code>~/Library/LaunchAgents/com.shannon.agent-host.plist</code> に配置済み。プロジェクトは <code>shannon-ios</code> だけを許可し、任意のフォルダへは移動できない。作業キューは0件で、依頼を確定するまでモデル処理は始まらない。</p>
+  </section>
+
+  <aside class="note">
+    <b>実機で見るポイント</b><br>
+    既存の会話と記憶が表示されること、Shannonから作業提案が出た際にカードを開けること、進捗と承認画面が自然に読めることを確認する。専用HostトークンはMacとAzureの所有者専用ファイルに保存され、画面やログには出していない。
+  </aside>
+
+  <footer>Released to iPhone · 2026-09-04 JST · Codex App Serverは認証・履歴・承認・ストリーミングイベントを含む製品内統合向けの公式インターフェース。<a href="https://developers.openai.com/codex/app-server">OpenAI公式仕様</a></footer>
+</main>
+</body>
+</html>

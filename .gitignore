@@ -7,7 +7,12 @@ data/
 .env.*
 !.env.example
 DerivedData/
+DerivedData*/
 .build/
+*.xcresult/
+*.ipa
+*.dSYM/
 *.xcuserstate
+*.p8
 xcuserdata/
 /design/character-concepts/drafts/

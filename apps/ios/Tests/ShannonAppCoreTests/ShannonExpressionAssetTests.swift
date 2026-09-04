@@ -28,4 +28,10 @@ final class ShannonExpressionAssetTests: XCTestCase {
         XCTAssertEqual(Set(names).count, ShannonExpressionDTO.allCases.count)
         XCTAssertEqual(ShannonExpressionDTO.neutral.assetName, "shannon-expression-neutral")
     }
+
+    func testDialogueStagePortraitIsBundledAndReadable() throws {
+        let url = try XCTUnwrap(ShannonDialogueAssets.stagePortraitURL)
+        let data = try Data(contentsOf: url)
+        XCTAssertGreaterThan(data.count, 100_000)
+    }
 }

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Cost Control v9</title>
+  <style>
+    :root { color-scheme: light; --blue:#64c5e8; --ink:#14232b; --sub:#526770; --line:#dce9ee; --soft:#f3fbfe; --ok:#167a5b; --warn:#a76100; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:#fff; line-height:1.7; }
+    main { width:min(1080px,calc(100% - 32px)); margin:auto; padding:56px 0 96px; }
+    h1 { margin:0; font-size:clamp(2rem,5vw,4rem); letter-spacing:-.05em; line-height:1.08; }
+    h2 { margin:64px 0 20px; font-size:1.55rem; }
+    p { margin:10px 0; }
+    .lead { max-width:760px; margin-top:20px; color:var(--sub); font-size:1.08rem; }
+    .badge { display:inline-flex; padding:5px 10px; border-radius:999px; background:var(--soft); color:#16779a; font-weight:700; font-size:.8rem; }
+    .hero { padding:34px; border:1px solid var(--line); border-radius:28px; background:linear-gradient(145deg,#fff 35%,#eafaff); }
+    .flow { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:12px; align-items:stretch; }
+    .node,.card { border:1px solid var(--line); border-radius:20px; background:#fff; padding:20px; }
+    .node strong,.card strong { display:block; margin-bottom:6px; }
+    .arrow { align-self:center; color:#52afd1; font-size:1.5rem; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+    .number { display:flex; width:32px; height:32px; align-items:center; justify-content:center; border-radius:50%; background:var(--blue); color:#063849; font-weight:800; margin-bottom:14px; }
+    .value { font-size:1.55rem; font-weight:800; letter-spacing:-.03em; }
+    .muted { color:var(--sub); font-size:.92rem; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid var(--line); border-radius:18px; }
+    th,td { padding:14px 16px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { background:var(--soft); font-size:.86rem; }
+    tr:last-child td { border-bottom:0; }
+    .ok { color:var(--ok); font-weight:700; }
+    .decision { border-left:5px solid var(--blue); padding:18px 22px; background:var(--soft); border-radius:0 18px 18px 0; }
+    code { background:#eef5f7; padding:2px 6px; border-radius:6px; }
+    a { color:#097ba4; }
+    @media(max-width:760px){ main{width:min(100% - 22px,1080px);padding-top:20px}.hero{padding:24px}.grid{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg);justify-self:center}table{font-size:.86rem}th,td{padding:10px} }
+  </style>
+</head>
+<body><main>
+  <section class="hero">
+    <span class="badge">Implemented · 2026-09-02</span>
+    <h1>シャノンは、働きすぎない。</h1>
+    <p class="lead">会話速度と人格の連続性は保ちつつ、裏側のLLM・Web巡回・保存量を明示的な予算内に閉じ込める。通常会話は止めず、背景処理だけを先に抑える設計。</p>
+  </section>
+
+  <h2>実行レーンを分離</h2>
+  <div class="flow">
+    <div class="node"><strong>会話 FCA</strong><span class="muted">ユーザー操作時のみ。LLM 1回。予算ブレーカーの対象外。</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><strong>即時共有状態</strong><span class="muted">感情と明示情報だけをルールで更新。追加LLMなし。</span></div>
+    <div class="arrow">→</div>
+    <div class="node"><strong>睡眠バッチ</strong><span class="muted">1日1回・3発言以上のみ。月額上限到達時はLLMを呼ばない。</span></div>
+  </div>
+
+  <h2>1〜6の実装結果</h2>
+  <div class="grid">
+    <div class="card"><span class="number">1</span><strong>ターンごとの記憶LLMを廃止</strong><span class="muted">明示された好み・事実・関係希望は決定的ルールで即時反映。曖昧な推測だけ夜へ送る。</span></div>
+    <div class="card"><span class="number">2</span><strong>睡眠LLMを絞る</strong><div class="value">1日1回</div><span class="muted">3発言未満はローカル処理。最大出力400 tokens。</span></div>
+    <div class="card"><span class="number">3</span><strong>Worldを低速化</strong><div class="value">3〜24時間</div><span class="muted">天気3h、HN/Zenn等6h、GitHub/試験RSS 12h、論文系24h。</span></div>
+    <div class="card"><span class="number">4</span><strong>RSSと保存量に上限</strong><span class="muted">新規試験は週1件、同時3件、活動中10件。90日保持・世界アイテム最大1,000件。</span></div>
+    <div class="card"><span class="number">5</span><strong>実使用量を保存</strong><span class="muted">会話/睡眠別に入力・キャッシュ・出力・合計tokenと推定USDをSQLiteへ記録。</span></div>
+    <div class="card"><span class="number">6</span><strong>背景予算ブレーカー</strong><div class="value">$0.50 / 月</div><span class="muted">到達後は睡眠LLMだけ停止。チャットは継続。設定値で変更可能。</span></div>
+  </div>
+
+  <h2>ユーザーから見える場所</h2>
+  <table>
+    <thead><tr><th>場所</th><th>表示</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td>メモリー → いま</td><td>今月の推定利用額</td><td>OpenAIの応答usageを元にしたローカル推定。</td></tr>
+      <tr><td>同カード</td><td>会話 / 睡眠の呼出回数</td><td>人格を支える背景処理が過剰になっていないか確認できる。</td></tr>
+      <tr><td>同カード</td><td>背景予算の残り</td><td>睡眠LLMに使える月間残額。会話予算とは分離。</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">計測はv9反映後から開始。過去のAPI利用はローカルDBへ遡及登録しない。</p>
+
+  <h2>Langfuseの判断</h2>
+  <div class="decision">
+    <strong>今は入れない。必要になった時に、匿名化した計測だけを任意送信する。</strong>
+    <p>Langfuseはトレース、token・cost、評価を横断して見る段階では有力。ただし現在の単一VMにセルフホストすると、Web/Workerに加えてPostgreSQL、ClickHouse、Redis/Valkey、オブジェクトストレージが必要になり、Shannon本体より観測基盤の運用負荷が大きくなる。</p>
+    <p>まずSQLiteの軽量計測を正とする。将来、複数モデル比較・プロンプト評価・失敗トレースが必要になった時だけLangfuse Cloudまたは別VMへ接続し、会話本文や記憶は送らず、token数・レイテンシ・モデル名・匿名scopeのみ送る。</p>
+    <p class="muted">参考: <a href="https://langfuse.com/docs/observability/features/token-and-cost-tracking">Langfuse Token & Cost Tracking</a> / <a href="https://langfuse.com/self-hosting">Langfuse Self-hosting</a></p>
+  </div>
+
+  <h2>運用上の二重防御</h2>
+  <table>
+    <thead><tr><th>防御</th><th>場所</th><th>状態</th></tr></thead>
+    <tbody>
+      <tr><td>ソフトな可視化</td><td>Shannonアプリ</td><td class="ok">実装済み</td></tr>
+      <tr><td>背景処理の強制停止</td><td>Shannonサーバー</td><td class="ok">実装済み</td></tr>
+      <tr><td>プロジェクト利用アラート</td><td>OpenAI Platform</td><td>管理画面で別途設定。外部側の異常も検知する最後の柵。</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">OpenAIのAPI料金・利用アラート: <a href="https://openai.com/api/">OpenAI API</a></p>
+</main></body>
+</html>

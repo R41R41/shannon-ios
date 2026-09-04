@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Shannon Agent Task Integration v12</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: light-dark(#15242b, #edf7fb);
+      --muted: light-dark(#60737d, #9eb1bb);
+      --blue: light-dark(#62c8eb, #67cdef);
+      --deep: light-dark(#087da7, #4bc4ea);
+      --soft: light-dark(#eaf8fd, #102f3b);
+      --paper: light-dark(#ffffff, #10171c);
+      --paper-2: light-dark(#f5fafc, #182228);
+      --line: light-dark(#d6e5eb, #2b3b44);
+      --green: light-dark(#dcf5e9, #123e30);
+      --green-ink: light-dark(#227452, #74deb0);
+      --amber: light-dark(#fff1d4, #443016);
+      --amber-ink: light-dark(#885914, #ffc875);
+      --red: light-dark(#ffeaec, #401f25);
+      --red-ink: light-dark(#a94450, #ff9aa5);
+      --violet: light-dark(#eeebff, #292441);
+      --shadow: light-dark(#153b4e18, #00000058);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 88% -5%, color-mix(in srgb, var(--blue) 26%, transparent), transparent 32rem),
+        radial-gradient(circle at 0 42%, color-mix(in srgb, var(--blue) 10%, transparent), transparent 25rem),
+        var(--paper);
+      font: 15px/1.72 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    }
+    a { color: var(--deep); }
+    code { padding: 2px 6px; border-radius: 6px; background: var(--paper-2); font: .88em ui-monospace, SFMono-Regular, Menlo, monospace; }
+    main { width: min(1180px, calc(100% - 32px)); margin: auto; padding: 54px 0 100px; }
+    nav {
+      position: sticky;
+      top: 12px;
+      z-index: 10;
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      margin: 0 0 44px;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--paper) 82%, transparent);
+      box-shadow: 0 12px 36px var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    nav a { flex: 0 0 auto; padding: 8px 12px; border-radius: 11px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 750; }
+    nav a:hover { color: #073445; background: var(--blue); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 900px; margin-bottom: 22px; font-size: clamp(2.65rem, 7vw, 6.4rem); line-height: .94; letter-spacing: -.06em; }
+    h2 { margin-bottom: 16px; font-size: clamp(1.55rem, 3vw, 2.2rem); letter-spacing: -.035em; }
+    h3 { margin-bottom: 8px; font-size: 1rem; }
+    .eyebrow { color: var(--deep); font-size: .76rem; font-weight: 900; letter-spacing: .16em; }
+    .lead { max-width: 820px; color: var(--muted); font-size: 1.12rem; }
+    .principle { max-width: 930px; margin: 34px 0 48px; padding: 24px 28px; border-left: 5px solid var(--blue); border-radius: 0 22px 22px 0; background: var(--soft); font-size: clamp(1.15rem, 2vw, 1.55rem); font-weight: 780; }
+    section { margin-top: 20px; padding: 30px; border: 1px solid var(--line); border-radius: 28px; background: color-mix(in srgb, var(--paper) 92%, transparent); box-shadow: 0 18px 55px var(--shadow); }
+    .subtle { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { padding: 20px; border-radius: 20px; background: var(--soft); }
+    .card.white { border: 1px solid var(--line); background: var(--paper); }
+    .card.green { background: var(--green); }
+    .card.amber { background: var(--amber); }
+    .card.violet { background: var(--violet); }
+    .num { margin-bottom: 7px; color: var(--deep); font-size: .72rem; font-weight: 900; letter-spacing: .11em; }
+    .decision { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+    .decision::before { content: "✓"; flex: 0 0 auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--green-ink); background: var(--green); font-size: 12px; font-weight: 900; }
+    .flow { display: grid; grid-template-columns: repeat(7, auto); gap: 10px; align-items: center; }
+    .node { min-height: 135px; padding: 17px; border-radius: 18px; background: var(--soft); }
+    .node b { display: block; margin-bottom: 6px; }
+    .arrow { color: var(--deep); text-align: center; font-size: 1.4rem; }
+    .phone-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; align-items: stretch; }
+    .phone { min-height: 410px; padding: 12px; border: 5px solid light-dark(#263137, #020303); border-radius: 31px; background: var(--paper); box-shadow: 0 16px 35px var(--shadow); }
+    .phone-top { display: flex; justify-content: space-between; align-items: center; height: 34px; padding: 0 6px; font-size: 10px; font-weight: 800; }
+    .phone-title { margin: 8px 0 12px; text-align: center; font-size: 12px; font-weight: 800; }
+    .bubble { margin: 9px 0; padding: 10px 11px; border-radius: 15px; background: var(--soft); font-size: 11px; line-height: 1.5; }
+    .bubble.user { margin-left: 26px; border-radius: 15px 15px 4px 15px; }
+    .mini-task { margin-top: 10px; padding: 11px; border: 1px solid color-mix(in srgb, var(--deep) 28%, var(--line)); border-radius: 15px; background: color-mix(in srgb, var(--soft) 58%, var(--paper)); font-size: 10px; }
+    .mini-task strong { display: block; margin-bottom: 5px; font-size: 11px; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 999px; color: var(--deep); background: color-mix(in srgb, var(--blue) 17%, transparent); font-size: 10px; font-weight: 800; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .progress { height: 5px; overflow: hidden; margin: 9px 0; border-radius: 99px; background: var(--line); }
+    .progress span { display: block; width: 55%; height: 100%; background: var(--deep); }
+    .timeline { margin: 14px 2px; }
+    .event { position: relative; display: grid; grid-template-columns: 17px 1fr; gap: 7px; min-height: 44px; font-size: 10px; }
+    .event:not(:last-child)::after { content: ""; position: absolute; left: 6px; top: 15px; bottom: 0; width: 1px; background: var(--line); }
+    .event i { position: relative; z-index: 1; width: 13px; height: 13px; border: 3px solid var(--paper); border-radius: 50%; background: var(--line); box-shadow: 0 0 0 1px var(--line); }
+    .event.done i { background: var(--green-ink); }
+    .event.now i { background: var(--deep); }
+    .approval { padding: 10px; border-radius: 13px; background: var(--amber); color: var(--amber-ink); font-size: 10px; font-weight: 700; }
+    .buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; margin-top: 8px; }
+    .buttons span { padding: 6px; border-radius: 8px; text-align: center; color: var(--ink); background: var(--paper); font-size: 9px; }
+    .result { padding: 12px; border-radius: 15px; background: var(--green); color: var(--green-ink); font-size: 10px; }
+    .caption { margin-top: 12px; color: var(--muted); font-size: 11px; text-align: center; }
+    .architecture { display: grid; grid-template-columns: 1fr auto 1.1fr auto 1.2fr; gap: 12px; align-items: center; }
+    .lane { height: 100%; padding: 19px; border-radius: 20px; background: var(--soft); }
+    .lane.local { background: var(--violet); }
+    .lane ul { margin: 9px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+    .callout { margin-top: 16px; padding: 17px 19px; border-radius: 17px; background: var(--amber); color: var(--amber-ink); }
+    .state-flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .state { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper-2); font-size: 11px; font-weight: 800; }
+    .state.live { color: var(--deep); background: var(--soft); }
+    .state.wait { color: var(--amber-ink); background: var(--amber); }
+    .state.end { color: var(--green-ink); background: var(--green); }
+    .state.fail { color: var(--red-ink); background: var(--red); }
+    .row { display: grid; grid-template-columns: 210px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: 0; }
+    .row > b { color: var(--deep); }
+    .schema { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--deep); font-size: 10px; letter-spacing: .06em; }
+    .tree { overflow-x: auto; padding: 20px; border-radius: 18px; background: light-dark(#17242a, #080c0e); color: #d8edf5; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+    .sequence { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .sequence .card { min-height: 158px; }
+    .sequence strong { display: block; margin-bottom: 8px; color: var(--deep); }
+    .version { display: grid; grid-template-columns: 100px 1fr 210px; gap: 15px; align-items: start; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .version:last-child { border-bottom: 0; }
+    .vtag { display: inline-block; padding: 7px 10px; border-radius: 10px; color: #073445; background: var(--blue); font-weight: 900; text-align: center; }
+    .done-when { padding: 12px; border-radius: 14px; background: var(--green); color: var(--green-ink); font-size: 11px; }
+    .test-grid { display: grid; grid-template-columns: 170px 1fr 1fr; }
+    .test-grid > div { padding: 12px; border-bottom: 1px solid var(--line); }
+    .test-grid .head { color: var(--deep); font-size: 10px; font-weight: 900; letter-spacing: .07em; }
+    .risk { display: grid; grid-template-columns: 105px 1fr 1fr; gap: 0; }
+    .risk > div { padding: 12px; border-bottom: 1px solid var(--line); }
+    .p0, .p1, .p2 { display: inline-block; min-width: 32px; padding: 3px 7px; border-radius: 8px; text-align: center; font-size: 10px; font-weight: 900; }
+    .p0 { color: var(--red-ink); background: var(--red); }
+    .p1 { color: var(--amber-ink); background: var(--amber); }
+    .p2 { color: var(--deep); background: var(--soft); }
+    footer { padding: 34px 5px 0; color: var(--muted); font-size: 12px; }
+    @media (max-width: 900px) {
+      .grid, .grid.two, .phone-row, .architecture, .sequence { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+      .phone-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .version { grid-template-columns: 90px 1fr; }
+      .done-when { grid-column: 2; }
+    }
+    @media (max-width: 620px) {
+      main { width: min(100% - 20px, 1180px); padding-top: 28px; }
+      section { padding: 20px; border-radius: 22px; }
+      nav { top: 7px; margin-bottom: 30px; }
+      .phone-row, .test-grid, .risk { grid-template-columns: 1fr; }
+      .row, .version { grid-template-columns: 1fr; gap: 5px; }
+      .done-when { grid-column: auto; }
+      .test-grid .head:nth-of-type(n+2) { display: none; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <nav aria-label="章へのリンク">
+    <a href="#decision">決定</a><a href="#ux">UI</a><a href="#flow">フロー</a><a href="#architecture">構成</a><a href="#model">データ</a><a href="#api">API</a><a href="#folders">フォルダ</a><a href="#plan">実装順</a><a href="#tests">試験</a>
+  </nav>
+
+  <div class="eyebrow">SHANNON · AGENT TASK INTEGRATION v12 · 2026-09-04</div>
+  <h1>会話から頼み、<br>途中で判断し、<br>結果を受け取る。</h1>
+  <p class="lead">Shannon iOS v1.0の人格・記憶・トーク体験を保ったまま、Mac上のCodexを「シャノンが仕事をするための手足」として接続する具体設計。常設の開発ツール画面は増やさず、作業が生まれた時だけ仕事場を開く。</p>
+  <div class="principle">会話が入口。作業画面が仕事場。通知がノック。<br><span class="subtle">iPhoneは理解と判断、Desktopは詳細確認と操作を担う。</span></div>
+
+  <section id="decision">
+    <div class="eyebrow">01 · PRODUCT DECISIONS</div>
+    <h2>ここまでを仕様として固定する</h2>
+    <div class="grid">
+      <article class="card"><div class="num">NAVIGATION</div><h3>Agentタブは作らない</h3><p>既存の「トーク／メモリー／設定」とスワイプ遷移を維持。作業は会話内カードから開く。</p></article>
+      <article class="card"><div class="num">MOBILE ROLE</div><h3>iPhoneはRemote</h3><p>状況、計画、承認、追加指示、中断、結果に集中。ターミナル全文は通常表示しない。</p></article>
+      <article class="card"><div class="num">AGENT ROLE</div><h3>Codexは交換可能なWorker</h3><p>Shannonが意図と人格を持ち、AdapterがCodex固有プロトコルを吸収する。</p></article>
+    </div>
+    <div style="margin-top:18px">
+      <div class="decision">v1.1では、作業開始前に必ず「始める」をユーザーが押す。曖昧な会話から勝手にコードを変更しない。</div>
+      <div class="decision">同じMacで同時実行する作業は最初は1件。複数作業はキューに積み、並列化は実測後に判断する。</div>
+      <div class="decision">会話LLMの1回の応答に構造化された<code>taskProposal</code>を含め、分類専用の追加LLM呼び出しは増やさない。</div>
+      <div class="decision">作業終了時にShannonへ残すのは要約・判断・既知問題・ユーザー方針だけ。Codexの生ログを長期記憶に入れない。</div>
+      <div class="decision">任意HTMLをAIに生成させず、許可済みUIブロックだけをSwiftUIで描画する。</div>
+    </div>
+  </section>
+
+  <section id="ux">
+    <div class="eyebrow">02 · MOBILE EXPERIENCE</div>
+    <h2>一本の作業を4つの姿で見せる</h2>
+    <div class="phone-row">
+      <div><div class="phone"><div class="phone-top"><span>9:41</span><span>● ◒ ▰</span></div><div class="phone-title">トーク</div><div class="bubble user">ログイン周りで落ちるの、直せる？</div><div class="bubble">見てみるね。作業として始めてもいい？<div class="mini-task"><strong>ログイン障害を調査・修正</strong><span class="badge">作業候補</span><div class="buttons"><span>始める</span><span>条件を変える</span></div></div></div></div><div class="caption">1 · 提案</div></div>
+      <div><div class="phone"><div class="phone-top"><span>9:43</span><span>● ◒ ▰</span></div><div class="phone-title">トーク</div><div class="bubble">進めてるよ。認証状態の復元処理を追ってる。<div class="mini-task"><strong>ログイン障害を調査</strong><span class="badge"><i class="dot"></i>調査中</span><div class="progress"><span></span></div>計画 2 / 4　　作業を見る →</div></div></div><div class="caption">2 · 会話内カード</div></div>
+      <div><div class="phone"><div class="phone-top"><span>9:46</span><span>● ◒ ▰</span></div><div class="phone-title">ログイン障害を調査</div><span class="badge"><i class="dot"></i>作業中</span><div class="timeline"><div class="event done"><i></i><div><b>再現条件を確認</b><br>再起動直後に発生</div></div><div class="event done"><i></i><div><b>関連箇所を特定</b><br>SessionStore</div></div><div class="event now"><i></i><div><b>修正案を検証中</b></div></div><div class="event"><i></i><div><b>実機向けビルド</b></div></div></div><div class="approval">接続テストの許可が必要<div class="buttons"><span>今回だけ</span><span>許可しない</span></div></div></div><div class="caption">3 · 作業画面</div></div>
+      <div><div class="phone"><div class="phone-top"><span>9:53</span><span>● ◒ ▰</span></div><div class="phone-title">トーク</div><div class="bubble">直ったよ。履歴を残したまま再接続できるようにした。<div class="mini-task result"><strong>✓ 作業完了</strong>2ファイル変更<br>31テスト成功<br><br>結果を見る　·　続きを頼む</div></div></div><div class="caption">4 · 結果</div></div>
+    </div>
+    <div class="row"><b>作業中の常設表示</b><span>トーク入力欄の直上に高さ44pt程度の「作業カプセル」を1つだけ表示。タップで作業画面へ。会話本文を隠さず、入力中の横スワイプ禁止ルールも維持する。</span></div>
+    <div class="row"><b>作業画面の情報順</b><span>シャノンの一文 → 現在の行動 → タイムライン → 必要な判断 → 変更・試験結果。内部処理名や生ログを最上部に置かない。</span></div>
+    <div class="row"><b>戻り方</b><span>左上の戻る操作で元のトークへ。作業画面ではトーク／メモリーの横スワイプを無効化し、誤操作を防ぐ。</span></div>
+    <div class="row"><b>表情</b><span>調査＝thinking、実行＝determined、承認待ち＝concerned、完了＝joyful、失敗＝wry。イベントごとに固定保存し、後から感情が変わっても過去表示を変えない。</span></div>
+  </section>
+
+  <section id="flow">
+    <div class="eyebrow">03 · END-TO-END FLOW</div>
+    <h2>一回の依頼が完了するまで</h2>
+    <div class="flow">
+      <div class="node"><b>1 · 理解</b>通常FCAが返答と<code>taskProposal</code>を同時生成。</div><div class="arrow">→</div>
+      <div class="node"><b>2 · 確認</b>iPhoneに提案カード。開始は明示タップ。</div><div class="arrow">→</div>
+      <div class="node"><b>3 · 委譲</b>Azureが作業を保存し、Mac Hostが命令を取得。</div><div class="arrow">→</div>
+      <div class="node"><b>4 · 実行</b>HostがCodex App Serverをローカル<code>stdio</code>で操作。</div>
+    </div>
+    <div class="flow" style="margin-top:10px">
+      <div class="node"><b>8 · 記憶</b>要約と判断だけを活動履歴・記憶候補へ。</div><div class="arrow">←</div>
+      <div class="node"><b>7 · 報告</b>結果カードを会話へ保存。必要ならAPNs。</div><div class="arrow">←</div>
+      <div class="node"><b>6 · 判断</b>承認要求はiPhoneへ通知し、Hostへ決定を返す。</div><div class="arrow">←</div>
+      <div class="node"><b>5 · 投影</b>生イベントをShannon用Timelineへ変換。</div>
+    </div>
+    <div class="callout"><b>LLM費用の境界：</b>作業カードの状態更新、ポーリング、イベント整形、重複排除、通知判定にはLLMを使わない。LLMを使うのは通常のShannon会話と、ユーザーが明示的に開始したCodex作業だけ。</div>
+  </section>
+
+  <section id="architecture">
+    <div class="eyebrow">04 · SYSTEM ARCHITECTURE</div>
+    <h2>Azureを中継し、Macへ外から穴を開けない</h2>
+    <div class="architecture">
+      <div class="lane"><h3>iPhone · Shannon</h3><ul><li>会話と作業カード</li><li>Task Room</li><li>承認・追加指示・中断</li><li>APNsとDeep Link</li></ul></div>
+      <div class="arrow">⇄</div>
+      <div class="lane"><h3>Azure · Shannon API</h3><ul><li>既存ペアリング認証</li><li>Task Store / Event Projection</li><li>Command Broker</li><li>通知と再接続状態</li></ul></div>
+      <div class="arrow">⇄</div>
+      <div class="lane local"><h3>Mac · Shannon Agent Host</h3><ul><li>外向きHTTPS long-poll</li><li>Codex Adapter</li><li>App Serverをstdio起動</li><li>project allowlist / sandbox</li></ul></div>
+    </div>
+    <div class="row"><b>通信方式 v1</b><span>Hostは25秒のlong-pollで命令を取得し、イベントをバッチ送信。iPhoneは作業画面表示中だけ<code>afterSequence</code>付きで2秒間隔、非表示時は停止。承認と完了はAPNsを使う。</span></div>
+    <div class="row"><b>Codex接続</b><span>Hostが<code>codex app-server</code>を子プロセスとして起動し、安定したローカル<code>stdio</code> JSONLで接続。外部公開用WebSocketへ直接iPhoneをつながない。</span></div>
+    <div class="row"><b>再接続</b><span>Host再起動後は未完了Taskを読み、外部thread IDがあれば<code>thread/resume</code>。進行中turnを復元できなければ「中断後、再開可能」としてユーザーへ明示する。</span></div>
+    <div class="callout">OpenAI公式文書ではApp ServerのWebSocket transportはexperimentalかつproduction非対応。したがって本設計は、App Server自体を外へ公開せず、ローカル<code>stdio</code>の前にShannon Hostを置く。</div>
+  </section>
+
+  <section id="model">
+    <div class="eyebrow">05 · DOMAIN &amp; DATABASE</div>
+    <h2>正本はTask、表示はProjection</h2>
+    <div class="state-flow" aria-label="タスク状態遷移">
+      <span class="state">proposed</span><span>→</span><span class="state">queued</span><span>→</span><span class="state live">starting</span><span>→</span><span class="state live">running</span><span>⇄</span><span class="state wait">waiting_approval</span><span>⇄</span><span class="state wait">paused</span><span>→</span><span class="state end">completed</span><span class="state fail">failed</span><span class="state fail">cancelled</span>
+    </div>
+    <p class="subtle" style="margin-top:12px">Task statusは少数に固定し、細かな作業内容はEventと<code>currentAction</code>で表す。UIがAgent固有状態へ依存しない。</p>
+    <div class="schema">
+      <table>
+        <thead><tr><th>TABLE</th><th>役割</th><th>主要列</th><th>保持方針</th></tr></thead>
+        <tbody>
+          <tr><td><code>agent_hosts</code></td><td>Mac Hostと能力</td><td>id, scope_key, name, platform, capabilities_json, status, last_seen_at</td><td>登録解除まで</td></tr>
+          <tr><td><code>agent_tasks</code></td><td>作業の正本</td><td>id, scope_key, conversation_thread_id, source_message_id, host_id, adapter_kind, external_thread_id, external_turn_id, goal, title, status, summary, current_action, last_sequence, timestamps</td><td>ユーザー削除まで</td></tr>
+          <tr><td><code>agent_task_events</code></td><td>追記専用Timeline</td><td>task_id, sequence, type, importance, title, detail, occurred_at, user_visible</td><td>要約後90日を既定</td></tr>
+          <tr><td><code>agent_task_plan_items</code></td><td>現在の計画</td><td>task_id, item_id, position, title, status, updated_at</td><td>Taskと同じ</td></tr>
+          <tr><td><code>agent_task_commands</code></td><td>iPhone→Host命令</td><td>id, task_id, idempotency_key, kind, payload_json, status, claimed_at, completed_at</td><td>監査用90日</td></tr>
+          <tr><td><code>agent_task_approvals</code></td><td>危険操作の判断</td><td>task_id, external_request_id, kind, reason, resource_json, available_decisions_json, status, resolved_at</td><td>Taskと同じ</td></tr>
+          <tr><td><code>agent_task_artifacts</code></td><td>Diff・試験・結果</td><td>task_id, kind, display_name, summary, metadata_json, local_ref, retention_until</td><td>本文は短期、要約はTaskと同じ</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 style="margin-top:24px">共通AgentTaskViewModel</h3>
+    <div class="grid two">
+      <pre class="tree">AgentTaskViewModel
+├─ id / title / goal
+├─ status / statusLabel
+├─ summary / currentAction
+├─ progress { completed, total }
+├─ plan[]
+├─ timeline[]
+├─ pendingApproval?
+├─ changes[]
+├─ tests[]
+├─ warnings[]
+├─ availableActions[]
+└─ expression</pre>
+      <div class="card white"><h3>Rendererの分担</h3><p><b>会話カード：</b>status、currentAction、progressだけ。</p><p><b>iPhone Task Room：</b>Timeline、承認、変更要約、試験。</p><p><b>Desktop Deck：</b>同じViewModelに詳細Diff、Terminal、Filesを追加。</p><p><b>通知：</b>taskId、event type、短いsummaryだけ。</p></div>
+    </div>
+  </section>
+
+  <section id="api">
+    <div class="eyebrow">06 · API &amp; PROTOCOL</div>
+    <h2>既存APIへ小さく足す</h2>
+    <div class="sequence">
+      <article class="card"><strong>iPhone API</strong><code>POST /v1/agent/tasks</code><br><code>GET /v1/agent/tasks</code><br><code>GET /v1/agent/tasks/:id</code><br><code>POST /v1/agent/tasks/:id/commands</code></article>
+      <article class="card"><strong>差分取得</strong><code>GET .../:id?afterSequence=42</code><br><br>変更がなければ304。Task Room表示中だけ短周期取得。</article>
+      <article class="card violet"><strong>Host API</strong><code>POST /v1/agent/host/heartbeat</code><br><code>POST /v1/agent/host/commands/claim</code><br><code>POST /v1/agent/host/events</code></article>
+      <article class="card amber"><strong>命令種別</strong><code>start</code><br><code>steer</code><br><code>interrupt</code><br><code>resolve_approval</code><br><code>resume</code></article>
+    </div>
+    <div class="row"><b>冪等性</b><span>開始・追加指示・中断・承認すべてに端末生成の<code>idempotencyKey</code>を必須化。通信再試行で同じCodex命令を二重実行しない。</span></div>
+    <div class="row"><b>イベント順序</b><span>Hostごとの受信順ではなくTaskごとの単調増加<code>sequence</code>をAPIが採番。重複event IDは無視し、欠番時はHostへ再送要求。</span></div>
+    <div class="row"><b>ChatResponse拡張</b><span><code>uiBlocks?: [{ type: "agent_task_proposal", proposalId, title, goal, hostHint, projectHint, risk }]</code>を追加。テキスト本文からカードを推測しない。</span></div>
+    <div class="row"><b>Codex Adapter</b><span><code>thread/start</code>・<code>thread/resume</code>、<code>turn/start</code>、<code>turn/steer</code>、<code>turn/interrupt</code>、item/turn通知、approval requestをShannonの共通Eventへ変換する。</span></div>
+  </section>
+
+  <section id="folders">
+    <div class="eyebrow">07 · REPOSITORY SHAPE</div>
+    <h2>現在のmonorepoへこう追加する</h2>
+    <pre class="tree">shannon-ios/
+├─ apps/ios/Sources/ShannonAppCore/
+│  ├─ AgentTasks/
+│  │  ├─ ShannonAgentTask.swift
+│  │  ├─ ShannonAgentTaskStore.swift
+│  │  └─ ShannonAgentTaskViews.swift
+│  ├─ ShannonAPIClient.swift
+│  └─ ShannonConversationModel.swift
+├─ services/api/src/
+│  ├─ agentTaskStore.ts                # Azure正本・Command Broker
+│  ├─ agentHost.ts                     # Mac常駐プロセス
+│  ├─ agentHostConfig.ts               # Project allowlist
+│  ├─ agentHostState.ts                # 再接続状態・Event outbox
+│  ├─ agentHostBroker.ts               # Azureへの外向きHTTPS
+│  ├─ codexAppServerClient.ts          # stdio JSONL / RPC
+│  └─ codexTaskBridge.ts               # Codex → Shannon Event
+├─ deploy/macos/
+│  ├─ agent-host.env.example
+│  └─ com.shannon.agent-host.plist.example
+├─ docs/shannon-agent-task-integration-v12.html
+└─ docs/shannon-codex-bridge-v13.html</pre>
+    <p class="subtle" style="margin-top:14px">既存の<code>conversationStore</code>・<code>pushNotifications</code>・端末ペアリングは再利用する。Agent Taskの正本を会話テーブルへ詰め込まず、IDだけで関連付ける。</p>
+  </section>
+
+  <section id="security">
+    <div class="eyebrow">08 · SAFETY, PRIVACY, COST</div>
+    <h2>「自由に動ける」と「勝手に動く」を分ける</h2>
+    <div class="grid">
+      <article class="card amber"><h3>Project allowlist</h3><p>Host設定に登録した絶対パスだけを<code>cwd</code>にできる。iPhoneやLLMが任意パスを指定しても拒否。</p></article>
+      <article class="card amber"><h3>Approvalは縮小のみ</h3><p>Codexが提示した選択肢をそのまま許可範囲として扱い、Shannon側が勝手に広げない。</p></article>
+      <article class="card amber"><h3>通知は秘密を載せない</h3><p>ロック画面には「判断が必要」「作業が完了」まで。コマンド・ファイル名・Diffはアプリ内だけ。</p></article>
+      <article class="card green"><h3>LLM予算を分離</h3><p>Shannon会話、Codex作業、背景活動を別レーンで計測。作業開始前にモデル・上限をTaskへ固定。</p></article>
+      <article class="card green"><h3>停止条件</h3><p>日額上限、連続失敗、Host切断、approval timeout、ユーザー中断で即停止。自動再開はしない。</p></article>
+      <article class="card green"><h3>短期ログ</h3><p>Terminal全文や大きなDiffはMac正本。Azureは要約と参照を基本にし、必要な一時本文には期限を持たせる。</p></article>
+    </div>
+  </section>
+
+  <section id="plan">
+    <div class="eyebrow">09 · IMPLEMENTATION PLAN</div>
+    <h2>現行v1.0からの実装順</h2>
+    <div class="decision"><b>2026-09-04 更新：</b>v1.1・v1.2に加え、v1.3 Codex Bridgeのローカル実装が完了。実Codex App Serverとのhandshake、start/resume/steer/interrupt、承認変換、再接続、未送信Event保存を確認した。Azure配置と物理iPhoneからの実作業完走は次の配置工程。</div>
+    <div class="version"><div><span class="vtag">v1.1</span></div><div><h3>Task UX Foundation</h3><p>共通型、状態機械、fixture、会話内の提案／進行／結果カード、Task Roomを実装。まだCodexは接続せず、既存トーク・メモリー・通知の回帰を止める。</p></div><div class="done-when"><b>完了条件</b><br>4画面状態をfixtureで再現。VoiceOver、ライト／ダーク、オフライン再表示、戻る操作が通る。</div></div>
+    <div class="version"><div><span class="vtag">v1.2</span></div><div><h3>Task Store &amp; Broker</h3><p>SQLite migration、Task API、Command Broker、Event Projection、iOS polling cacheを追加。Fake Hostで開始・進行・承認・完了をE2E確認。</p></div><div class="done-when"><b>完了条件</b><br>通信を切って再接続しても状態が巻き戻らず、二重タップでも作業が1件だけ作られる。</div></div>
+    <div class="version"><div><span class="vtag">v1.3</span></div><div><h3>Codex Bridge</h3><p>Mac Agent Host、Codex App Server Adapter、イベント変換、steer、interrupt、command/file/network approvalを接続。まず専用テストrepoだけをallowlist登録。</p></div><div class="done-when"><b>完了条件</b><br>iPhoneからテストrepoの修正依頼を開始し、途中指示・拒否・中断・再開・試験結果まで完走。</div></div>
+    <div class="version"><div><span class="vtag">v1.4</span></div><div><h3>Daily Remote</h3><p>APNs、Deep Link、Host online表示、失敗時の復旧、音声による短い追加指示を統合。作業結果から活動履歴と記憶候補を作る。</p></div><div class="done-when"><b>完了条件</b><br>アプリを閉じた状態で承認通知を受け、対象作業へ入り、判断後に完了通知を受け取れる。</div></div>
+    <div class="version"><div><span class="vtag">v1.5</span></div><div><h3>Desktop Shannon Deck</h3><p>同じViewModelを使い、左にTask一覧、中央に活動、右にDiff／Terminal／Filesを表示。Global Push-to-TalkとCompact Modeを追加。</p></div><div class="done-when"><b>完了条件</b><br>iPhoneで開始したTaskをDesktopで継続し、同じsequence・approval・結果が一致する。</div></div>
+    <div class="version"><div><span class="vtag">v2.0</span></div><div><h3>Supervisor &amp; Self Extension</h3><p>Claude Code Adapter、複数Worker、上位Task分解、隔離環境でのスキル提案・評価・更新へ進む。自動Deployは別の明示承認境界を持つ。</p></div><div class="done-when"><b>完了条件</b><br>Agentを交換してもUI・Task履歴・承認モデルが変わらず、評価に合格した拡張だけ採用される。</div></div>
+    <div class="callout"><b>最初の実装単位：</b>v1.1を一度に完成させる。見た目だけのカードではなく、状態機械・fixture・永続表示まで含める。v1.2以降が未接続でも「作業UIそのもの」は完成状態にする。</div>
+  </section>
+
+  <section id="tests">
+    <div class="eyebrow">10 · VERIFICATION</div>
+    <h2>後から潰すのではなく、境界ごとに試験する</h2>
+    <div class="test-grid">
+      <div class="head">層</div><div class="head">必須試験</div><div class="head">失敗させる試験</div>
+      <div><b>Domain</b></div><div>全状態遷移、sequence投影、progress計算、Agent別event変換</div><div>completed後のrunning、重複event、欠番、古いapproval</div>
+      <div><b>API / DB</b></div><div>migration、scope分離、冪等命令、再起動復元、保持期限</div><div>他scope参照、二重開始、Hostなりすまし、巨大payload</div>
+      <div><b>Agent Host</b></div><div>App Server handshake、start/resume/steer/interrupt、approval応答</div><div>Codex終了、JSON破損、Host再起動、利用上限、context超過</div>
+      <div><b>iOS</b></div><div>カード全状態、Task Room、Deep Link、ライト／ダーク、Dynamic Type</div><div>連打、機内モード、入力中遷移、Task削除、遅い更新</div>
+      <div><b>E2E</b></div><div>Fake Agent完走 → Codexテストrepo完走 → 物理iPhone</div><div>approval拒否、中断、APNs遅延、API再起動、Mac sleep</div>
+    </div>
+    <h3 style="margin-top:25px">リリースを止める優先課題</h3>
+    <div class="risk">
+      <div><span class="p0">P0</span></div><div><b>別Taskへの承認誤適用</b></div><div>taskId + external requestId + active turnIdの三点一致以外は拒否。</div>
+      <div><span class="p0">P0</span></div><div><b>同じ命令の二重実行</b></div><div>端末idempotency keyとDB unique制約を両方使用。</div>
+      <div><span class="p1">P1</span></div><div><b>Host再起動で状態不明</b></div><div>runningを自動完了扱いせず、reconcilingを経て再開可否を表示。</div>
+      <div><span class="p1">P1</span></div><div><b>生ログによる情報漏洩</b></div><div>通知除外、Azure短期保持、UIの既定を要約表示にする。</div>
+      <div><span class="p2">P2</span></div><div><b>細かなイベントで画面が騒がしい</b></div><div>FILE_READ等は集約し、意味が変わるeventだけTimelineへ投影。</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">11 · OUT OF SCOPE FOR THE FIRST RELEASE</div>
+    <h2>最初から巨大なAgent Frameworkにはしない</h2>
+    <div class="grid">
+      <div class="card white">複数Agentの同時協調</div><div class="card white">無承認の自動Deploy</div><div class="card white">常時Wake Word</div>
+      <div class="card white">iPhoneでのTerminal完全操作</div><div class="card white">AI生成の自由HTML UI</div><div class="card white">無制限の自律作業</div>
+    </div>
+  </section>
+
+  <footer>
+    設計根拠：現行Shannon iOS v1.0の会話・記憶・APNs・Azureペアリング構成、Shannon Agent Interface構想、OpenAI公式のCodex App Server仕様。<br>
+    公式参照：<a href="https://developers.openai.com/codex/app-server">Codex App Server</a> — thread/turn lifecycle、streamed events、steer、interrupt、approvals、stdio transport。WebSocket transportはexperimentalのため本番経路には採用しない。
+  </footer>
+</main>
+</body>
+</html>

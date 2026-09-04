@@ -65,6 +65,7 @@ function normalizeMeaning(value: string): string {
     .replace(/アドバイス/gu, '助言')
     .replace(/好物/gu, '好きな食べ物')
     .replace(/が一番好き/gu, 'が好きな食べ物')
+    .replace(/([^。、\s]+)が好き$/u, '好きな食べ物は$1')
     .replace(/好む/gu, '好き')
     .replace(/住んでいます|住んでます/gu, '住んでいる')
     .replace(/しています|してます/gu, 'している')

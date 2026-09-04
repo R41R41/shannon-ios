@@ -67,6 +67,73 @@ final class ShannonConnectionTests: XCTestCase {
         _ = try await client.send(message: "こんにちは", scopeKey: "untrusted-client-scope")
     }
 
+    func testAPIClientRegistersAPNsTokenWithPairedDeviceCredential() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "p", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-push",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/push/register")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            XCTAssertEqual(json["deviceToken"], String(repeating: "ab", count: 32))
+            XCTAssertEqual(json["environment"], "sandbox")
+            return try response(url: request.url!, json: ["registered": true])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        try await client.registerPushToken(
+            scopeKey: "untrusted-client-scope",
+            deviceToken: String(repeating: "ab", count: 32),
+            environment: .sandbox
+        )
+    }
+
+    func testAPIClientCreatesAgentTaskAndMapsTheServerProjection() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "t", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-task",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let localTask = ShannonAgentTaskFixtures.proposed(threadID: "thread-a")
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/agent/tasks")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+            XCTAssertEqual(json["taskId"] as? String, localTask.id.uuidString)
+            XCTAssertEqual(json["idempotencyKey"] as? String, "stable-start-key")
+            return try response(url: request.url!, json: agentTaskEnvelopeJSON(id: localTask.id))
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let task = try await client.createAgentTask(
+            scopeKey: "untrusted-client-scope",
+            task: localTask,
+            idempotencyKey: "stable-start-key"
+        )
+
+        XCTAssertEqual(task.id, localTask.id)
+        XCTAssertEqual(task.status, .queued)
+        XCTAssertEqual(task.timeline.first?.sequence, 1)
+        XCTAssertEqual(task.timeline.first?.title, "作業を受け付けた")
+    }
+
     func testExpiredOrDifferentServerCredentialIsNotConnected() throws {
         let stored = ShannonConnectionCredential(
             baseURL: URL(string: "https://old.example")!,
@@ -211,9 +278,10 @@ private func requestBody(_ request: URLRequest) -> Data? {
 }
 
 private func chatResponseJSON() -> [String: Any] {
-    [
+        [
         "mode": "local-stub",
         "reply": "こんにちは",
+        "threadId": "test-thread-id",
         "snapshotVersion": 0,
         "messageEmotion": [
             "valence": 0,
@@ -238,6 +306,33 @@ private func chatResponseJSON() -> [String: Any] {
             "interests": [],
             "userFacts": [],
             "activeMemories": [],
+        ],
+    ]
+}
+
+private func agentTaskEnvelopeJSON(id: UUID) -> [String: Any] {
+    [
+        "created": true,
+        "task": [
+            "id": id.uuidString,
+            "conversationThreadID": "thread-a",
+            "title": "ログイン障害を調査・修正",
+            "goal": "会話履歴を保持したまま接続失敗を解消する",
+            "status": "queued",
+            "summary": "作業をお願いしているところ。",
+            "plan": [],
+            "timeline": [[
+                "id": UUID().uuidString,
+                "sequence": 1,
+                "title": "作業を受け付けた",
+                "occurredAt": "2026-09-04T00:00:00.000Z",
+                "tone": "neutral",
+            ]],
+            "changes": [],
+            "tests": [],
+            "createdAt": "2026-09-04T00:00:00.000Z",
+            "updatedAt": "2026-09-04T00:00:00.000Z",
+            "latestSequence": 1,
         ],
     ]
 }

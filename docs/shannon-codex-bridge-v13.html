@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Shannon Codex Bridge v1.3</title>
+  <style>
+    :root{color-scheme:light dark;--paper:light-dark(#fff,#10171c);--card:light-dark(#eef9fd,#14313c);--ink:light-dark(#172a32,#eefaff);--muted:light-dark(#60747d,#9eb2bb);--blue:#67cdef;--deep:light-dark(#087da7,#73d8f5);--line:light-dark(#d6e7ed,#2d414a);--green:light-dark(#e0f6e9,#123d2c);--amber:light-dark(#fff1d6,#49331a);--shadow:#123b4c1c}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% 0,#67cdef38,transparent 34rem),var(--paper);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}main{width:min(1100px,calc(100% - 28px));margin:auto;padding:54px 0 90px}h1{font-size:clamp(2.5rem,7vw,5.6rem);line-height:.96;letter-spacing:-.055em;margin:.2em 0}h2{font-size:1.7rem;letter-spacing:-.03em;margin:0 0 16px}.eyebrow{color:var(--deep);font-size:.75rem;font-weight:900;letter-spacing:.15em}.lead{max-width:760px;color:var(--muted);font-size:1.08rem}.status{display:inline-flex;gap:8px;align-items:center;margin:18px 0 32px;padding:9px 13px;border-radius:99px;background:var(--green);font-weight:800}.status i{width:9px;height:9px;border-radius:50%;background:#35a66f}section{margin:18px 0;padding:26px;border:1px solid var(--line);border-radius:26px;background:color-mix(in srgb,var(--paper) 92%,transparent);box-shadow:0 18px 54px var(--shadow)}.flow{display:grid;grid-template-columns:repeat(7,auto);gap:10px;align-items:center}.node{height:100%;padding:17px;border-radius:18px;background:var(--card)}.node b{display:block;margin-bottom:5px}.arrow{color:var(--deep);font-size:1.4rem}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{padding:18px;border-radius:18px;background:var(--card)}.card.green{background:var(--green)}.card.amber{background:var(--amber)}.row{display:grid;grid-template-columns:200px 1fr;gap:15px;padding:13px 0;border-bottom:1px solid var(--line)}.row:last-child{border:0}.row b{color:var(--deep)}code{padding:2px 6px;border-radius:6px;background:var(--card);font:.87em ui-monospace,Menlo,monospace}.tree{overflow:auto;padding:20px;border-radius:18px;background:#0d171b;color:#d9f2fb;font:12px/1.75 ui-monospace,Menlo,monospace;white-space:pre}.next{padding:20px;border-left:5px solid var(--blue);border-radius:0 18px 18px 0;background:var(--card);font-weight:750}a{color:var(--deep)}footer{color:var(--muted);font-size:12px;padding:20px 4px}@media(max-width:760px){main{padding-top:30px}.grid,.flow,.row{grid-template-columns:1fr}.arrow{text-align:center;transform:rotate(90deg)}section{padding:20px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · CODEX BRIDGE · v1.3 · 2026-09-04</div>
+  <h1>シャノンの依頼を、<br>MacのCodexへ。</h1>
+  <p class="lead">iPhoneの会話から生まれた作業をAzureで預かり、Macが外向き通信で受け取る。Codexの生ログは見せず、意味のある進捗・判断・変更・試験だけをShannonのTask Roomへ返す。</p>
+  <div class="status"><i></i>ローカル実装・112試験・実App Server handshake 完了</div>
+
+  <section><div class="eyebrow">FLOW</div><h2>穴を開けずに往復する</h2>
+    <div class="flow"><div class="node"><b>iPhone</b>開始・追加指示・承認</div><div class="arrow">→</div><div class="node"><b>Azure</b>保存・命令キュー</div><div class="arrow">→</div><div class="node"><b>Mac Host</b>許可プロジェクトを選択</div><div class="arrow">→</div><div class="node"><b>Codex</b>stdioで実行</div></div>
+    <div class="flow" style="margin-top:10px"><div class="node"><b>Task Room</b>要約・結果</div><div class="arrow">←</div><div class="node"><b>Event Projection</b>順序と状態を確定</div><div class="arrow">←</div><div class="node"><b>Event outbox</b>切断中もMacへ保存</div><div class="arrow">←</div><div class="node"><b>Adapter</b>生イベントを翻訳</div></div>
+  </section>
+
+  <section><div class="eyebrow">IMPLEMENTED</div><h2>今回つながったもの</h2><div class="grid">
+    <div class="card green"><b>作業ライフサイクル</b><br>start / resume / steer / interrupt / complete / fail</div>
+    <div class="card green"><b>ユーザー判断</b><br>command / file / network / permission</div>
+    <div class="card green"><b>Task Room表示</b><br>計画・現在地・変更ファイル・試験結果</div>
+    <div class="card"><b>Mac再起動復元</b><br>task ↔ Codex thread / turnを0600の状態ファイルへ保存</div>
+    <div class="card"><b>通信切断復元</b><br>未送信Eventをoutboxへ残し、同じevent IDで再送</div>
+    <div class="card"><b>二重実行防止</b><br>開始命令IDを保存し、lease再取得でも新しいturnを作らない</div>
+  </div></section>
+
+  <section><div class="eyebrow">BOUNDARIES</div><h2>自由に動く範囲はMacが決める</h2>
+    <div class="row"><b>Project allowlist</b><span><code>SHANNON_AGENT_PROJECTS_JSON</code>に登録した別名だけを受理。iPhoneやLLMが送った任意パスは使わない。</span></div>
+    <div class="row"><b>Codex sandbox</b><span>既定は<code>workspace-write</code>と<code>on-request</code>。範囲外操作はiPhoneで判断する。</span></div>
+    <div class="row"><b>Host identity</b><span>AzureはTaskを受け取ったMacだけからEventを受理。他Hostによる進捗のなりすましを拒否する。</span></div>
+    <div class="row"><b>Transport</b><span>AzureへはHTTPSの外向き通信。CodexへはMac内のstdio JSONL。WebSocketをインターネットへ公開しない。</span></div>
+    <div class="row"><b>Privacy</b><span>コマンド出力全文はAzureへ送らない。ファイル名、増減行数、試験の成否、Codexの最終要約だけを投影する。</span></div>
+  </section>
+
+  <section><div class="eyebrow">FILES</div><h2>実装の配置</h2><pre class="tree">services/api/src/
+├─ agentHost.ts               Mac常駐ループ
+├─ agentHostConfig.ts         HTTPS・token・project allowlist
+├─ agentHostState.ts          session + durable outbox
+├─ agentHostBroker.ts         Azure command/event transport
+├─ codexAppServerClient.ts    initialize + JSONL RPC
+└─ codexTaskBridge.ts         Codex event → Shannon event
+
+deploy/macos/
+├─ agent-host.env.example
+└─ com.shannon.agent-host.plist.example</pre></section>
+
+  <section><div class="eyebrow">VERIFICATION</div><h2>現在の確認結果</h2><div class="grid">
+    <div class="card green"><b>112 / 112</b><br>全バックエンド試験</div>
+    <div class="card green"><b>Protocol fixture</b><br>JSONL handshake・thread・turn</div>
+    <div class="card green"><b>Installed Codex</b><br>実App Server initialize成功</div>
+    <div class="card"><b>再接続</b><br>保存済みin-flight sessionをresume</div>
+    <div class="card"><b>承認</b><br>request IDを照合して応答</div>
+    <div class="card"><b>秘密の抑制</b><br>生command outputをEventへ含めない</div>
+  </div></section>
+
+  <section><div class="eyebrow">NEXT</div><h2>残るのは配置と実作業の完走</h2>
+    <div class="next">Azure APIへ今回のBrokerを配置 → MacへHost設定を配置 → 専用テストrepoを1件だけ許可 → iPhoneから開始・途中指示・承認・中断・再開・完了を確認。ユーザー側の操作は、最後にShannonアプリで作業を開始して結果を見るだけにする。</div>
+  </section>
+
+  <footer>Protocol source: <a href="https://developers.openai.com/codex/app-server">OpenAI Codex App Server</a>. stdio JSONL、initialize、thread/turn lifecycle、streamed events、steer、interrupt、approval requestを実装根拠とした。</footer>
+</main></body></html>

@@ -50,7 +50,9 @@ private actor MemoryClient: ShannonAPIClientProtocol {
         self.mutationResult = mutationResult
     }
 
-    func send(message: String, scopeKey: String) async throws -> ChatResponseDTO { throw TestMemoryError.failed }
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        throw TestMemoryError.failed
+    }
     func loadMemories(scopeKey: String) async throws -> ShannonMemoryDashboardDTO { try loadResult.get() }
     func mutateMemory(
         scopeKey: String,

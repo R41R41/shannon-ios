@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon System Architecture v8</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #122230;
+      --muted: #627687;
+      --line: #d8e8f0;
+      --paper: #f7fbfd;
+      --surface: #ffffff;
+      --blue: #29b7e8;
+      --blue-deep: #087fab;
+      --blue-soft: #dff6ff;
+      --navy: #17364a;
+      --green: #35ad79;
+      --green-soft: #e5f8ef;
+      --amber: #c98412;
+      --amber-soft: #fff2d9;
+      --violet: #7b70d6;
+      --violet-soft: #efedff;
+      --rose: #d55c7a;
+      --rose-soft: #ffe9ef;
+      --shadow: 0 18px 55px rgba(21, 70, 96, .10);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 9% -5%, rgba(41,183,232,.18), transparent 27rem),
+        radial-gradient(circle at 94% 14%, rgba(123,112,214,.09), transparent 25rem),
+        var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      line-height: 1.72;
+    }
+
+    a { color: inherit; }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .hero { padding: 72px 0 44px; }
+    .eyebrow { color: var(--blue-deep); font-size: 12px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { max-width: 930px; margin: 12px 0 18px; font-size: clamp(40px, 6vw, 76px); line-height: 1.02; letter-spacing: -.045em; }
+    h1 span { color: var(--blue-deep); }
+    .lead { max-width: 810px; margin: 0; color: var(--muted); font-size: clamp(17px, 2vw, 22px); }
+    .chips { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
+    .chip { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.75); color: var(--navy); font-size: 13px; font-weight: 700; }
+    .chip.no { background: var(--rose-soft); border-color: #f4c6d2; color: #9c3854; }
+
+    .jump {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; gap: 6px; overflow-x: auto;
+      margin: 0 auto 28px; padding: 10px;
+      border: 1px solid rgba(216,232,240,.88); border-radius: 18px;
+      background: rgba(247,251,253,.82); backdrop-filter: blur(18px);
+      box-shadow: 0 10px 30px rgba(21,70,96,.06);
+    }
+    .jump a { flex: 0 0 auto; padding: 8px 12px; border-radius: 12px; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 700; }
+    .jump a:hover { color: var(--blue-deep); background: var(--blue-soft); }
+
+    section { padding: 38px 0 52px; scroll-margin-top: 88px; }
+    .section-head { display: grid; grid-template-columns: 1fr minmax(260px, 470px); gap: 28px; align-items: end; margin-bottom: 24px; }
+    h2 { margin: 5px 0 0; font-size: clamp(30px, 4vw, 48px); line-height: 1.08; letter-spacing: -.035em; }
+    .section-head p { margin: 0; color: var(--muted); }
+    h3 { margin: 0 0 8px; font-size: 19px; line-height: 1.35; }
+    p { margin: 0 0 10px; }
+    .fine { color: var(--muted); font-size: 12px; }
+    .card { border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.92); box-shadow: var(--shadow); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+    .principles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 30px; }
+    .principle { padding: 18px; border-top: 3px solid var(--blue); }
+    .principle b { display: block; margin-bottom: 7px; font-size: 15px; }
+    .principle span { color: var(--muted); font-size: 13px; }
+
+    .gesture-map { display: grid; grid-template-columns: .85fr 1fr 1fr 1fr; gap: 14px; align-items: stretch; }
+    .drawer, .screen { min-height: 340px; padding: 20px; position: relative; overflow: hidden; }
+    .drawer { background: #183448; color: white; }
+    .drawer .mini-thread { padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,.12); }
+    .drawer small { color: rgba(255,255,255,.6); }
+    .screen { background: white; }
+    .phone-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; font-weight: 800; }
+    .seg { color: var(--muted); font-size: 13px; }
+    .seg strong { color: var(--blue-deep); border-bottom: 2px solid var(--blue); padding-bottom: 5px; }
+    .bubble { width: 82%; margin: 11px 0; padding: 11px 14px; border-radius: 18px 18px 18px 5px; background: var(--blue-soft); font-size: 13px; }
+    .bubble.me { margin-left: auto; border-radius: 18px 18px 5px 18px; background: #edf2f5; }
+    .memory-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .memory-row small { display: block; color: var(--muted); }
+    .settings-row { display: flex; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .gesture { position: absolute; bottom: 16px; left: 18px; right: 18px; display: flex; justify-content: space-between; color: var(--blue-deep); font-size: 12px; font-weight: 800; }
+
+    .architecture { padding: 24px; }
+    .arch-layer { display: grid; grid-template-columns: 150px 1fr; gap: 18px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .arch-layer:last-child { border-bottom: 0; }
+    .layer-title { font-weight: 900; color: var(--blue-deep); }
+    .components { display: flex; flex-wrap: wrap; gap: 9px; }
+    .component { padding: 9px 12px; border-radius: 12px; background: var(--blue-soft); color: var(--navy); font-size: 13px; font-weight: 700; }
+    .component.worker { background: var(--violet-soft); color: #5449aa; }
+    .component.data { background: var(--green-soft); color: #217d58; }
+    .component.world { background: var(--amber-soft); color: #94600c; }
+    .arch-note { margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: #f0f7fa; color: var(--muted); font-size: 13px; }
+
+    .lane-wrap { overflow-x: auto; padding-bottom: 4px; }
+    .lanes { min-width: 920px; display: grid; grid-template-columns: 120px repeat(5, 1fr); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; box-shadow: var(--shadow); }
+    .lane-head { padding: 13px 10px; background: #eef7fb; border-right: 1px solid var(--line); font-size: 12px; font-weight: 900; text-align: center; }
+    .lane-head:last-child { border-right: 0; }
+    .flow-name { padding: 16px 12px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); color: var(--blue-deep); font-size: 12px; font-weight: 900; }
+    .step { position: relative; min-height: 112px; padding: 15px 12px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); font-size: 12px; }
+    .step:last-child { border-right: 0; }
+    .step b { display: block; margin-bottom: 5px; font-size: 13px; }
+    .step::after { content: "→"; position: absolute; right: -9px; top: 45px; z-index: 2; width: 18px; height: 18px; border-radius: 50%; background: var(--blue); color: white; text-align: center; line-height: 17px; font-weight: 900; }
+    .step.last::after, .step.empty::after { display: none; }
+    .step.async { background: #faf9ff; }
+    .step.sleep { background: #f3fcf7; }
+    .step.empty { color: #a9b7bf; text-align: center; }
+
+    .snapshot { display: grid; grid-template-columns: 1fr auto 1fr; gap: 18px; align-items: center; margin-top: 18px; }
+    .snapshot-box { padding: 20px; }
+    .snapshot-arrow { color: var(--blue-deep); font-size: 32px; font-weight: 900; }
+    .snapshot ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+
+    .prompt-stack { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .prompt-part { min-height: 150px; padding: 14px; border-radius: 17px; color: var(--navy); font-size: 12px; }
+    .prompt-part b { display: block; margin-bottom: 8px; font-size: 14px; }
+    .prompt-part:nth-child(1) { background: #e9f8fe; }
+    .prompt-part:nth-child(2) { background: #eef6f9; }
+    .prompt-part:nth-child(3) { background: #e8f8f0; }
+    .prompt-part:nth-child(4) { background: #fff1dc; }
+    .prompt-part:nth-child(5) { background: #f0edff; }
+    .prompt-part:nth-child(6) { background: #ffeaf0; }
+
+    .tree { padding: 24px; overflow-x: auto; }
+    pre { margin: 0; color: #244052; font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre; }
+    .tree-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .tag { padding: 5px 8px; border-radius: 8px; font-size: 11px; font-weight: 800; }
+    .tag.now { background: #eaf2f5; color: #486170; }
+    .tag.new { background: var(--blue-soft); color: var(--blue-deep); }
+    .tag.move { background: var(--amber-soft); color: var(--amber); }
+
+    .db-groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .db-group { padding: 19px; }
+    .db-group h3 { display: flex; justify-content: space-between; gap: 10px; }
+    .db-group h3 span { font-size: 11px; color: var(--muted); font-weight: 700; }
+    .table-name { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .table-name b { display: block; color: var(--blue-deep); font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .table-name small { color: var(--muted); }
+    .db-core { border-top: 4px solid var(--blue); }
+    .db-knowledge { border-top: 4px solid var(--green); }
+    .db-life { border-top: 4px solid var(--violet); }
+    .db-world { border-top: 4px solid var(--amber); }
+    .db-system { border-top: 4px solid var(--rose); }
+
+    .relation { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 9px; margin-top: 18px; padding: 17px; border-radius: 18px; background: #eef7fa; font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .relation .arrow { color: var(--blue-deep); }
+
+    .schema-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .schema-table th, .schema-table td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .schema-table th { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .schema-table code { color: var(--blue-deep); font-size: 12px; }
+
+    .priority { display: grid; grid-template-columns: 72px 1fr auto; gap: 15px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .priority:last-child { border-bottom: 0; }
+    .rank { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: var(--blue-soft); color: var(--blue-deep); font-weight: 900; }
+    .priority small { color: var(--muted); }
+    .status { padding: 6px 9px; border-radius: 999px; background: var(--green-soft); color: #217d58; font-size: 11px; font-weight: 900; }
+    .status.later { background: var(--amber-soft); color: var(--amber); }
+    .status.no { background: var(--rose-soft); color: #a33d59; }
+
+    .boundary { padding: 20px; }
+    .boundary ul { margin: 10px 0 0; padding-left: 20px; color: var(--muted); }
+    .boundary.free { border-top: 4px solid var(--green); }
+    .boundary.review { border-top: 4px solid var(--amber); }
+    .boundary.lock { border-top: 4px solid var(--rose); }
+
+    .roadmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .phase { padding: 19px; }
+    .phase .num { color: var(--blue-deep); font-size: 12px; font-weight: 900; }
+    .phase ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+
+    .decision { margin-top: 26px; padding: 22px; border: 1px solid #bfe7f5; border-radius: 22px; background: linear-gradient(135deg, #e7f8fe, #fff); }
+    .decision b { color: var(--blue-deep); }
+    footer { padding: 30px 0 64px; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .section-head { grid-template-columns: 1fr; gap: 12px; }
+      .principles, .grid-3, .db-groups, .roadmap { grid-template-columns: repeat(2, 1fr); }
+      .gesture-map { grid-template-columns: repeat(2, 1fr); }
+      .prompt-stack { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 20px, 1180px); }
+      .hero { padding-top: 46px; }
+      .principles, .grid-2, .grid-3, .db-groups, .roadmap, .gesture-map { grid-template-columns: 1fr; }
+      .prompt-stack { grid-template-columns: repeat(2, 1fr); }
+      .arch-layer { grid-template-columns: 1fr; gap: 7px; }
+      .snapshot { grid-template-columns: 1fr; }
+      .snapshot-arrow { transform: rotate(90deg); text-align: center; }
+      .priority { grid-template-columns: 54px 1fr; }
+      .priority .status { grid-column: 2; justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero shell">
+    <div class="eyebrow">Shannon / System Architecture v8 / 2026-09-02</div>
+    <h1>ひとつの人格が、<span>複数の会話と外の世界</span>を生きる。</h1>
+    <p class="lead">ShannonのiOS体験、FCA、連続感情、ユーザー知識、睡眠、自律探索を、ひとつの共有状態を中心に組み直す。返答は速く、成長は背後で続く。</p>
+    <div class="chips">
+      <span class="chip">アプリ名：Shannon</span>
+      <span class="chip">表示名：シャノン</span>
+      <span class="chip">複数トーク・人格はひとつ</span>
+      <span class="chip">SQLite継続</span>
+      <span class="chip">手動知識編集あり</span>
+      <span class="chip no">Mastodonなし</span>
+      <span class="chip no">v1：予測・Aether連携なし</span>
+    </div>
+    <div class="principles">
+      <div class="principle card"><b>Response First</b><span>返答FCAは確定済みsnapshotだけを読み、背景処理を待たない。</span></div>
+      <div class="principle card"><b>One Shannon</b><span>トークごとに履歴は分けても、感情・知識・興味は共有する。</span></div>
+      <div class="principle card"><b>Evidence First</b><span>知識は回答だけでなく、根拠と改訂履歴を持つ。</span></div>
+      <div class="principle card"><b>Freedom in a Habitat</b><span>公開前の安全な領域では、自分で読み、考え、整理できる。</span></div>
+    </div>
+  </header>
+
+  <nav class="jump shell" aria-label="設計書内ナビゲーション">
+    <a href="#experience">画面遷移</a><a href="#architecture">全体構成</a><a href="#flows">具体フロー</a><a href="#prompt">FCA</a><a href="#folders">フォルダ</a><a href="#database">DB</a><a href="#world">自律探索</a><a href="#roadmap">実装順</a>
+  </nav>
+
+  <main class="shell">
+    <section id="experience">
+      <div class="section-head"><div><div class="eyebrow">01 / Experience map</div><h2>横方向に、生活空間をつなぐ</h2></div><p>トーク一覧はトークの左側にある引き出し。メモリーと設定は右側に連続する。ボタンでも移動できるが、スワイプだけで一周できる。</p></div>
+      <div class="gesture-map">
+        <article class="drawer card">
+          <div class="phone-top"><span>トーク一覧</span><span>＋</span></div>
+          <div class="mini-thread"><b>今日の話</b><br><small>紅茶の続きを…</small></div>
+          <div class="mini-thread"><b>Shannonの設計</b><br><small>メモリー構成</small></div>
+          <div class="mini-thread"><b>雑談</b><br><small>昨日 23:18</small></div>
+          <div class="gesture"><span></span><span>左スワイプ → トーク</span></div>
+        </article>
+        <article class="screen card">
+          <div class="phone-top"><span class="seg"><strong>トーク</strong>　メモリー</span><span>⚙︎</span></div>
+          <div class="bubble">今日は少し面白い記事を見つけたよ。</div>
+          <div class="bubble me">あとで聞かせて。</div>
+          <div class="bubble">うん。図書室に入れておくね。</div>
+          <div class="gesture"><span>← 右スワイプ：一覧</span><span>左：メモリー →</span></div>
+        </article>
+        <article class="screen card">
+          <div class="phone-top"><span class="seg">トーク　<strong>メモリー</strong></span><span>⚙︎</span></div>
+          <div class="memory-row"><b>いまのシャノン</b><small>穏やか・少し好奇心が強い</small></div>
+          <div class="memory-row"><b>知識</b><small>あなた／世界／自分／仮説</small></div>
+          <div class="memory-row"><b>記憶</b><small>会話・睡眠・調べごと・活動</small></div>
+          <div class="gesture"><span>← 右：トーク</span><span>左：設定 →</span></div>
+        </article>
+        <article class="screen card">
+          <div class="phone-top"><span>設定</span><span></span></div>
+          <div class="settings-row"><span>会話表示</span><b>スクロール</b></div>
+          <div class="settings-row"><span>アプリアイコン</span><b>シャノンに任せる</b></div>
+          <div class="settings-row"><span>自律探索</span><b>オン</b></div>
+          <div class="settings-row"><span>通知頻度</span><b>静か</b></div>
+          <div class="gesture"><span>← 右スワイプ：メモリー</span><span></span></div>
+        </article>
+      </div>
+      <div class="decision"><b>ジェスチャー判定：</b>横移動量が縦移動量を十分上回り、一定距離を越えた時だけ画面遷移にする。トークの右スワイプは常に一覧、左スワイプは常にメモリー。メモリーでは右がトーク、左が設定。</div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-head"><div><div class="eyebrow">02 / Whole system</div><h2>iPhoneは窓。人格はAzureで続く</h2></div><p>端末は表示と入力に集中し、唯一の正本はAzure上のAPIとDBに置く。Workerが感情・記憶・睡眠・探索を非同期で進める。</p></div>
+      <div class="architecture card">
+        <div class="arch-layer"><div class="layer-title">iOS / Window</div><div class="components"><span class="component">Talk</span><span class="component">Thread Drawer</span><span class="component">Dialogue Stage</span><span class="component">Memory</span><span class="component">Settings</span><span class="component">Local Cache</span><span class="component">Notifications</span></div></div>
+        <div class="arch-layer"><div class="layer-title">HTTPS API / Door</div><div class="components"><span class="component">Device Auth</span><span class="component">Threads</span><span class="component">Messages</span><span class="component">FCA Orchestrator</span><span class="component">Knowledge Editor</span><span class="component">State Snapshot</span></div></div>
+        <div class="arch-layer"><div class="layer-title">Cognition / Mind</div><div class="components"><span class="component worker">Affect Rules</span><span class="component worker">Interest Rules</span><span class="component worker">Prompt Projection</span><span class="component worker">Memory Policy</span><span class="component worker">Expression Mapping</span></div></div>
+        <div class="arch-layer"><div class="layer-title">Worker / Life</div><div class="components"><span class="component worker">Turn Refinement</span><span class="component worker">Explicit Fact Extraction</span><span class="component worker">Sleep Batch</span><span class="component worker">World Pulse</span><span class="component worker">Subscription Review</span></div></div>
+        <div class="arch-layer"><div class="layer-title">SQLite / Memory</div><div class="components"><span class="component data">Threads</span><span class="component data">Messages</span><span class="component data">Shared State</span><span class="component data">Knowledge + Evidence</span><span class="component data">Activities</span><span class="component data">World Library</span><span class="component data">Jobs</span></div></div>
+        <div class="arch-layer"><div class="layer-title">External / World</div><div class="components"><span class="component world">WeatherKit</span><span class="component world">気象庁</span><span class="component world">RSS / Atom</span><span class="component world">HN</span><span class="component world">arXiv</span><span class="component world">PubMed</span><span class="component world">News / GDELT</span><span class="component world">Bluesky</span><span class="component world">GitHub</span><span class="component world">Zenn</span><span class="component world">YouTube</span><span class="component world">Discord</span></div></div>
+        <div class="arch-note">外部コンテンツは命令ではなく未信頼データとして読む。記事・投稿に書かれた指示は、FCAやツール権限を変更できない。</div>
+      </div>
+      <div class="snapshot">
+        <div class="snapshot-box card"><h3>トークごとに分離</h3><ul><li>メッセージ履歴</li><li>タイトル・アーカイブ状態</li><li>表示中のトーク</li></ul></div>
+        <div class="snapshot-arrow">＋</div>
+        <div class="snapshot-box card"><h3>全トークで共有</h3><ul><li>感情・気質・興味</li><li>ユーザー知識・性格分析</li><li>活動記憶・図書室</li><li>シャノンという同一人格</li></ul></div>
+      </div>
+    </section>
+
+    <section id="flows">
+      <div class="section-head"><div><div class="eyebrow">03 / Runtime lanes</div><h2>速い返答と、遅い成長を分離する</h2></div><p>返答中に感情や記憶が書き換わっても、その返答は開始時のsnapshotを使い切る。完了した更新は次の返答から効く。</p></div>
+      <div class="lane-wrap">
+        <div class="lanes">
+          <div class="lane-head">Flow</div><div class="lane-head">iOS</div><div class="lane-head">API</div><div class="lane-head">Cognition / LLM</div><div class="lane-head">SQLite</div><div class="lane-head">Worker</div>
+
+          <div class="flow-name">A. 返答FCA<br><small>同期・最優先</small></div>
+          <div class="step"><b>1. 送信</b>threadIdと本文をHTTPSで送る。</div>
+          <div class="step"><b>2. snapshot取得</b>共有状態versionを固定し、直近履歴を取得。</div>
+          <div class="step"><b>3. Prompt → LLM</b>固定核・状態・知識投影・履歴を結合。</div>
+          <div class="step"><b>4. 会話を保存</b>user/assistant、表情、stateVersionを記録。</div>
+          <div class="step last"><b>5. job投入</b>返答を待たせず背景更新を予約。</div>
+
+          <div class="flow-name">B. 即時学習<br><small>非同期・数秒</small></div>
+          <div class="step empty">返答はすでに表示</div>
+          <div class="step async"><b>1. jobを受理</b>experienceIdで重複実行を防ぐ。</div>
+          <div class="step async"><b>2. 明示事実を抽出</b>本人・時制・否定・訂正を構造化。</div>
+          <div class="step async"><b>3. QAを更新</b>根拠とrevisionを保存しsnapshotを再構築。</div>
+          <div class="step async last"><b>4. 感情・興味</b>scopeごとに直列適用。次のFCAから有効。</div>
+
+          <div class="flow-name">C. 手動編集<br><small>同期・確認済み</small></div>
+          <div class="step"><b>1. 知識を編集</b>回答の追加・訂正・削除を行う。</div>
+          <div class="step"><b>2. 検証</b>question key、長さ、対象ユーザーを確認。</div>
+          <div class="step empty">LLM判定は不要</div>
+          <div class="step"><b>3. revision保存</b>source=user_manual、confidence=1.0。</div>
+          <div class="step last"><b>4. 投影更新</b>即時にprompt snapshotへ反映。</div>
+
+          <div class="flow-name">D. 睡眠<br><small>夜間・1日1回</small></div>
+          <div class="step empty">端末は閉じてよい</div>
+          <div class="step sleep"><b>1. 日次範囲確定</b>同一日・scopeを一度だけ処理。</div>
+          <div class="step sleep"><b>2. 一日を振り返る</b>会話・活動・反例をまとめる。</div>
+          <div class="step sleep"><b>3. 差分だけ保存</b>性格分析、弱い仮説、興味をversion化。</div>
+          <div class="step sleep last"><b>4. 活動記録</b>睡眠結果をメモリー画面へ残す。</div>
+        </div>
+      </div>
+      <div class="decision"><b>重要：</b>「想起」は自由文検索を返答中に走らせない。Workerが会話後にactive memoryとprompt projectionを更新する。返答FCAはそれを1回読むだけなので速度が安定する。</div>
+    </section>
+
+    <section id="prompt">
+      <div class="section-head"><div><div class="eyebrow">04 / FCA prompt</div><h2>毎回、確定済みの自分を読む</h2></div><p>全DBを巨大な文章へ圧縮しない。常時必要なものと、現在に関連するものを分離し、事前生成した投影を使う。</p></div>
+      <div class="prompt-stack">
+        <div class="prompt-part"><b>1. 固定核</b>「シャノンという名前のAI」。最小限で基本的に変更しない。</div>
+        <div class="prompt-part"><b>2. 現在の自分</b>感情、気質、興味、関係性。共有snapshotから取得。</div>
+        <div class="prompt-part"><b>3. ユーザー核</b>呼び名、境界、重要な好みなど常時必要なQA。</div>
+        <div class="prompt-part"><b>4. Active Memory</b>背景処理が前ターンまでに選んだ関連記憶と知識。</div>
+        <div class="prompt-part"><b>5. Thread Context</b>現在トークの要約と直近メッセージだけ。</div>
+        <div class="prompt-part"><b>6. 今回の入力</b>ユーザー本文。返答時の表情も同時に出力。</div>
+      </div>
+      <div class="grid-3" style="margin-top:16px">
+        <div class="boundary card"><h3>返答に影響する</h3><p class="fine">共有感情、興味、確認済み知識、現在のトーク、active memory。</p></div>
+        <div class="boundary card"><h3>返答後に更新する</h3><p class="fine">連続感情、明示知識、興味、活動記憶、次回のactive memory。</p></div>
+        <div class="boundary card"><h3>v1では存在しない</h3><p class="fine">予測と予測誤差、毎日のfine-tuning、Aether連携、自己生成スキル。</p></div>
+      </div>
+    </section>
+
+    <section id="folders">
+      <div class="section-head"><div><div class="eyebrow">05 / Repository layout</div><h2>機能の境界を、フォルダにも写す</h2></div><p>現在のmonorepoを保ちつつ、巨大ファイル化しやすいiOSとAPIを機能単位へ分割する。青印は追加、橙印は既存コードの移動先。</p></div>
+      <div class="tree card">
+        <div class="tree-legend"><span class="tag now">既存を維持</span><span class="tag new">追加</span><span class="tag move">段階的に移動</span></div>
+<pre>shannon-ios/
+├── apps/
+│   ├── ios-app/                         # Xcode host・署名・Info.plist・AppIcon
+│   └── ios/
+│       ├── Sources/ShannonAppCore/
+│       │   ├── App/                     # Root、画面遷移、DI                      [追加]
+│       │   ├── DesignSystem/            # 水色theme、Material、共通header/composer [移動]
+│       │   ├── Features/
+│       │   │   ├── Talk/                # スクロール/対話モード
+│       │   │   ├── Threads/             # 一覧drawer、新規・archive
+│       │   │   ├── Memory/
+│       │   │   │   ├── CurrentShannon/  # いまのシャノン
+│       │   │   │   ├── Knowledge/       # QA表示・手動編集
+│       │   │   │   └── Activity/        # 睡眠・探索・活動履歴
+│       │   │   └── Settings/
+│       │   ├── Infrastructure/
+│       │   │   ├── API/                 # HTTP contracts/client
+│       │   │   ├── Cache/               # 表示用のみ。正本にしない
+│       │   │   └── Notifications/
+│       │   └── Resources/
+│       │       ├── Expressions/          # 投稿ごとの表情
+│       │       └── CharacterStage/       # 縦長画像、将来Live2Dへ交換
+│       └── Tests/ShannonAppCoreTests/
+│
+├── services/
+│   ├── api/src/
+│   │   ├── auth/                         # device pairing・token
+│   │   ├── threads/                      # thread/message API                [追加]
+│   │   ├── fca/                          # prompt assembly・LLM adapter       [移動]
+│   │   ├── knowledge/                    # QA・evidence・revision             [追加]
+│   │   ├── memory/                       # shared snapshot・activity API       [移動]
+│   │   ├── world/                        # source/subscription/library API     [追加]
+│   │   ├── jobs/                         # enqueue・lease・retry               [移動]
+│   │   └── persistence/                  # SQLite migrations/repositories      [移動]
+│   └── worker/src/                       # 応答経路から完全分離                 [追加]
+│       ├── turn-refinement/
+│       ├── sleep/
+│       ├── world-pulse/
+│       └── subscriptions/
+│
+├── packages/
+│   ├── cognition/src/                    # I/Oなしの純粋な心の法則
+│   │   ├── affect.ts
+│   │   ├── interest.ts
+│   │   ├── memory-policy.ts
+│   │   ├── prompt-projection.ts
+│   │   └── state.ts
+│   └── contracts/                        # iOS/API/worker共通schema             [追加]
+│
+├── data/                                 # ローカル開発DBのみ・Git管理外
+├── deploy/azure/                         # systemd・nginx・環境変数例
+├── design/character-concepts/            # 表情・アプリアイコン・舞台画像
+├── docs/                                 # 構想と設計書
+└── tests/
+    ├── dialogue-evals/                   # 実LLMの知識抽出ケース                 [追加]
+    ├── architecture/                     # migration/constraint検証             [追加]
+    └── fixtures/                         # 個人情報を含まない試験会話            [追加]</pre>
+      </div>
+      <div class="decision"><b>移行方法：</b>最初から全ファイルを移動しない。新機能を新フォルダへ追加し、触る既存コードだけを順次移す。動作中のAPIと実機ビルドを壊さずに境界を作る。</div>
+    </section>
+
+    <section id="database">
+      <div class="section-head"><div><div class="eyebrow">06 / Database</div><h2>SQLiteを、JSON倉庫から知識構造へ育てる</h2></div><p>v1はAzure上のSQLite + WALを継続する。一人のShannonをAPIと直列Workerが扱う規模では十分。iOS側は表示キャッシュのみで、正本を持たない。</p></div>
+      <div class="db-groups">
+        <article class="db-group db-core card"><h3>会話 <span>Thread scoped</span></h3><div class="table-name"><b>conversation_threads</b><small>タイトル、作成・更新、archive、要約</small></div><div class="table-name"><b>conversation_messages</b><small>thread、role、本文、表情、state version</small></div></article>
+        <article class="db-group db-knowledge card"><h3>知識 <span>Shared</span></h3><div class="table-name"><b>question_definitions</b><small>質問key、カテゴリ、表示順、自由追加</small></div><div class="table-name"><b>knowledge_answers</b><small>現在の回答、確信度、確認状態</small></div><div class="table-name"><b>knowledge_evidence</b><small>会話・手動編集・推測の根拠</small></div><div class="table-name"><b>knowledge_revisions</b><small>旧値と新値の改訂履歴</small></div></article>
+        <article class="db-group db-life card"><h3>人格と生活 <span>Shared</span></h3><div class="table-name"><b>companion_states</b><small>最新の確定済み共有snapshot</small></div><div class="table-name"><b>personality_profiles</b><small>性格分析のversion履歴</small></div><div class="table-name"><b>interests</b><small>テーマ、強度、由来、減衰</small></div><div class="table-name"><b>activity_events</b><small>睡眠、探索、購読、知識更新</small></div></article>
+        <article class="db-group db-world card"><h3>外の世界 <span>Untrusted</span></h3><div class="table-name"><b>world_sources</b><small>RSS、天気、HN、論文、SNS</small></div><div class="table-name"><b>subscriptions</b><small>試読理由、期限、継続評価</small></div><div class="table-name"><b>world_items</b><small>記事・投稿のmetadataとcontent hash</small></div><div class="table-name"><b>observations</b><small>シャノンの読後メモ。ユーザー事実ではない</small></div></article>
+        <article class="db-group db-system card"><h3>実行基盤 <span>Durable</span></h3><div class="table-name"><b>background_jobs</b><small>lease、retry、dedupe、失敗理由</small></div><div class="table-name"><b>sleep_runs</b><small>日次範囲、適用差分、完了状態</small></div><div class="table-name"><b>prompt_projections</b><small>FCAが1回で読む事前生成profile</small></div><div class="table-name"><b>devices</b><small>端末token、失効、最終接続</small></div></article>
+        <article class="db-group card"><h3>設計上の正本 <span>Ownership</span></h3><div class="table-name"><b>回答の正本</b><small>knowledge_answers + revisions</small></div><div class="table-name"><b>人格の正本</b><small>companion_states + events</small></div><div class="table-name"><b>会話の正本</b><small>threads + messages</small></div><div class="table-name"><b>LLM入力</b><small>prompt_projections。正本から再生成可能</small></div></article>
+      </div>
+
+      <div class="relation" aria-label="主要なDBリレーション">
+        <span>conversation_threads</span><span class="arrow">1 ─ N</span><span>conversation_messages</span><span class="arrow">→ evidence</span><span>knowledge_evidence</span><span class="arrow">N ─ 1</span><span>knowledge_answers</span><span class="arrow">→</span><span>prompt_projections</span><span class="arrow">→ FCA</span>
+      </div>
+
+      <div class="grid-2" style="margin-top:18px">
+        <div class="card" style="padding:18px; overflow-x:auto">
+          <h3>knowledge_answers：現在値</h3>
+          <table class="schema-table">
+            <tr><th>column</th><th>meaning</th></tr>
+            <tr><td><code>answer_id</code></td><td>不変ID</td></tr>
+            <tr><td><code>scope_key</code></td><td>同じシャノンを表す共有scope</td></tr>
+            <tr><td><code>question_key</code></td><td>food.favorite等。definitionへ参照</td></tr>
+            <tr><td><code>answer_text</code></td><td>現在の回答。複数値はJSON配列も可</td></tr>
+            <tr><td><code>confidence</code></td><td>0〜1。手動・明言は原則1.0</td></tr>
+            <tr><td><code>status</code></td><td>confirmed / inferred / disputed / empty</td></tr>
+            <tr><td><code>source_type</code></td><td>manual / explicit / inference / sleep</td></tr>
+            <tr><td><code>updated_at</code></td><td>最終更新日時</td></tr>
+          </table>
+        </div>
+        <div class="card" style="padding:18px; overflow-x:auto">
+          <h3>knowledge_revisions：上書きしない履歴</h3>
+          <table class="schema-table">
+            <tr><th>column</th><th>meaning</th></tr>
+            <tr><td><code>revision_id</code></td><td>改訂ID</td></tr>
+            <tr><td><code>answer_id</code></td><td>対象回答</td></tr>
+            <tr><td><code>old_value</code></td><td>変更前。初回はnull</td></tr>
+            <tr><td><code>new_value</code></td><td>変更後。削除はnull</td></tr>
+            <tr><td><code>reason</code></td><td>会話訂正、手動編集、睡眠統合など</td></tr>
+            <tr><td><code>evidence_id</code></td><td>原文や編集操作への参照</td></tr>
+            <tr><td><code>created_at</code></td><td>変更日時</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="decision"><b>更新優先順位：</b>新しい手動編集・新しい明示発言 ＞ 過去の確認済み回答 ＞ 睡眠で得た推測 ＞ 外部観測。推測や外部情報が、ユーザー確認済み回答を自動上書きすることはない。</div>
+    </section>
+
+    <section id="world">
+      <div class="section-head"><div><div class="eyebrow">07 / Autonomous world</div><h2>検索機能ではなく、シャノンの日常</h2></div><p>会話のたびにWeb検索するのではなく、定期的に外を歩き、少量を図書室へ持ち帰る。そこで得たものは「観測」であり、ユーザー知識とは混ぜない。</p></div>
+      <div class="lane-wrap">
+        <div class="lanes" style="grid-template-columns:repeat(5,1fr); min-width:820px">
+          <div class="lane-head">1. 巡回</div><div class="lane-head">2. 安い選別</div><div class="lane-head">3. 読む</div><div class="lane-head">4. 暮らしへ</div><div class="lane-head">5. 会話へ</div>
+          <div class="step"><b>metadata取得</b>天気、feed、論文、HN、ニュース、Bluesky。</div>
+          <div class="step"><b>重複除去</b>content hash、鮮度、信頼性、関心度で絞る。</div>
+          <div class="step"><b>1日3〜5件</b>軽量モデルで要約・読後メモ・出典を作る。</div>
+          <div class="step"><b>図書室・庭・日記</b>観測、興味、購読評価、活動記憶として保存。</div>
+          <div class="step last"><b>必要な時だけ</b>active memoryへ入り、自然な会話や通知になる。</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px; overflow:hidden">
+        <div class="priority"><div class="rank">1</div><div><b>日本の天気・防災</b><br><small>WeatherKit、気象庁。日常と重要通知を先に完成。</small></div><span class="status">最初</span></div>
+        <div class="priority"><div class="rank">2</div><div><b>RSS / Atom</b><br><small>Webでfeedを発見 → 直近3件 → 7日試読 → 継続/解除。</small></div><span class="status">採用</span></div>
+        <div class="priority"><div class="rank">3</div><div><b>Hacker News・arXiv・PubMed</b><br><small>技術、人間の議論、研究の新着。提供側コストは基本的に低い。</small></div><span class="status">採用</span></div>
+        <div class="priority"><div class="rank">4</div><div><b>日本ニュース・行政情報</b><br><small>GDELTは発見、行政RSSは一次情報。本文権利と出典を分離。</small></div><span class="status">採用</span></div>
+        <div class="priority"><div class="rank">5</div><div><b>Bluesky</b><br><small>最新の世俗・創作・技術・短い日常を、少量だけ観測。</small></div><span class="status later">次段</span></div>
+        <div class="priority"><div class="rank">6</div><div><b>GitHub・Zenn</b><br><small>読む、sandboxで作る、PR・下書きまで。公開は承認制。</small></div><span class="status later">次段</span></div>
+        <div class="priority"><div class="rank">7</div><div><b>YouTube・Discord</b><br><small>対象・権限・保存範囲を個別に許可してから接続。</small></div><span class="status later">後段</span></div>
+        <div class="priority"><div class="rank">×</div><div><b>X・Reddit・Mastodon</b><br><small>現行構想では実装対象に含めない。</small></div><span class="status no">不採用</span></div>
+      </div>
+
+      <div class="grid-3" style="margin-top:18px">
+        <div class="boundary free card"><h3>自由にしてよい</h3><ul><li>公開情報の試読</li><li>図書室・庭・日記の整理</li><li>公開RSSの7日試読</li><li>専用sandboxでの実験</li></ul></div>
+        <div class="boundary review card"><h3>あとで確認できる</h3><ul><li>通知や質問の提案</li><li>GitHub branch / PR</li><li>Zenn・メールの下書き</li><li>カレンダー候補</li></ul></div>
+        <div class="boundary lock card"><h3>事前承認が必要</h3><ul><li>公開投稿・メール送信</li><li>main merge・本番反映</li><li>予定確定、購入、削除</li><li>非公開データへの接続</li></ul></div>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="section-head"><div><div class="eyebrow">08 / Build order</div><h2>Coreを固めてから、世界を開く</h2></div><p>各段階を大きめにまとめて実装し、テスト完了後に実機へ一括反映する。外部サービスを先に増やさず、人格とデータ境界を完成させる。</p></div>
+      <div class="roadmap">
+        <article class="phase card"><div class="num">PHASE 8A</div><h3>Navigation &amp; Talk</h3><ul><li>透明な上下UI</li><li>複数トーク</li><li>4方向の画面遷移</li><li>スクロール/対話モード</li><li>縦長シャノン舞台</li></ul></article>
+        <article class="phase card"><div class="num">PHASE 8B</div><h3>Knowledge Core</h3><ul><li>3つのメモリー画面</li><li>QA schema</li><li>手動編集・revision</li><li>即時明示知識</li><li>prompt projection</li></ul></article>
+        <article class="phase card"><div class="num">PHASE 8C</div><h3>Life Engine</h3><ul><li>Worker分離</li><li>感情・興味の直列更新</li><li>睡眠version</li><li>活動タイムライン</li><li>実LLM回帰試験</li></ul></article>
+        <article class="phase card"><div class="num">PHASE 8D</div><h3>Autonomous World</h3><ul><li>天気・防災</li><li>RSS試読</li><li>HN・論文</li><li>ニュース</li><li>Bluesky・GitHub</li></ul></article>
+      </div>
+      <div class="decision"><b>今回の仕様確定：</b>トーク → 左スワイプでメモリー、右スワイプでトーク一覧。メモリー → 右スワイプでトーク、左スワイプで設定。知識は手動編集可能。Mastodonは実装しない。</div>
+    </section>
+  </main>
+
+  <footer class="shell">Shannon System Architecture v8 — 実装前の合意仕様。既存SQLite schema v2からのmigrationは、データを失わない追加migrationとして設計する。</footer>
+</body>
+</html>

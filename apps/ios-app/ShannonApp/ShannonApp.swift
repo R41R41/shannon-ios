@@ -1,7 +1,9 @@
 import ShannonAppCore
+import Foundation
 import SwiftUI
 #if os(iOS)
 import UIKit
+@preconcurrency import UserNotifications
 #endif
 
 @main
@@ -12,6 +14,9 @@ struct ShannonApp: App {
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel
+    @State private var pendingPushToken: String?
+    @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
 #if os(iOS)
@@ -32,6 +37,7 @@ struct ShannonApp: App {
             store: connectionStore,
             deviceName: { deviceDisplayName }
         ))
+        _pendingPushToken = State(initialValue: nil)
     }
 
     var body: some Scene {
@@ -41,33 +47,142 @@ struct ShannonApp: App {
                 connectionModel: connectionModel,
                 memoryModel: memoryModel
             )
+                .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }
+                .onChange(of: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    Task {
+                        await conversationModel.synchronizeAgentTasks()
+                        await refreshInitiativesAndBadge()
+                        await configureRemoteNotifications()
+                        await registerPendingPushToken()
+                    }
+                }
+                .onChange(of: connectionModel.status) {
+                    guard connectionModel.isConnected else { return }
+                    Task { await registerPendingPushToken() }
+                }
+                .onChange(of: conversationModel.totalBadgeCount) {
+                    updateApplicationBadge(conversationModel.totalBadgeCount)
+                }
 #if os(iOS)
+                .onReceive(NotificationCenter.default.publisher(for: .shannonPushTokenReceived)) { notification in
+                    guard let token = notification.object as? String else { return }
+                    pendingPushToken = token
+                    Task { await registerPendingPushToken() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .shannonInitiativeNotificationOpened)) { notification in
+                    guard let threadId = notification.object as? String else { return }
+                    Task { await conversationModel.openInitiativeThread(threadId) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .shannonAgentTaskNotificationOpened)) { notification in
+                    guard let taskID = notification.object as? UUID else { return }
+                    Task { await conversationModel.openAgentTaskNotification(taskID) }
+                }
                 .task {
                     if let url = ShannonAppDelegate.takePendingConnectionURL() {
                         await connectionModel.connect(using: url)
                     } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
                         await connectionModel.pair(code: code)
                     }
+                    await configureRemoteNotifications()
+                    if let token = ShannonAppDelegate.takePendingDeviceToken() {
+                        pendingPushToken = token
+                        await registerPendingPushToken()
+                    }
+                    if let threadId = ShannonAppDelegate.takePendingInitiativeThreadID() {
+                        await conversationModel.openInitiativeThread(threadId)
+                    }
+                    if let taskID = ShannonAppDelegate.takePendingAgentTaskID() {
+                        await conversationModel.openAgentTaskNotification(taskID)
+                    }
                 }
 #endif
         }
     }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch ShannonAppearanceMode(rawValue: appearanceModeRawValue) ?? .system {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    private func refreshInitiativesAndBadge() async {
+        await conversationModel.refreshInitiatives()
+        updateApplicationBadge(conversationModel.totalBadgeCount)
+    }
+
+    private func updateApplicationBadge(_ count: Int) {
+#if os(iOS)
+        Task { try? await UNUserNotificationCenter.current().setBadgeCount(max(0, count)) }
+#endif
+    }
+
+#if os(iOS)
+    private func configureRemoteNotifications() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        }
+        let refreshed = await center.notificationSettings()
+        guard refreshed.authorizationStatus != .denied else { return }
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    private func registerPendingPushToken() async {
+        guard connectionModel.isConnected, let token = pendingPushToken else { return }
+        let registered = await conversationModel.registerPushToken(token, environment: pushEnvironment)
+        if registered, pendingPushToken == token { pendingPushToken = nil }
+    }
+
+    private var pushEnvironment: ShannonPushEnvironmentDTO {
+#if DEBUG
+        .sandbox
+#else
+        .production
+#endif
+    }
+#endif
 }
 
 #if os(iOS)
 @MainActor
-private final class ShannonAppDelegate: NSObject, UIApplicationDelegate {
+private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     private static var pendingConnectionURL: URL?
+    private static var pendingDeviceToken: String?
+    private static var pendingInitiativeThreadID: String?
+    private static var pendingAgentTaskID: UUID?
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         Self.pendingConnectionURL = launchOptions?[.url] as? URL
+        Self.pendingInitiativeThreadID = Self.threadID(from: launchOptions?[.remoteNotification])
+        Self.pendingAgentTaskID = Self.taskID(from: launchOptions?[.remoteNotification])
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Self.pendingDeviceToken = token
+        NotificationCenter.default.post(name: .shannonPushTokenReceived, object: token)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        // The app retries APNs registration on the next foreground activation.
     }
 
     func application(
@@ -83,6 +198,63 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate {
         defer { pendingConnectionURL = nil }
         return pendingConnectionURL
     }
+
+    static func takePendingDeviceToken() -> String? {
+        defer { pendingDeviceToken = nil }
+        return pendingDeviceToken
+    }
+
+    static func takePendingInitiativeThreadID() -> String? {
+        defer { pendingInitiativeThreadID = nil }
+        return pendingInitiativeThreadID
+    }
+
+    static func takePendingAgentTaskID() -> UUID? {
+        defer { pendingAgentTaskID = nil }
+        return pendingAgentTaskID
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound, .badge]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let payload = response.notification.request.content.userInfo
+        await MainActor.run {
+            if let taskID = Self.taskID(from: payload) {
+                Self.pendingAgentTaskID = taskID
+                NotificationCenter.default.post(name: .shannonAgentTaskNotificationOpened, object: taskID)
+            } else if let threadId = Self.threadID(from: payload) {
+                Self.pendingInitiativeThreadID = threadId
+                NotificationCenter.default.post(name: .shannonInitiativeNotificationOpened, object: threadId)
+            }
+        }
+    }
+
+    nonisolated private static func threadID(from payload: Any?) -> String? {
+        guard let dictionary = payload as? [AnyHashable: Any],
+              let threadId = dictionary["threadId"] as? String,
+              !threadId.isEmpty else { return nil }
+        return threadId
+    }
+
+    nonisolated private static func taskID(from payload: Any?) -> UUID? {
+        guard let dictionary = payload as? [AnyHashable: Any],
+              let taskID = dictionary["taskId"] as? String else { return nil }
+        return UUID(uuidString: taskID)
+    }
+}
+
+private extension Notification.Name {
+    static let shannonPushTokenReceived = Notification.Name("ShannonPushTokenReceived")
+    static let shannonInitiativeNotificationOpened = Notification.Name("ShannonInitiativeNotificationOpened")
+    static let shannonAgentTaskNotificationOpened = Notification.Name("ShannonAgentTaskNotificationOpened")
 }
 #endif
 private enum ShannonRuntimeConfiguration {

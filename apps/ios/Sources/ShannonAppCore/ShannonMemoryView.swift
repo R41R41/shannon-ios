@@ -2,7 +2,10 @@ import SwiftUI
 
 public struct ShannonMemoryView: View {
     @State private var model: ShannonMemoryModel
-    @State private var filter: MemoryFilter = .all
+    @State private var area: MemoryArea = .current
+    @State private var editingAnswer: ShannonKnowledgeAnswerDTO?
+    @State private var editingText = ""
+    @State private var selectedSleepReport: ShannonSleepReportDTO?
     private let showsDismissButton: Bool
     private let workspaceTopInset: CGFloat
     @Environment(\.dismiss) private var dismiss
@@ -40,49 +43,72 @@ public struct ShannonMemoryView: View {
                 memoryContent(palette)
             }
         }
+        .sheet(item: $editingAnswer) { answer in
+            NavigationStack {
+                Form {
+                    Section(answer.question) {
+                        TextField("回答", text: $editingText, axis: .vertical)
+                            .lineLimit(2...8)
+                    }
+                }
+                .navigationTitle("知識を訂正")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("キャンセル") { editingAnswer = nil }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            let value = editingText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Task {
+                                if await model.correctKnowledge(answerID: answer.answerId, answer: value) {
+                                    editingAnswer = nil
+                                }
+                            }
+                        }
+                        .disabled(editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $selectedSleepReport) { report in
+            NavigationStack {
+                ShannonSleepReportView(report: report)
+            }
+        }
     }
 
     private func memoryContent(_ palette: M3Palette) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: M3Spacing.large) {
-                if workspaceTopInset > 0 {
-                    HStack {
-                        Text("メモリー")
-                            .font(.largeTitle.bold())
-                        Spacer()
-                        Button { Task { await model.reload() } } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(model.isLoading)
-                        .accessibilityLabel("記憶を更新")
-                    }
-                    .padding(.horizontal, M3Spacing.extraSmall)
-                }
-
                 if let report = model.latestSleepReport {
-                    NavigationLink {
-                        ShannonSleepReportView(report: report)
+                    Button {
+                        selectedSleepReport = report
                     } label: {
                         SleepSummaryCard(report: report, palette: palette)
                     }
                     .buttonStyle(.plain)
                 }
-                filterChips(palette)
+                Picker("表示", selection: $area) {
+                    ForEach(MemoryArea.allCases) { area in
+                        Label(area.title, systemImage: area.symbol).tag(area)
+                    }
+                }
+                .pickerStyle(.segmented)
 
                 if model.isLoading && model.dashboard == nil {
                     ProgressView("読み込み中…")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 64)
-                } else if filteredActiveItems.isEmpty {
-                    emptyState(palette)
                 } else {
-                    memorySection("いま覚えていること", items: filteredActiveItems, palette: palette)
-                }
-
-                if filter == .all && !model.hiddenItems.isEmpty {
-                    memorySection("あなたが境界を決めた記憶", items: model.hiddenItems, palette: palette)
+                    switch area {
+                    case .current:
+                        currentStateContent(palette)
+                    case .knowledge:
+                        knowledgeContent(palette)
+                    case .activity:
+                        activityContent(palette)
+                    }
                 }
 
                 if let error = model.errorMessage {
@@ -95,44 +121,158 @@ public struct ShannonMemoryView: View {
             .padding(.top, max(M3Spacing.large, workspaceTopInset))
             .padding(.bottom, M3Spacing.large)
         }
-        .background(palette.surfaceContainerLow)
+        .background(Color.clear)
         .task { await model.loadIfNeeded() }
         .refreshable { await model.reload() }
     }
 
-    private var filteredActiveItems: [ShannonMemoryItemDTO] {
-        guard let kind = filter.kind else { return model.activeItems }
-        return model.activeItems.filter { $0.kind == kind }
+    @ViewBuilder
+    private func currentStateContent(_ palette: M3Palette) -> some View {
+        if let state = model.dashboard?.currentState {
+            ShannonCurrentStateCard(state: state, palette: palette)
+            if let usage = model.dashboard?.usage {
+                ShannonCostCard(usage: usage, palette: palette)
+            }
+            if let evaluation = model.dashboard?.evaluation {
+                ShannonInitiativeEvaluationCard(evaluation: evaluation, palette: palette)
+            }
+            if let profile = model.dashboard?.personalityProfile {
+                VStack(alignment: .leading, spacing: M3Spacing.small) {
+                    HStack {
+                        Text("性格分析").font(.title3.weight(.semibold))
+                        Spacer()
+                        Text("v\(profile.version)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(palette.primary)
+                    }
+                    Text(profile.analysis)
+                        .font(.body)
+                        .lineSpacing(4)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+                .padding(M3Spacing.large)
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+            }
+            if !state.interests.isEmpty {
+                MemorySimpleSection(title: "興味", symbol: "sparkles", values: state.interests, palette: palette)
+            }
+        } else {
+            let interests = model.activeItems.filter { $0.kind == .interest }
+            let relationships = model.activeItems.filter { $0.kind == .relationship }
+            if interests.isEmpty && relationships.isEmpty {
+                emptyState("いまの状態はまだありません", symbol: "waveform.path.ecg", palette: palette)
+            } else {
+                if !interests.isEmpty { memorySection(nil, items: interests, palette: palette) }
+                if !relationships.isEmpty { memorySection("ふたりの関係", items: relationships, palette: palette) }
+            }
+        }
     }
 
-    private func filterChips(_ palette: M3Palette) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: M3Spacing.small) {
-                ForEach(MemoryFilter.allCases) { option in
-                    Button { filter = option } label: {
-                        Label(option.title, systemImage: option.symbol)
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(filter == option ? palette.onPrimary : palette.onSurfaceVariant)
-                            .padding(.horizontal, M3Spacing.medium)
-                            .frame(minHeight: 40)
-                            .background(filter == option ? palette.primary : palette.surfaceContainerHigh, in: Capsule())
+    @ViewBuilder
+    private func knowledgeContent(_ palette: M3Palette) -> some View {
+        let answers = model.dashboard?.knowledge ?? []
+        if answers.isEmpty {
+            let facts = model.activeItems.filter { $0.kind == .userFact }
+            if facts.isEmpty {
+                emptyState("知識はまだありません", symbol: "books.vertical", palette: palette)
+            } else {
+                memorySection(nil, items: facts, palette: palette)
+            }
+        } else {
+            ForEach(knowledgeCategories(answers), id: \.category) { group in
+                VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                    Text(group.category).font(.title3.weight(.semibold))
+                    ForEach(group.answers) { answer in
+                        HStack(alignment: .center, spacing: M3Spacing.small) {
+                            KnowledgeAnswerCard(answer: answer, palette: palette)
+                            Button {
+                                editingText = answer.answer
+                                editingAnswer = answer
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(palette.primary)
+                            .accessibilityLabel("\(answer.question)を編集")
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-        .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder
+    private func activityContent(_ palette: M3Palette) -> some View {
+        let reports = model.dashboard?.sleepReports ?? []
+        if !reports.isEmpty {
+            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                Label("シャノンの日記", systemImage: "book.closed.fill")
+                    .font(.title3.weight(.semibold))
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: M3Spacing.medium) {
+                        ForEach(reports.prefix(14)) { report in
+                            Button {
+                                selectedSleepReport = report
+                            } label: {
+                                ShannonDiaryCard(report: report, palette: palette)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+
+        let world = model.dashboard?.world ?? []
+        if !world.isEmpty {
+            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                Text("見つけたもの").font(.title3.weight(.semibold))
+                ForEach(world.prefix(12)) { item in
+                    if let url = URL(string: item.url) {
+                        Link(destination: url) {
+                            WorldItemCard(item: item, palette: palette)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        WorldItemCard(item: item, palette: palette)
+                    }
+                }
+            }
+        }
+        let activity = model.dashboard?.activity ?? []
+        if activity.isEmpty {
+            let experiences = model.activeItems.filter { $0.kind == .experience }
+            if experiences.isEmpty {
+                emptyState("活動履歴はまだありません", symbol: "clock.arrow.circlepath", palette: palette)
+            } else {
+                memorySection(nil, items: experiences, palette: palette)
+            }
+        } else {
+            ForEach(activityGroups(activity)) { group in
+                VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                    Text(group.title)
+                        .font(.title3.weight(.semibold))
+                    ForEach(group.items) { item in
+                        ActivityTimelineRow(item: item, palette: palette)
+                    }
+                }
+            }
+        }
     }
 
     private func memorySection(
-        _ title: String,
+        _ title: String?,
         items: [ShannonMemoryItemDTO],
         palette: M3Palette
     ) -> some View {
         VStack(alignment: .leading, spacing: M3Spacing.medium) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-                .padding(.horizontal, M3Spacing.extraSmall)
+            if let title {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .padding(.horizontal, M3Spacing.extraSmall)
+            }
             ForEach(items) { item in
                 NavigationLink {
                     ShannonMemoryDetailView(model: model, memoryID: item.id)
@@ -144,29 +284,472 @@ public struct ShannonMemoryView: View {
         }
     }
 
-    private func emptyState(_ palette: M3Palette) -> some View {
+    private func emptyState(_ title: String, symbol: String, palette: M3Palette) -> some View {
         ContentUnavailableView {
-            Label("記憶はありません", systemImage: filter.symbol)
+            Label(title, systemImage: symbol)
         }
         .foregroundStyle(palette.onSurfaceVariant)
         .padding(.vertical, M3Spacing.huge)
     }
-}
 
-private enum MemoryFilter: String, CaseIterable, Identifiable {
-    case all, userFact, interest, experience, relationship
-    var id: String { rawValue }
-    var kind: ShannonMemoryKindDTO? {
-        switch self {
-        case .all: nil
-        case .userFact: .userFact
-        case .interest: .interest
-        case .experience: .experience
-        case .relationship: .relationship
+    private func knowledgeCategories(_ answers: [ShannonKnowledgeAnswerDTO]) -> [(category: String, answers: [ShannonKnowledgeAnswerDTO])] {
+        let grouped = Dictionary(grouping: answers, by: \.category)
+        let order = ["基本情報", "趣味嗜好", "興味", "その他"]
+        return grouped.map { ($0.key, $0.value) }.sorted {
+            (order.firstIndex(of: $0.0) ?? 99) < (order.firstIndex(of: $1.0) ?? 99)
         }
     }
-    var title: String { kind?.japaneseName ?? "すべて" }
-    var symbol: String { kind?.symbolName ?? "square.grid.2x2" }
+
+    private func activityGroups(_ items: [ShannonActivityItemDTO]) -> [ShannonActivityGroup] {
+        let calendar = Calendar.current
+        let now = Date()
+        let thisWeek = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        var today: [ShannonActivityItemDTO] = []
+        var week: [ShannonActivityItemDTO] = []
+        var earlier: [ShannonActivityItemDTO] = []
+
+        for item in items {
+            guard let date = parsedDate(item.occurredAt) else {
+                earlier.append(item)
+                continue
+            }
+            if calendar.isDateInToday(date) {
+                today.append(item)
+            } else if date >= thisWeek {
+                week.append(item)
+            } else {
+                earlier.append(item)
+            }
+        }
+
+        return [
+            ShannonActivityGroup(id: "today", title: "今日", items: today),
+            ShannonActivityGroup(id: "week", title: "今週", items: week),
+            ShannonActivityGroup(id: "earlier", title: "それ以前", items: earlier),
+        ].filter { !$0.items.isEmpty }
+    }
+}
+
+private struct ShannonActivityGroup: Identifiable {
+    let id: String
+    let title: String
+    let items: [ShannonActivityItemDTO]
+}
+
+private struct ShannonCostCard: View {
+    let usage: ShannonLlmUsageSummaryDTO
+    let palette: M3Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            HStack {
+                Label("今月のAI使用量", systemImage: "gauge.with.dots.needle.50percent")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text(usage.monthKey).font(.caption.monospacedDigit()).foregroundStyle(palette.onSurfaceVariant)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(usage.estimatedCostUsd, format: .currency(code: "USD"))
+                    .font(.title2.bold()).foregroundStyle(palette.primary)
+                Spacer()
+                Text("バックグラウンド残り \(usage.backgroundRemainingUsd, format: .currency(code: "USD"))")
+                    .font(.caption).foregroundStyle(palette.onSurfaceVariant)
+            }
+            ProgressView(
+                value: usage.backgroundBudgetUsd > 0
+                    ? min(1, usage.backgroundCostUsd / usage.backgroundBudgetUsd)
+                    : 1
+            )
+            .tint(usage.backgroundRemainingUsd > 0 ? palette.primary : palette.error)
+            HStack {
+                Text("会話 \(calls(for: "chat"))回")
+                Spacer()
+                Text("睡眠 \(calls(for: "sleep"))回")
+            }
+            .font(.caption)
+            .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .padding(M3Spacing.large)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+    }
+
+    private func calls(for lane: String) -> Int {
+        usage.rows.first(where: { $0.lane == lane })?.calls ?? 0
+    }
+}
+
+private struct ShannonInitiativeEvaluationCard: View {
+    let evaluation: ShannonInitiativeEvaluationDTO
+    let palette: M3Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            HStack {
+                Label("最近の自発性", systemImage: "bubble.left.and.sparkles")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text("\(evaluation.windowDays)日")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(evaluation.deliveryRate, format: .percent.precision(.fractionLength(0)))
+                    .font(.title2.bold())
+                    .foregroundStyle(palette.primary)
+                Text("話しかけた割合")
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                Spacer()
+                Text("\(evaluation.delivered)件")
+                    .font(.body.weight(.semibold))
+            }
+            ProgressView(value: min(1, evaluation.deliveryRate))
+                .tint(palette.primary)
+            HStack {
+                Text("候補 \(evaluation.candidatesConsidered)件")
+                Spacer()
+                Text("静かにした \(silentRuns)回")
+            }
+            .font(.caption)
+            .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .padding(M3Spacing.large)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+    }
+
+    private var silentRuns: Int {
+        evaluation.stopped.values.reduce(0, +)
+    }
+}
+
+private struct WorldItemCard: View {
+    let item: ShannonWorldItemDTO
+    let palette: M3Palette
+
+    var body: some View {
+        HStack(alignment: .top, spacing: M3Spacing.medium) {
+            Image(systemName: "globe.asia.australia.fill")
+                .foregroundStyle(palette.primary)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(palette.onSurface)
+                    .lineLimit(3)
+                Text(item.sourceTitle)
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.up.right")
+                .font(.caption)
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .padding(M3Spacing.medium)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+    }
+}
+
+private enum MemoryArea: String, CaseIterable, Identifiable {
+    case current, knowledge, activity
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .current: "いま"
+        case .knowledge: "知識"
+        case .activity: "記憶"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .current: "waveform.path.ecg"
+        case .knowledge: "books.vertical"
+        case .activity: "clock.arrow.circlepath"
+        }
+    }
+}
+
+private struct ShannonCurrentStateCard: View {
+    let state: CompanionStateDTO
+    let palette: M3Palette
+    @State private var showsDetails = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: M3Spacing.large) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("いまのシャノン", systemImage: "brain.head.profile.fill")
+                        .font(.title3.weight(.semibold))
+                    Text("更新 \(displayDate(state.updatedAt))")
+                        .font(.caption)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+                Spacer()
+                Text("v\(state.version)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(palette.primary)
+            }
+            HStack(spacing: M3Spacing.medium) {
+                Image(systemName: dominantState.symbol)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(palette.onPrimaryContainer)
+                    .frame(width: 52, height: 52)
+                    .background(palette.primaryContainer, in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(dominantState.label)
+                        .font(.title2.weight(.semibold))
+                    Text(dominantState.value.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(palette.onSurfaceVariant)
+                }
+            }
+
+            if let focus = state.interests.first {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("今日の関心")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.primary)
+                    Text(focus)
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(palette.onSurface)
+                }
+                .padding(M3Spacing.medium)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.primaryContainer.opacity(0.56), in: RoundedRectangle(cornerRadius: M3Shape.large))
+            }
+
+            if !state.activeMemories.isEmpty {
+                VStack(alignment: .leading, spacing: M3Spacing.small) {
+                    Text("頭に浮かんでいること")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.onSurfaceVariant)
+                    ForEach(state.activeMemories.prefix(2)) { memory in
+                        HStack(alignment: .top, spacing: M3Spacing.small) {
+                            Circle().fill(palette.primary).frame(width: 6, height: 6).padding(.top, 6)
+                            Text(memory.summary)
+                                .font(.callout)
+                                .foregroundStyle(palette.onSurface)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+
+            DisclosureGroup(isExpanded: $showsDetails) {
+                VStack(spacing: M3Spacing.medium) {
+                    stateMeter("気分", value: (state.emotion.valence + 1) / 2)
+                    stateMeter("活性", value: state.emotion.arousal)
+                    stateMeter("心の開き", value: state.emotion.openness)
+                    stateMeter("好奇心", value: state.temperament.curiosity)
+                    stateMeter("親密さ", value: state.temperament.closeness)
+                }
+                .padding(.top, M3Spacing.medium)
+            } label: {
+                Text("状態の詳細")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            .tint(palette.primary)
+        }
+        .padding(M3Spacing.large)
+        .background(
+            LinearGradient(
+                colors: [palette.surface, palette.primaryContainer.opacity(0.18)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: M3Shape.extraLarge)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+    }
+
+    private func stateMeter(_ title: String, value: Double) -> some View {
+        VStack(spacing: 5) {
+            HStack {
+                Text(title).font(.callout)
+                Spacer()
+                Text(value.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            ProgressView(value: min(1, max(0, value))).tint(palette.primary)
+        }
+    }
+
+    private var dominantState: (label: String, symbol: String, value: Double) {
+        let candidates = [
+            ("好奇心が強い", "sparkles", state.temperament.curiosity),
+            ("心を開いている", "heart.circle.fill", state.emotion.openness),
+            ("元気がある", "bolt.fill", state.emotion.arousal),
+            ("穏やか", "cloud.sun.fill", state.temperament.calmness),
+            ("距離が近い", "person.2.fill", state.temperament.closeness),
+        ]
+        return candidates.max(by: { $0.2 < $1.2 }) ?? candidates[0]
+    }
+}
+
+private struct MemorySimpleSection: View {
+    let title: String
+    let symbol: String
+    let values: [String]
+    let palette: M3Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            Label(title, systemImage: symbol).font(.title3.weight(.semibold))
+            ForEach(values, id: \.self) { value in
+                Text(value)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(M3Spacing.medium)
+                    .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+            }
+        }
+    }
+}
+
+private struct KnowledgeAnswerCard: View {
+    let answer: ShannonKnowledgeAnswerDTO
+    let palette: M3Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(answer.question)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.primary)
+                Spacer()
+                if answer.confirmed {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.caption)
+                        .foregroundStyle(palette.primary)
+                }
+            }
+            Text(answer.answer)
+                .font(.body)
+                .foregroundStyle(palette.onSurface)
+                .multilineTextAlignment(.leading)
+            HStack {
+                Text(answer.source == "user" ? "手動編集" : answer.source == "conversation" ? "会話" : "AI推測")
+                Spacer()
+                Text(answer.confidence.formatted(.percent.precision(.fractionLength(0))))
+            }
+            .font(.caption)
+            .foregroundStyle(palette.onSurfaceVariant)
+            Text("更新 \(displayDate(answer.updatedAt))")
+                .font(.caption2)
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .padding(M3Spacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.large)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct ShannonDiaryCard: View {
+    let report: ShannonSleepReportDTO
+    let palette: M3Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            HStack {
+                Image(systemName: "moon.stars.fill")
+                    .foregroundStyle(palette.primary)
+                Spacer()
+                Text(report.dayKey)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            Text(title)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(palette.onSurface)
+                .lineLimit(2)
+            Text(summary)
+                .font(.caption)
+                .foregroundStyle(palette.onSurfaceVariant)
+                .lineLimit(3)
+            Spacer(minLength: 0)
+            HStack {
+                Text("読む")
+                Spacer()
+                Image(systemName: "chevron.right")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(palette.primary)
+        }
+        .padding(M3Spacing.large)
+        .frame(width: 236, height: 176, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.large)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+    }
+
+    private var title: String {
+        if let interest = report.interestChanges.first { return interest.text }
+        if let learned = report.learned.first { return learned.text }
+        if let updated = report.updated.first { return updated.text }
+        if !report.contradictions.isEmpty { return "まだ決めずに置いておくこと" }
+        return "静かに整理した夜"
+    }
+
+    private var summary: String {
+        let learnedCount = report.learned.count + report.updated.count
+        let interestCount = report.interestChanges.count
+        let pendingCount = report.contradictions.count
+        var parts: [String] = []
+        if learnedCount > 0 { parts.append("理解が\(learnedCount)件深まった") }
+        if interestCount > 0 { parts.append("関心が\(interestCount)件動いた") }
+        if pendingCount > 0 { parts.append("\(pendingCount)件は保留した") }
+        return parts.isEmpty ? "大きく書き換えず、そのまま覚えている。" : parts.joined(separator: "。") + "。"
+    }
+}
+
+private struct ActivityTimelineRow: View {
+    let item: ShannonActivityItemDTO
+    let palette: M3Palette
+
+    var body: some View {
+        HStack(alignment: .top, spacing: M3Spacing.medium) {
+            Image(systemName: symbol)
+                .foregroundStyle(palette.primary)
+                .frame(width: 36, height: 36)
+                .background(palette.secondaryContainer, in: Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title).font(.body.weight(.semibold))
+                if let detail = item.detail, !detail.isEmpty {
+                    Text(detail).font(.callout).foregroundStyle(palette.onSurfaceVariant).lineLimit(3)
+                }
+                Text(displayDate(item.occurredAt)).font(.caption).foregroundStyle(palette.onSurfaceVariant)
+            }
+            Spacer()
+        }
+        .padding(.vertical, M3Spacing.extraSmall)
+    }
+
+    private var symbol: String {
+        switch item.type {
+        case "sleep": "moon.stars.fill"
+        case "knowledge": "brain.head.profile"
+        case "conversation": "bubble.left.and.bubble.right"
+        default: "sparkles"
+        }
+    }
 }
 
 private struct MemoryCard: View {
@@ -450,6 +1033,7 @@ private struct ShannonMemoryDetailView: View {
 private struct ShannonSleepReportView: View {
     let report: ShannonSleepReportDTO
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let palette = M3Palette.resolve(colorScheme)
@@ -473,6 +1057,14 @@ private struct ShannonSleepReportView: View {
         }
         .background(palette.surfaceContainerLow)
         .navigationTitle("睡眠後の変化")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("閉じる") { dismiss() }
+            }
+        }
     }
 
     private func reportSection(
@@ -546,9 +1138,13 @@ private func sleepSummary(_ report: ShannonSleepReportDTO) -> String {
 }
 
 private func displayDate(_ value: String) -> String {
-    let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
-    let date = (try? fractional.parse(value)) ?? (try? Date.ISO8601FormatStyle().parse(value))
+    let date = parsedDate(value)
     return date?.formatted(date: .abbreviated, time: .shortened) ?? value
+}
+
+private func parsedDate(_ value: String) -> Date? {
+    let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    return (try? fractional.parse(value)) ?? (try? Date.ISO8601FormatStyle().parse(value))
 }
 
 private func sourceName(_ value: String) -> String {

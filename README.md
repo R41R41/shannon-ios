@@ -7,7 +7,9 @@
 - v1は固定LLMを使う。
 - FCAは開始時の確定済み共有状態を一度だけ受け取る。
 - 感情評価と記憶想起はFCAの外側で非同期に動き、次の返答から共有状態として影響する。投稿アイコンだけは同じ法則の軽量な反応投影を即時表示する。
-- 予測、Aether連携、追加学習、自動コード更新はv1に含めない。
+- 予測、追加学習、ユーザー別ファインチューニングはv1に含めない。
+- Aetherは用途を限定した文脈投影だけを読み、更新案はproposal inboxへ送る。
+- コード変更はユーザーが開始したAgent Taskだけで行い、自律的な自己書き換えはしない。
 - 睡眠バッチは一日分の経験からユーザー情報だけを慎重に更新する。
 
 ## 構成
@@ -18,6 +20,8 @@
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
 - `deploy/azure`: 既存サービスから分離したsystemd・nginx・秘密値配置のレビュー用テンプレート。
+- `deploy/macos`: ユーザー指示の自己改修をCodexへ橋渡しするAgent Hostのlaunchd設定。
+- `AGENTS.md`: Codexが毎回読む実装上の境界と優先順位。
 
 ## 開発
 
@@ -26,6 +30,15 @@ pnpm install
 pnpm check
 pnpm test
 pnpm dev:api
+```
+
+Codexを含む全開発経路では、同じ検証入口を使う。
+
+```sh
+scripts/verify.sh api
+scripts/verify.sh ios
+scripts/verify.sh app
+scripts/verify.sh all
 ```
 
 別ターミナルで背景workerを起動する。APIは感情・想起・睡眠処理を待たない。
@@ -71,3 +84,5 @@ FCA・感情・記憶がどう分離して動くかは [`docs/shannon-fca-v1-run
 Azure接続とペアリングの安全境界は [`docs/shannon-azure-pairing.html`](docs/shannon-azure-pairing.html) にまとめている。
 
 独立workerと睡眠バッチは [`docs/shannon-background-sleep.html`](docs/shannon-background-sleep.html) で視覚的に確認できる。
+
+現在の実装上の正本は [`docs/architecture.md`](docs/architecture.md)、自己改修の完了条件と配備・復旧手順は [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md) にまとめている。番号付きHTML資料は設計履歴であり、明示的に指定されない限り現在仕様より優先しない。

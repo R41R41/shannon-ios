@@ -1,0 +1,62 @@
+# Shannon development instructions
+
+This repository contains the current Shannon iOS app, its API, background workers, and the Mac Agent Host used for user-directed self-improvement.
+
+## Instruction authority
+
+For every task, use this order when sources disagree:
+
+1. The user's current request.
+2. This file.
+3. `docs/architecture.md` for the current implemented system.
+4. `docs/self-improvement-runbook.md` for verification and deployment.
+
+Numbered HTML files under `docs/` are design history. They are useful context, but they are not current implementation authority unless the user explicitly names one.
+
+## Product invariants
+
+- The app name is `Shannon`; the character's Japanese display name is `シャノン`.
+- Ordinary chat must not wait for emotion updates, memory extraction, sleep consolidation, web exploration, push delivery, or self-improvement work.
+- v1 uses a fixed LLM. Personality, emotion, interests, user knowledge, recalled memories, and current task state are prompt/shared-state inputs. Do not introduce per-user fine-tuning or prediction-error training.
+- Aether data enters Shannon only through the bounded projection. Shannon writes suggestions to Aether's proposal inbox; it does not silently rewrite Aether.
+- Source-code modification is user-directed. Never start autonomous self-rewriting from background activity.
+- `agent_tasks` and their event stream are the durable authority for task status. Chat summaries are projections, not the source of truth.
+- Preserve conversation history, memory, device pairing, Keychain credentials, and the production SQLite database across updates.
+
+## Repository map
+
+- `apps/ios`: Swift package containing Shannon's SwiftUI screens, models, local cache, and tests.
+- `apps/ios-app`: signed iOS application shell and Xcode project.
+- `services/api`: HTTPS API, SQLite persistence, workers, Agent Host bridge, Aether projection, and tests.
+- `packages/cognition`: pure prompt/state transitions without database, timer, or network ownership.
+- `deploy/azure`: production service templates.
+- `deploy/macos`: Mac Agent Host launch configuration.
+- `docs/architecture.md`: concise current architecture.
+- `docs/self-improvement-runbook.md`: definition of done and recovery steps.
+
+## Data ownership
+
+- Azure SQLite is the durable source of truth for conversations, knowledge, memories, background activity, and agent tasks.
+- The iOS conversation cache is an offline/display cache and must reconcile with the server without erasing newer local entries.
+- Database changes must be additive and restart-safe. Back up the production database before a migration and verify row counts or health afterward.
+- Secrets belong in ignored `.env` files, the Azure environment file, launchd environment, or iOS Keychain. Never copy secret values into source, logs, tests, prompts, or documentation.
+
+## Working method
+
+1. Inspect `git status` before editing. The worktree may contain valuable unfinished user changes; preserve unrelated work.
+2. Resolve the requested surface to its owning layer, then read the relevant current source and tests.
+3. Implement a coherent vertical slice. Do not report a partial UI or a compile-only result as complete.
+4. Run `scripts/verify.sh` with the narrowest useful target, then `scripts/verify.sh all` for cross-layer work.
+5. If the user requests Azure or physical-device delivery, follow the runbook and complete that delivery. Do not uninstall the app as part of an update.
+6. If an external prerequisite is unavailable, leave the durable task state accurate and name the exact remaining step.
+
+## Verification commands
+
+```sh
+scripts/verify.sh api
+scripts/verify.sh ios
+scripts/verify.sh app
+scripts/verify.sh all
+```
+
+Use the real-LLM evaluations only when a change affects extraction, proposal decisions, or model behavior and credentials are deliberately available. Normal regression tests must remain deterministic and free of billable calls.

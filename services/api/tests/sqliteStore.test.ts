@@ -33,9 +33,11 @@ describe('SQLite Shannon persistence', () => {
     const first = new SQLiteShannonStore({ path, now });
     first.apply('owner-a', { type: 'emotion-adjusted', delta: { valence: 0.4, arousal: 0.2 } });
     const expected = first.apply('owner-a', { type: 'interest-observed', interest: '脳科学' });
-    first.appendTurn('owner-a', '脳科学の続きを話そう', 'うん、続きを聞かせて。', now(), {
+    const threadId = first.createThread('owner-a', 'テスト');
+    first.appendTurn('owner-a', threadId, '脳科学の続きを話そう', 'うん、続きを聞かせて。', now(), {
       capturedStateVersion: expected.version,
       messageEmotion: { valence: 0.4, arousal: 0.5, openness: 0.35, expression: 'curious' },
+      taskDecision: { disposition: 'propose', reason: '明示的な改修依頼' },
     });
     expect(first.events('owner-a').map(event => event.type)).toEqual([
       'state.initialized',
@@ -59,6 +61,7 @@ describe('SQLite Shannon persistence', () => {
       role: 'assistant',
       messageEmotion: { expression: 'curious' },
       stateVersion: 2,
+      taskDecision: { disposition: 'propose', reason: '明示的な改修依頼' },
     });
     expect(reopened.experienceCandidates('owner-a')).toEqual([
       expect.objectContaining({ summary: expect.stringContaining('脳科学の続きを話そう') }),
@@ -78,6 +81,179 @@ describe('SQLite Shannon persistence', () => {
     expect(store.events('owner-a').every(event => event.scopeKey === 'owner-a')).toBe(true);
     expect(store.events('owner-b').every(event => event.scopeKey === 'owner-b')).toBe(true);
     store.close();
+  });
+
+  it('keeps histories isolated between threads while sharing the owner state', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const store = new SQLiteShannonStore({ path, now });
+    const firstThread = store.createThread('owner-a', '創作');
+    const secondThread = store.createThread('owner-a', '旅行');
+
+    store.appendTurn('owner-a', firstThread, '小説の続きを考えたい', '続きを考えよう。', now());
+    store.appendTurn('owner-a', secondThread, '京都へ行きたい', '季節も考えよう。', now());
+    store.apply('owner-a', { type: 'interest-observed', interest: '散歩' });
+
+    expect(store.conversationHistory('owner-a', firstThread).map(message => message.content)).toEqual([
+      '小説の続きを考えたい', '続きを考えよう。',
+    ]);
+    expect(store.conversationHistory('owner-a', secondThread).map(message => message.content)).toEqual([
+      '京都へ行きたい', '季節も考えよう。',
+    ]);
+    expect(store.listThreads('owner-a').map(thread => thread.threadId)).toEqual([secondThread, firstThread]);
+    expect(store.snapshot('owner-a').interests).toEqual(['散歩']);
+    store.close();
+  });
+
+  it('archives one thread without deleting its messages or selecting it again', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const store = new SQLiteShannonStore({ path, now });
+    const firstThread = store.createThread('owner-a', '残す');
+    const archivedThread = store.createThread('owner-a', 'しまう');
+    store.appendTurn('owner-a', archivedThread, 'あとで読む', '保管しておくね。', now());
+
+    expect(store.archiveThread('owner-a', archivedThread)).toBe(true);
+    expect(store.listThreads('owner-a').map(item => item.threadId)).toEqual([firstThread]);
+    expect(store.threadId('owner-a')).toBe(firstThread);
+    store.close();
+    const database = new DatabaseSync(path);
+    const retained = database.prepare('SELECT COUNT(*) AS count FROM conversation_messages WHERE thread_id = ?').get(archivedThread) as { count: number };
+    expect(Number(retained.count)).toBe(2);
+    database.close();
+  });
+
+  it('persists a renamed thread across database reopen', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const first = new SQLiteShannonStore({ path, now });
+    const threadId = first.createThread('owner-a', '仮のタイトル');
+
+    expect(first.renameThread('owner-a', threadId, '保存したタイトル')).toBe(true);
+    first.close();
+
+    const reopened = new SQLiteShannonStore({ path, now });
+    expect(reopened.listThreads('owner-a')).toEqual([
+      expect.objectContaining({ threadId, title: '保存したタイトル' }),
+    ]);
+    reopened.close();
+  });
+
+  it('migrates a schema v2 conversation into one legacy thread without losing messages', () => {
+    const path = databasePath();
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`
+      CREATE TABLE companion_states (
+        scope_key TEXT PRIMARY KEY,
+        version INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL
+      );
+      CREATE TABLE conversation_messages (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id TEXT NOT NULL UNIQUE,
+        scope_key TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        ordinal INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        metadata_json TEXT
+      );
+      INSERT INTO conversation_messages
+        (message_id, scope_key, turn_id, ordinal, role, content, observed_at, metadata_json)
+      VALUES
+        ('m1', 'owner-a', 'turn-1', 0, 'user', '消してはいけない会話', '2026-08-30T00:00:00.000Z', NULL),
+        ('m2', 'owner-a', 'turn-1', 1, 'assistant', '覚えているよ', '2026-08-30T00:00:01.000Z', NULL);
+      PRAGMA user_version = 2;
+    `);
+    legacy.close();
+
+    const migrated = new SQLiteShannonStore({ path, now: () => '2026-09-02T00:00:00.000Z' });
+    const threads = migrated.listThreads('owner-a');
+    expect(threads).toHaveLength(1);
+    expect(threads[0]?.threadId).toBe('legacy:owner-a');
+    expect(migrated.conversationHistory('owner-a', threads[0]?.threadId).map(message => message.content)).toEqual([
+      '消してはいけない会話', '覚えているよ',
+    ]);
+    migrated.close();
+  });
+
+  it('projects user facts into categorized QA knowledge with evidence and revisions', () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: sequenceClock() });
+    store.apply('owner-a', {
+      type: 'user-fact-upserted',
+      source: 'conversation',
+      fact: {
+        id: 'favorite-food',
+        statement: 'ユーザーの好きな食べ物は寿司',
+        confidence: 0.95,
+        observedAt: '2026-09-02T00:00:00.000Z',
+        evidence: '好きな食べ物は寿司',
+      },
+    });
+    expect(store.knowledgeAnswers('owner-a')).toEqual([
+      expect.objectContaining({
+        answerId: 'favorite-food',
+        questionKey: 'preference.food',
+        category: '趣味嗜好',
+        question: '好きな食べ物は？',
+        answer: 'ユーザーの好きな食べ物は寿司',
+        source: 'conversation',
+        confirmed: true,
+        evidence: [expect.objectContaining({ quote: '好きな食べ物は寿司' })],
+      }),
+    ]);
+
+    store.apply('owner-a', {
+      type: 'user-fact-upserted',
+      source: 'sleep',
+      fact: {
+        id: 'favorite-food',
+        statement: 'ユーザーの好きな食べ物はカレー',
+        confidence: 0.8,
+        observedAt: '2026-09-03T00:00:00.000Z',
+        evidence: '最近はカレーが好き',
+      },
+    });
+    expect(store.knowledgeRevisions('owner-a', 'favorite-food')).toEqual([
+      expect.objectContaining({
+        previousAnswer: 'ユーザーの好きな食べ物は寿司',
+        nextAnswer: 'ユーザーの好きな食べ物はカレー',
+      }),
+    ]);
+    expect(store.promptProjection('owner-a')).toContain('ユーザーの好きな食べ物はカレー');
+
+    store.correctKnowledge('owner-a', 'favorite-food', 'ユーザーの好きな食べ物は蕎麦', '2026-09-04T00:00:00.000Z');
+    expect(store.promptProjection('owner-a')).toContain('ユーザーの好きな食べ物は蕎麦');
+    expect(store.knowledgeAnswers('owner-a')[0]).toMatchObject({ source: 'user', confirmed: true, confidence: 1 });
+    store.close();
+  });
+
+  it('persists token usage by lane and calculates the background monthly spend', () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: sequenceClock() });
+    store.recordLlmUsage({
+      scopeKey: 'owner-a', lane: 'chat', model: 'gpt-5.6-luna', inputTokens: 100,
+      cachedInputTokens: 20, outputTokens: 30, totalTokens: 130,
+      estimatedCostUsd: 0.000056, occurredAt: '2026-09-02T00:00:00.000Z',
+    });
+    store.recordLlmUsage({
+      scopeKey: 'owner-a', lane: 'sleep', model: 'gpt-5.6-luna', inputTokens: 500,
+      cachedInputTokens: 0, outputTokens: 100, totalTokens: 600,
+      estimatedCostUsd: 0.00022, occurredAt: '2026-09-03T00:00:00.000Z',
+    });
+    expect(store.llmUsageSummary('owner-a', '2026-09')).toEqual([
+      expect.objectContaining({ lane: 'chat', calls: 1, totalTokens: 130 }),
+      expect.objectContaining({ lane: 'sleep', calls: 1, totalTokens: 600 }),
+    ]);
+    expect(store.backgroundLlmCostUsd('2026-09')).toBeCloseTo(0.00022, 9);
+    store.close();
+
+    const database = new DatabaseSync(path);
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
+    database.close();
   });
 
   it('continues FCA history after an API process restart and reacts on the current icon', async () => {
@@ -136,7 +312,8 @@ describe('SQLite Shannon persistence', () => {
   it('migrates schema v1 without replaying background effects already applied by the old API', () => {
     const path = databasePath();
     const first = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:00.000Z' });
-    first.appendTurn('owner-a', '完成して嬉しい！', 'よかった。', '2026-08-31T00:00:00.000Z');
+    const threadId = first.createThread('owner-a', '旧DB移行');
+    first.appendTurn('owner-a', threadId, '完成して嬉しい！', 'よかった。', '2026-08-31T00:00:00.000Z');
     first.apply('owner-a', { type: 'emotion-adjusted', delta: { valence: 0.14 } });
     first.close();
 

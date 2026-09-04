@@ -5,7 +5,40 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>シャノン</string>
+    <string>Shannon</string>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconName</key>
+            <string>AppIcon</string>
+        </dict>
+        <key>CFBundleAlternateIcons</key>
+        <dict>
+            <key>ShannonIconCalm</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCalm</string></array></dict>
+            <key>ShannonIconJoyful</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconJoyful</string></array></dict>
+            <key>ShannonIconCurious</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCurious</string></array></dict>
+            <key>ShannonIconSleepy</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconSleepy</string></array></dict>
+            <key>ShannonIconExasperated</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconExasperated</string></array></dict>
+            <key>ShannonIconExcited</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconExcited</string></array></dict>
+            <key>ShannonIconLaughing</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconLaughing</string></array></dict>
+            <key>ShannonIconTender</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconTender</string></array></dict>
+            <key>ShannonIconBashful</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconBashful</string></array></dict>
+            <key>ShannonIconDetermined</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconDetermined</string></array></dict>
+            <key>ShannonIconSleeping</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconSleeping</string></array></dict>
+        </dict>
+    </dict>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>

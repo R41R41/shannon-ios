@@ -5,8 +5,8 @@ import { TurnRefinementProcessor } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import {
   consolidateSleepMemory,
+  LocalRuleSleepMemoryAnalyzer,
   type SleepMemoryAnalyzer,
-  type UserFactProposal,
 } from './sleepConsolidation.js';
 
 export interface BackgroundWorkerOptions {
@@ -16,6 +16,7 @@ export interface BackgroundWorkerOptions {
   leaseMilliseconds?: number;
   now?: () => Date;
   reportError?: (code: string) => void;
+  minimumSleepMessages?: number;
 }
 
 export class ShannonBackgroundWorker {
@@ -26,6 +27,8 @@ export class ShannonBackgroundWorker {
   private readonly leaseMilliseconds: number;
   private readonly now: () => Date;
   private readonly reportError: (code: string) => void;
+  private readonly minimumSleepMessages: number;
+  private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
 
   constructor(
@@ -42,6 +45,7 @@ export class ShannonBackgroundWorker {
     this.leaseMilliseconds = options.leaseMilliseconds ?? 120_000;
     this.now = options.now ?? (() => new Date());
     this.reportError = options.reportError ?? (code => console.error('Shannon worker job failed', code));
+    this.minimumSleepMessages = Math.max(1, Math.trunc(options.minimumSleepMessages ?? 3));
   }
 
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
@@ -69,33 +73,23 @@ export class ShannonBackgroundWorker {
   private async process(job: ClaimedBackgroundJob, completedAt: string): Promise<void> {
     if (job.payload.kind === 'turn-refinement') {
       const payload = job.payload;
-      let supplementalProposals: UserFactProposal[] = [];
-      if (this.sleepAnalyzer.mode === 'openai') {
-        try {
-          supplementalProposals = [...await this.sleepAnalyzer.analyze([
-            { content: payload.userMessage, observedAt: completedAt },
-          ])];
-        } catch {
-          this.reportError('IMMEDIATE_MEMORY_LLM_FAILED');
-        }
-      }
       this.jobStore.completeClaimedBackgroundJob(job, this.workerId, completedAt, () => {
         this.processor.process(
           job.scopeKey,
           payload.userMessage,
           payload.experienceId,
           completedAt,
-          supplementalProposals,
         );
       });
       return;
     }
     const messages = this.jobStore.dailyUserMessages(job.scopeKey, job.payload.startAt, job.payload.endAt);
     const outcome = await consolidateSleepMemory(
-      this.sleepAnalyzer,
+      messages.length >= this.minimumSleepMessages ? this.sleepAnalyzer : this.localSleepAnalyzer,
       messages,
       this.stateStore.snapshot(job.scopeKey),
       job.payload.endAt,
+      { scopeKey: job.scopeKey, occurredAt: completedAt },
     );
     this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome);
   }

@@ -4,9 +4,10 @@ import { createConfiguredSleepMemoryAnalyzer } from './sleepConsolidation.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
-const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(), {
+const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
+  minimumSleepMessages: parseInteger(process.env.SHANNON_SLEEP_MIN_MESSAGES, 3),
 });
 const once = process.argv.includes('--once');
 let stopping = false;

@@ -8,6 +8,13 @@ import {
 } from '@shannon/cognition';
 import type { DailyUserMessage } from './backgroundJobStore.js';
 import type { SleepChange, SleepContradiction } from './memoryService.js';
+import {
+  configuredBackgroundBudgetUsd,
+  estimatedOpenAICostUsd,
+  responseUsage,
+  utcMonthKey,
+  type LlmUsageStore,
+} from './llmUsage.js';
 
 export interface UserFactProposal {
   kind?: 'user-fact' | 'relationship' | 'interest';
@@ -29,7 +36,12 @@ export interface SleepConsolidationOutcome {
 
 export interface SleepMemoryAnalyzer {
   readonly mode: 'openai' | 'local-rules';
-  analyze(messages: readonly DailyUserMessage[]): Promise<readonly UserFactProposal[]>;
+  analyze(messages: readonly DailyUserMessage[], context?: SleepAnalysisContext): Promise<readonly UserFactProposal[]>;
+}
+
+export interface SleepAnalysisContext {
+  scopeKey: string;
+  occurredAt: string;
 }
 
 export class LocalRuleSleepMemoryAnalyzer implements SleepMemoryAnalyzer {
@@ -89,6 +101,9 @@ interface OpenAISleepMemoryAnalyzerOptions {
   endpoint?: string;
   fetcher?: typeof fetch;
   timeoutMilliseconds?: number;
+  usageStore?: LlmUsageStore;
+  backgroundBudgetUsd?: number;
+  now?: () => Date;
 }
 
 export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
@@ -107,8 +122,11 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 30_000;
   }
 
-  async analyze(messages: readonly DailyUserMessage[]): Promise<readonly UserFactProposal[]> {
+  async analyze(messages: readonly DailyUserMessage[], context?: SleepAnalysisContext): Promise<readonly UserFactProposal[]> {
     if (!messages.length) return [];
+    const current = this.options.now?.() ?? new Date();
+    const budget = this.options.backgroundBudgetUsd ?? 0.5;
+    if ((this.options.usageStore?.backgroundLlmCostUsd(utcMonthKey(current)) ?? 0) >= budget) return [];
     const transcript = messages
       .map((message, index) => `[${index + 1}] ${message.content.replace(/\s+/g, ' ').trim().slice(0, 2_000)}`)
       .join('\n')
@@ -176,7 +194,7 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
             },
           },
         },
-        max_output_tokens: 1_200,
+        max_output_tokens: 400,
         store: false,
       }),
       signal: AbortSignal.timeout(this.timeoutMilliseconds),
@@ -184,6 +202,17 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
     const raw = await response.text();
     const json = parseJson(raw);
     if (!response.ok) throw new Error(`OPENAI_SLEEP_RESPONSE_${response.status}`);
+    const usage = responseUsage(json);
+    if (context) {
+      this.options.usageStore?.recordLlmUsage({
+        scopeKey: context.scopeKey,
+        lane: 'sleep',
+        model: this.model,
+        ...usage,
+        estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
+        occurredAt: context.occurredAt,
+      });
+    }
     const output = parseJson(extractOutputText(json));
     if (!output || typeof output !== 'object' || Array.isArray(output)) throw new Error('OPENAI_SLEEP_OUTPUT_INVALID');
     const result = output as { facts?: unknown; relationships?: unknown; interests?: unknown };
@@ -199,12 +228,15 @@ export class OpenAISleepMemoryAnalyzer implements SleepMemoryAnalyzer {
 
 export function createConfiguredSleepMemoryAnalyzer(
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  usageStore?: LlmUsageStore,
 ): SleepMemoryAnalyzer {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return new LocalRuleSleepMemoryAnalyzer();
   return new OpenAISleepMemoryAnalyzer({
     apiKey,
     model: environment.SHANNON_SLEEP_MODEL?.trim() || environment.SHANNON_LLM_MODEL?.trim(),
+    usageStore,
+    backgroundBudgetUsd: configuredBackgroundBudgetUsd(environment),
   });
 }
 
@@ -222,8 +254,9 @@ export async function consolidateSleepMemory(
   messages: readonly DailyUserMessage[],
   current: CompanionStateSnapshot,
   observedAt: string,
+  context?: SleepAnalysisContext,
 ): Promise<SleepConsolidationOutcome> {
-  const proposals = await analyzer.analyze(messages);
+  const proposals = await analyzer.analyze(messages, context);
   const source = messages.map(message => normalize(message.content)).join('\n');
   const consolidated = consolidateProposals(proposals, source, current, observedAt, 0.55);
   const facts = [...consolidated.facts];

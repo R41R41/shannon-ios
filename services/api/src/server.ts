@@ -4,21 +4,45 @@ import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiA
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
-import { configuredAuthPepper, normalizePairingCode, SQLiteDeviceAuthStore } from './deviceAuth.js';
+import {
+  configuredAuthPepper,
+  normalizePairingCode,
+  SQLiteDeviceAuthStore,
+  type ShannonDevicePrincipal,
+} from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
+import { SQLiteWorldStore } from './worldStore.js';
+import { SQLiteInitiativeStore } from './initiativeStore.js';
+import { FileAetherContextReader } from './aetherContext.js';
+import { FileAetherProposalStore } from './aetherProposal.js';
+import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotifications.js';
+import { SQLiteAgentTaskStore } from './agentTaskStore.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({
   path: configuredDatabasePath(),
   now,
 });
+const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
+const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);
+const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
+const agentTaskStore = new SQLiteAgentTaskStore(configuredDatabasePath());
 const kernel = createLocalApiKernel(now, {
-  chatModel: createConfiguredChatModel(),
+  chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
   conversationStore: persistentStore,
   background: new DurableBackgroundDispatcher(persistentStore, persistentStore),
-  memoryStore: new ShannonMemoryService(persistentStore, persistentStore, now),
+  memoryStore: new ShannonMemoryService(persistentStore, persistentStore, now, persistentStore, worldStore, persistentStore, undefined, initiativeStore),
+  knowledgeStore: persistentStore,
+  initiativeInbox: initiativeStore,
+  aetherContext: process.env.SHANNON_AETHER_CONTEXT_FILE?.trim()
+    ? new FileAetherContextReader(process.env.SHANNON_AETHER_CONTEXT_FILE.trim())
+    : undefined,
+  aetherProposals: process.env.SHANNON_AETHER_PROPOSAL_DIR?.trim()
+    ? new FileAetherProposalStore(process.env.SHANNON_AETHER_PROPOSAL_DIR.trim(), now)
+    : undefined,
+  agentTasks: agentTaskStore,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
@@ -43,6 +67,27 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (url.pathname.startsWith('/v1/agent/host/')) {
+      const hostToken = process.env.SHANNON_AGENT_HOST_TOKEN?.trim();
+      if (!hostToken || hostToken.length < 32) {
+        sendJson(response, 503, { error: 'AGENT_HOST_NOT_CONFIGURED' });
+        return;
+      }
+      if (!bearerAuthorized(request.headers.authorization, hostToken)) {
+        sendJson(response, 401, { error: 'AGENT_HOST_UNAUTHORIZED' });
+        return;
+      }
+      const hostBody = request.method === 'POST' ? await readJson(request, 256 * 1024) : undefined;
+      const result = await kernel.dispatch({
+        method: request.method,
+        path: url.pathname,
+        query: url.searchParams,
+        body: hostBody,
+      });
+      sendJson(response, result.status, result.body);
+      return;
+    }
+
     const principal = deviceAuth ? deviceAuth.authenticate(request.headers.authorization) : null;
     const authorized = authMode === 'paired'
       ? principal !== null
@@ -55,6 +100,10 @@ const server = createServer(async (request, response) => {
     const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
+    if (url.pathname === '/v1/push/register') {
+      handlePushRegistration(request, response, body, principal);
+      return;
+    }
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
     if (isPairedChat && !consumeDeviceChatAllowance(principal.deviceId)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
@@ -109,9 +158,50 @@ function shutdown(): void {
   shuttingDown = true;
   server.close(() => {
     deviceAuth?.close();
+    pushStore.close();
+    worldStore.close();
+    initiativeStore.close();
+    agentTaskStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });
+}
+
+function handlePushRegistration(
+  request: IncomingMessage,
+  response: ServerResponse,
+  body: unknown,
+  principal: ShannonDevicePrincipal | null,
+): void {
+  if (request.method !== 'POST') {
+    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return;
+  }
+  if (!principal) {
+    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
+    return;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    sendJson(response, 400, { error: 'INVALID_REQUEST' });
+    return;
+  }
+  const value = body as Record<string, unknown>;
+  const deviceToken = typeof value.deviceToken === 'string' ? value.deviceToken : '';
+  const environment = value.environment;
+  if (environment !== 'sandbox' && environment !== 'production') {
+    sendJson(response, 400, { error: 'PUSH_ENVIRONMENT_INVALID' });
+    return;
+  }
+  try {
+    pushStore.register(principal, deviceToken, environment as APNsEnvironment);
+    sendJson(response, 200, { registered: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PUSH_DEVICE_TOKEN_INVALID') {
+      sendJson(response, 400, { error: error.message });
+      return;
+    }
+    throw error;
+  }
 }
 
 process.once('SIGINT', shutdown);

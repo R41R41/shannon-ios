@@ -53,8 +53,10 @@ describe('Shannon durable background worker', () => {
   it('captures directly stated preferences and relationship wishes in the first turn-refinement job', async () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
+    const threadId = store.createThread('owner-a', '初回検証');
     store.appendTurn(
       'owner-a',
+      threadId,
       '僕は水色が好き。結論から話してほしい。最近エージェント設計に興味がある。',
       '覚えておくね。',
       '2026-09-01T10:00:00.000Z',
@@ -87,47 +89,51 @@ describe('Shannon durable background worker', () => {
     store.close();
   });
 
-  it('uses the asynchronous model analyzer for natural facts outside the fast local rules', async () => {
+  it('never calls the model analyzer during immediate turn refinement', async () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
+    const threadId = store.createThread('owner-a', '食事検証');
     const message = '食事でいちばん気分が上がるのは、お寿司かな';
-    store.appendTurn('owner-a', message, 'そうなんだね。', '2026-09-01T10:00:00.000Z');
+    store.appendTurn('owner-a', threadId, message, 'そうなんだね。', '2026-09-01T10:00:00.000Z');
+    let analyzerCalls = 0;
     const worker = new ShannonBackgroundWorker(
       store,
       store,
       store,
       {
         mode: 'openai',
-        analyze: async () => [{
+        analyze: async () => {
+          analyzerCalls += 1;
+          return [{
           kind: 'user-fact',
           statement: 'ユーザーの好きな食べ物は寿司',
           evidence: message,
-        }],
+          }];
+        },
       },
       { workerId: 'immediate-llm-worker', now: () => new Date('2026-09-01T10:00:01.000Z') },
     );
 
     expect(await worker.runOnce()).toBe('processed');
-    expect(store.snapshot('owner-a').userFacts).toEqual([
-      expect.objectContaining({ statement: 'ユーザーの好きな食べ物は寿司', confidence: 0.72 }),
-    ]);
+    expect(store.snapshot('owner-a').userFacts).toEqual([]);
+    expect(analyzerCalls).toBe(0);
     store.close();
   });
 
-  it('keeps emotion and local memory updates running when immediate model analysis fails', async () => {
+  it('keeps emotion and local memory updates independent from the sleep model', async () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });
-    store.appendTurn('owner-a', '寿司が好き。完成して嬉しい！', 'よかった。', '2026-09-01T10:00:00.000Z');
-    const errors: string[] = [];
+    const threadId = store.createThread('owner-a', '感情失敗対策');
+    store.appendTurn('owner-a', threadId, '寿司が好き。完成して嬉しい！', 'よかった。', '2026-09-01T10:00:00.000Z');
+    let analyzerCalls = 0;
     const worker = new ShannonBackgroundWorker(
       store,
       store,
       store,
-      { mode: 'openai', analyze: async () => { throw new Error('network'); } },
+      { mode: 'openai', analyze: async () => { analyzerCalls += 1; throw new Error('network'); } },
       {
         workerId: 'immediate-llm-fallback-worker',
         now: () => new Date('2026-09-01T10:00:01.000Z'),
-        reportError: code => errors.push(code),
       },
     );
 
@@ -136,7 +142,7 @@ describe('Shannon durable background worker', () => {
       expect.objectContaining({ statement: 'ユーザーは寿司が好き' }),
     ]);
     expect(store.snapshot('owner-a').emotion.valence).toBeGreaterThan(0);
-    expect(errors).toContain('IMMEDIATE_MEMORY_LLM_FAILED');
+    expect(analyzerCalls).toBe(0);
     store.close();
   });
 
@@ -190,8 +196,10 @@ describe('Shannon durable background worker', () => {
 
   it('runs one sleep consolidation per local day and learns only explicit user facts', async () => {
     const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
+    const threadId = store.createThread('owner-a', '睡眠サマリー');
     store.appendTurn(
       'owner-a',
+      threadId,
       '僕は青い照明が好き。落ち着くんだ。',
       '覚えておくね。',
       '2026-09-01T03:00:00.000Z',
@@ -214,14 +222,54 @@ describe('Shannon durable background worker', () => {
     ]);
     expect(store.snapshot('owner-a').userFacts[0]?.confidence).toBeCloseTo(0.8, 5);
     expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
+    expect(store.personalityProfile('owner-a')).toMatchObject({
+      version: 1,
+      analysis: expect.stringContaining('青い照明'),
+    });
+    expect(store.promptProjection('owner-a')).toContain('[Personality analysis v1]');
     expect(await worker.runOnce()).toBe('idle');
+    store.close();
+  });
+
+  it('does not spend a sleep-model call on a day with fewer than three user messages', async () => {
+    const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
+    const threadId = store.createThread('owner-a', '短い一日');
+    store.appendTurn(
+      'owner-a', threadId, '僕は桃が好き。', '覚えておくね。', '2026-09-01T03:00:00.000Z',
+    );
+    let analyzerCalls = 0;
+    const worker = new ShannonBackgroundWorker(
+      store,
+      store,
+      store,
+      {
+        mode: 'openai',
+        analyze: async () => {
+          analyzerCalls += 1;
+          return [];
+        },
+      },
+      {
+        workerId: 'minimum-sleep-messages-worker',
+        timeZone: 'Asia/Tokyo',
+        sleepHour: 3,
+        minimumSleepMessages: 3,
+        now: () => new Date('2026-09-01T18:30:00.000Z'),
+      },
+    );
+
+    expect(await worker.runOnce()).toBe('processed'); // turn refinement
+    expect(await worker.runOnce()).toBe('processed'); // local-only sleep consolidation
+    expect(analyzerCalls).toBe(0);
+    expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
     store.close();
   });
 
   it('recovers a turn saved immediately before an API process crash', async () => {
     const path = databasePath();
     const apiStore = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:00.000Z' });
-    apiStore.appendTurn('owner-a', '嬉しい！', 'よかった。', '2026-08-31T00:00:00.000Z');
+    const threadId = apiStore.createThread('owner-a', 'クラッシュ復旧');
+    apiStore.appendTurn('owner-a', threadId, '嬉しい！', 'よかった。', '2026-08-31T00:00:00.000Z');
     apiStore.close();
 
     const workerStore = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:01.000Z' });
@@ -255,8 +303,33 @@ describe('Shannon durable background worker', () => {
     expect(proposals).toHaveLength(1);
     expect(requestBody).toMatchObject({
       store: false,
+      max_output_tokens: 400,
       text: { format: { type: 'json_schema', strict: true } },
     });
+  });
+
+  it('stops background OpenAI analysis when the monthly budget is exhausted', async () => {
+    let fetchCalls = 0;
+    const analyzer = new OpenAISleepMemoryAnalyzer({
+      apiKey: 'test-key',
+      backgroundBudgetUsd: 0.5,
+      now: () => new Date('2026-09-02T00:00:00.000Z'),
+      usageStore: {
+        recordLlmUsage: () => undefined,
+        backgroundLlmCostUsd: monthKey => monthKey === '2026-09' ? 0.5 : 0,
+      },
+      fetcher: async () => {
+        fetchCalls += 1;
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    const proposals = await analyzer.analyze(
+      [{ content: '僕は猫が好き', observedAt: '2026-09-01T00:00:00.000Z' }],
+      { scopeKey: 'owner-a', occurredAt: '2026-09-02T00:00:00.000Z' },
+    );
+    expect(proposals).toEqual([]);
+    expect(fetchCalls).toBe(0);
   });
 
   it('rejects a proposed fact when its evidence is absent from the transcript', async () => {

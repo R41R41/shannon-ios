@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class ShannonConversationModelTests: XCTestCase {
+    func testTimelineAddsOneQuietDividerPerCalendarDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let messages = [
+            ConversationMessage(role: .user, text: "一日目", sentAt: Date(timeIntervalSince1970: 1_788_307_200)),
+            ConversationMessage(role: .shannon, text: "一日目の返事", sentAt: Date(timeIntervalSince1970: 1_788_307_260)),
+            ConversationMessage(role: .user, text: "二日目", sentAt: Date(timeIntervalSince1970: 1_788_393_600)),
+        ]
+
+        let items = ShannonConversationTimeline.items(from: messages, calendar: calendar)
+
+        XCTAssertEqual(items.count, 5)
+        XCTAssertEqual(items.filter {
+            if case .day = $0 { return true }
+            return false
+        }.count, 2)
+    }
+
     func testSuccessfulTurnAppendsBothMessagesAndState() async {
         let response = TestFixtures.chatResponse(version: 3, reply: "聞いてるよ", expression: .calm)
         let model = ShannonConversationModel(client: StubClient(response: response))
@@ -66,6 +84,7 @@ final class ShannonConversationModelTests: XCTestCase {
 
     func testLoadsPersistedConversationAndExpressionOnce() async {
         let history = ConversationHistoryResponseDTO(
+            threadId: "persisted-thread",
             messages: [
                 StoredConversationMessageDTO(
                     id: "26F3D19A-A881-40C4-99BB-6C738E86CC05",
@@ -104,11 +123,91 @@ final class ShannonConversationModelTests: XCTestCase {
         let loadCount = await client.loadCount
         XCTAssertEqual(loadCount, 1)
     }
+
+    func testLoadsLatestThreadAndSwitchesWithoutMixingMessages() async {
+        let client = ThreadClient()
+        let model = ShannonConversationModel(client: client)
+
+        await model.loadConversationIfNeeded()
+        XCTAssertEqual(model.selectedThreadId, "thread-new")
+        XCTAssertEqual(model.messages.map(\.text), ["新しいトークの会話"])
+
+        await model.selectThread("thread-old")
+        XCTAssertEqual(model.selectedThreadId, "thread-old")
+        XCTAssertEqual(model.messages.map(\.text), ["古いトークの会話"])
+        XCTAssertFalse(model.messages.contains(where: { $0.text == "新しいトークの会話" }))
+    }
+
+    func testRenamingThreadUpdatesTheListImmediatelyAfterSaving() async {
+        let client = RenameThreadClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+
+        await model.loadThreads(force: true)
+        let didRename = await model.renameThread("thread-rename", title: "週末の計画")
+
+        XCTAssertTrue(didRename)
+        XCTAssertEqual(model.threads.first?.title, "週末の計画")
+        XCTAssertNil(model.errorMessage)
+        let captured = await client.capturedRename
+        XCTAssertEqual(captured?.threadId, "thread-rename")
+        XCTAssertEqual(captured?.title, "週末の計画")
+    }
+
+    func testExplicitlySendsOnlyAShannonReplyToAetherProposalInbox() async {
+        let client = ProposalClient()
+        let reply = ConversationMessage(role: .shannon, text: "設計案\nこの内容を残したい")
+        let model = ShannonConversationModel(client: client, messages: [reply], usesDisplayCache: false)
+
+        await model.sendToAether(reply)
+
+        let captured = await client.captured
+        XCTAssertEqual(captured?.title, "設計案")
+        XCTAssertEqual(captured?.content, reply.text)
+        XCTAssertEqual(model.statusMessage, "Aetherの提案箱へ送りました。")
+        XCTAssertNil(model.errorMessage)
+        XCTAssertTrue(model.aetherSubmittedMessageIDs.contains(reply.id))
+        await model.sendToAether(reply)
+        let callCount = await client.callCount
+        XCTAssertEqual(callCount, 1)
+    }
+
+    func testInitiativeRefreshKeepsUnreadUntilTheTalkIsExplicitlyOpened() async {
+        let client = InitiativeClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+
+        await model.refreshInitiatives()
+
+        XCTAssertEqual(model.selectedThreadId, "initiative-thread")
+        XCTAssertEqual(model.messages.map(\.text), ["シャノンから届いた話"])
+        XCTAssertEqual(model.unreadInitiativeCount, 1)
+        XCTAssertEqual(model.initiativeThreadIDs, ["initiative-thread"])
+        let refreshAcknowledgements = await client.markReadCount
+        XCTAssertEqual(refreshAcknowledgements, 0)
+
+        await model.acknowledgeVisibleInitiatives()
+
+        XCTAssertEqual(model.unreadInitiativeCount, 0)
+        XCTAssertTrue(model.initiativeThreadIDs.isEmpty)
+        let explicitAcknowledgements = await client.markReadCount
+        XCTAssertEqual(explicitAcknowledgements, 1)
+    }
+
+    func testSelectingTheAlreadyVisibleInitiativeThreadAcknowledgesIt() async {
+        let client = InitiativeClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        await model.refreshInitiatives()
+
+        await model.selectThread("initiative-thread")
+
+        XCTAssertEqual(model.unreadInitiativeCount, 0)
+        let acknowledgements = await client.markReadCount
+        XCTAssertEqual(acknowledgements, 1)
+    }
 }
 
 private struct StubClient: ShannonAPIClientProtocol {
     let response: ChatResponseDTO
-    func send(message: String, scopeKey: String) async throws -> ChatResponseDTO { response }
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO { response }
 }
 
 private enum TestFailure: Error {
@@ -122,7 +221,7 @@ private actor SequenceClient: ShannonAPIClientProtocol {
         self.results = results
     }
 
-    func send(message: String, scopeKey: String) async throws -> ChatResponseDTO {
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
         try results.removeFirst().get()
     }
 }
@@ -135,13 +234,163 @@ private actor HistoryClient: ShannonAPIClientProtocol {
         self.history = history
     }
 
-    func send(message: String, scopeKey: String) async throws -> ChatResponseDTO {
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
         TestFixtures.chatResponse()
     }
 
-    func loadConversation(scopeKey: String) async throws -> ConversationHistoryResponseDTO {
+    func loadConversation(scopeKey: String, threadId: String?) async throws -> ConversationHistoryResponseDTO {
         loadCount += 1
         return history
+    }
+}
+
+private actor ProposalClient: ShannonAPIClientProtocol {
+    struct Captured: Sendable {
+        let title: String
+        let content: String
+        let reason: String
+    }
+    private(set) var captured: Captured?
+    private(set) var callCount = 0
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func createAetherProposal(scopeKey: String, title: String, content: String, reason: String) async throws -> AetherProposalResponseDTO {
+        callCount += 1
+        captured = Captured(title: title, content: content, reason: reason)
+        return AetherProposalResponseDTO(
+            id: "proposal-1", operation: "new-note", title: title, content: content,
+            reason: reason, createdAt: "2026-09-03T00:00:00.000Z"
+        )
+    }
+}
+
+private actor ThreadClient: ShannonAPIClientProtocol {
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO {
+        ThreadListResponseDTO(threads: [
+            ChatThreadDTO(
+                threadId: "thread-new", title: "新しい", createdAt: "2026-09-02T00:00:00Z",
+                updatedAt: "2026-09-02T00:00:00Z", messageCount: 1
+            ),
+            ChatThreadDTO(
+                threadId: "thread-old", title: "古い", createdAt: "2026-09-01T00:00:00Z",
+                updatedAt: "2026-09-01T00:00:00Z", messageCount: 1
+            ),
+        ])
+    }
+
+    func loadConversation(scopeKey: String, threadId: String?) async throws -> ConversationHistoryResponseDTO {
+        let resolved = threadId ?? "thread-new"
+        let text = resolved == "thread-old" ? "古いトークの会話" : "新しいトークの会話"
+        return ConversationHistoryResponseDTO(
+            threadId: resolved,
+            messages: [StoredConversationMessageDTO(
+                id: UUID().uuidString,
+                role: "user",
+                content: text,
+                observedAt: "2026-09-02T00:00:00.000Z",
+                messageEmotion: nil,
+                stateVersion: nil
+            )],
+            state: TestFixtures.state(version: 1)
+        )
+    }
+}
+
+private actor RenameThreadClient: ShannonAPIClientProtocol {
+    struct CapturedRename: Sendable {
+        let threadId: String
+        let title: String
+    }
+
+    private(set) var capturedRename: CapturedRename?
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO {
+        ThreadListResponseDTO(threads: [
+            ChatThreadDTO(
+                threadId: "thread-rename", title: "最初のタイトル", createdAt: "2026-09-01T00:00:00Z",
+                updatedAt: "2026-09-02T00:00:00Z", messageCount: 2
+            )
+        ])
+    }
+
+    func renameThread(scopeKey: String, threadId: String, title: String) async throws {
+        capturedRename = CapturedRename(threadId: threadId, title: title)
+    }
+}
+
+private actor InitiativeClient: ShannonAPIClientProtocol {
+    private(set) var markReadCount = 0
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func loadInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO {
+        ShannonInitiativeInboxDTO(
+            unreadCount: 1,
+            messages: [
+                ShannonInitiativeMessageDTO(
+                    id: "initiative-1",
+                    threadId: "initiative-thread",
+                    content: "シャノンから届いた話",
+                    expression: .curious,
+                    sourceTitle: "今日の関心",
+                    sourceURL: "https://example.com/story",
+                    createdAt: "2026-09-04T00:00:00.000Z",
+                    readAt: nil
+                )
+            ]
+        )
+    }
+
+    func markInitiativesRead(scopeKey: String) async throws -> Int {
+        markReadCount += 1
+        return 1
+    }
+
+    func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO {
+        ThreadListResponseDTO(threads: [
+            ChatThreadDTO(
+                threadId: "initiative-thread",
+                title: "今日の関心",
+                createdAt: "2026-09-04T00:00:00.000Z",
+                updatedAt: "2026-09-04T00:00:00.000Z",
+                messageCount: 1
+            )
+        ])
+    }
+
+    func loadConversation(scopeKey: String, threadId: String?) async throws -> ConversationHistoryResponseDTO {
+        ConversationHistoryResponseDTO(
+            threadId: threadId ?? "initiative-thread",
+            messages: [
+                StoredConversationMessageDTO(
+                    id: "EA8BCB13-67D9-48B1-A338-512977DAD462",
+                    role: "assistant",
+                    content: "シャノンから届いた話",
+                    observedAt: "2026-09-04T00:00:00.000Z",
+                    messageEmotion: ShannonMessageEmotionDTO(
+                        valence: 0.35,
+                        arousal: 0.5,
+                        openness: 0.7,
+                        expression: .curious
+                    ),
+                    stateVersion: 1
+                )
+            ],
+            state: TestFixtures.state(version: 1)
+        )
     }
 }
 
@@ -154,6 +403,7 @@ private enum TestFixtures {
         ChatResponseDTO(
             mode: "local-stub",
             reply: reply,
+            threadId: "test-thread",
             snapshotVersion: version,
             messageEmotion: ShannonMessageEmotionDTO(
                 valence: 0,

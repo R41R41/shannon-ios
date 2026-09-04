@@ -56,6 +56,17 @@ describe('Shannon companion shared state', () => {
     expect(fullPrompt).not.toContain('予測');
   });
 
+  it('treats the newest interest as Shannon\'s focus for today', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    store.apply('scope-a', { type: 'interest-observed', interest: '脳科学' });
+    store.apply('scope-a', { type: 'interest-observed', interest: '創作と休息' });
+
+    const prompt = buildCompanionStatePrompt(store.snapshot('scope-a'));
+
+    expect(prompt).toContain('今日の関心: 創作と休息');
+    expect(prompt).toContain('ほかに育っている関心: 脳科学');
+  });
+
   it('derives stable message expressions from the captured emotion', () => {
     expect(deriveShannonExpression(
       { valence: 0.7, arousal: 0.8, openness: 0.5 },

@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import {
   createInitialCompanionState,
+  assembleShannonSystemPrompt,
   freezeSnapshot,
   reduceCompanionState,
   type CompanionClock,
@@ -20,15 +21,29 @@ import type {
   DailyUserMessage,
 } from './backgroundJobStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
+import type { ShannonTaskDecision } from './chatModel.js';
 import type {
   ConversationStore,
+  ConversationThread,
   ShannonExperience,
   StoredConversationMessage,
   TurnPersistenceContext,
 } from './conversationStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
+import type { ActivityItem } from './memoryService.js';
+import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
+import {
+  DEFAULT_QUESTION_DEFINITIONS,
+  classifyQuestion,
+  type KnowledgeAnswer,
+  type KnowledgeRevision,
+  type KnowledgeSource,
+  type KnowledgeStore,
+  type PersonalityProfile,
+} from './knowledgeStore.js';
+import { migrateAgentTasks } from './agentTaskStore.js';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 7;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -37,6 +52,7 @@ interface StateRow {
 
 interface MessageRow {
   message_id: string;
+  thread_id: string;
   role: string;
   content: string;
   observed_at: string;
@@ -65,11 +81,49 @@ interface TurnPayload {
   summary: string;
   capturedStateVersion?: number;
   messageEmotion?: ShannonMessageEmotion;
+  taskDecision?: ShannonTaskDecision;
 }
 
 interface MessageMetadata {
   stateVersion?: number;
   messageEmotion?: ShannonMessageEmotion;
+  taskDecision?: ShannonTaskDecision;
+}
+
+interface ThreadRow {
+  thread_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+interface KnowledgeAnswerRow {
+  answer_id: string;
+  question_key: string;
+  category: string;
+  question: string;
+  answer: string;
+  confidence: number;
+  source: KnowledgeSource;
+  confirmed: number;
+  updated_at: string;
+}
+
+interface KnowledgeEvidenceRow {
+  answer_id: string;
+  quote: string;
+  source: KnowledgeSource;
+  observed_at: string;
+}
+
+interface KnowledgeRevisionRow {
+  revision_id: string;
+  answer_id: string;
+  previous_answer: string | null;
+  next_answer: string;
+  reason: string;
+  observed_at: string;
 }
 
 export interface PersistedExperienceEvent {
@@ -93,11 +147,12 @@ export interface SQLiteShannonStoreOptions {
  * Durable adapter only. Cognition remains in packages/cognition; this class
  * stores immutable snapshots, conversation messages, and append-only events.
  */
-export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore {
+export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore {
   private readonly database: DatabaseSync;
   private readonly maximumModelConversationItems: number;
   private readonly maximumDisplayedConversationItems: number;
   private readonly maximumExperiences: number;
+  private readonly defaultThreadCache = new Map<string, string>();
 
   constructor(private readonly options: SQLiteShannonStoreOptions) {
     if (!options.path.trim()) throw new Error('SHANNON_DATABASE_PATH is required');
@@ -152,28 +207,348 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         fromVersion: current.version,
         toVersion: next.version,
       });
+      if (event.type === 'user-fact-upserted') {
+        this.synchronizeFact(scopeKey, event.fact, event.source ?? 'inference');
+        this.insertActivity(scopeKey, 'knowledge', '知識を更新', event.fact.statement, next.updatedAt);
+      }
+      this.writePromptProjection(scopeKey, next);
     });
     return next;
   }
 
-  history(scopeKey: string): readonly ShannonConversationItem[] {
-    return Object.freeze(this.conversationHistory(scopeKey)
+  synchronizeFact(scopeKey: string, fact: CompanionStateSnapshot['userFacts'][number], source: KnowledgeSource): void {
+    const definition = classifyQuestion(fact.statement, fact.id);
+    const existing = this.database.prepare(`
+      SELECT answer FROM knowledge_answers WHERE answer_id = ? AND scope_key = ?
+    `).get(fact.id, scopeKey) as unknown as { answer: string } | undefined;
+    this.database.prepare(`
+      INSERT INTO question_definitions (question_key, category, question, display_order, allows_multiple, created_at)
+      VALUES (?, ?, ?, ?, 1, ?)
+      ON CONFLICT(question_key) DO UPDATE SET
+        category = excluded.category,
+        question = excluded.question,
+        display_order = excluded.display_order
+    `).run(definition.key, definition.category, definition.question, definition.order, fact.observedAt);
+    if (existing && existing.answer !== fact.statement) {
+      this.database.prepare(`
+        INSERT INTO knowledge_revisions
+          (revision_id, scope_key, answer_id, previous_answer, next_answer, reason, observed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(randomUUID(), scopeKey, fact.id, existing.answer, fact.statement, `${source}から更新`, fact.observedAt);
+    }
+    this.database.prepare(`
+      INSERT INTO knowledge_answers
+        (answer_id, scope_key, question_key, answer, confidence, source, confirmed, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_key, answer_id) DO UPDATE SET
+        question_key = excluded.question_key,
+        answer = excluded.answer,
+        confidence = excluded.confidence,
+        source = excluded.source,
+        confirmed = excluded.confirmed,
+        updated_at = excluded.updated_at
+      WHERE knowledge_answers.scope_key = excluded.scope_key
+    `).run(
+      fact.id,
+      scopeKey,
+      definition.key,
+      fact.statement,
+      fact.confidence,
+      source,
+      source === 'user' || source === 'conversation' ? 1 : 0,
+      fact.observedAt,
+    );
+    if (fact.evidence) {
+      this.database.prepare(`
+        INSERT OR IGNORE INTO knowledge_evidence
+          (evidence_id, scope_key, answer_id, quote, source, observed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(randomUUID(), scopeKey, fact.id, fact.evidence, source, fact.observedAt);
+    }
+  }
+
+  correctKnowledge(scopeKey: string, answerId: string, answer: string, observedAt: string): void {
+    const current = this.database.prepare(`
+      SELECT answer FROM knowledge_answers WHERE scope_key = ? AND answer_id = ?
+    `).get(scopeKey, answerId) as unknown as { answer: string } | undefined;
+    if (!current) return;
+    if (current.answer !== answer) {
+      this.database.prepare(`
+        INSERT INTO knowledge_revisions
+          (revision_id, scope_key, answer_id, previous_answer, next_answer, reason, observed_at)
+        VALUES (?, ?, ?, ?, ?, 'ユーザーが手動で訂正', ?)
+      `).run(randomUUID(), scopeKey, answerId, current.answer, answer, observedAt);
+    }
+    this.database.prepare(`
+      UPDATE knowledge_answers
+      SET answer = ?, confidence = 1, source = 'user', confirmed = 1, updated_at = ?
+      WHERE scope_key = ? AND answer_id = ?
+    `).run(answer, observedAt, scopeKey, answerId);
+    this.database.prepare(`
+      INSERT INTO knowledge_evidence
+        (evidence_id, scope_key, answer_id, quote, source, observed_at)
+      VALUES (?, ?, ?, ?, 'user', ?)
+    `).run(randomUUID(), scopeKey, answerId, answer, observedAt);
+    this.insertActivity(scopeKey, 'knowledge', '知識を手動訂正', answer, observedAt, { answerId });
+    this.writePromptProjection(scopeKey, this.snapshot(scopeKey));
+  }
+
+  knowledgeAnswers(scopeKey: string): readonly KnowledgeAnswer[] {
+    const rows = this.database.prepare(`
+      SELECT a.answer_id, a.question_key, q.category, q.question, a.answer,
+             a.confidence, a.source, a.confirmed, a.updated_at
+      FROM knowledge_answers a
+      JOIN question_definitions q ON q.question_key = a.question_key
+      WHERE a.scope_key = ?
+      ORDER BY q.display_order ASC, a.updated_at DESC
+    `).all(scopeKey) as unknown as KnowledgeAnswerRow[];
+    const evidenceRows = this.database.prepare(`
+      SELECT answer_id, quote, source, observed_at
+      FROM knowledge_evidence WHERE scope_key = ? ORDER BY observed_at DESC
+    `).all(scopeKey) as unknown as KnowledgeEvidenceRow[];
+    return Object.freeze(rows.map(row => Object.freeze({
+      answerId: row.answer_id,
+      questionKey: row.question_key,
+      category: row.category,
+      question: row.question,
+      answer: row.answer,
+      confidence: Number(row.confidence),
+      source: row.source,
+      confirmed: Boolean(row.confirmed),
+      updatedAt: row.updated_at,
+      evidence: Object.freeze(evidenceRows.filter(item => item.answer_id === row.answer_id).map(item => Object.freeze({
+        quote: item.quote,
+        source: item.source,
+        observedAt: item.observed_at,
+      }))),
+    })));
+  }
+
+  knowledgeRevisions(scopeKey: string, answerId?: string): readonly KnowledgeRevision[] {
+    const rows = (answerId
+      ? this.database.prepare(`
+          SELECT revision_id, answer_id, previous_answer, next_answer, reason, observed_at
+          FROM knowledge_revisions WHERE scope_key = ? AND answer_id = ? ORDER BY observed_at DESC
+        `).all(scopeKey, answerId)
+      : this.database.prepare(`
+          SELECT revision_id, answer_id, previous_answer, next_answer, reason, observed_at
+          FROM knowledge_revisions WHERE scope_key = ? ORDER BY observed_at DESC
+        `).all(scopeKey)) as unknown as KnowledgeRevisionRow[];
+    return Object.freeze(rows.map(row => Object.freeze({
+      revisionId: row.revision_id,
+      answerId: row.answer_id,
+      previousAnswer: row.previous_answer,
+      nextAnswer: row.next_answer,
+      reason: row.reason,
+      observedAt: row.observed_at,
+    })));
+  }
+
+  personalityProfile(scopeKey: string): PersonalityProfile | null {
+    const row = this.database.prepare(`
+      SELECT version, analysis, created_at
+      FROM personality_profiles
+      WHERE scope_key = ? AND active = 1
+      ORDER BY version DESC LIMIT 1
+    `).get(scopeKey) as unknown as { version: number; analysis: string; created_at: string } | undefined;
+    return row ? Object.freeze({ version: Number(row.version), analysis: row.analysis, createdAt: row.created_at }) : null;
+  }
+
+  promptProjection(scopeKey: string): string | null {
+    const row = this.database.prepare(`
+      SELECT content FROM prompt_projections WHERE scope_key = ?
+    `).get(scopeKey) as unknown as { content: string } | undefined;
+    return row?.content ?? null;
+  }
+
+  recordLlmUsage(event: LlmUsageEvent): void {
+    this.database.prepare(`
+      INSERT INTO llm_usage_events
+        (usage_id, scope_key, lane, model, input_tokens, cached_input_tokens,
+         output_tokens, total_tokens, estimated_cost_usd, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(), event.scopeKey, event.lane, event.model,
+      event.inputTokens, event.cachedInputTokens, event.outputTokens,
+      event.totalTokens, event.estimatedCostUsd, event.occurredAt,
+    );
+  }
+
+  backgroundLlmCostUsd(monthKey: string): number {
+    const row = this.database.prepare(`
+      SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
+      FROM llm_usage_events
+      WHERE lane <> 'chat' AND substr(occurred_at, 1, 7) = ?
+    `).get(monthKey) as unknown as { cost: number };
+    return Number(row.cost);
+  }
+
+  llmUsageSummary(scopeKey: string, monthKey: string): readonly {
+    lane: 'chat' | 'sleep'; calls: number; inputTokens: number; cachedInputTokens: number;
+    outputTokens: number; totalTokens: number; estimatedCostUsd: number;
+  }[] {
+    const rows = this.database.prepare(`
+      SELECT lane, COUNT(*) AS calls, COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd
+      FROM llm_usage_events
+      WHERE scope_key = ? AND substr(occurred_at, 1, 7) = ?
+      GROUP BY lane ORDER BY lane
+    `).all(scopeKey, monthKey) as unknown as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map(row => Object.freeze({
+      lane: String(row.lane) as 'chat' | 'sleep', calls: Number(row.calls),
+      inputTokens: Number(row.input_tokens), cachedInputTokens: Number(row.cached_input_tokens),
+      outputTokens: Number(row.output_tokens), totalTokens: Number(row.total_tokens),
+      estimatedCostUsd: Number(row.estimated_cost_usd),
+    })));
+  }
+
+  private writePromptProjection(scopeKey: string, state: CompanionStateSnapshot): void {
+    const personality = this.personalityProfile(scopeKey);
+    const knowledge = this.knowledgeAnswers(scopeKey).slice(0, 80);
+    const sections = [assembleShannonSystemPrompt(state)];
+    if (knowledge.length) {
+      sections.push(`[User knowledge]\n${knowledge.map(item => `- ${item.question}: ${item.answer} (confidence ${item.confidence.toFixed(2)}, source ${item.source})`).join('\n')}`);
+    }
+    if (personality) sections.push(`[Personality analysis v${personality.version}]\n${personality.analysis}`);
+    const content = sections.join('\n\n');
+    this.database.prepare(`
+      INSERT INTO prompt_projections (scope_key, state_version, content, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(scope_key) DO UPDATE SET
+        state_version = excluded.state_version,
+        content = excluded.content,
+        updated_at = excluded.updated_at
+    `).run(scopeKey, state.version, content, state.updatedAt);
+  }
+
+  private insertActivity(
+    scopeKey: string,
+    type: string,
+    title: string,
+    detail: string | null,
+    occurredAt: string,
+    metadata: unknown = {},
+  ): void {
+    this.database.prepare(`
+      INSERT INTO activity_events
+        (activity_id, scope_key, activity_type, title, detail, occurred_at, metadata_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(randomUUID(), scopeKey, type, title, detail, occurredAt, JSON.stringify(metadata));
+  }
+
+  private writePersonalityProfile(scopeKey: string, state: CompanionStateSnapshot, createdAt: string): void {
+    const previous = this.database.prepare(`
+      SELECT COALESCE(MAX(version), 0) AS version FROM personality_profiles WHERE scope_key = ?
+    `).get(scopeKey) as unknown as { version: number };
+    const facts = state.userFacts.slice(0, 6).map(item => item.statement);
+    const relationships = state.relationships.slice(0, 4).map(item => item.statement);
+    const analysis = [
+      facts.length ? `把握している特徴: ${facts.join('、')}` : '本人について断定できる特徴はまだ少ない。',
+      relationships.length ? `好む関わり方: ${relationships.join('、')}` : '好む関わり方はまだ観察中。',
+      state.interests.length ? `最近の関心: ${state.interests.slice(0, 8).join('、')}` : '最近の関心はまだ定まっていない。',
+    ].join('\n');
+    this.database.prepare(`UPDATE personality_profiles SET active = 0 WHERE scope_key = ?`).run(scopeKey);
+    this.database.prepare(`
+      INSERT INTO personality_profiles
+        (profile_id, scope_key, version, analysis, active, created_at)
+      VALUES (?, ?, ?, ?, 1, ?)
+    `).run(randomUUID(), scopeKey, Number(previous.version) + 1, analysis, createdAt);
+  }
+
+  listThreads(scopeKey: string): readonly ConversationThread[] {
+    const rows = this.database.prepare(`
+      SELECT thread_id, title, created_at, updated_at,
+        (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.scope_key = ct.scope_key AND cm.thread_id = ct.thread_id) AS message_count
+      FROM conversation_threads ct
+      WHERE ct.scope_key = ? AND ct.archived_at IS NULL
+      ORDER BY ct.updated_at DESC, ct.created_at DESC
+    `).all(scopeKey) as unknown as ThreadRow[];
+    return Object.freeze(rows.map(row => Object.freeze({
+      threadId: row.thread_id,
+      title: row.title,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      messageCount: Number(row.message_count),
+    })));
+  }
+
+  threadId(scopeKey: string, threadId?: string): string {
+    const preferred = threadId?.trim();
+    if (preferred) {
+      this.ensureThread(scopeKey, preferred, null);
+      this.defaultThreadCache.set(scopeKey, preferred);
+      return preferred;
+    }
+    const cached = this.defaultThreadCache.get(scopeKey);
+    if (cached) return cached;
+
+    const threads = this.listThreads(scopeKey);
+    if (threads[0]) {
+      this.defaultThreadCache.set(scopeKey, threads[0].threadId);
+      return threads[0].threadId;
+    }
+    const created = this.createThread(scopeKey, '新しいトーク');
+    this.defaultThreadCache.set(scopeKey, created);
+    return created;
+  }
+
+  private ensureThread(scopeKey: string, threadId: string, title: string | null): void {
+    const now = this.options.now();
+    this.database.prepare(`
+      INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at)
+      VALUES (?, ?, COALESCE(?, '新しいトーク'), ?, ?)
+      ON CONFLICT(thread_id) DO NOTHING
+    `).run(threadId, scopeKey, title, now, now);
+  }
+
+  createThread(scopeKey: string, title = '新しいトーク'): string {
+    const threadId = randomUUID();
+    this.ensureThread(scopeKey, threadId, title);
+    return threadId;
+  }
+
+  renameThread(scopeKey: string, threadId: string, title: string): boolean {
+    const result = this.database.prepare(`
+      UPDATE conversation_threads
+      SET title = ?, updated_at = ?
+      WHERE scope_key = ? AND thread_id = ? AND archived_at IS NULL
+    `).run(title, this.options.now(), scopeKey, threadId);
+    return Number(result.changes) > 0;
+  }
+
+  archiveThread(scopeKey: string, threadId: string): boolean {
+    const result = this.database.prepare(`
+      UPDATE conversation_threads SET archived_at = ?
+      WHERE scope_key = ? AND thread_id = ? AND archived_at IS NULL
+    `).run(this.options.now(), scopeKey, threadId);
+    if (Number(result.changes) > 0 && this.defaultThreadCache.get(scopeKey) === threadId) {
+      this.defaultThreadCache.delete(scopeKey);
+    }
+    return Number(result.changes) > 0;
+  }
+
+  history(scopeKey: string, threadId?: string): readonly ShannonConversationItem[] {
+    return Object.freeze(this.conversationHistory(scopeKey, threadId)
       .slice(-this.maximumModelConversationItems)
       .map(item => Object.freeze({ role: item.role, content: item.content })));
   }
 
-  conversationHistory(scopeKey: string): readonly StoredConversationMessage[] {
+  conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] {
+    const effectiveThreadId = this.threadId(scopeKey, threadId);
     const rows = this.database.prepare(`
-      SELECT message_id, role, content, observed_at, metadata_json
+      SELECT message_id, thread_id, role, content, observed_at, metadata_json
       FROM (
-        SELECT sequence, message_id, role, content, observed_at, metadata_json
+        SELECT sequence, message_id, thread_id, role, content, observed_at, metadata_json
         FROM conversation_messages
-        WHERE scope_key = ?
+        WHERE scope_key = ? AND thread_id = ?
         ORDER BY sequence DESC
         LIMIT ?
       )
       ORDER BY sequence ASC
-    `).all(scopeKey, this.maximumDisplayedConversationItems) as unknown as MessageRow[];
+    `).all(scopeKey, effectiveThreadId, this.maximumDisplayedConversationItems) as unknown as MessageRow[];
     return Object.freeze(rows.map(row => freezeStoredMessage(row)));
   }
 
@@ -200,12 +575,20 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   appendTurn(
     scopeKey: string,
+    threadId: string,
     userMessage: string,
     shannonReply: string,
     observedAt: string,
     context?: TurnPersistenceContext,
   ): ShannonExperience {
     const turnId = randomUUID();
+    const effectiveThreadId = this.threadId(scopeKey, threadId);
+    this.ensureThread(scopeKey, effectiveThreadId, null);
+    this.database.prepare(`
+      UPDATE conversation_threads
+      SET updated_at = ?, title = COALESCE(NULLIF(title, ''), ?)
+      WHERE thread_id = ? AND scope_key = ?
+    `).run(observedAt, conciseThreadTitle(userMessage), effectiveThreadId, scopeKey);
     const summary = summarizeExperience(userMessage, shannonReply);
     const payload: TurnPayload = {
       userMessage,
@@ -214,18 +597,20 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       ...(context ? {
         capturedStateVersion: context.capturedStateVersion,
         messageEmotion: context.messageEmotion,
+        ...(context.taskDecision ? { taskDecision: context.taskDecision } : {}),
       } : {}),
     };
     this.transaction(() => {
       const insert = this.database.prepare(`
         INSERT INTO conversation_messages
-          (message_id, scope_key, turn_id, ordinal, role, content, observed_at, metadata_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      insert.run(randomUUID(), scopeKey, turnId, 0, 'user', userMessage, observedAt, null);
+      insert.run(randomUUID(), scopeKey, effectiveThreadId, turnId, 0, 'user', userMessage, observedAt, null);
       insert.run(
         randomUUID(),
         scopeKey,
+        effectiveThreadId,
         turnId,
         1,
         'assistant',
@@ -234,9 +619,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         context ? JSON.stringify({
           stateVersion: context.capturedStateVersion,
           messageEmotion: context.messageEmotion,
+          ...(context.taskDecision ? { taskDecision: context.taskDecision } : {}),
         } satisfies MessageMetadata) : null,
       );
       this.insertEvent(scopeKey, 'turn.completed', observedAt, payload, turnId);
+      this.insertActivity(scopeKey, 'conversation', 'トーク', summary, observedAt, { threadId: effectiveThreadId });
     });
     return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt });
   }
@@ -255,6 +642,23 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       type: row.event_type,
       observedAt: row.observed_at,
       payload: parseJson(row.payload_json),
+    })));
+  }
+
+  activityTimeline(scopeKey: string): readonly ActivityItem[] {
+    const rows = this.database.prepare(`
+      SELECT activity_id, activity_type, title, detail, occurred_at
+      FROM activity_events WHERE scope_key = ?
+      ORDER BY occurred_at DESC LIMIT 100
+    `).all(scopeKey) as unknown as Array<{
+      activity_id: string; activity_type: string; title: string; detail: string | null; occurred_at: string;
+    }>;
+    return Object.freeze(rows.map(row => Object.freeze({
+      id: row.activity_id,
+      type: row.activity_type,
+      title: row.title,
+      ...(row.detail ? { detail: row.detail } : {}),
+      occurredAt: row.occurred_at,
     })));
   }
 
@@ -442,6 +846,17 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         appliedInterests: outcome.interests,
         ...outcome.report,
       });
+      const dayKey = job.payload.kind === 'sleep-consolidation' ? job.payload.dayKey : completedAt.slice(0, 10);
+      this.database.prepare(`
+        INSERT INTO sleep_runs
+          (sleep_run_id, scope_key, day_key, status, summary_json, started_at, completed_at)
+        VALUES (?, ?, ?, 'completed', ?, ?, ?)
+        ON CONFLICT(scope_key, day_key) DO UPDATE SET
+          status = 'completed', summary_json = excluded.summary_json, completed_at = excluded.completed_at
+      `).run(job.id, job.scopeKey, dayKey, JSON.stringify(outcome.report), completedAt, completedAt);
+      this.writePersonalityProfile(job.scopeKey, this.snapshot(job.scopeKey), completedAt);
+      this.writePromptProjection(job.scopeKey, this.snapshot(job.scopeKey));
+      this.insertActivity(job.scopeKey, 'sleep', '睡眠バッチ', dayKey, completedAt, outcome.report);
     });
   }
 
@@ -557,8 +972,243 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
           );
         }
       }
+      if (previousVersion < 3) this.migrateThreadedConversations();
+      if (previousVersion < 4) this.migrateKnowledgeCore();
+      if (previousVersion < 5) this.migrateThreadArchive();
+      if (previousVersion < 6) this.migrateLlmUsage();
+      if (previousVersion < 7) migrateAgentTasks(this.database);
       this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
+  }
+
+  private migrateThreadedConversations(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_threads (
+        thread_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS conversation_threads_scope
+        ON conversation_threads (scope_key, updated_at DESC);
+    `);
+
+    const columns = this.database.prepare("PRAGMA table_info('conversation_messages')").all() as unknown as Array<{ name: string }>;
+    const hasThreadId = columns.some(column => column.name === 'thread_id');
+
+    if (!hasThreadId) {
+      const now = this.options.now();
+      this.database.exec('ALTER TABLE conversation_messages ADD COLUMN thread_id TEXT;');
+
+      const scopes = this.database.prepare(`
+        SELECT DISTINCT scope_key
+        FROM conversation_messages
+      `).all() as unknown as Array<{ scope_key: string }>;
+
+      const createThread = this.database.prepare(`
+        INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const seedFirstMessage = this.database.prepare(`
+        SELECT content, observed_at
+        FROM conversation_messages
+        WHERE scope_key = ?
+        ORDER BY sequence ASC
+        LIMIT 1
+      `);
+      const assignThread = this.database.prepare(`
+        UPDATE conversation_messages
+        SET thread_id = ?
+        WHERE scope_key = ?
+      `);
+
+      for (const row of scopes) {
+        const threadId = `legacy:${row.scope_key}`;
+        const seed = seedFirstMessage.get(row.scope_key) as { content: string; observed_at: string } | undefined;
+        const title = seed ? conciseThreadTitle(seed.content) : '新しいトーク';
+        createThread.run(threadId, row.scope_key, title, seed?.observed_at ?? now, seed?.observed_at ?? now);
+        assignThread.run(threadId, row.scope_key);
+      }
+    }
+
+    const missing = this.database.prepare(`
+      SELECT scope_key, message_id
+      FROM conversation_messages
+      WHERE thread_id IS NULL
+      LIMIT 1
+    `).get();
+    if (missing) {
+      const now = this.options.now();
+      const createThread = this.database.prepare(`
+        INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at)
+        VALUES (?, ?, '新しいトーク', ?, ?)
+      `);
+      const assignMissing = this.database.prepare(`
+        UPDATE conversation_messages
+        SET thread_id = ?
+        WHERE scope_key = ? AND thread_id IS NULL
+      `);
+      const rows = this.database.prepare(`
+        SELECT DISTINCT scope_key
+        FROM conversation_messages
+        WHERE thread_id IS NULL
+      `).all() as unknown as Array<{ scope_key: string }>;
+      for (const row of rows) {
+        const threadId = randomUUID();
+        createThread.run(threadId, row.scope_key, '新しいトーク', now, now);
+        assignMissing.run(threadId, row.scope_key);
+      }
+    }
+
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS conversation_messages_scope_thread
+        ON conversation_messages (scope_key, thread_id, sequence);
+    `);
+
+    const conversationThreads = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM conversation_threads
+    `).get() as unknown as { count: number };
+    if (conversationThreads.count === 0) return;
+
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS conversation_messages_thread_scope_sequence
+        ON conversation_messages (thread_id, scope_key, sequence);
+    `);
+  }
+
+  private migrateThreadArchive(): void {
+    const columns = this.database.prepare("PRAGMA table_info('conversation_threads')").all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'archived_at')) {
+      this.database.exec('ALTER TABLE conversation_threads ADD COLUMN archived_at TEXT;');
+    }
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS conversation_threads_active_scope
+        ON conversation_threads (scope_key, archived_at, updated_at DESC);
+    `);
+  }
+
+  private migrateLlmUsage(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS llm_usage_events (
+        usage_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        lane TEXT NOT NULL CHECK (lane IN ('chat', 'sleep')),
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+        cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
+        output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+        total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0),
+        estimated_cost_usd REAL NOT NULL CHECK (estimated_cost_usd >= 0),
+        occurred_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS llm_usage_events_month_lane
+        ON llm_usage_events (occurred_at, lane);
+    `);
+  }
+
+  private migrateKnowledgeCore(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS question_definitions (
+        question_key TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        question TEXT NOT NULL,
+        display_order INTEGER NOT NULL,
+        allows_multiple INTEGER NOT NULL DEFAULT 0 CHECK (allows_multiple IN (0, 1)),
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS knowledge_answers (
+        answer_id TEXT NOT NULL,
+        scope_key TEXT NOT NULL,
+        question_key TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+        source TEXT NOT NULL CHECK (source IN ('conversation', 'sleep', 'user', 'inference')),
+        confirmed INTEGER NOT NULL DEFAULT 0 CHECK (confirmed IN (0, 1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, answer_id),
+        FOREIGN KEY (question_key) REFERENCES question_definitions(question_key)
+      );
+      CREATE INDEX IF NOT EXISTS knowledge_answers_scope_question
+        ON knowledge_answers (scope_key, question_key, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS knowledge_evidence (
+        evidence_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        answer_id TEXT NOT NULL,
+        quote TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('conversation', 'sleep', 'user', 'inference')),
+        observed_at TEXT NOT NULL,
+        UNIQUE (scope_key, answer_id, quote, observed_at)
+      );
+      CREATE INDEX IF NOT EXISTS knowledge_evidence_answer
+        ON knowledge_evidence (scope_key, answer_id, observed_at DESC);
+      CREATE TABLE IF NOT EXISTS knowledge_revisions (
+        revision_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        answer_id TEXT NOT NULL,
+        previous_answer TEXT,
+        next_answer TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        observed_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS knowledge_revisions_answer
+        ON knowledge_revisions (scope_key, answer_id, observed_at DESC);
+      CREATE TABLE IF NOT EXISTS personality_profiles (
+        profile_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        analysis TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        UNIQUE (scope_key, version)
+      );
+      CREATE TABLE IF NOT EXISTS activity_events (
+        activity_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT,
+        occurred_at TEXT NOT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS activity_events_scope_time
+        ON activity_events (scope_key, occurred_at DESC);
+      CREATE TABLE IF NOT EXISTS sleep_runs (
+        sleep_run_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+        summary_json TEXT,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        UNIQUE (scope_key, day_key)
+      );
+      CREATE TABLE IF NOT EXISTS prompt_projections (
+        scope_key TEXT PRIMARY KEY,
+        state_version INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    const seededAt = this.options.now();
+    const insertDefinition = this.database.prepare(`
+      INSERT OR IGNORE INTO question_definitions
+        (question_key, category, question, display_order, allows_multiple, created_at)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `);
+    for (const definition of DEFAULT_QUESTION_DEFINITIONS) {
+      insertDefinition.run(definition.key, definition.category, definition.question, definition.order, seededAt);
+    }
+
+    const states = this.database.prepare(`
+      SELECT scope_key, snapshot_json FROM companion_states
+    `).all() as unknown as Array<{ scope_key: string; snapshot_json: string }>;
+    for (const row of states) {
+      const state = parseSnapshot(row.snapshot_json, row.scope_key);
+      for (const fact of state.userFacts) this.synchronizeFact(row.scope_key, fact, 'sleep');
+      this.writePromptProjection(row.scope_key, state);
+    }
   }
 
   private assertJobLease(jobId: string, workerId: string): void {
@@ -662,6 +1312,7 @@ function freezeStoredMessage(row: MessageRow): StoredConversationMessage {
     observedAt: row.observed_at,
     ...(metadata?.messageEmotion ? { messageEmotion: Object.freeze({ ...metadata.messageEmotion }) } : {}),
     ...(metadata?.stateVersion !== undefined ? { stateVersion: metadata.stateVersion } : {}),
+    ...(metadata?.taskDecision ? { taskDecision: Object.freeze({ ...metadata.taskDecision }) } : {}),
   });
 }
 
@@ -672,7 +1323,17 @@ function parseMessageMetadata(raw: string): MessageMetadata | null {
   return {
     ...(Number.isSafeInteger(row.stateVersion) ? { stateVersion: row.stateVersion } : {}),
     ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: row.messageEmotion } : {}),
+    ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),
   };
+}
+
+function validTaskDecision(value: unknown): value is ShannonTaskDecision {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Partial<ShannonTaskDecision>;
+  return (row.disposition === 'none' || row.disposition === 'clarify' || row.disposition === 'propose')
+    && typeof row.reason === 'string'
+    && row.reason.length > 0
+    && row.reason.length <= 500;
 }
 
 function parseTurnPayload(raw: string): TurnPayload | null {
@@ -718,6 +1379,12 @@ function parseJson(raw: string): unknown {
   } catch {
     throw new Error('SHANNON_DATABASE_JSON_CORRUPT');
   }
+}
+
+function conciseThreadTitle(value: string): string {
+  const cleaned = value.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '新しいトーク';
+  return cleaned.length <= 30 ? cleaned : `${cleaned.slice(0, 27)}…`;
 }
 
 function summarizeExperience(userMessage: string, shannonReply: string): string {

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Cloud Delivery v17</title>
+  <style>
+    :root{color-scheme:light dark;--blue:#6fcaff;--deep:#075f82;--ink:#172027;--muted:#63727c;--paper:#f7fcff;--card:#fff;--line:#cae5f2;--ok:#127a56;--warn:#9a6400}
+    @media(prefers-color-scheme:dark){:root{--ink:#e6f1f6;--muted:#a8bac3;--paper:#0d1519;--card:#151f24;--line:#29414c;--deep:#84d5ff;--ok:#67d9ad;--warn:#ffca6a}}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;line-height:1.7}main{max-width:1080px;margin:auto;padding:48px 22px 80px}h1{font-size:clamp(2rem,5vw,4rem);line-height:1.1;margin:.2em 0}.lead{font-size:1.15rem;color:var(--muted);max-width:760px}.tag{display:inline-block;padding:5px 11px;border-radius:999px;background:#6fcaff2b;color:var(--deep);font-weight:700}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:24px 0}.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 12px 36px #0648650c}.card h3{margin-top:0}.yes{color:var(--ok);font-weight:800}.no{color:var(--warn);font-weight:800}.flow{display:flex;gap:10px;align-items:stretch;overflow:auto;padding:12px 0}.node{min-width:160px;flex:1;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}.arrow{align-self:center;color:var(--deep);font-size:1.4rem}.phase{border-left:4px solid var(--blue);padding:4px 0 4px 18px;margin:24px 0}.small{font-size:.9rem;color:var(--muted)}code{background:#6fcaff20;padding:.15em .4em;border-radius:6px}a{color:var(--deep)}ul{padding-left:1.3em}.status{display:grid;grid-template-columns:auto 1fr;gap:8px 16px}.status b{color:var(--deep)}
+  </style>
+</head>
+<body><main>
+  <span class="tag">Shannon delivery architecture · v17</span>
+  <h1>Macを閉じても、<br>ShannonをiPhoneへ届ける</h1>
+  <p class="lead">実現可能。Azure VMからiPhoneへ直接書き込むのではなく、コードをクラウドへ渡し、Appleのクラウドでテスト・署名し、TestFlight経由で更新する。</p>
+
+  <section class="grid">
+    <article class="card"><h3>Macが起動中</h3><p class="yes">今の方式で可能</p><p>USB、または初回ペアリング後の同一ネットワーク経由でXcodeから直接インストール。</p></article>
+    <article class="card"><h3>Macが閉じている</h3><p class="yes">Xcode Cloudなら可能</p><p>クラウド上のMac環境がビルド、テスト、署名、TestFlightへの配布を担当する。</p></article>
+    <article class="card"><h3>Azureだけで直接配布</h3><p class="no">不可</p><p>iOSの正式な署名・配布にはAppleのビルド／配布経路が必要。Azureは指示・コード・状態管理を担当する。</p></article>
+  </section>
+
+  <h2>目標フロー</h2>
+  <div class="flow" aria-label="クラウド配布フロー">
+    <div class="node"><b>1. Shannon</b><br><span class="small">ユーザーから改修依頼</span></div><div class="arrow">→</div>
+    <div class="node"><b>2. Azure</b><br><span class="small">永続タスクと承認状態</span></div><div class="arrow">→</div>
+    <div class="node"><b>3. Code worker</b><br><span class="small">専用ブランチで変更・検査</span></div><div class="arrow">→</div>
+    <div class="node"><b>4. Private Git</b><br><span class="small">履歴と差分の正本</span></div><div class="arrow">→</div>
+    <div class="node"><b>5. Xcode Cloud</b><br><span class="small">ビルド・テスト・署名</span></div><div class="arrow">→</div>
+    <div class="node"><b>6. TestFlight</b><br><span class="small">iPhoneへ更新通知／自動更新</span></div>
+  </div>
+
+  <div class="card">
+    <h3>大事な境界</h3>
+    <ul>
+      <li>「コードを直してよい」と「iPhoneへ配布してよい」は別の承認にする。</li>
+      <li>通常の会話や自発探索から自己改修を開始しない。</li>
+      <li>本番配布ブランチへ直接書き込まず、テスト成功後だけ昇格させる。</li>
+      <li>秘密鍵・APIキー・Apple認証情報をGitや会話へ保存しない。</li>
+      <li>TestFlightの自動更新を有効にしても、iOS側の更新時刻は完全には指定できない。緊急反映はTestFlight画面から手動更新する。</li>
+    </ul>
+  </div>
+
+  <h2>現在地</h2>
+  <div class="card status">
+    <b>署名</b><span>Apple Team設定済み。現在の開発用プロファイルは2027年9月まで有効。</span>
+    <b>App ID</b><span><code>com.r41r41.shannon</code></span>
+    <b>Git</b><span>ローカルリポジトリには現在リモートが未設定。まず非公開リモートへ安全に整理して登録する必要がある。</span>
+    <b>配布</b><span>現在はMacからの開発用直接インストール。TestFlight／Xcode Cloudは未接続。</span>
+    <b>費用</b><span>Apple Developer Program会員にはXcode Cloud 25 compute hours／月が含まれる。小規模な個人開発ならまずこの枠で試せる。</span>
+  </div>
+
+  <h2>導入順序</h2>
+  <div class="phase"><b>Phase A — ソースを安全にクラウド化</b><br>現在の大きな未コミット差分を整理し、秘密情報を除外して非公開Gitリポジトリへ登録。保護ブランチを作る。</div>
+  <div class="phase"><b>Phase B — TestFlightを一度手動で開通</b><br>App Store ConnectにShannonのアプリレコードと内部テスターを作成し、最初のビルドを配布。iPhoneにTestFlightを入れる。</div>
+  <div class="phase"><b>Phase C — Xcode Cloudを接続</b><br>テスト、アーカイブ、内部TestFlight配布のワークフローを構成。ビルド番号をクラウドで一意にする。</div>
+  <div class="phase"><b>Phase D — Shannonの改修タスクと連携</b><br>ユーザー承認後だけリリース用ブランチへ昇格し、Xcode Cloudを開始。結果をShannonの作業カードへ返す。</div>
+
+  <h2>今回のチャット改善</h2>
+  <div class="grid">
+    <article class="card"><h3>回答を広く</h3><p>シャノン側の吹き出し背景と不要な右余白を廃止。ChatGPTのような読み物型レイアウトに変更。</p></article>
+    <article class="card"><h3>表情は残す</h3><p>各発言時に保存された表情アイコンを回答の左に表示。後から感情状態が変わっても発言時の表情を保持。</p></article>
+    <article class="card"><h3>コピー</h3><p>回答下のコピーアイコンと、メッセージ長押しメニューの両方からコピー可能。文字選択も維持。</p></article>
+  </div>
+
+  <p class="small">Apple公式資料：<a href="https://developer.apple.com/documentation/Xcode/Xcode-Cloud">Xcode Cloud</a> · <a href="https://developer.apple.com/documentation/xcode/distributing-your-xcode-cloud-builds-through-testflight">TestFlightへのクラウド配布</a> · <a href="https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview">TestFlight概要</a> · <a href="https://developer.apple.com/xcode-cloud/get-started/">料金と開始条件</a></p>
+</main></body></html>

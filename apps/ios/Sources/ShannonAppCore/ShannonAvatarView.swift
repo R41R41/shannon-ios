@@ -53,3 +53,65 @@ public struct ShannonAvatarView: View {
 #endif
     }
 }
+
+public struct ShannonExpressionPortraitView: View {
+    public let expression: ShannonExpressionDTO
+
+    public init(expression: ShannonExpressionDTO) {
+        self.expression = expression
+    }
+
+    public var body: some View {
+        portraitImage
+            .resizable()
+            .scaledToFit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(expression.accessibilityDescription)
+    }
+
+    private var portraitImage: Image {
+#if canImport(UIKit)
+        if let image = ShannonExpressionAssets.uiImage(for: expression) {
+            return Image(uiImage: image)
+        }
+        return Image(systemName: "person.crop.rectangle")
+#elseif canImport(AppKit)
+        if let image = ShannonExpressionAssets.nsImage(for: expression) {
+            return Image(nsImage: image)
+        }
+        return Image(systemName: "person.crop.rectangle")
+#else
+        return Image(systemName: "person.crop.rectangle")
+#endif
+    }
+}
+
+public struct ShannonDialogueStagePortraitView: View {
+    public init() {}
+
+    public var body: some View {
+        stageImage
+            .resizable()
+            .scaledToFit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("シャノン")
+    }
+
+    private var stageImage: Image {
+#if canImport(UIKit)
+        if let url = ShannonDialogueAssets.stagePortraitURL,
+           let image = UIImage(contentsOfFile: url.path) {
+            return Image(uiImage: image)
+        }
+        return Image(systemName: "person.crop.rectangle")
+#elseif canImport(AppKit)
+        if let url = ShannonDialogueAssets.stagePortraitURL,
+           let image = NSImage(contentsOf: url) {
+            return Image(nsImage: image)
+        }
+        return Image(systemName: "person.crop.rectangle")
+#else
+        return Image(systemName: "person.crop.rectangle")
+#endif
+    }
+}

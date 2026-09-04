@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto';
+import {
+  estimatedOpenAICostUsd,
+  responseUsage,
+  type LlmUsageStore,
+} from './llmUsage.js';
 
 export type ShannonChatMode = 'openai' | 'local-stub';
 
@@ -18,6 +23,23 @@ export interface ShannonChatModelResult {
   mode: ShannonChatMode;
   model: string;
   reply: string;
+  taskProposal?: ShannonTaskProposal;
+  taskDecision?: ShannonTaskDecision;
+}
+
+export type ShannonTaskDisposition = 'none' | 'clarify' | 'propose';
+
+export interface ShannonTaskDecision {
+  disposition: ShannonTaskDisposition;
+  reason: string;
+}
+
+export interface ShannonTaskProposal {
+  title: string;
+  goal: string;
+  hostHint?: string;
+  projectHint?: string;
+  risk?: string;
 }
 
 export interface ShannonChatModel {
@@ -43,6 +65,8 @@ export interface OpenAIResponsesModelOptions {
   endpoint?: string;
   timeoutMilliseconds?: number;
   fetcher?: typeof fetch;
+  usageStore?: LlmUsageStore;
+  now?: () => string;
 }
 
 export class OpenAIResponsesChatModel implements ShannonChatModel {
@@ -69,13 +93,54 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: request.systemPrompt,
+        instructions: `${request.systemPrompt}\n\n${AGENT_TASK_INSTRUCTIONS}`,
         input: [
           ...request.history.map(item => ({ role: item.role, content: item.content })),
           { role: 'user', content: request.message },
         ],
         reasoning: { effort: 'none' },
-        text: { verbosity: 'low' },
+        text: {
+          verbosity: 'low',
+          format: {
+            type: 'json_schema',
+            name: 'shannon_chat_turn',
+            strict: true,
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                reply: { type: 'string', description: 'ユーザーに見せる自然な日本語の返答' },
+                taskDecision: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    disposition: { type: 'string', enum: ['none', 'clarify', 'propose'] },
+                    reason: { type: 'string', description: '判定理由。内部監査用に短く具体的に書く' },
+                  },
+                  required: ['disposition', 'reason'],
+                },
+                taskProposal: {
+                  anyOf: [
+                    { type: 'null' },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        title: { type: 'string' },
+                        goal: { type: 'string' },
+                        hostHint: { type: ['string', 'null'] },
+                        projectHint: { type: ['string', 'null'] },
+                        risk: { type: ['string', 'null'] },
+                      },
+                      required: ['title', 'goal', 'hostHint', 'projectHint', 'risk'],
+                    },
+                  ],
+                },
+              },
+              required: ['reply', 'taskDecision', 'taskProposal'],
+            },
+          },
+        },
         max_output_tokens: 700,
         store: false,
         prompt_cache_key: stableScopeIdentifier(request.scopeKey),
@@ -89,20 +154,36 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     if (!response.ok) {
       throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
     }
-    const reply = extractOutputText(json);
-    if (!reply) throw new Error('OPENAI_RESPONSE_EMPTY');
-    return { mode: this.mode, model: this.model, reply };
+    const structured = parseStructuredTurn(extractOutputText(json));
+    const usage = responseUsage(json);
+    this.options.usageStore?.recordLlmUsage({
+      scopeKey: request.scopeKey,
+      lane: 'chat',
+      model: this.model,
+      ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
+      occurredAt: this.options.now?.() ?? new Date().toISOString(),
+    });
+    return {
+      mode: this.mode,
+      model: this.model,
+      reply: structured.reply,
+      taskDecision: structured.taskDecision,
+      ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
+    };
   }
 }
 
 export function createConfiguredChatModel(
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  usageStore?: LlmUsageStore,
 ): ShannonChatModel {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return new LocalStubChatModel();
   return new OpenAIResponsesChatModel({
     apiKey,
     model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
+    usageStore,
   });
 }
 
@@ -150,3 +231,65 @@ function extractOutputText(value: unknown): string {
   }
   return parts.join('').trim();
 }
+
+function parseStructuredTurn(raw: string): {
+  reply: string;
+  taskDecision: ShannonTaskDecision;
+  taskProposal: ShannonTaskProposal | null;
+} {
+  if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
+  const value = parseJson(raw);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  const object = value as Record<string, unknown>;
+  if (typeof object.reply !== 'string' || !object.reply.trim()) throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  if (!object.taskDecision || typeof object.taskDecision !== 'object' || Array.isArray(object.taskDecision)) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  const rawDecision = object.taskDecision as Record<string, unknown>;
+  if (!isTaskDisposition(rawDecision.disposition)
+    || typeof rawDecision.reason !== 'string' || !rawDecision.reason.trim()) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  const taskDecision: ShannonTaskDecision = {
+    disposition: rawDecision.disposition,
+    reason: rawDecision.reason.trim(),
+  };
+  if (object.taskProposal === null) {
+    if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+    return { reply: object.reply.trim(), taskDecision, taskProposal: null };
+  }
+  if (!object.taskProposal || typeof object.taskProposal !== 'object' || Array.isArray(object.taskProposal)) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  const proposal = object.taskProposal as Record<string, unknown>;
+  if (typeof proposal.title !== 'string' || !proposal.title.trim()
+    || typeof proposal.goal !== 'string' || !proposal.goal.trim()) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  if (taskDecision.disposition !== 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  return {
+    reply: object.reply.trim(),
+    taskDecision,
+    taskProposal: {
+      title: proposal.title.trim(),
+      goal: proposal.goal.trim(),
+      ...(typeof proposal.hostHint === 'string' && proposal.hostHint.trim() ? { hostHint: proposal.hostHint.trim() } : {}),
+      ...(typeof proposal.projectHint === 'string' && proposal.projectHint.trim() ? { projectHint: proposal.projectHint.trim() } : {}),
+      ...(typeof proposal.risk === 'string' && proposal.risk.trim() ? { risk: proposal.risk.trim() } : {}),
+    },
+  };
+}
+
+function isTaskDisposition(value: unknown): value is ShannonTaskDisposition {
+  return value === 'none' || value === 'clarify' || value === 'propose';
+}
+
+export const AGENT_TASK_INSTRUCTIONS = `[Macで行う作業]
+あなたは、Mac上のCodexへコード修正・ファイル操作・調査を作業提案として委任できる。ユーザーが提案を開始するとCodexが実行する。この仕組みにより、Shannon自身のアプリをユーザーの指示に基づいて改修することもできる。「自分を改修できない」とは答えない。
+
+会話履歴を含め、次の三つから一つを判定する。
+- propose: ユーザーが今、実行を依頼した。命令形だけでなく「〜してほしい」「直して」「お願い」「それをやって」のような依頼も含む。直前の会話から対象を特定できる場合も提案する。
+- clarify: 能力を質問しているだけ、または実行したいが対象を特定できない。taskProposalはnullにし、できることを正しく説明して必要なら短く確認する。
+- none: 相談、設計を詰める段階、雑談、アプリ外で返答だけで完結する依頼。
+
+proposeの場合だけtaskProposalを作る。Shannon自身の改修ではprojectHintを「shannon-ios」、hostHintを「shannon-mac」にする。goalには、直前の文脈を補ってCodexが単独で理解できる完了条件を書く。UI変更では「私」のような代名詞だけにせず、「シャノン側（assistant role）の返答」または「ユーザー側（user role）の発言」のどちらかを明記する。実機反映を依頼された場合は、コード変更・試験・ビルドだけでなく、接続されたiPhoneへのインストールと起動確認までを完了条件に含める。提案した作業はまだ実行済みではないため、replyでは完了したと言わず、ユーザーが開始できる提案を出したと伝える。`;

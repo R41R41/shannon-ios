@@ -1,0 +1,28 @@
+[Unit]
+Description=Shannon autonomous world worker
+After=network-online.target shannon-ios.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-ios
+Environment=NODE_ENV=production
+Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/worldWorker.ts
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+ReadWritePaths=/home/azureuser/shannon-ios-data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.shannon.agent-host</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/ABSOLUTE/PATH/TO/node</string>
+    <string>--env-file=/ABSOLUTE/PATH/TO/agent-host.env</string>
+    <string>--import</string>
+    <string>tsx</string>
+    <string>services/api/src/agentHost.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/shannon-ios</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/ABSOLUTE/PATH/TO/user-home</string>
+    <key>CODEX_HOME</key>
+    <string>/ABSOLUTE/PATH/TO/user-home/.codex</string>
+    <key>PATH</key>
+    <string>/ABSOLUTE/PATH/TO/node-directory:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>/ABSOLUTE/PATH/TO/shannon-agent-host.log</string>
+  <key>StandardErrorPath</key>
+  <string>/ABSOLUTE/PATH/TO/shannon-agent-host.error.log</string>
+</dict>
+</plist>
