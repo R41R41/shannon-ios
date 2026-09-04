@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Cloud Agent v18</title>
+  <style>
+    :root{color-scheme:light dark;--sky:#79d2ff;--deep:#075e83;--paper:#f7fcff;--card:#fff;--ink:#17232a;--muted:#637681;--line:#c9e6f3;--ok:#117555;--wait:#9a6500}
+    @media(prefers-color-scheme:dark){:root{--paper:#0c151a;--card:#142027;--ink:#e8f4f8;--muted:#a5bac4;--line:#294550;--deep:#8cdbff;--ok:#70dcaf;--wait:#ffd078}}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;line-height:1.7}main{max-width:1120px;margin:auto;padding:48px 22px 80px}h1{font-size:clamp(2rem,6vw,4.4rem);line-height:1.08;margin:.25em 0}.lead{max-width:760px;color:var(--muted);font-size:1.12rem}.tag{display:inline-block;padding:5px 12px;border-radius:999px;background:#79d2ff2c;color:var(--deep);font-weight:800}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:14px;margin:24px 0}.card,.node{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:21px;box-shadow:0 14px 40px #075e830b}.card h3{margin-top:0}.done{color:var(--ok);font-weight:800}.wait{color:var(--wait);font-weight:800}.flow{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:10px;overflow:auto;padding:12px 0}.node{min-width:150px;position:relative}.node:not(:last-child):after{content:"→";position:absolute;right:-13px;top:42%;color:var(--deep);font-weight:900}.small{font-size:.9rem;color:var(--muted)}.rule{border-left:4px solid var(--sky);padding:4px 0 4px 16px;margin:18px 0}code{background:#79d2ff22;padding:.16em .42em;border-radius:7px}table{width:100%;border-collapse:separate;border-spacing:0 8px}td{padding:12px 14px;background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}td:first-child{border-left:1px solid var(--line);border-radius:14px 0 0 14px;font-weight:800}td:last-child{border-right:1px solid var(--line);border-radius:0 14px 14px 0}a{color:var(--deep)}
+    @media(max-width:760px){.flow{grid-template-columns:repeat(6,78vw)}td{display:block;border:1px solid var(--line)!important;border-radius:14px!important;margin-bottom:-9px}}
+  </style>
+</head>
+<body><main>
+  <span class="tag">Cloud self-improvement · v18</span>
+  <h1>Macを閉じても、<br>シャノンが改修を続ける</h1>
+  <p class="lead">TestFlightの自動配信経路は開通済み。今回、改修依頼をMac固定から切り離し、Azureの専用作業環境へ安全に振り分けられるコードと配備雛形まで整えた。</p>
+
+  <div class="flow" aria-label="自己改修から配信までの流れ">
+    <div class="node"><b>依頼</b><br><span class="small">iPhoneでシャノンに話す</span></div>
+    <div class="node"><b>永続化</b><br><span class="small">Azureが作業と承認を保持</span></div>
+    <div class="node"><b>Cloud Agent</b><br><span class="small">隔離された作業コピーでCodex</span></div>
+    <div class="node"><b>GitHub</b><br><span class="small">専用ブランチ・試験・承認</span></div>
+    <div class="node"><b>Xcode Cloud</b><br><span class="small">iOSビルドと署名</span></div>
+    <div class="node"><b>TestFlight</b><br><span class="small">MacなしでiPhoneへ配信</span></div>
+  </div>
+
+  <section class="grid">
+    <article class="card"><h3>配信経路</h3><p class="done">開通済み</p><p>非公開GitHubからXcode Cloudが自動ビルドし、Shannon Internalへ配信する。</p></article>
+    <article class="card"><h3>ホスト指定</h3><p class="done">実装・試験済み</p><p>提案時の<code>hostHint</code>と<code>projectHint</code>をiOSが失わず、指定ホストだけが作業を取得する。</p></article>
+    <article class="card"><h3>Azure常駐</h3><p class="wait">資格情報待ち</p><p>常駐サービスと隔離ルールは用意済み。専用のCodex認証とGitHub書込鍵を配置すれば起動できる。</p></article>
+    <article class="card"><h3>既定切替</h3><p class="wait">最終試験後</p><p>無害な試験タスクが通ってから、依頼先を<code>shannon-cloud</code>へ切り替える。</p></article>
+  </section>
+
+  <h2>安全境界</h2>
+  <div class="rule"><b>作業コピーを分離</b><br>稼働中のAPI配置先をCodexに直接編集させず、<code>/home/azureuser/shannon-agent-workspace/shannon-ios</code>だけを書き換える。</div>
+  <div class="rule"><b>1タスク1ブランチ</b><br><code>shannon/task-&lt;task-id&gt;</code>で変更し、試験前にmainへ入れない。</div>
+  <div class="rule"><b>配信は別承認</b><br>コードを直す許可と、GitHubへ送りTestFlight配信を始める許可を分ける。push時にもう一度確認する。</div>
+  <div class="rule"><b>認証を分離</b><br>Macの個人ログイン情報はAzureへコピーしない。取り消せる専用資格情報だけを使う。</div>
+
+  <h2>次の一回だけ必要な準備</h2>
+  <table>
+    <tr><td>Codex</td><td>Azure専用のOpenAIプロジェクト／サービスアカウント鍵を設定する。</td></tr>
+    <tr><td>GitHub</td><td>Azure専用・このリポジトリ限定・書込可能なDeploy Keyを登録する。</td></tr>
+    <tr><td>起動</td><td><code>shannon-agent-host.service</code>を有効化し、Azureのハートビートを確認する。</td></tr>
+    <tr><td>切替</td><td>無害なタスク成功後に<code>SHANNON_AGENT_DEFAULT_HOST=shannon-cloud</code>へ変更する。</td></tr>
+  </table>
+
+  <p class="small">OpenAI公式資料では、プロジェクト用サービスアカウントに専用APIキーを発行できる。個人ログインの複製より、用途を限定して取り消せる認証がこの構成に適している。<a href="https://developers.openai.com/api/reference/cli/resources/admin/subresources/organization/subresources/projects/subresources/service_accounts/subresources/api_keys/methods/create">Service account API key</a></p>
+</main></body></html>

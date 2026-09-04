@@ -143,7 +143,7 @@ describe('Shannon local API kernel', () => {
     } });
 
     expect(model.requests).toHaveLength(1);
-    expect(model.requests[0]?.systemPrompt).toContain('[Mac作業の現在状態 — Azure DB上の事実・会話履歴より優先]');
+    expect(model.requests[0]?.systemPrompt).toContain('[Codex作業の現在状態 — Azure DB上の事実・会話履歴より優先]');
     expect(model.requests[0]?.systemPrompt).toContain('リンク表示を直す [waiting_approval]');
     expect(model.requests[0]?.systemPrompt).toContain('SwiftPMの検証にsandbox-execが必要です。');
     expect(model.requests[0]?.systemPrompt).toContain('scripts/verify.sh ios');

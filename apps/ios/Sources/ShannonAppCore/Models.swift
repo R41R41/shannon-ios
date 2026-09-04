@@ -238,6 +238,8 @@ public struct ShannonAgentTaskCreateRequestDTO: Codable, Equatable, Sendable {
     public let goal: String
     public let summary: String
     public let plan: [ShannonAgentPlanItem]
+    public let hostHint: String?
+    public let projectHint: String?
 }
 
 public struct ShannonAgentTaskCommandRequestDTO: Codable, Equatable, Sendable {

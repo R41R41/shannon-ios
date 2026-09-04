@@ -558,7 +558,7 @@ export function agentTaskPromptProjection(tasks: readonly AgentTask[], currentTh
     return `- ${task.title} [${task.status}] ${task.summary}${action}${approval}`.slice(0, 700);
   });
   return [
-    '[Mac作業の現在状態 — Azure DB上の事実・会話履歴より優先]',
+    '[Codex作業の現在状態 — Azure DB上の事実・会話履歴より優先]',
     ...lines,
     'これは全トークにまたがる作業一覧である。別トークから尋ねられても、該当する作業名と最新状態をここから答える。',
     'waiting_approvalは実行中ではなく、記載された確認をユーザーが操作するまで停止中である。過去の会話にある古い進捗説明を繰り返さない。',

@@ -341,7 +341,7 @@ public final class ShannonConversationModel {
             let previous = task
             task.status = .queued
             task.summary = "作業をお願いしているところ。"
-            task.currentAction = "Macの空きを確認中"
+            task.currentAction = "作業環境の空きを確認中"
             task.updatedAt = Date()
             upsertAgentTask(task)
             do {
@@ -380,7 +380,7 @@ public final class ShannonConversationModel {
                 failureMessage: "作業を中止できませんでした。通信状態を確認してもう一度お試しください。",
                 optimisticUpdate: { optimistic in
                     optimistic.summary = "停止を送信しています。"
-                    optimistic.currentAction = "Macへ停止命令を送信中"
+                    optimistic.currentAction = "作業環境へ停止命令を送信中"
                 }
             )
             return
@@ -441,7 +441,7 @@ public final class ShannonConversationModel {
                 failureMessage: "判断を送信できませんでした。通信状態を確認してもう一度お試しください。",
                 optimisticUpdate: { optimistic in
                     optimistic.summary = accepted ? "許可を送信しています。" : "判断を送信しています。"
-                    optimistic.currentAction = "Macへ判断を送信中"
+                    optimistic.currentAction = "作業環境へ判断を送信中"
                 }
             )
             return
@@ -560,6 +560,8 @@ public final class ShannonConversationModel {
             sourceMessageID: next.sourceMessageID,
             title: next.title,
             goal: next.goal,
+            hostHint: task.hostHint,
+            projectHint: task.projectHint,
             status: next.status,
             summary: next.summary,
             currentAction: next.currentAction,
@@ -799,6 +801,8 @@ public final class ShannonConversationModel {
                 sourceMessageID: sourceMessageID,
                 title: block.title,
                 goal: block.goal,
+                hostHint: block.hostHint,
+                projectHint: block.projectHint,
                 status: .proposed,
                 summary: detail.isEmpty ? block.goal : detail
             )

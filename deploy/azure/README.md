@@ -11,6 +11,28 @@ explicit release operation.
 - Public HTTPS base: `https://sh4nnon.com/companion`
 - Services: `shannon-ios.service` (response lane) and `shannon-ios-worker.service` (background/sleep lane)
 
+## Optional cloud Agent Host
+
+`shannon-agent-host.service` moves user-directed Codex work off the Mac. It uses:
+
+- a dedicated writable checkout at `/home/azureuser/shannon-agent-workspace/shannon-ios`
+- durable host/Codex state under `/home/azureuser/shannon-agent-data`
+- a dedicated Codex executable under `/home/azureuser/shannon-agent-runtime`
+- secrets in `/home/azureuser/.config/shannon-agent-host/agent-host.env` (`0600`)
+
+Do not point the Agent Host at `/home/azureuser/shannon-ios`, because that tree is
+the running API deployment. The worktree and production deployment must remain
+separate so an unfinished edit cannot change the live service.
+
+The API setting `SHANNON_AGENT_DEFAULT_HOST=shannon-cloud` should be enabled only
+after the cloud host heartbeat and a harmless end-to-end task succeed. Until then,
+leave it unset so task proposals continue to target `shannon-mac`.
+
+The cloud host needs two independent, revocable credentials: Codex/OpenAI access
+and write access to the private GitHub repository. Never reuse or copy the Mac's
+personal Codex login directory. Xcode Cloud remains responsible for iOS builds,
+signing, and internal TestFlight distribution after a reviewed commit reaches GitHub.
+
 The VM's system Node is currently v20 and cannot run `node:sqlite`. Do not
 upgrade it in place because existing Shannon and Aether services use it. Install
 an isolated Node 24 LTS runtime at the path above and verify its checksum before

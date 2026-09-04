@@ -108,7 +108,9 @@ final class ShannonConnectionTests: XCTestCase {
             displayName: "Test iPhone",
             expiresAt: Date(timeIntervalSinceNow: 3_600)
         ))
-        let localTask = ShannonAgentTaskFixtures.proposed(threadID: "thread-a")
+        var localTask = ShannonAgentTaskFixtures.proposed(threadID: "thread-a")
+        localTask.hostHint = "shannon-cloud"
+        localTask.projectHint = "shannon-ios"
         let session = stubSession { request in
             XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/agent/tasks")
             XCTAssertEqual(request.httpMethod, "POST")
@@ -118,6 +120,8 @@ final class ShannonConnectionTests: XCTestCase {
             XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
             XCTAssertEqual(json["taskId"] as? String, localTask.id.uuidString)
             XCTAssertEqual(json["idempotencyKey"] as? String, "stable-start-key")
+            XCTAssertEqual(json["hostHint"] as? String, "shannon-cloud")
+            XCTAssertEqual(json["projectHint"] as? String, "shannon-ios")
             return try response(url: request.url!, json: agentTaskEnvelopeJSON(id: localTask.id))
         }
         let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)

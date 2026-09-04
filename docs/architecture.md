@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-04 / context v16
+Revision: 2026-09-05 / cloud delivery bridge
 
 ## System shape
 
@@ -19,8 +19,9 @@ Azure VM: API + SQLite + background workers
   └─ durable agent-task state
           ▲ authenticated commands/events
           │
-Mac Agent Host
-  └─ Codex App Server (stdio) in an allowlisted local repository
+Agent Host
+  ├─ current: Mac + Codex App Server
+  └─ staged: Azure-isolated Codex workspace → private GitHub → Xcode Cloud → TestFlight
 ```
 
 Production endpoint: `https://sh4nnon.com/companion`.
@@ -72,14 +73,16 @@ User asks Shannon for a concrete change
   → Shannon proposes an agent task
   → user starts it
   → Azure stores task + command
-  → Mac Agent Host claims the command
+  → the explicitly selected Agent Host claims the command
   → Codex starts in the allowlisted repository
   → Codex reads AGENTS.md + current architecture + runbook
   → progress / approval / changes / tests stream back to Azure
   → iOS can leave and return without losing authoritative status
 ```
 
-Self-improvement is never initiated autonomously. The Mac host persists the Codex thread, turn, and pending-approval checkpoint identifiers so it can reattach after an Agent Host restart. Azure `agent_tasks` and `agent_task_events` remain authoritative if the iOS app is suspended.
+Self-improvement is never initiated autonomously. The selected host persists the Codex thread, turn, and pending-approval checkpoint identifiers so it can reattach after an Agent Host restart. Azure `agent_tasks` and `agent_task_events` remain authoritative if the iOS app is suspended. Host and project hints are preserved from the model proposal through the iOS start request, and an explicitly targeted task can be claimed only by that host.
+
+The staged cloud host uses a writable checkout separate from the running API deployment. Cloud work happens on a task branch. Tests must pass before any main-branch integration, and GitHub/TestFlight delivery requires an explicit user request plus an operation-time approval. Xcode Cloud builds and signs iOS artifacts; the Linux VM never attempts to build or sign the iOS app itself.
 
 An approval request is valid only on the live Codex connection that created it. After a host restart, an expired approval is cleared rather than inferred. The same durable Shannon task and goal continue from the existing working tree in a clean Codex thread, avoiding unmatched tool calls left in the old history; a fresh approval is requested only when the remaining operation still needs one. The recovery `started` event also clears the stale approval projection in Azure so the app cannot remain permanently waiting on an unresolvable request.
 
@@ -103,7 +106,7 @@ An approval request is valid only on the live Codex connection that created it. 
 - `services/api`: contracts, authentication, persistence, chat orchestration, background workers, Agent Host protocol, Aether/world integrations.
 - `packages/cognition`: pure shared-state and prompt-projection rules.
 - `deploy/macos`: launchd configuration for the local Agent Host.
-- `deploy/azure`: production services and configuration examples.
+- `deploy/azure`: production services, optional isolated cloud Agent Host, and configuration examples.
 
 ## Production layout
 
@@ -119,7 +122,7 @@ Systemd services:
 - `shannon-ios-worker.service`
 - `shannon-ios-world.service`
 
-The local Mac Agent Host runs as `com.shannon.agent-host` and uses the local Shannon repository as its source checkout.
+The current local Agent Host runs as `com.shannon.agent-host` and uses the local Shannon repository as its source checkout. The cloud Agent Host unit is staged but must not become the default until its dedicated Codex credential, GitHub write credential, heartbeat, and harmless end-to-end task have been verified.
 
 ## Deferred by design
 

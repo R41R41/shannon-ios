@@ -350,7 +350,9 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
             title: task.title,
             goal: task.goal,
             summary: task.summary,
-            plan: task.plan
+            plan: task.plan,
+            hostHint: task.hostHint,
+            projectHint: task.projectHint
         ))
         let envelope: ShannonAgentTaskEnvelopeDTO = try await response(ShannonAgentTaskEnvelopeDTO.self, for: request)
         return try ShannonAgentTask(remote: envelope.task)

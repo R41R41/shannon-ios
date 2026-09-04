@@ -86,6 +86,22 @@ describe('SQLite Agent Task Store', () => {
     store.close();
   });
 
+  it('routes an explicitly targeted task only to that host', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const created = store.create('owner-a', {
+      idempotencyKey: 'cloud-start', conversationThreadID: 'thread-a', title: 'クラウド改修',
+      goal: 'TestFlightへ届ける', summary: 'クラウドで作業する。', hostHint: 'shannon-cloud',
+      projectHint: 'shannon-ios',
+    }, '2026-09-04T00:00:00.000Z');
+
+    expect(store.claim('shannon-mac', '2026-09-04T00:00:01.000Z')).toBeNull();
+    expect(store.claim('shannon-cloud', '2026-09-04T00:00:02.000Z')).toMatchObject({
+      taskId: created.task.id,
+      payload: { hostHint: 'shannon-cloud', projectHint: 'shannon-ios' },
+    });
+    store.close();
+  });
+
   it('queues one idempotent approval command and rejects an old-state command', () => {
     const store = new SQLiteAgentTaskStore(databasePath());
     const created = store.create('owner-a', {

@@ -204,12 +204,12 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         INSERT INTO agent_tasks
           (task_id, scope_key, conversation_thread_id, source_message_id, start_idempotency_key,
            title, goal, status, summary, current_action, plan_json, pending_approval_json,
-           changes_json, tests_json, created_at, updated_at, latest_sequence)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0)
+           changes_json, tests_json, created_at, updated_at, latest_sequence, assigned_host_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?)
       `).run(
         taskId, scopeKey, input.conversationThreadID, input.sourceMessageID ?? null,
         input.idempotencyKey, input.title, input.goal, input.summary,
-        JSON.stringify(input.plan ?? []), now, now,
+        JSON.stringify(input.plan ?? []), now, now, input.hostHint?.trim() || null,
       );
       this.appendEvent(taskId, 'queued', '作業を受け付けた', input.summary, 'neutral', now, {});
       this.insertCommand(taskId, scopeKey, `${input.idempotencyKey}:start`, 'start', {
@@ -323,10 +323,10 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       if (command?.type === 'start') {
         this.database.prepare(`
           UPDATE agent_tasks SET status = 'starting', summary = '作業を始める準備中。',
-            current_action = 'Macの作業環境へ接続中', assigned_host_id = ?, updated_at = ?
+            current_action = '作業環境へ接続中', assigned_host_id = ?, updated_at = ?
           WHERE task_id = ? AND status = 'queued'
         `).run(hostId, now, command.taskId);
-        this.appendEvent(command.taskId, 'starting', 'Macが作業を受け取った', undefined, 'progress', now, { hostId });
+        this.appendEvent(command.taskId, 'starting', '作業環境が依頼を受け取った', undefined, 'progress', now, { hostId });
       }
     });
     return commandId ? this.command(commandId, leaseUntil) : null;
@@ -669,10 +669,10 @@ function projectedStatusForCommand(status: AgentTaskStatus, type: AgentCommandTy
     case 'interrupt': return isTrue(payload.cancel)
       ? { status: 'cancelled', summary: 'この作業を中止した。', currentAction: '', clearApproval: true }
       : { status: 'paused', summary: '作業を一時停止しています。', currentAction: '' };
-    case 'resume': return { status: 'starting', summary: '作業を再開しています。', currentAction: 'Macへ再接続中' };
+    case 'resume': return { status: 'starting', summary: '作業を再開しています。', currentAction: '作業環境へ再接続中' };
     case 'resolve_approval': return payload.decision === 'deny'
       ? { status: 'cancelled', summary: '許可されなかったので、ここで止めた。', currentAction: '', clearApproval: true }
-      : { status: 'starting', summary: '判断を受け取り、続きを始めています。', currentAction: '操作結果をMacへ送信中', clearApproval: true };
+      : { status: 'starting', summary: '判断を受け取り、続きを始めています。', currentAction: '操作結果を作業環境へ送信中', clearApproval: true };
     case 'start': return { status };
   }
 }

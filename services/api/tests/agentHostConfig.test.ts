@@ -18,6 +18,7 @@ describe('Agent Host configuration', () => {
 
     expect(resolveAgentProject(config, 'shannon')).toMatchObject({ key: 'shannon', path: realpathSync(project) });
     expect(resolveAgentProject(config, undefined).path).toBe(realpathSync(project));
+    expect(config.deliveryMode).toBe('local-device');
     expect(() => resolveAgentProject(config, '/tmp/not-allowed')).toThrow('AGENT_PROJECT_NOT_ALLOWLISTED');
   });
 
@@ -32,5 +33,16 @@ describe('Agent Host configuration', () => {
       .toThrow('must use HTTPS');
     expect(() => loadAgentHostConfig({ ...base, SHANNON_AGENT_HOST_TOKEN: 'short' }))
       .toThrow('at least 32');
+  });
+
+  it('accepts the isolated cloud TestFlight delivery mode', () => {
+    const root = mkdtempSync(join(tmpdir(), 'shannon-host-config-'));
+    const config = loadAgentHostConfig({
+      SHANNON_AGENT_HOST_TOKEN: 'x'.repeat(32),
+      SHANNON_AGENT_PROJECTS_JSON: JSON.stringify({ Shannon: root }),
+      SHANNON_AGENT_DEFAULT_PROJECT: 'Shannon',
+      SHANNON_AGENT_DELIVERY_MODE: 'cloud-testflight',
+    });
+    expect(config.deliveryMode).toBe('cloud-testflight');
   });
 });

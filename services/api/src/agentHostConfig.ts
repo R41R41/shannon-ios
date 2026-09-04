@@ -16,6 +16,7 @@ export interface AgentHostConfig {
   codexExecutable: string;
   codexModel?: string;
   codexEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  deliveryMode: 'local-device' | 'cloud-testflight';
   projects: ReadonlyMap<string, AgentHostProject>;
   defaultProjectKey: string;
   pollIntervalMs: number;
@@ -38,6 +39,7 @@ export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = process.env
   const bundledCodex = '/Applications/ChatGPT.app/Contents/Resources/codex';
   const codexExecutable = configuredCodex || (existsSync(bundledCodex) ? bundledCodex : 'codex');
   const codexEffort = parseEffort(environment.SHANNON_CODEX_REASONING_EFFORT);
+  const deliveryMode = parseDeliveryMode(environment.SHANNON_AGENT_DELIVERY_MODE);
 
   return Object.freeze({
     apiBaseURL,
@@ -48,11 +50,18 @@ export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = process.env
     codexExecutable,
     ...(environment.SHANNON_CODEX_MODEL?.trim() ? { codexModel: environment.SHANNON_CODEX_MODEL.trim() } : {}),
     ...(codexEffort ? { codexEffort } : {}),
+    deliveryMode,
     projects,
     defaultProjectKey: defaultProjectKey.toLocaleLowerCase('en-US'),
     pollIntervalMs: boundedInteger(environment.SHANNON_AGENT_POLL_INTERVAL_MS, 1_500, 250, 30_000),
     heartbeatIntervalMs: boundedInteger(environment.SHANNON_AGENT_HEARTBEAT_INTERVAL_MS, 15_000, 5_000, 120_000),
   });
+}
+
+function parseDeliveryMode(raw: string | undefined): AgentHostConfig['deliveryMode'] {
+  const value = raw?.trim() || 'local-device';
+  if (value === 'local-device' || value === 'cloud-testflight') return value;
+  throw new Error('SHANNON_AGENT_DELIVERY_MODE must be local-device or cloud-testflight');
 }
 
 export function resolveAgentProject(config: AgentHostConfig, hint: unknown): AgentHostProject {

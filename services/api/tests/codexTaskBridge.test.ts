@@ -254,6 +254,7 @@ function makeFixture() {
   const config: AgentHostConfig = {
     apiBaseURL: 'https://sh4nnon.com/companion', token: 'x'.repeat(32), hostId: 'test-mac', displayName: 'Test Mac',
     stateFile: join(root, 'state.json'), codexExecutable: 'codex', projects, defaultProjectKey: 'fixture',
+    deliveryMode: 'local-device',
     pollIntervalMs: 250, heartbeatIntervalMs: 5_000,
   };
   return { config, state: new AgentHostStateStore(config.stateFile), client: new FakeCodexConnection(), project };

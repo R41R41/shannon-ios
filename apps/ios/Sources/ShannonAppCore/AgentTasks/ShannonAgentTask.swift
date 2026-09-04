@@ -310,6 +310,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public var sourceMessageID: UUID?
     public var title: String
     public var goal: String
+    public var hostHint: String?
+    public var projectHint: String?
     public var status: ShannonAgentTaskStatus
     public var summary: String
     public var currentAction: String?
@@ -327,6 +329,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         sourceMessageID: UUID? = nil,
         title: String,
         goal: String,
+        hostHint: String? = nil,
+        projectHint: String? = nil,
         status: ShannonAgentTaskStatus,
         summary: String,
         currentAction: String? = nil,
@@ -343,6 +347,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         self.sourceMessageID = sourceMessageID
         self.title = title
         self.goal = goal
+        self.hostHint = hostHint
+        self.projectHint = projectHint
         self.status = status
         self.summary = summary
         self.currentAction = currentAction

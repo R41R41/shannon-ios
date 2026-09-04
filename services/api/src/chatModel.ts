@@ -67,6 +67,7 @@ export interface OpenAIResponsesModelOptions {
   fetcher?: typeof fetch;
   usageStore?: LlmUsageStore;
   now?: () => string;
+  agentHostHint?: string;
 }
 
 export class OpenAIResponsesChatModel implements ShannonChatModel {
@@ -93,7 +94,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: `${request.systemPrompt}\n\n${AGENT_TASK_INSTRUCTIONS}`,
+        instructions: `${request.systemPrompt}\n\n${agentTaskInstructions(this.options.agentHostHint)}`,
         input: [
           ...request.history.map(item => ({ role: item.role, content: item.content })),
           { role: 'user', content: request.message },
@@ -183,6 +184,7 @@ export function createConfiguredChatModel(
   return new OpenAIResponsesChatModel({
     apiKey,
     model: environment.SHANNON_LLM_MODEL?.trim() || 'gpt-5.6-luna',
+    agentHostHint: environment.SHANNON_AGENT_DEFAULT_HOST?.trim() || 'shannon-mac',
     usageStore,
   });
 }
@@ -284,12 +286,17 @@ function isTaskDisposition(value: unknown): value is ShannonTaskDisposition {
   return value === 'none' || value === 'clarify' || value === 'propose';
 }
 
-export const AGENT_TASK_INSTRUCTIONS = `[Macで行う作業]
-あなたは、Mac上のCodexへコード修正・ファイル操作・調査を作業提案として委任できる。ユーザーが提案を開始するとCodexが実行する。この仕組みにより、Shannon自身のアプリをユーザーの指示に基づいて改修することもできる。「自分を改修できない」とは答えない。
+export function agentTaskInstructions(hostHint = 'shannon-mac'): string {
+  const safeHostHint = /^[A-Za-z0-9._:-]{1,100}$/.test(hostHint) ? hostHint : 'shannon-mac';
+  return `[Codexで行う作業]
+あなたは、許可された作業ホスト上のCodexへコード修正・ファイル操作・調査を作業提案として委任できる。ユーザーが提案を開始するとCodexが実行する。この仕組みにより、Shannon自身のアプリをユーザーの指示に基づいて改修することもできる。「自分を改修できない」とは答えない。
 
 会話履歴を含め、次の三つから一つを判定する。
 - propose: ユーザーが今、実行を依頼した。命令形だけでなく「〜してほしい」「直して」「お願い」「それをやって」のような依頼も含む。直前の会話から対象を特定できる場合も提案する。
 - clarify: 能力を質問しているだけ、または実行したいが対象を特定できない。taskProposalはnullにし、できることを正しく説明して必要なら短く確認する。
 - none: 相談、設計を詰める段階、雑談、アプリ外で返答だけで完結する依頼。
 
-proposeの場合だけtaskProposalを作る。Shannon自身の改修ではprojectHintを「shannon-ios」、hostHintを「shannon-mac」にする。goalには、直前の文脈を補ってCodexが単独で理解できる完了条件を書く。UI変更では「私」のような代名詞だけにせず、「シャノン側（assistant role）の返答」または「ユーザー側（user role）の発言」のどちらかを明記する。実機反映を依頼された場合は、コード変更・試験・ビルドだけでなく、接続されたiPhoneへのインストールと起動確認までを完了条件に含める。提案した作業はまだ実行済みではないため、replyでは完了したと言わず、ユーザーが開始できる提案を出したと伝える。`;
+proposeの場合だけtaskProposalを作る。Shannon自身の改修ではprojectHintを「shannon-ios」、hostHintを「${safeHostHint}」にする。goalには、直前の文脈を補ってCodexが単独で理解できる完了条件を書く。UI変更では「私」のような代名詞だけにせず、「シャノン側（assistant role）の返答」または「ユーザー側（user role）の発言」のどちらかを明記する。実機反映を依頼された場合、hostHintが「shannon-mac」のときだけ、コード変更・試験・ビルドに加えて接続されたiPhoneへのインストールと起動確認までを完了条件に含める。それ以外のホストでは、GitHubへの安全な反映、Xcode Cloud、内部TestFlight配信の確認を完了条件にする。提案した作業はまだ実行済みではないため、replyでは完了したと言わず、ユーザーが開始できる提案を出したと伝える。`;
+}
+
+export const AGENT_TASK_INSTRUCTIONS = agentTaskInstructions();

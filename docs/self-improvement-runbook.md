@@ -35,17 +35,19 @@ scripts/verify.sh all
 
 Real-LLM evaluations are opt-in because they cost money. Run them only for changes to extraction, proposal decisions, or model behavior and record that cost-bearing tests were intentionally used.
 
-## Mac Agent Host
+## Agent Host
 
-The launchd label is `com.shannon.agent-host`. After changing Agent Host or bridge code:
+The Mac launchd label is `com.shannon.agent-host`; the staged Azure unit is `shannon-agent-host.service`. After changing Agent Host or bridge code:
 
 1. Run API verification.
 2. Restart the launch agent.
-3. Confirm it is running.
+3. Confirm the intended host is running and the task is routed only to its exact host ID.
 4. Confirm its authenticated heartbeat reaches Azure.
 5. For lifecycle changes, start a harmless task and verify start, progress, reconnect, and completion events.
 
-The Agent Host must launch Codex only inside an allowlisted project. Its saved state contains task, Codex thread, turn, and pending-approval checkpoint identifiers used for reattachment after restart.
+The Agent Host must launch Codex only inside an allowlisted project. Its saved state contains task, Codex thread, turn, and pending-approval checkpoint identifiers used for reattachment after restart. A cloud host must use a dedicated writable checkout, never the live API deployment directory.
+
+For cloud TestFlight delivery, work on `shannon/task-<task-id>`. Do not integrate or push `main` until tests pass and the user explicitly requested delivery. The push/integration operation needs a fresh approval at execution time. Xcode Cloud, not Azure Linux, performs the iOS build and signing.
 
 An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Discard the expired request, preserve the Shannon task goal, continue from the same working tree in a clean Codex thread, publish a `started` recovery event so Azure clears the stale approval, and ask for a fresh approval only if the remaining operation still requires it. A clean thread is intentional: the expired request can leave an unmatched tool call in the old Codex history.
 

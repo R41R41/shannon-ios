@@ -24,6 +24,7 @@ describe('OpenAI Responses chat adapter', () => {
       });
       expect(String(body.instructions)).toContain('Shannon自身のアプリをユーザーの指示に基づいて改修');
       expect(String(body.instructions)).toContain('直前の会話から対象を特定');
+      expect(String(body.instructions)).toContain('hostHintを「shannon-mac」');
       expect(body.input).toEqual([
         { role: 'user', content: '前の話' },
         { role: 'assistant', content: '覚えてる' },
@@ -69,6 +70,27 @@ describe('OpenAI Responses chat adapter', () => {
         estimatedCostUsd: 0.00006,
       }),
     ]);
+  });
+
+  it('targets the configured cloud host in task instructions', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(String(body.instructions)).toContain('hostHintを「shannon-cloud」');
+      expect(String(body.instructions)).toContain('内部TestFlight配信');
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          reply: 'クラウド作業として提案したよ。',
+          taskDecision: { disposition: 'propose', reason: '実装依頼' },
+          taskProposal: { title: 'UI修正', goal: '修正してTestFlightへ配る', hostHint: 'shannon-cloud', projectHint: 'shannon-ios', risk: null },
+        }),
+      }), { status: 200 });
+    });
+    const model = new OpenAIResponsesChatModel({
+      apiKey: 'test-only', fetcher: fetcher as typeof fetch, agentHostHint: 'shannon-cloud',
+    });
+
+    await model.generate({ scopeKey: 'owner', systemPrompt: 'system', history: [], message: '修正して配って' });
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it('returns a task proposal in the same model response without another call', async () => {
