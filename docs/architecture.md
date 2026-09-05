@@ -49,14 +49,18 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 ## iOS experience
 
-- Talk, Memory, and Settings form the primary horizontal workspace.
+- Talk and Memory share a root switcher that changes only on an explicit tap; there is no interactive horizontal page swipe.
+- Settings opens independently from the gear button instead of behaving like a third content page.
 - Talk supports multiple threads, a sliding thread list, scroll mode, and character-focused dialogue mode.
-- Assistant messages store the expression used at send time.
+- The thread list has a visible button. A left-edge swipe is retained only as a secondary shortcut on Talk.
+- Assistant messages store the expression used at send time and place that avatar in a compact message header so the reply body can use the full content width.
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 
 Live2D and animated widgets remain future work. Current dialogue mode uses a static character-stage asset.
+
+Voice conversation is planned after the v1.2 usability and presence pass. Its first release is user-initiated, half-duplex, and reuses the existing FCA/chat path after transcription. Audio is not retained by default; the durable conversation remains text plus the committed expression. Full-duplex interruption and background voice activation are deliberately later work.
 
 ## Aether boundary
 
@@ -136,3 +140,4 @@ The distributor records every automatic check in the production SQLite database.
 - autonomous source-code rewriting
 - Live2D runtime
 - animated widget character
+- full-duplex or background voice activation

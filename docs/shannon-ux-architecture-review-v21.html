@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon UX画面アーキテクチャ監査 v21</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5fbfe;--paper:#fff;--ink:#14242c;--muted:#637985;--line:#cfe5ef;--sky:#72d2fa;--deep:#087da8;--soft:#e6f7fe;--green:#147253;--green-soft:#e1f6ed;--amber:#8b5b00;--amber-soft:#fff2d7;--red:#a63b32;--red-soft:#ffe8e5;--violet:#6651b8;--violet-soft:#eeeaff;--shadow:0 20px 60px #0c587414}
+    @media(prefers-color-scheme:dark){:root{--bg:#09151b;--paper:#122129;--ink:#e9f6fb;--muted:#a3bac5;--line:#294957;--sky:#78d4fb;--deep:#8edfff;--soft:#102e3b;--green:#73d9b2;--green-soft:#123328;--amber:#ffd17a;--amber-soft:#382a12;--red:#ffb4ab;--red-soft:#3b2220;--violet:#c0b4ff;--violet-soft:#292442;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,#76d8ff35,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}main{width:min(1180px,calc(100% - 30px));margin:auto;padding:50px 0 90px}h1,h2,h3,p{margin-top:0}h1{max-width:960px;margin:.18em 0;font-size:clamp(2.45rem,7vw,5rem);line-height:1;letter-spacing:-.055em}h2{font-size:clamp(1.55rem,4vw,2.4rem);letter-spacing:-.025em}.eyebrow{color:var(--deep);font-size:.77rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.lead{max-width:830px;color:var(--muted);font-size:1.08rem}.chips{display:flex;flex-wrap:wrap;gap:9px;margin:24px 0 38px}.chip{padding:7px 12px;border-radius:999px;background:var(--soft);color:var(--deep);font-weight:800}.chip.now{background:var(--violet-soft);color:var(--violet)}
+    section{margin-top:18px;padding:28px;border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:var(--shadow)}.decision{padding:22px;border-radius:22px;background:linear-gradient(135deg,var(--violet-soft),var(--soft));border:1px solid color-mix(in srgb,var(--sky) 55%,var(--line))}.decision strong{display:block;color:var(--violet);font-size:1.17rem}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{padding:20px;border:1px solid var(--line);border-radius:21px;background:var(--paper)}.bad{background:var(--red-soft)}.bad h3{color:var(--red)}.good{background:var(--green-soft)}.good h3{color:var(--green)}.tag{display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:var(--soft);color:var(--deep);font-size:.72rem;font-weight:900;letter-spacing:.08em}
+    .compare{display:grid;grid-template-columns:1fr 64px 1fr;gap:14px;align-items:center}.arrow{font-size:2rem;text-align:center;color:var(--deep)}.map{display:grid;gap:10px}.layer{padding:16px 18px;border-radius:17px;background:var(--paper);border:1px solid var(--line);display:grid;grid-template-columns:150px 1fr;gap:14px}.layer b{color:var(--deep)}.phone-wrap{display:grid;grid-template-columns:.8fr 1.2fr;gap:24px;align-items:center}.phone{max-width:375px;width:100%;margin:auto;padding:16px;border:2px solid color-mix(in srgb,var(--ink) 76%,transparent);border-radius:39px;background:var(--bg);min-height:600px}.header{display:grid;grid-template-columns:46px 1fr 46px;gap:8px;align-items:center}.round{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 72%,transparent)}.seg{display:grid;grid-template-columns:1fr 1fr;padding:3px;border:1px solid var(--line);border-radius:999px}.seg span,.seg b{text-align:center;padding:7px;border-radius:999px}.seg b{background:var(--deep);color:white}.assistant{margin-top:28px}.identity{display:flex;align-items:center;gap:9px}.face{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-size:1.25rem}.identity small{color:var(--muted)}.answer{margin-top:10px;font-size:1rem;line-height:1.75}.mine{width:78%;margin:22px 0 22px auto;padding:11px 15px;border-radius:19px;background:var(--deep);color:white}.composer{margin-top:36px;padding:9px 10px 9px 16px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--paper) 76%,transparent)}.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--deep);color:white}
+    .gesture{width:100%;border-collapse:separate;border-spacing:0 8px}.gesture th{text-align:left;color:var(--muted);font-size:.78rem}.gesture td{padding:13px 14px;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.gesture td:first-child{border-left:1px solid var(--line);border-radius:14px 0 0 14px;font-weight:800}.gesture td:last-child{border-right:1px solid var(--line);border-radius:0 14px 14px 0}.yes{color:var(--green);font-weight:900}.no{color:var(--red);font-weight:900}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.step{padding:19px;border-radius:20px;background:var(--paper);border:1px solid var(--line)}.step.now{background:var(--violet-soft);border:2px solid var(--violet)}.num{color:var(--deep);font-size:.75rem;font-weight:900;letter-spacing:.09em}.note{margin-top:16px;padding:16px 18px;border-radius:17px;background:var(--amber-soft);color:var(--amber)}footer{padding:28px 5px 0;color:var(--muted);font-size:.85rem}a{color:var(--deep)}
+    @media(max-width:900px){.grid,.phone-wrap,.steps,.compare{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}section{padding:22px}.layer{grid-template-columns:1fr;gap:2px}.gesture thead{display:none}.gesture,.gesture tbody,.gesture tr,.gesture td{display:block}.gesture tr{margin-bottom:12px}.gesture td{border:1px solid var(--line)!important;border-radius:12px!important;margin-top:-1px}.phone{min-height:0}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon · UX architecture audit · v21 · 2026-09-05</div>
+  <h1>スワイプを減らし、<br>居場所を分かりやすくする。</h1>
+  <p class="lead">画面遷移を軽快に見せることと、誤操作なく理解できることは別。Shannonでは会話中の文字選択・縦スクロール・キーボードが中心なので、横スワイプへ複数の意味を持たせない。</p>
+  <div class="chips"><span class="chip now">推奨案</span><span class="chip">トーク／メモリーはタップ切替</span><span class="chip">設定は独立画面</span><span class="chip">スレッドはボタン＋端スワイプ</span></div>
+
+  <section>
+    <div class="eyebrow">01 / Main decision</div><h2>横に3ページ並べる構造をやめる</h2>
+    <div class="decision"><strong>トークとメモリーは兄弟だが、スワイプ対象にはしない。</strong>上部の切替をタップした時だけ短いクロスフェード／方向感のある遷移を行う。設定はコンテンツではなく管理画面なので、歯車から独立したNavigationStackまたは全画面シートとして開く。</div>
+    <div class="compare" style="margin-top:16px">
+      <div class="card bad"><span class="tag">CURRENT</span><h3>横長ワークスペース</h3><p>トーク ←→ メモリー ←→ 設定</p><p>右スワイプがページ移動とトーク一覧の両方を意味し、開始位置や現在ページで結果が変わる。</p></div>
+      <div class="arrow">→</div>
+      <div class="card good"><span class="tag">RECOMMENDED</span><h3>明示的なRoot Shell</h3><p>［トーク｜メモリー］をタップ切替。設定は歯車。トーク一覧は一覧ボタン、端スワイプは補助操作だけ。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / Architecture</div><h2>新しい画面階層</h2>
+    <div class="map">
+      <div class="layer"><b>Root Shell</b><span>共通ヘッダー、トーク／メモリー切替、作業バッジ、設定ボタン。選択中の画面だけを描画する。</span></div>
+      <div class="layer"><b>Talk</b><span>スクロール表示／対話表示、入力欄、スレッド一覧。表示モードはTalk内部の状態であり、アプリ全体のナビゲーションではない。</span></div>
+      <div class="layer"><b>Memory</b><span>「いまのシャノン」「知識」「日記」の入口。詳細はNavigationStackで奥へ進み、戻る操作にiOS標準を使う。</span></div>
+      <div class="layer"><b>Settings</b><span>歯車から開く独立画面。接続、外観、アイコン、アプリ更新、将来の音声設定をまとめる。</span></div>
+      <div class="layer"><b>Transient UI</b><span>エラー、再試行、作業中、承認要求は画面遷移にしない。Snackbar、Capsule、Task Roomとして一時表示する。</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / Chat width</div><h2>表情は残し、本文は全幅にする</h2>
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="header"><div class="round">☰</div><div class="seg"><b>トーク</b><span>メモリー</span></div><div class="round">⚙︎</div></div>
+        <div class="assistant"><div class="identity"><div class="face">☺</div><div><b>シャノン</b><br><small>穏やか · 14:42</small></div><span style="margin-left:auto">⧉</span></div><div class="answer">表情アイコンを本文の左列に置かず、発言ヘッダーとして上に置く。返答本文はその下で画面幅いっぱいを使うので、長文でも一行が短くなりすぎない。</div></div>
+        <div class="mine">ユーザー側は会話の方向が分かる小さな吹き出しを維持。</div>
+        <div class="composer"><span>メッセージ</span><span class="send">↑</span></div>
+      </div>
+      <div>
+        <div class="card good"><h3>今回ローカル実装済み</h3><p>アイコン、名前、感情、時刻、コピーを一つのヘッダーへ移動。シャノンの本文は次の行で最大幅を使う。</p></div>
+        <div class="card" style="margin-top:12px"><h3>守ること</h3><p>文字サイズを上げてもアイコン列が本文を圧迫しない。コピーは長押しだけに隠さない。発言時の表情は履歴へ固定する。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / UX risks</div><h2>ほかに構造から直したい点</h2>
+    <div class="grid">
+      <article class="card bad"><h3>見えないジェスチャー依存</h3><p>トーク一覧をスワイプだけにすると存在を発見できない。一覧ボタンを常設し、端スワイプは慣れた人向けにする。</p></article>
+      <article class="card bad"><h3>タブの中にタブ</h3><p>トーク／メモリーの切替直下に、メモリーの3分割Segmented Controlが続く。メモリーは入口カード＋詳細画面の階層へ寄せる。</p></article>
+      <article class="card bad"><h3>透明すぎる固定UI</h3><p>完全透明のヘッダーや入力欄は、背後の文字と重なる。外枠は作らず、内容が潜った時だけ薄いぼかし・グラデーションを出す。</p></article>
+      <article class="card bad"><h3>小さな表示モード切替</h3><p>スクロール／対話は意味の大きい変更なのに小さなCapsuleだけ。現在地より「押すと何になるか」を示し、設定の一部にはしない。</p></article>
+      <article class="card bad"><h3>作業UIの競合</h3><p>作業バッジ、作業Capsule、会話内カードが同時に出る可能性がある。緊急度に応じて一つだけを前面に出す規則が必要。</p></article>
+      <article class="card bad"><h3>メモリーの情報密度</h3><p>性格、コスト、評価、興味を同列カードにすると「頭の中」より管理画面に見える。内部指標は詳細へ退避する。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / Gesture policy</div><h2>一つのジェスチャーに、一つの意味</h2>
+    <table class="gesture"><thead><tr><th>操作</th><th>役割</th><th>採用</th></tr></thead><tbody>
+      <tr><td>縦スクロール</td><td>トーク・メモリー本文を読む。入力中はキーボードをインタラクティブに閉じる。</td><td class="yes">採用</td></tr>
+      <tr><td>トーク／メモリーを横スワイプ</td><td>ページ移動。スレッド一覧や文字選択と競合する。</td><td class="no">廃止</td></tr>
+      <tr><td>左端から右スワイプ</td><td>トーク画面でスレッド一覧を開く。画面全体の左半分ではなく端だけ。</td><td class="yes">補助採用</td></tr>
+      <tr><td>一覧ボタン</td><td>スレッド一覧を確実に開く。</td><td class="yes">主操作</td></tr>
+      <tr><td>横スワイプで戻る</td><td>メモリー詳細・設定詳細などNavigationStack内の標準戻る操作。</td><td class="yes">標準のみ</td></tr>
+      <tr><td>入力中の横ジェスチャー</td><td>誤遷移の原因。画面外タップまたは縦スクロールで入力状態を抜ける。</td><td class="no">無効</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / Implementation order</div><h2>v1.2を3つに分けて直す</h2>
+    <div class="steps">
+      <div class="step now"><div class="num">v1.2.1 · SHELL</div><h3>遷移の骨格</h3><p>横ページングを廃止。タップ切替、独立設定、一覧ボタン、端スワイプ、全幅返信を実装。</p></div>
+      <div class="step"><div class="num">v1.2.2 · CONTENT</div><h3>各画面の階層</h3><p>メモリー入口、対話モード、作業UIの優先順位、長文・空状態・失敗状態を整理。</p></div>
+      <div class="step"><div class="num">v1.2.3 · DEVICE QA</div><h3>実機で摩擦を除く</h3><p>片手操作、キーボード、VoiceOver、大きな文字、ライト／ダークをTestFlightで一巡。</p></div>
+    </div>
+    <div class="note"><b>音声会話への影響：</b>マイク、聞き取り中、読み上げ中をTalk内部へ追加できる安定したShellになる。画面横スワイプを先に廃止することで、将来の「スワイプで録音キャンセル」とも衝突しない。</div>
+  </section>
+
+  <footer>状態：v1.2.1 Shellをローカル実装済み。横ページング廃止、タップ切替、独立設定、一覧ボタン、左端スワイプ、シャノン返信の全幅化まで完了。TestFlightで実機確認後、v1.2.2へ進む。<br>関連：<a href="shannon-ux-voice-roadmap-v20.html">UX・音声ロードマップ v20</a> · <a href="architecture.md">現行アーキテクチャ</a></footer>
+</main></body></html>

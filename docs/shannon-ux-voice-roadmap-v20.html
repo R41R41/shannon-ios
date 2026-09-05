@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon UX・音声ロードマップ v20</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5fbfe;--paper:#fff;--ink:#14242c;--muted:#637985;--line:#cfe5ef;--sky:#72d2fa;--deep:#087da8;--soft:#e6f7fe;--green:#147253;--green-soft:#e1f6ed;--amber:#8b5b00;--amber-soft:#fff2d7;--violet:#6651b8;--violet-soft:#eeeaff;--shadow:0 20px 60px #0c587414}
+    @media(prefers-color-scheme:dark){:root{--bg:#09151b;--paper:#122129;--ink:#e9f6fb;--muted:#a3bac5;--line:#294957;--sky:#78d4fb;--deep:#8edfff;--soft:#102e3b;--green:#73d9b2;--green-soft:#123328;--amber:#ffd17a;--amber-soft:#382a12;--violet:#c0b4ff;--violet-soft:#292442;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 85% -10%,#76d8ff35,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}main{width:min(1180px,calc(100% - 30px));margin:auto;padding:50px 0 90px}
+    h1,h2,h3,p{margin-top:0}h1{max-width:960px;margin:.18em 0;font-size:clamp(2.45rem,7vw,5rem);line-height:1;letter-spacing:-.055em}h2{font-size:clamp(1.55rem,4vw,2.4rem);letter-spacing:-.025em}.eyebrow{color:var(--deep);font-size:.77rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.lead{max-width:820px;color:var(--muted);font-size:1.08rem}.chips{display:flex;flex-wrap:wrap;gap:9px;margin:24px 0 38px}.chip{padding:7px 12px;border-radius:999px;background:var(--soft);color:var(--deep);font-weight:800}.chip.ok{background:var(--green-soft);color:var(--green)}.chip.now{background:var(--violet-soft);color:var(--violet)}
+    section{margin-top:18px;padding:28px;border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:var(--shadow)}.decision{padding:22px;border-radius:22px;background:linear-gradient(135deg,var(--violet-soft),var(--soft));border:1px solid color-mix(in srgb,var(--sky) 55%,var(--line))}.decision strong{display:block;color:var(--violet);font-size:1.18rem;margin-bottom:6px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{padding:20px;border:1px solid var(--line);border-radius:21px;background:var(--paper)}.card.now{background:var(--violet-soft)}.card.later{background:var(--amber-soft)}.tag{display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:var(--soft);color:var(--deep);font-size:.72rem;font-weight:900;letter-spacing:.08em}.now .tag{background:var(--paper);color:var(--violet)}.later .tag{background:var(--paper);color:var(--amber)}
+    .phones{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}.phone{max-width:350px;width:100%;margin:auto;padding:15px;border:2px solid color-mix(in srgb,var(--ink) 76%,transparent);border-radius:38px;background:var(--bg);min-height:560px;box-shadow:0 14px 36px #0c587418}.top{display:flex;align-items:center;gap:8px;position:sticky;top:0;padding:5px 0 14px;background:transparent}.seg{display:grid;grid-template-columns:1fr 1fr;flex:1;padding:3px;border:1px solid var(--line);border-radius:999px}.seg b,.seg span{text-align:center;padding:7px;border-radius:999px}.seg b{color:#fff;background:var(--deep)}.gear{font-size:1.25rem}.message{display:grid;grid-template-columns:46px 1fr;gap:10px;margin:18px 0}.face{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-size:1.3rem}.reply{line-height:1.65}.meta{color:var(--muted);font-size:.72rem;margin-top:5px}.mine{width:78%;margin:16px 0 16px auto;padding:11px 15px;border-radius:19px;background:var(--deep);color:white}.composer{margin-top:28px;padding:9px 10px 9px 16px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--paper) 76%,transparent);backdrop-filter:blur(18px)}.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--deep);color:white}.portrait{height:350px;border-radius:28px;background:linear-gradient(180deg,var(--soft),var(--paper));display:grid;place-items:center;font-size:6rem;position:relative;overflow:hidden}.bubble{position:absolute;top:20px;left:14px;right:14px;padding:14px 16px;border:1px solid var(--line);border-radius:20px;background:color-mix(in srgb,var(--paper) 90%,transparent);font-size:.9rem}.memory{padding:15px 2px;border-bottom:1px solid var(--line)}.memory small{color:var(--muted)}
+    .flow{display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));gap:10px;overflow:auto;padding:8px 2px 12px}.node{min-width:160px;padding:17px;border-radius:18px;background:var(--soft);position:relative}.node:not(:last-child):after{content:"→";position:absolute;right:-14px;top:42%;z-index:2;color:var(--deep);font-weight:900}.node small{display:block;color:var(--muted);line-height:1.45}.rules{display:grid;grid-template-columns:1fr 1fr;gap:10px}.rule{padding:16px;border-radius:17px;background:var(--paper);border:1px solid var(--line)}.rule b{color:var(--deep);display:block}.roadmap{display:grid;grid-template-columns:repeat(5,1fr);gap:11px}.phase{padding:18px;border-radius:19px;background:var(--paper);border:1px solid var(--line)}.phase.current{background:var(--violet-soft);border:2px solid var(--violet)}.version{color:var(--deep);font-size:.75rem;font-weight:900;letter-spacing:.09em}.check{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.check div{padding:13px 15px;border-radius:15px;background:var(--green-soft);color:var(--green);font-weight:700}.note{margin-top:16px;padding:16px 18px;border-radius:17px;background:var(--amber-soft);color:var(--amber)}footer{padding:28px 5px 0;color:var(--muted);font-size:.85rem}a{color:var(--deep)}
+    @media(max-width:900px){.grid,.phones,.roadmap,.rules,.check{grid-template-columns:1fr}.flow{grid-template-columns:repeat(5,78vw)}section{padding:22px}.phone{min-height:0}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon · UX &amp; Voice roadmap · v20 · 2026-09-05</div>
+  <h1>機能を足す前に、<br>毎日触りたくなる形へ。</h1>
+  <p class="lead">v1.1はAzure・Xcode Cloud・TestFlight build 19まで配信済み。基盤が安定した今、追加機能を積む前にトーク、対話、メモリー、設定の使いやすさを一度まとめて仕上げる。</p>
+  <div class="chips"><span class="chip ok">v1.1 本番稼働</span><span class="chip ok">TestFlight build 19</span><span class="chip now">NEXT · UX品質</span><span class="chip">音声会話を計画へ追加</span></div>
+
+  <section id="decision">
+    <div class="eyebrow">01 / Decision</div><h2>UX改善へ入るのは「今」</h2>
+    <div class="decision"><strong>v1.2を機能追加版ではなく、UX・Presence完成版にする。</strong>音声や情報源を先に増やすと、入力方法と画面状態がさらに増えて使いにくさの原因が分からなくなる。既存の主要機能が一通り揃い、遠隔配信も動いた現在が最も安全な区切り。</div>
+    <div class="grid" style="margin-top:14px">
+      <article class="card"><span class="tag">BEFORE</span><h3>すでに揃った基盤</h3><p>複数トーク、記憶、感情、日記、自発通知、Aether、Agent作業、TestFlight自動配信。</p></article>
+      <article class="card now"><span class="tag">NOW</span><h3>触り心地を統一</h3><p>迷い、重なり、隠れた操作、視線移動、キーボードとスワイプの衝突をまとめて除く。</p></article>
+      <article class="card later"><span class="tag">AFTER</span><h3>音声を足す</h3><p>固まった会話画面へ、マイク・聞き取り中・発話中・中断という新しい状態を安全に追加する。</p></article>
+    </div>
+  </section>
+
+  <section id="ux">
+    <div class="eyebrow">02 / v1.2 experience</div><h2>3つの画面を、1つの居場所として整える</h2>
+    <div class="phones">
+      <div><div class="phone"><div class="top"><div class="seg"><b>トーク</b><span>メモリー</span></div><span class="gear">⚙︎</span></div><div class="message"><div class="face">☺</div><div class="reply">シャノンの返答は吹き出しで狭めず、読みやすい横幅を使う。<div class="meta">穏やか · 14:32　⧉</div></div></div><div class="mine">ユーザー側だけ小さな吹き出し。</div><div class="message"><div class="face">◔</div><div class="reply">発言時の表情は履歴に固定し、コピーは常に見つけられる位置へ。<div class="meta">考え中 · 14:33　⧉</div></div></div><div class="composer"><span>メッセージ</span><span class="send">↑</span></div></div><h3>スクロール</h3><p>読むことを最優先。時刻や感情は静かに、異常時以外の内部状態は隠す。</p></div>
+      <div><div class="phone"><div class="top"><div class="seg"><b>トーク</b><span>メモリー</span></div><span class="gear">⚙︎</span></div><div class="portrait"><div class="bubble">今日はどんな一日だった？ 長い返答はタップで広がり、画像を隠しすぎない。</div>✦</div><div class="composer"><span>メッセージ</span><span class="send">↑</span></div></div><h3>対話</h3><p>履歴を消して、いまのシャノンと一往復に集中。画像・吹き出し・入力欄の優先順位を固定する。</p></div>
+      <div><div class="phone"><div class="top"><div class="seg"><span>トーク</span><b>メモリー</b></div><span class="gear">⚙︎</span></div><div class="memory"><b>いまのシャノン</b><br><small>今日の関心、気分、頭に浮かんでいること</small></div><div class="memory"><b>知識</b><br><small>あなた・世界・シャノン自身。検索と編集へ。</small></div><div class="memory"><b>シャノンの日記</b><br><small>睡眠、調べごと、自発行動を時系列で。</small></div></div><h3>メモリー</h3><p>DBの一覧ではなく「頭の中」の入口にする。詳細な数値や根拠は一段奥へ。</p></div>
+    </div>
+  </section>
+
+  <section id="scope">
+    <div class="eyebrow">03 / Scope</div><h2>v1.2で直し切る範囲</h2>
+    <div class="grid">
+      <article class="card"><h3>トーク</h3><p>返信の幅、表情アイコン、コピー、日付、過去話題カード、入力欄、送信・失敗・再試行を一貫させる。</p></article>
+      <article class="card"><h3>トーク一覧</h3><p>右スワイプの追従性、選択中表示、最終会話時刻、新規作成、タイトル編集を長押しに隠さない。</p></article>
+      <article class="card"><h3>対話モード</h3><p>画像が必ず見えること、吹き出しの位置、長文展開、考え中、キーボード表示時の縮小を実機で調整。</p></article>
+      <article class="card"><h3>メモリー</h3><p>「いま／知識／日記」の情報階層、編集後の反映、空状態、更新中、失敗時の戻り道を整える。</p></article>
+      <article class="card"><h3>共通操作</h3><p>透明ヘッダー、ページスワイプ、振動、入力中の遷移抑止、画面外タップでキーボードを閉じる動作を統一。</p></article>
+      <article class="card"><h3>アクセシビリティ</h3><p>ライト／ダーク、文字サイズ、VoiceOver、44–48ptのタップ領域、動きを減らす設定を確認する。</p></article>
+    </div>
+    <div class="note"><b>後回しにするもの：</b>Live2D、Widget、情報源の大量追加、スキル自己生成。UX検証中に画面構造を増やさない。</div>
+  </section>
+
+  <section id="voice">
+    <div class="eyebrow">04 / v1.3 voice conversation</div><h2>音声は、既存FCAへ入るもう一つの入口</h2>
+    <p class="lead">人格や記憶を音声専用に分けない。確定した文字起こしを通常のユーザーメッセージとしてFCAへ渡し、返答テキストと表情を保存してから読み上げる。</p>
+    <div class="flow">
+      <div class="node"><b>タップして話す</b><small>常時盗聴せず、ユーザー操作で開始</small></div>
+      <div class="node"><b>文字起こし</b><small>途中結果を入力欄へ表示、修正可能</small></div>
+      <div class="node"><b>既存FCA</b><small>同じ記憶・感情・スレッドを利用</small></div>
+      <div class="node"><b>返答＋表情</b><small>履歴へ通常どおり保存</small></div>
+      <div class="node"><b>シャノンが話す</b><small>字幕を残し、タップですぐ中断</small></div>
+    </div>
+    <div class="rules">
+      <div class="rule"><b>最初は半二重</b>聞く時間と話す時間を分ける。割り込み可能な全二重は安定後に追加。</div>
+      <div class="rule"><b>音声は保存しない</b>初期設定では文字起こし後に破棄。会話履歴にはテキストだけを残す。</div>
+      <div class="rule"><b>失敗しても文字で続く</b>認識・読み上げ・回線のどれかが失敗しても、通常チャットへ戻れる。</div>
+      <div class="rule"><b>予算を別管理</b>文字起こし・会話LLM・読み上げを分け、1日上限と今回消費を可視化する。</div>
+      <div class="rule"><b>バックグラウンド待受なし</b>画面を離れたら録音停止。自発通知と常時マイクを混同しない。</div>
+      <div class="rule"><b>話し方は状態の影響を受ける</b>速さ・間・抑揚は穏やかに変化させるが、聞き取りやすさを優先する。</div>
+    </div>
+  </section>
+
+  <section id="gate">
+    <div class="eyebrow">05 / Quality gate</div><h2>ここまで通ったら、音声へ進む</h2>
+    <div class="check">
+      <div>✓ 主要8操作を迷わず完了</div><div>✓ 入力中に誤スワイプしない</div>
+      <div>✓ 対話画像・吹き出しが重ならない</div><div>✓ コピー・編集・再試行が発見できる</div>
+      <div>✓ ライト／ダーク／大きな文字で崩れない</div><div>✓ 既存履歴・記憶・接続が更新後も残る</div>
+      <div>✓ P0/P1の操作不具合が0件</div><div>✓ TestFlight実機で一巡確認</div>
+    </div>
+    <p class="lead" style="margin:16px 0 0">「完全に美しくなった」ではなく、基本操作の摩擦と致命的な違和感がなくなった時点を出口にする。細かな好みは実利用から次の小さな更新へ回す。</p>
+  </section>
+
+  <section id="roadmap">
+    <div class="eyebrow">06 / Product sequence</div><h2>更新後のロードマップ</h2>
+    <div class="roadmap">
+      <div class="phase"><div class="version">DONE · v1.1</div><h3>Operations</h3><p>遠隔ビルド、自動配信、失敗通知、配信履歴。</p></div>
+      <div class="phase current"><div class="version">NOW · v1.2</div><h3>Usability &amp; Presence</h3><p>トーク、対話、メモリー、遷移を実機で仕上げる。</p></div>
+      <div class="phase"><div class="version">NEXT · v1.3</div><h3>Voice</h3><p>タップ会話、字幕、読み上げ、中断、音声予算。</p></div>
+      <div class="phase"><div class="version">v1.4–1.6</div><h3>World &amp; Daily Remote</h3><p>情報源、関心の成長、Agent体験、後にWidget。</p></div>
+      <div class="phase"><div class="version">v2.0</div><h3>Self Extension</h3><p>隔離されたスキル生成・評価・承認採用。</p></div>
+    </div>
+  </section>
+
+  <footer>現在の配信：commit <code>2816ca3</code> / TestFlight <code>0.1.0 (19)</code> / Shannon Internal。<br>関連資料：<a href="shannon-ux-architecture-review-v21.html">画面アーキテクチャ監査 v21</a> · <a href="shannon-project-status-v19.html">プロジェクト進捗 v19</a> · <a href="architecture.md">現行アーキテクチャ</a> · <a href="shannon-implementation-roadmap-v11.html">実装ロードマップ v11</a></footer>
+</main></body>
+</html>

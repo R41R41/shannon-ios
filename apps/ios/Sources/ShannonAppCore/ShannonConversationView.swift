@@ -16,13 +16,14 @@ public struct ShannonConversationView: View {
     @State private var showsAppIconSettings = false
     @State private var showsAppearanceSettings = false
     @State private var showsTestFlightDelivery = false
+    @State private var showsSettings = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
-    @State private var workspaceProgress: CGFloat = 0
     @State private var drawerProgress: CGFloat = 0
-    @State private var dragIntent: ShannonHorizontalDragIntent?
-    @State private var dragStartProgress: CGFloat = 0
+    @State private var drawerDragIsActive = false
+    @State private var drawerDragStartProgress: CGFloat = 0
     @State private var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State private var dialogueIsExpanded = false
+    @State private var dialogueDidCopy = false
     @State private var selectedAgentTaskID: UUID?
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @FocusState private var composerIsFocused: Bool
@@ -48,17 +49,18 @@ public struct ShannonConversationView: View {
 
         GeometryReader { geometry in
             ZStack(alignment: .top) {
-                workspacePages(palette, width: geometry.size.width)
+                workspaceContent(palette)
 
-            ShannonWorkspaceSwitcher(
-                selection: selectedPage,
-                pageProgress: workspaceProgress,
-                unreadInitiativeCount: model.unreadInitiativeCount,
-                agentTasks: model.agentTaskNotices,
-                openAgentTask: openAgentTask,
-                select: selectWorkspacePage
+                ShannonWorkspaceSwitcher(
+                    selection: selectedPage,
+                    unreadInitiativeCount: model.unreadInitiativeCount,
+                    agentTasks: model.agentTaskNotices,
+                    openThreadDrawer: openThreadDrawer,
+                    openSettings: openSettings,
+                    openAgentTask: openAgentTask,
+                    select: selectWorkspacePage
                 )
-                    .padding(.top, M3Spacing.extraSmall)
+                .padding(.top, M3Spacing.extraSmall)
 
                 Color.black.opacity(0.22 * drawerProgress)
                     .ignoresSafeArea()
@@ -81,7 +83,7 @@ public struct ShannonConversationView: View {
                 .accessibilityHidden(drawerProgress < 0.98)
             }
             .clipped()
-            .simultaneousGesture(horizontalWorkspaceGesture(viewWidth: geometry.size.width))
+            .simultaneousGesture(threadDrawerGesture(viewWidth: geometry.size.width))
         }
         .background(palette.surface)
         .foregroundStyle(palette.onSurface)
@@ -104,28 +106,11 @@ public struct ShannonConversationView: View {
             guard selectedPage == .memory else { return }
             Task { await memoryModel.reload() }
         }
-        .sheet(isPresented: $showsStateDetails) {
-            ShannonStateSheet(state: model.state, expression: model.currentExpression)
-        }
-        .sheet(isPresented: $showsConnectionDetails) {
-            if let connectionModel {
-                ShannonConnectionView(model: connectionModel)
-            }
-        }
-        .sheet(isPresented: $showsAppIconSettings) {
-            ShannonAppIconSettingsView(
-                model: appIconModel,
-                expression: model.currentExpression
-            )
-        }
-        .sheet(isPresented: $showsAppearanceSettings) {
-            ShannonAppearanceSettingsView()
-        }
-        .sheet(isPresented: $showsTestFlightDelivery) {
-            ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
+        .sheet(isPresented: $showsSettings) {
+            settingsSheet(palette)
         }
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
-            settleWorkspace(on: .settings)
+            showsSettings = true
             showsTestFlightDelivery = true
         }
 #if os(iOS)
@@ -168,26 +153,22 @@ public struct ShannonConversationView: View {
         }
     }
 
-    @ViewBuilder
-    private func workspacePages(_ palette: M3Palette, width: CGFloat) -> some View {
-        HStack(spacing: 0) {
+    private func workspaceContent(_ palette: M3Palette) -> some View {
+        ZStack {
             talkPage(palette)
-                .frame(width: width)
+                .opacity(selectedPage == .talk ? 1 : 0)
+                .allowsHitTesting(selectedPage == .talk)
                 .accessibilityHidden(selectedPage != .talk)
             ShannonMemoryView(
                 model: memoryModel,
                 showsDismissButton: false,
                 workspaceTopInset: ShannonWorkspaceChrome.contentTopInset
             )
-            .frame(width: width)
+            .opacity(selectedPage == .memory ? 1 : 0)
+            .allowsHitTesting(selectedPage == .memory)
             .accessibilityHidden(selectedPage != .memory)
-            settingsPage(palette)
-                .frame(width: width)
-                .accessibilityHidden(selectedPage != .settings)
         }
-        .frame(width: width * 3, alignment: .leading)
-        .offset(x: -workspaceProgress * width)
-        .frame(width: width, alignment: .leading)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedPage)
     }
 
     private func talkPage(_ palette: M3Palette) -> some View {
@@ -236,7 +217,7 @@ public struct ShannonConversationView: View {
                 HStack {
                     Spacer()
                     Button(action: toggleDisplayMode) {
-                        Label(displayMode.japaneseName, systemImage: displayMode.symbolName)
+                        Label(displayMode.switchActionTitle, systemImage: displayMode.switchActionSymbolName)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(palette.onSurfaceVariant)
                             .padding(.horizontal, M3Spacing.medium)
@@ -244,7 +225,7 @@ public struct ShannonConversationView: View {
                             .background(.thinMaterial, in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("表示を\(displayMode == .scroll ? "対話" : "スクロール")モードへ切り替える")
+                    .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
                 }
                 .padding(.horizontal, M3Spacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset)
@@ -376,129 +357,125 @@ public struct ShannonConversationView: View {
         .padding(.bottom, M3Spacing.small)
     }
 
-    private func settingsPage(_ palette: M3Palette) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: M3Spacing.large) {
-                Text("設定")
-                    .font(.largeTitle.bold())
-                    .padding(.horizontal, M3Spacing.extraSmall)
-
-                Button { showsStateDetails = true } label: {
-                    ShannonSettingsRow(
-                        title: "シャノンの状態",
-                        detail: model.state == nil
-                            ? model.currentExpression.japaneseName
-                            : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
-                        symbol: "waveform.path.ecg"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button { showsAppIconSettings = true } label: {
-                    ShannonSettingsRow(
-                        title: "アプリアイコン",
-                        detail: "\(appIconModel.mode.japaneseName)・\(appIconModel.activeTitle)",
-                        symbol: "app.dashed"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button { showsAppearanceSettings = true } label: {
-                    ShannonSettingsRow(
-                        title: "外観",
-                        detail: savedAppearanceMode.japaneseName,
-                        symbol: savedAppearanceMode.symbolName
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button { showsTestFlightDelivery = true } label: {
-                    ShannonSettingsRow(
-                        title: "アプリの更新",
-                        detail: "TestFlightの配信状況と履歴",
-                        symbol: "arrow.down.app"
-                    )
-                }
-                .buttonStyle(.plain)
-
-                if let connectionModel {
-                    Button { showsConnectionDetails = true } label: {
+    private func settingsSheet(_ palette: M3Palette) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: M3Spacing.large) {
+                    Button { showsStateDetails = true } label: {
                         ShannonSettingsRow(
-                            title: "接続",
-                            detail: connectionModel.statusLabel,
-                            symbol: "link"
+                            title: "シャノンの状態",
+                            detail: model.state == nil
+                                ? model.currentExpression.japaneseName
+                                : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
+                            symbol: "waveform.path.ecg"
                         )
                     }
                     .buttonStyle(.plain)
-                }
 
-            }
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-            .padding(.bottom, M3Spacing.huge)
-        }
-        .scrollIndicators(.hidden)
-        .background(Color.clear)
-    }
+                    Button { showsAppIconSettings = true } label: {
+                        ShannonSettingsRow(
+                            title: "アプリアイコン",
+                            detail: "\(appIconModel.mode.japaneseName)・\(appIconModel.activeTitle)",
+                            symbol: "app.dashed"
+                        )
+                    }
+                    .buttonStyle(.plain)
 
-    private func horizontalWorkspaceGesture(viewWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
-            .onChanged { value in
-                guard !composerIsFocused else { return }
-                guard abs(value.translation.width) > abs(value.translation.height) * 1.15 else { return }
-                if dragIntent == nil {
-                    dragStartProgress = drawerProgress > 0 ? drawerProgress : workspaceProgress
-                    if drawerProgress > 0
-                        || (selectedPage == .talk
-                            && workspaceProgress < 0.01
-                            && value.startLocation.x <= viewWidth / 2
-                            && value.translation.width > 0) {
-                        dragIntent = .threadDrawer
-                        composerIsFocused = false
-                    } else {
-                        dragIntent = .workspace
+                    Button { showsAppearanceSettings = true } label: {
+                        ShannonSettingsRow(
+                            title: "外観",
+                            detail: savedAppearanceMode.japaneseName,
+                            symbol: savedAppearanceMode.symbolName
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { showsTestFlightDelivery = true } label: {
+                        ShannonSettingsRow(
+                            title: "アプリの更新",
+                            detail: "TestFlightの配信状況と履歴",
+                            symbol: "arrow.down.app"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    if let connectionModel {
+                        Button { showsConnectionDetails = true } label: {
+                            ShannonSettingsRow(
+                                title: "接続",
+                                detail: connectionModel.statusLabel,
+                                symbol: "link"
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-
-                switch dragIntent {
-                case .threadDrawer:
-                    drawerProgress = ShannonWorkspaceMotionPolicy.drawerProgress(
-                        from: dragStartProgress,
-                        translation: value.translation.width,
-                        drawerWidth: drawerWidth(for: viewWidth)
-                    )
-                case .workspace:
-                    workspaceProgress = ShannonWorkspaceMotionPolicy.pageProgress(
-                        from: dragStartProgress,
-                        translation: value.translation.width,
-                        width: viewWidth,
-                        pageCount: ShannonWorkspacePage.allCases.count
-                    )
-                case nil:
-                    break
+                .padding(.horizontal, M3Spacing.large)
+                .padding(.vertical, M3Spacing.large)
+            }
+            .scrollIndicators(.hidden)
+            .background(palette.surface)
+            .navigationTitle("設定")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("閉じる") { showsSettings = false }
                 }
             }
-            .onEnded { value in
-                defer { dragIntent = nil }
-                switch dragIntent {
-                case .threadDrawer:
-                    settleDrawer(open: ShannonWorkspaceMotionPolicy.shouldOpenDrawer(
-                        from: dragStartProgress,
-                        predictedTranslation: value.predictedEndTranslation.width,
-                        drawerWidth: drawerWidth(for: viewWidth)
-                    ))
-                case .workspace:
-                    let targetIndex = ShannonWorkspaceMotionPolicy.targetPage(
-                        from: dragStartProgress,
-                        predictedTranslation: value.predictedEndTranslation.width,
-                        width: viewWidth,
-                        pageCount: ShannonWorkspacePage.allCases.count
-                    )
-                    guard let target = ShannonWorkspacePage(rawValue: targetIndex) else { return }
-                    settleWorkspace(on: target)
-                case nil:
-                    break
+            .sheet(isPresented: $showsStateDetails) {
+                ShannonStateSheet(state: model.state, expression: model.currentExpression)
+            }
+            .sheet(isPresented: $showsConnectionDetails) {
+                if let connectionModel {
+                    ShannonConnectionView(model: connectionModel)
                 }
+            }
+            .sheet(isPresented: $showsAppIconSettings) {
+                ShannonAppIconSettingsView(
+                    model: appIconModel,
+                    expression: model.currentExpression
+                )
+            }
+            .sheet(isPresented: $showsAppearanceSettings) {
+                ShannonAppearanceSettingsView()
+            }
+            .sheet(isPresented: $showsTestFlightDelivery) {
+                ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
+            }
+        }
+    }
+
+    private func threadDrawerGesture(viewWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .onChanged { value in
+                if !drawerDragIsActive {
+                    guard ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+                        isTalkSelected: selectedPage == .talk,
+                        composerIsFocused: composerIsFocused,
+                        currentProgress: drawerProgress,
+                        startX: value.startLocation.x,
+                        translation: value.translation
+                    ) else { return }
+                    drawerDragStartProgress = drawerProgress
+                    drawerDragIsActive = true
+                }
+
+                drawerProgress = ShannonWorkspaceMotionPolicy.drawerProgress(
+                    from: drawerDragStartProgress,
+                    translation: value.translation.width,
+                    drawerWidth: drawerWidth(for: viewWidth)
+                )
+            }
+            .onEnded { value in
+                guard drawerDragIsActive else { return }
+                drawerDragIsActive = false
+                settleDrawer(open: ShannonWorkspaceMotionPolicy.shouldOpenDrawer(
+                    from: drawerDragStartProgress,
+                    predictedTranslation: value.predictedEndTranslation.width,
+                    drawerWidth: drawerWidth(for: viewWidth)
+                ))
             }
     }
 
@@ -514,12 +491,29 @@ public struct ShannonConversationView: View {
 
     private func settleWorkspace(on page: ShannonWorkspacePage) {
         let changed = page != selectedPage
-        selectedPage = page
         composerIsFocused = false
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0.04)) {
-            workspaceProgress = CGFloat(page.rawValue)
+            selectedPage = page
         }
         if changed { ShannonHaptics.page() }
+    }
+
+    private func openThreadDrawer() {
+        guard !composerIsFocused else {
+            composerIsFocused = false
+            return
+        }
+        guard selectedPage == .talk else { return }
+        settleDrawer(open: true)
+    }
+
+    private func openSettings() {
+        guard !composerIsFocused else {
+            composerIsFocused = false
+            return
+        }
+        showsSettings = true
+        ShannonHaptics.page()
     }
 
     private func closeThreadDrawer() {
@@ -582,24 +576,52 @@ public struct ShannonConversationView: View {
                     .transition(.opacity)
                 } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
                     ShannonDialogueBubble(palette: palette, isExpanded: dialogueIsExpanded) {
-                        ScrollView(dialogueIsExpanded ? .vertical : []) {
-                            Text(reply.text)
-                                .font(.body)
-                                .lineSpacing(3)
-                                .foregroundStyle(palette.onSurface)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
+                            ScrollView(dialogueIsExpanded ? .vertical : []) {
+                                Text(reply.text)
+                                    .font(.body)
+                                    .lineSpacing(3)
+                                    .foregroundStyle(palette.onSurface)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .scrollIndicators(.hidden)
+                            .frame(maxHeight: dialogueIsExpanded ? min(250, geometry.size.height * 0.34) : 112)
+
+                            HStack(spacing: M3Spacing.extraSmall) {
+                                if reply.text.count > 120 {
+                                    Button {
+                                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                                            dialogueIsExpanded.toggle()
+                                        }
+                                    } label: {
+                                        Label(
+                                            dialogueIsExpanded ? "閉じる" : "続きを読む",
+                                            systemImage: dialogueIsExpanded ? "chevron.up" : "chevron.down"
+                                        )
+                                        .font(.caption2.weight(.medium))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(palette.onSurfaceVariant)
+                                }
+                                Spacer(minLength: 0)
+                                Button {
+                                    copyDialogueReply(reply.text)
+                                } label: {
+                                    Label(
+                                        dialogueDidCopy ? "コピー済み" : "コピー",
+                                        systemImage: dialogueDidCopy ? "checkmark" : "doc.on.doc"
+                                    )
+                                    .font(.caption2.weight(.semibold))
+                                    .frame(minHeight: 32)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                                .accessibilityLabel(dialogueDidCopy ? "コピーしました" : "シャノンの回答をコピー")
+                            }
                         }
-                        .scrollIndicators(.hidden)
-                        .frame(maxHeight: dialogueIsExpanded ? min(300, geometry.size.height * 0.42) : 150)
                     }
                     .padding(.top, ShannonWorkspaceChrome.contentTopInset + 54)
-                    .onTapGesture {
-                        guard reply.text.count > 120 else { return }
-                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
-                            dialogueIsExpanded.toggle()
-                        }
-                    }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
@@ -617,6 +639,21 @@ public struct ShannonConversationView: View {
         displayMode = displayMode == .scroll ? .dialogue : .scroll
         UserDefaults.standard.set(displayMode.rawValue, forKey: Self.displayModeKey)
         composerIsFocused = false
+        ShannonHaptics.page()
+    }
+
+    private func copyDialogueReply(_ text: String) {
+#if canImport(UIKit)
+        UIPasteboard.general.string = text
+#elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+#endif
+        dialogueDidCopy = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.2))
+            dialogueDidCopy = false
+        }
     }
 
     private static let displayModeKey = "shannon.conversation.display-mode"
@@ -858,21 +895,18 @@ private struct ShannonAppearanceSettingsView: View {
 private enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     case talk
     case memory
-    case settings
 
     var id: Int { rawValue }
     var title: String {
         switch self {
         case .talk: "トーク"
         case .memory: "メモリー"
-        case .settings: "設定"
         }
     }
     var symbol: String {
         switch self {
         case .talk: "bubble.left.and.bubble.right.fill"
         case .memory: "brain.head.profile.fill"
-        case .settings: "gearshape.fill"
         }
     }
 }
@@ -883,9 +917,10 @@ private enum ShannonWorkspaceChrome {
 
 private struct ShannonWorkspaceSwitcher: View {
     let selection: ShannonWorkspacePage
-    let pageProgress: CGFloat
     let unreadInitiativeCount: Int
     let agentTasks: [ShannonAgentTask]
+    let openThreadDrawer: () -> Void
+    let openSettings: () -> Void
     let openAgentTask: (UUID) -> Void
     let select: (ShannonWorkspacePage) -> Void
     @Environment(\.colorScheme) private var colorScheme
@@ -894,8 +929,21 @@ private struct ShannonWorkspaceSwitcher: View {
         let palette = M3Palette.resolve(colorScheme)
 
         HStack(spacing: M3Spacing.small) {
+            Button(action: openThreadDrawer) {
+                Image(systemName: "text.justify.leading")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .background(.thinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .opacity(selection == .talk ? 1 : 0)
+            .allowsHitTesting(selection == .talk)
+            .accessibilityHidden(selection != .talk)
+            .accessibilityLabel("トーク一覧")
+
             ShannonWorkspaceTrack(
-                progress: min(max(pageProgress, 0), 1),
+                selection: selection,
                 palette: palette,
                 unreadInitiativeCount: unreadInitiativeCount,
                 select: select
@@ -935,22 +983,15 @@ private struct ShannonWorkspaceSwitcher: View {
                     ? "許可が必要な作業があります" : "実行中または未確認の作業を開きます")
             }
 
-            Button {
-                select(.settings)
-            } label: {
-                Image(systemName: ShannonWorkspacePage.settings.symbol)
+            Button(action: openSettings) {
+                Image(systemName: "gearshape.fill")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(selection == .settings ? palette.onPrimary : palette.onSurfaceVariant)
+                    .foregroundStyle(palette.onSurfaceVariant)
                     .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                    .background(
-                        palette.primary.opacity(min(max(pageProgress - 1, 0), 1)),
-                        in: Circle()
-                    )
+                    .background(.thinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
-            .background(Color.clear)
             .accessibilityLabel("設定")
-            .accessibilityAddTraits(selection == .settings ? .isSelected : [])
         }
         .padding(.horizontal, M3Spacing.large)
         .frame(maxWidth: .infinity)
@@ -958,7 +999,7 @@ private struct ShannonWorkspaceSwitcher: View {
 }
 
 private struct ShannonWorkspaceTrack: View {
-    let progress: CGFloat
+    let selection: ShannonWorkspacePage
     let palette: M3Palette
     let unreadInitiativeCount: Int
     let select: (ShannonWorkspacePage) -> Void
@@ -967,7 +1008,7 @@ private struct ShannonWorkspaceTrack: View {
         GeometryReader { geometry in
             let inset = M3Spacing.extraSmall
             let itemWidth = (geometry.size.width - inset * 2) / 2
-            let indicatorX = inset + itemWidth * progress
+            let indicatorX = inset + itemWidth * CGFloat(selection.rawValue)
 
             ZStack(alignment: .leading) {
                 Capsule()
@@ -980,6 +1021,7 @@ private struct ShannonWorkspaceTrack: View {
                     .fill(palette.primary)
                     .frame(width: itemWidth, height: 40)
                     .offset(x: indicatorX)
+                    .animation(.snappy(duration: 0.28, extraBounce: 0.02), value: selection)
 
                 workspaceLabels(
                     color: palette.onSurfaceVariant,
@@ -1008,6 +1050,7 @@ private struct ShannonWorkspaceTrack: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .contentShape(Rectangle())
                             .accessibilityLabel(page.title)
+                            .accessibilityAddTraits(page == selection ? .isSelected : [])
                         }
                 }
                 .padding(.horizontal, inset)
@@ -1042,11 +1085,6 @@ private struct ShannonWorkspaceTrack: View {
         }
         .padding(.horizontal, M3Spacing.extraSmall)
     }
-}
-
-private enum ShannonHorizontalDragIntent {
-    case workspace
-    case threadDrawer
 }
 
 private enum ShannonHaptics {
@@ -1114,62 +1152,67 @@ private struct ShannonThreadDrawer: View {
             ScrollView {
                 LazyVStack(spacing: M3Spacing.extraSmall) {
                     ForEach(model.threads, id: \.threadId) { thread in
-                        Button {
-                            Task {
-                                await model.selectThread(thread.threadId)
-                                close()
-                            }
-                        } label: {
-                            HStack(spacing: M3Spacing.medium) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(thread.title)
-                                        .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
-                                        .foregroundStyle(palette.onSurface)
-                                        .lineLimit(2)
-                                    HStack(spacing: 6) {
-                                        Text(threadUpdatedLabel(thread.updatedAt))
-                                        Text("·")
-                                        Text("\(thread.messageCount)件")
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(palette.onSurfaceVariant)
-                                }
-                                Spacer()
-                                if model.initiativeThreadIDs.contains(thread.threadId) {
-                                    Circle()
-                                        .fill(palette.primary)
-                                        .frame(width: 9, height: 9)
-                                        .accessibilityLabel("シャノンからの新しい話")
-                                }
-                                if thread.threadId == selectedThreadId {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(palette.primary)
-                                }
-                            }
-                            .padding(.horizontal, M3Spacing.medium)
-                            .frame(minHeight: 58)
-                            .background(
-                                thread.threadId == selectedThreadId
-                                    ? palette.secondaryContainer.opacity(0.72)
-                                    : Color.clear,
-                                in: RoundedRectangle(cornerRadius: M3Shape.medium)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
+                        HStack(spacing: 0) {
                             Button {
-                                editingThread = thread
+                                Task {
+                                    await model.selectThread(thread.threadId)
+                                    close()
+                                }
                             } label: {
-                                Label("タイトルを編集", systemImage: "pencil")
+                                HStack(spacing: M3Spacing.medium) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(thread.title)
+                                            .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
+                                            .foregroundStyle(palette.onSurface)
+                                            .lineLimit(2)
+                                        HStack(spacing: 6) {
+                                            Text(threadUpdatedLabel(thread.updatedAt))
+                                            Text("·")
+                                            Text("\(thread.messageCount)件")
+                                        }
+                                        .font(.caption)
+                                        .foregroundStyle(palette.onSurfaceVariant)
+                                    }
+                                    Spacer()
+                                    if model.initiativeThreadIDs.contains(thread.threadId) {
+                                        Circle()
+                                            .fill(palette.primary)
+                                            .frame(width: 9, height: 9)
+                                            .accessibilityLabel("シャノンからの新しい話")
+                                    }
+                                    if thread.threadId == selectedThreadId {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(palette.primary)
+                                    }
+                                }
+                                .padding(.leading, M3Spacing.medium)
+                                .padding(.vertical, M3Spacing.extraSmall)
+                                .frame(minHeight: 58)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(thread.threadId == selectedThreadId ? .isSelected : [])
+                            .contextMenu {
+                                threadActions(for: thread)
                             }
 
-                            Button(role: .destructive) {
-                                Task { await model.archiveThread(thread.threadId) }
+                            Menu {
+                                threadActions(for: thread)
                             } label: {
-                                Label("アーカイブ", systemImage: "archivebox")
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(palette.onSurfaceVariant)
+                                    .frame(width: M3TouchTarget.minimum, height: 58)
+                                    .contentShape(Rectangle())
                             }
-                            .disabled(model.threads.count <= 1)
+                            .accessibilityLabel("\(thread.title)の操作")
                         }
+                        .background(
+                            thread.threadId == selectedThreadId
+                                ? palette.secondaryContainer.opacity(0.72)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: M3Shape.medium)
+                        )
                     }
                 }
                 .padding(.horizontal, M3Spacing.small)
@@ -1202,6 +1245,22 @@ private struct ShannonThreadDrawer: View {
                 )
             }
         }
+    }
+
+    @ViewBuilder
+    private func threadActions(for thread: ChatThreadDTO) -> some View {
+        Button {
+            editingThread = thread
+        } label: {
+            Label("タイトルを編集", systemImage: "pencil")
+        }
+
+        Button(role: .destructive) {
+            Task { await model.archiveThread(thread.threadId) }
+        } label: {
+            Label("アーカイブ", systemImage: "archivebox")
+        }
+        .disabled(model.threads.count <= 1)
     }
 }
 
@@ -1433,40 +1492,47 @@ private struct ShannonMessageRow: View {
     }
 
     private func shannonReply(_ palette: M3Palette) -> some View {
-        HStack(alignment: .top, spacing: M3Spacing.medium) {
-            ShannonAvatarView(
-                expression: message.emotionSnapshot?.expression ?? .neutral,
-                size: 48
-            )
+        VStack(alignment: .leading, spacing: M3Spacing.small) {
+            HStack(alignment: .center, spacing: M3Spacing.small) {
+                ShannonAvatarView(
+                    expression: message.emotionSnapshot?.expression ?? .neutral,
+                    size: 44
+                )
 
-            VStack(alignment: .leading, spacing: M3Spacing.small) {
-                messageText
-                    .font(.body)
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-                    .foregroundStyle(palette.onSurface)
-                    .tint(palette.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("シャノン")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(palette.onSurface)
 
-                HStack(spacing: M3Spacing.small) {
-                    if let expression = message.emotionSnapshot?.expression {
-                        Text(expression.japaneseName)
+                    HStack(spacing: 5) {
+                        if let expression = message.emotionSnapshot?.expression {
+                            Text(expression.japaneseName)
+                        }
+                        Text(message.sentAt.formatted(date: .omitted, time: .shortened))
                     }
-                    Text(message.sentAt.formatted(date: .omitted, time: .shortened))
-                    Spacer(minLength: 0)
-                    Button(action: copyMessage) {
-                        Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                            .font(.caption.weight(.semibold))
-                            .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(didCopy ? "コピーしました" : "シャノンの回答をコピー")
+                    .font(.caption2)
+                    .foregroundStyle(palette.onSurfaceVariant)
                 }
-                .font(.caption2)
+
+                Spacer(minLength: 0)
+                Button(action: copyMessage) {
+                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
                 .foregroundStyle(palette.onSurfaceVariant)
+                .accessibilityLabel(didCopy ? "コピーしました" : "シャノンの回答をコピー")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            messageText
+                .font(.body)
+                .lineSpacing(4)
+                .textSelection(.enabled)
+                .foregroundStyle(palette.onSurface)
+                .tint(palette.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

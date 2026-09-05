@@ -17,6 +17,20 @@ public enum ShannonConversationDisplayMode: String, CaseIterable, Equatable, Sen
         case .dialogue: "person.crop.rectangle"
         }
     }
+
+    public var switchActionTitle: String {
+        switch self {
+        case .scroll: "対話"
+        case .dialogue: "履歴"
+        }
+    }
+
+    public var switchActionSymbolName: String {
+        switch self {
+        case .scroll: "person.crop.rectangle"
+        case .dialogue: "text.bubble"
+        }
+    }
 }
 
 public enum ShannonAppearanceMode: String, CaseIterable, Equatable, Identifiable, Sendable {

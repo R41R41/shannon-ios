@@ -1,48 +1,57 @@
+import CoreGraphics
 import XCTest
 @testable import ShannonAppCore
 
 final class ShannonWorkspaceMotionTests: XCTestCase {
-    func testPageProgressTracksFingerContinuously() {
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.pageProgress(
-                from: 0,
-                translation: -195,
-                width: 390,
-                pageCount: 3
-            ),
-            0.5,
-            accuracy: 0.001
-        )
+    func testDrawerStartsOnlyFromTheLeftEdgeOnTalk() {
+        XCTAssertTrue(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: false,
+            currentProgress: 0,
+            startX: 20,
+            translation: CGSize(width: 24, height: 2)
+        ))
+        XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: false,
+            currentProgress: 0,
+            startX: 120,
+            translation: CGSize(width: 24, height: 2)
+        ))
+        XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: false,
+            composerIsFocused: false,
+            currentProgress: 0,
+            startX: 20,
+            translation: CGSize(width: 24, height: 2)
+        ))
     }
 
-    func testProjectedSwipeSettlesOnOnePageOnly() {
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.targetPage(
-                from: 0,
-                predictedTranslation: -240,
-                width: 390,
-                pageCount: 3
-            ),
-            1
-        )
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.targetPage(
-                from: 0,
-                predictedTranslation: -900,
-                width: 390,
-                pageCount: 3
-            ),
-            1
-        )
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.targetPage(
-                from: 1,
-                predictedTranslation: -900,
-                width: 390,
-                pageCount: 3
-            ),
-            2
-        )
+    func testDrawerGestureDoesNotCompeteWithTypingOrVerticalScroll() {
+        XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: true,
+            currentProgress: 0,
+            startX: 10,
+            translation: CGSize(width: 30, height: 1)
+        ))
+        XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: false,
+            currentProgress: 0,
+            startX: 10,
+            translation: CGSize(width: 4, height: 30)
+        ))
+    }
+
+    func testOpenDrawerCanBeClosedFromAnywhere() {
+        XCTAssertTrue(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: false,
+            currentProgress: 1,
+            startX: 220,
+            translation: CGSize(width: -24, height: 2)
+        ))
     }
 
     func testDrawerFollowsFingerAndUsesReleaseThreshold() {
@@ -71,24 +80,4 @@ final class ShannonWorkspaceMotionTests: XCTestCase {
         )
     }
 
-    func testProgressIsClampedAtWorkspaceEdges() {
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.pageProgress(
-                from: 0,
-                translation: 500,
-                width: 390,
-                pageCount: 3
-            ),
-            0
-        )
-        XCTAssertEqual(
-            ShannonWorkspaceMotionPolicy.pageProgress(
-                from: 2,
-                translation: -500,
-                width: 390,
-                pageCount: 3
-            ),
-            2
-        )
-    }
 }
