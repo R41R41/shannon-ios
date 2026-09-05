@@ -442,9 +442,10 @@ private extension SFSpeechRecognizerAuthorizationStatus {
 private final class ShannonSpeechAnalyzerCapture {
     private let diagnostics: ShannonVoiceDiagnostics
     private let audioEngine = AVAudioEngine()
-    private let converter = ShannonVoiceBufferConverter()
     private var analyzer: SpeechAnalyzer?
     private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation?
+    private var rawAudioBuilder: AsyncStream<ShannonVoiceAudioBuffer>.Continuation?
+    private var audioInputTask: Task<Void, Never>?
     private var resultsTask: Task<Void, Never>?
     private var tapIsInstalled = false
 
@@ -495,9 +496,14 @@ private final class ShannonSpeechAnalyzerCapture {
 
         resultsTask = Task { [weak self] in
             var finalized = ""
+            var recordedFirstResult = false
             do {
                 for try await result in transcriber.results {
                     guard !Task.isCancelled else { return }
+                    if !recordedFirstResult {
+                        recordedFirstResult = true
+                        self?.diagnostics.record("analyzer.results.first", sessionID: sessionID)
+                    }
                     let value = String(result.text.characters)
                     if result.isFinal {
                         finalized += value
@@ -538,21 +544,46 @@ private final class ShannonSpeechAnalyzerCapture {
         ) else {
             throw AnalyzerError.formatUnavailable
         }
-        diagnostics.record("capture.tap.before", sessionID: sessionID)
-        let converter = converter
+
+        // AVAudioEngine invokes its tap on a real-time audio thread. Keep that
+        // callback limited to queueing the native buffer, matching Apple's
+        // SpeechAnalyzer sample. Conversion, allocation, diagnostics, and
+        // AnalyzerInput construction run on a separate task instead.
+        let (rawAudioSequence, rawAudioBuilder) = AsyncStream<ShannonVoiceAudioBuffer>.makeStream()
+        self.rawAudioBuilder = rawAudioBuilder
+        let converter = ShannonVoiceBufferConverter(outputFormat: analyzerFormat)
         let diagnostics = diagnostics
-        input.installTap(onBus: 0, bufferSize: 4_096, format: sourceFormat) { buffer, _ in
-            do {
-                let converted = try converter.convert(buffer, to: analyzerFormat)
-                builder.yield(AnalyzerInput(buffer: converted))
-            } catch {
-                let failure = error as NSError
-                diagnostics.record(
-                    "analyzer.convert.failed",
-                    sessionID: sessionID,
-                    metadata: ["domain": failure.domain, "code": String(failure.code)]
-                )
+        audioInputTask = Task.detached(priority: .userInitiated) {
+            defer { builder.finish() }
+            var recordedFirstBuffer = false
+            var recordedFirstOutput = false
+            for await input in rawAudioSequence {
+                guard !Task.isCancelled else { return }
+                if !recordedFirstBuffer {
+                    recordedFirstBuffer = true
+                    diagnostics.record("analyzer.audio.first_buffer", sessionID: sessionID)
+                }
+                do {
+                    let converted = try converter.convert(input.buffer)
+                    builder.yield(AnalyzerInput(buffer: converted))
+                    if !recordedFirstOutput {
+                        recordedFirstOutput = true
+                        diagnostics.record("analyzer.convert.first_output", sessionID: sessionID)
+                    }
+                } catch {
+                    let failure = error as NSError
+                    diagnostics.record(
+                        "analyzer.convert.failed",
+                        sessionID: sessionID,
+                        metadata: ["domain": failure.domain, "code": String(failure.code)]
+                    )
+                }
             }
+        }
+
+        diagnostics.record("capture.tap.before", sessionID: sessionID)
+        input.installTap(onBus: 0, bufferSize: 4_096, format: sourceFormat) { buffer, _ in
+            rawAudioBuilder.yield(ShannonVoiceAudioBuffer(buffer: buffer))
         }
         tapIsInstalled = true
         diagnostics.record("capture.tap.after", sessionID: sessionID)
@@ -570,13 +601,21 @@ private final class ShannonSpeechAnalyzerCapture {
             audioEngine.inputNode.removeTap(onBus: 0)
             tapIsInstalled = false
         }
-        inputBuilder?.finish()
-        inputBuilder = nil
+        rawAudioBuilder?.finish()
+        rawAudioBuilder = nil
+        let audioInputTask = audioInputTask
+        self.audioInputTask = nil
+        let inputBuilder = inputBuilder
+        self.inputBuilder = nil
+        if audioInputTask == nil {
+            inputBuilder?.finish()
+        }
         let analyzer = analyzer
         let resultsTask = resultsTask
         self.analyzer = nil
         self.resultsTask = nil
         Task {
+            await audioInputTask?.value
             do {
                 try await analyzer?.finalizeAndFinishThroughEndOfInput()
             } catch {
@@ -600,14 +639,24 @@ private final class ShannonSpeechAnalyzerCapture {
 }
 
 @available(iOS 26.0, *)
+private struct ShannonVoiceAudioBuffer: @unchecked Sendable {
+    let buffer: AVAudioPCMBuffer
+}
+
+@available(iOS 26.0, *)
 private final class ShannonVoiceBufferConverter: @unchecked Sendable {
+    private let outputFormat: AVAudioFormat
     private var converter: AVAudioConverter?
 
-    func convert(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
+    init(outputFormat: AVAudioFormat) {
+        self.outputFormat = outputFormat
+    }
+
+    func convert(_ buffer: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format
-        guard inputFormat != format else { return buffer }
-        if converter == nil || converter?.inputFormat != inputFormat || converter?.outputFormat != format {
-            converter = AVAudioConverter(from: inputFormat, to: format)
+        guard inputFormat != outputFormat else { return buffer }
+        if converter == nil || converter?.inputFormat != inputFormat || converter?.outputFormat != outputFormat {
+            converter = AVAudioConverter(from: inputFormat, to: outputFormat)
             converter?.primeMethod = .none
         }
         guard let converter else { throw ConversionError.converterUnavailable }
