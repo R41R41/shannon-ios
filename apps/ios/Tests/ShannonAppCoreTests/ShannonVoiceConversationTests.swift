@@ -30,6 +30,32 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertTrue(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: 48_000, channelCount: 1))
     }
 
+    func testLegacySpeechAuthorizationOnlyRequestsWhenUndetermined() {
+        XCTAssertEqual(
+            ShannonLegacySpeechAuthorizationAction.action(for: .notDetermined),
+            .request
+        )
+        XCTAssertEqual(
+            ShannonLegacySpeechAuthorizationAction.action(for: .authorized),
+            .proceed
+        )
+        XCTAssertEqual(
+            ShannonLegacySpeechAuthorizationAction.action(for: .denied),
+            .deny
+        )
+        XCTAssertEqual(
+            ShannonLegacySpeechAuthorizationAction.action(for: .restricted),
+            .deny
+        )
+    }
+
+    func testUsageDescriptionRequiresNonEmptyText() {
+        XCTAssertFalse(ShannonVoiceUsageDescriptionPolicy.isPresent(nil))
+        XCTAssertFalse(ShannonVoiceUsageDescriptionPolicy.isPresent(42))
+        XCTAssertFalse(ShannonVoiceUsageDescriptionPolicy.isPresent("  \n"))
+        XCTAssertTrue(ShannonVoiceUsageDescriptionPolicy.isPresent("音声認識に使います"))
+    }
+
     func testVoiceDiagnosticsPersistBreadcrumbsWithoutSensitiveContent() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ShannonVoiceDiagnosticsTests-\(UUID().uuidString)")
