@@ -186,13 +186,17 @@ export class SQLitePushNotificationStore {
         badgeCount: Math.max(1, Math.min(99, Number(row.initiative_badge_count) + 1)),
       };
     });
+    const testFlightBadgeExpression = this.tableExists('initiative_messages')
+      ? `(SELECT COUNT(*) FROM initiative_messages unread
+            WHERE unread.scope_key = pr.scope_key AND unread.read_at IS NULL)`
+      : '0';
     const testFlightRows = !this.tableExists('testflight_failure_episodes')
       ? []
       : this.database.prepare(`
         SELECT
           e.episode_id, e.opened_at,
           pr.device_id, pr.device_token, pr.environment,
-          ${initiativeBadgeExpression} AS initiative_badge_count
+          ${testFlightBadgeExpression} AS initiative_badge_count
         FROM testflight_failure_episodes e
         JOIN push_registrations pr ON pr.invalidated_at IS NULL
         LEFT JOIN push_delivery_state delivery

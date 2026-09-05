@@ -104,6 +104,8 @@ describe('push notification delivery', () => {
     const directory = mkdtempSync(join(tmpdir(), 'shannon-testflight-push-test-'));
     directories.push(directory);
     const path = join(directory, 'shannon.sqlite');
+    const initiatives = new SQLiteInitiativeStore(path);
+    initiatives.close();
     const delivery = new SQLiteTestFlightDeliveryStore(path);
     delivery.recordFailure(new Error('APP_STORE_CONNECT_403'), '2026-09-05T04:00:00.000Z');
     delivery.recordFailure(new Error('APP_STORE_CONNECT_403'), '2026-09-05T04:10:00.000Z');
