@@ -19,6 +19,7 @@ import { FileAetherProposalStore } from './aetherProposal.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotifications.js';
 import { SQLiteAgentTaskStore } from './agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
+import { SQLiteDailyMindStore } from './dailyMind.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({
@@ -30,12 +31,16 @@ const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now)
 const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
 const agentTaskStore = new SQLiteAgentTaskStore(configuredDatabasePath());
 const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredDatabasePath());
+const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
   conversationStore: persistentStore,
   background: new DurableBackgroundDispatcher(persistentStore, persistentStore),
-  memoryStore: new ShannonMemoryService(persistentStore, persistentStore, now, persistentStore, worldStore, persistentStore, undefined, initiativeStore),
+  memoryStore: new ShannonMemoryService(
+    persistentStore, persistentStore, now, persistentStore, worldStore,
+    persistentStore, undefined, initiativeStore, dailyMindStore,
+  ),
   knowledgeStore: persistentStore,
   initiativeInbox: initiativeStore,
   aetherContext: process.env.SHANNON_AETHER_CONTEXT_FILE?.trim()
@@ -47,6 +52,7 @@ const kernel = createLocalApiKernel(now, {
   agentTasks: agentTaskStore,
   testFlightDelivery: testFlightDeliveryStore,
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,
+  dailyMind: dailyMindStore,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
@@ -167,6 +173,7 @@ function shutdown(): void {
     initiativeStore.close();
     agentTaskStore.close();
     testFlightDeliveryStore.close();
+    dailyMindStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import type { DailyMindFocus } from './dailyMind.js';
 
 const QUIET_START_HOUR = 23;
 const QUIET_END_HOUR = 7;
@@ -101,7 +102,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     this.secureFiles();
   }
 
-  runOnce(at = this.now(), timeZone = 'Asia/Tokyo'): InitiativeLoopResult {
+  runOnce(
+    at = this.now(),
+    timeZone = 'Asia/Tokyo',
+    dailyFocuses: ReadonlyMap<string, DailyMindFocus> = new Map(),
+  ): InitiativeLoopResult {
     const local = localDateParts(new Date(at), timeZone);
     if (local.hour >= QUIET_START_HOUR || local.hour < QUIET_END_HOUR) {
       return this.finish({ considered: 0, sent: 0, stopped: 'quiet-hours' }, at);
@@ -130,14 +135,24 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }
       const state = parseState(scope.snapshot_json);
       const interest = firstInterest(state.interests);
+      const dailyFocus = dailyFocuses.get(scope.scope_key) ?? null;
+      if (dailyFocus && !dailyFocus.openingLine) {
+        lastStop = 'nothing-worth-saying';
+        continue;
+      }
       const candidates = this.candidates(scope.scope_key, at);
       considered += candidates.length;
-      const selected = selectCandidate(candidates, interest, finite(state.temperament?.initiative, 0.25), at);
+      const preferred = dailyFocus?.sourceItemId
+        ? candidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
+        : undefined;
+      const selected = preferred
+        ? { ...preferred, score: candidateScore(preferred, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at) }
+        : selectCandidate(candidates, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at);
       if (!selected) {
         lastStop = 'nothing-worth-saying';
         continue;
       }
-      this.persistMessage(scope.scope_key, state, selected, interest, dayKey, at);
+      this.persistMessage(scope.scope_key, state, selected, interest, dailyFocus, dayKey, at);
       sent += 1;
       lastStop = null;
     }
@@ -216,13 +231,16 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     state: CompanionStateShape,
     candidate: CandidateRow & { score: number },
     interest: string | null,
+    dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
   ): void {
     const initiativeId = randomUUID();
     const threadId = this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
-    const content = interest
+    const content = dailyFocus?.openingLine
+      ? `${dailyFocus.openingLine}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
+      : interest
       ? `今日の関心の「${interest}」に近くて、これが少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : `これ、少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`;
     const metadata = JSON.stringify({
@@ -235,6 +253,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       },
       initiativeId,
       sourceItemId: candidate.item_id,
+      dailyMindDayKey: dailyFocus?.dayKey ?? null,
     });
 
     this.database.exec('BEGIN IMMEDIATE');
@@ -262,6 +281,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         VALUES (?, ?, 'initiative', 'シャノンから話しかけた', ?, ?, ?)
       `).run(randomUUID(), scopeKey, truncate(candidate.title, 240), createdAt, JSON.stringify({
         initiativeId, sourceItemId: candidate.item_id, score: candidate.score,
+        dailyMindDayKey: dailyFocus?.dayKey ?? null,
       }));
       this.database.exec('COMMIT');
     } catch (error) {

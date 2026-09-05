@@ -1,10 +1,11 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { configuredDatabasePath } from './sqliteStore.js';
+import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { discoverFeedLinks, SQLiteWorldStore, type WorldItemInput, type WorldSource } from './worldStore.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
+import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
 import {
   createConfiguredPushNotificationSender,
   deliverPendingPushNotifications,
@@ -12,8 +13,12 @@ import {
 } from './pushNotifications.js';
 
 const databasePath = configuredDatabasePath();
+const nowISOString = () => new Date().toISOString();
 const store = new SQLiteWorldStore(databasePath);
 const initiativeStore = new SQLiteInitiativeStore(databasePath);
+const stateStore = new SQLiteShannonStore({ path: databasePath, now: nowISOString });
+const dailyMindStore = new SQLiteDailyMindStore(databasePath);
+const dailyMindModel = createConfiguredDailyMindModel(process.env, stateStore);
 const pushStore = new SQLitePushNotificationStore(databasePath);
 const pushSender = createConfiguredPushNotificationSender(process.env);
 const once = process.argv.includes('--once');
@@ -48,7 +53,8 @@ try {
     const now = Date.now();
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();
-      const initiative = initiativeStore.runOnce(at);
+      const dailyFocuses = await dailyMindStore.ensureForKnownScopes(store.latestItems(40), dailyMindModel, at);
+      const initiative = initiativeStore.runOnce(at, 'Asia/Tokyo', dailyFocuses);
       nextInitiativeCheckAt = now + nextInitiativeDelayMilliseconds(initiative, at);
       if (initiative.sent > 0) console.log(`Shannon initiative delivered: ${initiative.sent}`);
     }
@@ -63,6 +69,8 @@ try {
   } while (!stopping);
 } finally {
   pushStore.close();
+  dailyMindStore.close();
+  stateStore.close();
   initiativeStore.close();
   store.close();
 }

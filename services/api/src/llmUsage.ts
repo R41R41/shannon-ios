@@ -30,6 +30,7 @@ export interface LlmUsageSummaryRow {
 export interface LlmUsageReader {
   llmUsageSummary(scopeKey: string, monthKey: string): readonly LlmUsageSummaryRow[];
   backgroundLlmCostUsd(monthKey: string): number;
+  backgroundLlmCostUsdForDay?(dayKey: string): number;
 }
 
 export interface ResponseUsage {

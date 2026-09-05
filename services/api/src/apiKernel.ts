@@ -30,6 +30,7 @@ import {
 } from './agentTaskStore.js';
 import { randomUUID } from 'node:crypto';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
+import type { DailyMindReader } from './dailyMind.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -129,6 +130,7 @@ export interface ShannonApiKernelOptions {
   agentTasks?: AgentTaskStore;
   testFlightDelivery?: TestFlightDeliveryReader;
   defaultAgentHost?: string;
+  dailyMind?: DailyMindReader;
 }
 
 export class ShannonApiKernel {
@@ -143,6 +145,7 @@ export class ShannonApiKernel {
   private readonly agentTasks: AgentTaskStore;
   private readonly testFlightDelivery: TestFlightDeliveryReader | null;
   private readonly defaultAgentHost: string | null;
+  private readonly dailyMind: DailyMindReader | null;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -164,6 +167,7 @@ export class ShannonApiKernel {
     this.defaultAgentHost = validAgentHostHint(options.defaultAgentHost)
       ? options.defaultAgentHost.trim()
       : null;
+    this.dailyMind = options.dailyMind ?? null;
   }
 
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
@@ -516,11 +520,12 @@ export class ShannonApiKernel {
       const basePrompt = this.knowledgeStore?.promptProjection(body.scopeKey)
         ?? assembleShannonSystemPrompt(captured);
       const aetherPrompt = this.aetherContext?.promptFor(body.scopeKey, message) ?? '';
+      const dailyMindPrompt = this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '';
       const taskPrompt = agentTaskPromptProjection(
         this.agentTasks.list(body.scopeKey),
         threadId,
       );
-      const systemPrompt = [basePrompt, aetherPrompt, taskPrompt].filter(Boolean).join('\n\n');
+      const systemPrompt = [basePrompt, dailyMindPrompt, aetherPrompt, taskPrompt].filter(Boolean).join('\n\n');
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt,

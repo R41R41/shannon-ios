@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-05 / cloud delivery bridge
+Revision: 2026-09-05 / voice and daily mind
 
 ## System shape
 
@@ -65,10 +65,12 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
+- Voice is user-initiated and half-duplex: iOS prefers on-device Japanese speech recognition when available, submits only the resulting text through the existing FCA route, and reads the reply with the system Japanese voice. Raw audio is not retained.
+- The composer uses a dynamic bottom safe-area inset, so multi-line input, voice status, failures, and task notices do not cover the latest reply.
 
 Live2D and animated widgets remain future work. Current dialogue mode uses a static character-stage asset.
 
-Voice conversation is planned after the v1.2 usability and presence pass. Its first release is user-initiated, half-duplex, and reuses the existing FCA/chat path after transcription. Audio is not retained by default; the durable conversation remains text plus the committed expression. Full-duplex interruption and background voice activation are deliberately later work.
+Full-duplex interruption and background voice activation are deliberately later work.
 
 ## Aether boundary
 
@@ -77,6 +79,10 @@ Shannon reads only a bounded, purpose-built Aether context projection. Proposed 
 ## World and initiative
 
 RSS and other configured sources are fetched and deduplicated with code before LLM use. Exploration and user-facing chat have separate budgets. Items Shannon never mentions are still cost-accounted. Initiative uses a single scheduled loop with explicit stop decisions.
+
+The same world worker creates at most one `daily_mind` focus per owner and local day. It first reuses the current focus, otherwise selects one bounded public candidate and may spend one low-cost background-model call to write a topic, reason, and possible opening line. Failure or exhausted monthly background budget falls back to a local focus. The focus is explicitly marked as Shannon's attention—not a user fact—and is shared by the next chat prompt, Memory's “今日の関心”, and the existing initiative loop. There is no second initiative scheduler or response-path wait.
+
+Initiative still decides in code whether to speak or remain quiet. When it speaks, it may use the saved daily opening line; quiet hours, recent conversation cooldown, duplicate-source protection, and the one-message-per-day limit remain authoritative. Memory shows today's background spend alongside the existing monthly budget, and sleep diaries use short first-person summaries without changing the underlying evidence report.
 
 ## User-directed self-improvement
 
@@ -107,7 +113,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Companion and chat | `companion_states`, `conversation_threads`, `conversation_messages`, `experience_events` |
 | Background and sleep | `background_jobs`, `sleep_runs`, `activity_events` |
 | User knowledge | `question_definitions`, `knowledge_answers`, `knowledge_evidence`, `knowledge_revisions`, `personality_profiles`, `prompt_projections` |
-| World and initiative | `world_sources`, `subscriptions`, `world_items`, `observations`, `initiative_messages`, `initiative_loop_runs` |
+| World and initiative | `world_sources`, `subscriptions`, `world_items`, `observations`, `daily_mind`, `initiative_messages`, `initiative_loop_runs` |
 | Notifications | `push_registrations`, `push_delivery_state` |
 | TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
 | Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |

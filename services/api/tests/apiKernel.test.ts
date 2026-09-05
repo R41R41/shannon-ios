@@ -124,6 +124,28 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[0]?.systemPrompt).toContain('設計メモ');
   });
 
+  it('lets today\'s focus color the same chat prompt without treating it as a user fact', async () => {
+    const model = new RecordingChatModel();
+    const now = '2026-09-05T03:00:00.000Z';
+    const api = createLocalApiKernel(() => now, {
+      chatModel: model,
+      dailyMind: {
+        currentFocus: () => null,
+        promptFor: (scopeKey, at) => {
+          expect(scopeKey).toBe('owner-a');
+          expect(at).toBe(now);
+          return '[Today\'s Shannon focus]\n- topic: 記憶が育つ条件\n- This is not a fact about the user.';
+        },
+      },
+    });
+
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: 'おはよう' } });
+
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]?.systemPrompt).toContain('topic: 記憶が育つ条件');
+    expect(model.requests[0]?.systemPrompt).toContain('not a fact about the user');
+  });
+
   it('projects the authoritative agent task status across conversations', async () => {
     const model = new RecordingChatModel();
     const now = '2026-09-04T04:50:00.000Z';

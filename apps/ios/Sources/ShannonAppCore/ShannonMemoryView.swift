@@ -129,7 +129,7 @@ public struct ShannonMemoryView: View {
     @ViewBuilder
     private func currentStateContent(_ palette: M3Palette) -> some View {
         if let state = model.dashboard?.currentState {
-            ShannonCurrentStateCard(state: state, palette: palette)
+            ShannonCurrentStateCard(state: state, dailyMind: model.dashboard?.dailyMind, palette: palette)
             if let usage = model.dashboard?.usage {
                 ShannonCostCard(usage: usage, palette: palette)
             }
@@ -355,6 +355,16 @@ private struct ShannonCostCard: View {
                 Text("バックグラウンド残り \(usage.backgroundRemainingUsd, format: .currency(code: "USD"))")
                     .font(.caption).foregroundStyle(palette.onSurfaceVariant)
             }
+            if let today = usage.todayBackgroundCostUsd {
+                HStack {
+                    Text("今日のバックグラウンド")
+                    Spacer()
+                    Text(today, format: .currency(code: "USD"))
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .foregroundStyle(palette.onSurfaceVariant)
+            }
             ProgressView(
                 value: usage.backgroundBudgetUsd > 0
                     ? min(1, usage.backgroundCostUsd / usage.backgroundBudgetUsd)
@@ -364,7 +374,7 @@ private struct ShannonCostCard: View {
             HStack {
                 Text("会話 \(calls(for: "chat"))回")
                 Spacer()
-                Text("睡眠 \(calls(for: "sleep"))回")
+                Text("バックグラウンド \(calls(for: "sleep"))回")
             }
             .font(.caption)
             .foregroundStyle(palette.onSurfaceVariant)
@@ -479,6 +489,7 @@ private enum MemoryArea: String, CaseIterable, Identifiable {
 
 private struct ShannonCurrentStateCard: View {
     let state: CompanionStateDTO
+    let dailyMind: ShannonDailyMindDTO?
     let palette: M3Palette
     @State private var showsDetails = false
 
@@ -512,14 +523,24 @@ private struct ShannonCurrentStateCard: View {
                 }
             }
 
-            if let focus = state.interests.first {
+            if let focus = dailyMind {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("今日の関心")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(palette.primary)
-                    Text(focus)
+                    Text(focus.topic)
                         .font(.title3.weight(.medium))
                         .foregroundStyle(palette.onSurface)
+                    Text(focus.reason)
+                        .font(.caption)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                    if let title = focus.sourceTitle, let url = focus.sourceURL, let sourceURL = URL(string: url) {
+                        Link(destination: sourceURL) {
+                            Label(title, systemImage: "arrow.up.right")
+                                .font(.caption.weight(.medium))
+                                .lineLimit(1)
+                        }
+                    }
                 }
                 .padding(M3Spacing.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -709,14 +730,19 @@ private struct ShannonDiaryCard: View {
     }
 
     private var summary: String {
-        let learnedCount = report.learned.count + report.updated.count
-        let interestCount = report.interestChanges.count
-        let pendingCount = report.contradictions.count
-        var parts: [String] = []
-        if learnedCount > 0 { parts.append("理解が\(learnedCount)件深まった") }
-        if interestCount > 0 { parts.append("関心が\(interestCount)件動いた") }
-        if pendingCount > 0 { parts.append("\(pendingCount)件は保留した") }
-        return parts.isEmpty ? "大きく書き換えず、そのまま覚えている。" : parts.joined(separator: "。") + "。"
+        if let interest = report.interestChanges.first {
+            return "「\(interest.text)」が、今日は少し心に残った。"
+        }
+        if let learned = report.learned.first {
+            return "あなたについて「\(learned.text)」を新しく覚えた。"
+        }
+        if let updated = report.updated.first {
+            return "「\(updated.text)」について、前より少し理解が深まった。"
+        }
+        if !report.contradictions.isEmpty {
+            return "まだ決めつけずに置いておきたいことがあった。"
+        }
+        return "今日は大きく書き換えず、静かに覚えている。"
     }
 }
 
@@ -1129,12 +1155,11 @@ private struct MemoryErrorCard: View {
 }
 
 private func sleepSummary(_ report: ShannonSleepReportDTO) -> String {
-    let changes = report.learned.count + report.updated.count + report.interestChanges.count
-    if changes == 0 && report.contradictions.isEmpty { return "昨夜は大きな変化なし" }
-    var parts: [String] = []
-    if changes > 0 { parts.append("\(changes)件の理解が変化") }
-    if !report.contradictions.isEmpty { parts.append("\(report.contradictions.count)件を矛盾として保留") }
-    return parts.joined(separator: "・")
+    if let interest = report.interestChanges.first { return "「\(interest.text)」が少し心に残った" }
+    if let learned = report.learned.first { return "「\(learned.text)」を新しく覚えた" }
+    if let updated = report.updated.first { return "「\(updated.text)」への理解が少し深まった" }
+    if !report.contradictions.isEmpty { return "まだ決めつけずに置いたことがある" }
+    return "昨夜は静かに記憶を整理した"
 }
 
 private func displayDate(_ value: String) -> String {

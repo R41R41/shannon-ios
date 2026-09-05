@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 次期改善計画 v23</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg:#f6fbfd; --surface:#ffffff; --surface2:#eaf7fc; --ink:#14323f; --muted:#607985;
+      --line:#cce6f0; --primary:#45bde7; --primary2:#86d9f4; --deep:#176984;
+      --good:#1f8a65; --warn:#b66a18; --later:#7d6ca8; --shadow:0 18px 48px rgba(28,91,113,.10);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:linear-gradient(180deg,#ecf9fe 0,#f8fbfc 420px);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Hiragino Sans","Yu Gothic UI",sans-serif;line-height:1.65}
+    a{color:var(--deep)}
+    .wrap{width:min(1160px,calc(100% - 32px));margin:auto;padding:42px 0 80px}
+    .hero{position:relative;overflow:hidden;padding:46px;border:1px solid rgba(69,189,231,.35);border-radius:34px;background:rgba(255,255,255,.82);box-shadow:var(--shadow);backdrop-filter:blur(18px)}
+    .hero:after{content:"";position:absolute;width:360px;height:360px;right:-110px;top:-160px;border-radius:50%;background:radial-gradient(circle,var(--primary2),transparent 66%);opacity:.62}
+    .eyebrow{font-size:12px;font-weight:800;letter-spacing:.15em;color:var(--deep);text-transform:uppercase}
+    h1{font-size:clamp(34px,6vw,68px);line-height:1.06;letter-spacing:-.045em;margin:14px 0 20px;max-width:870px}
+    h2{font-size:clamp(26px,4vw,40px);line-height:1.2;letter-spacing:-.025em;margin:8px 0 22px}
+    h3{font-size:19px;line-height:1.35;margin:6px 0 8px}
+    p{margin:0;color:var(--muted)}
+    .lead{font-size:18px;max-width:850px}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
+    .chip{padding:7px 12px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);font-size:12px;font-weight:750;color:var(--deep)}
+    .chip.good{background:#e7f7f1;color:var(--good);border-color:#bde5d5}
+    section{margin-top:56px}
+    .decision{display:grid;grid-template-columns:80px 1fr;gap:22px;padding:26px;border-radius:25px;background:linear-gradient(135deg,#dff5fd,#f8fdff);border:1px solid var(--line)}
+    .decision .num{font-size:48px;font-weight:850;color:var(--primary);line-height:1}
+    .decision strong{font-size:22px;display:block;margin-bottom:6px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+    .card{grid-column:span 4;padding:22px;border-radius:22px;background:var(--surface);border:1px solid var(--line);box-shadow:0 8px 24px rgba(31,93,114,.06)}
+    .card.wide{grid-column:span 6}.card.full{grid-column:1/-1}
+    .tag{display:inline-block;font-size:11px;font-weight:850;letter-spacing:.08em;padding:4px 9px;border-radius:999px;background:var(--surface2);color:var(--deep)}
+    .tag.now{background:#d8f4ff}.tag.good{background:#e5f6ef;color:var(--good)}.tag.later{background:#f0ebfa;color:var(--later)}
+    .metric{font-size:32px;font-weight:850;letter-spacing:-.03em;color:var(--deep)}
+    .small{font-size:13px}.note{font-size:12px;margin-top:10px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:20px;overflow:hidden;display:table}
+    th,td{text-align:left;padding:15px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{font-size:12px;letter-spacing:.05em;color:var(--deep);background:var(--surface2)}
+    tr:last-child td{border-bottom:0}
+    .status{font-weight:800;white-space:nowrap}.status.done{color:var(--good)}.status.partial{color:var(--warn)}
+    .roadmap{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+    .phase{position:relative;min-height:210px;padding:19px;border-radius:21px;background:var(--surface);border:1px solid var(--line)}
+    .phase.current{background:linear-gradient(180deg,#dff6ff,#fff);border:2px solid var(--primary)}
+    .phase .version{font-size:11px;font-weight:850;color:var(--deep);letter-spacing:.08em}
+    .phase ul,.checklist{padding-left:18px;margin:12px 0 0;color:var(--muted);font-size:14px}
+    .phase li,.checklist li{margin:6px 0}
+    .flow{display:flex;align-items:stretch;gap:8px;overflow-x:auto;padding:3px 1px 12px}
+    .flowbox{min-width:155px;flex:1;padding:16px;border-radius:17px;background:var(--surface);border:1px solid var(--line);text-align:center}
+    .flowbox b{display:block;margin-bottom:4px}.arrow{align-self:center;color:var(--primary);font-size:24px;font-weight:900}
+    .phones{display:grid;grid-template-columns:repeat(2,minmax(0,340px));justify-content:center;gap:28px}
+    .phone{aspect-ratio:9/18.8;border-radius:38px;padding:12px;background:#0d2028;box-shadow:0 22px 45px rgba(8,34,44,.22)}
+    .screen{height:100%;overflow:hidden;border-radius:29px;background:linear-gradient(180deg,#e9f9ff,#fff 55%);position:relative;padding:42px 16px 18px}
+    .island{position:absolute;top:10px;left:50%;translate:-50%;width:92px;height:22px;border-radius:20px;background:#0d2028}
+    .topbar{height:39px;border-radius:19px;background:rgba(255,255,255,.58);display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:11px;font-weight:750}
+    .presence{height:53%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+    .halo{width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,#9ee4fa,#dff8ff 48%,transparent 70%);display:grid;place-items:center;font-size:66px}
+    .bubble{padding:13px 15px;border-radius:18px 18px 5px 18px;background:rgba(255,255,255,.86);border:1px solid #cdebf5;font-size:12px;text-align:left;box-shadow:0 8px 20px rgba(26,97,120,.08)}
+    .composer{position:absolute;left:14px;right:14px;bottom:13px;min-height:45px;border-radius:24px;background:rgba(255,255,255,.76);border:1px solid #cce8f2;display:flex;align-items:center;padding:0 13px;font-size:11px;color:#71909c;backdrop-filter:blur(14px)}
+    .memory-head{padding:18px 4px 8px}.memory-head b{font-size:21px}.tabs{display:flex;gap:5px;margin:10px 0}.tab{flex:1;text-align:center;font-size:10px;padding:7px;border-radius:11px;background:#edf5f8}.tab.on{background:#cceffc;color:#176984;font-weight:800}
+    .mind-card{padding:14px;border-radius:19px;background:rgba(255,255,255,.88);border:1px solid #cdeaf4;margin-top:10px}
+    .mind-card .title{font-size:11px;color:#3d96b4;font-weight:800}.mind-card .big{font-size:16px;font-weight:800;margin:3px 0}.thought{padding:9px 11px;border-radius:13px;background:#eefaff;font-size:11px;margin-top:7px}
+    .callout{padding:20px 22px;border-left:5px solid var(--primary);border-radius:8px 18px 18px 8px;background:var(--surface)}
+    footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+    @media(max-width:900px){.card,.card.wide{grid-column:span 6}.roadmap{grid-template-columns:1fr 1fr}.hero{padding:30px}.decision{grid-template-columns:1fr}.decision .num{font-size:28px}.phones{grid-template-columns:minmax(0,340px)}}
+    @media(max-width:580px){.wrap{width:min(100% - 20px,1160px);padding-top:18px}.card,.card.wide{grid-column:1/-1}.roadmap{grid-template-columns:1fr}.hero{border-radius:25px;padding:25px 21px}.flow .arrow{display:none}table{display:block;overflow-x:auto}.phones{grid-template-columns:1fr}.phone{max-width:340px;margin:auto;width:100%}}
+    @media(prefers-color-scheme:dark){:root{--bg:#07151b;--surface:#10252e;--surface2:#123440;--ink:#e7f7fc;--muted:#a7c0ca;--line:#24505f;--deep:#78d7f6;--good:#69d8ad;--warn:#f1b266}body{background:linear-gradient(180deg,#09232d,#07151b 500px)}.hero{background:rgba(12,35,44,.88)}.chip.good{background:#123c31;border-color:#246a54}.tag.good{background:#153e34}.phase.current{background:linear-gradient(180deg,#123d4d,#10252e)}.screen{color:#14323f}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Shannon · Next improvement plan · v23 · 2026-09-05</div>
+    <h1>次は機能を増やすより、<br>「一つの心」にまとめる。</h1>
+    <p class="lead">会話、感情、記憶、探索、自発メッセージはすでに動いている。次の焦点は、それぞれを別々の機能に見せず、今日の関心から行動と日記まで自然につながる体験へ仕上げること。</p>
+    <div class="chips">
+      <span class="chip good">TestFlight 0.1.0 (23) 実機Smoke完了</span>
+      <span class="chip good">Azure本番稼働</span>
+      <span class="chip good">Build 24–26 ローカル実装・全検証完了</span>
+      <span class="chip">次：Azure → TestFlightで一括反映</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / Recommendation</div>
+    <h2>直近の一手</h2>
+    <div class="decision">
+      <div class="num">24</div>
+      <div><strong>Build 24〜26は一つの変更群として実装完了。</strong><p>既存UXを作り直さず、入力欄の安全領域、半二重音声、日ごとの「今日の関心」、自然な自発メッセージ、一人称の日記、日次背景コスト表示を既存の会話・メモリー・自発行動へ接続した。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / Reality check</div>
+    <h2>いま本当にできていること</h2>
+    <div class="grid">
+      <div class="card"><span class="tag good">本番</span><div class="metric">7</div><h3>有効な情報源</h3><p class="small">気象庁、Hacker News、arXiv、PubMed、Zenn、内閣府など。</p></div>
+      <div class="card"><span class="tag good">本番</span><div class="metric">199</div><h3>取得済み情報</h3><p class="small">コードで取得・重複排除され、LLMを使わない探索層に保存。</p></div>
+      <div class="card"><span class="tag good">本番</span><div class="metric">347</div><h3>自発性の判定</h3><p class="small">静かな時間、直近会話、1日上限などを見て送信可否を判断。</p></div>
+      <div class="card"><span class="tag good">本番</span><div class="metric">2</div><h3>自発メッセージ</h3><p class="small">すでに通知・バッジ・会話への保存まで動作している。</p></div>
+      <div class="card"><span class="tag good">実装済み</span><h3>メモリーの3面</h3><p class="small">「いま」「知識」「記憶」。今日の関心、睡眠日記、見つけた情報、編集と根拠表示を持つ。</p></div>
+      <div class="card"><span class="tag good">実装済み</span><h3>会話と作業</h3><p class="small">複数トーク、自動タイトル、全幅返信、コピー、表情固定、Codex作業の永続状態、遠隔TestFlight。</p></div>
+    </div>
+    <p class="note">本番集計は個人内容を読まず、件数と稼働状態だけを2026-09-05に確認。</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / Gap analysis</div>
+    <h2>あるものと、まだ足りないもの</h2>
+    <table>
+      <thead><tr><th>領域</th><th>現在</th><th>次の改善</th></tr></thead>
+      <tbody>
+        <tr><td>今日の関心</td><td class="status partial">表示はある</td><td>現在は「最近観測した関心の先頭」。日ごとに選ばれ、理由と期限を持つシャノン自身の焦点へ変える。</td></tr>
+        <tr><td>自発性</td><td class="status done">一本のループが稼働</td><td>選定文が定型的。候補決定後だけ最大1回/日の低コスト生成を使い、自然な話しかけへ。</td></tr>
+        <tr><td>シャノン日記</td><td class="status done">睡眠レポートから表示</td><td>「何を覚えたか」中心から、「何が気になった／どう変わった」中心の短い一人称記録へ。</td></tr>
+        <tr><td>対話モード</td><td class="status partial">Presence Stage実装済み</td><td>静止画を置いた印象をさらに減らし、聞く・考える・話すの状態、字幕密度、表情遷移を統合。</td></tr>
+        <tr><td>メモリー</td><td class="status partial">3面と編集は実装済み</td><td>数値やDB一覧を主役にせず、「頭に浮かぶこと」「今日の焦点」「最近の変化」を先に見せる。</td></tr>
+        <tr><td>音声</td><td class="status partial">設計のみ</td><td>ユーザー起動・半二重・字幕あり・音声非保存のMVPを実装。</td></tr>
+        <tr><td>Aether連携</td><td class="status partial">境界とAPIはある</td><td>参照元の明示、提案レビュー、実データでの往復を完成。正本変更はAether側との連携要求が必要。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / Experience sketches</div>
+    <h2>UIをどう寄せるか</h2>
+    <div class="phones">
+      <div>
+        <div class="phone"><div class="screen"><div class="island"></div><div class="topbar"><span>☰</span><span>対話</span><span>⚙︎</span></div><div class="presence"><div class="halo">◡</div><b>考え中…</b><span class="small">表情と呼吸だけが静かに変化</span></div><div class="bubble">それ、少し面白いね。昨日の話ともつながっていそう。</div><div class="composer">シャノンに話す…　　🎙︎　↑</div></div></div>
+        <h3>対話モード：会話の状態が主役</h3><p class="small">大きな額縁や巨大な吹き出しを避ける。キャラクター、短い字幕、入力を一つの場面にし、全文はタップで展開・コピー。</p>
+      </div>
+      <div>
+        <div class="phone"><div class="screen"><div class="island"></div><div class="topbar"><span>☰</span><span>メモリー</span><span>⚙︎</span></div><div class="memory-head"><b>頭の中</b><div class="tabs"><span class="tab on">いま</span><span class="tab">知識</span><span class="tab">記憶</span></div></div><div class="mind-card"><div class="title">今日の関心</div><div class="big">AIが「自分らしく」育つ条件</div><p class="small">昨日の会話と、今朝見つけた記事から。</p><div class="thought">頭に浮かんでいること：便利さだけでなく、関係が変化する手触り。</div></div><div class="mind-card"><div class="title">昨夜から変わったこと</div><div class="big">少し好奇心が強い</div><p class="small">詳しい数値は開いた時だけ。</p></div></div></div>
+        <h3>メモリー：DBビューではなく頭の中</h3><p class="small">最初に短い物語を見せ、根拠・確信度・履歴・編集は掘り下げた先へ置く。知識の便利な手動編集は維持。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / One living loop</div>
+    <h2>シャノンの自発性を一本につなぐ</h2>
+    <div class="flow">
+      <div class="flowbox"><b>観測</b><span class="small">会話・時間・探索結果</span></div><div class="arrow">→</div>
+      <div class="flowbox"><b>共有状態</b><span class="small">感情・記憶・関心</span></div><div class="arrow">→</div>
+      <div class="flowbox"><b>今日の焦点</b><span class="small">1日1件、理由つき</span></div><div class="arrow">→</div>
+      <div class="flowbox"><b>行動候補</b><span class="small">調べる・話す・待つ</span></div><div class="arrow">→</div>
+      <div class="flowbox"><b>一度だけ実行</b><span class="small">上限・静かな時間</span></div><div class="arrow">→</div>
+      <div class="flowbox"><b>日記</b><span class="small">何が変わったかを残す</span></div>
+    </div>
+    <div class="callout"><b>重要：</b>探索や15分ごとの判定にLLMは使わない。コードが話す価値のある候補を1件まで絞り、その時だけ自然な文面を生成する。返答FCAは待たせない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / Version plan</div>
+    <h2>どのバージョンで何を完成させるか</h2>
+    <div class="roadmap">
+      <article class="phase"><div class="version">DONE · BUILD 24</div><h3>Usability closure</h3><ul><li>既存UXの棚卸し</li><li>可変高さの入力・状態表示をsafe areaへ</li><li>会話・作業表示の回帰保護</li><li>iOS実機向けコンパイル</li><li>既存機能の二重実装なし</li></ul></article>
+      <article class="phase"><div class="version">DONE · BUILD 25</div><h3>Voice MVP</h3><ul><li>タップして聞く</li><li>端末文字起こし優先</li><li>既存FCAへテキスト送信</li><li>字幕＋端末読み上げ</li><li>停止・再送・権限拒否</li></ul></article>
+      <article class="phase current"><div class="version">READY TO RELEASE · BUILD 26</div><h3>Daily mind</h3><ul><li>本物の「今日の関心」</li><li>自然な自発メッセージ</li><li>一人称のシャノン日記</li><li>話さない判断の保持</li><li>1日単位の背景コスト表示</li></ul></article>
+      <article class="phase"><div class="version">v1.5 / BUILD 27+</div><h3>World &amp; Aether</h3><ul><li>情報源の透明な管理</li><li>RSS試読の採否</li><li>日本の天気・ニュース品質</li><li>Aether参照と提案往復</li><li>出典カード</li></ul></article>
+      <article class="phase"><div class="version">v2.0</div><h3>Embodiment</h3><ul><li>Live2D</li><li>瞬きWidget</li><li>20種アイコン完成</li><li>隔離スキル生成</li><li>評価・承認後だけ採用</li></ul></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 / Build 24 definition of done</div>
+    <h2>次の実装を「完了」と呼ぶ条件</h2>
+    <div class="grid">
+      <div class="card wide"><span class="tag now">画面</span><h3>主要4状態を実機で確認</h3><ul class="checklist"><li>空／短文／長文／通信失敗</li><li>スクロール／対話の切替</li><li>入力中は誤遷移せず、外タップで閉じる</li><li>作業タイルは注意が必要な時だけ前面化</li></ul></div>
+      <div class="card wide"><span class="tag now">アクセシビリティ</span><h3>端末設定に負けない</h3><ul class="checklist"><li>最大文字サイズで操作可能</li><li>VoiceOverの読み順とボタン名</li><li>Reduce Motionで静止</li><li>ライト／ダーク双方で十分なコントラスト</li></ul></div>
+      <div class="card wide"><span class="tag now">回帰</span><h3>既存の大切なものを守る</h3><ul class="checklist"><li>会話履歴・接続・メモリー維持</li><li>表情とコピー</li><li>複数トークと自動タイトル</li><li>Codex作業の進捗・許可・復帰</li></ul></div>
+      <div class="card wide"><span class="tag now">配信</span><h3>TestFlightまでを一工程にする</h3><ul class="checklist"><li>ローカル全試験</li><li>Azure変更がある場合だけバックアップ配備</li><li>Xcode Cloud内部配信</li><li>Install／Smokeまで確認</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">08 / Cost guardrails</div>
+    <h2>生きて見えても、働きすぎない</h2>
+    <table>
+      <thead><tr><th>処理</th><th>方式</th><th>上限</th></tr></thead>
+      <tbody>
+        <tr><td>RSS・天気・ニュース取得</td><td>コードのみ</td><td>情報源ごとの間隔、最大件数、90日保持</td></tr>
+        <tr><td>重複排除・話す価値の判定</td><td>コードのみ</td><td>候補80件以内、静かな時間、直近会話、1日1件</td></tr>
+        <tr><td>自然な自発メッセージ</td><td>候補決定後だけLLM</td><td>最大1回／日。背景予算が尽きたら定型送信せず沈黙</td></tr>
+        <tr><td>睡眠バッチ</td><td>既存の背景LLM枠</td><td>月次背景予算。今日の関心と日記を同じ結果から作り追加呼出しを避ける</td></tr>
+        <tr><td>通常会話</td><td>FCAの固定モデル</td><td>背景処理とは別予算。探索・感情・記憶を待たない</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="eyebrow">09 / Explicitly later</div>
+    <h2>今は入れないもの</h2>
+    <div class="grid">
+      <div class="card"><span class="tag later">後続</span><h3>Live2D・Widget</h3><p class="small">魅力は大きいが、対話画面と音声状態が固まってから。先に動きの責務を確定する。</p></div>
+      <div class="card"><span class="tag later">v2</span><h3>予測誤差ループ</h3><p class="small">v1では使わない。返答に影響させず、必要性が実利用で確認できてから検討。</p></div>
+      <div class="card"><span class="tag later">v2</span><h3>自動スキル生成</h3><p class="small">自律的な自己改修はしない。隔離試験とユーザー承認を通過した時だけ採用。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">10 / Start order</div>
+    <h2>実装開始時の順番</h2>
+    <div class="grid">
+      <div class="card"><div class="metric">1</div><h3>非個人fixtureを固定</h3><p class="small">短文、長文、失敗、作業中、メモリー、睡眠日記を同じ架空データで再現。</p></div>
+      <div class="card"><div class="metric">2</div><h3>画面を小さく直す</h3><p class="small">対話、入力、メモリー、作業表示を順に調整。バックエンド仕様はこの段階で増やさない。</p></div>
+      <div class="card"><div class="metric">3</div><h3>build 24で実機一巡</h3><p class="small">使って違和感を集め、v1.2を閉じる。合格後にVoice MVPへ進む。</p></div>
+    </div>
+  </section>
+
+  <footer>
+    現行の実装正本：<a href="architecture.md">architecture.md</a> · 実用試験：<a href="shannon-practical-test-cases-v22.html">v22</a> · 旧UX計画：<a href="shannon-ux-voice-roadmap-v20.html">v20</a><br>
+    Build 24〜26はローカル実装・回帰検証済み。本番反映は7段階の配信ゲートで別に追跡する。Aether正本への書き戻しやVoyager契約変更は、Syzygy連携要求を経て扱う。
+  </footer>
+</main>
+</body>
+</html>

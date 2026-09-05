@@ -573,6 +573,7 @@ public struct ShannonMemoryDashboardDTO: Codable, Equatable, Sendable {
     public let world: [ShannonWorldItemDTO]?
     public let usage: ShannonLlmUsageSummaryDTO?
     public let evaluation: ShannonInitiativeEvaluationDTO?
+    public let dailyMind: ShannonDailyMindDTO?
     public let items: [ShannonMemoryItemDTO]
     public let sleepReports: [ShannonSleepReportDTO]
 
@@ -585,6 +586,7 @@ public struct ShannonMemoryDashboardDTO: Codable, Equatable, Sendable {
         world: [ShannonWorldItemDTO]? = nil,
         usage: ShannonLlmUsageSummaryDTO? = nil,
         evaluation: ShannonInitiativeEvaluationDTO? = nil,
+        dailyMind: ShannonDailyMindDTO? = nil,
         items: [ShannonMemoryItemDTO],
         sleepReports: [ShannonSleepReportDTO]
     ) {
@@ -596,9 +598,23 @@ public struct ShannonMemoryDashboardDTO: Codable, Equatable, Sendable {
         self.world = world
         self.usage = usage
         self.evaluation = evaluation
+        self.dailyMind = dailyMind
         self.items = items
         self.sleepReports = sleepReports
     }
+}
+
+public struct ShannonDailyMindDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let dayKey: String
+    public let topic: String
+    public let reason: String
+    public let sourceItemId: String?
+    public let sourceTitle: String?
+    public let sourceURL: String?
+    public let openingLine: String?
+    public let createdAt: String
+    public let expiresAt: String
 }
 
 public struct ShannonInitiativeEvaluationDTO: Codable, Equatable, Sendable {
@@ -672,8 +688,10 @@ public struct ShannonLlmUsageRowDTO: Codable, Equatable, Identifiable, Sendable 
 
 public struct ShannonLlmUsageSummaryDTO: Codable, Equatable, Sendable {
     public let monthKey: String
+    public let dayKey: String?
     public let estimatedCostUsd: Double
     public let backgroundCostUsd: Double
+    public let todayBackgroundCostUsd: Double?
     public let backgroundBudgetUsd: Double
     public let backgroundRemainingUsd: Double
     public let rows: [ShannonLlmUsageRowDTO]

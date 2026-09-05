@@ -11,6 +11,7 @@ public struct ShannonConversationView: View {
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var appIconModel = ShannonAppIconModel()
+    @State private var voiceModel = ShannonVoiceConversationModel()
     @State private var showsStateDetails = false
     @State private var showsConnectionDetails = false
     @State private var showsAppIconSettings = false
@@ -104,8 +105,12 @@ public struct ShannonConversationView: View {
         }
         .onChange(of: selectedPage) {
             composerIsFocused = false
+            voiceModel.cancel()
             guard selectedPage == .memory else { return }
             Task { await memoryModel.reload() }
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase != .active { voiceModel.cancel() }
         }
         .sheet(isPresented: $showsSettings) {
             settingsSheet(palette)
@@ -173,7 +178,7 @@ public struct ShannonConversationView: View {
     }
 
     private func talkPage(_ palette: M3Palette) -> some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             Group {
                 switch displayMode {
                 case .scroll:
@@ -183,8 +188,27 @@ public struct ShannonConversationView: View {
                 }
             }
 
-            VStack(spacing: M3Spacing.small) {
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: toggleDisplayMode) {
+                        Label(displayMode.switchActionTitle, systemImage: displayMode.switchActionSymbolName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .padding(.horizontal, M3Spacing.medium)
+                            .frame(minHeight: 38)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
+                }
+                .padding(.horizontal, M3Spacing.large)
+                .padding(.top, ShannonWorkspaceChrome.contentTopInset)
                 Spacer()
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: M3Spacing.small) {
                 if let statusMessage = model.statusMessage {
                     ShannonSnackbar(
                         message: statusMessage,
@@ -211,27 +235,18 @@ public struct ShannonConversationView: View {
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                if voiceModel.phase != .idle {
+                    ShannonVoiceStatusBar(
+                        model: voiceModel,
+                        primaryAction: performVoicePrimaryAction,
+                        cancel: voiceModel.cancel
+                    )
+                    .padding(.horizontal, M3Spacing.medium)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 composer(palette)
             }
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: toggleDisplayMode) {
-                        Label(displayMode.switchActionTitle, systemImage: displayMode.switchActionSymbolName)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.onSurfaceVariant)
-                            .padding(.horizontal, M3Spacing.medium)
-                            .frame(minHeight: 38)
-                            .background(.thinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
-                }
-                .padding(.horizontal, M3Spacing.large)
-                .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-                Spacer()
-            }
+            .background(Color.clear)
         }
         .background(palette.surface)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
@@ -297,7 +312,7 @@ public struct ShannonConversationView: View {
                 }
                 .padding(.horizontal, M3Spacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-                .padding(.bottom, 124)
+                .padding(.bottom, M3Spacing.large)
             }
             .scrollIndicators(.hidden)
             .shannonKeyboardDismissMode()
@@ -326,26 +341,26 @@ public struct ShannonConversationView: View {
                 .submitLabel(.send)
                 .accessibilityHint("複数行入力できます")
 
-            Button(action: sendDraft) {
+            Button(action: composerPrimaryAction) {
                 ZStack {
                     Circle()
-                        .fill(model.canSendDraft ? palette.primary : palette.surface)
-                    if model.isSending {
+                        .fill(composerActionIsEnabled ? palette.primary : palette.surface)
+                    if model.isSending || voiceModel.phase == .requestingPermission || voiceModel.phase == .thinking {
                         ProgressView()
                             .tint(palette.onSurfaceVariant)
                             .controlSize(.small)
                     } else {
-                        Image(systemName: "arrow.up")
+                        Image(systemName: composerActionSymbol)
                             .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(model.canSendDraft ? palette.onPrimary : palette.onSurfaceVariant)
+                            .foregroundStyle(composerActionIsEnabled ? palette.onPrimary : palette.onSurfaceVariant)
                     }
                 }
                 .frame(width: 40, height: 40)
             }
             .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
             .buttonStyle(.plain)
-            .disabled(!model.canSendDraft)
-            .accessibilityLabel(model.isSending ? "送信中" : "送信")
+            .disabled(!composerActionIsEnabled)
+            .accessibilityLabel(composerActionLabel)
         }
         .padding(M3Spacing.extraSmall)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous))
@@ -661,7 +676,7 @@ public struct ShannonConversationView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset + 48)
-                .padding(.bottom, 118)
+                .padding(.bottom, M3Spacing.large)
             }
         }
         .contentShape(Rectangle())
@@ -747,8 +762,61 @@ public struct ShannonConversationView: View {
     }
 
     private func sendDraft() {
+        voiceModel.stopSpeaking()
         guard model.canSendDraft else { return }
         Task { await model.sendDraft() }
+    }
+
+    private var composerActionIsEnabled: Bool {
+        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return model.canSendDraft
+        }
+        return voiceModel.primaryAction != .none && !model.isSending
+    }
+
+    private var composerActionSymbol: String {
+        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "arrow.up" }
+        return voiceModel.phase.symbolName
+    }
+
+    private var composerActionLabel: String {
+        if model.isSending { return "送信中" }
+        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "送信" }
+        return voiceModel.phase.japaneseLabel
+    }
+
+    private func composerPrimaryAction() {
+        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            sendDraft()
+            return
+        }
+        performVoicePrimaryAction()
+    }
+
+    private func performVoicePrimaryAction() {
+        switch voiceModel.primaryAction {
+        case .start:
+            composerIsFocused = false
+            Task { await voiceModel.startListening() }
+        case .send:
+            guard let transcript = voiceModel.finishListening() else { return }
+            voiceModel.beginThinking()
+            model.draft = transcript
+            Task {
+                await model.sendDraft()
+                if model.hasFailedMessage {
+                    voiceModel.finishAfterFailedReply()
+                } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
+                    voiceModel.speak(reply.text)
+                } else {
+                    voiceModel.finishAfterFailedReply()
+                }
+            }
+        case .stopSpeaking:
+            voiceModel.stopSpeaking()
+        case .none:
+            break
+        }
     }
 
     private func openAgentTask(_ id: UUID) {
@@ -1792,6 +1860,70 @@ private struct ShannonSnackbar: View {
         .padding(.trailing, M3Spacing.extraSmall)
         .background(palette.onSurface, in: RoundedRectangle(cornerRadius: M3Shape.small, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+    }
+}
+
+private struct ShannonVoiceStatusBar: View {
+    let model: ShannonVoiceConversationModel
+    let primaryAction: () -> Void
+    let cancel: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = M3Palette.resolve(colorScheme)
+        HStack(spacing: M3Spacing.small) {
+            Image(systemName: model.phase.symbolName)
+                .symbolEffect(.variableColor.iterative, isActive: model.phase == .listening || model.phase == .speaking)
+                .foregroundStyle(palette.primary)
+                .frame(width: 30)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.phase.japaneseLabel)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(palette.onSurface)
+                if !model.transcript.isEmpty {
+                    Text(model.transcript)
+                        .font(.caption)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .lineLimit(2)
+                } else if let errorMessage = model.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(palette.error)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if model.primaryAction != .none {
+                Button(action: primaryAction) {
+                    Image(systemName: model.primaryAction == .send ? "arrow.up" : model.phase.symbolName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(palette.onPrimary)
+                        .frame(width: 36, height: 36)
+                        .background(palette.primary, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.phase.japaneseLabel)
+            }
+
+            Button(action: cancel) {
+                Image(systemName: "xmark")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(palette.onSurfaceVariant)
+            .accessibilityLabel("音声会話を閉じる")
+        }
+        .padding(.horizontal, M3Spacing.medium)
+        .padding(.vertical, M3Spacing.small)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
+                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+        }
+        .accessibilityElement(children: .contain)
     }
 }
 

@@ -12,6 +12,7 @@ import type { PersonalityProfile } from './knowledgeStore.js';
 import type { WorldItem, WorldReader } from './worldStore.js';
 import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from './llmUsage.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from './initiativeStore.js';
+import type { DailyMindFocus, DailyMindReader } from './dailyMind.js';
 
 export interface MemoryEvidence {
   quote: string;
@@ -70,13 +71,16 @@ export interface MemoryDashboard {
   sleepReports: readonly SleepReport[];
   usage: {
     monthKey: string;
+    dayKey: string;
     estimatedCostUsd: number;
     backgroundCostUsd: number;
+    todayBackgroundCostUsd: number;
     backgroundBudgetUsd: number;
     backgroundRemainingUsd: number;
     rows: readonly LlmUsageSummaryRow[];
   } | null;
   evaluation: InitiativeEvaluationSummary | null;
+  dailyMind: DailyMindFocus | null;
 }
 
 export interface ActivityItem {
@@ -126,6 +130,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     private readonly usageReader: LlmUsageReader | null = null,
     private readonly backgroundBudgetUsd = configuredBackgroundBudgetUsd(),
     private readonly initiativeEvaluationReader: InitiativeEvaluationReader | null = null,
+    private readonly dailyMindReader: DailyMindReader | null = null,
   ) {}
 
   dashboard(scopeKey: string): MemoryDashboard {
@@ -192,6 +197,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       || right.updatedAt.localeCompare(left.updatedAt));
     const generatedAt = this.now();
     const monthKey = generatedAt.slice(0, 7);
+    const dayKey = localDayKey(generatedAt, 'Asia/Tokyo');
     const usageRows = this.usageReader?.llmUsageSummary(scopeKey, monthKey) ?? [];
     const backgroundCostUsd = this.usageReader?.backgroundLlmCostUsd(monthKey) ?? 0;
     return Object.freeze({
@@ -207,13 +213,16 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       sleepReports: Object.freeze(parseSleepReports(events).slice(0, 30)),
       usage: this.usageReader ? Object.freeze({
         monthKey,
+        dayKey,
         estimatedCostUsd: usageRows.reduce((sum, row) => sum + row.estimatedCostUsd, 0),
         backgroundCostUsd,
+        todayBackgroundCostUsd: this.usageReader.backgroundLlmCostUsdForDay?.(dayKey) ?? 0,
         backgroundBudgetUsd: this.backgroundBudgetUsd,
         backgroundRemainingUsd: Math.max(0, this.backgroundBudgetUsd - backgroundCostUsd),
         rows: Object.freeze([...usageRows]),
       }) : null,
       evaluation: this.initiativeEvaluationReader?.initiativeEvaluation(30, generatedAt) ?? null,
+      dailyMind: this.dailyMindReader?.currentFocus(scopeKey, generatedAt) ?? null,
     });
   }
 
@@ -242,6 +251,14 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     }
     return this.dashboard(scopeKey);
   }
+}
+
+function localDayKey(at: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(at));
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value ?? '00';
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function buildActivity(

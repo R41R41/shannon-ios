@@ -369,6 +369,8 @@ describe('SQLite Shannon persistence', () => {
       expect.objectContaining({ lane: 'sleep', calls: 1, totalTokens: 600 }),
     ]);
     expect(store.backgroundLlmCostUsd('2026-09')).toBeCloseTo(0.00022, 9);
+    expect(store.backgroundLlmCostUsdForDay('2026-09-03')).toBeCloseTo(0.00022, 9);
+    expect(store.backgroundLlmCostUsdForDay('2026-09-02')).toBe(0);
     store.close();
 
     const database = new DatabaseSync(path);

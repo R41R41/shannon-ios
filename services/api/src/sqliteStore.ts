@@ -384,6 +384,15 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     return Number(row.cost);
   }
 
+  backgroundLlmCostUsdForDay(dayKey: string): number {
+    const row = this.database.prepare(`
+      SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
+      FROM llm_usage_events
+      WHERE lane <> 'chat' AND date(datetime(occurred_at, '+9 hours')) = ?
+    `).get(dayKey) as unknown as { cost: number };
+    return Number(row.cost);
+  }
+
   llmUsageSummary(scopeKey: string, monthKey: string): readonly {
     lane: 'chat' | 'sleep'; calls: number; inputTokens: number; cachedInputTokens: number;
     outputTokens: number; totalTokens: number; estimatedCostUsd: number;
