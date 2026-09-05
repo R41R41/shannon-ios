@@ -1,0 +1,12 @@
+[Unit]
+Description=Check for a new Shannon Xcode Cloud build
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=shannon-testflight-distributor.service
+
+[Install]
+WantedBy=timers.target

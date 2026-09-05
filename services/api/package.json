@@ -13,6 +13,7 @@
     "worker:world": "tsx --env-file-if-exists=../../.env src/worldWorker.ts",
     "agent:fake": "tsx --env-file-if-exists=../../.env src/fakeAgentHost.ts",
     "agent:host": "tsx --env-file-if-exists=../../.env src/agentHost.ts",
+    "testflight:distribute": "tsx --env-file-if-exists=../../.env src/testflightDistributor.ts",
     "auth": "tsx --env-file-if-exists=../../.env src/authCli.ts"
   },
   "dependencies": {

@@ -1,0 +1,18 @@
+[Unit]
+Description=Shannon latest Xcode Cloud build distributor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-agent-workspace/shannon-ios
+EnvironmentFile=/home/azureuser/.config/shannon-appstore-connect/testflight.env
+Environment=PATH=/home/azureuser/shannon-ios-runtime/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node /home/azureuser/shannon-agent-workspace/shannon-ios/node_modules/tsx/dist/cli.mjs /home/azureuser/shannon-agent-workspace/shannon-ios/services/api/src/testflightDistributor.ts
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/azureuser/shannon-agent-data
