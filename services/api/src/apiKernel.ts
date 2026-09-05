@@ -88,6 +88,10 @@ function validThreadTitle(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 80;
 }
 
+function validAgentHostHint(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,100}$/u.test(value.trim());
+}
+
 function optionalFiniteNumber(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value));
 }
@@ -116,6 +120,7 @@ export interface ShannonApiKernelOptions {
   aetherContext?: AetherContextReader;
   aetherProposals?: AetherProposalStore;
   agentTasks?: AgentTaskStore;
+  defaultAgentHost?: string;
 }
 
 export class ShannonApiKernel {
@@ -128,6 +133,7 @@ export class ShannonApiKernel {
   private readonly aetherContext: AetherContextReader | null;
   private readonly aetherProposals: AetherProposalStore;
   private readonly agentTasks: AgentTaskStore;
+  private readonly defaultAgentHost: string | null;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -145,6 +151,9 @@ export class ShannonApiKernel {
     this.aetherContext = options.aetherContext ?? null;
     this.aetherProposals = options.aetherProposals ?? new DisabledAetherProposalStore();
     this.agentTasks = options.agentTasks ?? new InMemoryAgentTaskStore();
+    this.defaultAgentHost = validAgentHostHint(options.defaultAgentHost)
+      ? options.defaultAgentHost.trim()
+      : null;
   }
 
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
@@ -216,6 +225,9 @@ export class ShannonApiKernel {
       }
       if (request.body.plan !== undefined && !validPlan(request.body.plan)) return badRequest('plan is invalid');
       try {
+        const hostHint = typeof request.body.hostHint === 'string' && request.body.hostHint.trim()
+          ? request.body.hostHint.trim()
+          : this.defaultAgentHost;
         const result = this.agentTasks.create(scopeKey, {
           ...(typeof request.body.taskId === 'string' ? { taskId: request.body.taskId } : {}),
           idempotencyKey: request.body.idempotencyKey,
@@ -225,7 +237,7 @@ export class ShannonApiKernel {
           goal: request.body.goal,
           summary: request.body.summary,
           ...(Array.isArray(request.body.plan) ? { plan: request.body.plan as AgentPlanItem[] } : {}),
-          ...(typeof request.body.hostHint === 'string' ? { hostHint: request.body.hostHint } : {}),
+          ...(hostHint ? { hostHint } : {}),
           ...(typeof request.body.projectHint === 'string' ? { projectHint: request.body.projectHint } : {}),
         }, this.now());
         return { status: result.created ? 201 : 200, body: result };

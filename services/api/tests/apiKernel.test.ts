@@ -151,6 +151,31 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[0]?.systemPrompt).toContain('completedを作業中、cancelledを再開中、runningを未開始とは言わない');
   });
 
+  it('routes tasks from older clients to the configured default Agent Host', async () => {
+    const api = createLocalApiKernel(
+      () => '2026-09-05T03:45:00.000Z',
+      { defaultAgentHost: 'shannon-cloud' },
+    );
+    const created = await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      scopeKey: 'owner-a', idempotencyKey: 'cloud-default-test', conversationThreadID: 'thread-a',
+      title: 'クラウド作業', goal: '旧版クライアントから依頼する', summary: 'クラウドへ送る',
+    } });
+    expect(created.status).toBe(201);
+
+    const macClaim = await api.dispatch({ method: 'POST', path: '/v1/agent/host/commands/claim', body: {
+      hostId: 'shannon-mac',
+    } });
+    expect(macClaim).toMatchObject({ status: 200, body: { command: null } });
+
+    const cloudClaim = await api.dispatch({ method: 'POST', path: '/v1/agent/host/commands/claim', body: {
+      hostId: 'shannon-cloud',
+    } });
+    expect(cloudClaim).toMatchObject({
+      status: 200,
+      body: { command: { payload: { hostHint: 'shannon-cloud' } } },
+    });
+  });
+
   it('queues an explicit Aether proposal without calling the chat model', async () => {
     const model = new RecordingChatModel();
     const created: unknown[] = [];

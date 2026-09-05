@@ -43,6 +43,7 @@ const kernel = createLocalApiKernel(now, {
     ? new FileAetherProposalStore(process.env.SHANNON_AETHER_PROPOSAL_DIR.trim(), now)
     : undefined,
   agentTasks: agentTaskStore,
+  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
