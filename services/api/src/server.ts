@@ -18,6 +18,7 @@ import { FileAetherContextReader } from './aetherContext.js';
 import { FileAetherProposalStore } from './aetherProposal.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotifications.js';
 import { SQLiteAgentTaskStore } from './agentTaskStore.js';
+import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({
@@ -28,6 +29,7 @@ const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
 const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);
 const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
 const agentTaskStore = new SQLiteAgentTaskStore(configuredDatabasePath());
+const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredDatabasePath());
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
@@ -43,6 +45,7 @@ const kernel = createLocalApiKernel(now, {
     ? new FileAetherProposalStore(process.env.SHANNON_AETHER_PROPOSAL_DIR.trim(), now)
     : undefined,
   agentTasks: agentTaskStore,
+  testFlightDelivery: testFlightDeliveryStore,
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
@@ -163,6 +166,7 @@ function shutdown(): void {
     worldStore.close();
     initiativeStore.close();
     agentTaskStore.close();
+    testFlightDeliveryStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

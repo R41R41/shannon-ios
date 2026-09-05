@@ -2,6 +2,8 @@ import { createPrivateKey, sign } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { configuredDatabasePath } from './sqliteStore.js';
+import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
 
 const appStoreConnectOrigin = 'https://api.appstoreconnect.apple.com';
 
@@ -191,8 +193,19 @@ function numericVersion(version: string | undefined): number[] | null {
 }
 
 async function main(): Promise<void> {
-  const result = await distributeLatestInternalBuild({ config: configuredTestFlightDistribution() });
-  console.log(`[testflight-distributor] ${result.status}${'version' in result ? ` build=${result.version}` : ''}`);
+  const delivery = new SQLiteTestFlightDeliveryStore(configuredDatabasePath());
+  const checkedAt = new Date().toISOString();
+  try {
+    const result = await distributeLatestInternalBuild({ config: configuredTestFlightDistribution() });
+    delivery.recordResult(result, checkedAt);
+    console.log(`[testflight-distributor] ${result.status}${'version' in result ? ` build=${result.version}` : ''}`);
+  } catch (error) {
+    const recorded = delivery.recordFailure(error, checkedAt);
+    console.error(`[testflight-distributor] failed code=${recorded.failureCode} notification=${recorded.notificationQueued ? 'queued' : 'suppressed'}`);
+    throw error;
+  } finally {
+    delivery.close();
+  }
 }
 
 function encodeJson(value: unknown): string {

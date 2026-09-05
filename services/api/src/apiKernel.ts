@@ -29,6 +29,7 @@ import {
   type HostAgentEvent,
 } from './agentTaskStore.js';
 import { randomUUID } from 'node:crypto';
+import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -120,6 +121,7 @@ export interface ShannonApiKernelOptions {
   aetherContext?: AetherContextReader;
   aetherProposals?: AetherProposalStore;
   agentTasks?: AgentTaskStore;
+  testFlightDelivery?: TestFlightDeliveryReader;
   defaultAgentHost?: string;
 }
 
@@ -133,6 +135,7 @@ export class ShannonApiKernel {
   private readonly aetherContext: AetherContextReader | null;
   private readonly aetherProposals: AetherProposalStore;
   private readonly agentTasks: AgentTaskStore;
+  private readonly testFlightDelivery: TestFlightDeliveryReader | null;
   private readonly defaultAgentHost: string | null;
 
   constructor(
@@ -151,6 +154,7 @@ export class ShannonApiKernel {
     this.aetherContext = options.aetherContext ?? null;
     this.aetherProposals = options.aetherProposals ?? new DisabledAetherProposalStore();
     this.agentTasks = options.agentTasks ?? new InMemoryAgentTaskStore();
+    this.testFlightDelivery = options.testFlightDelivery ?? null;
     this.defaultAgentHost = validAgentHostHint(options.defaultAgentHost)
       ? options.defaultAgentHost.trim()
       : null;
@@ -195,6 +199,21 @@ export class ShannonApiKernel {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: { tasks: this.agentTasks.list(scopeKey) } };
+    }
+
+    if (request.method === 'GET' && request.path === '/v1/testflight/delivery') {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      return {
+        status: 200,
+        body: this.testFlightDelivery?.dashboard() ?? {
+          condition: 'waiting',
+          latestBuildVersion: null,
+          lastCheckedAt: null,
+          activeFailureCode: null,
+          history: [],
+        },
+      };
     }
 
     const agentTaskMatch = request.path.match(/^\/v1\/agent\/tasks\/([^/]+)$/);

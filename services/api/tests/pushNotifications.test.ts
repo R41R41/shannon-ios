@@ -12,6 +12,7 @@ import {
 } from '../src/pushNotifications.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/worldStore.js';
+import { SQLiteTestFlightDeliveryStore } from '../src/testflightDeliveryStore.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));
@@ -97,6 +98,40 @@ describe('push notification delivery', () => {
     expect(sent).toEqual(['agent:completed-event']);
     expect(push.pending()).toEqual([]);
     push.close();
+  });
+
+  it('delivers only the first push for one TestFlight failure episode', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'shannon-testflight-push-test-'));
+    directories.push(directory);
+    const path = join(directory, 'shannon.sqlite');
+    const delivery = new SQLiteTestFlightDeliveryStore(path);
+    delivery.recordFailure(new Error('APP_STORE_CONNECT_403'), '2026-09-05T04:00:00.000Z');
+    delivery.recordFailure(new Error('APP_STORE_CONNECT_403'), '2026-09-05T04:10:00.000Z');
+    const push = new SQLitePushNotificationStore(path, () => '2026-09-05T04:11:00.000Z');
+    push.register(
+      { deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' },
+      'fa'.repeat(32),
+      'production',
+    );
+    expect(push.pending()).toEqual([
+      expect.objectContaining({
+        kind: 'testflight_failure',
+        title: 'シャノン · アプリの更新',
+        expression: 'concerned',
+      }),
+    ]);
+    const sender: PushNotificationSender = {
+      enabled: true,
+      async send() {
+        return { delivered: true, permanentFailure: false, status: 200, reason: null };
+      },
+    };
+    expect(await deliverPendingPushNotifications(push, sender, '2026-09-05T04:11:00.000Z'))
+      .toEqual({ attempted: 1, delivered: 1 });
+    expect(push.pending()).toEqual([]);
+    expect(delivery.dashboard().history[1]?.notificationStatus).toBe('sent');
+    push.close();
+    delivery.close();
   });
 
   it('stays disabled until the complete APNs credential set exists', () => {

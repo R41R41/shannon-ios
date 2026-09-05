@@ -28,6 +28,25 @@ describe('Shannon local API kernel', () => {
     });
   });
 
+  it('returns the authenticated TestFlight delivery projection', async () => {
+    const dashboard = {
+      condition: 'healthy' as const,
+      latestBuildVersion: '17',
+      lastCheckedAt: '2026-09-05T04:00:00.000Z',
+      activeFailureCode: null,
+      history: [],
+    };
+    const api = createLocalApiKernel(
+      () => '2026-09-05T04:00:00.000Z',
+      { testFlightDelivery: { dashboard: () => dashboard } },
+    );
+    expect(await api.dispatch({
+      method: 'GET', path: '/v1/testflight/delivery', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    })).toEqual({ status: 200, body: dashboard });
+    expect(await api.dispatch({ method: 'GET', path: '/v1/testflight/delivery' }))
+      .toMatchObject({ status: 400 });
+  });
+
   it('captures one immutable state version for a chat turn', async () => {
     let tick = 0;
     const api = createLocalApiKernel(() => `2026-08-31T00:00:0${tick++}.000Z`);

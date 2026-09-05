@@ -97,6 +97,48 @@ final class ShannonConnectionTests: XCTestCase {
         )
     }
 
+    func testAPIClientLoadsTestFlightDeliveryHistoryWithPairedDeviceCredential() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "u", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-update",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://shannon.example/companion/v1/testflight/delivery?scopeKey=owner-from-server"
+            )
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            return try response(url: request.url!, json: [
+                "condition": "healthy",
+                "latestBuildVersion": "17",
+                "lastCheckedAt": "2026-09-05T04:00:00.000Z",
+                "activeFailureCode": NSNull(),
+                "history": [[
+                    "id": "run-1",
+                    "status": "distributed",
+                    "buildVersion": "17",
+                    "checkedAt": "2026-09-05T04:00:00.000Z",
+                    "failureCode": NSNull(),
+                    "notificationStatus": "not-needed",
+                ]],
+            ])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let dashboard = try await client.loadTestFlightDelivery(scopeKey: "untrusted-client-scope")
+
+        XCTAssertEqual(dashboard.condition, .healthy)
+        XCTAssertEqual(dashboard.latestBuildVersion, "17")
+        XCTAssertEqual(dashboard.history.first?.status, .distributed)
+    }
+
     func testAPIClientCreatesAgentTaskAndMapsTheServerProjection() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "t", count: 43)

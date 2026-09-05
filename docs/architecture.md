@@ -95,6 +95,7 @@ An approval request is valid only on the live Codex connection that created it. 
 | User knowledge | `question_definitions`, `knowledge_answers`, `knowledge_evidence`, `knowledge_revisions`, `personality_profiles`, `prompt_projections` |
 | World and initiative | `world_sources`, `subscriptions`, `world_items`, `observations`, `initiative_messages`, `initiative_loop_runs` |
 | Notifications | `push_registrations`, `push_delivery_state` |
+| TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
 | Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |
 | Cost | `llm_usage_events` |
 | Pairing | device pairing records and device tokens |
@@ -123,6 +124,10 @@ Systemd services:
 - `shannon-ios-world.service`
 
 The current local Agent Host runs as `com.shannon.agent-host` and uses the local Shannon repository as its source checkout. The cloud Agent Host unit is staged but must not become the default until its dedicated Codex credential, GitHub write credential, heartbeat, and harmless end-to-end task have been verified.
+
+## TestFlight delivery operations
+
+The distributor records every automatic check in the production SQLite database. Consecutive failures with the same safe failure category belong to one durable episode. The notification worker sends an APNs alert only for the first event in an episode; repeated timer failures stay silent. A successful check closes the episode without a recovery notification. The paired iOS app reads the current condition and recent history through `GET /v1/testflight/delivery`, and a failure-notification tap opens Settings → App Update. Raw App Store Connect responses, JWTs, keys, and user conversation content are not stored in this projection.
 
 ## Deferred by design
 

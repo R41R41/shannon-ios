@@ -14,6 +14,7 @@ struct ShannonApp: App {
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel
+    @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var pendingPushToken: String?
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.scenePhase) private var scenePhase
@@ -32,6 +33,7 @@ struct ShannonApp: App {
         )
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
+        _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
         _connectionModel = State(initialValue: ShannonConnectionModel(
             baseURL: ShannonRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
@@ -45,7 +47,8 @@ struct ShannonApp: App {
             ShannonConversationView(
                 model: conversationModel,
                 connectionModel: connectionModel,
-                memoryModel: memoryModel
+                memoryModel: memoryModel,
+                testFlightDeliveryModel: testFlightDeliveryModel
             )
                 .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
@@ -97,6 +100,12 @@ struct ShannonApp: App {
                     }
                     if let taskID = ShannonAppDelegate.takePendingAgentTaskID() {
                         await conversationModel.openAgentTaskNotification(taskID)
+                    }
+                    if ShannonAppDelegate.takePendingTestFlightDeliveryOpen() {
+                        NotificationCenter.default.post(
+                            name: .shannonTestFlightDeliveryNotificationOpened,
+                            object: nil
+                        )
                     }
                 }
 #endif
@@ -157,6 +166,7 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
     private static var pendingDeviceToken: String?
     private static var pendingInitiativeThreadID: String?
     private static var pendingAgentTaskID: UUID?
+    private static var pendingTestFlightDeliveryOpen = false
 
     func application(
         _ application: UIApplication,
@@ -165,6 +175,7 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         Self.pendingConnectionURL = launchOptions?[.url] as? URL
         Self.pendingInitiativeThreadID = Self.threadID(from: launchOptions?[.remoteNotification])
         Self.pendingAgentTaskID = Self.taskID(from: launchOptions?[.remoteNotification])
+        Self.pendingTestFlightDeliveryOpen = Self.isTestFlightFailure(launchOptions?[.remoteNotification])
         UNUserNotificationCenter.current().delegate = self
         return true
     }
@@ -214,6 +225,11 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         return pendingAgentTaskID
     }
 
+    static func takePendingTestFlightDeliveryOpen() -> Bool {
+        defer { pendingTestFlightDeliveryOpen = false }
+        return pendingTestFlightDeliveryOpen
+    }
+
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
@@ -227,7 +243,13 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
     ) async {
         let payload = response.notification.request.content.userInfo
         await MainActor.run {
-            if let taskID = Self.taskID(from: payload) {
+            if Self.isTestFlightFailure(payload) {
+                Self.pendingTestFlightDeliveryOpen = true
+                NotificationCenter.default.post(
+                    name: .shannonTestFlightDeliveryNotificationOpened,
+                    object: nil
+                )
+            } else if let taskID = Self.taskID(from: payload) {
                 Self.pendingAgentTaskID = taskID
                 NotificationCenter.default.post(name: .shannonAgentTaskNotificationOpened, object: taskID)
             } else if let threadId = Self.threadID(from: payload) {
@@ -248,6 +270,11 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         guard let dictionary = payload as? [AnyHashable: Any],
               let taskID = dictionary["taskId"] as? String else { return nil }
         return UUID(uuidString: taskID)
+    }
+
+    nonisolated private static func isTestFlightFailure(_ payload: Any?) -> Bool {
+        guard let dictionary = payload as? [AnyHashable: Any] else { return false }
+        return dictionary["kind"] as? String == "testflight_failure"
     }
 }
 

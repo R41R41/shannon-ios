@@ -7,7 +7,7 @@ import type { ShannonDevicePrincipal } from './deviceAuth.js';
 export type APNsEnvironment = 'sandbox' | 'production';
 
 export interface PendingPushNotification {
-  kind: 'initiative' | 'agent_task';
+  kind: 'initiative' | 'agent_task' | 'testflight_failure';
   initiativeId: string;
   deviceId: string;
   deviceToken: string;
@@ -186,7 +186,41 @@ export class SQLitePushNotificationStore {
         badgeCount: Math.max(1, Math.min(99, Number(row.initiative_badge_count) + 1)),
       };
     });
-    return Object.freeze([...initiatives, ...agentTasks]
+    const testFlightRows = !this.tableExists('testflight_failure_episodes')
+      ? []
+      : this.database.prepare(`
+        SELECT
+          e.episode_id, e.opened_at,
+          pr.device_id, pr.device_token, pr.environment,
+          ${initiativeBadgeExpression} AS initiative_badge_count
+        FROM testflight_failure_episodes e
+        JOIN push_registrations pr ON pr.invalidated_at IS NULL
+        LEFT JOIN push_delivery_state delivery
+          ON delivery.initiative_id = ('testflight:' || e.episode_id) AND delivery.device_id = pr.device_id
+        WHERE e.closed_at IS NULL
+          AND e.opened_at >= ?
+          AND (delivery.initiative_id IS NULL OR (
+            delivery.delivered_at IS NULL
+            AND delivery.attempts < ?
+            AND delivery.next_attempt_at <= ?
+          ))
+        ORDER BY e.opened_at ASC
+        LIMIT ?
+      `).all(cutoff, MAXIMUM_ATTEMPTS, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
+    const testFlightFailures: PendingPushNotification[] = testFlightRows.map(row => ({
+      kind: 'testflight_failure',
+      initiativeId: `testflight:${String(row.episode_id)}`,
+      title: 'シャノン · アプリの更新',
+      deviceId: String(row.device_id),
+      deviceToken: String(row.device_token),
+      environment: String(row.environment) as APNsEnvironment,
+      threadId: 'testflight-delivery',
+      content: '新しいビルドの配信で少しつまずいてる。設定から確認できるよ。',
+      expression: 'concerned',
+      createdAt: String(row.opened_at),
+      badgeCount: Math.max(1, Math.min(99, Number(row.initiative_badge_count) + 1)),
+    }));
+    return Object.freeze([...initiatives, ...agentTasks, ...testFlightFailures]
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .slice(0, boundedLimit)
       .map(notification => Object.freeze(notification)));

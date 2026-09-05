@@ -22,6 +22,7 @@ public protocol ShannonAPIClientProtocol: Sendable {
         deviceToken: String,
         environment: ShannonPushEnvironmentDTO
     ) async throws
+    func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO
     func createAetherProposal(scopeKey: String, title: String, content: String, reason: String) async throws -> AetherProposalResponseDTO
     func createAgentTask(scopeKey: String, task: ShannonAgentTask, idempotencyKey: String) async throws -> ShannonAgentTask
     func loadAgentTasks(scopeKey: String) async throws -> [ShannonAgentTask]
@@ -84,6 +85,10 @@ public extension ShannonAPIClientProtocol {
         deviceToken: String,
         environment: ShannonPushEnvironmentDTO
     ) async throws {}
+
+    func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO {
+        throw ShannonAPIError.invalidResponse
+    }
 
     func createAetherProposal(scopeKey: String, title: String, content: String, reason: String) async throws -> AetherProposalResponseDTO {
         throw ShannonAPIError.invalidResponse
@@ -314,6 +319,19 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
             for: request
         )
         guard result.registered else { throw ShannonAPIError.invalidResponse }
+    }
+
+    public func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/testflight/delivery"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey)]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonTestFlightDeliveryDashboardDTO.self, for: request)
     }
 
     public func createAetherProposal(scopeKey: String, title: String, content: String, reason: String) async throws -> AetherProposalResponseDTO {

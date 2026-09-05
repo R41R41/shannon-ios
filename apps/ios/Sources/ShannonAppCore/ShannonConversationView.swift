@@ -9,11 +9,13 @@ public struct ShannonConversationView: View {
     @State private var model: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel?
     @State private var memoryModel: ShannonMemoryModel
+    @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var appIconModel = ShannonAppIconModel()
     @State private var showsStateDetails = false
     @State private var showsConnectionDetails = false
     @State private var showsAppIconSettings = false
     @State private var showsAppearanceSettings = false
+    @State private var showsTestFlightDelivery = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
     @State private var workspaceProgress: CGFloat = 0
     @State private var drawerProgress: CGFloat = 0
@@ -32,11 +34,13 @@ public struct ShannonConversationView: View {
     public init(
         model: ShannonConversationModel = ShannonConversationModel(),
         connectionModel: ShannonConnectionModel? = nil,
-        memoryModel: ShannonMemoryModel = ShannonMemoryModel()
+        memoryModel: ShannonMemoryModel = ShannonMemoryModel(),
+        testFlightDeliveryModel: ShannonTestFlightDeliveryModel = ShannonTestFlightDeliveryModel()
     ) {
         _model = State(initialValue: model)
         _connectionModel = State(initialValue: connectionModel)
         _memoryModel = State(initialValue: memoryModel)
+        _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
     }
 
     public var body: some View {
@@ -116,6 +120,13 @@ public struct ShannonConversationView: View {
         }
         .sheet(isPresented: $showsAppearanceSettings) {
             ShannonAppearanceSettingsView()
+        }
+        .sheet(isPresented: $showsTestFlightDelivery) {
+            ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
+            settleWorkspace(on: .settings)
+            showsTestFlightDelivery = true
         }
 #if os(iOS)
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
@@ -397,6 +408,15 @@ public struct ShannonConversationView: View {
                         title: "外観",
                         detail: savedAppearanceMode.japaneseName,
                         symbol: savedAppearanceMode.symbolName
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button { showsTestFlightDelivery = true } label: {
+                    ShannonSettingsRow(
+                        title: "アプリの更新",
+                        detail: "TestFlightの配信状況と履歴",
+                        symbol: "arrow.down.app"
                     )
                 }
                 .buttonStyle(.plain)

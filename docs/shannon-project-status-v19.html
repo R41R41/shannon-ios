@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon プロジェクト計画・進捗 v19</title>
+  <style>
+    :root{
+      color-scheme:light dark;
+      --bg:#f5fbfe;--paper:#fff;--ink:#14242c;--muted:#637985;--line:#cfe5ef;
+      --sky:#72d2fa;--sky-deep:#087da8;--sky-soft:#e6f7fe;--green:#147253;
+      --green-soft:#e1f6ed;--amber:#8b5b00;--amber-soft:#fff2d7;--violet:#6651b8;
+      --violet-soft:#eeeaff;--shadow:0 20px 60px #0c587414;
+    }
+    @media(prefers-color-scheme:dark){:root{
+      --bg:#09151b;--paper:#122129;--ink:#e9f6fb;--muted:#a3bac5;--line:#294957;
+      --sky:#78d4fb;--sky-deep:#8edfff;--sky-soft:#102e3b;--green:#73d9b2;
+      --green-soft:#123328;--amber:#ffd17a;--amber-soft:#382a12;--violet:#c0b4ff;
+      --violet-soft:#292442;--shadow:none;
+    }}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:
+      radial-gradient(circle at 85% -10%,#76d8ff35,transparent 34rem),var(--bg);
+      color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}
+    main{width:min(1160px,calc(100% - 30px));margin:auto;padding:52px 0 90px}
+    h1,h2,h3,p{margin-top:0}h1{max-width:920px;margin:.2em 0;font-size:clamp(2.45rem,7vw,5rem);line-height:1;letter-spacing:-.055em}
+    h2{font-size:clamp(1.55rem,4vw,2.4rem);letter-spacing:-.025em}h3{line-height:1.35}.eyebrow{color:var(--sky-deep);font-size:.77rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+    .lead{max-width:790px;color:var(--muted);font-size:1.08rem}.chips,.stats{display:flex;flex-wrap:wrap;gap:9px;margin:24px 0 38px}
+    .chip{padding:7px 12px;border-radius:999px;background:var(--sky-soft);color:var(--sky-deep);font-weight:800}.chip.ok{background:var(--green-soft);color:var(--green)}
+    section{margin-top:18px;padding:28px;border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:var(--shadow)}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);margin:20px 0 0}.stat{padding:19px;border-radius:20px;background:var(--sky-soft)}
+    .stat b{display:block;font-size:clamp(1.6rem,4vw,2.35rem);line-height:1.1;color:var(--sky-deep)}.stat span{color:var(--muted);font-size:.87rem}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{padding:20px;border:1px solid var(--line);border-radius:21px;background:var(--paper)}
+    .card.live{background:var(--green-soft)}.card.next{background:var(--violet-soft)}.card.later{background:var(--amber-soft)}
+    .tag{display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:var(--sky-soft);color:var(--sky-deep);font-size:.72rem;font-weight:900;letter-spacing:.08em}
+    .live .tag{background:var(--paper);color:var(--green)}.next .tag{background:var(--paper);color:var(--violet)}.later .tag{background:var(--paper);color:var(--amber)}
+    .flow{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:10px;overflow:auto;padding:8px 2px 12px}.node{min-width:145px;padding:17px;border-radius:18px;background:var(--sky-soft);position:relative}.node:not(:last-child):after{content:"→";position:absolute;right:-14px;top:42%;z-index:2;color:var(--sky-deep);font-weight:900}.node small{display:block;color:var(--muted);line-height:1.45}
+    .matrix{width:100%;border-collapse:separate;border-spacing:0 8px}.matrix th{text-align:left;color:var(--muted);font-size:.78rem}.matrix td{padding:12px 14px;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.matrix td:first-child{border-left:1px solid var(--line);border-radius:14px 0 0 14px;font-weight:800}.matrix td:last-child{border-right:1px solid var(--line);border-radius:0 14px 14px 0}.status{font-weight:900}.status.ok{color:var(--green)}.status.next{color:var(--violet)}.status.later{color:var(--amber)}
+    .split{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}.phone{max-width:390px;margin:auto;padding:18px;border:2px solid color-mix(in srgb,var(--ink) 78%,transparent);border-radius:38px;background:var(--bg)}
+    .phone-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.back{color:var(--sky-deep);font-weight:800}.state-card{padding:17px;border-radius:20px;background:var(--green-soft);margin-bottom:12px}.history-row{display:grid;grid-template-columns:26px 1fr auto;gap:9px;align-items:start;padding:14px 2px;border-bottom:1px solid var(--line)}.history-row:last-child{border:0}.history-row small{color:var(--muted)}
+    .rules{display:grid;gap:9px}.rule{display:grid;grid-template-columns:132px 1fr;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}.rule:last-child{border:0}.rule b{color:var(--sky-deep)}
+    .timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.phase{padding:19px;border-radius:20px;background:var(--paper);border:1px solid var(--line)}.phase.now{border:2px solid var(--sky);background:var(--sky-soft)}.phase .version{color:var(--sky-deep);font-size:.76rem;font-weight:900;letter-spacing:.1em}
+    .callout{margin-top:16px;padding:17px 19px;border-radius:18px;background:var(--amber-soft);color:var(--amber)}
+    .tests{display:flex;gap:8px;flex-wrap:wrap}.test{padding:8px 11px;border-radius:12px;background:var(--green-soft);color:var(--green);font-weight:800}
+    a{color:var(--sky-deep)}footer{padding:28px 5px 0;color:var(--muted);font-size:.85rem}
+    @media(max-width:860px){.grid,.stats,.timeline,.split{grid-template-columns:1fr}.flow{grid-template-columns:repeat(6,78vw)}section{padding:22px}.matrix thead{display:none}.matrix,.matrix tbody,.matrix tr,.matrix td{display:block}.matrix tr{margin-bottom:12px}.matrix td{border:1px solid var(--line)!important;border-radius:12px!important;margin-top:-1px}.rule{grid-template-columns:1fr;gap:2px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon · Project status &amp; roadmap · v19 · 2026-09-05</div>
+  <h1>v1.1はローカル実装済み。<br>次は安全に本番へ届ける。</h1>
+  <p class="lead">配信失敗時だけの通知と、設定画面で確認できる配信履歴を、SQLite・APNs・API・iOSまで接続。現在は検証済みソースで、AzureとTestFlightへの配信は未実施。</p>
+  <div class="chips"><span class="chip ok">Azure 5サービス稼働</span><span class="chip ok">TestFlight build 16</span><span class="chip ok">v1.1 ローカル実装済み</span><span class="chip ok">自動試験 190件成功</span><span class="chip">本番配信は次工程</span></div>
+
+  <section>
+    <div class="eyebrow">01 / Live status</div><h2>現在の運用状態</h2>
+    <div class="stats">
+      <div class="stat"><b>5</b><span>Azure上の稼働サービス</span></div>
+      <div class="stat"><b>190</b><span>現在成功している自動試験</span></div>
+      <div class="stat"><b>16</b><span>Shannon Internalの確認済みビルド</span></div>
+      <div class="stat"><b>10分</b><span>新ビルド確認間隔</span></div>
+    </div>
+    <div class="tests" style="margin-top:16px"><span class="test">API 122</span><span class="test">Cognition 11</span><span class="test">Swift 57</span></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / Runtime</div><h2>いま実際につながっている経路</h2>
+    <div class="flow">
+      <div class="node"><b>iPhone</b><small>トーク、記憶、作業指示、承認</small></div>
+      <div class="node"><b>Shannon API</b><small>会話と状態の正本</small></div>
+      <div class="node"><b>Azure Worker</b><small>睡眠、探索、通知、Agent</small></div>
+      <div class="node"><b>GitHub</b><small>監査済みソースと作業ブランチ</small></div>
+      <div class="node"><b>Xcode Cloud</b><small>Macなしでビルドと署名</small></div>
+      <div class="node"><b>TestFlight</b><small>Shannon Internalへ自動追加</small></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / Progress</div><h2>プロジェクト全体の現在地</h2>
+    <table class="matrix">
+      <thead><tr><th>領域</th><th>状態</th><th>現在できること</th><th>残ること</th></tr></thead>
+      <tbody>
+        <tr><td>トーク</td><td class="status ok">実機稼働</td><td>複数スレッド、タイトル変更、履歴、表情固定、コピー、Markdown</td><td>対話モードの視覚調整</td></tr>
+        <tr><td>シャノンの内面</td><td class="status ok">実装済み</td><td>連続感情、今日の関心、即時記憶、睡眠整理、日記</td><td>関心が長期的に育つ規則</td></tr>
+        <tr><td>メモリー</td><td class="status ok">実装済み</td><td>QA知識、性格分析、根拠、確信度、訂正履歴</td><td>情報量が増えた時の検索と整理</td></tr>
+        <tr><td>自発行動</td><td class="status ok">Azure稼働</td><td>World探索、沈黙判断、APNs、未読、予算停止</td><td>情報源の拡充と品質評価</td></tr>
+        <tr><td>Aether連携</td><td class="status ok">基礎実装済み</td><td>読み取り、提案箱、差分確認、承認更新</td><td>日常利用での関連性調整</td></tr>
+        <tr><td>自己改修</td><td class="status ok">Azure稼働</td><td>依頼、永続タスク、承認、Codex、GitHub、遠隔配信</td><td>作業と配信の状態表示を統合</td></tr>
+        <tr><td>TestFlight</td><td class="status ok">v1.1 実装済み</td><td>自動追加、同一障害1回だけの通知、設定の配信履歴</td><td>Azure配置と実地試験</td></tr>
+        <tr><td>Live2D / Widget</td><td class="status later">延期</td><td>静止画と表情アセットまで</td><td>Live2D導入、WidgetKitタイムライン</td></tr>
+        <tr><td>スキル自己生成</td><td class="status later">v2</td><td>ユーザー指示によるコード改修まで</td><td>生成、隔離評価、採用判断</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / v1.1 implemented</div><h2>実装した2機能</h2>
+    <div class="split">
+      <div>
+        <div class="card next"><span class="tag">実装済み 1</span><h3>自動配信失敗時だけ通知</h3><p>成功時や定期確認時は通知しない。同一障害は最初の1回だけ、シャノンの短い言葉で知らせる。</p></div>
+        <div class="rules" style="margin-top:12px">
+          <div class="rule"><b>通知条件</b><span>連続失敗の最初、または原因が変わった時だけ。</span></div>
+          <div class="rule"><b>重複防止</b><span>障害fingerprintと通知済み時刻を保存。10分ごとの同じ失敗は黙る。</span></div>
+          <div class="rule"><b>復旧</b><span>成功で障害状態を閉じる。復旧通知は既定OFF、履歴だけ更新。</span></div>
+          <div class="rule"><b>遷移先</b><span>通知タップで「設定 → アプリの更新」を直接開く。</span></div>
+          <div class="rule"><b>本文</b><span>生ログや鍵情報は出さず、「新しいビルドの配信で少しつまずいてる」のように表示。</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="card next"><span class="tag">実装済み 2</span><h3>設定画面の配信履歴</h3><p>技術者向けダッシュボードではなく、現在正常か、どのビルドまで届いたかを一目で確認する。</p></div>
+        <div class="phone" style="margin-top:12px">
+          <div class="phone-top"><span class="back">‹ 設定</span><b>アプリの更新</b><span></span></div>
+          <div class="state-card"><b>正常に動いています</b><br><small>最新：ビルド16 · 最終確認 13:42</small></div>
+          <div class="history-row"><span>✓</span><div><b>ビルド16</b><br><small>Shannon Internalへ自動追加済み</small></div><small>13:42</small></div>
+          <div class="history-row"><span>✓</span><div><b>ビルド15</b><br><small>Shannon Internalへ追加済み</small></div><small>13:30</small></div>
+          <div class="history-row"><span>!</span><div><b>配信できませんでした</b><br><small>次回、自動で再確認します</small></div><small>詳細</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="callout"><b>保存する履歴：</b>結果、ビルド番号、確認時刻、失敗分類、通知済みか。秘密鍵、JWT、生のサーバーログ、ユーザーの会話は保存しない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / Implementation flow</div><h2>v1.1の実装順</h2>
+    <div class="flow">
+      <div class="node"><b>1 · Event保存</b><small>配信確認ごとにSQLiteへ結果を記録</small></div>
+      <div class="node"><b>2 · 障害束ね</b><small>同じ失敗を1つのepisodeにまとめる</small></div>
+      <div class="node"><b>3 · APNs</b><small>episode最初の1回だけ通知</small></div>
+      <div class="node"><b>4 · API</b><small>現在状態と履歴をiPhoneへ返す</small></div>
+      <div class="node"><b>5 · 設定UI</b><small>状態カードと履歴一覧を表示</small></div>
+      <div class="node"><b>6 · 実地試験</b><small>失敗、重複抑止、復旧を確認</small></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / Roadmap</div><h2>今後のバージョン</h2>
+    <div class="timeline">
+      <div class="phase"><div class="version">READY · v1.1</div><h3>Operations</h3><p>配信履歴と失敗通知は実装済み。残りは本番配置と実地試験。</p></div>
+      <div class="phase now"><div class="version">NEXT · v1.2</div><h3>Presence</h3><p>対話モード、吹き出し、シャノン日記、ページ遷移の視覚品質を仕上げる。</p></div>
+      <div class="phase"><div class="version">v1.3</div><h3>World</h3><p>RSS自動試読、日本のニュース・天気、関心の成長、調査品質を改善。</p></div>
+      <div class="phase"><div class="version">v2.0</div><h3>Self Extension</h3><p>スキル生成、隔離試験、評価、ユーザー承認後だけの採用。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 / Boundaries</div><h2>いま入れないもの</h2>
+    <div class="grid">
+      <div class="card later"><span class="tag">LATER</span><h3>Widget / Live2D</h3><p>Widgetは静止画タイムラインと瞬き差分を予定。Live2Dの常時再生は別工程。</p></div>
+      <div class="card later"><span class="tag">v2</span><h3>予測誤差ループ</h3><p>v1には入れない。感情と記憶の共有状態を非同期更新する現行方式を継続。</p></div>
+      <div class="card later"><span class="tag">OPTIONAL</span><h3>Langfuse</h3><p>配信処理には不要。LLMモデルやプロンプト比較を始める時だけ、本文なしで検討。</p></div>
+    </div>
+  </section>
+
+  <footer>
+    現行本番：commit <code>3a9cde3</code>。v1.1の変更はローカル検証済み・未配信。AzureのAPI、記憶Worker、World Worker、Cloud Agent、TestFlight timerは従来版で稼働中。<br>
+    関連資料：<a href="shannon-implementation-roadmap-v11.html">ロードマップ v11</a> · <a href="shannon-agent-task-integration-v12.html">Agent Task v12</a> · <a href="shannon-cloud-agent-v18.html">Cloud Agent v18</a>
+  </footer>
+</main></body>
+</html>
