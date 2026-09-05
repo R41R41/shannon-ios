@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-05 / voice and daily mind
+Revision: 2026-09-06 / voice diagnostics
 
 ## System shape
 
@@ -66,6 +66,7 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 - Voice is user-initiated and half-duplex: iOS prefers on-device Japanese speech recognition when available, submits only the resulting text through the existing FCA route, and reads the reply with the system Japanese voice. Raw audio is not retained.
+- Voice startup writes privacy-bounded, immediately flushed checkpoints before and after permission, audio-session, input-format, tap, and engine-start operations. Settings → Voice Diagnostics can copy the bounded report after a crash; audio, transcripts, messages, tokens, and credentials are never recorded.
 - The composer uses a dynamic bottom safe-area inset, so multi-line input, voice status, failures, and task notices do not cover the latest reply.
 
 Live2D and animated widgets remain future work. Current dialogue mode uses a static character-stage asset.

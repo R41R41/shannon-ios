@@ -29,4 +29,31 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertFalse(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: .nan, channelCount: 1))
         XCTAssertTrue(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: 48_000, channelCount: 1))
     }
+
+    func testVoiceDiagnosticsPersistBreadcrumbsWithoutSensitiveContent() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ShannonVoiceDiagnosticsTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let diagnostics = ShannonVoiceDiagnostics(
+            fileURL: directory.appendingPathComponent("voice.jsonl")
+        )
+
+        diagnostics.record(
+            "capture.tap.before",
+            sessionID: "session-1",
+            metadata: [
+                "sample_rate": "48000",
+                "transcript": "これは保存してはいけない",
+                "token_value": "secret-value",
+            ]
+        )
+
+        let report = diagnostics.report()
+        XCTAssertTrue(report.contains("capture.tap.before"))
+        XCTAssertTrue(report.contains("sample_rate=48000"))
+        XCTAssertTrue(report.contains("transcript=<redacted>"))
+        XCTAssertTrue(report.contains("token_value=<redacted>"))
+        XCTAssertFalse(report.contains("これは保存してはいけない"))
+        XCTAssertFalse(report.contains("secret-value"))
+    }
 }

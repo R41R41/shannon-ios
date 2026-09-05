@@ -17,6 +17,7 @@ public struct ShannonConversationView: View {
     @State private var showsAppIconSettings = false
     @State private var showsAppearanceSettings = false
     @State private var showsTestFlightDelivery = false
+    @State private var showsVoiceDiagnostics = false
     @State private var showsSettings = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
     @State private var drawerProgress: CGFloat = 0
@@ -415,6 +416,15 @@ public struct ShannonConversationView: View {
                     }
                     .buttonStyle(.plain)
 
+                    Button { showsVoiceDiagnostics = true } label: {
+                        ShannonSettingsRow(
+                            title: "音声診断",
+                            detail: "クラッシュ直前の処理を確認・コピー",
+                            symbol: "waveform.badge.magnifyingglass"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
                     if let connectionModel {
                         Button { showsConnectionDetails = true } label: {
                             ShannonSettingsRow(
@@ -459,6 +469,9 @@ public struct ShannonConversationView: View {
             }
             .sheet(isPresented: $showsTestFlightDelivery) {
                 ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
+            }
+            .sheet(isPresented: $showsVoiceDiagnostics) {
+                ShannonVoiceDiagnosticsView()
             }
         }
     }
