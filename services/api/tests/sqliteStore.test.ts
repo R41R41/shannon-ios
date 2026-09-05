@@ -154,6 +154,55 @@ describe('SQLite Shannon persistence', () => {
     store.close();
   });
 
+  it('does not write an event or projection for a no-op shared-state update', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const store = new SQLiteShannonStore({ path, now });
+    const first = store.apply('owner-a', { type: 'interest-observed', interest: '創作' });
+    const eventsAfterFirst = store.events('owner-a');
+    const projectionAfterFirst = store.promptProjection('owner-a');
+
+    const duplicate = store.apply('owner-a', { type: 'interest-observed', interest: '創作' });
+
+    expect(duplicate).toEqual(first);
+    expect(store.events('owner-a')).toEqual(eventsAfterFirst);
+    expect(store.promptProjection('owner-a')).toBe(projectionAfterFirst);
+    store.close();
+  });
+
+  it('bounds structurally malformed persisted state instead of restoring unsafe values', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: () => '2026-09-05T00:00:00.000Z' });
+    first.snapshot('owner-a');
+    first.close();
+    const database = new DatabaseSync(path);
+    database.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify({
+      scopeKey: 'owner-a',
+      version: 8,
+      updatedAt: 'invalid',
+      temperament: { curiosity: 99 },
+      emotion: { valence: -99 },
+      interests: ['  創作  ', null],
+      userFacts: [{ id: 'fact', statement: '  水色が好き ', confidence: 4, observedAt: 'invalid' }],
+      activeMemories: [{ id: 'memory', summary: '  過去の会話 ', relevance: 7, observedAt: 'invalid' }],
+    }), 'owner-a');
+    database.close();
+
+    const reopened = new SQLiteShannonStore({ path, now: () => '2026-09-05T01:00:00.000Z' });
+    expect(reopened.snapshot('owner-a')).toMatchObject({
+      version: 8,
+      updatedAt: '2026-09-05T01:00:00.000Z',
+      temperament: { curiosity: 1, calmness: 0.6 },
+      emotion: { valence: -1, arousal: 0.3 },
+      interests: ['創作'],
+      userFacts: [{ id: 'fact', statement: '水色が好き', confidence: 1 }],
+      activeMemories: [{ id: 'memory', summary: '過去の会話', relevance: 1 }],
+      relationships: [],
+      memoryControls: [],
+    });
+    reopened.close();
+  });
+
   it('keeps histories isolated between threads while sharing the owner state', () => {
     const path = databasePath();
     const now = sequenceClock();

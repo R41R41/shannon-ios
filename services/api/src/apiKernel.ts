@@ -72,17 +72,23 @@ function validEvent(value: unknown): value is CompanionStateEvent {
         && typeof value.control.updatedAt === 'string'
         && typeof value.control.changeReason === 'string';
     case 'memory-activated':
-      return objectBody(value.memory)
-        && typeof value.memory.id === 'string'
-        && typeof value.memory.summary === 'string'
-        && typeof value.memory.observedAt === 'string'
-        && typeof value.memory.relevance === 'number'
-        && Number.isFinite(value.memory.relevance);
+      return validActiveMemory(value.memory);
+    case 'active-memories-replaced':
+      return Array.isArray(value.memories) && value.memories.every(validActiveMemory);
     case 'memory-deactivated':
       return typeof value.memoryId === 'string' && value.memoryId.length > 0;
     default:
       return false;
   }
+}
+
+function validActiveMemory(value: unknown): boolean {
+  return objectBody(value)
+    && typeof value.id === 'string'
+    && typeof value.summary === 'string'
+    && typeof value.observedAt === 'string'
+    && typeof value.relevance === 'number'
+    && Number.isFinite(value.relevance);
 }
 
 function validThreadTitle(value: unknown): value is string {

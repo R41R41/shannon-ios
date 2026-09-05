@@ -4,6 +4,7 @@ export {
   createInitialCompanionState,
   freezeSnapshot,
   reduceCompanionState,
+  restoreCompanionState,
 } from './state.js';
 export { InMemoryCompanionStateStore, type CompanionClock } from './store.js';
 export {

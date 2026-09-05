@@ -9,6 +9,7 @@ import {
   deriveResonantInterest,
   deriveShannonExpression,
   projectEmotionReaction,
+  restoreCompanionState,
   selectActiveMemories,
 } from '../src/index.js';
 
@@ -44,6 +45,70 @@ describe('Shannon companion shared state', () => {
     store.apply('user-a', { type: 'interest-observed', interest: '脳科学' });
     expect(store.snapshot('user-a').interests).toEqual(['脳科学']);
     expect(store.snapshot('user-b').interests).toEqual([]);
+  });
+
+  it('does not advance shared state when an update changes nothing', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    const first = store.apply('scope-a', { type: 'interest-observed', interest: '脳科学' });
+    const duplicate = store.apply('scope-a', { type: 'interest-observed', interest: '脳科学' });
+    const missingRemoval = store.apply('scope-a', { type: 'memory-deactivated', memoryId: 'absent' });
+    const zeroEmotion = store.apply('scope-a', { type: 'emotion-adjusted', delta: { valence: 0 } });
+
+    expect(duplicate).toBe(first);
+    expect(missingRemoval).toBe(first);
+    expect(zeroEmotion).toBe(first);
+    expect(first.version).toBe(1);
+  });
+
+  it('replaces active recall as one bounded, deterministic state update', () => {
+    const store = new InMemoryCompanionStateStore(() => '2026-08-31T00:00:00.000Z');
+    const memories = Array.from({ length: 10 }, (_, index) => ({
+      id: `memory-${index % 9}`,
+      summary: `記憶 ${index}`,
+      relevance: index / 10,
+      observedAt: '2026-08-31T00:00:00.000Z',
+    }));
+    const replaced = store.apply('scope-a', { type: 'active-memories-replaced', memories });
+
+    expect(replaced.activeMemories).toHaveLength(8);
+    expect(replaced.activeMemories.map(memory => memory.relevance)).toEqual([0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2]);
+    expect(store.apply('scope-a', {
+      type: 'active-memories-replaced', memories: replaced.activeMemories,
+    })).toBe(replaced);
+  });
+
+  it('restores persisted state defensively and keeps legacy optional collections', () => {
+    const restored = restoreCompanionState('scope-a', {
+      scopeKey: 'scope-a',
+      version: -4,
+      updatedAt: 'invalid',
+      temperament: { curiosity: 7, initiative: -2 },
+      emotion: { valence: -5, arousal: 5, openness: 'invalid' },
+      interests: ['  脳   科学  ', 42, '脳 科学'],
+      userFacts: [
+        { id: 'fact', statement: '  ユーザーは   水色が好き ', confidence: 3, observedAt: 'invalid' },
+        null,
+        { id: '', statement: '無効', confidence: 1, observedAt: 'invalid' },
+      ],
+      activeMemories: [
+        { id: 'memory', summary: '以前の話', relevance: 2, observedAt: 'invalid' },
+        { id: 'memory', summary: '重複', relevance: 0.2, observedAt: 'invalid' },
+      ],
+    }, '2026-09-05T00:00:00.000Z');
+
+    expect(restored).toMatchObject({
+      scopeKey: 'scope-a',
+      version: 0,
+      updatedAt: '2026-09-05T00:00:00.000Z',
+      temperament: { curiosity: 1, initiative: 0, calmness: 0.6 },
+      emotion: { valence: -1, arousal: 1, openness: 0.35 },
+      interests: ['脳 科学'],
+      userFacts: [{ id: 'fact', statement: 'ユーザーは 水色が好き', confidence: 1, observedAt: '2026-09-05T00:00:00.000Z' }],
+      activeMemories: [{ id: 'memory', summary: '以前の話', relevance: 1, observedAt: '2026-09-05T00:00:00.000Z' }],
+      relationships: [],
+      memoryControls: [],
+    });
+    expect(Object.isFrozen(restored.activeMemories)).toBe(true);
   });
 
   it('builds a bounded prompt without predictions', () => {

@@ -50,6 +50,30 @@ describe('Shannon durable background worker', () => {
     workerStore.close();
   });
 
+  it('commits recalled memories with one bulk state event', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => '2026-09-05T10:00:01.000Z' });
+    const threadId = store.createThread('owner-a', '創作');
+    store.appendTurn('owner-a', threadId, '創作の続きを考えたい', '続きを考えよう。', '2026-09-05T09:00:00.000Z');
+    const worker = new ShannonBackgroundWorker(
+      store,
+      store,
+      store,
+      new LocalRuleSleepMemoryAnalyzer(),
+      { workerId: 'bulk-memory-worker', now: () => new Date('2026-09-05T10:00:01.000Z') },
+    );
+    expect(await worker.runOnce()).toBe('processed');
+
+    const second = store.appendTurn('owner-a', threadId, 'さっきの創作の続き', 'うん。', '2026-09-05T10:00:00.000Z');
+    store.enqueueTurnRefinement('owner-a', second.id, second.userMessage, second.observedAt);
+    expect(await worker.runOnce()).toBe('processed');
+
+    const stateEvents = store.events('owner-a').map(event => event.type).filter(type => type.startsWith('state.memory-') || type === 'state.active-memories-replaced');
+    expect(stateEvents).toEqual(['state.active-memories-replaced']);
+    expect(store.snapshot('owner-a').activeMemories).toHaveLength(1);
+    store.close();
+  });
+
   it('captures directly stated preferences and relationship wishes in the first turn-refinement job', async () => {
     const path = databasePath();
     const store = new SQLiteShannonStore({ path, now: () => '2026-09-01T10:00:01.000Z' });

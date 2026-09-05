@@ -80,6 +80,40 @@ function cleanControl(control: MemoryControl): MemoryControl {
   });
 }
 
+function sameEmotion(left: ShannonEmotion, right: ShannonEmotion): boolean {
+  return left.valence === right.valence
+    && left.arousal === right.arousal
+    && left.openness === right.openness;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function sameMemories(left: readonly ActiveMemory[], right: readonly ActiveMemory[]): boolean {
+  return left.length === right.length && left.every((memory, index) => {
+    const other = right[index];
+    return other !== undefined
+      && memory.id === other.id
+      && memory.summary === other.summary
+      && memory.relevance === other.relevance
+      && memory.observedAt === other.observedAt;
+  });
+}
+
+function normalizeMemories(memories: readonly ActiveMemory[]): readonly ActiveMemory[] {
+  const unique = new Map<string, ActiveMemory>();
+  for (const candidate of memories) {
+    const memory = cleanMemory(candidate);
+    if (!memory.id || !memory.summary) continue;
+    const previous = unique.get(memory.id);
+    if (!previous || memory.relevance > previous.relevance) unique.set(memory.id, memory);
+  }
+  return [...unique.values()]
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, MAX_ACTIVE_MEMORIES);
+}
+
 export function createInitialCompanionState(scopeKey: string, nowIso: string): CompanionStateSnapshot {
   if (!scopeKey.trim()) throw new Error('scopeKey is required');
   return freezeSnapshot({
@@ -108,6 +142,7 @@ export function reduceCompanionState(
       if (event.delta.valence !== undefined) emotion.valence = clamp(emotion.valence + event.delta.valence, -1, 1);
       if (event.delta.arousal !== undefined) emotion.arousal = clamp(emotion.arousal + event.delta.arousal, 0, 1);
       if (event.delta.openness !== undefined) emotion.openness = clamp(emotion.openness + event.delta.openness, 0, 1);
+      if (sameEmotion(emotion, current.emotion)) return current;
       next = { ...current, emotion };
       break;
     }
@@ -115,6 +150,7 @@ export function reduceCompanionState(
       const interest = cleanText(event.interest, 120);
       if (!interest) return current;
       const interests = [interest, ...current.interests.filter(item => item !== interest)].slice(0, MAX_INTERESTS);
+      if (sameStrings(interests, current.interests)) return current;
       next = { ...current, interests };
       break;
     }
@@ -164,17 +200,158 @@ export function reduceCompanionState(
     case 'memory-activated': {
       const memory = cleanMemory(event.memory);
       if (!memory.id || !memory.summary) return current;
-      const activeMemories = [memory, ...current.activeMemories.filter(item => item.id !== memory.id)]
-        .sort((a, b) => b.relevance - a.relevance)
-        .slice(0, MAX_ACTIVE_MEMORIES);
+      const activeMemories = normalizeMemories([memory, ...current.activeMemories.filter(item => item.id !== memory.id)]);
+      if (sameMemories(activeMemories, current.activeMemories)) return current;
       next = { ...current, activeMemories };
       break;
     }
-    case 'memory-deactivated':
-      next = { ...current, activeMemories: current.activeMemories.filter(item => item.id !== event.memoryId) };
+    case 'active-memories-replaced': {
+      const activeMemories = normalizeMemories(event.memories);
+      if (sameMemories(activeMemories, current.activeMemories)) return current;
+      next = { ...current, activeMemories };
       break;
+    }
+    case 'memory-deactivated': {
+      const activeMemories = current.activeMemories.filter(item => item.id !== event.memoryId);
+      if (activeMemories.length === current.activeMemories.length) return current;
+      next = { ...current, activeMemories };
+      break;
+    }
   }
   return freezeSnapshot({ ...next, version: current.version + 1, updatedAt: nowIso });
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function restoredNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? clamp(value, minimum, maximum) : fallback;
+}
+
+function restoredTimestamp(value: unknown, fallback: string): string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : fallback;
+}
+
+function restoredText(value: unknown, maximumLength: number): string {
+  return typeof value === 'string' ? cleanText(value, maximumLength) : '';
+}
+
+function restoredItems<T>(
+  value: unknown,
+  maximum: number,
+  parse: (item: Record<string, unknown>) => T | null,
+  identity: (item: T) => string,
+): T[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Map<string, T>();
+  for (const candidate of value) {
+    const row = recordValue(candidate);
+    if (!row) continue;
+    const item = parse(row);
+    if (!item) continue;
+    const id = identity(item);
+    if (!unique.has(id)) unique.set(id, item);
+  }
+  return [...unique.values()].slice(0, maximum);
+}
+
+/** Restores persisted JSON through the same bounds used by live state updates. */
+export function restoreCompanionState(
+  scopeKey: string,
+  candidate: unknown,
+  nowIso: string,
+): CompanionStateSnapshot {
+  const initial = createInitialCompanionState(scopeKey, nowIso);
+  const row = recordValue(candidate);
+  if (!row || row.scopeKey !== scopeKey) return initial;
+
+  const temperamentRow = recordValue(row.temperament);
+  const emotionRow = recordValue(row.emotion);
+  const temperament: ShannonTemperament = {
+    curiosity: restoredNumber(temperamentRow?.curiosity, initial.temperament.curiosity, 0, 1),
+    initiative: restoredNumber(temperamentRow?.initiative, initial.temperament.initiative, 0, 1),
+    closeness: restoredNumber(temperamentRow?.closeness, initial.temperament.closeness, 0, 1),
+    calmness: restoredNumber(temperamentRow?.calmness, initial.temperament.calmness, 0, 1),
+    needForContinuity: restoredNumber(temperamentRow?.needForContinuity, initial.temperament.needForContinuity, 0, 1),
+    confidenceAboutUser: restoredNumber(temperamentRow?.confidenceAboutUser, initial.temperament.confidenceAboutUser, 0, 1),
+  };
+  const emotion: ShannonEmotion = {
+    valence: restoredNumber(emotionRow?.valence, initial.emotion.valence, -1, 1),
+    arousal: restoredNumber(emotionRow?.arousal, initial.emotion.arousal, 0, 1),
+    openness: restoredNumber(emotionRow?.openness, initial.emotion.openness, 0, 1),
+  };
+  const interests = Array.isArray(row.interests)
+    ? [...new Set(row.interests.map(value => restoredText(value, 120)).filter(Boolean))].slice(0, MAX_INTERESTS)
+    : [];
+  const userFacts = restoredItems(row.userFacts, MAX_USER_FACTS, value => {
+    const id = restoredText(value.id, 120);
+    const statement = restoredText(value.statement, 320);
+    if (!id || !statement) return null;
+    return cleanFact({
+      id,
+      statement,
+      confidence: restoredNumber(value.confidence, 0, 0, 1),
+      observedAt: restoredTimestamp(value.observedAt, nowIso),
+      ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+    });
+  }, item => item.id);
+  const activeMemories = normalizeMemories(restoredItems(row.activeMemories, MAX_ACTIVE_MEMORIES * 2, value => {
+    const id = restoredText(value.id, 120);
+    const summary = restoredText(value.summary, 320);
+    if (!id || !summary) return null;
+    return cleanMemory({
+      id,
+      summary,
+      relevance: restoredNumber(value.relevance, 0, 0, 1),
+      observedAt: restoredTimestamp(value.observedAt, nowIso),
+    });
+  }, item => item.id));
+  const relationships = restoredItems(row.relationships, MAX_RELATIONSHIPS, value => {
+    const id = restoredText(value.id, 120);
+    const statement = restoredText(value.statement, 320);
+    if (!id || !statement) return null;
+    return cleanRelationship({
+      id,
+      statement,
+      confidence: restoredNumber(value.confidence, 0, 0, 1),
+      observedAt: restoredTimestamp(value.observedAt, nowIso),
+      ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+    });
+  }, item => item.id);
+  const memoryControls = restoredItems(row.memoryControls, MAX_MEMORY_CONTROLS, value => {
+    const memoryId = restoredText(value.memoryId, 120);
+    const changeReason = restoredText(value.changeReason, 240);
+    const kind = value.kind;
+    const status = value.status;
+    if (!memoryId || !changeReason
+      || (kind !== 'user-fact' && kind !== 'interest' && kind !== 'experience' && kind !== 'relationship')
+      || (status !== 'active' && status !== 'forgotten' && status !== 'rejected')) return null;
+    return cleanControl({
+      memoryId,
+      kind,
+      status,
+      pinned: value.pinned === true,
+      updatedAt: restoredTimestamp(value.updatedAt, nowIso),
+      changeReason,
+      ...(restoredText(value.overrideText, 320) ? { overrideText: restoredText(value.overrideText, 320) } : {}),
+    });
+  }, item => item.memoryId);
+
+  return freezeSnapshot({
+    scopeKey,
+    version: typeof row.version === 'number' && Number.isSafeInteger(row.version) && row.version >= 0 ? row.version : 0,
+    updatedAt: restoredTimestamp(row.updatedAt, nowIso),
+    temperament,
+    emotion,
+    interests,
+    userFacts,
+    activeMemories,
+    relationships,
+    memoryControls,
+  });
 }
 
 export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionStateSnapshot {

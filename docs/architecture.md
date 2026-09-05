@@ -48,6 +48,8 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Emotion is a continuous shared state updated after conversation events and decayed toward its baseline.
 - Direct statements such as preferences and personal facts can update structured knowledge immediately, with evidence and confidence.
 - Memory recall and interest changes run outside the response path.
+- Each recall pass replaces the complete active-memory set with one bounded state event. Pinned experiences are retained, and unchanged recall does not create another state version, event, or prompt projection.
+- Persisted companion snapshots are restored through the same text, collection, and numeric bounds as live updates. Older snapshots without newer optional collections remain readable, while malformed nested values are discarded or reset to safe defaults.
 - Sleep consolidation reviews the day's evidence and cautiously updates user knowledge and personality projections. It does not fine-tune the LLM.
 - Background jobs are leased, retryable, and resumable after process restarts.
 

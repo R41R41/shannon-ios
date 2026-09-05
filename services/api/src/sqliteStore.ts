@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   createInitialCompanionState,
   assembleShannonSystemPrompt,
-  freezeSnapshot,
   reduceCompanionState,
+  restoreCompanionState,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
@@ -178,7 +178,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       FROM companion_states
       WHERE scope_key = ?
     `).get(scopeKey) as unknown as StateRow | undefined;
-    if (row) return parseSnapshot(row.snapshot_json, scopeKey);
+    if (row) return parseSnapshot(row.snapshot_json, scopeKey, this.options.now());
 
     const initial = createInitialCompanionState(scopeKey, this.options.now());
     this.transaction(() => {
@@ -1230,7 +1230,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       SELECT scope_key, snapshot_json FROM companion_states
     `).all() as unknown as Array<{ scope_key: string; snapshot_json: string }>;
     for (const row of states) {
-      const state = parseSnapshot(row.snapshot_json, row.scope_key);
+      const state = parseSnapshot(row.snapshot_json, row.scope_key, seededAt);
       for (const fact of state.userFacts) this.synchronizeFact(row.scope_key, fact, 'sleep');
       this.writePromptProjection(row.scope_key, state);
     }
@@ -1307,24 +1307,8 @@ function secureDatabaseFiles(path: string): void {
   }
 }
 
-function parseSnapshot(raw: string, expectedScopeKey: string): CompanionStateSnapshot {
-  const value = parseJson(raw);
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('SHANNON_STATE_CORRUPT');
-  const row = value as Partial<CompanionStateSnapshot>;
-  if (row.scopeKey !== expectedScopeKey
-    || !Number.isSafeInteger(row.version)
-    || typeof row.updatedAt !== 'string'
-    || !row.temperament || !row.emotion
-    || !Array.isArray(row.interests)
-    || !Array.isArray(row.userFacts)
-    || !Array.isArray(row.activeMemories)) {
-    throw new Error('SHANNON_STATE_CORRUPT');
-  }
-  return freezeSnapshot({
-    ...(row as CompanionStateSnapshot),
-    relationships: Array.isArray(row.relationships) ? row.relationships : [],
-    memoryControls: Array.isArray(row.memoryControls) ? row.memoryControls : [],
-  });
+function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
+  return restoreCompanionState(expectedScopeKey, parseJson(raw), nowIso);
 }
 
 function freezeStoredMessage(row: MessageRow): StoredConversationMessage {

@@ -70,18 +70,12 @@ export class TurnRefinementProcessor {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
 
-    const recalledIds = new Set(recalled.map(memory => memory.id));
     const pinnedIds = new Set(current.memoryControls
       .filter(control => control.kind === 'experience' && control.status === 'active' && control.pinned)
       .map(control => control.memoryId));
-    for (const memory of current.activeMemories) {
-      if (!recalledIds.has(memory.id) && !pinnedIds.has(memory.id)) {
-        this.stateStore.apply(scopeKey, { type: 'memory-deactivated', memoryId: memory.id });
-      }
-    }
-    for (const memory of recalled) {
-      this.stateStore.apply(scopeKey, { type: 'memory-activated', memory });
-    }
+    const recalledIds = new Set(recalled.map(memory => memory.id));
+    const pinned = current.activeMemories.filter(memory => pinnedIds.has(memory.id) && !recalledIds.has(memory.id));
+    this.stateStore.apply(scopeKey, { type: 'active-memories-replaced', memories: [...recalled, ...pinned] });
     const resonantInterest = current.temperament.curiosity >= 0.5
       ? deriveResonantInterest(userMessage, recalled)
       : null;

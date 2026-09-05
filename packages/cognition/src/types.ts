@@ -74,6 +74,7 @@ export type CompanionStateEvent =
   | { type: 'relationship-upserted'; relationship: RelationshipInsight; source?: MemoryLearningSource }
   | { type: 'memory-control-upserted'; control: MemoryControl }
   | { type: 'memory-activated'; memory: ActiveMemory }
+  | { type: 'active-memories-replaced'; memories: readonly ActiveMemory[] }
   | { type: 'memory-deactivated'; memoryId: string };
 
 export interface CompanionStateStore {
