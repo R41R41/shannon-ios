@@ -1,9 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import type { TestFlightDistributionResult } from './testflightDistributor.js';
 
-export type TestFlightDeliveryStatus = TestFlightDistributionResult['status'] | 'failed';
+export type RecordedTestFlightDistributionResult =
+  | { readonly status: 'distributed'; readonly buildId: string; readonly version: string }
+  | { readonly status: 'already-current'; readonly buildId: string; readonly version: string }
+  | { readonly status: 'no-valid-build' };
+
+export type TestFlightDeliveryStatus = RecordedTestFlightDistributionResult['status'] | 'failed';
 export type TestFlightDeliveryCondition = 'healthy' | 'waiting' | 'attention';
 export type TestFlightNotificationStatus = 'not-needed' | 'pending' | 'sent' | 'suppressed';
 
@@ -82,7 +86,7 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
     this.secureFiles();
   }
 
-  recordResult(result: TestFlightDistributionResult, at = new Date().toISOString()): void {
+  recordResult(result: RecordedTestFlightDistributionResult, at = new Date().toISOString()): void {
     this.transaction(() => {
       this.database.prepare(`
         UPDATE testflight_failure_episodes SET closed_at = ? WHERE closed_at IS NULL
