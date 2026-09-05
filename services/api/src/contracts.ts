@@ -32,6 +32,7 @@ export interface ThreadListRequest {
 }
 
 export interface ChatResponse {
+  thread?: ChatThread;
   mode: ShannonChatMode;
   model: string;
   reply: string;

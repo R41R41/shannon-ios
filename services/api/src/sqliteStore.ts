@@ -42,8 +42,9 @@ import {
   type PersonalityProfile,
 } from './knowledgeStore.js';
 import { migrateAgentTasks } from './agentTaskStore.js';
+import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -490,7 +491,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       this.defaultThreadCache.set(scopeKey, threads[0].threadId);
       return threads[0].threadId;
     }
-    const created = this.createThread(scopeKey, '新しいトーク');
+    const created = this.createThread(scopeKey);
     this.defaultThreadCache.set(scopeKey, created);
     return created;
   }
@@ -498,25 +499,35 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private ensureThread(scopeKey: string, threadId: string, title: string | null): void {
     const now = this.options.now();
     this.database.prepare(`
-      INSERT INTO conversation_threads (thread_id, scope_key, title, created_at, updated_at)
-      VALUES (?, ?, COALESCE(?, '新しいトーク'), ?, ?)
+      INSERT INTO conversation_threads (thread_id, scope_key, title, title_origin, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(thread_id) DO NOTHING
-    `).run(threadId, scopeKey, title, now, now);
+    `).run(threadId, scopeKey, title?.trim() || DEFAULT_THREAD_TITLE, title?.trim() ? 'manual' : 'pending', now, now);
   }
 
-  createThread(scopeKey: string, title = '新しいトーク'): string {
+  createThread(scopeKey: string, title?: string): string {
     const threadId = randomUUID();
-    this.ensureThread(scopeKey, threadId, title);
+    this.ensureThread(scopeKey, threadId, title ?? null);
     return threadId;
   }
 
   renameThread(scopeKey: string, threadId: string, title: string): boolean {
     const result = this.database.prepare(`
       UPDATE conversation_threads
-      SET title = ?, updated_at = ?
+      SET title = ?, title_origin = 'manual', updated_at = ?
       WHERE scope_key = ? AND thread_id = ? AND archived_at IS NULL
     `).run(title, this.options.now(), scopeKey, threadId);
     return Number(result.changes) > 0;
+  }
+
+  needsAutomaticThreadTitle(scopeKey: string, threadId: string): boolean {
+    return Boolean(this.database.prepare(`
+      SELECT 1 FROM conversation_threads
+      WHERE scope_key = ? AND thread_id = ? AND title_origin = 'pending' AND archived_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM conversation_messages WHERE scope_key = ? AND thread_id = ? AND role = 'user'
+        )
+    `).get(scopeKey, threadId, scopeKey, threadId));
   }
 
   archiveThread(scopeKey: string, threadId: string): boolean {
@@ -584,11 +595,6 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     const turnId = randomUUID();
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     this.ensureThread(scopeKey, effectiveThreadId, null);
-    this.database.prepare(`
-      UPDATE conversation_threads
-      SET updated_at = ?, title = COALESCE(NULLIF(title, ''), ?)
-      WHERE thread_id = ? AND scope_key = ?
-    `).run(observedAt, conciseThreadTitle(userMessage), effectiveThreadId, scopeKey);
     const summary = summarizeExperience(userMessage, shannonReply);
     const payload: TurnPayload = {
       userMessage,
@@ -601,6 +607,16 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       } : {}),
     };
     this.transaction(() => {
+      // Recheck after the model await: a manual edit or another completed turn wins.
+      if (this.needsAutomaticThreadTitle(scopeKey, effectiveThreadId)) {
+        this.database.prepare(`
+          UPDATE conversation_threads SET title = ?, title_origin = 'automatic'
+          WHERE scope_key = ? AND thread_id = ? AND title_origin = 'pending' AND archived_at IS NULL
+        `).run(initialThreadTitle(context?.threadTitle, userMessage), scopeKey, effectiveThreadId);
+      }
+      this.database.prepare(`
+        UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?
+      `).run(observedAt, scopeKey, effectiveThreadId);
       const insert = this.database.prepare(`
         INSERT INTO conversation_messages
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
@@ -977,8 +993,17 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       if (previousVersion < 5) this.migrateThreadArchive();
       if (previousVersion < 6) this.migrateLlmUsage();
       if (previousVersion < 7) migrateAgentTasks(this.database);
+      if (previousVersion < 8) this.migrateThreadTitleOrigin();
       this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
+  }
+
+  private migrateThreadTitleOrigin(): void {
+    const columns = this.database.prepare("PRAGMA table_info('conversation_threads')").all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'title_origin')) {
+      // Legacy titles have no edit provenance; preserve even manually chosen default titles.
+      this.database.exec("ALTER TABLE conversation_threads ADD COLUMN title_origin TEXT NOT NULL DEFAULT 'manual';");
+    }
   }
 
   private migrateThreadedConversations(): void {

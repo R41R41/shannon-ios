@@ -176,6 +176,26 @@ describe('SQLite Agent Task Store', () => {
     expect(JSON.stringify(timeline)).not.toContain('do not expose');
     store.close();
   });
+
+  it('keeps the concrete remaining action when the host pauses an unfinished task', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const created = store.create('owner-a', {
+      idempotencyKey: 'start-key', conversationThreadID: 'thread-a', title: '配信',
+      goal: 'TestFlightへ配信する', summary: '配信を始める。', hostHint: 'cloud-a',
+    }, '2026-09-04T00:00:00.000Z');
+    store.claim('cloud-a', '2026-09-04T00:00:01.000Z');
+
+    store.recordHostEvents('cloud-a', [{
+      eventId: 'paused-with-next-action', taskId: created.task.id, type: 'paused',
+      title: '続きが必要です', detail: 'ビルド前の承認を待っています。',
+      occurredAt: '2026-09-04T00:00:02.000Z', payload: { currentAction: 'GitHubへの反映を承認' },
+    }], '2026-09-04T00:00:02.000Z');
+
+    expect(store.get('owner-a', created.task.id)).toMatchObject({
+      status: 'paused', summary: 'ビルド前の承認を待っています。', currentAction: 'GitHubへの反映を承認',
+    });
+    store.close();
+  });
 });
 
 function databasePath(): string {

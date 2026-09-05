@@ -51,6 +51,12 @@ interface RuntimeTask {
   suppressTerminalEvent: boolean;
 }
 
+interface ShannonTaskResult {
+  status: 'completed' | 'paused' | 'failed';
+  summary: string;
+  remainingAction?: string;
+}
+
 export interface CodexTaskBridgeOptions {
   config: AgentHostConfig;
   client: CodexAppServerConnection;
@@ -454,7 +460,7 @@ export class CodexTaskBridge {
     if (type === 'commandExecution') {
       const command = stringValue(item.command) ?? '';
       if (completed) {
-        const test = testFromCommand(item, command, runtime.turnId ?? runtime.threadId);
+        const test = testFromCommand(item, command);
         if (test) runtime.tests.set(test.id, test);
       }
       const commandFailed = item.status === 'failed' || (typeof item.exitCode === 'number' && item.exitCode !== 0);
@@ -500,10 +506,38 @@ export class CodexTaskBridge {
       return;
     }
     if (status === 'completed') {
-      await this.emit(runtime.taskId, 'completed', '作業が完了', compact(runtime.lastAgentMessage) ?? '依頼された作業を完了した。', {
-        changes: [...runtime.changes.values()],
-        tests: [...runtime.tests.values()],
-      });
+      const result = taskResult(runtime.lastAgentMessage);
+      const tests = [...runtime.tests.values()];
+      const payload = { changes: [...runtime.changes.values()], tests };
+      const failedVerification = tests.find(test => test.status === 'failed');
+      if (failedVerification) {
+        await this.emit(runtime.taskId, 'paused', '検証が残っています',
+          result?.summary ?? compact(runtime.lastAgentMessage) ?? '自動検証で問題が見つかりました。', {
+            ...payload,
+            currentAction: result?.remainingAction ?? `${failedVerification.name}を修正して再実行`,
+          });
+        return;
+      }
+      if (!result) {
+        await this.emit(runtime.taskId, 'paused', '完了条件を確認できません',
+          compact(runtime.lastAgentMessage) ?? 'Codexのターンは終了しましたが、作業の完了条件を確認できませんでした。', {
+            ...payload,
+            currentAction: '変更・検証・配備の残作業を確認',
+          });
+        return;
+      }
+      if (result.status === 'failed') {
+        await this.emit(runtime.taskId, 'failed', '作業を完了できません', result.summary, payload);
+        return;
+      }
+      if (result.status === 'paused') {
+        await this.emit(runtime.taskId, 'paused', '続きが必要です', result.summary, {
+          ...payload,
+          currentAction: result.remainingAction ?? '残っている工程を確認',
+        });
+        return;
+      }
+      await this.emit(runtime.taskId, 'completed', '作業が完了', result.summary, payload);
     }
   }
 
@@ -595,6 +629,7 @@ function taskPrompt(command: ClaimedAgentCommand, project: AgentHostProject, con
     '依頼中のUI上の主体（シャノン側の返答／ユーザー側の発言）を明示的に区別し、代名詞だけで判断しないでください。',
     '実機反映が完了条件に含まれる場合、ビルド成功だけを完了とせず、接続されたiPhoneへのインストールと起動確認まで行ってください。実機が使えない場合は完了と偽らず、その事実を残してください。',
     '判断が必要な操作では承認を求め、完了時は変更点・試験結果・残る課題を簡潔に報告してください。',
+    ...taskResultInstructions(),
   ].join('\n');
 }
 
@@ -605,6 +640,7 @@ function resumePrompt(project: AgentHostProject, config: AgentHostConfig, taskId
     ...deliveryInstructions(config, taskId),
     '再開時点のgit statusと未完了の検証を確認し、対象リポジトリ直下のAGENTS.mdおよび現行architecture・runbookを読み直してください。',
     '以前の説明だけで完了とせず、現在のファイル・試験・必要な配備結果を根拠に続行してください。',
+    ...taskResultInstructions(),
   ].join('\n');
 }
 
@@ -627,7 +663,16 @@ function recoveryPrompt(
     approvalExpired
       ? '同じ権限がまだ必要なら、新しい承認要求を出してください。古い承認結果を推測してはいけません。'
       : '完了済みと確認できる工程をやり直さず、残る工程から続けてください。',
+    ...taskResultInstructions(),
   ].join('\n');
+}
+
+function taskResultInstructions(): string[] {
+  return [
+    '最終応答の末尾に、必ず次の機械可読行を1行だけ付けてください。',
+    'SHANNON_TASK_RESULT: {"status":"completed|paused|failed","summary":"ユーザー向け要約","remainingAction":"未完了なら次に必要な一手"}',
+    'Codexのターンが終わっただけではcompletedにしません。依頼の完了条件とrunbook上の該当工程がすべて検証済みの場合だけcompletedにしてください。検証・承認・配備・外部前提が残る場合はpaused、続行不能ならfailedにしてください。',
+  ];
 }
 
 function deliveryInstructions(config: AgentHostConfig, taskId?: string): string[] {
@@ -705,11 +750,12 @@ function commandCompletionTitle(item: Record<string, unknown>): string {
   return 'コマンドの実行を完了';
 }
 
-function testFromCommand(item: Record<string, unknown>, command: string, namespace: string): AgentTestResult | undefined {
+function testFromCommand(item: Record<string, unknown>, command: string): AgentTestResult | undefined {
   if (!isTestCommand(command)) return undefined;
   const failed = item.status === 'failed' || (typeof item.exitCode === 'number' && item.exitCode !== 0);
   return {
-    id: stableID(namespace, command),
+    // The same verification rerun after a pause replaces its earlier result.
+    id: stableID('verification', command.trim().replace(/\s+/g, ' ')),
     name: testName(command),
     status: failed ? 'failed' : 'passed',
     detail: failed ? '失敗を検出' : '成功',
@@ -717,15 +763,46 @@ function testFromCommand(item: Record<string, unknown>, command: string, namespa
 }
 
 function isTestCommand(command: string): boolean {
-  return /(^|\s)(test|pytest|vitest|xctest)(\s|$)|swift\s+test|xcodebuild.*\btest\b|(?:npm|pnpm|yarn)\s+(?:run\s+)?test/i.test(command);
+  return /scripts\/verify\.sh(?:\s+(?:api|ios|app|all))?|(^|\s)(test|pytest|vitest|xctest)(\s|$)|swift\s+test|xcodebuild.*\b(?:test|build)\b|(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:test|typecheck|build)/i.test(command);
 }
 
 function testName(command: string): string {
+  const verifyTarget = command.match(/scripts\/verify\.sh(?:\s+(api|ios|app|all))?/i)?.[1]?.toLocaleLowerCase('en-US');
+  if (verifyTarget === 'api') return 'API検証';
+  if (verifyTarget === 'ios') return 'iOSパッケージ検証';
+  if (verifyTarget === 'app') return 'iOSアプリビルド';
+  if (verifyTarget === 'all' || /scripts\/verify\.sh/i.test(command)) return '全体検証';
   if (/xcodebuild/i.test(command)) return 'Xcodeテスト';
   if (/swift\s+test/i.test(command)) return 'Swiftテスト';
   if (/vitest/i.test(command)) return 'Vitest';
   if (/pytest/i.test(command)) return 'Pytest';
   return '自動テスト';
+}
+
+function taskResult(message: string | undefined): ShannonTaskResult | undefined {
+  if (!message?.trim()) return undefined;
+  const lines = message.trim().split(/\r?\n/);
+  let markerIndex = -1;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (lines[index]!.trim().startsWith('SHANNON_TASK_RESULT:')) {
+      markerIndex = index;
+      break;
+    }
+  }
+  if (markerIndex < 0) return undefined;
+  const raw = lines[markerIndex]!.trim().slice('SHANNON_TASK_RESULT:'.length).trim();
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const status = value.status;
+    if (status !== 'completed' && status !== 'paused' && status !== 'failed') return undefined;
+    const visibleSummary = lines.filter((_, index) => index !== markerIndex).join('\n').trim();
+    const summary = stringValue(value.summary)?.trim() || visibleSummary;
+    if (!summary) return undefined;
+    const remainingAction = stringValue(value.remainingAction)?.trim();
+    return { status, summary, ...(remainingAction ? { remainingAction } : {}) };
+  } catch {
+    return undefined;
+  }
 }
 
 function changeFromItem(value: unknown, namespace: string): AgentChangeSummary | undefined {

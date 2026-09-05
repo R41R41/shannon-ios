@@ -9,7 +9,9 @@ describe('CodexAppServerClient', () => {
     const client = new CodexAppServerClient({
       executable: process.execPath,
       args: [fixture],
-      requestTimeoutMs: 2_000,
+      // CI and heavily loaded local builds can take a few seconds just to
+      // schedule the fixture process. Production keeps a 20-second default.
+      requestTimeoutMs: 10_000,
     });
     client.onNotification(notification => notifications.push(notification.method));
 

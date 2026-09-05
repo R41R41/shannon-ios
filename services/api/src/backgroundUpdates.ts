@@ -13,6 +13,7 @@ import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepCo
 import type { ShannonTaskDecision } from './chatModel.js';
 
 export interface CompletedTurn {
+  threadTitle?: string;
   scopeKey: string;
   threadId: string;
   capturedState: CompanionStateSnapshot;
@@ -113,6 +114,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
       },
     );
@@ -162,6 +164,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
       },
     );

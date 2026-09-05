@@ -34,6 +34,8 @@ public final class ShannonConversationModel {
     private var didAttemptThreadsLoad = false
     private var previewAgentTaskIDs: Set<UUID> = []
     private var acknowledgedAgentTaskIDs: Set<UUID>
+    private var threadListRevision = 0
+    private var titleEditRevisions: [String: Int] = [:]
 
     public init(
         scopeKey: String = "local-owner",
@@ -155,9 +157,11 @@ public final class ShannonConversationModel {
         guard force || threads.isEmpty else { return }
         isLoadingThreads = true
         defer { isLoadingThreads = false }
+        let revision = threadListRevision
 
         do {
             let threadList = try await client.loadThreads(scopeKey: scopeKey)
+            guard revision == threadListRevision else { return }
             threads = threadList.threads
             if selectedThreadId == nil, let latest = threads.first {
                 selectedThreadId = latest.threadId
@@ -217,8 +221,13 @@ public final class ShannonConversationModel {
             return false
         }
 
+        threadListRevision += 1
+        defer {
+            threadListRevision += 1
+        }
         do {
             try await client.renameThread(scopeKey: scopeKey, threadId: threadId, title: trimmedTitle)
+            titleEditRevisions[threadId, default: 0] += 1
             guard let index = threads.firstIndex(where: { $0.threadId == threadId }) else { return true }
             let existing = threads[index]
             threads[index] = ChatThreadDTO(
@@ -675,6 +684,7 @@ public final class ShannonConversationModel {
     private func send(text: String, userMessageID: UUID) async {
         errorMessage = nil
         isSending = true
+        let titleRevisionsAtSend = titleEditRevisions
 
         do {
             let response = try await client.send(message: text, scopeKey: scopeKey, threadId: selectedThreadId)
@@ -699,9 +709,27 @@ public final class ShannonConversationModel {
                 threadID: response.threadId,
                 sourceMessageID: replyMessage.id
             )
+            if let thread = response.thread, thread.threadId == response.threadId {
+                let existing = threads.first { $0.threadId == thread.threadId }
+                let editedDuringSend = titleRevisionsAtSend[thread.threadId, default: 0]
+                    != titleEditRevisions[thread.threadId, default: 0]
+                let updated = ChatThreadDTO(
+                    threadId: thread.threadId,
+                    title: editedDuringSend ? (existing?.title ?? thread.title) : thread.title,
+                    createdAt: thread.createdAt,
+                    updatedAt: thread.updatedAt,
+                    messageCount: thread.messageCount
+                )
+                threads.removeAll { $0.threadId == updated.threadId }
+                threads.insert(updated, at: 0)
+                threadListRevision += 1
+            }
             cacheCurrentHistory()
             persistDisplayCache()
-            await loadThreads(force: true)
+            if response.thread == nil {
+                // Older servers expose title changes through the existing thread-list API.
+                await loadThreads(force: true)
+            }
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)
             errorMessage = "シャノンに接続できませんでした。ローカルAPIを確認してください。"

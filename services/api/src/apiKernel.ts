@@ -347,7 +347,7 @@ export class ShannonApiKernel {
     if (request.method === 'POST' && request.path === '/v1/threads') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const scopeKey = request.body.scopeKey;
-      const title = validThreadTitle(request.body.title) ? request.body.title.trim() : '新しいトーク';
+      const title = validThreadTitle(request.body.title) ? request.body.title.trim() : undefined;
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       const threadId = this.conversationStore.createThread(scopeKey, title);
       return { status: 200, body: { threadId } };
@@ -520,6 +520,7 @@ export class ShannonApiKernel {
         systemPrompt,
         history: this.conversationStore.history(body.scopeKey, threadId),
         message,
+        generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
@@ -550,11 +551,13 @@ export class ShannonApiKernel {
         capturedState: captured,
         userMessage: message,
         shannonReply: completion.reply,
+        ...(completion.threadTitle ? { threadTitle: completion.threadTitle } : {}),
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
         completedAt: this.now(),
       };
       const experience = this.background.recordTurn(completedTurn);
+      response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };
     }

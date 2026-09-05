@@ -35,6 +35,7 @@ describe('CodexTaskBridge', () => {
     expect(taskText).toContain('AGENTS.md');
     expect(taskText).toContain('番号付きHTML資料');
     expect(taskText).toContain('git status');
+    expect(taskText).toContain('SHANNON_TASK_RESULT');
     expect(fixture.state.session('task-1')?.goal).toBe('Fix login');
     expect(events).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'started', taskId: 'task-1' }),
@@ -91,7 +92,8 @@ describe('CodexTaskBridge', () => {
     } });
     fixture.client.notify({ method: 'item/completed', params: {
       threadId: 'thread-1', turnId: 'turn-1', item: {
-        type: 'agentMessage', id: 'message-1', text: 'ログイン処理を直してテストした。',
+        type: 'agentMessage', id: 'message-1',
+        text: 'ログイン処理を直してテストした。\nSHANNON_TASK_RESULT: {"status":"completed","summary":"ログイン処理を直してテストした。"}',
       },
     } });
     fixture.client.notify({ method: 'turn/completed', params: {
@@ -114,6 +116,95 @@ describe('CodexTaskBridge', () => {
       },
     });
     expect(JSON.stringify(events)).not.toContain('SECRET RAW OUTPUT');
+    await bridge.stop();
+  });
+
+  it('keeps a task paused when Codex ends without a verified task result', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Build the iOS app', projectHint: 'fixture' }));
+
+    fixture.client.notify({ method: 'item/completed', params: {
+      threadId: 'thread-1', turnId: 'turn-1', item: {
+        type: 'commandExecution', id: 'verify-item', command: 'scripts/verify.sh all',
+        status: 'failed', exitCode: 1,
+      },
+    } });
+    fixture.client.notify({ method: 'item/completed', params: {
+      threadId: 'thread-1', turnId: 'turn-1', item: {
+        type: 'agentMessage', id: 'message-1', text: 'iOSビルドを確認できなかった。',
+      },
+    } });
+    fixture.client.notify({ method: 'turn/completed', params: {
+      threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed', items: [] },
+    } });
+    await bridge.whenIdle();
+
+    expect(events.some(event => event.type === 'completed')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'paused', title: '検証が残っています', payload: expect.objectContaining({
+        currentAction: '全体検証を修正して再実行',
+        tests: [expect.objectContaining({ name: '全体検証', status: 'failed' })],
+      }),
+    }));
+    await bridge.stop();
+  });
+
+  it('publishes the remaining action when Codex reports a deliberate pause', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Deliver to TestFlight', projectHint: 'fixture' }));
+    fixture.client.notify({ method: 'item/completed', params: {
+      threadId: 'thread-1', turnId: 'turn-1', item: {
+        type: 'agentMessage', id: 'message-1',
+        text: '実装とテストは完了した。\nSHANNON_TASK_RESULT: {"status":"paused","summary":"配信承認を待っています。","remainingAction":"GitHubへの反映を承認"}',
+      },
+    } });
+    fixture.client.notify({ method: 'turn/completed', params: {
+      threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed', items: [] },
+    } });
+    await bridge.whenIdle();
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'paused', title: '続きが必要です', detail: '配信承認を待っています。',
+      payload: expect.objectContaining({ currentAction: 'GitHubへの反映を承認' }),
+    }));
+    await bridge.stop();
+  });
+
+  it('lets a successful verification rerun replace an earlier failure', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Fix and verify', projectHint: 'fixture' }));
+    for (const [status, exitCode] of [['failed', 1], ['completed', 0]] as const) {
+      fixture.client.notify({ method: 'item/completed', params: {
+        threadId: 'thread-1', turnId: 'turn-1', item: {
+          type: 'commandExecution', id: `verify-${exitCode}`, command: 'scripts/verify.sh all', status, exitCode,
+        },
+      } });
+    }
+    fixture.client.notify({ method: 'item/completed', params: {
+      threadId: 'thread-1', turnId: 'turn-1', item: {
+        type: 'agentMessage', id: 'message-1',
+        text: '修正後の全体検証に成功した。\nSHANNON_TASK_RESULT: {"status":"completed","summary":"修正と全体検証が完了しました。"}',
+      },
+    } });
+    fixture.client.notify({ method: 'turn/completed', params: {
+      threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed', items: [] },
+    } });
+    await bridge.whenIdle();
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'completed', payload: expect.objectContaining({
+        tests: [expect.objectContaining({ name: '全体検証', status: 'passed' })],
+      }),
+    }));
     await bridge.stop();
   });
 

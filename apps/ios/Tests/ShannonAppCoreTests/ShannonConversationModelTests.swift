@@ -3,6 +3,115 @@ import XCTest
 
 @MainActor
 final class ShannonConversationModelTests: XCTestCase {
+    func testGeneratedTitleArrivesWithAssistantReplyAndRestoresFromDisplayCache() async {
+        let scopeKey = "title-test-\(UUID().uuidString)"
+        defer { UserDefaults.standard.removeObject(forKey: "shannon.conversation-cache.v1.\(scopeKey)") }
+        let client = TitleClient()
+        let model = ShannonConversationModel(scopeKey: scopeKey, client: client, usesDisplayCache: true)
+        await model.loadThreads(force: true)
+        model.draft = "週末は京都に行きたい"
+        let sending = Task { await model.sendDraft() }
+        await client.waitForSend()
+
+        XCTAssertEqual(model.selectedThread?.title, "新しいトーク")
+        XCTAssertEqual(model.messages.map(\.role), [.user])
+        await client.completeSend()
+        await sending.value
+
+        XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
+        XCTAssertEqual(model.selectedThread?.title, "京都の庭園巡り")
+        XCTAssertEqual(model.selectedThread?.messageCount, 2)
+        let listLoads = await client.listLoads
+        XCTAssertEqual(listLoads, 1, "The title must not wait for another thread-list request")
+        XCTAssertFalse(model.isSending)
+
+        let restored = ShannonConversationModel(scopeKey: scopeKey, client: client, usesDisplayCache: true)
+        XCTAssertEqual(restored.selectedThread?.title, "京都の庭園巡り")
+        XCTAssertEqual(restored.messages.map(\.text), model.messages.map(\.text))
+    }
+
+    func testManualTitleEditedDuringSendWinsOverEarlierChatResponse() async {
+        for title in ["自分の旅行メモ", "新しいトーク"] {
+            let client = TitleClient()
+            let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+            await model.loadThreads(force: true)
+            model.draft = "京都に行きたい"
+            let sending = Task { await model.sendDraft() }
+            await client.waitForSend()
+            let renamed = await model.renameThread("test-thread", title: title)
+            XCTAssertTrue(renamed)
+            await client.completeSend()
+            await sending.value
+
+            XCTAssertEqual(model.selectedThread?.title, title)
+            XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
+            let renamedAgain = await model.renameThread("test-thread", title: "あとから編集")
+            XCTAssertTrue(renamedAgain)
+            XCTAssertEqual(model.selectedThread?.title, "あとから編集")
+        }
+    }
+
+    func testOlderThreadListCannotOverwriteGeneratedOrManuallyEditedTitle() async {
+        let client = TitleClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        await model.loadThreads(force: true)
+        await client.delayNextList()
+        let refreshing = Task { await model.loadThreads(force: true) }
+        await client.waitForList()
+
+        model.draft = "京都に行きたい"
+        let sending = Task { await model.sendDraft() }
+        await client.waitForSend()
+        await client.completeSend()
+        await sending.value
+        await client.completeList()
+        await refreshing.value
+        XCTAssertEqual(model.selectedThread?.title, "京都の庭園巡り")
+
+        await client.delayNextList()
+        let nextRefresh = Task { await model.loadThreads(force: true) }
+        await client.waitForList()
+        let renamed = await model.renameThread("test-thread", title: "自分のタイトル")
+        XCTAssertTrue(renamed)
+        await client.completeList()
+        await nextRefresh.value
+        XCTAssertEqual(model.selectedThread?.title, "自分のタイトル")
+    }
+
+    func testFailedFirstSendKeepsDefaultTitleAndRetryAppliesGeneratedTitle() async {
+        let client = TitleClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        await model.loadThreads(force: true)
+        model.draft = "京都に行きたい"
+        let sending = Task { await model.sendDraft() }
+        await client.waitForSend()
+        await client.failSend()
+        await sending.value
+        XCTAssertEqual(model.selectedThread?.title, "新しいトーク")
+        XCTAssertEqual(model.messages.map(\.role), [.user])
+        XCTAssertEqual(model.messages.first?.deliveryState, .failed)
+
+        let retrying = Task { await model.retryLastFailed() }
+        await client.waitForSend()
+        await client.completeSend()
+        await retrying.value
+        XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
+        XCTAssertEqual(model.selectedThread?.title, "京都の庭園巡り")
+    }
+
+    func testChatResponseDecodesWithAndWithoutThreadMetadata() throws {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        let legacy = try decoder.decode(ChatResponseDTO.self, from: encoder.encode(TestFixtures.chatResponse()))
+        XCTAssertNil(legacy.thread)
+        let thread = ChatThreadDTO(
+            threadId: "test-thread", title: "京都の庭園巡り", createdAt: "2026-09-05T00:00:00Z",
+            updatedAt: "2026-09-05T00:00:01Z", messageCount: 2
+        )
+        let current = try decoder.decode(ChatResponseDTO.self, from: encoder.encode(TestFixtures.chatResponse(thread: thread)))
+        XCTAssertEqual(current.thread, thread)
+    }
+
     func testTimelineAddsOneQuietDividerPerCalendarDay() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -210,6 +319,74 @@ private struct StubClient: ShannonAPIClientProtocol {
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO { response }
 }
 
+private actor TitleClient: ShannonAPIClientProtocol {
+    private(set) var listLoads = 0
+    private var pendingSend: CheckedContinuation<ChatResponseDTO, any Error>?
+    private var sendWaiter: CheckedContinuation<Void, Never>?
+    private var pendingList: CheckedContinuation<ThreadListResponseDTO, Never>?
+    private var listWaiter: CheckedContinuation<Void, Never>?
+    private var shouldDelayList = false
+
+    private func thread(title: String = "新しいトーク", messageCount: Int = 0) -> ChatThreadDTO {
+        ChatThreadDTO(
+            threadId: "test-thread", title: title, createdAt: "2026-09-05T00:00:00Z",
+            updatedAt: "2026-09-05T00:00:01Z", messageCount: messageCount
+        )
+    }
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        try await withCheckedThrowingContinuation { continuation in
+            pendingSend = continuation
+            sendWaiter?.resume()
+            sendWaiter = nil
+        }
+    }
+
+    func waitForSend() async {
+        if pendingSend != nil { return }
+        await withCheckedContinuation { sendWaiter = $0 }
+    }
+
+    func completeSend() {
+        pendingSend?.resume(returning: TestFixtures.chatResponse(
+            reply: "庭園を巡るのはどうかな。", thread: thread(title: "京都の庭園巡り", messageCount: 2)
+        ))
+        pendingSend = nil
+    }
+
+    func failSend() {
+        pendingSend?.resume(throwing: TestFailure.offline)
+        pendingSend = nil
+    }
+
+    func renameThread(scopeKey: String, threadId: String, title: String) async throws {}
+
+    func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO {
+        listLoads += 1
+        if shouldDelayList {
+            shouldDelayList = false
+            return await withCheckedContinuation { continuation in
+                pendingList = continuation
+                listWaiter?.resume()
+                listWaiter = nil
+            }
+        }
+        return ThreadListResponseDTO(threads: [thread()])
+    }
+
+    func delayNextList() { shouldDelayList = true }
+
+    func waitForList() async {
+        if pendingList != nil { return }
+        await withCheckedContinuation { listWaiter = $0 }
+    }
+
+    func completeList() {
+        pendingList?.resume(returning: ThreadListResponseDTO(threads: [thread()]))
+        pendingList = nil
+    }
+}
+
 private enum TestFailure: Error {
     case offline
 }
@@ -398,7 +575,8 @@ private enum TestFixtures {
     static func chatResponse(
         version: Int = 0,
         reply: String = "ok",
-        expression: ShannonExpressionDTO = .calm
+        expression: ShannonExpressionDTO = .calm,
+        thread: ChatThreadDTO? = nil
     ) -> ChatResponseDTO {
         ChatResponseDTO(
             mode: "local-stub",
@@ -412,7 +590,8 @@ private enum TestFixtures {
                 expression: expression
             ),
             systemPrompt: "prompt",
-            state: state(version: version)
+            state: state(version: version),
+            thread: thread
         )
     }
 

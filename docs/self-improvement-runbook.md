@@ -1,6 +1,6 @@
 # Shannon self-improvement runbook
 
-Revision: 2026-09-04
+Revision: 2026-09-05
 
 This is the operational authority for user-directed Shannon changes.
 
@@ -16,6 +16,8 @@ A task is complete only after every applicable layer succeeds:
 6. **Background behavior** — an agent task remains queryable after the app backgrounds or the Agent Host restarts when task orchestration changed.
 
 If a prerequisite is unavailable, keep the task non-complete and report the exact remaining action.
+
+The Agent Host must distinguish a finished Codex turn from a finished Shannon task. Every Codex turn ends with the `SHANNON_TASK_RESULT` contract supplied by the host prompt. `completed` is accepted only when all applicable conditions above are satisfied. A missing contract, failed recorded verification, unavailable build environment, pending approval, or unfinished deployment is stored as `paused` together with the next concrete action; it must never be projected as completion.
 
 ## Local verification
 

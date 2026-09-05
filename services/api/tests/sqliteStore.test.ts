@@ -27,6 +27,77 @@ class RecordingChatModel implements ShannonChatModel {
 }
 
 describe('SQLite Shannon persistence', () => {
+  it('persists automatic titles and manual protection, including the default wording, after reopen', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const first = new SQLiteShannonStore({ path, now });
+    const automatic = first.createThread('owner');
+    const manual = first.createThread('owner');
+    const pending = first.createThread('owner');
+    first.renameThread('owner', manual, '新しいトーク');
+    first.appendTurn('owner', automatic, '旅行の相談', '京都を歩こう', now(), {
+      capturedStateVersion: 0,
+      messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' },
+      threadTitle: '京都の散歩',
+    });
+    first.close();
+
+    const reopened = new SQLiteShannonStore({ path, now });
+    expect(reopened.needsAutomaticThreadTitle('owner', automatic)).toBe(false);
+    expect(reopened.needsAutomaticThreadTitle('owner', manual)).toBe(false);
+    expect(reopened.needsAutomaticThreadTitle('owner', pending)).toBe(true);
+    reopened.appendTurn('owner', manual, 'タイトルを変えない', 'うん', now());
+    expect(reopened.listThreads('owner')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ threadId: automatic, title: '京都の散歩', messageCount: 2 }),
+      expect.objectContaining({ threadId: manual, title: '新しいトーク', messageCount: 2 }),
+    ]));
+    reopened.close();
+  });
+
+  it('migrates v7 additively and repeatedly without guessing whether legacy default titles were manual', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const oldStore = new SQLiteShannonStore({ path, now });
+    const defaultThread = oldStore.createThread('owner', '新しいトーク');
+    const namedThread = oldStore.createThread('owner', '保存したタイトル');
+    oldStore.appendTurn('owner', namedThread, '残す会話', 'シャノンの返事', now());
+    oldStore.apply('owner', { type: 'interest-observed', interest: '旅行' });
+    const snapshot = oldStore.snapshot('owner');
+    const history = oldStore.conversationHistory('owner', namedThread);
+    const events = oldStore.events('owner');
+    const threads = oldStore.listThreads('owner');
+    oldStore.close();
+    const legacy = new DatabaseSync(path);
+    legacy.exec('ALTER TABLE conversation_threads DROP COLUMN title_origin; PRAGMA user_version = 7;');
+    legacy.close();
+
+    for (let restart = 0; restart < 2; restart += 1) {
+      const migrated = new SQLiteShannonStore({ path, now });
+      expect(migrated.listThreads('owner')).toEqual(threads);
+      expect(migrated.conversationHistory('owner', namedThread)).toEqual(history);
+      expect(migrated.events('owner')).toEqual(events);
+      expect(migrated.snapshot('owner')).toEqual(snapshot);
+      expect(migrated.needsAutomaticThreadTitle('owner', defaultThread)).toBe(false);
+      migrated.close();
+    }
+  });
+
+  it('rolls back a generated title if the assistant message cannot be persisted', () => {
+    const path = databasePath();
+    const now = sequenceClock();
+    const store = new SQLiteShannonStore({ path, now });
+    const threadId = store.createThread('owner');
+    const database = new DatabaseSync(path);
+    database.exec(`CREATE TRIGGER fail_assistant BEFORE INSERT ON conversation_messages
+      WHEN NEW.role = 'assistant' BEGIN SELECT RAISE(ABORT, 'test write failure'); END;`);
+    expect(() => store.appendTurn('owner', threadId, 'ユーザーの発言', 'シャノンの返答', now())).toThrow('test write failure');
+    expect(store.listThreads('owner')[0]).toMatchObject({ title: '新しいトーク', messageCount: 0 });
+    expect(store.needsAutomaticThreadTitle('owner', threadId)).toBe(true);
+    expect(store.events('owner')).toHaveLength(0);
+    database.close();
+    store.close();
+  });
+
   it('restores shared state, conversation, message emotion, and experiences after reopen', () => {
     const path = databasePath();
     const now = sequenceClock();
@@ -252,7 +323,7 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 7 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
     database.close();
   });
 

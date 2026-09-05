@@ -516,7 +516,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         break;
       }
       case 'paused':
-        update('paused', event.detail ?? '作業を一時停止した。');
+        update('paused', event.detail ?? '作業を一時停止した。', stringValue(payload.currentAction));
         clearPendingApproval();
         break;
       case 'completed':

@@ -3,6 +3,49 @@ import { OpenAIResponsesChatModel, createConfiguredChatModel } from '../src/chat
 import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
 
 describe('OpenAI Responses chat adapter', () => {
+  it('generates a separate short title from the first user message and assistant reply in one call', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.text.format.schema.required).toContain('threadTitle');
+      expect(body.instructions).toContain('シャノン側のreplyの両方');
+      expect(body.input).toEqual([{ role: 'user', content: '週末は京都に行きたい' }]);
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        reply: '庭園を巡るのはどうかな。', threadTitle: '「京都の庭園巡り」',
+        taskDecision: { disposition: 'none', reason: '旅行の会話' }, taskProposal: null,
+      }) }));
+    });
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const result = await model.generate({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '週末は京都に行きたい', generateThreadTitle: true,
+    });
+    expect(result).toMatchObject({ reply: '庭園を巡るのはどうかな。', threadTitle: '京都の庭園巡り' });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it.each([undefined, null, 42, {}, '', '  ', '新しいトーク'])('accepts the assistant reply even with unusable title metadata: %j', async threadTitle => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+      reply: '聞いてるよ。', threadTitle,
+      taskDecision: { disposition: 'none', reason: '会話' }, taskProposal: null,
+    }) })));
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const result = await model.generate({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'こんにちは', generateThreadTitle: true,
+    });
+    expect(result.reply).toBe('聞いてるよ。');
+    expect(result.threadTitle).toBeUndefined();
+  });
+
+  it('bounds title length without splitting emoji and ignores titles on subsequent turns', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+      reply: 'いいね。', threadTitle: `  ${'🌸'.repeat(40)}\nお花見 `,
+      taskDecision: { disposition: 'none', reason: '会話' }, taskProposal: null,
+    }) })));
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const request = { scopeKey: 'owner', systemPrompt: 'system', history: [], message: 'お花見しよう' };
+    expect((await model.generate({ ...request, generateThreadTitle: true })).threadTitle).toBe(`${'🌸'.repeat(29)}…`);
+    expect((await model.generate(request)).threadTitle).toBeUndefined();
+  });
+
   it('uses the local stub when the API key is absent', () => {
     expect(createConfiguredChatModel({}).mode).toBe('local-stub');
   });
@@ -30,6 +73,7 @@ describe('OpenAI Responses chat adapter', () => {
         { role: 'assistant', content: '覚えてる' },
         { role: 'user', content: '続き' },
       ]);
+      expect(JSON.stringify(body.text)).not.toContain('threadTitle');
       expect(String(body.safety_identifier)).not.toContain('owner-private');
       return new Response(JSON.stringify({
         output_text: JSON.stringify({

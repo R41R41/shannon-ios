@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { RecallCandidate, ShannonMessageEmotion } from '@shannon/cognition';
 import type { ShannonConversationItem } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
+import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
 export interface ShannonExperience extends RecallCandidate {
   userMessage: string;
@@ -25,6 +26,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
 }
 
 export interface TurnPersistenceContext {
+  threadTitle?: string;
   messageEmotion: ShannonMessageEmotion;
   capturedStateVersion: number;
   taskDecision?: ShannonTaskDecision;
@@ -35,6 +37,7 @@ export interface ConversationStore {
   threadId(scopeKey: string, threadId?: string): string;
   createThread(scopeKey: string, title?: string): string;
   renameThread(scopeKey: string, threadId: string, title: string): boolean;
+  needsAutomaticThreadTitle(scopeKey: string, threadId: string): boolean;
   archiveThread(scopeKey: string, threadId: string): boolean;
   history(scopeKey: string, threadId?: string): readonly ShannonConversationItem[];
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[];
@@ -52,6 +55,7 @@ export interface ConversationStore {
 export class InMemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, Map<string, StoredConversationMessage[]>>();
   private readonly threadTitles = new Map<string, Map<string, string>>();
+  private readonly protectedTitles = new Map<string, Set<string>>();
   private readonly experiences = new Map<string, ShannonExperience[]>();
   private readonly archivedThreads = new Map<string, Set<string>>();
 
@@ -70,12 +74,11 @@ export class InMemoryConversationStore implements ConversationStore {
     const archived = this.archivedThreads.get(scopeKey) ?? new Set<string>();
     return Object.freeze(Array.from(threads.entries()).filter(([threadId]) => !archived.has(threadId)).map(([threadId, messages]) => {
       const ordered = [...messages].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
-      const first = ordered[0];
       const last = ordered[ordered.length - 1];
       const customTitle = threadTitles.get(threadId);
       return Object.freeze({
         threadId,
-        title: customTitle ?? (first ? conciseTitle(first.content) : '新しいトーク'),
+        title: customTitle ?? DEFAULT_THREAD_TITLE,
         createdAt: ordered[0]?.observedAt ?? new Date().toISOString(),
         updatedAt: last?.observedAt ?? new Date().toISOString(),
         messageCount: messages.length,
@@ -96,12 +99,13 @@ export class InMemoryConversationStore implements ConversationStore {
     return selected;
   }
 
-  createThread(scopeKey: string, title = '新しいトーク'): string {
+  createThread(scopeKey: string, title?: string): string {
     const threadId = randomUUID();
     const threads = this.conversations.get(scopeKey) ?? new Map<string, StoredConversationMessage[]>();
     const threadTitles = this.threadTitles.get(scopeKey) ?? new Map<string, string>();
     threads.set(threadId, []);
-    threadTitles.set(threadId, title.trim() || '新しいトーク');
+    threadTitles.set(threadId, title?.trim() || DEFAULT_THREAD_TITLE);
+    if (title?.trim()) this.protectTitle(scopeKey, threadId);
     this.conversations.set(scopeKey, threads);
     this.threadTitles.set(scopeKey, threadTitles);
     this.defaultThreadCache.set(scopeKey, threadId);
@@ -114,7 +118,20 @@ export class InMemoryConversationStore implements ConversationStore {
     const threadTitles = this.threadTitles.get(scopeKey) ?? new Map<string, string>();
     threadTitles.set(threadId, title);
     this.threadTitles.set(scopeKey, threadTitles);
+    this.protectTitle(scopeKey, threadId);
     return true;
+  }
+
+  private protectTitle(scopeKey: string, threadId: string): void {
+    const protectedTitles = this.protectedTitles.get(scopeKey) ?? new Set<string>();
+    protectedTitles.add(threadId);
+    this.protectedTitles.set(scopeKey, protectedTitles);
+  }
+
+  needsAutomaticThreadTitle(scopeKey: string, threadId: string): boolean {
+    return !this.protectedTitles.get(scopeKey)?.has(threadId)
+      && !this.archivedThreads.get(scopeKey)?.has(threadId)
+      && !(this.conversations.get(scopeKey)?.get(threadId) ?? []).some(item => item.role === 'user');
   }
 
   archiveThread(scopeKey: string, threadId: string): boolean {
@@ -158,6 +175,12 @@ export class InMemoryConversationStore implements ConversationStore {
     const resolvedThreadId = this.threadId(scopeKey, threadId);
     const threads = this.conversations.get(scopeKey) ?? new Map<string, StoredConversationMessage[]>();
     const conversation = threads.get(resolvedThreadId) ?? [];
+    if (this.needsAutomaticThreadTitle(scopeKey, resolvedThreadId)) {
+      const titles = this.threadTitles.get(scopeKey) ?? new Map<string, string>();
+      titles.set(resolvedThreadId, initialThreadTitle(context?.threadTitle, userMessage));
+      this.threadTitles.set(scopeKey, titles);
+      this.protectTitle(scopeKey, resolvedThreadId);
+    }
     conversation.push(
       { id: randomUUID(), role: 'user', content: userMessage, observedAt },
       {
@@ -194,10 +217,4 @@ function summarizeExperience(userMessage: string, shannonReply: string): string 
   const user = userMessage.replace(/\s+/g, ' ').trim().slice(0, 220);
   const shannon = shannonReply.replace(/\s+/g, ' ').trim().slice(0, 140);
   return `ユーザー: ${user} / シャノン: ${shannon}`;
-}
-
-function conciseTitle(value: string): string {
-  const cleaned = value.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!cleaned) return '新しいトーク';
-  return cleaned.length <= 30 ? cleaned : `${cleaned.slice(0, 27)}…`;
 }

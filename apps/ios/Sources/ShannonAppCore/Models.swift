@@ -264,6 +264,7 @@ public struct ShannonAgentTaskCommandRequestDTO: Codable, Equatable, Sendable {
 }
 
 public struct ChatResponseDTO: Codable, Equatable, Sendable {
+    public let thread: ChatThreadDTO?
     public let mode: String
     public let reply: String
     public let threadId: String
@@ -281,8 +282,10 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
         messageEmotion: ShannonMessageEmotionDTO,
         systemPrompt: String,
         state: CompanionStateDTO,
-        uiBlocks: [ShannonUIBlockDTO]? = nil
+        uiBlocks: [ShannonUIBlockDTO]? = nil,
+        thread: ChatThreadDTO? = nil
     ) {
+        self.thread = thread
         self.mode = mode
         self.reply = reply
         self.threadId = threadId
