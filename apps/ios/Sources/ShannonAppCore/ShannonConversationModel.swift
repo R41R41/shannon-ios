@@ -80,7 +80,10 @@ public final class ShannonConversationModel {
     }
 
     public var latestAgentTaskNotice: ShannonAgentTask? {
-        agentTaskNotices.first
+        agentTasks.first { task in
+            (task.status == .waitingApproval || task.status.isTerminal)
+                && !acknowledgedAgentTaskIDs.contains(task.id)
+        }
     }
 
     public var agentTaskNotices: [ShannonAgentTask] {

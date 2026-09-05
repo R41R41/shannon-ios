@@ -145,7 +145,22 @@ final class ShannonAgentTaskTests: XCTestCase {
         model.acknowledgeAgentTask(waitingID)
 
         XCTAssertEqual(Set(model.agentTaskNotices.map(\.id)), Set([waitingID, runningID]))
-        XCTAssertEqual(model.latestAgentTaskNotice?.id, runningID)
+        XCTAssertNil(model.latestAgentTaskNotice)
+    }
+
+    func testRunningTaskUsesHeaderMenuWithoutOccupyingComposerArea() {
+        let model = ShannonConversationModel(usesDisplayCache: false)
+        let runningID = model.installAgentTaskFixture(status: .running)
+
+        XCTAssertEqual(model.agentTaskNotices.map(\.id), [runningID])
+        XCTAssertNil(model.latestAgentTaskNotice)
+    }
+
+    func testApprovalStillProducesAnUrgentComposerBanner() {
+        let model = ShannonConversationModel(usesDisplayCache: false)
+        let waitingID = model.installAgentTaskFixture(status: .waitingApproval)
+
+        XCTAssertEqual(model.latestAgentTaskNotice?.id, waitingID)
     }
 
     func testApprovalFailureRestoresTheCardAndExposesAnInlineError() async {

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 実用テスト v22</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f7fbfd;--surface:#fff;--text:#15252d;--muted:#63757d;--line:#d8e8ee;--blue:#60cce8;--blue2:#dff7fd;--good:#16855d;--bad:#ba3d4d;--shadow:0 16px 40px rgba(34,91,108,.10)}
+    @media(prefers-color-scheme:dark){:root{--bg:#0d171c;--surface:#142329;--text:#edf9fc;--muted:#a7bac1;--line:#294149;--blue:#69d7f1;--blue2:#173943;--good:#61d6a8;--bad:#ff8995;--shadow:none}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;line-height:1.7}main{max-width:1120px;margin:auto;padding:44px 22px 80px}.eyebrow{color:var(--muted);font-size:12px;letter-spacing:.15em}h1{font-size:clamp(34px,7vw,72px);line-height:1.03;margin:14px 0 20px}h2{font-size:26px;margin:0 0 18px}h3{font-size:17px;margin:0 0 7px}p{margin:0}.lead{max-width:760px;font-size:18px;color:var(--muted)}section{margin-top:58px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:var(--shadow)}.card strong{color:var(--blue)}.before-after{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px}.arrow{color:var(--blue);font-size:28px}.tag{display:inline-flex;align-items:center;min-height:26px;padding:2px 10px;border-radius:99px;background:var(--blue2);font-size:12px;font-weight:650;margin-bottom:10px}.test{display:grid;grid-template-columns:70px 1fr 260px;gap:20px;padding:22px 0;border-top:1px solid var(--line)}.test:first-of-type{border-top:0}.num{font-size:34px;line-height:1;color:var(--blue);font-weight:760}.prompt{margin-top:12px;background:var(--blue2);border-radius:15px;padding:14px 16px;white-space:pre-wrap}.checks{margin:0;padding-left:19px;color:var(--muted)}.checks li+li{margin-top:5px}.pass{color:var(--good)}.fail{color:var(--bad)}.flow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.step{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 13px;font-size:13px}.flow i{font-style:normal;color:var(--blue)}table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:18px;overflow:hidden}th,td{text-align:left;padding:13px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted)}tr:last-child td{border-bottom:0}.note{border-left:4px solid var(--blue);padding:12px 16px;background:var(--blue2);border-radius:0 14px 14px 0}.small{font-size:13px;color:var(--muted)}@media(max-width:820px){.grid{grid-template-columns:1fr}.before-after{grid-template-columns:1fr}.arrow{transform:rotate(90deg);justify-self:center}.test{grid-template-columns:56px 1fr}.test>div:last-child{grid-column:2}}@media(max-width:520px){main{padding:28px 16px 60px}.test{grid-template-columns:1fr}.test>div:last-child{grid-column:auto}.num{font-size:26px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · PRACTICAL TEST CASES · v22 · 2026-09-05</div>
+  <h1>眺める試験ではなく、<br>生活とアプリを動かす試験。</h1>
+  <p class="lead">会話品質だけではなく、即時記憶、複数トーク、バックグラウンド復帰、許可、自己改修、Aether連携を、実際に役立つ依頼で一巡させる。</p>
+
+  <section>
+    <h2>今回のUI修正</h2>
+    <div class="before-after">
+      <article class="card"><span class="tag">BEFORE</span><h3>対話モード</h3><p>縦長画像がカードとして置かれ、右下の小さな顔アイコンが重複。会話の相手というより画像ビューアに見える。</p></article>
+      <div class="arrow">→</div>
+      <article class="card"><span class="tag">AFTER</span><h3>Presence stage</h3><p>画像の枠を外し、背景光・ごく小さな呼吸・現在の感情・直前のユーザー発言・返答を一つの舞台に統合。右下の顔アイコンは廃止。</p></article>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <article class="card"><strong>返答を圧縮</strong><h3>44 → 36pt</h3><p>表情アイコンを小さくし、名前・感情・時刻を一列へ。発言同士の間隔と本文行間も縮小する。</p></article>
+      <article class="card"><strong>作業表示を分担</strong><h3>進行中は上部</h3><p>通常の実行中タスクは上部の作業アイコンだけ。入力欄上のタイルは、許可待ち・完了・失敗など反応が必要な時だけ出す。</p></article>
+      <article class="card"><strong>コピーを維持</strong><h3>見える操作</h3><p>スクロール／対話の両モードでコピー可能。履歴側は長押しメニューからも使える。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>最初に実施する5本</h2>
+    <div class="test">
+      <div class="num">01</div><div><span class="tag">会話・表情</span><h3>短い共感と、長い説明</h3><div class="prompt">今日は集中できなくて自己嫌悪気味。解決策を並べる前に、状況を整理する質問を一つだけして。</div><div class="prompt">次に、集中を戻す方法を理由つきで5つ、少し詳しく教えて。</div></div>
+      <div><ul class="checks"><li>返答の余白が過大でない</li><li>各発言の表情が固定保存される</li><li>コピーできる</li><li>対話モードで直前の質問が分かる</li></ul></div>
+    </div>
+    <div class="test">
+      <div class="num">02</div><div><span class="tag">即時記憶</span><h3>好みを覚え、会話で訂正する</h3><div class="prompt">僕は寿司が好き。特に光り物が好きで、甘い玉子はあまり選ばない。覚えておいて。</div><div class="prompt">訂正。玉子が嫌いなわけではなく、寿司屋では優先度が低いだけ。</div></div>
+      <div><ul class="checks"><li>1発言目の直後に知識へ反映</li><li>カテゴリが趣味嗜好</li><li>訂正が追記ではなく更新になる</li><li>根拠と更新日時を確認できる</li></ul></div>
+    </div>
+    <div class="test">
+      <div class="num">03</div><div><span class="tag">複数トーク</span><h3>文脈を混ぜない</h3><div class="prompt">トークA：ShannonのUI改善だけを相談する。<br>トークB：今月行きたい旅行先だけを相談する。</div></div>
+      <div><ul class="checks"><li>一覧に最終会話時刻が出る</li><li>再起動後も両方残る</li><li>AのUI案をBの旅行条件として扱わない</li><li>タイトルを変更できる</li></ul></div>
+    </div>
+    <div class="test">
+      <div class="num">04</div><div><span class="tag">自己改修</span><h3>小さいが本当に役立つ変更</h3><div class="prompt">設定画面の一番下に、この端末に入っているShannonのバージョン番号とビルド番号を小さく表示して。会話履歴、DB、接続設定は変更しないで。自動テストを追加し、TestFlight配信の直前で止めて結果を報告して。</div></div>
+      <div><ul class="checks"><li>勝手に開始せず「始める」が出る</li><li>別アプリへ移動して3分後に戻っても継続</li><li>状態を聞くと現在工程を答える</li><li>配信前の許可UIが復元できる</li><li>変更範囲とテスト結果を説明する</li></ul></div>
+    </div>
+    <div class="test">
+      <div class="num">05</div><div><span class="tag">Aether・目的</span><h3>メモを次の行動へ変える</h3><div class="prompt">Aetherの直近7日分から、Shannonについて考えていたメモだけを読んで。繰り返し出ている課題を3つにまとめ、今週ひとつだけ試すなら何か提案して。Aetherの元メモは書き換えず、必要なら提案として送って。</div></div>
+      <div><ul class="checks"><li>Aetherにない内容を読んだふりしない</li><li>取得範囲を直近7日に限定</li><li>元メモを直接変更しない</li><li>提案の根拠を示せる</li></ul></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>自己改修テストの観察順</h2>
+    <div class="flow"><span class="step">会話で依頼</span><i>→</i><span class="step">作業候補</span><i>→</i><span class="step">開始</span><i>→</i><span class="step">別アプリへ</span><i>→</i><span class="step">復帰</span><i>→</i><span class="step">許可</span><i>→</i><span class="step">結果確認</span></div>
+    <div class="note" style="margin-top:18px"><b>合格条件：</b>作業の正本がチャット文ではなくタスク状態として残り、画面を閉じても同じ作業へ戻れること。通常の実行中は入力欄を塞がず、判断が必要になった時だけ下部に通知が現れること。</div>
+  </section>
+
+  <section>
+    <h2>記録する項目</h2>
+    <table><thead><tr><th>項目</th><th class="pass">合格</th><th class="fail">不合格の例</th></tr></thead><tbody>
+      <tr><td>結果</td><td>期待した行動が完了</td><td>返答だけして実処理がない</td></tr>
+      <tr><td>継続性</td><td>再起動・画面移動後も復元</td><td>何をしていたか分からない</td></tr>
+      <tr><td>境界</td><td>指定外のDB・履歴を保存</td><td>履歴消失、無断配信、無断編集</td></tr>
+      <tr><td>UI</td><td>必要な判断だけ目立つ</td><td>進行中タイルが常時入力を圧迫</td></tr>
+      <tr><td>説明</td><td>結果・根拠・残課題が明確</td><td>内部ログだけ、成功を推測で断定</td></tr>
+    </tbody></table>
+    <p class="small" style="margin-top:12px">各ケースは別々に実行する。問題が出たら、画面名・操作・表示された文言・発生時刻を残すと再現しやすい。</p>
+  </section>
+</main></body></html>

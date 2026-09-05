@@ -53,7 +53,9 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Settings opens independently from the gear button instead of behaving like a third content page.
 - Talk supports multiple threads, a sliding thread list, scroll mode, and character-focused dialogue mode.
 - The thread list has a visible button. A left-edge swipe is retained only as a secondary shortcut on Talk.
-- Assistant messages store the expression used at send time and place that avatar in a compact message header so the reply body can use the full content width.
+- Assistant messages store the expression used at send time and place a 36pt avatar, name, emotion, time, and copy action in one compact header so the reply body can use the full content width.
+- Dialogue mode is a presence stage rather than a framed portrait: ambient depth, a subtle reduced-motion-aware breathing treatment, the current emotion, the latest user utterance, and Shannon's reply share one scene. The redundant corner avatar is not shown.
+- Running agent work lives in the common header task menu and beside its source message. The composer-area task capsule is reserved for unacknowledged approval, completion, failure, or cancellation states that need attention.
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.

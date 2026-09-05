@@ -24,6 +24,7 @@ public struct ShannonConversationView: View {
     @State private var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State private var dialogueIsExpanded = false
     @State private var dialogueDidCopy = false
+    @State private var dialoguePresenceIsBreathing = false
     @State private var selectedAgentTaskID: UUID?
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @FocusState private var composerIsFocused: Bool
@@ -239,7 +240,7 @@ public struct ShannonConversationView: View {
     private func messageList(_ palette: M3Palette) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: M3Spacing.large) {
+                LazyVStack(spacing: M3Spacing.medium) {
                     if model.isLoadingHistory {
                         ProgressView("これまでの会話を思い出している…")
                             .tint(palette.primary)
@@ -541,93 +542,132 @@ public struct ShannonConversationView: View {
 
     private func dialogueStage(_ palette: M3Palette) -> some View {
         GeometryReader { geometry in
-            let keyboardScale: CGFloat = composerIsFocused ? 0.78 : 1
-            let portraitWidth = min(geometry.size.width * 0.92, 390) * keyboardScale
+            let keyboardScale: CGFloat = composerIsFocused ? 0.84 : 1
+            let portraitWidth = min(geometry.size.width * 1.04, 430) * keyboardScale
 
             ZStack(alignment: .top) {
                 LinearGradient(
-                    colors: [palette.surface, palette.primaryContainer.opacity(0.34), palette.surface],
+                    colors: [
+                        palette.surface,
+                        palette.primaryContainer.opacity(colorScheme == .dark ? 0.26 : 0.42),
+                        palette.surface
+                    ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
 
+                Circle()
+                    .fill(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
+                    .frame(width: geometry.size.width * 1.28, height: geometry.size.width * 1.28)
+                    .blur(radius: 42)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.50)
+
                 ShannonDialogueStagePortraitView()
                     .frame(width: portraitWidth)
-                    .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-                    .overlay(alignment: .bottomTrailing) {
-                        ShannonAvatarView(expression: model.currentExpression, size: 58)
-                            .padding(M3Spacing.medium)
-                            .accessibilityLabel("いまの表情：\(model.currentExpression.japaneseName)")
-                    }
-                    .shadow(color: palette.primary.opacity(0.10), radius: 24, y: 12)
-                .position(
-                    x: geometry.size.width / 2,
-                    y: geometry.size.height * (composerIsFocused ? 0.55 : 0.60)
-                )
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: composerIsFocused)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.20), value: model.currentExpression)
+                    .scaleEffect(dialoguePresenceIsBreathing && !reduceMotion ? 1.008 : 1)
+                    .shadow(color: palette.primary.opacity(0.10), radius: 28, y: 10)
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: geometry.size.height * (composerIsFocused ? 0.59 : 0.62)
+                    )
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: composerIsFocused)
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 3.2).repeatForever(autoreverses: true),
+                        value: dialoguePresenceIsBreathing
+                    )
 
-                if model.isSending {
-                    ShannonDialogueBubble(palette: palette, isExpanded: false) {
-                        ShannonThinkingDots()
+                VStack(spacing: M3Spacing.small) {
+                    HStack(spacing: 6) {
+                        Text("シャノン")
+                            .font(.callout.weight(.semibold))
+                        Text("·")
+                        Text(model.currentExpression.japaneseName)
                     }
-                    .padding(.top, ShannonWorkspaceChrome.contentTopInset + 54)
-                    .transition(.opacity)
-                } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
-                    ShannonDialogueBubble(palette: palette, isExpanded: dialogueIsExpanded) {
-                        VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
-                            ScrollView(dialogueIsExpanded ? .vertical : []) {
-                                Text(reply.text)
-                                    .font(.body)
-                                    .lineSpacing(3)
-                                    .foregroundStyle(palette.onSurface)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .scrollIndicators(.hidden)
-                            .frame(maxHeight: dialogueIsExpanded ? min(250, geometry.size.height * 0.34) : 112)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .padding(.horizontal, M3Spacing.medium)
+                    .frame(minHeight: 32)
+                    .background(.thinMaterial, in: Capsule())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("シャノン、\(model.currentExpression.japaneseName)")
 
-                            HStack(spacing: M3Spacing.extraSmall) {
-                                if reply.text.count > 120 {
-                                    Button {
-                                        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
-                                            dialogueIsExpanded.toggle()
+                    if let userMessage = latestUserMessage {
+                        Text("あなた：\(userMessage.text)")
+                            .font(.caption)
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .lineLimit(1)
+                            .padding(.horizontal, M3Spacing.medium)
+                            .frame(maxWidth: 330, minHeight: 30, alignment: .trailing)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.horizontal, M3Spacing.large)
+                    }
+
+                    if model.isSending {
+                        ShannonDialogueBubble(palette: palette, isExpanded: false) {
+                            ShannonThinkingDots()
+                        }
+                        .transition(.opacity)
+                    } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
+                        ShannonDialogueBubble(palette: palette, isExpanded: dialogueIsExpanded) {
+                            VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
+                                ScrollView(dialogueIsExpanded ? .vertical : []) {
+                                    Text(reply.text)
+                                        .font(.body)
+                                        .lineSpacing(2)
+                                        .foregroundStyle(palette.onSurface)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .scrollIndicators(.hidden)
+                                .frame(maxHeight: dialogueIsExpanded ? min(250, geometry.size.height * 0.34) : 104)
+
+                                HStack(spacing: M3Spacing.extraSmall) {
+                                    if reply.text.count > 120 {
+                                        Button {
+                                            withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
+                                                dialogueIsExpanded.toggle()
+                                            }
+                                        } label: {
+                                            Label(
+                                                dialogueIsExpanded ? "閉じる" : "続きを読む",
+                                                systemImage: dialogueIsExpanded ? "chevron.up" : "chevron.down"
+                                            )
+                                            .font(.caption2.weight(.medium))
                                         }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(palette.onSurfaceVariant)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Button {
+                                        copyDialogueReply(reply.text)
                                     } label: {
                                         Label(
-                                            dialogueIsExpanded ? "閉じる" : "続きを読む",
-                                            systemImage: dialogueIsExpanded ? "chevron.up" : "chevron.down"
+                                            dialogueDidCopy ? "コピー済み" : "コピー",
+                                            systemImage: dialogueDidCopy ? "checkmark" : "doc.on.doc"
                                         )
-                                        .font(.caption2.weight(.medium))
+                                        .font(.caption2.weight(.semibold))
+                                        .frame(minHeight: 30)
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(palette.onSurfaceVariant)
+                                    .accessibilityLabel(dialogueDidCopy ? "コピーしました" : "シャノンの回答をコピー")
                                 }
-                                Spacer(minLength: 0)
-                                Button {
-                                    copyDialogueReply(reply.text)
-                                } label: {
-                                    Label(
-                                        dialogueDidCopy ? "コピー済み" : "コピー",
-                                        systemImage: dialogueDidCopy ? "checkmark" : "doc.on.doc"
-                                    )
-                                    .font(.caption2.weight(.semibold))
-                                    .frame(minHeight: 32)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(palette.onSurfaceVariant)
-                                .accessibilityLabel(dialogueDidCopy ? "コピーしました" : "シャノンの回答をコピー")
                             }
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .padding(.top, ShannonWorkspaceChrome.contentTopInset + 54)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+
+                    Spacer(minLength: 0)
                 }
+                .padding(.top, ShannonWorkspaceChrome.contentTopInset + 48)
+                .padding(.bottom, 118)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture { composerIsFocused = false }
+        .onAppear { dialoguePresenceIsBreathing = true }
+        .onDisappear { dialoguePresenceIsBreathing = false }
         .onChange(of: model.messages.count) { dialogueIsExpanded = false }
     }
 
@@ -668,6 +708,10 @@ public struct ShannonConversationView: View {
 
     private var latestShannonMessageID: UUID? {
         model.messages.last(where: { $0.role == .shannon })?.id
+    }
+
+    private var latestUserMessage: ConversationMessage? {
+        model.messages.last(where: { $0.role == .user })
     }
 
     private var agentTaskRoomIsPresented: Binding<Bool> {
@@ -1492,43 +1536,41 @@ private struct ShannonMessageRow: View {
     }
 
     private func shannonReply(_ palette: M3Palette) -> some View {
-        VStack(alignment: .leading, spacing: M3Spacing.small) {
-            HStack(alignment: .center, spacing: M3Spacing.small) {
+        VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
+            HStack(alignment: .center, spacing: M3Spacing.extraSmall) {
                 ShannonAvatarView(
                     expression: message.emotionSnapshot?.expression ?? .neutral,
-                    size: 44
+                    size: 36
                 )
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("シャノン")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(palette.onSurface)
+                Text("シャノン")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(palette.onSurface)
 
-                    HStack(spacing: 5) {
-                        if let expression = message.emotionSnapshot?.expression {
-                            Text(expression.japaneseName)
-                        }
-                        Text(message.sentAt.formatted(date: .omitted, time: .shortened))
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                if let expression = message.emotionSnapshot?.expression {
+                    Text("· \(expression.japaneseName)")
                 }
+                Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
+
                 Button(action: copyMessage) {
                     Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                         .font(.caption.weight(.semibold))
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .frame(width: 34, height: 34)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(palette.onSurfaceVariant)
                 .accessibilityLabel(didCopy ? "コピーしました" : "シャノンの回答をコピー")
             }
+            .font(.caption2)
+            .foregroundStyle(palette.onSurfaceVariant)
 
             messageText
                 .font(.body)
-                .lineSpacing(4)
+                .lineSpacing(2)
                 .textSelection(.enabled)
                 .foregroundStyle(palette.onSurface)
                 .tint(palette.primary)
