@@ -22,4 +22,11 @@ final class ShannonVoiceConversationTests: XCTestCase {
             XCTAssertFalse(phase.symbolName.isEmpty)
         }
     }
+
+    func testAudioFormatPolicyRejectsFormatsThatCanCrashAudioTapInstallation() {
+        XCTAssertFalse(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: 0, channelCount: 1))
+        XCTAssertFalse(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: 48_000, channelCount: 0))
+        XCTAssertFalse(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: .nan, channelCount: 1))
+        XCTAssertTrue(ShannonVoiceAudioFormatPolicy.isUsable(sampleRate: 48_000, channelCount: 1))
+    }
 }

@@ -54,6 +54,12 @@ public enum ShannonVoicePrimaryAction: Equatable, Sendable {
     }
 }
 
+public enum ShannonVoiceAudioFormatPolicy {
+    public static func isUsable(sampleRate: Double, channelCount: UInt32) -> Bool {
+        sampleRate.isFinite && sampleRate > 0 && channelCount > 0
+    }
+}
+
 #if os(iOS)
 @preconcurrency import AVFoundation
 @preconcurrency import Speech
@@ -65,7 +71,9 @@ public final class ShannonVoiceConversationModel: NSObject {
     public private(set) var transcript = ""
     public private(set) var errorMessage: String?
 
-    private let audioEngine = AVAudioEngine()
+    // AVAudioEngine can retain a stale input graph after a route change or a
+    // previous capture. Build a fresh engine for each user-initiated session.
+    private var audioEngine: AVAudioEngine?
     private let synthesizer = AVSpeechSynthesizer()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -162,20 +170,23 @@ public final class ShannonVoiceConversationModel: NSObject {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
         try session.setActive(true, options: .notifyOthersOnDeactivation)
+        guard session.isInputAvailable else { throw VoiceError.inputUnavailable }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
         recognitionRequest = request
 
-        let input = audioEngine.inputNode
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
+        guard ShannonVoiceAudioFormatPolicy.isUsable(
+            sampleRate: format.sampleRate,
+            channelCount: format.channelCount
+        ) else {
+            throw VoiceError.invalidInputFormat
         }
-        tapIsInstalled = true
-        audioEngine.prepare()
-        try audioEngine.start()
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             let text = result?.bestTranscription.formattedString
@@ -198,12 +209,21 @@ public final class ShannonVoiceConversationModel: NSObject {
                 }
             }
         }
+
+        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak request] buffer, _ in
+            request?.append(buffer)
+        }
+        tapIsInstalled = true
+        engine.prepare()
+        try engine.start()
     }
 
     private func stopCapture() {
-        if audioEngine.isRunning { audioEngine.stop() }
-        if tapIsInstalled {
-            audioEngine.inputNode.removeTap(onBus: 0)
+        let engine = audioEngine
+        audioEngine = nil
+        if engine?.isRunning == true { engine?.stop() }
+        if tapIsInstalled, let engine {
+            engine.inputNode.removeTap(onBus: 0)
             tapIsInstalled = false
         }
         recognitionRequest?.endAudio()
@@ -219,7 +239,11 @@ public final class ShannonVoiceConversationModel: NSObject {
         }
     }
 
-    private enum VoiceError: Error { case recognizerUnavailable }
+    private enum VoiceError: Error {
+        case recognizerUnavailable
+        case inputUnavailable
+        case invalidInputFormat
+    }
 }
 
 extension ShannonVoiceConversationModel: AVSpeechSynthesizerDelegate {
