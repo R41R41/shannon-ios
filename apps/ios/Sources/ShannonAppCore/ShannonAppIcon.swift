@@ -35,6 +35,10 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    public var previewAssetName: String {
+        "shannon-app-icon-preview-\(rawValue)"
+    }
+
     public var japaneseName: String {
         switch self {
         case .calm: "穏やか"
@@ -90,6 +94,14 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         case .jealous, .wry, .exasperated, .annoyed:
             .exasperated
         }
+    }
+}
+
+enum ShannonAppIconAssets {
+    static let primaryPreviewAssetName = "shannon-app-icon-preview-primary"
+
+    static func url(for assetName: String) -> URL? {
+        Bundle.module.url(forResource: assetName, withExtension: "png")
     }
 }
 
@@ -230,7 +242,11 @@ public final class ShannonAppIconModel {
     }
 
     public var activeTitle: String {
-        activeChoice?.japaneseName ?? "通常"
+        activeChoice?.japaneseName ?? "固定"
+    }
+
+    var activePreviewAssetName: String {
+        activeChoice?.previewAssetName ?? ShannonAppIconAssets.primaryPreviewAssetName
     }
 
     public func activate(

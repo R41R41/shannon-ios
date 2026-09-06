@@ -2,6 +2,25 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonAppIconTests: XCTestCase {
+    func testEverySelectableIconHasABundledVisualPreview() {
+        XCTAssertNotNil(
+            ShannonAppIconAssets.url(for: ShannonAppIconAssets.primaryPreviewAssetName)
+        )
+
+        for choice in ShannonAppIconChoice.allCases {
+            XCTAssertNotNil(
+                ShannonAppIconAssets.url(for: choice.previewAssetName),
+                "Missing preview for \(choice.rawValue)"
+            )
+        }
+    }
+
+    func testPreviewAssetNamesAreUnique() {
+        let names = ShannonAppIconChoice.allCases.map(\.previewAssetName)
+        XCTAssertEqual(Set(names).count, names.count)
+        XCTAssertFalse(names.contains(ShannonAppIconAssets.primaryPreviewAssetName))
+    }
+
     func testEveryExpressionMapsToAnEmotionIcon() {
         let mapped = ShannonExpressionDTO.allCases.map(ShannonAppIconChoice.matching)
 
