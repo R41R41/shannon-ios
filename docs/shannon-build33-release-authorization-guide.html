@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 33 配信許可ガイド</title>
+  <style>
+    :root { color-scheme: light dark; --blue:#65c9ed; --ink:#142a34; --muted:#607681; --bg:#f1faff; --card:#fff; --line:#cfe8f2; --ok:#147653; --warn:#9a6300; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; color:var(--ink); background:linear-gradient(150deg,var(--bg),#fff 58%); line-height:1.7; }
+    main { width:min(900px,calc(100% - 32px)); margin:auto; padding:44px 0 72px; }
+    h1 { margin:8px 0 12px; font-size:clamp(28px,5vw,46px); line-height:1.18; letter-spacing:-.035em; }
+    h2 { margin:0 0 12px; font-size:21px; }
+    p { margin:8px 0; }
+    .eyebrow { color:#087ba7; font-size:12px; font-weight:750; letter-spacing:.1em; }
+    .lead { color:var(--muted); font-size:17px; max-width:720px; }
+    .card { margin-top:20px; padding:23px; background:color-mix(in srgb,var(--card) 95%,transparent); border:1px solid var(--line); border-radius:22px; box-shadow:0 12px 34px rgba(36,105,130,.08); }
+    .ok { border-left:5px solid var(--ok); }
+    .warn { border-left:5px solid var(--warn); }
+    ol,ul { padding-left:22px; }
+    code { color:#11617e; background:#e7f6fb; padding:2px 6px; border-radius:6px; }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#e8f7fb; --muted:#afc6cf; --bg:#09171d; --card:#132831; --line:#2a4a56; }
+      body { background:linear-gradient(150deg,#09171d,#102832 58%); }
+      code { color:#a9e8ff; background:#183945; }
+    }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · BUILD 33 · RELEASE AUTHORIZATION</div>
+  <h1>サーバー文字起こし版を<br>AzureとTestFlightへ届ける</h1>
+  <p class="lead">ローカル実装と全回帰は完了済み。ここから先だけが、外部環境を変更する配信作業です。</p>
+
+  <section class="card ok">
+    <h2>目的</h2>
+    <p>Build 32で落ちていた端末内リアルタイム音声認識を使わず、iPhoneはM4A録音、Azureは<code>gpt-transcribe</code>文字起こしを担当するBuild 33を実機で確認できるようにします。設定画面のアイコンプレビュー修正も同時に含みます。</p>
+  </section>
+
+  <section class="card">
+    <h2>許可後に行うこと</h2>
+    <ol>
+      <li>Azure上の現行DBと配備対象をバックアップする。</li>
+      <li>検証済みAPI差分を転送し、依存関係・環境変数を確認してShannon APIを再起動する。</li>
+      <li>ヘルスチェックと既存会話APIを確認し、接続・履歴を壊していないことを確かめる。</li>
+      <li>監査済みコミットを非公開GitHubのShannon正本へpushする。</li>
+      <li>Release RunnerでXcode Cloud、TestFlight処理、<code>Shannon Internal</code>への追加まで監視する。</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>あなたが行うこと</h2>
+    <ol>
+      <li>このタスクで「Build 33のAzure転送・DBバックアップ・再起動・GitHub push・TestFlight配信を許可します」と返信する。</li>
+      <li>配信完了後、iPhoneのTestFlightからShannonを更新する。Macへの有線接続は不要。</li>
+      <li>設定のアイコン一覧、音声ボタン、10秒ほどの日本語、返答、既存履歴の順に確認する。</li>
+    </ol>
+  </section>
+
+  <section class="card ok">
+    <h2>成功の見え方</h2>
+    <ul>
+      <li>アイコン選択画面に各アイコンの実画像が表示される。</li>
+      <li>音声ボタンでクラッシュせず、「聞いている…」から「聞き取っています…」へ進む。</li>
+      <li>話した日本語が通常の会話として送られ、シャノンが返答する。</li>
+      <li>既存の接続、トーク一覧、会話履歴、メモリーが維持される。</li>
+    </ul>
+  </section>
+
+  <section class="card warn">
+    <h2>失敗した場合の安全な戻し方</h2>
+    <p>Azureのヘルスチェックまたは既存会話が失敗した時点でTestFlight配信を止め、直前のAPIへ戻してバックアップDBを保持します。Xcode CloudやTestFlightが失敗しても、現在インストール済みのBuild 32はそのまま利用できます。実機Smokeが通るまではBuild 33を完了扱いにしません。</p>
+  </section>
+</main></body></html>
