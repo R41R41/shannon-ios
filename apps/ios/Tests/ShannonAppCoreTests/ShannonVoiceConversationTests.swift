@@ -41,6 +41,24 @@ final class ShannonVoiceConversationTests: XCTestCase {
         )
     }
 
+    func testRealtimeOfferDiagnosticsDescribeStructureWithoutKeepingSDP() {
+        let sdp = """
+        v=0\r
+        m=audio 9 UDP/TLS/RTP/SAVPF 111\r
+        a=candidate:1 1 UDP 1 192.0.2.1 5000 typ host\r
+        a=candidate:2 1 UDP 1 192.0.2.2 5001 typ host\r
+        m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r
+        """
+
+        let diagnostics = ShannonRealtimeOfferDiagnostics(sdp: sdp)
+
+        XCTAssertEqual(diagnostics.audioSectionCount, 1)
+        XCTAssertEqual(diagnostics.dataSectionCount, 1)
+        XCTAssertEqual(diagnostics.candidateCount, 2)
+        XCTAssertEqual(diagnostics.metadata["ice_gathering"], "complete")
+        XCTAssertNil(diagnostics.metadata["sdp"])
+    }
+
     func testPrimaryActionFollowsHalfDuplexVoiceState() {
         XCTAssertEqual(ShannonVoicePrimaryAction.action(for: .idle), .start)
         XCTAssertEqual(ShannonVoicePrimaryAction.action(for: .requestingPermission), .none)

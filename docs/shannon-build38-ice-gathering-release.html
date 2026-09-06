@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 38 — Realtime音声の再確認</title>
+  <style>
+    :root { color-scheme: light dark; --blue:#65c9ed; --ink:#173142; --paper:#f7fbfd; --card:#fff; --muted:#587180; --ok:#177a55; --warn:#9a5d00; }
+    @media (prefers-color-scheme:dark) { :root { --ink:#e9f7fc; --paper:#0b161c; --card:#12232c; --muted:#a8c0cb; --ok:#72d7ad; --warn:#ffc56d; } }
+    * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; }
+    main { width:min(860px,calc(100% - 32px)); margin:0 auto; padding:54px 0 80px; }
+    .eyebrow { color:#258bb2; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }
+    h1 { font-size:clamp(30px,6vw,52px); line-height:1.12; margin:.3em 0; letter-spacing:-.035em; }
+    h2 { margin:0 0 10px; font-size:21px; } p { margin:8px 0; }
+    .lead { color:var(--muted); font-size:18px; max-width:720px; }
+    .flow { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:30px 0; }
+    .card { background:var(--card); border:1px solid color-mix(in srgb,var(--blue) 28%,transparent); border-radius:20px; padding:20px; box-shadow:0 10px 34px rgba(31,111,143,.08); }
+    .number { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--blue); color:#063044; font-weight:800; margin-bottom:12px; }
+    .ok { color:var(--ok); font-weight:700; } .warn { color:var(--warn); }
+    code { background:color-mix(in srgb,var(--blue) 15%,transparent); padding:.15em .4em; border-radius:7px; }
+    .approval { border:2px solid var(--blue); margin-top:24px; }
+    @media (max-width:680px) { .flow { grid-template-columns:1fr; } main { padding-top:30px; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon · TestFlight Build 38</div>
+  <h1>未完成の音声接続情報を<br>送らないようにする</h1>
+  <p class="lead">Build 37は、iPhoneが接続候補を集めている途中のSDPをOpenAIへ送り、<code>invalid_offer</code>になっていました。Build 38では候補収集の完了を待ってから送信します。</p>
+
+  <div class="flow">
+    <section class="card"><div class="number">1</div><h2>今回の変更</h2><p>ICE候補を一度だけ収集し、完了まで最大10秒待ってからAzureへ送ります。</p></section>
+    <section class="card"><div class="number">2</div><h2>安全な診断</h2><p>SDP本文は保存せず、音声・データ欄・候補の個数だけを診断ログへ残します。</p></section>
+    <section class="card"><div class="number">3</div><h2>変えないもの</h2><p>Azure API、会話DB、認証、既存トーク、App Iconは変更しません。</p></section>
+  </div>
+
+  <section class="card approval">
+    <h2>こちらで必要な操作</h2>
+    <p>GitHubの非公開リポジトリへ検証済みcommitを送り、既存のXcode CloudとShannon Internalを使ってBuild 38を配信します。</p>
+    <p><strong>許可する場合：</strong>「Build 38のGitHub pushとTestFlight配信を許可します」と返信してください。</p>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <h2>配信後、あなたにお願いする確認</h2>
+    <ol>
+      <li>TestFlightでShannonを<strong>削除せず上書き更新</strong>する。</li>
+      <li>既存トークと接続が残っていることを確認する。</li>
+      <li>音声ボタンを押し、接続後に短く話す。</li>
+      <li>自分の発話字幕、シャノンの字幕と音声が出ることを確認する。</li>
+    </ol>
+    <p class="ok">成功：接続が成立し、話した内容がリアルタイム表示され、シャノンが音声で返答します。</p>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <h2>うまくいかなかった場合</h2>
+    <p class="warn">現在のBuild 37はそのまま残ります。会話DBや認証は変更しないため、再インストールは不要です。</p>
+    <p>設定 → 音声診断 → コピーを選び、ログを共有してください。新しいログには <code>audio_sections</code>、<code>data_sections</code>、<code>candidates</code> が入り、次の原因を一度で判定できます。</p>
+  </section>
+</main></body>
+</html>

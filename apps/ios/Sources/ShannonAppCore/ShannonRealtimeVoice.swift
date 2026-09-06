@@ -104,6 +104,31 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
     }
 }
 
+public struct ShannonRealtimeOfferDiagnostics: Equatable, Sendable {
+    public let byteCount: Int
+    public let audioSectionCount: Int
+    public let dataSectionCount: Int
+    public let candidateCount: Int
+
+    public init(sdp: String) {
+        byteCount = sdp.utf8.count
+        let lines = sdp.split(whereSeparator: \.isNewline)
+        audioSectionCount = lines.count { $0.hasPrefix("m=audio ") }
+        dataSectionCount = lines.count { $0.hasPrefix("m=application ") }
+        candidateCount = lines.count { $0.hasPrefix("a=candidate:") }
+    }
+
+    public var metadata: [String: String] {
+        [
+            "bytes": String(byteCount),
+            "audio_sections": String(audioSectionCount),
+            "data_sections": String(dataSectionCount),
+            "candidates": String(candidateCount),
+            "ice_gathering": "complete",
+        ]
+    }
+}
+
 #if os(iOS) && canImport(WebRTC)
 @preconcurrency import AVFoundation
 @preconcurrency import WebRTC
@@ -160,7 +185,10 @@ public final class ShannonRealtimeVoiceSessionModel {
         do {
             diagnostics.record("realtime.offer.before")
             let offer = try await transport.createOffer()
-            diagnostics.record("realtime.offer.after")
+            diagnostics.record(
+                "realtime.offer.after",
+                metadata: ShannonRealtimeOfferDiagnostics(sdp: offer).metadata
+            )
             let call = try await createCall(offer)
             diagnostics.record("realtime.answer.received", metadata: ["model": call.model ?? "unknown"])
             try await transport.acceptAnswer(call.answerSDP)
@@ -285,8 +313,15 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     private var peerConnection: RTCPeerConnection?
     private var dataChannel: RTCDataChannel?
     private var audioTrack: RTCAudioTrack?
+    private let iceGatheringEvents: AsyncStream<Void>
+    private let iceGatheringEventContinuation: AsyncStream<Void>.Continuation
 
     override init() {
+        let iceGatheringEventPair = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1)
+        )
+        iceGatheringEvents = iceGatheringEventPair.stream
+        iceGatheringEventContinuation = iceGatheringEventPair.continuation
         RTCInitializeSSL()
         factory = RTCPeerConnectionFactory()
         super.init()
@@ -296,7 +331,9 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         try configureAudioSession()
         let configuration = RTCConfiguration()
         configuration.sdpSemantics = .unifiedPlan
-        configuration.continualGatheringPolicy = .gatherContinually
+        // OpenAI's one-shot SDP exchange cannot receive candidates discovered
+        // after the offer is posted, so gather once and wait for completion.
+        configuration.continualGatheringPolicy = .gatherOnce
         let constraints = RTCMediaConstraints(
             mandatoryConstraints: nil,
             optionalConstraints: ["DtlsSrtpKeyAgreement": "true"]
@@ -336,6 +373,7 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         )
         let offer = try await createOffer(on: peer, constraints: offerConstraints)
         try await setLocalDescription(offer, on: peer)
+        try await waitForICEGathering(on: peer)
         return peer.localDescription?.sdp ?? offer.sdp
     }
 
@@ -352,6 +390,7 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     }
 
     func close() {
+        iceGatheringEventContinuation.finish()
         audioTrack?.isEnabled = false
         dataChannel?.delegate = nil
         dataChannel?.close()
@@ -407,10 +446,29 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         }
     }
 
+    private func waitForICEGathering(on peer: RTCPeerConnection) async throws {
+        guard peer.iceGatheringState != .complete else { return }
+        let events = iceGatheringEvents
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await _ in events { return }
+                throw TransportError.iceGatheringCancelled
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(10))
+                throw TransportError.iceGatheringTimedOut
+            }
+            _ = try await group.next()
+            group.cancelAll()
+        }
+    }
+
     private enum TransportError: Error {
         case peerCreationFailed
         case dataChannelCreationFailed
         case offerFailed
+        case iceGatheringCancelled
+        case iceGatheringTimedOut
     }
 }
 
@@ -429,7 +487,11 @@ extension ShannonWebRTCVoiceTransport: RTCPeerConnectionDelegate {
         @unknown default: break
         }
     }
-    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
+        if newState == .complete {
+            iceGatheringEventContinuation.yield(())
+        }
+    }
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
