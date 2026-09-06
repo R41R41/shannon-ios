@@ -8,7 +8,8 @@ import AppKit
 
 final class ShannonAppIconTests: XCTestCase {
     func testEverySelectableIconHasABundledVisualPreview() {
-        assertPreviewCanBeDecoded(ShannonAppIconAssets.primaryPreviewAssetName)
+        assertPreviewCanBeDecoded(ShannonAppIconAssets.primaryLightPreviewAssetName)
+        assertPreviewCanBeDecoded(ShannonAppIconAssets.primaryDarkPreviewAssetName)
 
         for choice in ShannonAppIconChoice.allCases {
             assertPreviewCanBeDecoded(choice.previewAssetName)
@@ -18,7 +19,7 @@ final class ShannonAppIconTests: XCTestCase {
     func testPreviewAssetNamesAreUnique() {
         let names = ShannonAppIconChoice.allCases.map(\.previewAssetName)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertFalse(names.contains(ShannonAppIconAssets.primaryPreviewAssetName))
+        XCTAssertEqual(ShannonAppIconChoice.primary.previewAssetName, ShannonAppIconAssets.primaryLightPreviewAssetName)
     }
 
     func testEveryExpressionMapsToAnEmotionIcon() {
@@ -36,11 +37,11 @@ final class ShannonAppIconTests: XCTestCase {
         XCTAssertEqual(ShannonAppIconMode.allCases, [.automatic, .manual])
     }
 
-    func testComparisonChoicesContainTheTenProvidedIcons() {
-        XCTAssertEqual(ShannonAppIconChoice.comparisonChoices.count, 10)
-        XCTAssertTrue(Set(ShannonAppIconChoice.comparisonChoices).isDisjoint(
-            with: Set(ShannonAppIconChoice.emotionChoices)
-        ))
+    func testManualChoicesContainDefaultThenOnlyShannonExpressions() {
+        XCTAssertEqual(ShannonAppIconChoice.manualChoices.first, .primary)
+        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.dropFirst()), ShannonAppIconChoice.emotionChoices)
+        XCTAssertEqual(ShannonAppIconChoice.primary.alternateIconName, nil)
+        XCTAssertFalse(ShannonAppIconChoice.allCases.contains { $0.rawValue.contains("Compare") })
     }
 
     func testPrimaryExpressionMappingsRemainStable() {

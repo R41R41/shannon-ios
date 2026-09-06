@@ -21,6 +21,7 @@ public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
+    case primary = "__primary__"
     case calm = "ShannonIconCalm"
     case joyful = "ShannonIconJoyful"
     case curious = "ShannonIconCurious"
@@ -32,43 +33,30 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
     case bashful = "ShannonIconBashful"
     case determined = "ShannonIconDetermined"
     case sleeping = "ShannonIconSleeping"
-    case compareShannonV3 = "ShannonIconCompareShannonV3"
-    case compareAetherV4 = "ShannonIconCompareAetherV4"
-    case compareAetherV3 = "ShannonIconCompareAetherV3"
-    case compareAetherOriginal = "ShannonIconCompareAetherOriginal"
-    case compareAetherV2 = "ShannonIconCompareAetherV2"
-    case compareShannonV2 = "ShannonIconCompareShannonV2"
-    case compareShannonV3Dark = "ShannonIconCompareShannonV3Dark"
-    case compareShannonOriginal = "ShannonIconCompareShannonOriginal"
-    case compareVoyagerV3 = "ShannonIconCompareVoyagerV3"
-    case compareVoyagerOriginal = "ShannonIconCompareVoyagerOriginal"
 
     public static let emotionChoices: [Self] = [
         .calm, .joyful, .curious, .sleepy, .exasperated, .excited,
         .laughing, .tender, .bashful, .determined, .sleeping,
     ]
 
-    public static let comparisonChoices: [Self] = [
-        .compareShannonV3,
-        .compareAetherV4,
-        .compareAetherV3,
-        .compareAetherOriginal,
-        .compareAetherV2,
-        .compareShannonV2,
-        .compareShannonV3Dark,
-        .compareShannonOriginal,
-        .compareVoyagerV3,
-        .compareVoyagerOriginal,
-    ]
+    public static let manualChoices: [Self] = [.primary] + emotionChoices
 
     public var id: String { rawValue }
 
     public var previewAssetName: String {
-        "shannon-app-icon-preview-\(rawValue)"
+        switch self {
+        case .primary: ShannonAppIconAssets.primaryLightPreviewAssetName
+        default: "shannon-app-icon-preview-\(rawValue)"
+        }
+    }
+
+    public var alternateIconName: String? {
+        self == .primary ? nil : rawValue
     }
 
     public var japaneseName: String {
         switch self {
+        case .primary: "デフォルト"
         case .calm: "穏やか"
         case .joyful: "うれしい"
         case .curious: "興味津々"
@@ -80,21 +68,12 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         case .bashful: "照れ笑い"
         case .determined: "得意げ"
         case .sleeping: "眠っている"
-        case .compareShannonV3: "Shannon v3"
-        case .compareAetherV4: "Aether v4"
-        case .compareAetherV3: "Aether v3"
-        case .compareAetherOriginal: "Aether"
-        case .compareAetherV2: "Aether v2"
-        case .compareShannonV2: "Shannon v2"
-        case .compareShannonV3Dark: "Shannon v3（黒）"
-        case .compareShannonOriginal: "Shannon"
-        case .compareVoyagerV3: "Voyager v3"
-        case .compareVoyagerOriginal: "Voyager"
         }
     }
 
     public var symbolName: String {
         switch self {
+        case .primary: "app.fill"
         case .calm: "cup.and.saucer.fill"
         case .joyful: "hands.sparkles.fill"
         case .curious: "magnifyingglass"
@@ -106,12 +85,6 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         case .bashful: "hand.raised.fill"
         case .determined: "star.fill"
         case .sleeping: "moon.stars.fill"
-        case .compareShannonV3, .compareShannonV2, .compareShannonV3Dark, .compareShannonOriginal:
-            "wave.3.right"
-        case .compareAetherV4, .compareAetherV3, .compareAetherOriginal, .compareAetherV2:
-            "diamond.fill"
-        case .compareVoyagerV3, .compareVoyagerOriginal:
-            "checkmark"
         }
     }
 
@@ -142,7 +115,8 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum ShannonAppIconAssets {
-    static let primaryPreviewAssetName = "shannon-app-icon-preview-primary"
+    static let primaryLightPreviewAssetName = "shannon-app-icon-preview-primary"
+    static let primaryDarkPreviewAssetName = "shannon-app-icon-preview-primary-dark"
 
     static func url(for assetName: String) -> URL? {
         Bundle.module.url(forResource: assetName, withExtension: "png")
@@ -290,12 +264,12 @@ public final class ShannonAppIconModel {
             .flatMap(ShannonAppIconChoice.init(rawValue:))
         if storedMode == "fixed" {
             mode = .manual
-            manualChoice = .compareShannonV3
+            manualChoice = .primary
             defaults.set(ShannonAppIconMode.manual.rawValue, forKey: Keys.mode)
-            defaults.set(ShannonAppIconChoice.compareShannonV3.rawValue, forKey: Keys.manualChoice)
+            defaults.set(ShannonAppIconChoice.primary.rawValue, forKey: Keys.manualChoice)
         } else {
             mode = storedMode.flatMap(ShannonAppIconMode.init(rawValue:)) ?? .automatic
-            manualChoice = storedChoice ?? .compareShannonV3
+            manualChoice = storedChoice ?? .primary
         }
 #if canImport(UIKit)
         activeChoice = UIApplication.shared.alternateIconName
@@ -306,11 +280,7 @@ public final class ShannonAppIconModel {
     }
 
     public var activeTitle: String {
-        activeChoice?.japaneseName ?? "Shannon v3"
-    }
-
-    var activePreviewAssetName: String {
-        activeChoice?.previewAssetName ?? ShannonAppIconAssets.primaryPreviewAssetName
+        activeChoice?.japaneseName ?? ShannonAppIconChoice.primary.japaneseName
     }
 
     public func activate(
@@ -419,15 +389,17 @@ public final class ShannonAppIconModel {
             errorMessage = "この端末ではアイコンを切り替えられません。"
             return
         }
-        guard UIApplication.shared.alternateIconName != choice?.rawValue else {
-            activeChoice = choice
+        let normalizedChoice = choice == .primary ? nil : choice
+        let alternateIconName = normalizedChoice?.alternateIconName
+        guard UIApplication.shared.alternateIconName != alternateIconName else {
+            activeChoice = normalizedChoice
             return
         }
 
         isUpdating = true
         errorMessage = nil
         let failure: String? = await withCheckedContinuation { continuation in
-            UIApplication.shared.setAlternateIconName(choice?.rawValue) { error in
+            UIApplication.shared.setAlternateIconName(alternateIconName) { error in
                 continuation.resume(returning: error?.localizedDescription)
             }
         }
@@ -437,10 +409,10 @@ public final class ShannonAppIconModel {
             refresh()
             return
         }
-        activeChoice = choice
+        activeChoice = normalizedChoice
         UserDefaults.standard.set(now, forKey: Keys.lastChangedAt)
 #else
-        activeChoice = choice
+        activeChoice = choice == .primary ? nil : choice
 #endif
     }
 }

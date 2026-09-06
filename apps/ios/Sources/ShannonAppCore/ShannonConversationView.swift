@@ -56,9 +56,10 @@ public struct ShannonConversationView: View {
             ZStack(alignment: .top) {
                 workspaceContent(palette)
 
+                ShannonTopReadabilityGradient(palette: palette)
+
                 ShannonAppHeader(
                     selection: selectedPage,
-                    threadTitle: model.selectedThread?.title ?? "新しいトーク",
                     unreadInitiativeCount: model.unreadInitiativeCount,
                     openThreadDrawer: openThreadDrawer,
                     createThread: createThreadFromHeader
@@ -82,10 +83,12 @@ public struct ShannonConversationView: View {
                         close: closeThreadDrawer
                     )
                     .frame(width: drawerWidth(for: geometry.size.width))
+                    .frame(maxHeight: .infinity)
                     Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .offset(x: -drawerWidth(for: geometry.size.width) * (1 - drawerProgress))
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container, edges: .all)
                 .allowsHitTesting(drawerProgress > 0.98)
                 .accessibilityHidden(drawerProgress < 0.98)
             }
@@ -234,37 +237,42 @@ public struct ShannonConversationView: View {
                 Spacer()
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: M3Spacing.small) {
-                if let statusMessage = model.statusMessage {
-                    ShannonSnackbar(
-                        message: statusMessage,
-                        showsRetry: false,
-                        retry: {},
-                        dismiss: model.dismissStatus
-                    )
-                    .padding(.horizontal, M3Spacing.large)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                if let errorMessage = model.errorMessage {
-                    ShannonSnackbar(
-                        message: errorMessage,
-                        showsRetry: model.hasFailedMessage,
-                        retry: { Task { await model.retryLastFailed() } },
-                        dismiss: model.dismissError
-                    )
-                    .padding(.horizontal, M3Spacing.large)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                if let task = model.latestAgentTaskNotice {
-                    ShannonAgentTaskCapsule(task: task) {
-                        openAgentTask(task.id)
+        .overlay(alignment: .bottom) {
+            ZStack(alignment: .bottom) {
+                ShannonBottomReadabilityGradient(palette: palette)
+                    .ignoresSafeArea(.container, edges: .bottom)
+                    .allowsHitTesting(false)
+
+                VStack(spacing: M3Spacing.small) {
+                    if let statusMessage = model.statusMessage {
+                        ShannonSnackbar(
+                            message: statusMessage,
+                            showsRetry: false,
+                            retry: {},
+                            dismiss: model.dismissStatus
+                        )
+                        .padding(.horizontal, M3Spacing.large)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    if let errorMessage = model.errorMessage {
+                        ShannonSnackbar(
+                            message: errorMessage,
+                            showsRetry: model.hasFailedMessage,
+                            retry: { Task { await model.retryLastFailed() } },
+                            dismiss: model.dismissError
+                        )
+                        .padding(.horizontal, M3Spacing.large)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    if let task = model.latestAgentTaskNotice {
+                        ShannonAgentTaskCapsule(task: task) {
+                            openAgentTask(task.id)
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    composer(palette)
                 }
-                composer(palette)
             }
-            .background(Color.clear)
         }
         .background(palette.surface)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
@@ -330,7 +338,7 @@ public struct ShannonConversationView: View {
                 }
                 .padding(.horizontal, M3Spacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-                .padding(.bottom, M3Spacing.large)
+                .padding(.bottom, ShannonWorkspaceChrome.contentBottomInset)
             }
             .scrollIndicators(.hidden)
             .shannonKeyboardDismissMode()
@@ -344,6 +352,7 @@ public struct ShannonConversationView: View {
                 scrollToBottom(proxy)
             }
         }
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 
     private func composer(_ palette: M3Palette) -> some View {
@@ -876,7 +885,7 @@ private struct ShannonAppIconSettingsView: View {
                 VStack(alignment: .leading, spacing: M3Spacing.large) {
                     HStack(spacing: M3Spacing.large) {
                         ShannonAppIconPreview(
-                            assetName: model.activePreviewAssetName,
+                            assetName: previewAssetName(for: model.activeChoice ?? .primary),
                             size: 76,
                             accessibilityLabel: "現在のアイコン"
                         )
@@ -960,13 +969,8 @@ private struct ShannonAppIconSettingsView: View {
 
                     if model.mode == .manual {
                         iconChoiceGrid(
-                            title: "比較用アイコン",
-                            choices: ShannonAppIconChoice.comparisonChoices,
-                            palette: palette
-                        )
-                        iconChoiceGrid(
-                            title: "シャノンの表情",
-                            choices: ShannonAppIconChoice.emotionChoices,
+                            title: "アイコン",
+                            choices: ShannonAppIconChoice.manualChoices,
                             palette: palette
                         )
                     }
@@ -1020,7 +1024,7 @@ private struct ShannonAppIconSettingsView: View {
             .accessibilityLabel("時刻と感情で変わるアイコン")
         case .manual:
             ShannonAppIconPreview(
-                assetName: model.manualChoice.previewAssetName,
+                assetName: previewAssetName(for: model.manualChoice),
                 size: 56,
                 accessibilityLabel: "選択中の\(model.manualChoice.japaneseName)アイコン"
             )
@@ -1070,7 +1074,7 @@ private struct ShannonAppIconSettingsView: View {
                 } label: {
                     VStack(spacing: M3Spacing.small) {
                         ShannonAppIconPreview(
-                            assetName: choice.previewAssetName,
+                            assetName: previewAssetName(for: choice),
                             size: 72,
                             accessibilityLabel: "\(choice.japaneseName)のアイコン"
                         )
@@ -1105,6 +1109,13 @@ private struct ShannonAppIconSettingsView: View {
                 .disabled(model.isUpdating)
             }
         }
+    }
+
+    private func previewAssetName(for choice: ShannonAppIconChoice) -> String {
+        guard choice == .primary else { return choice.previewAssetName }
+        return colorScheme == .dark
+            ? ShannonAppIconAssets.primaryDarkPreviewAssetName
+            : ShannonAppIconAssets.primaryLightPreviewAssetName
     }
 }
 
@@ -1222,11 +1233,11 @@ private enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
 
 private enum ShannonWorkspaceChrome {
     static let contentTopInset: CGFloat = 72
+    static let contentBottomInset: CGFloat = 112
 }
 
 private struct ShannonAppHeader: View {
     let selection: ShannonWorkspacePage
-    let threadTitle: String
     let unreadInitiativeCount: Int
     let openThreadDrawer: () -> Void
     let createThread: () -> Void
@@ -1252,23 +1263,29 @@ private struct ShannonAppHeader: View {
                             .offset(x: 1, y: 1)
                     }
                 }
+                .frame(width: 48, height: 48)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle().stroke(palette.outlineVariant.opacity(0.6), lineWidth: 0.7)
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("メニュー")
 
-            Text(selection == .talk ? threadTitle : selection.title)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(palette.onSurface)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity)
-                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
 
             Button(action: createThread) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(palette.onSurface)
                     .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .frame(width: 48, height: 48)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay {
+                        Circle().stroke(palette.outlineVariant.opacity(0.6), lineWidth: 0.7)
+                    }
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
             }
             .buttonStyle(.plain)
             .opacity(selection == .talk ? 1 : 0)
@@ -1278,7 +1295,46 @@ private struct ShannonAppHeader: View {
         }
         .padding(.horizontal, M3Spacing.large)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
+    }
+}
+
+private struct ShannonTopReadabilityGradient: View {
+    let palette: M3Palette
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: palette.surface, location: 0),
+                .init(color: palette.surface.opacity(0.90), location: 0.36),
+                .init(color: palette.surface.opacity(0.42), location: 0.72),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 118)
+        .ignoresSafeArea(.container, edges: .top)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct ShannonBottomReadabilityGradient: View {
+    let palette: M3Palette
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: palette.surface.opacity(0.40), location: 0.30),
+                .init(color: palette.surface.opacity(0.92), location: 0.72),
+                .init(color: palette.surface, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 146)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1473,8 +1529,10 @@ private struct ShannonThreadDrawer: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, M3Spacing.small)
-            .padding(.vertical, M3Spacing.small)
+            .padding(.top, M3Spacing.small)
+            .padding(.bottom, 28)
         }
+        .frame(maxHeight: .infinity)
         .background(.regularMaterial)
         .overlay(alignment: .trailing) {
             Rectangle().fill(palette.outlineVariant.opacity(0.45)).frame(width: 0.7)

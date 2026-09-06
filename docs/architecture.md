@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-06 / Clear Signal app shell and Talk
+Revision: 2026-09-07 / edge-to-edge Talk and adaptive primary icon
 
 ## System shape
 
@@ -55,8 +55,10 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 ## iOS experience
 
-- Talk is the product root. Its compact header keeps the thread title centered, opens the common drawer from the left, and creates a new thread from the right.
+- Talk is the product root. Conversation content extends behind the status area and composer; restrained top and bottom gradients preserve system-status and input readability without turning either edge into an opaque bar.
+- Talk has no persistent centered title. Circular material controls float at the upper left and right for the common drawer and new-thread action, leaving the conversation visually continuous beneath them.
 - The common drawer holds the thread list plus explicit destinations for “頭の中”, current agent work, and Settings. Talk and Memory are no longer presented as equally weighted tabs or a persistent segmented switcher.
+- The drawer surface occupies the full display height, including behind the status area. Its interactive content retains a safe top start and enough bottom space for every destination to remain visible above the home indicator.
 - Settings opens from the drawer instead of behaving like a third content page.
 - Talk supports multiple threads, a sliding thread list, scroll mode, and character-focused dialogue mode.
 - The thread list has a visible button. A left-edge swipe is retained only as a secondary shortcut on Talk.
@@ -67,14 +69,15 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
-- Settings → App Icon shows the actual bundled primary and alternate icon artwork. The mode selector offers only automatic (`シャノンに任せる`) and manual (`自分で選ぶ`). Automatic mode uses the existing time/emotion variants. Manual mode first shows the ten supplied Aether/Shannon/Voyager comparison icons, followed by the existing Shannon expression icons. The currently active icon remains visible at the top. A stored legacy `fixed` selection is migrated to manual mode with `Shannon v3` selected so the visible icon does not unexpectedly change.
+- The primary App Icon owns native light and dark appearance artwork. Returning to `デフォルト` restores the primary icon so the OS can select its matching appearance rather than treating either appearance as a separate alternate icon.
+- Settings → App Icon shows the actual bundled primary and alternate icon artwork. The mode selector offers only automatic (`シャノンに任せる`) and manual (`自分で選ぶ`). Automatic mode uses the existing time/emotion variants. Manual mode contains `デフォルト` followed only by Shannon expression icons; temporary Aether/Shannon/Voyager comparison choices are not shipped. The primary preview follows the app appearance. A stored legacy `fixed` selection, or any removed/invalid manual selection, is migrated safely to `デフォルト`.
 - The primary voice candidate is a user-initiated Realtime WebRTC session. iOS captures and plays audio through WebRTC; Azure creates the OpenAI Realtime call with the standard API key kept server-side. The iPhone never receives that key.
 - Input-transcription delta events update the visible “あなた” caption while the user is still speaking. Output-audio-transcript delta events update Shannon's caption while her audio is playing. Server VAD creates responses automatically and permits natural interruption.
 - A Realtime session receives the same bounded Shannon identity, committed shared state, today's interest, recent thread history, and live-voice behavior rules. It cannot claim that an external task was executed; visible work and approval continue in Talk.
 - When both final transcripts for one turn arrive, iOS sends only those texts to `POST /v1/voice/realtime/turns`. The API stores the pair in the existing conversation thread, fixes Shannon's expression snapshot, and schedules the normal asynchronous emotion/memory update. Partial captions are not persisted.
 - The Realtime client has an initial ten-minute session ceiling and a per-device call-creation limit. Voice remains a separate cost concern from chat and background work; durable usage metering and a server-authoritative daily Realtime allowance are required before general release.
 - The Build 33 M4A → `POST /v1/voice/transcriptions` path remains a diagnostic fallback during the Realtime rollout. It uses `gpt-transcribe`, a 60-second/5-MiB limit, per-device rate limiting, and the existing `voice` cost lane. Temporary audio is deleted or held only in memory, and diagnostics never store audio, transcripts, messages, credentials, tokens, or file paths.
-- The composer uses a dynamic bottom safe-area inset, so multi-line input, voice status, failures, and task notices do not cover the latest reply.
+- The composer floats over the edge-to-edge conversation with a readability gradient. The message list reserves dynamic visual clearance for multi-line input, voice status, failures, and task notices while remaining visible beneath the lower chrome during scrolling.
 
 Live2D and animated widgets remain future work. Current dialogue mode and Realtime voice use a static character-stage asset with state-driven ambient motion.
 
