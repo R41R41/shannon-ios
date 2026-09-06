@@ -15,7 +15,7 @@
   <p class="lead">アプリアイコンの鮮やかな青をShannonの「存在」、少し深い青をユーザーが押す「操作」に分離する。白／黒の反転アイコンにも自然に接続し、長い会話を読む面は静かに保つ。</p>
 
   <section class="hero">
-    <span class="chip">推奨案</span>
+    <span class="chip">2026-09-06 採用済み</span>
     <p><strong>アイコンと同じ青を、全部に塗らない。</strong></p>
     <p>添付4案の代表色はおおむね <code>#0E82EF</code>〜<code>#65C6F5</code> の高彩度ブルーに集中している。この鮮烈さはロゴ、音声波形、選択状態、今日の関心に残す。白文字を載せる主要ボタンは、アクセシビリティのため <code>#006AA6</code> まで深くする。</p>
   </section>
@@ -95,16 +95,16 @@
     <div class="rule"><b>設定</b><p>Apple型のneutral list。アイコン背景だけsoft blue。各項目をカラフルにしない。</p></div>
   </div>
 
-  <div class="decision"><b>推奨決定:</b> UIの基本スキームはClear Signal。主アイコンは白地のshannon_v3、ダークモードの視覚参照は黒地のshannon_v3コピー。Pure IconとSoft Skyは比較候補として残し、実装にはまだ固定しない。</div>
+  <div class="decision"><b>確定決定:</b> UIの基本スキームはClear Signal。主アイコンは白地のshannon_v3、ダークモードの視覚参照は黒地のshannon_v3コピー。Pure IconとSoft Skyは検討履歴として残すが、Build 39の実装対象にはしない。</div>
 
-  <h2>次の確認</h2>
+  <h2>実装への引継ぎ</h2>
   <div class="grid">
-    <section class="card"><span class="chip">1</span><h3 style="margin-top:12px">方向を選ぶ</h3><p>比較モックでClear Signal、Pure Icon、Soft Skyをライト／ダーク両方確認する。</p></section>
+    <section class="card"><span class="chip">確定</span><h3 style="margin-top:12px">Clear Signal</h3><p>ユーザー確認済み。以後のUI実装では、本書のsemantic tokenを色の正本として扱う。</p></section>
     <section class="card"><span class="chip">2</span><h3 style="margin-top:12px">Build 39へ固定</h3><p>選んだtokenをSwiftのsemantic Colorへ実装し、直接hexを画面に書かない。</p></section>
     <section class="card"><span class="chip">3</span><h3 style="margin-top:12px">実画面監査</h3><p>全画面・全状態をライト／ダークで撮影し、読みにくさと色の過剰使用を一枚ずつ確認する。</p></section>
   </div>
 
-  <div class="footer">Shannon Color System v30 — design proposal only. No Swift, Azure, GitHub release, or TestFlight state changed.</div>
+  <div class="footer">Shannon Color System v30 — approved design. No Swift, Azure, GitHub release, or TestFlight state changed yet.</div>
 </main>
 </body>
 </html>
