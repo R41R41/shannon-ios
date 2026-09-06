@@ -41,6 +41,26 @@
             <dict><key>CFBundleIconFiles</key><array><string>ShannonIconDetermined</string></array></dict>
             <key>ShannonIconSleeping</key>
             <dict><key>CFBundleIconFiles</key><array><string>ShannonIconSleeping</string></array></dict>
+            <key>ShannonIconCompareShannonV3</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareShannonV3</string></array></dict>
+            <key>ShannonIconCompareAetherV4</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareAetherV4</string></array></dict>
+            <key>ShannonIconCompareAetherV3</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareAetherV3</string></array></dict>
+            <key>ShannonIconCompareAetherOriginal</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareAetherOriginal</string></array></dict>
+            <key>ShannonIconCompareAetherV2</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareAetherV2</string></array></dict>
+            <key>ShannonIconCompareShannonV2</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareShannonV2</string></array></dict>
+            <key>ShannonIconCompareShannonV3Dark</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareShannonV3Dark</string></array></dict>
+            <key>ShannonIconCompareShannonOriginal</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareShannonOriginal</string></array></dict>
+            <key>ShannonIconCompareVoyagerV3</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareVoyagerV3</string></array></dict>
+            <key>ShannonIconCompareVoyagerOriginal</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCompareVoyagerOriginal</string></array></dict>
         </dict>
     </dict>
     <key>CFBundleExecutable</key>

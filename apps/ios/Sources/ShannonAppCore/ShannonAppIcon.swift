@@ -7,7 +7,6 @@ import AppKit
 #endif
 
 public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
-    case fixed
     case automatic
     case manual
 
@@ -15,7 +14,6 @@ public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
 
     public var japaneseName: String {
         switch self {
-        case .fixed: "固定"
         case .automatic: "シャノンに任せる"
         case .manual: "自分で選ぶ"
         }
@@ -34,6 +32,34 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
     case bashful = "ShannonIconBashful"
     case determined = "ShannonIconDetermined"
     case sleeping = "ShannonIconSleeping"
+    case compareShannonV3 = "ShannonIconCompareShannonV3"
+    case compareAetherV4 = "ShannonIconCompareAetherV4"
+    case compareAetherV3 = "ShannonIconCompareAetherV3"
+    case compareAetherOriginal = "ShannonIconCompareAetherOriginal"
+    case compareAetherV2 = "ShannonIconCompareAetherV2"
+    case compareShannonV2 = "ShannonIconCompareShannonV2"
+    case compareShannonV3Dark = "ShannonIconCompareShannonV3Dark"
+    case compareShannonOriginal = "ShannonIconCompareShannonOriginal"
+    case compareVoyagerV3 = "ShannonIconCompareVoyagerV3"
+    case compareVoyagerOriginal = "ShannonIconCompareVoyagerOriginal"
+
+    public static let emotionChoices: [Self] = [
+        .calm, .joyful, .curious, .sleepy, .exasperated, .excited,
+        .laughing, .tender, .bashful, .determined, .sleeping,
+    ]
+
+    public static let comparisonChoices: [Self] = [
+        .compareShannonV3,
+        .compareAetherV4,
+        .compareAetherV3,
+        .compareAetherOriginal,
+        .compareAetherV2,
+        .compareShannonV2,
+        .compareShannonV3Dark,
+        .compareShannonOriginal,
+        .compareVoyagerV3,
+        .compareVoyagerOriginal,
+    ]
 
     public var id: String { rawValue }
 
@@ -54,6 +80,16 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         case .bashful: "照れ笑い"
         case .determined: "得意げ"
         case .sleeping: "眠っている"
+        case .compareShannonV3: "Shannon v3"
+        case .compareAetherV4: "Aether v4"
+        case .compareAetherV3: "Aether v3"
+        case .compareAetherOriginal: "Aether"
+        case .compareAetherV2: "Aether v2"
+        case .compareShannonV2: "Shannon v2"
+        case .compareShannonV3Dark: "Shannon v3（黒）"
+        case .compareShannonOriginal: "Shannon"
+        case .compareVoyagerV3: "Voyager v3"
+        case .compareVoyagerOriginal: "Voyager"
         }
     }
 
@@ -70,6 +106,12 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         case .bashful: "hand.raised.fill"
         case .determined: "star.fill"
         case .sleeping: "moon.stars.fill"
+        case .compareShannonV3, .compareShannonV2, .compareShannonV3Dark, .compareShannonOriginal:
+            "wave.3.right"
+        case .compareAetherV4, .compareAetherV3, .compareAetherOriginal, .compareAetherV2:
+            "diamond.fill"
+        case .compareVoyagerV3, .compareVoyagerOriginal:
+            "checkmark"
         }
     }
 
@@ -243,10 +285,18 @@ public final class ShannonAppIconModel {
 
     public init() {
         let defaults = UserDefaults.standard
-        mode = defaults.string(forKey: Keys.mode)
-            .flatMap(ShannonAppIconMode.init(rawValue:)) ?? .automatic
-        manualChoice = defaults.string(forKey: Keys.manualChoice)
-            .flatMap(ShannonAppIconChoice.init(rawValue:)) ?? .calm
+        let storedMode = defaults.string(forKey: Keys.mode)
+        let storedChoice = defaults.string(forKey: Keys.manualChoice)
+            .flatMap(ShannonAppIconChoice.init(rawValue:))
+        if storedMode == "fixed" {
+            mode = .manual
+            manualChoice = .compareShannonV3
+            defaults.set(ShannonAppIconMode.manual.rawValue, forKey: Keys.mode)
+            defaults.set(ShannonAppIconChoice.compareShannonV3.rawValue, forKey: Keys.manualChoice)
+        } else {
+            mode = storedMode.flatMap(ShannonAppIconMode.init(rawValue:)) ?? .automatic
+            manualChoice = storedChoice ?? .compareShannonV3
+        }
 #if canImport(UIKit)
         activeChoice = UIApplication.shared.alternateIconName
             .flatMap(ShannonAppIconChoice.init(rawValue:))
@@ -256,7 +306,7 @@ public final class ShannonAppIconModel {
     }
 
     public var activeTitle: String {
-        activeChoice?.japaneseName ?? "固定"
+        activeChoice?.japaneseName ?? "Shannon v3"
     }
 
     var activePreviewAssetName: String {
@@ -270,8 +320,6 @@ public final class ShannonAppIconModel {
     ) async {
         refresh()
         switch mode {
-        case .fixed:
-            await apply(choice: nil, now: now)
         case .manual:
             await apply(choice: manualChoice, now: now)
         case .automatic:
@@ -290,8 +338,6 @@ public final class ShannonAppIconModel {
         mode = newMode
         UserDefaults.standard.set(newMode.rawValue, forKey: Keys.mode)
         switch newMode {
-        case .fixed:
-            await apply(choice: nil, now: now)
         case .manual:
             await apply(choice: manualChoice, now: now)
         case .automatic:

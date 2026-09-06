@@ -938,56 +938,16 @@ private struct ShannonAppIconSettingsView: View {
                     }
 
                     if model.mode == .manual {
-                        Text("使うアイコン")
-                            .font(.headline)
-                            .foregroundStyle(palette.onSurface)
-
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.flexible(), spacing: M3Spacing.small),
-                                GridItem(.flexible(), spacing: M3Spacing.small),
-                            ],
-                            spacing: M3Spacing.small
-                        ) {
-                            ForEach(ShannonAppIconChoice.allCases) { choice in
-                                Button {
-                                    Task { await model.selectManualChoice(choice) }
-                                } label: {
-                                    VStack(spacing: M3Spacing.small) {
-                                        ShannonAppIconPreview(
-                                            assetName: choice.previewAssetName,
-                                            size: 72,
-                                            accessibilityLabel: "\(choice.japaneseName)のアイコン"
-                                        )
-                                        Text(choice.japaneseName)
-                                            .font(.callout.weight(.semibold))
-                                    }
-                                    .foregroundStyle(
-                                        model.manualChoice == choice
-                                            ? palette.onPrimaryContainer
-                                            : palette.onSurface
-                                    )
-                                    .frame(maxWidth: .infinity, minHeight: 116)
-                                    .background(
-                                        model.manualChoice == choice
-                                            ? palette.primaryContainer
-                                            : palette.surface,
-                                        in: RoundedRectangle(cornerRadius: M3Shape.large)
-                                    )
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: M3Shape.large)
-                                            .stroke(
-                                                model.manualChoice == choice
-                                                    ? palette.primary
-                                                    : palette.outlineVariant,
-                                                lineWidth: model.manualChoice == choice ? 2 : 0.7
-                                            )
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(model.isUpdating)
-                            }
-                        }
+                        iconChoiceGrid(
+                            title: "比較用アイコン",
+                            choices: ShannonAppIconChoice.comparisonChoices,
+                            palette: palette
+                        )
+                        iconChoiceGrid(
+                            title: "シャノンの表情",
+                            choices: ShannonAppIconChoice.emotionChoices,
+                            palette: palette
+                        )
                     }
 
                     if model.isUpdating {
@@ -1022,12 +982,6 @@ private struct ShannonAppIconSettingsView: View {
     @ViewBuilder
     private func modePreview(for mode: ShannonAppIconMode) -> some View {
         switch mode {
-        case .fixed:
-            ShannonAppIconPreview(
-                assetName: ShannonAppIconAssets.primaryPreviewAssetName,
-                size: 56,
-                accessibilityLabel: "固定アイコン"
-            )
         case .automatic:
             ZStack(alignment: .leading) {
                 ForEach(Array(automaticPreviewChoices.enumerated()), id: \.element.id) { index, choice in
@@ -1065,12 +1019,70 @@ private struct ShannonAppIconSettingsView: View {
 
     private func modeDetail(for mode: ShannonAppIconMode) -> String {
         switch mode {
-        case .fixed:
-            "いつも青いShannonアイコン"
         case .automatic:
             "時刻とシャノンの感情で変化"
         case .manual:
             "\(model.manualChoice.japaneseName)を使用"
+        }
+    }
+
+    @ViewBuilder
+    private func iconChoiceGrid(
+        title: String,
+        choices: [ShannonAppIconChoice],
+        palette: M3Palette
+    ) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(palette.onSurface)
+
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: M3Spacing.small),
+                GridItem(.flexible(), spacing: M3Spacing.small),
+            ],
+            spacing: M3Spacing.small
+        ) {
+            ForEach(choices) { choice in
+                Button {
+                    Task { await model.selectManualChoice(choice) }
+                } label: {
+                    VStack(spacing: M3Spacing.small) {
+                        ShannonAppIconPreview(
+                            assetName: choice.previewAssetName,
+                            size: 72,
+                            accessibilityLabel: "\(choice.japaneseName)のアイコン"
+                        )
+                        Text(choice.japaneseName)
+                            .font(.callout.weight(.semibold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                    }
+                    .foregroundStyle(
+                        model.manualChoice == choice
+                            ? palette.onPrimaryContainer
+                            : palette.onSurface
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 122)
+                    .background(
+                        model.manualChoice == choice
+                            ? palette.primaryContainer
+                            : palette.surface,
+                        in: RoundedRectangle(cornerRadius: M3Shape.large)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: M3Shape.large)
+                            .stroke(
+                                model.manualChoice == choice
+                                    ? palette.primary
+                                    : palette.outlineVariant,
+                                lineWidth: model.manualChoice == choice ? 2 : 0.7
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isUpdating)
+            }
         }
     }
 }

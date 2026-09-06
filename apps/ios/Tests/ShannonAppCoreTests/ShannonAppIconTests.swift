@@ -25,11 +25,22 @@ final class ShannonAppIconTests: XCTestCase {
         let mapped = ShannonExpressionDTO.allCases.map(ShannonAppIconChoice.matching)
 
         XCTAssertEqual(mapped.count, ShannonExpressionDTO.allCases.count)
-        XCTAssertTrue(mapped.allSatisfy(ShannonAppIconChoice.allCases.contains))
+        XCTAssertTrue(mapped.allSatisfy(ShannonAppIconChoice.emotionChoices.contains))
         XCTAssertEqual(
             Set(mapped.map(\.rawValue)),
-            Set(ShannonAppIconChoice.allCases.filter { $0 != .sleeping }.map(\.rawValue))
+            Set(ShannonAppIconChoice.emotionChoices.filter { $0 != .sleeping }.map(\.rawValue))
         )
+    }
+
+    func testModeOffersOnlyAutomaticAndManualSelection() {
+        XCTAssertEqual(ShannonAppIconMode.allCases, [.automatic, .manual])
+    }
+
+    func testComparisonChoicesContainTheTenProvidedIcons() {
+        XCTAssertEqual(ShannonAppIconChoice.comparisonChoices.count, 10)
+        XCTAssertTrue(Set(ShannonAppIconChoice.comparisonChoices).isDisjoint(
+            with: Set(ShannonAppIconChoice.emotionChoices)
+        ))
     }
 
     func testPrimaryExpressionMappingsRemainStable() {
