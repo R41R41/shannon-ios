@@ -20,6 +20,13 @@ import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotific
 import { SQLiteAgentTaskStore } from './agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
 import { SQLiteDailyMindStore } from './dailyMind.js';
+import {
+  createConfiguredVoiceTranscriber,
+  normalizedVoiceMimeType,
+  parsedVoiceDurationSeconds,
+  SHANNON_VOICE_MAXIMUM_BYTES,
+  VoiceTranscriptionError,
+} from './voiceTranscription.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({
@@ -32,6 +39,7 @@ const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now)
 const agentTaskStore = new SQLiteAgentTaskStore(configuredDatabasePath());
 const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredDatabasePath());
 const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
+const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
@@ -64,6 +72,8 @@ const deviceAuth = authMode === 'paired'
 let pairingWindow = { startedAt: 0, count: 0 };
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
+const deviceVoiceUsage = new Map<string, { startedAt: number; count: number }>();
+const activeVoiceScopes = new Set<string>();
 
 const server = createServer(async (request, response) => {
   try {
@@ -104,6 +114,11 @@ const server = createServer(async (request, response) => {
       : bearerAuthorized(request.headers.authorization, apiToken);
     if (!authorized) {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
+      return;
+    }
+
+    if (url.pathname === '/v1/voice/transcriptions') {
+      await handleVoiceTranscription(request, response, principal);
       return;
     }
 
@@ -216,6 +231,61 @@ function handlePushRegistration(
   }
 }
 
+async function handleVoiceTranscription(
+  request: IncomingMessage,
+  response: ServerResponse,
+  principal: ShannonDevicePrincipal | null,
+): Promise<void> {
+  if (request.method !== 'POST') {
+    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return;
+  }
+  if (!principal) {
+    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
+    return;
+  }
+  if (!voiceTranscriber) {
+    sendJson(response, 503, { error: 'VOICE_NOT_CONFIGURED', message: '音声入力は現在利用できません。' });
+    return;
+  }
+  if (!consumeDeviceAllowance(deviceVoiceUsage, principal.deviceId, 10)) {
+    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
+    return;
+  }
+  if (activeVoiceScopes.has(principal.scopeKey)) {
+    sendJson(response, 429, { error: 'BUSY', message: 'いまの音声を聞き取っています。少しお待ちください。' });
+    return;
+  }
+
+  activeVoiceScopes.add(principal.scopeKey);
+  try {
+    const mimeType = normalizedVoiceMimeType(request.headers['content-type']);
+    const durationSeconds = parsedVoiceDurationSeconds(request.headers['x-shannon-audio-duration-ms']);
+    const audio = await readBytes(request, SHANNON_VOICE_MAXIMUM_BYTES);
+    const result = await voiceTranscriber.transcribe({
+      scopeKey: principal.scopeKey,
+      audio,
+      mimeType,
+      durationSeconds,
+    });
+    sendJson(response, 200, result);
+  } catch (error) {
+    if (error instanceof VoiceTranscriptionError) {
+      const status = error.code === 'VOICE_DAILY_BUDGET_EXHAUSTED' ? 429
+        : error.code === 'VOICE_TRANSCRIPTION_FAILED' ? 502
+          : 400;
+      const message = error.code === 'VOICE_DAILY_BUDGET_EXHAUSTED'
+        ? '今日は音声入力を十分使いました。テキスト入力は引き続き使えます。'
+        : '音声を文字にできませんでした。もう一度お試しください。';
+      sendJson(response, status, { error: error.code, message });
+      return;
+    }
+    throw error;
+  } finally {
+    activeVoiceScopes.delete(principal.scopeKey);
+  }
+}
+
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
@@ -299,17 +369,31 @@ function bindScope(body: unknown, scopeKey: string): unknown {
 }
 
 function consumeDeviceChatAllowance(deviceId: string): boolean {
+  return consumeDeviceAllowance(deviceUsage, deviceId, 20);
+}
+
+function consumeDeviceAllowance(
+  usage: Map<string, { startedAt: number; count: number }>,
+  deviceId: string,
+  maximumPerMinute: number,
+): boolean {
   const timestamp = Date.now();
-  const previous = deviceUsage.get(deviceId);
+  const previous = usage.get(deviceId);
   const window = previous && timestamp - previous.startedAt < 60_000
     ? previous
     : { startedAt: timestamp, count: 0 };
   window.count += 1;
-  deviceUsage.set(deviceId, window);
-  return window.count <= 20;
+  usage.set(deviceId, window);
+  return window.count <= maximumPerMinute;
 }
 
 async function readJson(request: IncomingMessage, maximumBytes: number): Promise<unknown> {
+  const body = await readBytes(request, maximumBytes);
+  if (!body.byteLength) return undefined;
+  return JSON.parse(Buffer.from(body).toString('utf8')) as unknown;
+}
+
+async function readBytes(request: IncomingMessage, maximumBytes: number): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of request) {
@@ -318,8 +402,8 @@ async function readJson(request: IncomingMessage, maximumBytes: number): Promise
     if (size > maximumBytes) throw new Error('request body too large');
     chunks.push(bytes);
   }
-  if (!chunks.length) return undefined;
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+  if (!chunks.length) return new Uint8Array();
+  return Buffer.concat(chunks);
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {

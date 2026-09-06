@@ -1,4 +1,4 @@
-export type LlmUsageLane = 'chat' | 'sleep';
+export type LlmUsageLane = 'chat' | 'sleep' | 'voice';
 
 export interface LlmUsageEvent {
   scopeKey: string;
@@ -15,6 +15,7 @@ export interface LlmUsageEvent {
 export interface LlmUsageStore {
   recordLlmUsage(event: LlmUsageEvent): void;
   backgroundLlmCostUsd(monthKey: string): number;
+  voiceLlmCostUsdForDay?(scopeKey: string, dayKey: string): number;
 }
 
 export interface LlmUsageSummaryRow {

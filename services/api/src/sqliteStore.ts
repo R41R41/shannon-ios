@@ -44,7 +44,7 @@ import {
 import { migrateAgentTasks } from './agentTaskStore.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -379,7 +379,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     const row = this.database.prepare(`
       SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
       FROM llm_usage_events
-      WHERE lane <> 'chat' AND substr(occurred_at, 1, 7) = ?
+      WHERE lane = 'sleep' AND substr(occurred_at, 1, 7) = ?
     `).get(monthKey) as unknown as { cost: number };
     return Number(row.cost);
   }
@@ -388,13 +388,23 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     const row = this.database.prepare(`
       SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
       FROM llm_usage_events
-      WHERE lane <> 'chat' AND date(datetime(occurred_at, '+9 hours')) = ?
+      WHERE lane = 'sleep' AND date(datetime(occurred_at, '+9 hours')) = ?
     `).get(dayKey) as unknown as { cost: number };
     return Number(row.cost);
   }
 
+  voiceLlmCostUsdForDay(scopeKey: string, dayKey: string): number {
+    const row = this.database.prepare(`
+      SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
+      FROM llm_usage_events
+      WHERE scope_key = ? AND lane = 'voice'
+        AND date(datetime(occurred_at, '+9 hours')) = ?
+    `).get(scopeKey, dayKey) as unknown as { cost: number };
+    return Number(row.cost);
+  }
+
   llmUsageSummary(scopeKey: string, monthKey: string): readonly {
-    lane: 'chat' | 'sleep'; calls: number; inputTokens: number; cachedInputTokens: number;
+    lane: LlmUsageEvent['lane']; calls: number; inputTokens: number; cachedInputTokens: number;
     outputTokens: number; totalTokens: number; estimatedCostUsd: number;
   }[] {
     const rows = this.database.prepare(`
@@ -408,7 +418,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       GROUP BY lane ORDER BY lane
     `).all(scopeKey, monthKey) as unknown as Array<Record<string, unknown>>;
     return Object.freeze(rows.map(row => Object.freeze({
-      lane: String(row.lane) as 'chat' | 'sleep', calls: Number(row.calls),
+      lane: String(row.lane) as LlmUsageEvent['lane'], calls: Number(row.calls),
       inputTokens: Number(row.input_tokens), cachedInputTokens: Number(row.cached_input_tokens),
       outputTokens: Number(row.output_tokens), totalTokens: Number(row.total_tokens),
       estimatedCostUsd: Number(row.estimated_cost_usd),
@@ -1003,6 +1013,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       if (previousVersion < 6) this.migrateLlmUsage();
       if (previousVersion < 7) migrateAgentTasks(this.database);
       if (previousVersion < 8) this.migrateThreadTitleOrigin();
+      if (previousVersion < 9) this.migrateVoiceUsageLane();
       this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }
@@ -1127,7 +1138,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       CREATE TABLE IF NOT EXISTS llm_usage_events (
         usage_id TEXT PRIMARY KEY,
         scope_key TEXT NOT NULL,
-        lane TEXT NOT NULL CHECK (lane IN ('chat', 'sleep')),
+        lane TEXT NOT NULL CHECK (lane IN ('chat', 'sleep', 'voice')),
         model TEXT NOT NULL,
         input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
         cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
@@ -1137,6 +1148,38 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         occurred_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS llm_usage_events_month_lane
+        ON llm_usage_events (occurred_at, lane);
+    `);
+  }
+
+  private migrateVoiceUsageLane(): void {
+    const row = this.database.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'llm_usage_events'
+    `).get() as unknown as { sql?: string } | undefined;
+    if (row?.sql?.includes("'voice'")) return;
+
+    this.database.exec(`
+      ALTER TABLE llm_usage_events RENAME TO llm_usage_events_before_voice;
+      CREATE TABLE llm_usage_events (
+        usage_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        lane TEXT NOT NULL CHECK (lane IN ('chat', 'sleep', 'voice')),
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+        cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
+        output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+        total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0),
+        estimated_cost_usd REAL NOT NULL CHECK (estimated_cost_usd >= 0),
+        occurred_at TEXT NOT NULL
+      );
+      INSERT INTO llm_usage_events
+        (usage_id, scope_key, lane, model, input_tokens, cached_input_tokens,
+         output_tokens, total_tokens, estimated_cost_usd, occurred_at)
+      SELECT usage_id, scope_key, lane, model, input_tokens, cached_input_tokens,
+             output_tokens, total_tokens, estimated_cost_usd, occurred_at
+      FROM llm_usage_events_before_voice;
+      DROP TABLE llm_usage_events_before_voice;
+      CREATE INDEX llm_usage_events_month_lane
         ON llm_usage_events (occurred_at, lane);
     `);
   }

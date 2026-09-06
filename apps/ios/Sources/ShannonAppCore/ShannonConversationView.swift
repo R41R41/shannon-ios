@@ -812,10 +812,17 @@ public struct ShannonConversationView: View {
             composerIsFocused = false
             Task { await voiceModel.startListening() }
         case .send:
-            guard let transcript = voiceModel.finishListening() else { return }
-            voiceModel.beginThinking()
-            model.draft = transcript
+            guard let recording = voiceModel.finishListening() else { return }
             Task {
+                let transcript: String
+                do {
+                    transcript = try await model.transcribeVoice(recording)
+                } catch {
+                    voiceModel.finishAfterFailedTranscription()
+                    return
+                }
+                voiceModel.acceptTranscript(transcript)
+                model.draft = transcript
                 await model.sendDraft()
                 if model.hasFailedMessage {
                     voiceModel.finishAfterFailedReply()
@@ -1086,7 +1093,7 @@ private struct ShannonAppIconPreview: View {
     let accessibilityLabel: String
 
     var body: some View {
-        Image(assetName, bundle: .module)
+        previewImage
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
@@ -1097,6 +1104,22 @@ private struct ShannonAppIconPreview: View {
             }
             .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
             .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var previewImage: Image {
+#if canImport(UIKit)
+        if let image = ShannonAppIconAssets.uiImage(for: assetName) {
+            return Image(uiImage: image)
+        }
+        return Image(systemName: "app.dashed")
+#elseif canImport(AppKit)
+        if let image = ShannonAppIconAssets.nsImage(for: assetName) {
+            return Image(nsImage: image)
+        }
+        return Image(systemName: "app.dashed")
+#else
+        return Image(systemName: "app.dashed")
+#endif
     }
 }
 
@@ -2035,7 +2058,11 @@ private struct ShannonVoiceStatusBar: View {
                 Text(model.phase.japaneseLabel)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(palette.onSurface)
-                if !model.transcript.isEmpty {
+                if model.phase == .listening {
+                    Text(String(format: "%.1f 秒 · 最大60秒", model.recordingDuration))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(palette.onSurfaceVariant)
+                } else if !model.transcript.isEmpty {
                     Text(model.transcript)
                         .font(.caption)
                         .foregroundStyle(palette.onSurfaceVariant)

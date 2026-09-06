@@ -374,6 +374,8 @@ private struct ShannonCostCard: View {
             HStack {
                 Text("会話 \(calls(for: "chat"))回")
                 Spacer()
+                Text("音声 \(calls(for: "voice"))回")
+                Spacer()
                 Text("バックグラウンド \(calls(for: "sleep"))回")
             }
             .font(.caption)

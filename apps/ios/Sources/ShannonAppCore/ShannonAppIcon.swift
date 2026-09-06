@@ -2,6 +2,8 @@ import Foundation
 import Observation
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
 #endif
 
 public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
@@ -103,6 +105,18 @@ enum ShannonAppIconAssets {
     static func url(for assetName: String) -> URL? {
         Bundle.module.url(forResource: assetName, withExtension: "png")
     }
+
+#if canImport(UIKit)
+    static func uiImage(for assetName: String) -> UIImage? {
+        guard let url = url(for: assetName) else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
+#elseif canImport(AppKit)
+    static func nsImage(for assetName: String) -> NSImage? {
+        guard let url = url(for: assetName) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+#endif
 }
 
 enum ShannonAppIconTimeState: String, Equatable, Sendable {

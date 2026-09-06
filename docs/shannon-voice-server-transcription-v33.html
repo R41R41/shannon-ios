@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Voice v1 — サーバー文字起こし設計</title>
+  <style>
+    :root { color-scheme: light dark; --blue:#65c9ed; --ink:#12232d; --muted:#5e717b; --card:#fff; --bg:#eff9fd; --line:#cfe7f1; --ok:#167a55; --warn:#a86400; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif; background:linear-gradient(145deg,var(--bg),#fff 55%); color:var(--ink); line-height:1.7; }
+    main { width:min(980px,calc(100% - 32px)); margin:0 auto; padding:44px 0 80px; }
+    h1 { font-size:clamp(28px,5vw,48px); line-height:1.15; margin:8px 0 12px; letter-spacing:-.03em; }
+    h2 { margin:0 0 16px; font-size:22px; }
+    p { margin:8px 0; }
+    .eyebrow { color:#087ca8; font-weight:700; letter-spacing:.08em; font-size:12px; }
+    .lead { color:var(--muted); font-size:18px; max-width:720px; }
+    .badge { display:inline-block; padding:6px 12px; border-radius:999px; background:#dff5fd; color:#086d91; font-weight:700; font-size:13px; }
+    .card { margin-top:24px; padding:24px; background:color-mix(in srgb,var(--card) 94%,transparent); border:1px solid var(--line); border-radius:24px; box-shadow:0 14px 40px rgba(26,94,120,.08); }
+    .flow { display:grid; grid-template-columns:repeat(7,1fr); align-items:center; gap:8px; margin-top:20px; }
+    .step { min-height:112px; display:grid; place-items:center; text-align:center; padding:12px; border-radius:18px; background:#f7fcfe; border:1px solid var(--line); font-weight:650; }
+    .arrow { text-align:center; color:#268db3; font-size:24px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .good { border-left:5px solid var(--ok); }
+    .caution { border-left:5px solid var(--warn); }
+    table { width:100%; border-collapse:collapse; overflow:hidden; border-radius:14px; }
+    th,td { text-align:left; padding:13px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:#24687f; font-size:13px; }
+    code { background:#e8f5fa; padding:2px 6px; border-radius:6px; color:#15566c; }
+    ul { padding-left:22px; }
+    a { color:#087ca8; }
+    @media (max-width:760px) { .flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); } .grid { grid-template-columns:1fr; } }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#e7f6fb; --muted:#aec5ce; --card:#13262f; --bg:#09161c; --line:#284854; }
+      body { background:linear-gradient(145deg,#09161c,#10252e 55%); }
+      .step { background:#162d36; } .badge { background:#173c4b;color:#8dddf8; } code { background:#17343f;color:#a9e8ff; }
+    }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · VOICE V1 · BUILD 33 DESIGN</div>
+  <h1>iPhoneは録音と送信だけ。<br>文字起こしはAzureで行う。</h1>
+  <p class="lead">Build 32までのクラッシュ経路を外し、まず確実に「話す → 文字になる → シャノンが答える」を成立させる。</p>
+  <p><span class="badge">推奨：サーバー文字起こしをv1の標準にする</span></p>
+
+  <section class="card">
+    <h2>判断</h2>
+    <div class="grid">
+      <div class="card good"><strong>サーバー方式</strong><p>端末は短いM4Aを録音して送るだけ。実装が単純で、認識品質も端末差を受けにくい。</p></div>
+      <div class="card caution"><strong>端末内SpeechAnalyzer</strong><p>通信・従量費・音声送信は不要。ただし現在は録音callback境界でクラッシュし、Speech APIとSwift 6の隔離境界を同時に扱っている。</p></div>
+    </div>
+    <p>「処理が重い」ことは悪化要因。ただし軽い受け渡しだけだったBuild 29でも同地点で落ちたため、端末性能だけが原因ではない。ログ上はengine開始後、最初のaudio callbackが動く境目で終了している。</p>
+  </section>
+
+  <section class="card">
+    <h2>具体的な会話フロー</h2>
+    <div class="flow">
+      <div class="step">iPhone<br>録音</div><div class="arrow">→</div>
+      <div class="step">Azureへ<br>M4A送信</div><div class="arrow">→</div>
+      <div class="step">OpenAI<br>文字起こし</div><div class="arrow">→</div>
+      <div class="step">既存FCAへ<br>テキスト入力</div>
+    </div>
+    <div class="flow">
+      <div class="step">シャノンの<br>返答</div><div class="arrow">←</div>
+      <div class="step">既存APIの<br>応答</div><div class="arrow">←</div>
+      <div class="step">会話・記憶を<br>通常どおり更新</div><div class="arrow">←</div>
+      <div class="step">文字起こしを<br>確定</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>端末側の体験</h2>
+    <table>
+      <tr><th>状態</th><th>表示</th><th>処理</th></tr>
+      <tr><td>録音中</td><td>経過時間、簡単な音量反応、停止ボタン</td><td>M4Aへ保存。逐次文字起こしはしない</td></tr>
+      <tr><td>停止後</td><td>「聞き取っています…」</td><td>認証付きでAzureへ送信</td></tr>
+      <tr><td>成功</td><td>入力欄へ文字を表示して送信</td><td>既存のFCA会話へ渡す</td></tr>
+      <tr><td>失敗</td><td>再試行／録り直す</td><td>通常の文字入力は常に利用可能</td></tr>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>安全・費用の境界</h2>
+    <ul>
+      <li>1回60秒、5MBまで。長時間録音や無制限再試行を防ぐ。</li>
+      <li>ペアリング済み端末だけ利用可。音声専用の回数制限と日次予算を持つ。</li>
+      <li>端末・Azureとも、文字起こし完了または失敗後に一時音声を削除する。</li>
+      <li>診断ログには音声・文字起こし本文・認証情報を残さない。</li>
+      <li>会話、睡眠バッチ、音声文字起こしの費用を別レーンで記録する。</li>
+      <li>最初は <code>gpt-transcribe</code>。音声専用レーンへ実利用時間と推定費用を記録する。</li>
+    </ul>
+    <p>OpenAI公式：<a href="https://developers.openai.com/api/docs/models/gpt-transcribe">GPT-Transcribe</a> ／ <a href="https://developers.openai.com/api/docs/guides/speech-to-text">ファイル文字起こしガイド</a> ／ <a href="https://platform.openai.com/docs/models/default-usage-policies-by-endpoint">エンドポイント別データ管理</a></p>
+  </section>
+
+  <section class="card">
+    <h2>OpenAI文字起こしモデル比較</h2>
+    <table>
+      <tr><th>モデル</th><th>用途・価格</th><th>Shannonでの判断</th></tr>
+      <tr><td><strong>gpt-transcribe</strong></td><td>完了ファイル／逐次入力、高精度、固有語・言語ヒント。$0.0045/分（1時間 $0.27）</td><td><strong>Build 33で採用</strong></td></tr>
+      <tr><td>gpt-live-transcribe</td><td>低遅延の逐次字幕。$0.017/分（1時間 $1.02）</td><td>将来、話しながら文字が出る体験を作る時</td></tr>
+      <tr><td>gpt-realtime-whisper</td><td>遅延と精度を調整するStreaming。$0.017/分（1時間 $1.02）</td><td>今回は不要。Live版との比較候補</td></tr>
+      <tr><td>gpt-4o-transcribe</td><td>Whisperより高精度。音声入力$2.50/100万token、出力$10/100万token</td><td>比較評価用の候補</td></tr>
+      <tr><td>gpt-4o-mini-transcribe</td><td>Whisperより高精度。音声入力$1.25/100万token、出力$5/100万token</td><td>旧候補。現行標準にはしない</td></tr>
+      <tr><td>gpt-4o-transcribe-diarize</td><td>話者分離。音声入力$2.50/100万token、出力$10/100万token</td><td>一人で話すShannon入力には過剰</td></tr>
+      <tr><td>whisper-1</td><td>従来の汎用文字起こし／英訳・言語識別。$0.006/分（1時間 $0.36）</td><td>英訳または既存互換が必要な時</td></tr>
+    </table>
+    <p><strong>結論：</strong>今のShannonは「話し終えてから送る」方式なので、最安で用途にも合う <code>gpt-transcribe</code> が第一候補。ライブ字幕化するときだけ、約3.8倍の単価を受け入れて <code>gpt-live-transcribe</code> を評価する。</p>
+  </section>
+
+  <section class="card">
+    <h2>Build 33の範囲</h2>
+    <ol>
+      <li>設定のアイコン画像読込修正（実装・画像デコードテスト済み）</li>
+      <li>端末内SpeechAnalyzerを標準経路から外す</li>
+      <li>iPhoneの短時間M4A録音とキャンセル</li>
+      <li>Azureの認証付き音声受付・文字起こし・即時削除</li>
+      <li>音声専用の使用量・失敗理由・予算記録</li>
+      <li>単体・結合・署名なしiPhone Release build後にTestFlight配信</li>
+    </ol>
+  </section>
+</main></body></html>

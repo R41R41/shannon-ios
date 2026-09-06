@@ -6,6 +6,7 @@ public enum ShannonVoicePhase: String, Equatable, Sendable {
     case requestingPermission
     case listening
     case ready
+    case transcribing
     case thinking
     case speaking
     case denied
@@ -17,6 +18,7 @@ public enum ShannonVoicePhase: String, Equatable, Sendable {
         case .requestingPermission: "マイクを準備中"
         case .listening: "聞いている…"
         case .ready: "送信できます"
+        case .transcribing: "聞き取っています…"
         case .thinking: "考えている…"
         case .speaking: "シャノンが話している"
         case .denied: "マイクを利用できません"
@@ -27,7 +29,7 @@ public enum ShannonVoicePhase: String, Equatable, Sendable {
     public var symbolName: String {
         switch self {
         case .idle: "mic"
-        case .requestingPermission: "ellipsis"
+        case .requestingPermission, .transcribing: "ellipsis"
         case .listening: "waveform"
         case .ready: "arrow.up.circle.fill"
         case .thinking: "sparkles"
@@ -49,34 +51,7 @@ public enum ShannonVoicePrimaryAction: Equatable, Sendable {
         case .idle, .denied, .failed: .start
         case .listening, .ready: .send
         case .speaking: .stopSpeaking
-        case .requestingPermission, .thinking: .none
-        }
-    }
-}
-
-public enum ShannonVoiceAudioFormatPolicy {
-    public static func isUsable(sampleRate: Double, channelCount: UInt32) -> Bool {
-        sampleRate.isFinite && sampleRate > 0 && channelCount > 0
-    }
-}
-
-public enum ShannonSpeechPermissionState: Equatable, Sendable {
-    case notDetermined
-    case denied
-    case restricted
-    case authorized
-}
-
-public enum ShannonLegacySpeechAuthorizationAction: Equatable, Sendable {
-    case request
-    case proceed
-    case deny
-
-    public static func action(for state: ShannonSpeechPermissionState) -> Self {
-        switch state {
-        case .notDetermined: .request
-        case .authorized: .proceed
-        case .denied, .restricted: .deny
+        case .requestingPermission, .transcribing, .thinking: .none
         }
     }
 }
@@ -88,25 +63,54 @@ public enum ShannonVoiceUsageDescriptionPolicy {
     }
 }
 
+public struct ShannonVoiceRecording: Equatable, Sendable {
+    public let fileURL: URL
+    public let mimeType: String
+    public let durationMilliseconds: Int
+
+    public init(fileURL: URL, mimeType: String = "audio/mp4", durationMilliseconds: Int) {
+        self.fileURL = fileURL
+        self.mimeType = mimeType
+        self.durationMilliseconds = durationMilliseconds
+    }
+}
+
+public struct ShannonVoiceTranscriptionDTO: Codable, Equatable, Sendable {
+    public let transcript: String
+    public let model: String
+    public let durationSeconds: Double
+    public let estimatedCostUsd: Double
+}
+
+public enum ShannonVoiceRecordingPolicy {
+    public static let maximumDuration: TimeInterval = 60
+    public static let maximumBytes = 5 * 1_024 * 1_024
+    public static let minimumDuration: TimeInterval = 0.20
+
+    public static func isUsable(duration: TimeInterval, byteCount: Int) -> Bool {
+        duration.isFinite
+            && duration >= minimumDuration
+            && duration <= maximumDuration + 0.5
+            && byteCount > 0
+            && byteCount <= maximumBytes
+    }
+}
+
 #if os(iOS)
 @preconcurrency import AVFoundation
-@preconcurrency import Speech
 
 @MainActor
 @Observable
 public final class ShannonVoiceConversationModel: NSObject {
     public private(set) var phase: ShannonVoicePhase = .idle
     public private(set) var transcript = ""
+    public private(set) var recordingDuration: TimeInterval = 0
     public private(set) var errorMessage: String?
 
-    // AVAudioEngine can retain a stale input graph after a route change or a
-    // previous capture. Build a fresh engine for each user-initiated session.
-    private var audioEngine: AVAudioEngine?
     private let synthesizer = AVSpeechSynthesizer()
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var tapIsInstalled = false
-    private var analyzerCapture: AnyObject?
+    private var recorder: AVAudioRecorder?
+    private var recordingURL: URL?
+    private var meteringTask: Task<Void, Never>?
     private var diagnosticSessionID: String?
     private let diagnostics: ShannonVoiceDiagnostics
 
@@ -124,43 +128,36 @@ public final class ShannonVoiceConversationModel: NSObject {
 
     public func startListening() async {
         stopSpeaking()
-        stopCapture(reason: "prepare_new_session")
+        stopCapture(reason: "prepare_new_session", deletingFile: true)
         let sessionID = UUID().uuidString
         diagnosticSessionID = sessionID
         diagnostics.record("voice.start.requested", sessionID: sessionID)
         transcript = ""
+        recordingDuration = 0
         errorMessage = nil
         phase = .requestingPermission
 
-        let microphoneUsagePresent = ShannonVoiceUsageDescriptionPolicy.isPresent(
+        let usagePresent = ShannonVoiceUsageDescriptionPolicy.isPresent(
             Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription")
-        )
-        let speechUsagePresent = ShannonVoiceUsageDescriptionPolicy.isPresent(
-            Bundle.main.object(forInfoDictionaryKey: "NSSpeechRecognitionUsageDescription")
         )
         diagnostics.record(
             "permission.declarations",
             sessionID: sessionID,
-            metadata: [
-                "microphone": String(microphoneUsagePresent),
-                "speech": String(speechUsagePresent),
-            ]
+            metadata: ["microphone": String(usagePresent), "speech": "not_required"]
         )
-        guard microphoneUsagePresent else {
-            phase = .failed
-            errorMessage = "音声機能の設定が不足しています。アプリを更新してください。"
-            diagnostics.record("voice.start.missing_microphone_declaration", sessionID: sessionID)
+        guard usagePresent else {
+            fail("音声機能の設定が不足しています。アプリを更新してください。", step: "voice.start.missing_microphone_declaration")
             return
         }
 
         diagnostics.record("permission.microphone.before", sessionID: sessionID)
-        let microphone = await AVAudioApplication.requestRecordPermission()
+        let permitted = await AVAudioApplication.requestRecordPermission()
         diagnostics.record(
             "permission.microphone.after",
             sessionID: sessionID,
-            metadata: ["granted": String(microphone)]
+            metadata: ["granted": String(permitted)]
         )
-        guard microphone else {
+        guard permitted else {
             phase = .denied
             errorMessage = "設定でマイクを許可すると、音声で話せます。"
             diagnostics.record("voice.start.microphone_denied", sessionID: sessionID)
@@ -168,42 +165,9 @@ public final class ShannonVoiceConversationModel: NSObject {
         }
 
         do {
-            if #available(iOS 26.0, *) {
-                diagnostics.record("capture.engine.selected", sessionID: sessionID, metadata: ["engine": "SpeechAnalyzer"])
-                let capture = ShannonSpeechAnalyzerCapture(diagnostics: diagnostics)
-                analyzerCapture = capture
-                try await capture.start(
-                    sessionID: sessionID,
-                    transcriptUpdated: { [weak self] value in
-                        self?.transcript = value
-                    },
-                    failed: { [weak self] in
-                        guard let self else { return }
-                        self.stopCapture(reason: "analyzer_error")
-                        if self.transcript.isEmpty {
-                            self.phase = .failed
-                            self.errorMessage = "音声認識を続けられませんでした。"
-                        } else {
-                            self.phase = .ready
-                        }
-                    }
-                )
-            } else {
-                guard speechUsagePresent else {
-                    throw VoiceError.missingSpeechUsageDescription
-                }
-                let speech = await resolveLegacySpeechAuthorization(sessionID: sessionID)
-                guard speech == .authorized else {
-                    phase = .denied
-                    errorMessage = "設定で音声認識を許可すると、音声で話せます。"
-                    diagnostics.record("voice.start.speech_denied", sessionID: sessionID)
-                    return
-                }
-                diagnostics.record("capture.engine.selected", sessionID: sessionID, metadata: ["engine": "SFSpeechRecognizer"])
-                try beginLegacyCapture(sessionID: sessionID)
-            }
+            try beginFileRecording(sessionID: sessionID)
             phase = .listening
-            diagnostics.record("voice.start.listening", sessionID: sessionID)
+            diagnostics.record("voice.start.listening", sessionID: sessionID, metadata: ["transport": "m4a_file"])
         } catch {
             let failure = error as NSError
             diagnostics.record(
@@ -211,28 +175,58 @@ public final class ShannonVoiceConversationModel: NSObject {
                 sessionID: sessionID,
                 metadata: ["domain": failure.domain, "code": String(failure.code)]
             )
-            stopCapture(reason: "start_error")
+            stopCapture(reason: "start_error", deletingFile: true)
             phase = .failed
             errorMessage = "マイクを開始できませんでした。もう一度お試しください。"
         }
     }
 
-    public func finishListening() -> String? {
-        stopCapture(reason: "user_finished")
-        let value = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty {
-            phase = .failed
-            errorMessage = "言葉を聞き取れませんでした。"
+    public func finishListening() -> ShannonVoiceRecording? {
+        guard let recorder, let fileURL = recordingURL else {
+            fail("録音を完了できませんでした。", step: "voice.finish.missing_recording")
             return nil
         }
-        phase = .ready
-        return value
+        let duration = max(recordingDuration, recorder.currentTime)
+        phase = .transcribing
+        recorder.stop()
+        self.recorder = nil
+        recordingURL = nil
+        stopMetering()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        let byteCount = ((try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size]) as? NSNumber)?.intValue ?? 0
+        diagnostics.record(
+            "voice.recording.finished",
+            sessionID: diagnosticSessionID,
+            metadata: [
+                "duration_ms": String(Int(duration * 1_000)),
+                "bytes": String(byteCount),
+            ]
+        )
+        diagnosticSessionID = nil
+        guard ShannonVoiceRecordingPolicy.isUsable(duration: duration, byteCount: byteCount) else {
+            try? FileManager.default.removeItem(at: fileURL)
+            phase = .failed
+            errorMessage = duration < ShannonVoiceRecordingPolicy.minimumDuration
+                ? "もう少し長く話してから送ってください。"
+                : "録音が長すぎるため送信できませんでした。"
+            return nil
+        }
+        return ShannonVoiceRecording(
+            fileURL: fileURL,
+            durationMilliseconds: max(1, Int(duration * 1_000))
+        )
     }
 
-    public func beginThinking() {
-        stopCapture(reason: "begin_thinking")
+    public func acceptTranscript(_ value: String) {
+        transcript = value
         errorMessage = nil
         phase = .thinking
+    }
+
+    public func finishAfterFailedTranscription() {
+        phase = .failed
+        errorMessage = "音声を文字にできませんでした。録り直すか、テキストで入力してください。"
     }
 
     public func speak(_ text: String) {
@@ -256,9 +250,10 @@ public final class ShannonVoiceConversationModel: NSObject {
     }
 
     public func cancel() {
-        stopCapture(reason: "cancelled")
+        stopCapture(reason: "cancelled", deletingFile: true)
         stopSpeaking()
         transcript = ""
+        recordingDuration = 0
         errorMessage = nil
         phase = .idle
     }
@@ -268,20 +263,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         errorMessage = "返答を受け取れませんでした。テキストから再送できます。"
     }
 
-    private func beginLegacyCapture(sessionID: String) throws {
-        diagnostics.record("capture.recognizer.before", sessionID: sessionID)
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ja-JP")), recognizer.isAvailable else {
-            throw VoiceError.recognizerUnavailable
-        }
-        diagnostics.record(
-            "capture.recognizer.after",
-            sessionID: sessionID,
-            metadata: [
-                "available": String(recognizer.isAvailable),
-                "on_device": String(recognizer.supportsOnDeviceRecognition),
-            ]
-        )
-
+    private func beginFileRecording(sessionID: String) throws {
         let session = AVAudioSession.sharedInstance()
         diagnostics.record("capture.session.category.before", sessionID: sessionID)
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
@@ -291,368 +273,93 @@ public final class ShannonVoiceConversationModel: NSObject {
         diagnostics.record(
             "capture.session.activate.after",
             sessionID: sessionID,
-            metadata: [
-                "input_available": String(session.isInputAvailable),
-                "sample_rate": String(session.sampleRate),
-                "input_channels": String(session.inputNumberOfChannels),
-                "route_inputs": session.currentRoute.inputs.map(\.portType.rawValue).joined(separator: ","),
-            ]
+            metadata: ["input_available": String(session.isInputAvailable)]
         )
-        guard session.isInputAvailable else { throw VoiceError.inputUnavailable }
+        guard session.isInputAvailable else { throw RecordingError.inputUnavailable }
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
-        recognitionRequest = request
-
-        let engine = AVAudioEngine()
-        audioEngine = engine
-        diagnostics.record("capture.input_node.before", sessionID: sessionID)
-        let input = engine.inputNode
-        diagnostics.record("capture.input_node.after", sessionID: sessionID)
-        diagnostics.record("capture.format.before", sessionID: sessionID)
-        let format = input.outputFormat(forBus: 0)
-        diagnostics.record(
-            "capture.format.after",
-            sessionID: sessionID,
-            metadata: [
-                "sample_rate": String(format.sampleRate),
-                "channels": String(format.channelCount),
-                "interleaved": String(format.isInterleaved),
-                "common_format": String(format.commonFormat.rawValue),
-            ]
-        )
-        guard ShannonVoiceAudioFormatPolicy.isUsable(
-            sampleRate: format.sampleRate,
-            channelCount: format.channelCount
-        ) else {
-            throw VoiceError.invalidInputFormat
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shannon-voice-\(UUID().uuidString)")
+            .appendingPathExtension("m4a")
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 24_000,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: 64_000,
+            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+        ]
+        diagnostics.record("capture.recorder.create.before", sessionID: sessionID)
+        let recorder = try AVAudioRecorder(url: fileURL, settings: settings)
+        recorder.delegate = self
+        recorder.isMeteringEnabled = true
+        guard recorder.prepareToRecord() else { throw RecordingError.preparationFailed }
+        diagnostics.record("capture.recorder.create.after", sessionID: sessionID)
+        guard recorder.record(forDuration: ShannonVoiceRecordingPolicy.maximumDuration) else {
+            throw RecordingError.startFailed
         }
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            let text = result?.bestTranscription.formattedString
-            let final = result?.isFinal == true
-            let failed = error != nil
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if let text { self.transcript = text }
-                if final {
-                    self.stopCapture(reason: "recognition_final")
-                    self.phase = self.transcript.isEmpty ? .failed : .ready
-                } else if failed {
-                    self.stopCapture(reason: "recognition_error")
-                    if self.transcript.isEmpty {
-                        self.phase = .failed
-                        self.errorMessage = "音声認識を続けられませんでした。"
-                    } else {
-                        self.phase = .ready
-                    }
-                }
-            }
-        }
-
-        diagnostics.record("capture.tap.before", sessionID: sessionID)
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
-        }
-        tapIsInstalled = true
-        diagnostics.record("capture.tap.after", sessionID: sessionID)
-        diagnostics.record("capture.prepare.before", sessionID: sessionID)
-        engine.prepare()
-        diagnostics.record("capture.prepare.after", sessionID: sessionID)
-        diagnostics.record("capture.engine_start.before", sessionID: sessionID)
-        try engine.start()
-        diagnostics.record("capture.engine_start.after", sessionID: sessionID)
+        self.recorder = recorder
+        recordingURL = fileURL
+        startMetering(recorder)
+        diagnostics.record("capture.recorder.started", sessionID: sessionID)
     }
 
-    private func stopCapture(reason: String) {
-        let sessionID = diagnosticSessionID
-        diagnostics.record("capture.stop.before", sessionID: sessionID, metadata: ["reason": reason])
-        if #available(iOS 26.0, *), let capture = analyzerCapture as? ShannonSpeechAnalyzerCapture {
-            capture.stop(sessionID: sessionID, reason: reason)
+    private func startMetering(_ recorder: AVAudioRecorder) {
+        meteringTask?.cancel()
+        meteringTask = Task { [weak self, weak recorder] in
+            while !Task.isCancelled, let recorder, recorder.isRecording {
+                self?.recordingDuration = min(recorder.currentTime, ShannonVoiceRecordingPolicy.maximumDuration)
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
-        analyzerCapture = nil
-        let engine = audioEngine
-        audioEngine = nil
-        if engine?.isRunning == true { engine?.stop() }
-        if tapIsInstalled, let engine {
-            engine.inputNode.removeTap(onBus: 0)
-            tapIsInstalled = false
+    }
+
+    private func stopMetering() {
+        meteringTask?.cancel()
+        meteringTask = nil
+    }
+
+    private func stopCapture(reason: String, deletingFile: Bool) {
+        diagnostics.record("capture.stop.before", sessionID: diagnosticSessionID, metadata: ["reason": reason])
+        recorder?.stop()
+        recorder = nil
+        stopMetering()
+        if deletingFile, let recordingURL {
+            try? FileManager.default.removeItem(at: recordingURL)
         }
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
+        recordingURL = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        diagnostics.record("capture.stop.after", sessionID: sessionID, metadata: ["reason": reason])
+        diagnostics.record("capture.stop.after", sessionID: diagnosticSessionID, metadata: ["reason": reason])
         diagnosticSessionID = nil
     }
 
-    private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in continuation.resume(returning: status) }
-        }
+    private func fail(_ message: String, step: String) {
+        diagnostics.record(step, sessionID: diagnosticSessionID)
+        stopCapture(reason: "failed", deletingFile: true)
+        phase = .failed
+        errorMessage = message
     }
 
-    private func resolveLegacySpeechAuthorization(sessionID: String) async -> SFSpeechRecognizerAuthorizationStatus {
-        diagnostics.record("permission.speech.status.before", sessionID: sessionID)
-        let current = SFSpeechRecognizer.authorizationStatus()
-        diagnostics.record(
-            "permission.speech.status.after",
-            sessionID: sessionID,
-            metadata: ["status": String(current.rawValue)]
-        )
-        switch ShannonLegacySpeechAuthorizationAction.action(for: current.shannonPermissionState) {
-        case .proceed, .deny:
-            return current
-        case .request:
-            diagnostics.record("permission.speech.request.before", sessionID: sessionID)
-            let requested = await requestSpeechAuthorization()
-            diagnostics.record(
-                "permission.speech.request.after",
-                sessionID: sessionID,
-                metadata: ["status": String(requested.rawValue)]
+    private enum RecordingError: Error {
+        case inputUnavailable
+        case preparationFailed
+        case startFailed
+    }
+}
+
+extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthesizerDelegate {
+    nonisolated public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self, self.phase == .listening else { return }
+            self.recordingDuration = min(recorder.currentTime, ShannonVoiceRecordingPolicy.maximumDuration)
+            self.stopMetering()
+            self.phase = flag ? .ready : .failed
+            if !flag { self.errorMessage = "録音を完了できませんでした。" }
+            self.diagnostics.record(
+                flag ? "voice.recording.maximum_duration" : "voice.recording.failed",
+                sessionID: self.diagnosticSessionID
             )
-            return requested
         }
     }
 
-    private enum VoiceError: Error {
-        case recognizerUnavailable
-        case inputUnavailable
-        case invalidInputFormat
-        case missingSpeechUsageDescription
-    }
-}
-
-private extension SFSpeechRecognizerAuthorizationStatus {
-    var shannonPermissionState: ShannonSpeechPermissionState {
-        switch self {
-        case .notDetermined: .notDetermined
-        case .denied: .denied
-        case .restricted: .restricted
-        case .authorized: .authorized
-        @unknown default: .denied
-        }
-    }
-}
-
-@available(iOS 26.0, *)
-@MainActor
-private final class ShannonSpeechAnalyzerCapture {
-    private let diagnostics: ShannonVoiceDiagnostics
-    private let audioEngine = AVAudioEngine()
-    private var analyzer: SpeechAnalyzer?
-    private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation?
-    private var audioEventBuilder: AsyncStream<ShannonVoiceAnalyzerEvent>.Continuation?
-    private var audioInputTask: Task<Void, Never>?
-    private var resultsTask: Task<Void, Never>?
-    private var tapIsInstalled = false
-
-    init(diagnostics: ShannonVoiceDiagnostics) {
-        self.diagnostics = diagnostics
-    }
-
-    func start(
-        sessionID: String,
-        transcriptUpdated: @escaping @MainActor (String) -> Void,
-        failed: @escaping @MainActor () -> Void
-    ) async throws {
-        diagnostics.record("analyzer.locale.before", sessionID: sessionID)
-        guard let locale = await SpeechTranscriber.supportedLocale(
-            equivalentTo: Locale(identifier: "ja-JP")
-        ) else {
-            throw AnalyzerError.localeUnavailable
-        }
-        diagnostics.record("analyzer.locale.after", sessionID: sessionID, metadata: ["supported": "true"])
-
-        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
-        diagnostics.record("analyzer.assets.before", sessionID: sessionID)
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            diagnostics.record("analyzer.assets.download.before", sessionID: sessionID)
-            try await request.downloadAndInstall()
-            diagnostics.record("analyzer.assets.download.after", sessionID: sessionID)
-        }
-        diagnostics.record("analyzer.assets.after", sessionID: sessionID)
-
-        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-            compatibleWith: [transcriber]
-        ) else {
-            throw AnalyzerError.formatUnavailable
-        }
-        diagnostics.record(
-            "analyzer.format.ready",
-            sessionID: sessionID,
-            metadata: [
-                "sample_rate": String(analyzerFormat.sampleRate),
-                "channels": String(analyzerFormat.channelCount),
-            ]
-        )
-
-        let (inputSequence, builder) = AsyncStream<AnalyzerInput>.makeStream()
-        inputBuilder = builder
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
-        self.analyzer = analyzer
-
-        resultsTask = Task { [weak self] in
-            var finalized = ""
-            var recordedFirstResult = false
-            do {
-                for try await result in transcriber.results {
-                    guard !Task.isCancelled else { return }
-                    if !recordedFirstResult {
-                        recordedFirstResult = true
-                        self?.diagnostics.record("analyzer.results.first", sessionID: sessionID)
-                    }
-                    let value = String(result.text.characters)
-                    if result.isFinal {
-                        finalized += value
-                        transcriptUpdated(finalized)
-                    } else {
-                        transcriptUpdated(finalized + value)
-                    }
-                }
-            } catch {
-                let failure = error as NSError
-                self?.diagnostics.record(
-                    "analyzer.results.failed",
-                    sessionID: sessionID,
-                    metadata: ["domain": failure.domain, "code": String(failure.code)]
-                )
-                failed()
-            }
-        }
-
-        diagnostics.record("analyzer.start.before", sessionID: sessionID)
-        try await analyzer.start(inputSequence: inputSequence)
-        diagnostics.record("analyzer.start.after", sessionID: sessionID)
-
-        let audioSession = AVAudioSession.sharedInstance()
-        diagnostics.record("capture.session.category.before", sessionID: sessionID)
-        try audioSession.setCategory(.record, mode: .measurement, options: [.duckOthers])
-        diagnostics.record("capture.session.category.after", sessionID: sessionID)
-        diagnostics.record("capture.session.activate.before", sessionID: sessionID)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        diagnostics.record("capture.session.activate.after", sessionID: sessionID)
-        guard audioSession.isInputAvailable else { throw AnalyzerError.inputUnavailable }
-
-        let input = audioEngine.inputNode
-        let sourceFormat = input.outputFormat(forBus: 0)
-        guard ShannonVoiceAudioFormatPolicy.isUsable(
-            sampleRate: sourceFormat.sampleRate,
-            channelCount: sourceFormat.channelCount
-        ) else {
-            throw AnalyzerError.formatUnavailable
-        }
-
-        // AVAudioEngine owns the PCM buffer supplied to its tap and may reuse
-        // that storage as soon as the callback returns. Convert while the
-        // source is valid, then create Apple's Sendable AnalyzerInput before
-        // crossing into asynchronous work. This removes both a borrowed PCM
-        // reference and the hand-written UnsafePointer copy used by Build 31.
-        let (audioEventSequence, audioEventBuilder) = AsyncStream<ShannonVoiceAnalyzerEvent>.makeStream(
-            bufferingPolicy: .bufferingNewest(4)
-        )
-        self.audioEventBuilder = audioEventBuilder
-        let analyzerInputFactory = ShannonVoiceAnalyzerInputFactory(outputFormat: analyzerFormat)
-        let diagnostics = diagnostics
-        audioInputTask = Task.detached(priority: .userInitiated) {
-            defer { builder.finish() }
-            var recordedFirstBuffer = false
-            var recordedFirstOutput = false
-            for await event in audioEventSequence {
-                guard !Task.isCancelled else { return }
-                switch event {
-                case .input(let input):
-                    if !recordedFirstBuffer {
-                        recordedFirstBuffer = true
-                        diagnostics.record("analyzer.audio.first_buffer", sessionID: sessionID)
-                    }
-                    if !recordedFirstOutput {
-                        recordedFirstOutput = true
-                        diagnostics.record("analyzer.convert.first_output", sessionID: sessionID)
-                    }
-                    builder.yield(input)
-                case .conversionFailed(let domain, let code):
-                    diagnostics.record(
-                        "analyzer.convert.failed",
-                        sessionID: sessionID,
-                        metadata: ["domain": domain, "code": String(code)]
-                    )
-                }
-            }
-        }
-
-        diagnostics.record("capture.tap.before", sessionID: sessionID)
-        input.installTap(onBus: 0, bufferSize: 4_096, format: sourceFormat) { buffer, _ in
-            do {
-                let analyzerInput = try analyzerInputFactory.make(from: buffer)
-                audioEventBuilder.yield(.input(analyzerInput))
-            } catch {
-                let failure = error as NSError
-                audioEventBuilder.yield(.conversionFailed(domain: failure.domain, code: failure.code))
-            }
-        }
-        tapIsInstalled = true
-        diagnostics.record("capture.tap.after", sessionID: sessionID)
-        diagnostics.record("capture.prepare.before", sessionID: sessionID)
-        audioEngine.prepare()
-        diagnostics.record("capture.prepare.after", sessionID: sessionID)
-        diagnostics.record("capture.engine_start.before", sessionID: sessionID)
-        try audioEngine.start()
-        diagnostics.record("capture.engine_start.after", sessionID: sessionID)
-    }
-
-    func stop(sessionID: String?, reason: String) {
-        if audioEngine.isRunning { audioEngine.stop() }
-        if tapIsInstalled {
-            audioEngine.inputNode.removeTap(onBus: 0)
-            tapIsInstalled = false
-        }
-        audioEventBuilder?.finish()
-        audioEventBuilder = nil
-        let audioInputTask = audioInputTask
-        self.audioInputTask = nil
-        let inputBuilder = inputBuilder
-        self.inputBuilder = nil
-        if audioInputTask == nil {
-            inputBuilder?.finish()
-        }
-        let analyzer = analyzer
-        let resultsTask = resultsTask
-        self.analyzer = nil
-        self.resultsTask = nil
-        Task {
-            await audioInputTask?.value
-            do {
-                try await analyzer?.finalizeAndFinishThroughEndOfInput()
-            } catch {
-                let failure = error as NSError
-                diagnostics.record(
-                    "analyzer.finish.failed",
-                    sessionID: sessionID,
-                    metadata: ["domain": failure.domain, "code": String(failure.code)]
-                )
-            }
-            resultsTask?.cancel()
-        }
-        diagnostics.record("analyzer.stopped", sessionID: sessionID, metadata: ["reason": reason])
-    }
-
-    private enum AnalyzerError: Error {
-        case localeUnavailable
-        case formatUnavailable
-        case inputUnavailable
-    }
-}
-
-@available(iOS 26.0, *)
-private enum ShannonVoiceAnalyzerEvent: Sendable {
-    case input(AnalyzerInput)
-    case conversionFailed(domain: String, code: Int)
-}
-
-extension ShannonVoiceConversationModel: AVSpeechSynthesizerDelegate {
     nonisolated public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor [weak self] in
             guard self?.phase == .speaking else { return }
@@ -673,12 +380,14 @@ extension ShannonVoiceConversationModel: AVSpeechSynthesizerDelegate {
 public final class ShannonVoiceConversationModel {
     public private(set) var phase: ShannonVoicePhase = .denied
     public private(set) var transcript = ""
+    public private(set) var recordingDuration: TimeInterval = 0
     public private(set) var errorMessage: String? = "音声会話はiPhoneで利用できます。"
     public init() {}
     public var primaryAction: ShannonVoicePrimaryAction { .none }
     public func startListening() async {}
-    public func finishListening() -> String? { nil }
-    public func beginThinking() {}
+    public func finishListening() -> ShannonVoiceRecording? { nil }
+    public func acceptTranscript(_ value: String) {}
+    public func finishAfterFailedTranscription() {}
     public func speak(_ text: String) {}
     public func stopSpeaking() {}
     public func cancel() { phase = .denied }

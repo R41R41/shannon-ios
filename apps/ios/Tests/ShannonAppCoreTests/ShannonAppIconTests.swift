@@ -1,17 +1,17 @@
 import XCTest
 @testable import ShannonAppCore
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 final class ShannonAppIconTests: XCTestCase {
     func testEverySelectableIconHasABundledVisualPreview() {
-        XCTAssertNotNil(
-            ShannonAppIconAssets.url(for: ShannonAppIconAssets.primaryPreviewAssetName)
-        )
+        assertPreviewCanBeDecoded(ShannonAppIconAssets.primaryPreviewAssetName)
 
         for choice in ShannonAppIconChoice.allCases {
-            XCTAssertNotNil(
-                ShannonAppIconAssets.url(for: choice.previewAssetName),
-                "Missing preview for \(choice.rawValue)"
-            )
+            assertPreviewCanBeDecoded(choice.previewAssetName)
         }
     }
 
@@ -116,5 +116,33 @@ final class ShannonAppIconTests: XCTestCase {
 
     private func date(hour: Int, minute: Int = 0, calendar: Calendar) -> Date {
         calendar.date(from: DateComponents(year: 2026, month: 9, day: 2, hour: hour, minute: minute))!
+    }
+
+    private func assertPreviewCanBeDecoded(
+        _ assetName: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertNotNil(
+            ShannonAppIconAssets.url(for: assetName),
+            "Missing preview file for \(assetName)",
+            file: file,
+            line: line
+        )
+#if canImport(UIKit)
+        XCTAssertNotNil(
+            ShannonAppIconAssets.uiImage(for: assetName),
+            "Preview is not a decodable image: \(assetName)",
+            file: file,
+            line: line
+        )
+#elseif canImport(AppKit)
+        XCTAssertNotNil(
+            ShannonAppIconAssets.nsImage(for: assetName),
+            "Preview is not a decodable image: \(assetName)",
+            file: file,
+            line: line
+        )
+#endif
     }
 }

@@ -2,6 +2,7 @@ import Foundation
 
 public protocol ShannonAPIClientProtocol: Sendable {
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO
+    func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
     func loadConversation(scopeKey: String, threadId: String?) async throws -> ConversationHistoryResponseDTO
     func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO
     func createThread(scopeKey: String, title: String?) async throws -> String
@@ -37,6 +38,10 @@ public protocol ShannonAPIClientProtocol: Sendable {
 }
 
 public extension ShannonAPIClientProtocol {
+    func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
     func loadConversation(scopeKey: String, threadId: String? = nil) async throws -> ConversationHistoryResponseDTO {
         throw ShannonAPIError.invalidResponse
     }
@@ -152,6 +157,23 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
         return try JSONDecoder().decode(ChatResponseDTO.self, from: data)
+    }
+
+    public func transcribeVoice(
+        scopeKey: String,
+        recording: ShannonVoiceRecording
+    ) async throws -> ShannonVoiceTranscriptionDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/transcriptions"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 75
+        request.setValue(recording.mimeType, forHTTPHeaderField: "content-type")
+        request.setValue(String(recording.durationMilliseconds), forHTTPHeaderField: "x-shannon-audio-duration-ms")
+        authorize(&request, connection: connection)
+        let (data, response) = try await session.upload(for: request, fromFile: recording.fileURL)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        return try JSONDecoder().decode(ShannonVoiceTranscriptionDTO.self, from: data)
     }
 
     public func loadConversation(scopeKey: String, threadId: String? = nil) async throws -> ConversationHistoryResponseDTO {

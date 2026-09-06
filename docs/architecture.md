@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-06 / iOS 26 SpeechAnalyzer migration
+Revision: 2026-09-06 / server voice transcription
 
 ## System shape
 
@@ -66,9 +66,9 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 - Settings → App Icon shows the actual bundled primary and alternate icon artwork. Fixed mode previews the primary Shannon mark, automatic mode shows representative time/emotion variants, manual mode shows every selectable icon, and the currently active icon remains visible at the top.
-- Voice is user-initiated and half-duplex: iOS 26 and later use Apple's on-device `SpeechAnalyzer` without the legacy speech-authorization call; older supported iOS versions use `SFSpeechRecognizer` and request its authorization only while the state is undetermined. The resulting Japanese text follows the existing FCA route, and the reply uses the system Japanese voice. Raw audio is not retained.
-- The iOS 26 capture path never sends an `AVAudioEngine`-owned PCM buffer across an asynchronous boundary. The tap converts the borrowed buffer while it is valid and immediately creates Apple's `Sendable` `AnalyzerInput`; only that owned input enters a newest-four async queue. A separate feeder forwards those inputs to `SpeechAnalyzer`. On stop, the feeder drains queued input and closes the analyzer stream before finalization so the final phrase is not discarded. This removes both the original cross-thread borrowed buffer and Build 31's hand-written Unsafe PCM copy. The installed Xcode 26.5 SDK does not expose the newer `AnalyzerInputConverter` helper, so Shannon retains its own `AVAudioConverter` conversion step.
-- Voice startup writes privacy-bounded, immediately flushed checkpoints before and after permission, audio-session, input-format, tap, and engine-start operations. It also records the first captured buffer, first converted buffer, and first recognition result. Settings → Voice Diagnostics can copy the bounded report after a crash; audio, transcripts, messages, tokens, and credentials are never recorded.
+- Voice is user-initiated and half-duplex. iOS records a mono AAC/M4A file with `AVAudioRecorder`; it does not run speech recognition, PCM conversion, or `AVAudioEngine` callbacks. The paired device uploads the completed file to `POST /v1/voice/transcriptions`, Azure calls the configured transcription model, and the resulting Japanese text follows the existing FCA route. The reply continues to use the system Japanese voice.
+- The default transcription model is `gpt-transcribe`. A request is limited to 60 seconds and 5 MiB, requires the paired-device credential, and has a separate per-device rate limit. Voice cost uses the `voice` usage lane and a separate daily budget, so it cannot consume the background exploration/sleep budget.
+- The recording is a temporary client file and is deleted after transcription, whether the API succeeds or fails. Azure keeps the audio in memory only for the upstream request and does not write it to disk. Voice diagnostics record only bounded lifecycle steps, duration, byte count, and safe failure categories; audio, transcripts, messages, tokens, credentials, and file paths are never recorded.
 - The composer uses a dynamic bottom safe-area inset, so multi-line input, voice status, failures, and task notices do not cover the latest reply.
 
 Live2D and animated widgets remain future work. Current dialogue mode uses a static character-stage asset.
@@ -120,7 +120,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Notifications | `push_registrations`, `push_delivery_state` |
 | TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
 | Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |
-| Cost | `llm_usage_events` |
+| Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 
 ## Code ownership

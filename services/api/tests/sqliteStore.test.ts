@@ -364,9 +364,15 @@ describe('SQLite Shannon persistence', () => {
       cachedInputTokens: 0, outputTokens: 100, totalTokens: 600,
       estimatedCostUsd: 0.00022, occurredAt: '2026-09-03T00:00:00.000Z',
     });
+    store.recordLlmUsage({
+      scopeKey: 'owner-a', lane: 'voice', model: 'gpt-transcribe', inputTokens: 0,
+      cachedInputTokens: 0, outputTokens: 0, totalTokens: 0,
+      estimatedCostUsd: 0.000075, occurredAt: '2026-09-03T00:01:00.000Z',
+    });
     expect(store.llmUsageSummary('owner-a', '2026-09')).toEqual([
       expect.objectContaining({ lane: 'chat', calls: 1, totalTokens: 130 }),
       expect.objectContaining({ lane: 'sleep', calls: 1, totalTokens: 600 }),
+      expect.objectContaining({ lane: 'voice', calls: 1, estimatedCostUsd: 0.000075 }),
     ]);
     expect(store.backgroundLlmCostUsd('2026-09')).toBeCloseTo(0.00022, 9);
     expect(store.backgroundLlmCostUsdForDay('2026-09-03')).toBeCloseTo(0.00022, 9);
@@ -374,8 +380,56 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 8 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 });
     database.close();
+  });
+
+  it('migrates v8 LLM usage to the voice lane without losing existing cost history', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: sequenceClock() });
+    first.recordLlmUsage({
+      scopeKey: 'owner-a', lane: 'chat', model: 'gpt-5.6-luna', inputTokens: 10,
+      cachedInputTokens: 0, outputTokens: 5, totalTokens: 15,
+      estimatedCostUsd: 0.00001, occurredAt: '2026-09-05T00:00:00.000Z',
+    });
+    first.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`
+      ALTER TABLE llm_usage_events RENAME TO llm_usage_events_with_voice;
+      CREATE TABLE llm_usage_events (
+        usage_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        lane TEXT NOT NULL CHECK (lane IN ('chat', 'sleep')),
+        model TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+        cached_input_tokens INTEGER NOT NULL CHECK (cached_input_tokens >= 0),
+        output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+        total_tokens INTEGER NOT NULL CHECK (total_tokens >= 0),
+        estimated_cost_usd REAL NOT NULL CHECK (estimated_cost_usd >= 0),
+        occurred_at TEXT NOT NULL
+      );
+      INSERT INTO llm_usage_events SELECT * FROM llm_usage_events_with_voice;
+      DROP TABLE llm_usage_events_with_voice;
+      CREATE INDEX llm_usage_events_month_lane ON llm_usage_events (occurred_at, lane);
+      PRAGMA user_version = 8;
+    `);
+    legacy.close();
+
+    const migrated = new SQLiteShannonStore({ path, now: sequenceClock() });
+    expect(migrated.llmUsageSummary('owner-a', '2026-09')).toEqual([
+      expect.objectContaining({ lane: 'chat', calls: 1, totalTokens: 15 }),
+    ]);
+    migrated.recordLlmUsage({
+      scopeKey: 'owner-a', lane: 'voice', model: 'gpt-transcribe', inputTokens: 0,
+      cachedInputTokens: 0, outputTokens: 0, totalTokens: 0,
+      estimatedCostUsd: 0.000075, occurredAt: '2026-09-05T00:01:00.000Z',
+    });
+    expect(migrated.llmUsageSummary('owner-a', '2026-09')).toEqual([
+      expect.objectContaining({ lane: 'chat', calls: 1, totalTokens: 15 }),
+      expect.objectContaining({ lane: 'voice', calls: 1, estimatedCostUsd: 0.000075 }),
+    ]);
+    migrated.close();
   });
 
   it('continues FCA history after an API process restart and reacts on the current icon', async () => {

@@ -4,8 +4,6 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>シャノンと音声で会話するためにマイクを使用します。</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>話した言葉をテキストにしてシャノンへ送るために音声認識を使用します。</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>

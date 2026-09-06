@@ -147,6 +147,14 @@ public final class ShannonConversationModel {
         await send(text: text, userMessageID: message.id)
     }
 
+    public func transcribeVoice(_ recording: ShannonVoiceRecording) async throws -> String {
+        defer { try? FileManager.default.removeItem(at: recording.fileURL) }
+        let result = try await client.transcribeVoice(scopeKey: scopeKey, recording: recording)
+        let value = result.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return value
+    }
+
     public func loadThreadsIfNeeded() async {
         guard !didAttemptThreadsLoad else { return }
         didAttemptThreadsLoad = true

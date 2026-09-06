@@ -67,6 +67,45 @@ final class ShannonConnectionTests: XCTestCase {
         _ = try await client.send(message: "こんにちは", scopeKey: "untrusted-client-scope")
     }
 
+    func testAPIClientUploadsVoiceFileWithPairedDeviceCredential() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "v", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-voice",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ShannonVoiceUploadTests-\(UUID().uuidString).m4a")
+        try Data([1, 2, 3, 4]).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/voice/transcriptions")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "audio/mp4")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-audio-duration-ms"), "1250")
+            return try response(url: request.url!, json: [
+                "transcript": "今日は散歩に行きたい",
+                "model": "gpt-transcribe",
+                "durationSeconds": 1.25,
+                "estimatedCostUsd": 0.00009375,
+            ])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let result = try await client.transcribeVoice(
+            scopeKey: "untrusted-client-scope",
+            recording: ShannonVoiceRecording(fileURL: fileURL, durationMilliseconds: 1_250)
+        )
+
+        XCTAssertEqual(result.transcript, "今日は散歩に行きたい")
+        XCTAssertEqual(result.model, "gpt-transcribe")
+    }
+
     func testAPIClientRegistersAPNsTokenWithPairedDeviceCredential() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "p", count: 43)
