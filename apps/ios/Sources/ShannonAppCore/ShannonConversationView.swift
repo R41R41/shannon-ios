@@ -12,12 +12,14 @@ public struct ShannonConversationView: View {
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var appIconModel = ShannonAppIconModel()
     @State private var voiceModel = ShannonVoiceConversationModel()
+    @State private var realtimeVoiceModel = ShannonRealtimeVoiceSessionModel()
     @State private var showsStateDetails = false
     @State private var showsConnectionDetails = false
     @State private var showsAppIconSettings = false
     @State private var showsAppearanceSettings = false
     @State private var showsTestFlightDelivery = false
     @State private var showsVoiceDiagnostics = false
+    @State private var showsLiveVoice = false
     @State private var showsSettings = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
     @State private var drawerProgress: CGFloat = 0
@@ -107,11 +109,17 @@ public struct ShannonConversationView: View {
         .onChange(of: selectedPage) {
             composerIsFocused = false
             voiceModel.cancel()
+            realtimeVoiceModel.stop()
+            showsLiveVoice = false
             guard selectedPage == .memory else { return }
             Task { await memoryModel.reload() }
         }
         .onChange(of: scenePhase) {
-            if scenePhase != .active { voiceModel.cancel() }
+            if scenePhase != .active {
+                voiceModel.cancel()
+                realtimeVoiceModel.stop()
+                showsLiveVoice = false
+            }
         }
         .sheet(isPresented: $showsSettings) {
             settingsSheet(palette)
@@ -121,6 +129,22 @@ public struct ShannonConversationView: View {
             showsTestFlightDelivery = true
         }
 #if os(iOS)
+        .fullScreenCover(isPresented: $showsLiveVoice) {
+            ShannonLiveVoiceView(
+                model: realtimeVoiceModel,
+                expression: model.currentExpression,
+                createCall: { offer in
+                    try await model.createRealtimeVoiceCall(offerSDP: offer)
+                },
+                commitTurn: { user, shannon in
+                    try await model.commitRealtimeVoiceTurn(
+                        userTranscript: user,
+                        shannonTranscript: shannon
+                    )
+                },
+                dismiss: { showsLiveVoice = false }
+            )
+        }
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
             agentTaskRoom
         }
@@ -234,15 +258,6 @@ public struct ShannonConversationView: View {
                     ShannonAgentTaskCapsule(task: task) {
                         openAgentTask(task.id)
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                if voiceModel.phase != .idle {
-                    ShannonVoiceStatusBar(
-                        model: voiceModel,
-                        primaryAction: performVoicePrimaryAction,
-                        cancel: voiceModel.cancel
-                    )
-                    .padding(.horizontal, M3Spacing.medium)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 composer(palette)
@@ -784,18 +799,18 @@ public struct ShannonConversationView: View {
         if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return model.canSendDraft
         }
-        return voiceModel.primaryAction != .none && !model.isSending
+        return !model.isSending
     }
 
     private var composerActionSymbol: String {
         if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "arrow.up" }
-        return voiceModel.phase.symbolName
+        return "waveform"
     }
 
     private var composerActionLabel: String {
         if model.isSending { return "送信中" }
         if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "送信" }
-        return voiceModel.phase.japaneseLabel
+        return "シャノンと音声で話す"
     }
 
     private func composerPrimaryAction() {
@@ -807,36 +822,9 @@ public struct ShannonConversationView: View {
     }
 
     private func performVoicePrimaryAction() {
-        switch voiceModel.primaryAction {
-        case .start:
-            composerIsFocused = false
-            Task { await voiceModel.startListening() }
-        case .send:
-            guard let recording = voiceModel.finishListening() else { return }
-            Task {
-                let transcript: String
-                do {
-                    transcript = try await model.transcribeVoice(recording)
-                } catch {
-                    voiceModel.finishAfterFailedTranscription()
-                    return
-                }
-                voiceModel.acceptTranscript(transcript)
-                model.draft = transcript
-                await model.sendDraft()
-                if model.hasFailedMessage {
-                    voiceModel.finishAfterFailedReply()
-                } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
-                    voiceModel.speak(reply.text)
-                } else {
-                    voiceModel.finishAfterFailedReply()
-                }
-            }
-        case .stopSpeaking:
-            voiceModel.stopSpeaking()
-        case .none:
-            break
-        }
+        composerIsFocused = false
+        voiceModel.cancel()
+        showsLiveVoice = true
     }
 
     private func openAgentTask(_ id: UUID) {

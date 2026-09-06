@@ -1,0 +1,41 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shannon Build 34 Realtime音声 配信ガイド</title><style>
+:root{color-scheme:light dark;--bg:#f4fbfe;--s:rgba(255,255,255,.8);--ink:#132229;--muted:#61727a;--blue:#39bae9;--line:rgba(38,113,140,.18);--good:#08795c;--bad:#b33b49}@media(prefers-color-scheme:dark){:root{--bg:#071217;--s:rgba(18,31,37,.86);--ink:#edfaff;--muted:#a7bbc4;--blue:#65cdf2;--line:rgba(157,228,248,.17);--good:#65d9ae;--bad:#ff8994}}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 10% 0%,rgba(57,186,233,.18),transparent 34%),var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;line-height:1.65}.wrap{max-width:900px;margin:auto;padding:52px 22px 80px}h1{font-size:clamp(36px,7vw,66px);line-height:1.04;letter-spacing:-.04em;margin:14px 0 20px}h2{margin:46px 0 14px}.lead{font-size:18px;color:var(--muted);max-width:720px}.card{background:var(--s);border:1px solid var(--line);border-radius:22px;padding:22px;margin:14px 0;backdrop-filter:blur(16px)}.step{display:grid;grid-template-columns:36px 1fr;gap:12px;margin:18px 0}.n{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:rgba(57,186,233,.16);color:var(--blue);font-weight:800}.ok{color:var(--good)}.danger{border-color:rgba(179,59,73,.32)}code{font-family:"SF Mono",monospace;background:rgba(57,186,233,.10);padding:3px 6px;border-radius:7px;word-break:break-word}ul{padding-left:22px}footer{margin-top:52px;color:var(--muted);font-size:13px}</style></head><body><main class="wrap">
+<span>SHANNON · NEXT TESTFLIGHT</span><h1>Realtime音声を<br>実機へ届ける。</h1>
+<p class="lead">発話中字幕、シャノンの音声返答、自然な割り込み、既存トークへの保存を、次の内部Buildで確認するための配信手順です。Build 33の会話・接続・DBは消しません。</p>
+
+<h2>何を変更するか</h2><div class="card"><ul>
+<li>Azure APIに、ペアリング済みiPhone専用のRealtime call作成口を追加</li>
+<li>iPhoneの音声ボタンを、一括M4A送信からWebRTC音声セッションへ変更</li>
+<li>ユーザーとシャノン双方の字幕を発話中から表示</li>
+<li>確定した一往復だけを現在のトークへ保存し、感情・記憶は従来どおり非同期更新</li>
+<li>OpenAI標準APIキーはAzureの外へ出さない</li>
+</ul></div>
+
+<h2>こちらで行うこと</h2>
+<div class="step"><div class="n">1</div><div><b>正本と差分を固定</b><br>shannon-iosだけを対象にし、既存の無関係な変更を分離して監査します。</div></div>
+<div class="step"><div class="n">2</div><div><b>Azureを安全に更新</b><br>オンライン整合DBバックアップと変更前ソースを保存し、APIだけを更新。型検査、DB integrity、既存件数、3サービス、通常会話を確認します。</div></div>
+<div class="step"><div class="n">3</div><div><b>GitHubとXcode Cloud</b><br>検証済みcommitを非force pushし、既存のRelease RunnerでArchive、Upload、Apple Processing、Shannon Internal割当まで監視します。</div></div>
+<div class="step"><div class="n">4</div><div><b>実機Smoke</b><br>TestFlightで更新後、下記5項目だけを確認します。</div></div>
+
+<h2>ユーザーがすること</h2><div class="card">
+<p><b>配信前：</b>この会話で次の一文を返信します。</p>
+<p><code>Realtime音声版のAzure転送・DBバックアップ・再起動・GitHub push・TestFlight配信を許可します</code></p>
+<p><b>配信後：</b>TestFlightでShannonを更新し、音声ボタンを一度タップします。iPhoneをMacへ接続する必要はありません。</p>
+</div>
+
+<h2>成功の見え方</h2><div class="card ok"><ol>
+<li>音声画面が開き「聞いている」になる</li>
+<li>話している途中から「あなた」の字幕が伸びる</li>
+<li>シャノンが音声で返し、返答字幕も同時に伸びる</li>
+<li>返答中に話すとシャノンが止まり、聞く側へ戻る</li>
+<li>終了後、トーク画面に確定した会話が残る</li>
+</ol></div>
+
+<h2>失敗した場合の安全な戻し方</h2><div class="card danger"><ul>
+<li><b>Azure更新で異常：</b>TestFlight配信へ進まず、保存した変更前APIへ戻します。DBバックアップは保持します。</li>
+<li><b>Xcode Cloud失敗：</b>現在のBuild 33はそのまま利用できます。GitHubをforce操作しません。</li>
+<li><b>音声だけ失敗：</b>通常の文字チャットは維持。アプリを削除・再ペアリングせず、設定 → 音声診断を共有します。</li>
+<li><b>費用保護：</b>初期版は明示起動、端末別接続制限、1回10分上限。一般利用前にAzure側の日次Realtime予算を追加します。</li>
+</ul></div>
+<footer>関連設計: shannon-realtime-voice-v26.html · 配布正本: shannon-ios · 2026-09-06</footer>
+</main></body></html>

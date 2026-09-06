@@ -30,7 +30,11 @@ export type VoiceTranscriptionFailureCode =
   | 'VOICE_TRANSCRIPT_EMPTY';
 
 export class VoiceTranscriptionError extends Error {
-  constructor(readonly code: VoiceTranscriptionFailureCode) {
+  constructor(
+    readonly code: VoiceTranscriptionFailureCode,
+    readonly upstreamStatus?: number,
+    readonly upstreamCode?: string,
+  ) {
     super(code);
   }
 }
@@ -98,7 +102,14 @@ export class OpenAIVoiceTranscriber implements VoiceTranscriber {
     } finally {
       clearTimeout(timeout);
     }
-    if (!response.ok) throw new VoiceTranscriptionError('VOICE_TRANSCRIPTION_FAILED');
+    if (!response.ok) {
+      const body = await response.text();
+      throw new VoiceTranscriptionError(
+        'VOICE_TRANSCRIPTION_FAILED',
+        response.status,
+        safeUpstreamCode(body),
+      );
+    }
 
     const value = await response.json() as unknown;
     const transcript = transcriptionText(value);
@@ -233,4 +244,17 @@ function nonnegativeInteger(value: unknown): number {
 
 function roundUsd(value: number): number {
   return Math.round(value * 1_000_000_000) / 1_000_000_000;
+}
+
+function safeUpstreamCode(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const error = (parsed as Record<string, unknown>).error;
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined;
+    const value = (error as Record<string, unknown>).code ?? (error as Record<string, unknown>).type;
+    return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,100}$/u.test(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }

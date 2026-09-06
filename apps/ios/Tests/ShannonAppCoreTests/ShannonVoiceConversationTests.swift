@@ -2,6 +2,45 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonVoiceConversationTests: XCTestCase {
+    func testRealtimeTranscriptEventsAreVisibleAsDeltasAndPairInEitherCompletionOrder() throws {
+        var state = ShannonRealtimeVoiceTranscriptState()
+        let inputDelta = try XCTUnwrap(ShannonRealtimeVoiceEvent.decode(Data(
+            #"{"type":"conversation.item.input_audio_transcription.delta","delta":"明日は"}"#.utf8
+        )))
+        XCTAssertNil(state.apply(inputDelta))
+        XCTAssertEqual(state.userText, "明日は")
+
+        XCTAssertNil(state.apply(.inputTranscriptDone("明日は散歩したい")))
+        XCTAssertNil(state.apply(.outputTranscriptDelta("朝なら")))
+        XCTAssertEqual(state.shannonText, "朝なら")
+        XCTAssertEqual(
+            state.apply(.outputTranscriptDone("朝なら涼しそう。"))?.user,
+            "明日は散歩したい"
+        )
+
+        XCTAssertNil(state.apply(.speechStarted))
+        XCTAssertEqual(state.userText, "")
+        XCTAssertNil(state.apply(.outputTranscriptDone("いいね。")))
+        let reversed = state.apply(.inputTranscriptDone("そうしよう"))
+        XCTAssertEqual(reversed?.user, "そうしよう")
+        XCTAssertEqual(reversed?.shannon, "いいね。")
+    }
+
+    func testRealtimeEventsDecodeSpeechResponseAndSafeErrors() {
+        XCTAssertEqual(event(#"{"type":"input_audio_buffer.speech_started"}"#), .speechStarted)
+        XCTAssertEqual(event(#"{"type":"input_audio_buffer.speech_stopped"}"#), .speechStopped)
+        XCTAssertEqual(event(#"{"type":"response.created"}"#), .responseStarted)
+        XCTAssertEqual(event(#"{"type":"response.done"}"#), .responseFinished)
+        XCTAssertEqual(
+            event(#"{"type":"response.output_audio_transcript.delta","delta":"うん"}"#),
+            .outputTranscriptDelta("うん")
+        )
+        XCTAssertEqual(
+            event(#"{"type":"error","error":{"code":"session_expired","message":"secret"}}"#),
+            .failed("session_expired")
+        )
+    }
+
     func testPrimaryActionFollowsHalfDuplexVoiceState() {
         XCTAssertEqual(ShannonVoicePrimaryAction.action(for: .idle), .start)
         XCTAssertEqual(ShannonVoicePrimaryAction.action(for: .requestingPermission), .none)
@@ -64,5 +103,9 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertTrue(report.contains("token_value=<redacted>"))
         XCTAssertFalse(report.contains("これは保存してはいけない"))
         XCTAssertFalse(report.contains("secret-value"))
+    }
+
+    private func event(_ json: String) -> ShannonRealtimeVoiceEvent? {
+        ShannonRealtimeVoiceEvent.decode(Data(json.utf8))
     }
 }

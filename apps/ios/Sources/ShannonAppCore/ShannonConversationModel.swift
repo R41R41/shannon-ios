@@ -155,6 +155,48 @@ public final class ShannonConversationModel {
         return value
     }
 
+    public func createRealtimeVoiceCall(offerSDP: String) async throws -> ShannonRealtimeVoiceCallDTO {
+        let call = try await client.createRealtimeVoiceCall(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            offerSDP: offerSDP
+        )
+        selectedThreadId = call.threadID
+        return call
+    }
+
+    public func commitRealtimeVoiceTurn(
+        userTranscript: String,
+        shannonTranscript: String
+    ) async throws {
+        let userText = userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shannonText = shannonTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userText.isEmpty, !shannonText.isEmpty else { throw ShannonAPIError.invalidResponse }
+        let response = try await client.commitRealtimeVoiceTurn(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            userTranscript: userText,
+            shannonTranscript: shannonText
+        )
+        selectedThreadId = response.threadId
+        state = response.state
+        let emotion = response.messageEmotion
+        messages.append(ConversationMessage(role: .user, text: userText))
+        messages.append(ConversationMessage(
+            role: .shannon,
+            text: shannonText,
+            emotionSnapshot: ConversationMessage.EmotionSnapshot(
+                valence: emotion.valence,
+                arousal: emotion.arousal,
+                openness: emotion.openness,
+                expression: emotion.expression,
+                stateVersion: response.state.version
+            )
+        ))
+        cacheCurrentHistory()
+        await loadThreads(force: true)
+    }
+
     public func loadThreadsIfNeeded() async {
         guard !didAttemptThreadsLoad else { return }
         didAttemptThreadsLoad = true

@@ -170,6 +170,30 @@ export class ShannonApiKernel {
     this.dailyMind = options.dailyMind ?? null;
   }
 
+  realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
+    threadId: string;
+    instructions: string;
+  } {
+    const threadId = this.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
+    const captured = this.stateStore.snapshot(scopeKey);
+    const basePrompt = this.knowledgeStore?.promptProjection(scopeKey)
+      ?? assembleShannonSystemPrompt(captured);
+    const dailyMindPrompt = this.dailyMind?.promptFor(scopeKey, this.now()) ?? '';
+    const history = voiceHistoryProjection(this.conversationStore.history(scopeKey, threadId));
+    const voiceInstructions = [
+      '[Live voice conversation]',
+      '- Speak naturally in Japanese as Shannon. Keep most turns concise enough for a live conversation.',
+      '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
+      '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
+      '- Never claim that an external action or code change was completed during this voice session.',
+      '- When an external task is requested, acknowledge it briefly and ask the user to continue in Talk for visible execution and approval.',
+    ].join('\n');
+    return {
+      threadId,
+      instructions: [basePrompt, dailyMindPrompt, history, voiceInstructions].filter(Boolean).join('\n\n'),
+    };
+  }
+
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
     if (request.method === 'GET' && request.path === '/health') {
       return {
@@ -506,6 +530,49 @@ export class ShannonApiKernel {
       }
     }
 
+    if (request.method === 'POST' && request.path === '/v1/voice/realtime/turns') {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!validBoundedString(request.body.userTranscript, 8_000)) {
+        return badRequest('userTranscript is invalid');
+      }
+      if (!validBoundedString(request.body.shannonTranscript, 8_000)) {
+        return badRequest('shannonTranscript is invalid');
+      }
+      const userMessage = request.body.userTranscript.trim();
+      const shannonReply = request.body.shannonTranscript.trim();
+      const threadId = this.conversationStore.threadId(
+        scopeKey,
+        typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined,
+      );
+      const captured = this.stateStore.snapshot(scopeKey);
+      const messageEmotion = createShannonMessageEmotion(
+        projectEmotionReaction(captured, userMessage),
+        captured.temperament,
+        { userMessage, shannonReply },
+      );
+      const completedTurn = {
+        scopeKey,
+        threadId,
+        capturedState: captured,
+        userMessage,
+        shannonReply,
+        messageEmotion,
+        completedAt: this.now(),
+      };
+      const experience = this.background.recordTurn(completedTurn);
+      this.background.schedule(completedTurn, experience.id);
+      return {
+        status: 201,
+        body: {
+          threadId,
+          messageEmotion,
+          state: captured,
+        },
+      };
+    }
+
     if (request.method === 'POST' && request.path === '/v1/chat') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const body = request.body as unknown as ChatRequest;
@@ -579,6 +646,17 @@ export class ShannonApiKernel {
   waitForBackground(scopeKey: string): Promise<void> {
     return this.background.waitForIdle(scopeKey);
   }
+}
+
+function voiceHistoryProjection(history: readonly { role: 'user' | 'assistant'; content: string }[]): string {
+  const rows = history.slice(-12).map(item => {
+    const speaker = item.role === 'user' ? 'User' : 'Shannon';
+    const content = item.content.trim().replace(/\s+/gu, ' ').slice(0, 600);
+    return `${speaker}: ${content}`;
+  }).filter(row => !row.endsWith(': '));
+  if (!rows.length) return '';
+  const projection = `[Recent conversation]\n${rows.join('\n')}`;
+  return projection.length <= 6_000 ? projection : `${projection.slice(-5_999)}…`;
 }
 
 export function agentTaskPromptProjection(tasks: readonly AgentTask[], currentThreadID?: string): string {

@@ -3,6 +3,13 @@ import Foundation
 public protocol ShannonAPIClientProtocol: Sendable {
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
+    func createRealtimeVoiceCall(scopeKey: String, threadId: String?, offerSDP: String) async throws -> ShannonRealtimeVoiceCallDTO
+    func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
     func loadConversation(scopeKey: String, threadId: String?) async throws -> ConversationHistoryResponseDTO
     func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO
     func createThread(scopeKey: String, title: String?) async throws -> String
@@ -39,6 +46,23 @@ public protocol ShannonAPIClientProtocol: Sendable {
 
 public extension ShannonAPIClientProtocol {
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func createRealtimeVoiceCall(
+        scopeKey: String,
+        threadId: String?,
+        offerSDP: String
+    ) async throws -> ShannonRealtimeVoiceCallDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
         throw ShannonAPIError.invalidResponse
     }
 
@@ -174,6 +198,61 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
         return try JSONDecoder().decode(ShannonVoiceTranscriptionDTO.self, from: data)
+    }
+
+    public func createRealtimeVoiceCall(
+        scopeKey: String,
+        threadId: String?,
+        offerSDP: String
+    ) async throws -> ShannonRealtimeVoiceCallDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/realtime/calls"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 40
+        request.setValue("application/sdp", forHTTPHeaderField: "content-type")
+        if let threadId, !threadId.isEmpty {
+            request.setValue(threadId, forHTTPHeaderField: "x-shannon-thread-id")
+        }
+        authorize(&request, connection: connection)
+        request.httpBody = Data(offerSDP.utf8)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        guard let answerSDP = String(data: data, encoding: .utf8), answerSDP.hasPrefix("v=0") else {
+            throw ShannonAPIError.invalidResponse
+        }
+        let resolvedThreadID = http.value(forHTTPHeaderField: "x-shannon-thread-id") ?? threadId ?? ""
+        guard !resolvedThreadID.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return ShannonRealtimeVoiceCallDTO(
+            answerSDP: answerSDP,
+            threadID: resolvedThreadID,
+            model: http.value(forHTTPHeaderField: "x-shannon-realtime-model"),
+            callID: http.value(forHTTPHeaderField: "x-shannon-realtime-call-id")
+        )
+    }
+
+    public func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/realtime/turns"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonRealtimeVoiceTurnRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            threadId: threadId,
+            userTranscript: userTranscript,
+            shannonTranscript: shannonTranscript
+        ))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        return try JSONDecoder().decode(ShannonRealtimeVoiceTurnResponseDTO.self, from: data)
     }
 
     public func loadConversation(scopeKey: String, threadId: String? = nil) async throws -> ConversationHistoryResponseDTO {

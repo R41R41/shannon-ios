@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-06 / server voice transcription
+Revision: 2026-09-06 / Realtime voice candidate
 
 ## System shape
 
@@ -66,14 +66,17 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 - Settings → App Icon shows the actual bundled primary and alternate icon artwork. Fixed mode previews the primary Shannon mark, automatic mode shows representative time/emotion variants, manual mode shows every selectable icon, and the currently active icon remains visible at the top.
-- Voice is user-initiated and half-duplex. iOS records a mono AAC/M4A file with `AVAudioRecorder`; it does not run speech recognition, PCM conversion, or `AVAudioEngine` callbacks. The paired device uploads the completed file to `POST /v1/voice/transcriptions`, Azure calls the configured transcription model, and the resulting Japanese text follows the existing FCA route. The reply continues to use the system Japanese voice.
-- The default transcription model is `gpt-transcribe`. A request is limited to 60 seconds and 5 MiB, requires the paired-device credential, and has a separate per-device rate limit. Voice cost uses the `voice` usage lane and a separate daily budget, so it cannot consume the background exploration/sleep budget.
-- The recording is a temporary client file and is deleted after transcription, whether the API succeeds or fails. Azure keeps the audio in memory only for the upstream request and does not write it to disk. Voice diagnostics record only bounded lifecycle steps, duration, byte count, and safe failure categories; audio, transcripts, messages, tokens, credentials, and file paths are never recorded.
+- The primary voice candidate is a user-initiated Realtime WebRTC session. iOS captures and plays audio through WebRTC; Azure creates the OpenAI Realtime call with the standard API key kept server-side. The iPhone never receives that key.
+- Input-transcription delta events update the visible “あなた” caption while the user is still speaking. Output-audio-transcript delta events update Shannon's caption while her audio is playing. Server VAD creates responses automatically and permits natural interruption.
+- A Realtime session receives the same bounded Shannon identity, committed shared state, today's interest, recent thread history, and live-voice behavior rules. It cannot claim that an external task was executed; visible work and approval continue in Talk.
+- When both final transcripts for one turn arrive, iOS sends only those texts to `POST /v1/voice/realtime/turns`. The API stores the pair in the existing conversation thread, fixes Shannon's expression snapshot, and schedules the normal asynchronous emotion/memory update. Partial captions are not persisted.
+- The Realtime client has an initial ten-minute session ceiling and a per-device call-creation limit. Voice remains a separate cost concern from chat and background work; durable usage metering and a server-authoritative daily Realtime allowance are required before general release.
+- The Build 33 M4A → `POST /v1/voice/transcriptions` path remains a diagnostic fallback during the Realtime rollout. It uses `gpt-transcribe`, a 60-second/5-MiB limit, per-device rate limiting, and the existing `voice` cost lane. Temporary audio is deleted or held only in memory, and diagnostics never store audio, transcripts, messages, credentials, tokens, or file paths.
 - The composer uses a dynamic bottom safe-area inset, so multi-line input, voice status, failures, and task notices do not cover the latest reply.
 
-Live2D and animated widgets remain future work. Current dialogue mode uses a static character-stage asset.
+Live2D and animated widgets remain future work. Current dialogue mode and Realtime voice use a static character-stage asset with state-driven ambient motion.
 
-Full-duplex interruption and background voice activation are deliberately later work.
+Background voice activation remains deliberately later work. Realtime voice starts only from an explicit user tap and ends when dismissed, when the app leaves the active scene, or when the session ceiling is reached.
 
 ## Aether boundary
 
@@ -161,4 +164,4 @@ The distributor records every automatic check in the production SQLite database.
 - autonomous source-code rewriting
 - Live2D runtime
 - animated widget character
-- full-duplex or background voice activation
+- background voice activation

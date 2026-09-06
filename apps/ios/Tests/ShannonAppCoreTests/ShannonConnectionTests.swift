@@ -106,6 +106,62 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(result.model, "gpt-transcribe")
     }
 
+    func testAPIClientCreatesRealtimeCallAndCommitsTheVisibleTranscript() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "r", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-realtime",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        var requestCount = 0
+        let session = stubSession { request in
+            requestCount += 1
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.url?.path.hasSuffix("/v1/voice/realtime/calls") == true {
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "application/sdp")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-thread-id"), "thread-voice")
+                XCTAssertTrue(String(data: try XCTUnwrap(requestBody(request)), encoding: .utf8)?.hasPrefix("v=0") == true)
+                let response = try XCTUnwrap(HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                    headerFields: [
+                        "content-type": "application/sdp",
+                        "x-shannon-thread-id": "thread-voice",
+                        "x-shannon-realtime-model": "gpt-realtime-2.1-mini",
+                    ]
+                ))
+                return (response, Data("v=0\r\ns=answer\r\n".utf8))
+            }
+            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/realtime/turns") == true)
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+            XCTAssertEqual(json["threadId"] as? String, "thread-voice")
+            XCTAssertEqual(json["userTranscript"] as? String, "散歩したい")
+            XCTAssertEqual(json["shannonTranscript"] as? String, "朝がよさそう。")
+            return try response(url: request.url!, json: realtimeTurnResponseJSON())
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let call = try await client.createRealtimeVoiceCall(
+            scopeKey: "untrusted-client-scope", threadId: "thread-voice",
+            offerSDP: "v=0\r\ns=offer with enough bytes\r\n"
+        )
+        XCTAssertEqual(call.threadID, "thread-voice")
+        XCTAssertEqual(call.model, "gpt-realtime-2.1-mini")
+
+        let turn = try await client.commitRealtimeVoiceTurn(
+            scopeKey: "untrusted-client-scope", threadId: call.threadID,
+            userTranscript: "散歩したい", shannonTranscript: "朝がよさそう。"
+        )
+        XCTAssertEqual(turn.threadId, "thread-voice")
+        XCTAssertEqual(requestCount, 2)
+    }
+
     func testAPIClientRegistersAPNsTokenWithPairedDeviceCredential() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "p", count: 43)
@@ -419,5 +475,18 @@ private func agentTaskEnvelopeJSON(id: UUID) -> [String: Any] {
             "updatedAt": "2026-09-04T00:00:00.000Z",
             "latestSequence": 1,
         ],
+    ]
+}
+
+private func realtimeTurnResponseJSON() -> [String: Any] {
+    [
+        "threadId": "thread-voice",
+        "messageEmotion": [
+            "valence": 0.2,
+            "arousal": 0.3,
+            "openness": 0.4,
+            "expression": "curious",
+        ],
+        "state": chatResponseJSON()["state"] as Any,
     ]
 }

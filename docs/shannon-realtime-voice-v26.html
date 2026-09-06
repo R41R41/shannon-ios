@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Realtime Voice v26</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f7fbfd;--surface:rgba(255,255,255,.78);--ink:#132027;--muted:#5c707b;--blue:#38b9e8;--blue2:#9de4f8;--line:rgba(28,91,115,.15);--good:#087b5b;--warn:#a65d00;--shadow:0 20px 60px rgba(27,88,111,.10)}
+    @media(prefers-color-scheme:dark){:root{--bg:#081217;--surface:rgba(18,31,38,.82);--ink:#edfaff;--muted:#a8bcc5;--blue:#62cdf2;--blue2:#174f62;--line:rgba(157,228,248,.16);--good:#6ee7bd;--warn:#ffc36b;--shadow:0 20px 60px rgba(0,0,0,.30)}}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 12% 0%,rgba(56,185,232,.16),transparent 32%),var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif;line-height:1.65}.wrap{max-width:1120px;margin:auto;padding:56px 24px 88px}h1{font-size:clamp(38px,6vw,72px);line-height:1.03;letter-spacing:-.045em;margin:16px 0 22px}h2{font-size:28px;letter-spacing:-.025em;margin:64px 0 18px}h3{font-size:17px;margin:0 0 8px}.lead{font-size:19px;max-width:780px;color:var(--muted)}.eyebrow,.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:var(--surface);font-size:12px;font-weight:700;letter-spacing:.04em}.pill.good{color:var(--good)}.pill.now{color:#087da6}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.card{grid-column:span 4;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:var(--shadow);backdrop-filter:blur(18px)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card p{margin:0;color:var(--muted)}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:stretch}.node{background:var(--surface);border:1px solid var(--line);padding:18px;border-radius:18px;position:relative}.node:not(:last-child):after{content:"→";position:absolute;right:-15px;top:42%;z-index:2;color:var(--blue);font-weight:800}.node small{display:block;color:var(--muted);margin-top:6px}.phone{max-width:390px;margin:auto;border:9px solid #18262c;border-radius:46px;padding:15px;background:linear-gradient(155deg,rgba(157,228,248,.48),var(--surface) 52%,rgba(56,185,232,.12));min-height:620px;box-shadow:0 30px 80px rgba(0,0,0,.22)}.top{display:flex;justify-content:space-between;font-size:13px;font-weight:650}.presence{height:295px;display:grid;place-items:center;position:relative}.avatar{width:188px;height:188px;border-radius:50%;background:radial-gradient(circle at 50% 42%,#fff 0 23%,var(--blue2) 24% 47%,rgba(56,185,232,.18) 48%);box-shadow:0 0 0 22px rgba(56,185,232,.07),0 0 65px rgba(56,185,232,.33)}.caption{border:1px solid var(--line);background:rgba(255,255,255,.48);backdrop-filter:blur(20px);border-radius:19px;padding:11px 13px;margin:9px 0;font-size:15px}.caption b{font-size:11px;display:block;color:var(--muted);margin-bottom:2px}.controls{display:flex;justify-content:center;gap:22px;margin-top:25px}.round{width:54px;height:54px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center}.round.end{width:66px;height:66px;background:#dd3e4e;color:#fff;border:0}.check{display:grid;grid-template-columns:36px 1fr;gap:12px;margin:12px 0}.num{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(56,185,232,.15);color:var(--blue);font-weight:800}.note{border-left:4px solid var(--blue);padding:12px 16px;background:rgba(56,185,232,.08);border-radius:0 14px 14px 0;color:var(--muted)}code{font-family:"SF Mono",monospace;font-size:.88em}table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:18px;overflow:hidden}th,td{text-align:left;padding:14px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:12px;color:var(--muted)}footer{margin-top:64px;color:var(--muted);font-size:13px}@media(max-width:780px){.card,.card.wide{grid-column:1/-1}.flow{grid-template-columns:1fr}.node:not(:last-child):after{content:"↓";right:auto;left:50%;top:auto;bottom:-18px}.wrap{padding-top:32px}}
+  </style>
+</head>
+<body><main class="wrap">
+  <span class="eyebrow">SHANNON · LIVE VOICE CANDIDATE</span>
+  <h1>録音を送る、から<br>同じ時間を話す、へ。</h1>
+  <p class="lead">Build 33でクラッシュは解消し、iPhoneが4.8秒・6.2秒のM4Aを正常に録音できることを確認しました。一方、その後の一括文字起こしは失敗し、そもそも会話のテンポと発話中字幕を実現できません。そこで、次版候補をWebRTCによるRealtime音声会話へ切り替えます。</p>
+  <p><span class="pill good">ローカル実装・自動試験 完了</span> <span class="pill now">Azure / TestFlight 未反映</span></p>
+
+  <h2>実現する体験</h2>
+  <div class="grid">
+    <article class="card"><h3>話している途中から見える</h3><p>ユーザーの言葉を差分字幕で表示。「聞けているのか」が待たずに分かります。</p></article>
+    <article class="card"><h3>シャノンがそのまま返す</h3><p>送信ボタンを挟まず、発話の区切りを検知。返答音声と字幕が同時に進みます。</p></article>
+    <article class="card"><h3>自然に割り込める</h3><p>返答中に話し始めたらシャノンは止まり、最新の発話を聞きます。</p></article>
+  </div>
+
+  <h2>データの流れ</h2>
+  <div class="flow">
+    <div class="node"><b>iPhone</b><small>マイク音声をWebRTCで送る</small></div>
+    <div class="node"><b>Azure</b><small>端末を認証し、状態・記憶・履歴を組み立てる</small></div>
+    <div class="node"><b>Realtime</b><small>音声理解・返答・音声生成・字幕差分</small></div>
+    <div class="node"><b>iPhone</b><small>音声再生と両者の字幕を逐次表示</small></div>
+    <div class="node"><b>既存トーク</b><small>確定した一往復だけ保存し、感情・記憶を非同期更新</small></div>
+  </div>
+  <p class="note"><b>秘密の境界：</b> OpenAIの標準APIキーはAzureだけが持ちます。iPhoneはペアリング資格情報でAzureへSDPを渡し、返された接続情報で会話します。</p>
+
+  <h2>画面イメージ</h2>
+  <div class="grid">
+    <div class="card wide">
+      <div class="phone">
+        <div class="top"><span>シャノン<br><small>聞いている</small></span><span>×</span></div>
+        <div class="presence"><div class="avatar" aria-label="シャノンのプレースホルダー"></div></div>
+        <div class="caption"><b>シャノン</b>うん。その続き、聞かせて。</div>
+        <div class="caption"><b>あなた · 発話中</b>明日は少し早く起きて、散歩に…</div>
+        <div class="controls"><div class="round">🎙</div><div class="round end">☎</div><div class="round">〰</div></div>
+      </div>
+    </div>
+    <div class="card wide">
+      <h3>状態は5つだけ</h3>
+      <div class="check"><div class="num">1</div><div><b>準備中</b><br><small>マイク許可と安全な接続を準備。</small></div></div>
+      <div class="check"><div class="num">2</div><div><b>接続中</b><br><small>Azure経由でRealtimeセッションを作成。</small></div></div>
+      <div class="check"><div class="num">3</div><div><b>聞いている</b><br><small>発話中字幕を更新。</small></div></div>
+      <div class="check"><div class="num">4</div><div><b>考えている</b><br><small>区切り検出から返答開始まで。</small></div></div>
+      <div class="check"><div class="num">5</div><div><b>話している</b><br><small>音声と字幕を同期。割り込み可能。</small></div></div>
+    </div>
+  </div>
+
+  <h2>Shannonらしさを保つ接続</h2>
+  <table>
+    <tr><th>材料</th><th>音声会話での扱い</th></tr>
+    <tr><td>固定人格</td><td>最小のShannon Coreを通常会話と共有。</td></tr>
+    <tr><td>現在状態・感情</td><td>接続開始時の確定済み共有状態を渡す。返答速度を待たせない。</td></tr>
+    <tr><td>今日の関心</td><td>通常FCAと同じ日次プロンプトを利用。</td></tr>
+    <tr><td>トーク履歴</td><td>対象スレッドの直近12発言だけを境界付きで渡す。</td></tr>
+    <tr><td>記憶更新</td><td>確定した一往復を既存履歴へ保存した後、背後で感情・記憶を更新。</td></tr>
+    <tr><td>作業依頼</td><td>音声中に完了を装わない。実行・許可・進捗の見えるTalkへ案内。</td></tr>
+  </table>
+
+  <h2>安全・費用・失敗時</h2>
+  <div class="grid">
+    <article class="card"><h3>明示起動のみ</h3><p>常時待受けはしません。画面を閉じる、アプリが非アクティブになる、10分経過のいずれかで終了します。</p></article>
+    <article class="card"><h3>本文を診断に残さない</h3><p>ログは接続段階・安全なエラー種別だけ。音声・字幕・メッセージ・鍵は記録しません。</p></article>
+    <article class="card"><h3>段階導入</h3><p>Build 33の一括方式は診断用フォールバックとして残し、Realtimeの実機Smoke後に扱いを決めます。</p></article>
+    <article class="card wide"><h3>初期モデル</h3><p><code>gpt-realtime-2.1-mini</code> + <code>gpt-live-transcribe</code>。まず安価な構成で自然さを実機評価し、聞き取りや会話品質が足りなければ上位Realtimeモデルと同じシナリオで比較します。</p></article>
+    <article class="card wide"><h3>公開前に残るコスト制御</h3><p>現在は端末単位の接続回数制限と10分上限まで実装。Azure側の日次Realtime予算と実時間ベースの永続メータリングは、一般利用へ広げる前の必須ゲートです。</p></article>
+  </div>
+
+  <h2>検証結果と次のゲート</h2>
+  <div class="grid">
+    <article class="card"><h3>API</h3><p><b>171 / 171</b><br>接続設定、秘密境界、エラー、履歴保存を含む。</p></article>
+    <article class="card"><h3>iOS</h3><p><b>76 / 76</b><br>字幕差分、順不同の確定、認証付き接続を含む。</p></article>
+    <article class="card"><h3>iPhone Build</h3><p><b>成功</b><br>WebRTC 150.0.0を固定し、署名なし端末向けビルド成功。</p></article>
+    <article class="card full"><h3>実機で初めて確定できること</h3><p>①AzureがRealtimeセッションを作れる ②音声入出力がつながる ③発話中字幕が十分速い ④割り込みが自然 ⑤既存トークへ一往復ずつ保存される。この5点が通るまでは「完成」ではなく、ローカル候補です。</p></article>
+  </div>
+  <h2>仕様の根拠</h2>
+  <div class="grid">
+    <article class="card full"><p>
+      <a href="https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/create">OpenAI · Realtime call作成</a> ·
+      <a href="https://developers.openai.com/api/docs/models/gpt-live-transcribe">OpenAI · GPT Live Transcribe</a> ·
+      <a href="https://github.com/openai/openai-python/blob/main/src/openai/types/realtime/audio_transcription_param.py">OpenAI SDK · 現行文字起こし設定</a> ·
+      <a href="https://github.com/stasel/WebRTC/tree/150.0.0">WebRTC Swift package 150.0.0</a>
+    </p></article>
+  </div>
+  <footer>Implementation authority: <code>docs/architecture.md</code> · Candidate: Shannon Realtime Voice v26 · 2026-09-06</footer>
+</main></body>
+</html>

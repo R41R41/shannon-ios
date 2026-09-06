@@ -297,6 +297,33 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     }
 }
 
+public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
+    public let answerSDP: String
+    public let threadID: String
+    public let model: String?
+    public let callID: String?
+
+    public init(answerSDP: String, threadID: String, model: String? = nil, callID: String? = nil) {
+        self.answerSDP = answerSDP
+        self.threadID = threadID
+        self.model = model
+        self.callID = callID
+    }
+}
+
+public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let threadId: String?
+    public let userTranscript: String
+    public let shannonTranscript: String
+}
+
+public struct ShannonRealtimeVoiceTurnResponseDTO: Codable, Equatable, Sendable {
+    public let threadId: String
+    public let messageEmotion: ShannonMessageEmotionDTO
+    public let state: CompanionStateDTO
+}
+
 public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let id: String
     public let role: String

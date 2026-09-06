@@ -278,6 +278,45 @@ describe('Shannon local API kernel', () => {
     });
   });
 
+  it('builds a live voice session from current state and persists completed spoken turns', async () => {
+    const api = createLocalApiKernel(() => '2026-09-06T05:30:00.000Z');
+    const thread = await api.dispatch({ method: 'POST', path: '/v1/threads', body: {
+      scopeKey: 'owner-a', title: '音声の相談',
+    } });
+    const threadId = String((thread.body as { threadId: string }).threadId);
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', threadId, message: '音声で続きを話したい',
+    } });
+    await api.waitForBackground('owner-a');
+
+    const session = api.realtimeVoiceSession('owner-a', threadId);
+    expect(session.threadId).toBe(threadId);
+    expect(session.instructions).toContain('[Shannon shared state v1]');
+    expect(session.instructions).toContain('音声で続きを話したい');
+    expect(session.instructions).toContain('[Live voice conversation]');
+
+    const committed = await api.dispatch({ method: 'POST', path: '/v1/voice/realtime/turns', body: {
+      scopeKey: 'owner-a', threadId,
+      userTranscript: '明日は散歩に行きたい',
+      shannonTranscript: '朝の涼しい時間に行くの、よさそう。',
+    } });
+    expect(committed).toMatchObject({ status: 201, body: { threadId } });
+
+    const history = await api.dispatch({
+      method: 'GET', path: '/v1/conversation',
+      query: new URLSearchParams({ scopeKey: 'owner-a', threadId }),
+    });
+    expect(history).toMatchObject({
+      status: 200,
+      body: { messages: [
+        { role: 'user', content: '音声で続きを話したい' },
+        { role: 'assistant' },
+        { role: 'user', content: '明日は散歩に行きたい' },
+        { role: 'assistant', content: '朝の涼しい時間に行くの、よさそう。' },
+      ] },
+    });
+  });
+
   it('keeps scope state isolated', async () => {
     const api = createLocalApiKernel(() => '2026-08-31T00:00:00.000Z');
     await api.dispatch({ method: 'POST', path: '/v1/events', body: {
