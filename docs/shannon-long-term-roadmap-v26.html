@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 長期プロダクト計画 v26</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f3fbfe;--paper:#fff;--ink:#132f3b;--muted:#607983;--line:#c7e5ef;--sky:#65c9ed;--deep:#147da4;--soft:#e6f7fc;--good:#147755;--good-bg:#e3f7ef;--now:#8b5700;--now-bg:#fff2ce;--future:#675197;--future-bg:#efeafd;--shadow:0 18px 58px #13739316}
+    @media(prefers-color-scheme:dark){:root{--bg:#07151b;--paper:#10232c;--ink:#e7f6fb;--muted:#a5bec8;--line:#28515f;--sky:#73daf9;--deep:#98e5ff;--soft:#103641;--good:#78dfb7;--good-bg:#10372b;--now:#ffd17e;--now-bg:#473719;--future:#c9bdff;--future-bg:#2a2542;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 88% -6%,#6bdcff47,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.72 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(1160px,calc(100% - 28px));margin:auto;padding:44px 0 88px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.7rem,6vw,4.65rem);line-height:1.02;letter-spacing:-.06em;margin:.15em 0 .24em;max-width:1050px}h2{font-size:clamp(1.65rem,4vw,2.65rem);line-height:1.18;letter-spacing:-.035em;margin-bottom:16px}h3{font-size:1.07rem;margin:8px 0}.eyebrow{font-size:.74rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--deep)}.lead{font-size:1.08rem;max-width:850px;color:var(--muted)}header,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,transparent);box-shadow:var(--shadow)}header{padding:46px;border-radius:34px;position:relative;overflow:hidden}header:after{content:"";position:absolute;right:-120px;top:-160px;width:390px;height:390px;border-radius:50%;background:radial-gradient(circle,var(--sky),transparent 68%);opacity:.48}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}.chip,.tag{display:inline-block;padding:6px 11px;border-radius:999px;font-size:.74rem;font-weight:850}.chip{background:var(--soft);border:1px solid var(--line);color:var(--deep)}.good{background:var(--good-bg);color:var(--good)}.now{background:var(--now-bg);color:var(--now)}.future{background:var(--future-bg);color:var(--future)}section{padding:30px;border-radius:27px;margin-top:18px}.statement{padding:26px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 86%,transparent));font-size:clamp(1.25rem,2.4vw,1.9rem);line-height:1.46;letter-spacing:-.025em}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px;margin-top:15px}.card{grid-column:span 4;padding:20px;border:1px solid var(--line);border-radius:19px;background:var(--paper)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card p,.small{color:var(--muted);font-size:.9rem;margin-bottom:0}.meter{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}.meter div{height:11px;border-radius:999px;background:var(--soft);border:1px solid var(--line)}.meter .on{background:var(--sky);border-color:var(--sky)}.timeline{display:grid;gap:12px;margin-top:18px}.phase{display:grid;grid-template-columns:140px 1fr 210px;gap:18px;align-items:start;padding:20px;border:1px solid var(--line);border-radius:20px;background:var(--paper)}.phase.current{border:2px solid var(--sky);background:color-mix(in srgb,var(--soft) 55%,var(--paper))}.version{font-size:.77rem;font-weight:900;letter-spacing:.08em;color:var(--deep)}.phase p{margin:5px 0 0;color:var(--muted)}.gate{font-size:.82rem;padding:10px 12px;border-radius:13px;background:var(--soft);color:var(--deep)}.voice{display:grid;grid-template-columns:1fr 1fr;gap:14px}.voice .panel{padding:22px;border-radius:20px;border:1px solid var(--line);background:var(--paper)}.voice ol{margin-bottom:0}.flow{display:flex;gap:9px;overflow:auto;padding:5px 0 12px}.step{min-width:170px;flex:1;padding:16px;border-radius:18px;background:var(--paper);border:1px solid var(--line)}.step b{display:block;color:var(--deep);margin-bottom:4px}.step small{color:var(--muted)}.arrow{align-self:center;color:var(--sky);font-size:22px;font-weight:900}.priority{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:13px}.priority article{padding:20px;border-radius:20px;border:1px solid var(--line);background:var(--paper)}.priority article:first-child{border:2px solid var(--sky)}ul,ol{padding-left:1.35em}li+li{margin-top:6px}.rule{padding:16px 18px;border-left:5px solid var(--sky);border-radius:0 16px 16px 0;background:var(--soft);margin-top:15px}.muted{color:var(--muted)}footer{padding:26px 5px 0;color:var(--muted);font-size:.84rem}a{color:var(--deep)}
+    @media(max-width:820px){main{width:min(100% - 20px,1160px);padding-top:20px}header,section{padding:22px;border-radius:23px}.grid{grid-template-columns:1fr}.card,.card.wide,.card.full{grid-column:1}.meter{grid-template-columns:repeat(2,1fr)}.phase{grid-template-columns:1fr;gap:8px}.voice,.priority{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.flow{flex-direction:column}.step{min-width:0}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">Shannon · long-term product roadmap · v26 · 2026-09-06</div>
+    <h1>会話できる、から。<br>一緒に暮らし、考え、進めるへ。</h1>
+    <p class="lead">Build 38で、発話中字幕・シャノンの字幕と音声返答・履歴保存まで、Realtime音声の主要導線が実機で通った。ここからは大機能を急いで増やすより、日常的に使える品質へ磨き、iPhoneからMac、生活の情報、仕事の実行へ段階的に広げる。</p>
+    <div class="chips"><span class="chip good">Build 38 Realtime Smoke 完了</span><span class="chip good">会話・記憶・感情・作業の正本あり</span><span class="chip now">NEXT · UX監査とBuild 39</span><span class="chip future">Mac版 Shannon Desk</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / destination</div><h2>最終的に実現する体験</h2>
+    <div class="statement">シャノンは、質問に答えるだけのAIではない。<br>生活の続きを覚え、声でも文字でも自然に話せて、必要な時には一緒に考え、ユーザーの許可があれば実際の仕事も最後まで進める存在になる。</div>
+    <div class="grid">
+      <article class="card"><span class="tag good">関係性</span><h3>時間が積み重なる</h3><p>記憶、感情、今日の関心、日記が分断されず、昨日の会話が今日の受け止め方へ静かに影響する。</p></article>
+      <article class="card"><span class="tag good">会話</span><h3>入力方法を意識しない</h3><p>短いテキスト、長い文章、Realtime音声を状況で選べる。どの入口でも同じシャノン、同じスレッドへ戻る。</p></article>
+      <article class="card"><span class="tag good">協働</span><h3>話して終わらない</h3><p>Aetherの考えとVoyagerの次の行動を参照し、提案、承認付き実行、検証済みの結果まで一つの流れにする。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / where we are</div><h2>いまは「基盤完成、製品品質へ移る」地点</h2>
+    <div class="meter"><div class="on"></div><div class="on"></div><div class="on"></div><div></div></div>
+    <div class="grid">
+      <article class="card wide"><span class="tag good">実機済み</span><h3>中核体験</h3><p>複数トーク、履歴維持、自動タイトル、全幅返信、コピー、連続感情、即時知識、メモリー、今日の関心、自発通知、作業タスク、遠隔TestFlight配信、Realtime音声。</p></article>
+      <article class="card wide"><span class="tag now">ローカル済み</span><h3>次回配信へ待機</h3><p>「シャノンに任せる／自分で選ぶ」の2モードと、Aether・Shannon・Voyagerの比較用App Icon 10案。既存の表情アイコン11種も維持。</p></article>
+      <article class="card wide"><span class="tag now">次に磨く</span><h3>使いやすさと見た目</h3><p>トーク、対話、メモリー、設定、作業状態、ライト／ダーク、入力中、失敗時を同じ条件で撮影し、画面単位ではなく体験単位で改善する。</p></article>
+      <article class="card wide"><span class="tag future">まだ先</span><h3>Mac・存在感・自己拡張</h3><p>Mac版Shannon Desk、Live2D、Widget、背景音声、隔離されたスキル生成は、現在の会話品質と安全境界を固めてから進める。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / next three moves</div><h2>直近はこの順番</h2>
+    <div class="priority">
+      <article><span class="tag now">1 · NOW</span><h3>状態別UX監査</h3><p class="muted">主要6画面×通常・空・処理中・失敗×ライト／ダークを撮影。Aetherの文章・入力、Voyagerの作業状態を比較し、一枚ずつ問題と優先度を付ける。</p></article>
+      <article><span class="tag">2 · BUILD 39</span><h3>最初の使い勝手改善</h3><p class="muted">監査の上位問題と比較用アイコンをまとめる。通常会話、対話モード、メモリーのうち一つの体験単位に絞り、実機で変更前後を比べる。</p></article>
+      <article><span class="tag">3 · VOICE IDENTITY</span><h3>声を選べるシャノン</h3><p class="muted">候補音声を聞き比べ、選択を端末間で共有。接続中に勝手に変えず、次の音声セッションから反映する。</p></article>
+    </div>
+    <div class="rule"><b>方針：</b>次の大機能を先に足さない。まず「毎日話しやすい」「戻ってきても迷わない」「異常時だけ状態が見える」を完成させる。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / voice identity</div><h2>シャノンの声を変える計画</h2>
+    <div class="voice">
+      <div class="panel"><span class="tag now">近い将来</span><h3>まずは選択と試聴</h3><ol><li>日本語で自然な候補を3〜5声へ絞る。</li><li>設定で同じ短文を試聴する。</li><li>「シャノンに任せる／自分で選ぶ」を検討する。</li><li>選択はAzureへ保存し、iPhoneとMacで共有する。</li><li>音声セッション開始時だけ安全に適用する。</li></ol></div>
+      <div class="panel"><span class="tag future">その後</span><h3>声を人格表現へ育てる</h3><p>話速、間、感情の強さ、長文の聞きやすさを評価する。将来の独自音声や音声クローンは、権利・本人同意・費用・品質が明確になってから別判断にする。</p><p class="muted">先に変えるべきなのは声色だけではなく、割り込み、無音、再接続、イヤホン、通信不良時の戻り方を含む「音声体験全体」。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / roadmap</div><h2>長期バージョン計画</h2>
+    <div class="timeline">
+      <article class="phase"><div class="version">DONE · 0.1.x</div><div><h3>Companion Foundation</h3><p>会話、記憶、感情、関心、日記、自発通知、作業、遠隔配信、Realtime音声の基盤。</p></div><div class="gate">完了基準：Build 38実機Smokeまで達成</div></article>
+      <article class="phase current"><div class="version">NOW · 0.2.x</div><div><h3>Usability &amp; Presence</h3><p>全状態のUX監査、入力、会話密度、対話モード、メモリー階層、設定、ライト／ダーク、アクセシビリティ。比較用アイコンも配信。</p></div><div class="gate">完了基準：主要状態を迷わず片手で使え、変更前後の実機比較が残る</div></article>
+      <article class="phase"><div class="version">NEXT · 0.3.x</div><div><h3>Voice Identity &amp; Reliability</h3><p>音声の試聴・選択・同期、再接続、割り込み、イヤホン、通信失敗、音声予算と履歴。必要なら会話中の表情連動も磨く。</p></div><div class="gate">完了基準：毎日使っても接続・費用・停止方法に不安がない</div></article>
+      <article class="phase"><div class="version">0.4.x</div><div><h3>World &amp; Initiative</h3><p>RSS、ニュース、天気、arXiv、Hacker News、GitHub等を、コードによる収集・重複排除と背景予算の内側で読む。自分で良い情報源を見つけ、購読候補を提案する。</p></div><div class="gate">完了基準：役立つ時だけ話しかけ、調べすぎず、出典と費用を追える</div></article>
+      <article class="phase"><div class="version">0.5.x</div><div><h3>Shannon Desk for Mac</h3><p>macOS SwiftUI版。広い会話、Markdown、コード、コピー、検索、添付、キーボード操作。同じAzure正本でiPhoneの会話を続ける。</p></div><div class="gate">完了基準：普段のChatGPT用途を置き換えても読み書きの摩擦が増えない</div></article>
+      <article class="phase"><div class="version">0.6.x</div><div><h3>Context &amp; Work</h3><p>Aether文書とVoyagerタスクを参照し、相談→提案→承認→実行→検証→正本反映案を見失わずに進める。Mac Agent Hostとクラウド作業を安定化。</p></div><div class="gate">完了基準：長い作業が端末を離れても止まらず、現在地と次の一手が分かる</div></article>
+      <article class="phase"><div class="version">1.0</div><div><h3>Daily Companion</h3><p>文字・声・記憶・関心・提案・仕事がiPhoneとMacで一人のシャノンとして続く。予算、プライバシー、復旧、データ移行も一般利用に耐える。</p></div><div class="gate">完了基準：日常の主役として安定し、データと権限に不安がない</div></article>
+      <article class="phase"><div class="version">1.x</div><div><h3>Presence</h3><p>Live2D、瞬きWidget、状態連動アイコン、より豊かな声。演出は会話と集中を邪魔せず、シャノンの状態に意味を持つ時だけ使う。</p></div><div class="gate">完了基準：かわいさが装飾ではなく、関係性と状態理解を深める</div></article>
+      <article class="phase"><div class="version">2.0</div><div><h3>Self Extension</h3><p>ユーザー指示を受け、隔離環境で新しいスキルのコードを作り、試験し、差分とリスクを説明し、承認後だけ採用する。</p></div><div class="gate">完了基準：失敗しても本体を壊さず、無断で自己改修しない</div></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / one shannon</div><h2>進化しても変えない構造</h2>
+    <div class="flow"><div class="step"><b>iPhone</b><small>生活のそば、短い会話、Realtime音声、通知、存在感。</small></div><div class="arrow">↔</div><div class="step"><b>Azure正本</b><small>会話、記憶、感情、関心、作業、予算、端末間同期。</small></div><div class="arrow">↔</div><div class="step"><b>Mac Desk</b><small>長い思考、文章、コード、調査、作業の継続。</small></div><div class="arrow">↔</div><div class="step"><b>Agent Host</b><small>許可された実行。進捗と検証を永続化し、勝手に完了扱いしない。</small></div></div>
+    <div class="grid">
+      <article class="card"><h3>LLMはv1で固定</h3><p>育つのはファインチューニングではなく、共有状態、意味づけされた記憶、関心、性格理解、プロンプト投影。</p></article>
+      <article class="card"><h3>応答を待たせない</h3><p>感情、記憶、探索、睡眠、通知は非同期。会話は最新の確定済み状態を読み、一回の応答生成へ進む。</p></article>
+      <article class="card"><h3>自発性にも停止条件</h3><p>会話と背景活動の予算を分離し、LLM不要処理はコードだけで行い、「今日はもう十分調べた」を判断する。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 / decisions later</div><h2>今は決め切らないこと</h2>
+    <div class="grid">
+      <article class="card"><span class="tag future">後で判断</span><h3>独自音声</h3><p>既存音声の比較で、人格に必要な差が足りないと確認してから。</p></article>
+      <article class="card"><span class="tag future">後で判断</span><h3>Live2Dの常時表示</h3><p>対話モード、音声中、Mac、Widgetのどこで価値があるかを先に検証する。</p></article>
+      <article class="card"><span class="tag future">後で判断</span><h3>予測誤差学習</h3><p>v1には入れない。記憶と感情の品質を評価してから、必要性そのものを再検討する。</p></article>
+    </div>
+  </section>
+
+  <footer>実装正本: <a href="architecture.md">architecture.md</a> · UX監査: <a href="shannon-ux-audit-plan-v24.html">shannon-ux-audit-plan-v24.html</a> · 製品ビジョン: <a href="shannon-product-vision-and-macos-v25.html">shannon-product-vision-and-macos-v25.html</a><br>この文書のバージョン番号は日付ではなく品質ゲート。既に存在する機能を二重実装せず、各段階の開始前に現行コードと実機状態を棚卸しする。</footer>
+</main></body>
+</html>
