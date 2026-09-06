@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon 次回音声修正版 配信ガイド</title>
+  <style>
+    :root { color-scheme: light dark; --sky:#65c9ed; --ink:#16212a; --muted:#5d6d77; --paper:#f7fbfd; --card:#fff; --line:#d9e8ee; }
+    * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; }
+    main { max-width:760px; margin:auto; padding:48px 22px 80px; } .eyebrow { color:#1985aa; font-weight:700; letter-spacing:.08em; font-size:.8rem; } h1 { line-height:1.24; font-size:clamp(2rem,7vw,3.1rem); margin:.3rem 0 1rem; } h2 { margin:2.4rem 0 .75rem; font-size:1.25rem; } .lead { font-size:1.07rem; color:var(--muted); } .card, .step { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; margin:12px 0; box-shadow:0 8px 24px #2c65700b; } .step { display:grid; grid-template-columns:32px 1fr; gap:12px; } .number { width:28px; height:28px; border-radius:50%; background:var(--sky); color:#083041; display:grid; place-items:center; font-weight:800; } .key { display:inline-block; padding:.1rem .45rem; background:#e5f6fc; border-radius:7px; color:#176b89; font-weight:700; } .ok { border-left:4px solid #37aa77; } .warn { border-left:4px solid #e6a531; } ul { padding-left:1.3rem; } @media (prefers-color-scheme:dark) { :root { --ink:#e7f4f8; --muted:#a9bdc6; --paper:#0c1519; --card:#142126; --line:#29444d; } .key { background:#123b4b; color:#9ee7ff; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">SHANNON / TESTFLIGHT</div>
+    <h1>次回の音声修正版を<br>安全に配信する</h1>
+    <p class="lead">Build 30で確認された、マイクの最初の音声バッファ処理中のクラッシュを修正した版です。会話履歴、接続、記憶、アプリアイコンは変更しません。</p>
+
+    <h2>今回行うこと</h2>
+    <div class="card">
+      <ul>
+        <li>監査済みのShannonソースを公式GitHubへ送信し、Xcode Cloudで次のiOSビルドを作る</li>
+        <li>処理後、<span class="key">Shannon Internal</span>へ自動配信する</li>
+        <li>TestFlightから既存アプリの上に更新し、音声の一往復だけを確認する</li>
+      </ul>
+      <p>MacへのiPhone接続、アプリの削除、再ペアリングは不要です。</p>
+    </div>
+
+    <h2>配信の許可</h2>
+    <div class="step"><div class="number">1</div><div><b>この会話で許可を伝える</b><br>「<span class="key">次の音声修正版のGitHub送信とTestFlight配信を許可します</span>」と返信してください。これで、次のXcode Cloudビルド（Build 31以降）を開始します。</div></div>
+    <div class="step"><div class="number">2</div><div><b>配信を待つ</b><br>こちらでビルド、アップロード、処理、内部テスター割当を確認します。TestFlightに更新が出るまで、通常は数分〜十数分です。</div></div>
+    <div class="step"><div class="number">3</div><div><b>TestFlightで更新する</b><br>Shannonの更新ボタンを押します。<b>削除してから入れ直さないでください</b>。既存の会話と端末内の認証状態を保つためです。</div></div>
+    <div class="step"><div class="number">4</div><div><b>一往復だけ確認する</b><br>空の入力欄でマイクを押し、<span class="key">聞いている…</span>を確認してから短く話します。上矢印で送信し、返答と読み上げ開始、停止、通常テキスト入力まで確認します。</div></div>
+
+    <h2>成功の目印</h2>
+    <div class="card ok">
+      <ul>
+        <li>TestFlightで新しいShannonビルドへ更新できる</li>
+        <li>既存の会話と接続が残っている</li>
+        <li>マイクを押してもクラッシュせず、短い音声を文字にして送れる</li>
+        <li>返答の読み上げを停止した後も、通常のテキスト会話ができる</li>
+      </ul>
+    </div>
+
+    <h2>失敗したとき</h2>
+    <div class="card warn">
+      <p><b>アプリを削除・再インストールしないでください。</b> 更新前後の会話キャッシュと認証状態を守ります。</p>
+      <ul>
+        <li>更新が出ない: TestFlightを開き直して数分待つ。こちらでビルドの処理・割当も確認します。</li>
+        <li>クラッシュする: Shannonを開き直し、設定 → 音声診断 → コピーの内容をこの会話へ貼り付けてください。</li>
+        <li>権限が出る: iPhoneの設定でShannonのマイクを許可してから再試行してください。</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

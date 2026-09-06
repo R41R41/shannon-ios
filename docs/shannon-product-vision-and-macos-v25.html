@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 最終体験とMac版構想 v25</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5fbfe;--paper:#fff;--ink:#132f3b;--muted:#607983;--line:#cbe6ef;--sky:#55c8ee;--deep:#126e8f;--soft:#e8f8fd;--warm:#e88776;--good:#147755;--goodbg:#e4f7ef;--later:#6a579a;--laterbg:#eeeafd;--shadow:0 20px 60px #13739316}
+    @media(prefers-color-scheme:dark){:root{--bg:#07151b;--paper:#10232c;--ink:#e6f6fb;--muted:#a5bec8;--line:#28515f;--sky:#70dafa;--deep:#98e5ff;--soft:#103641;--warm:#f1a193;--good:#78dfb7;--goodbg:#10372b;--later:#c8bcff;--laterbg:#2a2542;--shadow:none}}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 88% -5%,#70dbfc48,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(1180px,calc(100% - 32px));margin:auto;padding:50px 0 92px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.7rem,7vw,5.6rem);line-height:1.01;letter-spacing:-.062em;margin:.14em 0 .23em;max-width:920px}h2{font-size:clamp(1.7rem,4vw,2.7rem);line-height:1.17;letter-spacing:-.035em;margin-bottom:18px}.eyebrow{font-size:.75rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--deep)}.lead{font-size:1.08rem;max-width:840px;color:var(--muted)}.hero,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,transparent);box-shadow:var(--shadow)}.hero{border-radius:35px;padding:48px;position:relative;overflow:hidden}.hero:after{content:"";position:absolute;right:-125px;top:-170px;width:390px;height:390px;border-radius:50%;background:radial-gradient(circle,var(--sky),transparent 67%);opacity:.49}.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:23px}.chip,.tag{display:inline-block;padding:6px 11px;border-radius:999px;font-size:.75rem;font-weight:850}.chip{background:var(--soft);border:1px solid var(--line);color:var(--deep)}.good{background:var(--goodbg);color:var(--good)}.later{background:var(--laterbg);color:var(--later)}section{padding:31px;border-radius:28px;margin-top:20px}.manifesto{padding:28px;border-radius:23px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 88%,transparent));border:1px solid var(--line)}.manifesto blockquote{margin:0;font-size:clamp(1.35rem,2.6vw,2rem);line-height:1.45;letter-spacing:-.025em}.manifesto p{color:var(--muted);margin:15px 0 0}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:16px}.card{grid-column:span 4;padding:21px;border:1px solid var(--line);border-radius:20px;background:var(--paper)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card h3{margin:10px 0 7px;font-size:1.08rem}.card p,.small{color:var(--muted);font-size:.9rem}.rhythms{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.rhythm{padding:23px;border-radius:22px;border:1px solid var(--line);background:var(--paper)}.rhythm .time{font-size:.76rem;letter-spacing:.09em;font-weight:900;color:var(--deep)}.rhythm h3{font-size:1.3rem;margin:7px 0}.desk{display:grid;grid-template-columns:220px 1fr 250px;min-height:390px;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:var(--paper);margin-top:16px}.side{padding:17px;background:color-mix(in srgb,var(--soft) 62%,var(--paper));border-right:1px solid var(--line)}.side.right{border-left:1px solid var(--line);border-right:0}.label{font-size:.71rem;letter-spacing:.09em;font-weight:900;color:var(--deep);margin-bottom:12px}.row{padding:9px 10px;border-radius:10px;font-size:.84rem;margin:4px 0;color:var(--muted)}.row.on{background:var(--paper);color:var(--ink);font-weight:800;box-shadow:0 3px 12px #126f9010}.chat{padding:34px 34px 88px;position:relative}.message{display:grid;grid-template-columns:36px 1fr;gap:10px;margin-bottom:20px}.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#e9fbff,#9fddf1);color:var(--deep)}.reply{max-width:720px}.reply b{font-size:.77rem;color:var(--deep)}.reply p{margin:5px 0;color:var(--ink)}.user{margin-left:46px;padding:11px 14px;background:var(--soft);border-radius:15px;max-width:62%;font-size:.9rem}.composer{position:absolute;bottom:18px;left:30px;right:30px;min-height:48px;border-radius:25px;border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 80%,transparent);display:flex;align-items:center;justify-content:space-between;padding:0 12px 0 16px;color:var(--muted);font-size:.87rem}.send{display:grid;place-items:center;width:33px;height:33px;border-radius:50%;background:var(--deep);color:white}.note{padding:14px;border-radius:14px;background:var(--paper);border:1px solid var(--line);font-size:.8rem;color:var(--muted);margin:9px 0}.flow{display:flex;gap:9px;overflow:auto;padding:5px 1px 11px}.step{min-width:175px;flex:1;padding:17px;border-radius:18px;background:var(--paper);border:1px solid var(--line)}.step b{display:block;color:var(--deep);margin-bottom:5px}.step small{color:var(--muted)}.arrow{align-self:center;color:var(--sky);font-size:22px;font-weight:900}table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--paper);margin-top:16px}th,td{padding:14px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{font-size:.75rem;letter-spacing:.06em;background:var(--soft);color:var(--deep)}tr:last-child td{border-bottom:0}.callout{margin-top:16px;padding:17px 19px;border-radius:18px;background:color-mix(in srgb,var(--laterbg) 80%,var(--paper));color:var(--later)}footer{padding:28px 5px 0;color:var(--muted);font-size:.85rem}a{color:var(--deep)}@media(max-width:850px){main{width:min(100% - 22px,1180px);padding-top:22px}.hero,section{padding:23px;border-radius:24px}.grid{grid-template-columns:1fr}.card,.card.wide,.card.full{grid-column:1}.rhythms{grid-template-columns:1fr}.desk{grid-template-columns:1fr;min-height:0}.side{display:none}.chat{min-height:390px;padding:24px 20px 84px}.composer{left:16px;right:16px}th,td{padding:11px;font-size:.84rem}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">Shannon · product vision &amp; macOS · v25 · 2026-09-06</div>
+    <h1>いつでも隣にいて、<br>深く考える時には机になる。</h1>
+    <p class="lead">Shannonは、iPhoneでは生活のそばにいる相棒として、MacではChatGPTを置き換える思考と実行の場所として働く。別の人格や別の履歴ではなく、同じシャノンとの時間が、画面をまたいで続く。</p>
+    <div class="chips"><span class="chip good">iPhone · Companion</span><span class="chip">Mac · Desk</span><span class="chip">同じ会話・記憶・作業</span><span class="chip later">Mac版は計画段階</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / the promise</div><h2>最終的に実現したい体験</h2>
+    <div class="manifesto"><blockquote>シャノンは、答えを返すだけの窓ではない。<br>考えがまだ曖昧な時には隣に座り、仕事を進める時には一緒に手を動かし、あとで戻ってきた時にも、どこまで考えていたかを覚えている。</blockquote><p>ユーザーが主体であること、情報の正本を勝手に書き換えないこと、外部行動には承認を置くことは変えない。シャノンの「自発性」は、勝手に決めることではなく、文脈を保ちながら静かに気づきや提案を届けること。</p></div>
+    <div class="grid">
+      <article class="card"><span class="tag good">継続性</span><h3>会話が途切れない</h3><p>iPhoneで始めた話をMacで掘り下げ、作業中の経緯や表情、今日の関心を同じシャノンが引き継ぐ。</p></article>
+      <article class="card"><span class="tag good">存在感</span><h3>便利さだけで終わらない</h3><p>記憶、感情、関心、日記が「機能一覧」ではなく、長く一緒にいる相手の連続性として感じられる。</p></article>
+      <article class="card"><span class="tag good">主導権</span><h3>決めるのはユーザー</h3><p>シャノンは提案し、整理し、実行を手伝う。送信、公開、正本の更新、コード変更は見える境界と承認を保つ。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / three rhythms</div><h2>同じシャノン、異なる時間の使い方</h2>
+    <div class="rhythms">
+      <article class="rhythm"><div class="time">10 SECONDS · IPHONE</div><h3>そばにいる</h3><p>思いつき、短い相談、気分の確認、通知からの一言。対話モードでは、情報量より「今ここにいる感じ」を優先する。</p></article>
+      <article class="rhythm"><div class="time">10 MINUTES · MAC</div><h3>一緒に考える</h3><p>長い会話、文章、調査、仕様、実装相談。ChatGPTのように読み書きしやすく、しかし会話・記憶・作業が分断されない。</p></article>
+      <article class="rhythm"><div class="time">1 DAY · BACKGROUND</div><h3>静かに育つ</h3><p>睡眠、今日の関心、明示的に許可された情報源の整理。背景予算と停止条件を持ち、働きすぎず、必要な時だけ話しかける。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / mac desk</div><h2>Mac版は「ChatGPTの代わりになる机」</h2>
+    <p class="lead">主役は中央の広い会話。サイドバーや情報パネルは、必要な時だけ文脈を支える。タスク管理画面やデータベース画面を常に見せず、会話から仕事へ自然に入れる。</p>
+    <div class="desk" aria-label="Mac版の概念図">
+      <aside class="side"><div class="label">SHANNON</div><div class="row on">✦ 今日の会話</div><div class="row">設計を詰める</div><div class="row">週末の計画</div><div class="row">実装の相談</div><div class="label" style="margin-top:24px">WORK</div><div class="row">◌ 実行中 1</div><div class="row">✓ 最近の結果</div></aside>
+      <div class="chat"><div class="message"><div class="avatar">✦</div><div class="reply"><b>シャノン · 考え中</b><p>ここは、あなたが長く考えられる幅を使う。必要なら、参照中のAether文書や進行中の作業を横に添えるね。</p></div></div><div class="user">この案の弱いところを一緒に見つけたい。</div><div class="message" style="margin-top:20px"><div class="avatar">◔</div><div class="reply"><b>シャノン · 考え中</b><p>まず前提を三つに分けよう。決める必要があることと、いまは決めなくてよいことも見分けられそう。</p></div></div><div class="composer"><span>シャノンに話しかける</span><span class="send">↑</span></div></div>
+      <aside class="side right"><div class="label">この会話の文脈</div><div class="note">参照中<br><b>Aether / Shannon構想</b></div><div class="note">今日の関心<br><b>会話の居心地</b></div><div class="note">実行中<br><b>UX監査</b></div><div class="row">詳細を開く →</div></aside>
+    </div>
+    <div class="grid">
+      <article class="card wide"><span class="tag">会話を主役に</span><h3>ChatGPTより広く、シャノンらしく</h3><p>返答は十分な横幅を使い、Markdown・引用・コード・コピーを自然に扱う。表情付きの小さなアイコンは残すが、会話本文を狭めない。</p></article>
+      <article class="card wide"><span class="tag">必要な時だけ文脈を見せる</span><h3>右側は「頭の中」の小窓</h3><p>今日の関心、Aether参照、作業中タスク、根拠を表示できる。ただし閉じれば普通の会話だけが残る。</p></article>
+      <article class="card wide"><span class="tag">作業を会話から始める</span><h3>提案・実行・結果を混同しない</h3><p>シャノンの提案は提案として、実行は承認付きの作業として、結果は検証付きの報告として表示する。常設の大きな作業タイルにはしない。</p></article>
+      <article class="card wide"><span class="tag">存在感は控えめに</span><h3>キャラクターは集中を邪魔しない</h3><p>通常は小さな表情と反応。必要なら対話モードへ切り替え、静かな背景・表情・吹き出しに集中する。Live2Dはこの基本形が固まってから。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / one shannon</div><h2>端末が変わっても、別人にしない</h2>
+    <div class="flow"><div class="step"><b>Azureの共有正本</b><small>会話、記憶、感情、関心、作業状態の永続的な正本。</small></div><div class="arrow">→</div><div class="step"><b>iPhone</b><small>端末ごとの安全なペアリングと表示用キャッシュ。素早い会話と存在感。</small></div><div class="arrow">↔</div><div class="step"><b>Mac</b><small>別デバイスとして安全にペアリング。深い会話と長い作業を行う。</small></div></div>
+    <div class="callout"><b>Macだからといって、勝手にMacの中を読むことはしない。</b> ファイル、リポジトリ、カレンダー、ブラウザなどへの接続は、その都度目的・範囲・書き込み可否を明示し、ユーザーの承認を経る。Mac Agent Hostの権限と、Shannonの会話クライアントを混同しない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / roadmap</div><h2>段階的な実装計画</h2>
+    <table>
+      <thead><tr><th>段階</th><th>実現すること</th><th>完了の見方</th></tr></thead>
+      <tbody>
+        <tr><td><b>現在</b><br>iPhone品質</td><td>Build 30の音声Smoke、状態別UX監査、使い勝手の小さな改善。</td><td>会話・入力・対話・メモリー・作業・設定をライト／ダークで実機確認。</td></tr>
+        <tr><td><b>Mac 0.1</b><br>Desk core</td><td>macOS SwiftUIクライアント。ペアリング、スレッド一覧、広い会話、Markdown、コピー、会話の再開。</td><td>iPhoneとMacで同じスレッドが続き、片方で送った内容がもう片方に安全に反映される。</td></tr>
+        <tr><td><b>Mac 0.2</b><br>Context &amp; work</td><td>Aether参照の表示、作業タスクの提案・進捗・承認・検証報告。必要な時だけ右パネルを開く。</td><td>長い設計・実装相談を、会話から作業、結果まで見失わずに進められる。</td></tr>
+        <tr><td><b>Mac 0.3</b><br>Desk polish</td><td>添付・引用・選択範囲コンテキスト、検索、キーボード操作、アクセシビリティ、メニューバーの最小入口。</td><td>普段のChatGPT利用を置き換えても、読み書き・再開・文脈の摩擦が増えない。</td></tr>
+        <tr><td><b>後続</b><br>Presence</td><td>Live2D、Widget、より豊かな音声、表示を超えたアンビエントな存在感。</td><td>演出が便利さと集中を壊さず、シャノンの状態と意味を持っている。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / not the goal</div><h2>目指さないもの</h2>
+    <div class="grid">
+      <article class="card"><span class="tag later">しない</span><h3>何でも勝手に動くOS</h3><p>自発性は、許可された範囲での気づきと提案。ファイル、送信、公開、コード変更を無断で行わない。</p></article>
+      <article class="card"><span class="tag later">しない</span><h3>単なるChatGPTクローン</h3><p>広い会話画面は借りるが、会話をまたぐ関係性、生活の時間、実行の責任を持つ点が違う。</p></article>
+      <article class="card"><span class="tag later">しない</span><h3>画面の多い管理ツール</h3><p>情報は必要な時だけ深く見せる。日常は、ひとつの会話と、そこにいるシャノンから始める。</p></article>
+    </div>
+  </section>
+
+  <footer>実装正本: <a href="architecture.md">architecture.md</a> · 現在のUX監査: <a href="shannon-ux-audit-plan-v24.html">UX監査・改善計画 v24</a> · この文書は製品ビジョンとMac版の計画であり、Macクライアントはまだ実装していない。</footer>
+</main>
+</body>
+</html>

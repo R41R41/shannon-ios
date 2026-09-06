@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 30 音声Smokeガイド</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f4fbfe;--paper:#fff;--ink:#14303b;--muted:#627b85;--line:#cce7f0;--sky:#58c9ed;--deep:#147391;--soft:#e9f8fd;--good:#147956;--goodbg:#e2f7ed;--warn:#9b5e12;--warnbg:#fff1da;--danger:#b4423d;--dangerbg:#ffe9e7;--shadow:0 18px 52px #126d8c15}
+    @media(prefers-color-scheme:dark){:root{--bg:#07161c;--paper:#10232c;--ink:#e7f6fb;--muted:#a5bec8;--line:#28515f;--sky:#73dcfa;--deep:#96e4ff;--soft:#103641;--good:#78dfb7;--goodbg:#10392d;--warn:#ffd082;--warnbg:#3a2b11;--danger:#ffaea9;--dangerbg:#401f20;--shadow:none}}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 87% -9%,#70dafa4b,transparent 33rem),var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(940px,calc(100% - 32px));margin:auto;padding:50px 0 88px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.45rem,7vw,4.9rem);line-height:1.03;letter-spacing:-.055em;margin:.15em 0 .25em}h2{font-size:clamp(1.55rem,4vw,2.35rem);line-height:1.2;letter-spacing:-.03em;margin-bottom:16px}.eyebrow{font-size:.75rem;font-weight:900;letter-spacing:.14em;color:var(--deep);text-transform:uppercase}.hero,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:var(--shadow)}.hero{padding:45px;border-radius:33px}.lead{max-width:700px;color:var(--muted);font-size:1.05rem}.chip{display:inline-block;margin:16px 7px 0 0;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--deep);font-size:.76rem;font-weight:850}.chip.good{background:var(--goodbg);color:var(--good)}section{padding:29px;border-radius:26px;margin-top:18px}.rule{padding:18px 20px;border-radius:18px;background:var(--soft);border:1px solid var(--line);color:var(--deep);font-weight:700}.steps{counter-reset:step;display:grid;gap:12px;margin-top:15px}.step{counter-increment:step;position:relative;padding:19px 20px 19px 68px;border:1px solid var(--line);border-radius:19px;background:var(--paper)}.step:before{content:counter(step);position:absolute;left:18px;top:18px;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:var(--deep);color:#fff;font-weight:850}.step h3{margin:0 0 6px;font-size:1.04rem}.step p{color:var(--muted);margin:0}.state{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--deep);font-size:.77rem;font-weight:800}code{font:inherit;padding:2px 5px;border-radius:6px;background:var(--soft);color:var(--deep)}.check{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}.check div{padding:14px;border-radius:15px;background:var(--goodbg);color:var(--good);font-weight:750}.failure{padding:19px;border-radius:19px;background:var(--dangerbg);color:var(--danger)}.failure h3{margin-bottom:8px}.table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--paper);margin-top:14px}th,td{padding:13px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:var(--soft);color:var(--deep);font-size:.76rem;letter-spacing:.06em}tr:last-child td{border-bottom:0}.quiet{padding:16px 18px;border-radius:17px;background:var(--warnbg);color:var(--warn);margin-top:14px}footer{padding:26px 4px 0;color:var(--muted);font-size:.85rem}@media(max-width:680px){main{width:min(100% - 22px,940px);padding-top:22px}.hero,section{padding:23px;border-radius:23px}.check{grid-template-columns:1fr}.step{padding-left:61px}.step:before{left:15px}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">Shannon · iPhone smoke guide · build 30</div>
+    <h1>音声会話を、<br>一往復だけ確認する。</h1>
+    <p class="lead">これはBuild 30の音声入力修正が実機で安定しているかを確かめるための短い確認です。会話履歴を汚したくなければ、新しいトークで行ってください。音声や会話本文は診断ログに保存されません。</p>
+    <span class="chip good">対象: Shannon 0.1.0 (30)</span><span class="chip">所要: 約2分</span><span class="chip">Mac接続は不要</span>
+  </header>
+
+  <section>
+    <div class="eyebrow">準備</div><h2>始める前に</h2>
+    <div class="rule">TestFlight上のShannonが <b>Build 30</b> であることだけ確認してください。すでにBuild 30を使っていれば、更新や再インストールは不要です。</div>
+    <p class="quiet"><b>避けたいこと:</b> 大事な会話の途中で試すこと、個人情報を話すこと、録音中にアプリを閉じること。音声が止まった場合も、アプリを再起動すれば通常チャットはそのまま使えます。</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">操作</div><h2>この順で一往復</h2>
+    <div class="steps">
+      <article class="step"><h3>新しいトークを開く</h3><p>できれば新しいトークを作成します。既存トークでも構いませんが、あとで確認しやすいよう音声テスト専用がおすすめです。</p></article>
+      <article class="step"><h3>空の入力欄でマイクを押す</h3><p>入力欄を空にして、右側の <span class="state">音声で話す</span>（マイク）を1回タップします。初回だけiPhoneがマイク利用を尋ねたら、<b>許可</b>を選びます。</p></article>
+      <article class="step"><h3><span class="state">聞いている…</span> を確認して話す</h3><p>波形と音声バーが表示されたら、3〜5秒ほど次の文を話してください。<br><code>こんにちは。今日は音声入力の確認をしています。短く返事をして。</code></p></article>
+      <article class="step"><h3>文字が出たら送信する</h3><p>話した文が音声バーに表示されたら、バー右側の上向き矢印をタップします。表示は <span class="state">考えている…</span> に変わります。</p></article>
+      <article class="step"><h3>返答と読み上げを確認する</h3><p>シャノンの返答が通常の会話として保存され、表示が <span class="state">シャノンが話している</span> に変われば成功です。読み上げ中にもう一度右側のボタンを押し、音声を止められることも確認してください。</p></article>
+      <article class="step"><h3>普通の会話へ戻れることを確認する</h3><p>音声バーを閉じるか、入力欄へ短いテキストを打って送ります。アプリが落ちず、テキスト会話を続けられれば確認完了です。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">成功条件</div><h2>6つすべてなら合格</h2>
+    <div class="check"><div>✓ マイクを押してもクラッシュしない</div><div>✓ <span class="state">聞いている…</span> が表示される</div><div>✓ 話した内容が短くても文字になる</div><div>✓ 上矢印で送信できる</div><div>✓ 返答が保存され、読み上げが始まる</div><div>✓ 読み上げ停止後も普通にチャットできる</div></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">うまくいかない時</div><h2>結果に応じて、これだけ送ってください</h2>
+    <table class="table"><thead><tr><th>起きたこと</th><th>まずすること</th><th>こちらへ送るもの</th></tr></thead><tbody>
+      <tr><td>マイクを押すと落ちる</td><td>Shannonを開き直し、歯車 → <b>音声診断</b> → <b>診断ログをコピー</b></td><td>コピーした診断ログ全文。音声・会話本文・認証情報は含まれません。</td></tr>
+      <tr><td>許可されない</td><td>iPhoneの「設定」→「Shannon」（または「アプリ」→「Shannon」）でマイクと音声認識を許可し、アプリへ戻る</td><td>表示されたメッセージと、どちらの許可が見当たらないか</td></tr>
+      <tr><td>文字が出ない／送れない</td><td>音声バーの <b>×</b> で閉じ、もう一度だけ試す</td><td>最後に見えた表示（例: 聞いている、送信できます、考えている）</td></tr>
+      <tr><td>返答は出るが読み上げない</td><td>テキスト会話が続くことを確認して終了</td><td>返答は表示されたか、音声バーの表示は何だったか</td></tr>
+    </tbody></table>
+    <div class="failure"><h3>クラッシュしても、アプリの削除や再インストールはしないでください。</h3><p>会話キャッシュや端末の認証状態を守るためです。開き直して音声診断をコピーできれば、原因の段階を絞れます。</p></div>
+  </section>
+
+  <footer>確認後は、結果を「6項目すべてOK」または上表の該当項目だけで教えてください。こちらでBuild 30の音声Smoke結果を記録し、次のUX監査へ進めます。</footer>
+</main>
+</body>
+</html>

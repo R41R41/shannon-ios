@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon UX監査・改善計画 v24</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5fbfe;--paper:#fff;--ink:#14313d;--muted:#5f7783;--line:#cce7f0;--sky:#54c6ed;--deep:#137596;--soft:#e8f8fd;--good:#13765a;--goodbg:#e4f6ef;--warn:#9b5d12;--warnbg:#fff1da;--later:#665596;--laterbg:#eeeafd;--shadow:0 18px 50px #16759614}
+    @media(prefers-color-scheme:dark){:root{--bg:#08161c;--paper:#11242d;--ink:#e7f6fb;--muted:#a5bec8;--line:#28515f;--sky:#70d9fa;--deep:#95e5ff;--soft:#103744;--good:#79dcb9;--goodbg:#10372c;--warn:#ffd080;--warnbg:#3a2b11;--later:#c8bcff;--laterbg:#292342;--shadow:none}}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 88% -8%,#71d7fa48,transparent 32rem),var(--bg);color:var(--ink);font:15px/1.68 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(1160px,calc(100% - 32px));margin:auto;padding:50px 0 90px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.55rem,7vw,5.4rem);line-height:1.02;letter-spacing:-.06em;margin:.15em 0 .22em}h2{font-size:clamp(1.7rem,4vw,2.65rem);line-height:1.18;letter-spacing:-.035em}.eyebrow{font-size:.75rem;font-weight:900;letter-spacing:.14em;color:var(--deep);text-transform:uppercase}.lead{max-width:840px;color:var(--muted);font-size:1.08rem}.hero,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,transparent);box-shadow:var(--shadow)}.hero{padding:46px;border-radius:34px;overflow:hidden;position:relative}.hero:after{content:"";position:absolute;width:360px;height:360px;border-radius:50%;right:-130px;top:-170px;background:radial-gradient(circle,var(--sky),transparent 67%);opacity:.48}.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:23px}.chip,.tag{padding:6px 11px;border-radius:999px;font-size:.75rem;font-weight:850}.chip{background:var(--soft);color:var(--deep);border:1px solid var(--line)}.chip.good,.tag.good{background:var(--goodbg);color:var(--good)}.chip.now,.tag.now{background:#daf4ff;color:#126987}.chip.later,.tag.later{background:var(--laterbg);color:var(--later)}section{padding:30px;border-radius:28px;margin-top:20px}.decision{padding:22px;border-radius:20px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 88%,transparent));border:1px solid var(--line)}.decision b{display:block;font-size:1.15rem;margin-bottom:6px}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:18px}.card{grid-column:span 4;padding:20px;border-radius:20px;border:1px solid var(--line);background:var(--paper)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card h3{margin:10px 0 7px;font-size:1.05rem}.card p,.small{font-size:.9rem;color:var(--muted)}.flow{display:flex;gap:9px;overflow:auto;padding:5px 1px 10px}.step{flex:1;min-width:170px;padding:17px;border-radius:18px;border:1px solid var(--line);background:var(--paper)}.step b{display:block;color:var(--deep);margin-bottom:5px}.step small{color:var(--muted)}.arrow{align-self:center;font-size:22px;color:var(--sky);font-weight:900}table{border-collapse:separate;border-spacing:0;width:100%;overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--paper);margin-top:16px}th,td{padding:14px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:var(--soft);font-size:.76rem;letter-spacing:.06em;color:var(--deep)}tr:last-child td{border-bottom:0}.done{color:var(--good);font-weight:800}.state{display:inline-block;padding:3px 8px;border-radius:999px;font-size:.72rem;font-weight:800;background:var(--soft);color:var(--deep)}.matrix{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px}.matrix .item{padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--paper)}.matrix b{display:block;margin-bottom:5px}.matrix p{font-size:.87rem;color:var(--muted);margin:0}.rubric{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.rubric div{padding:14px;border-radius:16px;background:var(--soft);color:var(--deep);font-weight:750}.callout{padding:17px 19px;margin-top:16px;border-radius:17px;background:var(--warnbg);color:var(--warn)}footer{padding:25px 5px 0;color:var(--muted);font-size:.85rem}a{color:var(--deep)}@media(max-width:760px){main{width:min(100% - 22px,1160px);padding-top:22px}.hero,section{padding:23px;border-radius:24px}.grid{grid-template-columns:1fr}.card,.card.wide,.card.full{grid-column:1}.matrix,.rubric{grid-template-columns:1fr}th,td{padding:11px;font-size:.84rem}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="eyebrow">Shannon · quality programme · v24 · 2026-09-06</div>
+    <h1>使いやすさを、<br>機能と同じ深さで仕上げる。</h1>
+    <p class="lead">Shannonは「機能を増やす段階」から「毎日気持ちよく使える段階」へ移る。Build 30を基準に、画面の全状態をライト／ダークで撮影し、AetherとVoyagerから操作の良い部分だけを学びながら、1枚ずつ改善する。</p>
+    <div class="chips"><span class="chip good">Build 30 実機確認済み</span><span class="chip now">次: 音声Smoke</span><span class="chip">UX監査を先行設計</span><span class="chip later">Live2D / Widget は後続</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / decision</div><h2>正本を固定してから、磨く</h2>
+    <div class="decision"><b>製品・配布の正本は <code>shannon-ios</code>。</b><p><code>work/shannon-v1</code> は旧来の研究用作業ツリーとして隔離する。そこから何かを採用する時は、対象を小さく読み取り、Shannonの現在の設計・権限・予算・テストに合わせて移植する。旧ツリーから直接ビルド、Azure反映、TestFlight配信はしない。</p></div>
+    <div class="grid">
+      <article class="card wide"><span class="tag good">完了</span><h3>Build 30の安定した出発点</h3><p>新しいprimary AppIcon、会話・接続の維持、複数トーク、記憶、作業タスク、背景の関心と自発性、配信自動化まで実機で確認済み。</p></article>
+      <article class="card wide"><span class="tag now">最優先</span><h3>音声の実機完了判定</h3><p>iOS 26の音声経路は録音tapと認識処理を分離済み。Build 30で「開始 → 話す → 確定 → 送信 → 返答・読み上げ → 停止」を確認して、過去のクラッシュ対応を閉じる。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / sequence</div><h2>実装の順番</h2>
+    <div class="flow">
+      <div class="step"><b>0. 正本の固定</b><small>shannon-iosだけを製品変更・配布対象にする。完了。</small></div><div class="arrow">→</div>
+      <div class="step"><b>1. 音声Smoke</b><small>Build 30で半二重会話の開始、確定、送信、読み上げ、停止を実機確認。</small></div><div class="arrow">→</div>
+      <div class="step"><b>2. 撮影fixture</b><small>個人会話を使わない固定データで、画面状態を安全に再現可能にする。</small></div><div class="arrow">→</div>
+      <div class="step"><b>3. 画面監査</b><small>ライト／ダーク・長文・空・失敗・キーボードなどを1枚ずつ評価。</small></div><div class="arrow">→</div>
+      <div class="step"><b>4. 小さく改修</b><small>発見した摩擦を優先順位順に直し、同じ画面を再撮影して差分確認。</small></div>
+    </div>
+    <div class="callout"><b>このフェーズでは新しい大機能を混ぜない。</b> 新しい情報源、Live2D、Widget、全二重音声は、基本操作の摩擦を消してから扱う。改善の原因と効果を見失わないための境界。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / screenshot matrix</div><h2>画面を「状態」まで含めて撮る</h2>
+    <p class="lead">最低48枚のコア画面を、同一の非個人fixtureと端末条件で撮影する。画像・会話・トークン・認証情報はサンプルに置き換え、共有しても安全な状態だけを残す。</p>
+    <table>
+      <thead><tr><th>画面</th><th>必須状態</th><th>表示条件</th><th>見ること</th></tr></thead>
+      <tbody>
+        <tr><td>トーク／スクロール</td><td>通常、長文、送信中・失敗、キーボード表示</td><td>ライト・ダーク × 4</td><td>本文幅、情報密度、コピー、入力欄と最終返信の重なり</td></tr>
+        <tr><td>対話モード</td><td>待機、考え中、短文、長文＋キーボード</td><td>ライト・ダーク × 4</td><td>シャノンの存在感、吹き出し、視線、余白、対話への集中</td></tr>
+        <tr><td>トーク一覧</td><td>空、複数、選択中、タイトル編集</td><td>ライト・ダーク × 4</td><td>新規作成、最終時刻、選択状態、編集と戻る導線</td></tr>
+        <tr><td>メモリー</td><td>いま、知識、日記、空・更新失敗</td><td>ライト・ダーク × 4</td><td>「頭の中」として読めるか、根拠・編集・戻り道</td></tr>
+        <tr><td>作業タスク</td><td>なし、進行中、許可待ち、完了・失敗</td><td>ライト・ダーク × 4</td><td>重要度、行動の分かりやすさ、通常会話を邪魔しないこと</td></tr>
+        <tr><td>設定</td><td>通常、App Update、Voice Diagnostics、接続不調</td><td>ライト・ダーク × 4</td><td>情報の優先順位、異常の伝え方、戻りやすさ</td></tr>
+      </tbody>
+    </table>
+    <div class="matrix">
+      <div class="item"><b>追加アクセシビリティ撮影</b><p>大きな文字、Reduce Motion、VoiceOverの主要導線、横向き不要の崩れ確認。コア48枚と別に代表状態を撮る。</p></div>
+      <div class="item"><b>通信・データ保護の撮影</b><p>オフライン、遅い応答、再試行、復元中をfixtureで再現。実ユーザー会話や本番のタスク本文は使わない。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / review lens</div><h2>1枚ごとの判定基準</h2>
+    <div class="rubric">
+      <div>① いま何ができるかが3秒で分かる</div><div>② 最も大切な内容に目が最初に行く</div><div>③ 操作できる要素が操作できる見た目をしている</div>
+      <div>④ 余白は静けさになり、情報不足にならない</div><div>⑤ ライト／ダーク双方で読みやすく、表情が沈まない</div><div>⑥ 直前の行動と次の行動が自然につながる</div>
+    </div>
+    <div class="grid">
+      <article class="card wide"><span class="tag">Aetherから学ぶ</span><h3>文章と入力の居心地</h3><p>透明感のある入力領域、情報を急かさない読み順、階層を増やしすぎないナビゲーションを参照する。ただしAetherの文書中心UIを会話にそのまま複製しない。</p></article>
+      <article class="card wide"><span class="tag">Voyagerから学ぶ</span><h3>作業状態の明快さ</h3><p>実行中・待機・完了・失敗の区別、次の行動を1つに絞る表現、長い作業を迷子にしない要約を参照する。ただしタスク管理画面の密度を通常会話に持ち込まない。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / delivery rhythm</div><h2>監査から改善までの一巡</h2>
+    <div class="grid">
+      <article class="card"><span class="tag now">観察</span><h3>スクリーンショットに注釈</h3><p>各画面に「問題」「なぜ気になるか」「仮説」「優先度」を付ける。主観だけでなく、操作の失敗や視線移動も記録する。</p></article>
+      <article class="card"><span class="tag now">選別</span><h3>1ビルドは1つの体験単位</h3><p>例: 入力体験、対話モード、メモリー階層。無関係な機能を同じ変更へ混ぜず、効果を実機で比較できるようにする。</p></article>
+      <article class="card"><span class="tag now">検証</span><h3>同じ状態を再撮影</h3><p>変更前後を同条件で比較し、会話履歴・接続・記憶・タスク表示の回帰をチェックしてからTestFlightへ進む。</p></article>
+    </div>
+    <p class="lead" style="margin-top:18px">実際にあなたの操作・端末接続・TestFlight更新が必要になる時は、その都度「目的、具体的な手順、成功時の見え方、失敗時の復帰」を書いた専用HTMLガイドを先に作る。</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / deliberately later</div><h2>この監査を終えてから扱うもの</h2>
+    <div class="grid">
+      <article class="card"><span class="tag later">後続</span><h3>Live2D・Widget</h3><p>画面の「居場所」と会話・音声状態を先に固め、動きに意味を持たせてから導入する。</p></article>
+      <article class="card"><span class="tag later">後続</span><h3>全二重・背景音声</h3><p>半二重音声の安全性と停止体験を実機で固めるまでは、常時マイクや割り込みを増やさない。</p></article>
+      <article class="card"><span class="tag later">後続</span><h3>情報源の大量追加</h3><p>RSS・ニュース・外部サービスは、使う理由、同意、予算、停止条件を1つずつ明確にして導入する。</p></article>
+    </div>
+  </section>
+
+  <footer>実装の正本: <a href="architecture.md">architecture.md</a> · 配布／実機の定義: <a href="self-improvement-runbook.md">self-improvement-runbook.md</a> · 旧UX資料は設計履歴として参照する。</footer>
+</main>
+</body>
+</html>

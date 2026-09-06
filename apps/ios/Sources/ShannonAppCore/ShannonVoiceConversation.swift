@@ -549,7 +549,15 @@ private final class ShannonSpeechAnalyzerCapture {
         // callback limited to queueing the native buffer, matching Apple's
         // SpeechAnalyzer sample. Conversion, allocation, diagnostics, and
         // AnalyzerInput construction run on a separate task instead.
-        let (rawAudioSequence, rawAudioBuilder) = AsyncStream<ShannonVoiceAudioBuffer>.makeStream()
+        // The buffer owned by an AVAudioEngine tap is reused by the audio
+        // engine. It must not cross the tap boundary by reference: the
+        // asynchronous converter can otherwise read it after the engine has
+        // already recycled its storage. Keep only a small newest-buffer queue
+        // so a temporarily busy recognizer cannot turn into an unbounded
+        // allocation stream.
+        let (rawAudioSequence, rawAudioBuilder) = AsyncStream<ShannonVoiceAudioBuffer>.makeStream(
+            bufferingPolicy: .bufferingNewest(4)
+        )
         self.rawAudioBuilder = rawAudioBuilder
         let converter = ShannonVoiceBufferConverter(outputFormat: analyzerFormat)
         let diagnostics = diagnostics
@@ -583,7 +591,11 @@ private final class ShannonSpeechAnalyzerCapture {
 
         diagnostics.record("capture.tap.before", sessionID: sessionID)
         input.installTap(onBus: 0, bufferSize: 4_096, format: sourceFormat) { buffer, _ in
-            rawAudioBuilder.yield(ShannonVoiceAudioBuffer(buffer: buffer))
+            // Do the minimum work needed for a safe handoff. The expensive
+            // format conversion and SpeechAnalyzer input construction remain
+            // off the real-time audio thread.
+            guard let snapshot = ShannonVoiceAudioBuffer(copying: buffer) else { return }
+            rawAudioBuilder.yield(snapshot)
         }
         tapIsInstalled = true
         diagnostics.record("capture.tap.after", sessionID: sessionID)
@@ -641,6 +653,53 @@ private final class ShannonSpeechAnalyzerCapture {
 @available(iOS 26.0, *)
 private struct ShannonVoiceAudioBuffer: @unchecked Sendable {
     let buffer: AVAudioPCMBuffer
+
+    /// AVAudioEngine owns buffers handed to its tap and may recycle their
+    /// backing storage as soon as the callback returns. Retain an independent
+    /// PCM snapshot before a buffer crosses into the asynchronous converter.
+    init?(copying source: AVAudioPCMBuffer) {
+        guard source.frameLength > 0,
+              let copy = AVAudioPCMBuffer(
+                pcmFormat: source.format,
+                frameCapacity: source.frameLength
+              )
+        else {
+            return nil
+        }
+
+        let sourceList = source.audioBufferList
+        let destinationList = copy.mutableAudioBufferList
+        let bufferCount = Int(sourceList.pointee.mNumberBuffers)
+        guard bufferCount > 0, bufferCount == Int(destinationList.pointee.mNumberBuffers) else {
+            return nil
+        }
+
+        // AudioBufferList has a flexible C array for `mBuffers`; Swift imports
+        // it as one visible element. Rebind the memory after that first field
+        // to traverse every plane of either interleaved or deinterleaved PCM.
+        let audioBuffersOffset = MemoryLayout<AudioBufferList>.offset(of: \.mBuffers) ?? 0
+        let sourceBuffers = UnsafeRawPointer(sourceList)
+            .advanced(by: audioBuffersOffset)
+            .assumingMemoryBound(to: AudioBuffer.self)
+        let destinationBuffers = UnsafeMutableRawPointer(destinationList)
+            .advanced(by: audioBuffersOffset)
+            .assumingMemoryBound(to: AudioBuffer.self)
+
+        copy.frameLength = source.frameLength
+        for index in 0..<bufferCount {
+            let sourceBuffer = sourceBuffers.advanced(by: index).pointee
+            let destinationBuffer = destinationBuffers.advanced(by: index)
+            guard let sourceData = sourceBuffer.mData,
+                  let destinationData = destinationBuffer.pointee.mData,
+                  sourceBuffer.mDataByteSize <= destinationBuffer.pointee.mDataByteSize
+            else {
+                return nil
+            }
+            memcpy(destinationData, sourceData, Int(sourceBuffer.mDataByteSize))
+            destinationBuffer.pointee.mDataByteSize = sourceBuffer.mDataByteSize
+        }
+        buffer = copy
+    }
 }
 
 @available(iOS 26.0, *)
