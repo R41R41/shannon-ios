@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon ゼロベースUX参考設計 v28</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5fafc;--paper:#fff;--ink:#102630;--muted:#607783;--line:#d2e6ed;--sky:#4eb9df;--deep:#087aa8;--soft:#e8f7fc;--warm:#f0a08f;--good:#0b7558;--goodbg:#e1f6ed;--warn:#875b12;--warnbg:#fff3d8;--bad:#9c3f44;--badbg:#ffe9ea;--shadow:0 18px 54px #17668116}
+    @media(prefers-color-scheme:dark){:root{--bg:#07171d;--paper:#10252e;--ink:#eefbff;--muted:#a7bec8;--line:#28505d;--sky:#78d9f7;--deep:#8be3ff;--soft:#103642;--warm:#ffb5a6;--good:#77dcb8;--goodbg:#10372b;--warn:#ffd081;--warnbg:#3b2d15;--bad:#ffb7ba;--badbg:#3d2225;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 90% -10%,#4eb9df45,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.72 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(1180px,calc(100% - 28px));margin:auto;padding:42px 0 90px}header,section{background:color-mix(in srgb,var(--paper) 94%,transparent);border:1px solid var(--line);box-shadow:var(--shadow)}header{padding:46px;border-radius:34px}section{padding:30px;border-radius:27px;margin-top:18px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.7rem,6vw,4.8rem);line-height:1.02;letter-spacing:-.055em;margin:.18em 0 .28em;max-width:980px}h2{font-size:clamp(1.65rem,4vw,2.55rem);line-height:1.16;letter-spacing:-.035em;margin-bottom:16px}h3{font-size:1.06rem;margin:6px 0}.lead{font-size:1.08rem;max-width:900px;color:var(--muted)}.eyebrow{font-size:.73rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--deep)}.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:23px}.chip,.tag{display:inline-block;border-radius:999px;padding:5px 10px;font-size:.73rem;font-weight:850}.chip{border:1px solid var(--line);background:var(--soft);color:var(--deep)}.good{background:var(--goodbg);color:var(--good)}.warn{background:var(--warnbg);color:var(--warn)}.bad{background:var(--badbg);color:var(--bad)}.decision{padding:22px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 86%,transparent));font-size:1.08rem}.decision b{color:var(--deep)}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px;margin-top:15px}.card{grid-column:span 4;background:var(--paper);border:1px solid var(--line);border-radius:19px;padding:20px}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card p,.small{font-size:.9rem;color:var(--muted);margin-bottom:0}.ratio{display:grid;grid-template-columns:9fr 1fr;border-radius:999px;overflow:hidden;height:18px;margin:18px 0 10px;background:var(--warm)}.ratio div:first-child{background:var(--deep)}.ratio-labels{display:flex;justify-content:space-between;color:var(--muted);font-size:.82rem;font-weight:750}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:18px;background:var(--paper)}table{width:100%;border-collapse:collapse;min-width:850px}th,td{padding:14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{font-size:.75rem;color:var(--deep);background:var(--soft)}tr:last-child td{border-bottom:0}td:first-child{font-weight:850;white-space:nowrap}.take{color:var(--good);font-weight:800}.skip{color:var(--bad);font-weight:800}.why{font-size:.87rem;color:var(--muted)}.anatomy{display:grid;grid-template-columns:210px 1fr;gap:17px;padding:19px 0;border-bottom:1px solid var(--line)}.anatomy:last-child{border-bottom:0}.anatomy h3{color:var(--deep)}.anatomy ul{margin:4px 0;padding-left:1.3em}.flow{display:flex;gap:8px;align-items:stretch;overflow:auto;padding:3px 0 10px}.step{min-width:170px;flex:1;padding:16px;border:1px solid var(--line);border-radius:17px;background:var(--paper)}.step b{display:block;color:var(--deep)}.step small{color:var(--muted)}.arrow{align-self:center;color:var(--sky);font-size:1.5rem;font-weight:900}.shell{max-width:390px;min-height:670px;margin:auto;border:2px solid color-mix(in srgb,var(--ink) 72%,transparent);border-radius:38px;background:var(--bg);padding:14px;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.top{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:8px}.round{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--paper) 83%,transparent);border:1px solid var(--line)}.title{text-align:center}.title b{display:block}.title small{color:var(--muted)}.chat{padding:26px 8px 8px}.msg-head{display:flex;gap:9px;align-items:center}.avatar{width:42px;height:42px;border-radius:50%;background:var(--soft);display:grid;place-items:center;font-size:1.25rem}.meta{font-size:.74rem;color:var(--muted)}.reply{font-size:1rem;line-height:1.7;margin:8px 0 27px 51px}.source{display:inline-flex;gap:6px;align-items:center;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--paper);font-size:.75rem;color:var(--deep)}.mine{max-width:78%;margin:20px 0 24px auto;padding:10px 14px;border-radius:18px;background:var(--soft)}.activity{margin:14px 0 0 51px;padding:12px 14px;border-left:3px solid var(--sky);background:color-mix(in srgb,var(--soft) 70%,transparent);border-radius:0 14px 14px 0;font-size:.84rem}.composer{padding:7px 7px 7px 15px;border:1px solid var(--line);border-radius:26px;background:color-mix(in srgb,var(--paper) 88%,transparent);display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;backdrop-filter:blur(18px)}.send{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--deep);color:white}.architecture{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}.dest{padding:16px;border:1px solid var(--line);border-radius:17px;background:var(--paper)}.dest b{display:block;color:var(--deep)}.dest small{color:var(--muted)}.personality{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.signal{padding:18px;border-radius:18px;background:var(--paper);border:1px solid var(--line)}.signal b{color:var(--deep)}.signal p{font-size:.85rem;color:var(--muted);margin:5px 0 0}.callout{margin-top:15px;padding:16px 18px;border-left:5px solid var(--sky);border-radius:0 16px 16px 0;background:var(--soft)}.phase{display:grid;grid-template-columns:155px 1fr 245px;gap:17px;padding:19px;border:1px solid var(--line);border-radius:20px;background:var(--paper);margin-top:11px}.phase-name{font-size:.76rem;font-weight:900;letter-spacing:.08em;color:var(--deep)}.gate{padding:10px 12px;border-radius:13px;background:var(--soft);color:var(--deep);font-size:.82rem}ul{padding-left:1.35em}li+li{margin-top:6px}footer{padding:26px 5px 0;color:var(--muted);font-size:.84rem}a{color:var(--deep)}
+    @media(max-width:820px){main{width:min(100% - 20px,1180px);padding-top:18px}header,section{padding:22px;border-radius:23px}.grid{grid-template-columns:1fr}.card,.card.wide,.card.full{grid-column:1}.anatomy{grid-template-columns:1fr}.architecture,.personality{grid-template-columns:1fr 1fr}.phase{grid-template-columns:1fr;gap:8px}}@media(max-width:480px){.architecture,.personality{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">Shannon · zero-base UX reference · v28 · 2026-09-06</div>
+    <h1>便利さが主役。<br>人格は、気配として。</h1>
+    <p class="lead">Shannonをキャラクター育成アプリとして設計しない。ChatGPT級の実用性を骨格に、Aether／Voyagerと同じ静かな道具感、Apple純正アプリの人間工学、シャノン固有の感情と自発性を少量だけ重ねる。</p>
+    <div class="chips"><span class="chip good">確定 · Utility first</span><span class="chip">人格は10%</span><span class="chip">UIはゼロベース再設計可</span><span class="chip warn">実装前の方針確認</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / corrected thesis</div><h2>守るのは画面ではなく、積み上がった資産</h2>
+    <div class="decision"><b>新しい前提：</b>会話履歴、記憶、ユーザー知識、端末接続、Realtime音声、作業状態、アイコン資産は維持する。一方で、ナビゲーション、画面分類、コンポーネント、余白、色、モーションは、必要ならゼロから組み直す。</div>
+    <div class="ratio"><div></div><div></div></div><div class="ratio-labels"><span>90% · 速い・明快・頼れるアシスタント</span><span>10% · シャノンの気配</span></div>
+    <div class="grid">
+      <article class="card"><h3>主役</h3><p>質問、回答、調査結果、作業成果、次に必要な操作。キャラクター画像ではない。</p></article>
+      <article class="card"><h3>人格の場所</h3><p>表情アイコン、声、短い状態文、言葉遣い、自発的な一件、穏やかな動き。</p></article>
+      <article class="card"><h3>入れないもの</h3><p>好感度、親密度ゲージ、部屋、着せ替え中心、ログイン報酬、関係を煽る通知。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / reference hierarchy</div><h2>参考製品は、この範囲に絞る</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>優先</th><th>製品</th><th>観察するUI</th><th>採る理由</th><th>採らないもの</th></tr></thead>
+      <tbody>
+        <tr><td>Core</td><td>Aether</td><td>透明な上下面、入力、長文、Light／Dark</td><td class="take">姉妹アプリとして同じ静けさと素材感を持てる</td><td class="skip">文書中心の情報構造そのもの</td></tr>
+        <tr><td>Core</td><td>Voyager</td><td>一覧、状態、進捗、次の行動</td><td class="take">作業を意味のある段階へ圧縮する文法を共有できる</td><td class="skip">タスク正本の管理画面化</td></tr>
+        <tr><td>Core</td><td>ChatGPT</td><td>全幅回答、下部composer、左Drawer、音声、ツール入口</td><td class="take">会話を最短距離で始め、長文も読める実用品の骨格</td><td class="skip">機能追加で肥大化したメニューをそのまま複製</td></tr>
+        <tr><td>Core</td><td>Claude</td><td>落ち着いた文章、添付、会話と成果物の分離</td><td class="take">会話と実行結果を混ぜず、長い成果を別の面で扱える</td><td class="skip">暖色ブランドやWebの二面レイアウトをiPhoneへ直輸入</td></tr>
+        <tr><td>Core</td><td>Perplexity</td><td>出典chip、調査モード、関連質問、Library</td><td class="take">シャノンの探索を検証可能にしつつ本文を邪魔しない</td><td class="skip">検索サービス中心のモード選択の多さ</td></tr>
+        <tr><td>Grammar</td><td>Apple純正</td><td>Navigation、Sheet、Toolbar、入力、電話、一覧、設定</td><td class="take">学習済みのiOS操作、片手操作、アクセシビリティを土台にできる</td><td class="skip">純正らしく見せるためだけの無個性な模倣</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout"><b>対象外：</b>Replika、Character.AI、Finch、およびキャラクターへの没入・恋愛・育成を中心にするUI。機能比較にも使わず、Shannonの判断基準へ混ぜない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / component anatomy</div><h2>部品の位置と色には、役割を持たせる</h2>
+    <div class="anatomy"><h3>上部</h3><div><ul><li><b>左：</b>スレッドDrawer。チャットアプリで学習済みの場所で、戻る操作とも整合する。</li><li><b>中央：</b>現在のトーク名。アプリ名や感情メーターを置かず、いま何を開いているかだけを示す。</li><li><b>右：</b>新規トーク。高頻度で可逆な操作を一段目に置き、設定はDrawer内へ下げる。</li></ul></div></div>
+    <div class="anatomy"><h3>会話本文</h3><div><ul><li><b>シャノン：</b>吹き出しを使わず全幅。長文の行長と余白を確保し、ChatGPT／Claude型の読み物として扱う。</li><li><b>ユーザー：</b>淡いsurfaceの短い吹き出し。誰の入力かを形で区別し、強いブランド色で塗らない。</li><li><b>表情：</b>返信先頭の40–44ptアイコン。感情名や数値は通常表示しない。</li><li><b>出典：</b>Perplexity型の小さなchip。タップで出典一覧を開き、本文には必要最小限だけ出す。</li></ul></div></div>
+    <div class="anatomy"><h3>下部composer</h3><div><ul><li>キーボードの直上に固定し、Aetherと同じ半透明surface。背後の会話を隠す不透明な帯を置かない。</li><li>左端の＋は写真・ファイル・参照をまとめる。文字入力中は右端が送信、空なら音声になる。</li><li>送信だけを深い青のfilled circleにして、取り消せない決定点を明確にする。他の操作はneutral。</li></ul></div></div>
+    <div class="anatomy"><h3>配色</h3><div><ul><li>大面積はsystem background／neutral surface。水色を背景全面へ広げない。</li><li>水色は選択、focus、リンク、進行中、シャノンの存在に限定する。</li><li>暖色はシャノンの感情にごく少量。成功・警告・失敗はsemantic colorを使い、人格色と混ぜない。</li></ul></div></div>
+    <div class="anatomy"><h3>モーションと触覚</h3><div><ul><li>Drawer、Sheet、音声接続、作業状態の変化など、空間関係の説明にだけ使う。</li><li>感情の常時アニメーションはしない。表情切替、瞬き、呼吸は対話画面かWidgetへ限定する。</li><li>選択・送信・モード確定には軽いhaptic、失敗は強い振動で叱らず文言と形で示す。</li></ul></div></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / apple references</div><h2>Apple純正アプリは、目的別に見る</h2>
+    <div class="grid">
+      <article class="card"><span class="tag good">Messages</span><h3>会話と入力</h3><p>スレッド一覧、入力中の視線、添付入口、キーボード復帰、長押し操作。</p></article>
+      <article class="card"><span class="tag good">Phone / FaceTime</span><h3>Realtime音声</h3><p>接続中・聞き取り中・ミュート・終了の優先順位。通話中は操作数を減らす。</p></article>
+      <article class="card"><span class="tag good">Journal</span><h3>記憶と日記</h3><p>出来事を時系列で読み返し、写真・場所・音声などを一件へ束ねる。空欄を埋めさせず候補を出す。</p></article>
+      <article class="card"><span class="tag">Reminders</span><h3>作業</h3><p>今日・予定・完了を分け、詳細は必要な時だけ開く。作業状態を会話本文へ常駐させない。</p></article>
+      <article class="card"><span class="tag">Settings</span><h3>設定</h3><p>標準Formと階層、明快なラベル、破壊的操作の隔離。巨大な独自カード一覧を避ける。</p></article>
+      <article class="card"><span class="tag">Weather / Health</span><h3>現在状態</h3><p>一目で読む要約と、詳細データの段階表示。シャノンの今を数値ダッシュボードにしない。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / first architecture hypothesis</div><h2>最初のゼロベース画面案</h2>
+    <div class="architecture">
+      <div class="dest"><b>Talk</b><small>起動時の主画面。履歴型の会話。</small></div>
+      <div class="dest"><b>Voice</b><small>Talkから全画面へ。独立タブにしない。</small></div>
+      <div class="dest"><b>Memory</b><small>Drawerから開く。今・知識・日記。</small></div>
+      <div class="dest"><b>Work</b><small>依頼と成果。会話内カードから詳細へ。</small></div>
+      <div class="dest"><b>Settings</b><small>Drawer最下部。標準Formで階層化。</small></div>
+    </div>
+    <div class="grid">
+      <article class="card wide"><h3>廃止候補</h3><p>画面上部に常駐する「トーク／メモリー」トグル。会話と頭の中は同格の作業モードではないため、トークを主画面、メモリーをDrawer内のdestinationにする。</p></article>
+      <article class="card wide"><h3>維持する概念</h3><p>左から出るトーク一覧、全幅返信、表情スナップショット、コピー、Realtime字幕、既存の複数トーク。ただし見た目と配置は組み直す。</p></article>
+    </div>
+    <div class="grid">
+      <article class="card full"><div class="shell">
+        <div class="top"><div class="round">☰</div><div class="title"><b>UIを再設計する</b><small>シャノン</small></div><div class="round">＋</div></div>
+        <div class="chat"><div class="mine">まず、参考製品を絞ろう。</div><div class="msg-head"><div class="avatar">☺</div><div><b>シャノン</b><div class="meta">いまの表情だけを静かに残す</div></div></div><div class="reply">ChatGPTの読みやすさを骨格にして、Aetherの透明感を重ねるのがよさそう。調べた内容には、出典を小さく添えるね。<br><span class="source">3 sources</span></div><div class="activity"><b>調査結果ができました</b><br>会話から独立した成果物として開けます。</div></div>
+        <div class="composer"><span>＋</span><span class="small">メッセージ</span><span class="send">↑</span></div>
+      </div></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / quiet personality</div><h2>感情と自発性は、4か所だけに出す</h2>
+    <div class="personality">
+      <div class="signal"><b>返信アイコン</b><p>送信時の表情を固定。文章を読む邪魔をしない。</p></div>
+      <div class="signal"><b>声と間</b><p>声色、短い相槌、発話の間で状態を感じさせる。</p></div>
+      <div class="signal"><b>今日の一件</b><p>自発的な提案はInbox badgeと一件の短いカード。</p></div>
+      <div class="signal"><b>Memoryの今</b><p>短い状態文、今日の関心、考えていることを表示。</p></div>
+    </div>
+    <div class="callout">人格はナビゲーションを増やす理由にしない。シャノンの感情が変わっても、ボタン位置、操作結果、情報階層は変えない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 / research method</div><h2>次はスクリーン単位で分解してから描く</h2>
+    <div class="flow"><div class="step"><b>1. Capture</b><small>Aether／Voyager実画面と、公式に確認できる各製品の代表状態を集める。</small></div><div class="arrow">→</div><div class="step"><b>2. Annotate</b><small>座標、余白、色、階層、片手操作、状態変化へ注釈。</small></div><div class="arrow">→</div><div class="step"><b>3. Extract</b><small>模倣ではなく、配置の理由と再利用する原則を抽出。</small></div><div class="arrow">→</div><div class="step"><b>4. Prototype</b><small>ShannonのLight／Dark主要画面をHTMLで比較。</small></div><div class="arrow">→</div><div class="step"><b>5. Approve</b><small>画面案をユーザー確認してからSwiftUI実装。</small></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>対象画面</th><th>比較する製品</th><th>見る状態</th><th>成果</th></tr></thead>
+      <tbody>
+        <tr><td>Talk</td><td>Aether / ChatGPT / Claude / Messages</td><td>空、通常、長文、添付、失敗、キーボード</td><td>情報構造＋Light/Dark mock</td></tr>
+        <tr><td>Voice</td><td>ChatGPT / Phone / FaceTime</td><td>接続、聞取、思考、発話、割込、失敗</td><td>状態機械＋全画面mock</td></tr>
+        <tr><td>Research</td><td>Perplexity / Claude</td><td>探索中、要約、出典、未採用結果</td><td>出典とコストの表示規則</td></tr>
+        <tr><td>Memory</td><td>Journal / Health / Aether</td><td>今、知識、日記、訂正、空</td><td>頭の中を感じるIA</td></tr>
+        <tr><td>Work</td><td>Voyager / Claude / Reminders</td><td>提案、実行、許可待ち、完了、失敗</td><td>会話カード＋詳細面</td></tr>
+        <tr><td>Settings</td><td>Settings / ChatGPT</td><td>通常、音声、アイコン、接続、診断</td><td>標準Form階層</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">08 / revised plan</div><h2>実装前に、もう一段デザインする</h2>
+    <div class="phase"><div class="phase-name">DESIGN 01<br>REFERENCE TEARDOWN</div><div><h3>実製品の画面注釈</h3><p class="small">上記6領域について、採る部品・採らない部品・理由を画面単位で確定する。</p></div><div class="gate">ブランド名ではなく、具体的な部品と理由で説明できる</div></div>
+    <div class="phase"><div class="phase-name">DESIGN 02<br>SHANNON SHELL</div><div><h3>新しい画面アーキテクチャ</h3><p class="small">Talk中心のNavigation、Drawer、Voice、Memory、Work、SettingsをLight／Darkで作図する。</p></div><div class="gate">主要操作へ2手以内、同格の強い操作が競合しない</div></div>
+    <div class="phase"><div class="phase-name">BUILD 39<br>FOUNDATION</div><div><h3>監査fixture＋新Shell</h3><p class="small">個人データを使わないUI監査モードを先に作り、NavigationとTalkから新構造へ移す。</p></div><div class="gate">既存会話・接続・音声を維持して置換できる</div></div>
+    <div class="phase"><div class="phase-name">BUILD 40–41<br>REMAINDER</div><div><h3>Voice／Memory／Work／Settings</h3><p class="small">同じfixtureでLight／Dark／大きな文字を比較しながら、体験単位で移行する。</p></div><div class="gate">全主要状態を再現・比較・回帰できる</div></div>
+    <div class="callout"><b>現在地：</b>参考範囲とゼロベース方針の整理まで完了。SwiftUI実装は未着手。この文書の方向を確認後、Design 01の画面注釈とDesign 02の比較mockへ進む。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">09 / sources</div><h2>今回確認した公式資料</h2>
+    <div class="grid">
+      <article class="card wide"><h3>AI assistants</h3><p><a href="https://help.openai.com/en/articles/20001274">ChatGPT Voice</a> · <a href="https://help.openai.com/en/articles/10169521-projects-in-chatgpt">ChatGPT Projects</a> · <a href="https://support.anthropic.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them">Claude Artifacts</a> · <a href="https://www.perplexity.ai/help-center/en/articles/10354769-what-is-a-thread">Perplexity Sessions</a></p></article>
+      <article class="card wide"><h3>Apple</h3><p><a href="https://developer.apple.com/design/human-interface-guidelines/design-principles">Design Principles</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/layout">Layout</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/typography">Typography</a> · <a href="https://support.apple.com/en-gb/guide/iphone/iph9824e83ce/ios">Journal</a></p></article>
+    </div>
+  </section>
+
+  <footer>この資料は設計判断の更新版。v27の「既存UIを小さく改善する」前提を置き換え、既存資産を保護しながらUIアーキテクチャを再構築する。</footer>
+</main></body>
+</html>
