@@ -444,7 +444,7 @@ private final class ShannonSpeechAnalyzerCapture {
     private let audioEngine = AVAudioEngine()
     private var analyzer: SpeechAnalyzer?
     private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation?
-    private var rawAudioBuilder: AsyncStream<ShannonVoiceAudioBuffer>.Continuation?
+    private var audioEventBuilder: AsyncStream<ShannonVoiceAnalyzerEvent>.Continuation?
     private var audioInputTask: Task<Void, Never>?
     private var resultsTask: Task<Void, Never>?
     private var tapIsInstalled = false
@@ -545,45 +545,39 @@ private final class ShannonSpeechAnalyzerCapture {
             throw AnalyzerError.formatUnavailable
         }
 
-        // AVAudioEngine invokes its tap on a real-time audio thread. Keep that
-        // callback limited to queueing the native buffer, matching Apple's
-        // SpeechAnalyzer sample. Conversion, allocation, diagnostics, and
-        // AnalyzerInput construction run on a separate task instead.
-        // The buffer owned by an AVAudioEngine tap is reused by the audio
-        // engine. It must not cross the tap boundary by reference: the
-        // asynchronous converter can otherwise read it after the engine has
-        // already recycled its storage. Keep only a small newest-buffer queue
-        // so a temporarily busy recognizer cannot turn into an unbounded
-        // allocation stream.
-        let (rawAudioSequence, rawAudioBuilder) = AsyncStream<ShannonVoiceAudioBuffer>.makeStream(
+        // AVAudioEngine owns the PCM buffer supplied to its tap and may reuse
+        // that storage as soon as the callback returns. Convert while the
+        // source is valid, then create Apple's Sendable AnalyzerInput before
+        // crossing into asynchronous work. This removes both a borrowed PCM
+        // reference and the hand-written UnsafePointer copy used by Build 31.
+        let (audioEventSequence, audioEventBuilder) = AsyncStream<ShannonVoiceAnalyzerEvent>.makeStream(
             bufferingPolicy: .bufferingNewest(4)
         )
-        self.rawAudioBuilder = rawAudioBuilder
-        let converter = ShannonVoiceBufferConverter(outputFormat: analyzerFormat)
+        self.audioEventBuilder = audioEventBuilder
+        let analyzerInputFactory = ShannonVoiceAnalyzerInputFactory(outputFormat: analyzerFormat)
         let diagnostics = diagnostics
         audioInputTask = Task.detached(priority: .userInitiated) {
             defer { builder.finish() }
             var recordedFirstBuffer = false
             var recordedFirstOutput = false
-            for await input in rawAudioSequence {
+            for await event in audioEventSequence {
                 guard !Task.isCancelled else { return }
-                if !recordedFirstBuffer {
-                    recordedFirstBuffer = true
-                    diagnostics.record("analyzer.audio.first_buffer", sessionID: sessionID)
-                }
-                do {
-                    let converted = try converter.convert(input.buffer)
-                    builder.yield(AnalyzerInput(buffer: converted))
+                switch event {
+                case .input(let input):
+                    if !recordedFirstBuffer {
+                        recordedFirstBuffer = true
+                        diagnostics.record("analyzer.audio.first_buffer", sessionID: sessionID)
+                    }
                     if !recordedFirstOutput {
                         recordedFirstOutput = true
                         diagnostics.record("analyzer.convert.first_output", sessionID: sessionID)
                     }
-                } catch {
-                    let failure = error as NSError
+                    builder.yield(input)
+                case .conversionFailed(let domain, let code):
                     diagnostics.record(
                         "analyzer.convert.failed",
                         sessionID: sessionID,
-                        metadata: ["domain": failure.domain, "code": String(failure.code)]
+                        metadata: ["domain": domain, "code": String(code)]
                     )
                 }
             }
@@ -591,11 +585,13 @@ private final class ShannonSpeechAnalyzerCapture {
 
         diagnostics.record("capture.tap.before", sessionID: sessionID)
         input.installTap(onBus: 0, bufferSize: 4_096, format: sourceFormat) { buffer, _ in
-            // Do the minimum work needed for a safe handoff. The expensive
-            // format conversion and SpeechAnalyzer input construction remain
-            // off the real-time audio thread.
-            guard let snapshot = ShannonVoiceAudioBuffer(copying: buffer) else { return }
-            rawAudioBuilder.yield(snapshot)
+            do {
+                let analyzerInput = try analyzerInputFactory.make(from: buffer)
+                audioEventBuilder.yield(.input(analyzerInput))
+            } catch {
+                let failure = error as NSError
+                audioEventBuilder.yield(.conversionFailed(domain: failure.domain, code: failure.code))
+            }
         }
         tapIsInstalled = true
         diagnostics.record("capture.tap.after", sessionID: sessionID)
@@ -613,8 +609,8 @@ private final class ShannonSpeechAnalyzerCapture {
             audioEngine.inputNode.removeTap(onBus: 0)
             tapIsInstalled = false
         }
-        rawAudioBuilder?.finish()
-        rawAudioBuilder = nil
+        audioEventBuilder?.finish()
+        audioEventBuilder = nil
         let audioInputTask = audioInputTask
         self.audioInputTask = nil
         let inputBuilder = inputBuilder
@@ -651,105 +647,9 @@ private final class ShannonSpeechAnalyzerCapture {
 }
 
 @available(iOS 26.0, *)
-private struct ShannonVoiceAudioBuffer: @unchecked Sendable {
-    let buffer: AVAudioPCMBuffer
-
-    /// AVAudioEngine owns buffers handed to its tap and may recycle their
-    /// backing storage as soon as the callback returns. Retain an independent
-    /// PCM snapshot before a buffer crosses into the asynchronous converter.
-    init?(copying source: AVAudioPCMBuffer) {
-        guard source.frameLength > 0,
-              let copy = AVAudioPCMBuffer(
-                pcmFormat: source.format,
-                frameCapacity: source.frameLength
-              )
-        else {
-            return nil
-        }
-
-        let sourceList = source.audioBufferList
-        let destinationList = copy.mutableAudioBufferList
-        let bufferCount = Int(sourceList.pointee.mNumberBuffers)
-        guard bufferCount > 0, bufferCount == Int(destinationList.pointee.mNumberBuffers) else {
-            return nil
-        }
-
-        // AudioBufferList has a flexible C array for `mBuffers`; Swift imports
-        // it as one visible element. Rebind the memory after that first field
-        // to traverse every plane of either interleaved or deinterleaved PCM.
-        let audioBuffersOffset = MemoryLayout<AudioBufferList>.offset(of: \.mBuffers) ?? 0
-        let sourceBuffers = UnsafeRawPointer(sourceList)
-            .advanced(by: audioBuffersOffset)
-            .assumingMemoryBound(to: AudioBuffer.self)
-        let destinationBuffers = UnsafeMutableRawPointer(destinationList)
-            .advanced(by: audioBuffersOffset)
-            .assumingMemoryBound(to: AudioBuffer.self)
-
-        copy.frameLength = source.frameLength
-        for index in 0..<bufferCount {
-            let sourceBuffer = sourceBuffers.advanced(by: index).pointee
-            let destinationBuffer = destinationBuffers.advanced(by: index)
-            guard let sourceData = sourceBuffer.mData,
-                  let destinationData = destinationBuffer.pointee.mData,
-                  sourceBuffer.mDataByteSize <= destinationBuffer.pointee.mDataByteSize
-            else {
-                return nil
-            }
-            memcpy(destinationData, sourceData, Int(sourceBuffer.mDataByteSize))
-            destinationBuffer.pointee.mDataByteSize = sourceBuffer.mDataByteSize
-        }
-        buffer = copy
-    }
-}
-
-@available(iOS 26.0, *)
-private final class ShannonVoiceBufferConverter: @unchecked Sendable {
-    private let outputFormat: AVAudioFormat
-    private var converter: AVAudioConverter?
-
-    init(outputFormat: AVAudioFormat) {
-        self.outputFormat = outputFormat
-    }
-
-    func convert(_ buffer: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
-        let inputFormat = buffer.format
-        guard inputFormat != outputFormat else { return buffer }
-        if converter == nil || converter?.inputFormat != inputFormat || converter?.outputFormat != outputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: outputFormat)
-            converter?.primeMethod = .none
-        }
-        guard let converter else { throw ConversionError.converterUnavailable }
-        let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
-        let capacity = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up))
-        guard let converted = AVAudioPCMBuffer(
-            pcmFormat: converter.outputFormat,
-            frameCapacity: max(capacity, 1)
-        ) else {
-            throw ConversionError.bufferUnavailable
-        }
-        var conversionError: NSError?
-        let inputState = ShannonVoiceConversionInputState()
-        let status = converter.convert(to: converted, error: &conversionError) { _, inputStatus in
-            defer { inputState.wasUsed = true }
-            inputStatus.pointee = inputState.wasUsed ? .noDataNow : .haveData
-            return inputState.wasUsed ? nil : buffer
-        }
-        guard status != .error else {
-            throw conversionError ?? ConversionError.conversionFailed
-        }
-        return converted
-    }
-
-    private enum ConversionError: Error {
-        case converterUnavailable
-        case bufferUnavailable
-        case conversionFailed
-    }
-}
-
-@available(iOS 26.0, *)
-private final class ShannonVoiceConversionInputState: @unchecked Sendable {
-    var wasUsed = false
+private enum ShannonVoiceAnalyzerEvent: Sendable {
+    case input(AnalyzerInput)
+    case conversionFailed(domain: String, code: Int)
 }
 
 extension ShannonVoiceConversationModel: AVSpeechSynthesizerDelegate {

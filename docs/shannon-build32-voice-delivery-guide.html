@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon Build 32 音声搬送修正 配信ガイド</title>
+  <style>
+    :root { color-scheme: light dark; --sky:#65c9ed; --ink:#16212a; --muted:#5d6d77; --paper:#f7fbfd; --card:#fff; --line:#d9e8ee; --ok:#37aa77; --warn:#e6a531; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; }
+    main { max-width:780px; margin:auto; padding:48px 22px 80px; }
+    .eyebrow { color:#1985aa; font-weight:750; letter-spacing:.08em; font-size:.8rem; }
+    h1 { line-height:1.22; font-size:clamp(2rem,7vw,3rem); margin:.3rem 0 1rem; }
+    h2 { margin:2.4rem 0 .75rem; font-size:1.25rem; }
+    .lead { font-size:1.07rem; color:var(--muted); }
+    .card,.step { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; margin:12px 0; box-shadow:0 8px 24px #2c65700b; }
+    .step { display:grid; grid-template-columns:32px 1fr; gap:12px; }
+    .number { width:28px; height:28px; border-radius:50%; background:var(--sky); color:#083041; display:grid; place-items:center; font-weight:800; }
+    .key { display:inline-block; padding:.1rem .45rem; background:#e5f6fc; border-radius:7px; color:#176b89; font-weight:700; }
+    .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 4px; }
+    .flow div { text-align:center; padding:12px 7px; border-radius:13px; background:#eaf8fd; color:#19596f; font-size:.86rem; font-weight:700; }
+    .ok { border-left:4px solid var(--ok); }
+    .warn { border-left:4px solid var(--warn); }
+    ul { padding-left:1.3rem; }
+    @media (max-width:620px) { .flow { grid-template-columns:1fr 1fr; } }
+    @media (prefers-color-scheme:dark) { :root { --ink:#e7f4f8; --muted:#a9bdc6; --paper:#0c1519; --card:#142126; --line:#29444d; } .key { background:#123b4b; color:#9ee7ff; } .flow div { background:#12313c; color:#a7e7fb; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">SHANNON / NEXT TESTFLIGHT</div>
+    <h1>音声を安全に渡す<br>次回ビルド</h1>
+    <p class="lead">Build 31でクラッシュしていた「最初の録音データを解析処理へ渡す境界」を作り直しました。配信時には、検証済みの新しい固定アプリアイコンとアイコン選択プレビューも同梱されます。</p>
+
+    <h2>何を直したか</h2>
+    <div class="card">
+      <p>録音エンジンが一時的に貸す音声データを、別処理へそのまま渡さない構成にしました。</p>
+      <div class="flow">
+        <div>マイク入力</div><div>有効な間に独立コピー</div><div>安全な解析入力へ変換</div><div>非同期で文字化</div>
+      </div>
+      <ul>
+        <li>Build 31の手書きメモリコピーを撤去</li>
+        <li>Appleの安全に受け渡せる解析入力だけを非同期処理へ送る</li>
+        <li>待ち行列は最新4件に限定し、滞留し続けない</li>
+        <li>音声・文字起こし・会話本文は診断ログへ保存しない</li>
+      </ul>
+    </div>
+
+    <h2>配信前の確認結果</h2>
+    <div class="card ok">
+      <ul>
+        <li>音声データの所有権を直接検証する新テスト：成功</li>
+        <li>iOSテスト 74件：成功</li>
+        <li>APIテスト 161件：成功</li>
+        <li>統合試験、iPhone向けDebug／Releaseビルド：成功</li>
+      </ul>
+      <p>ここまでがローカルで確認できる範囲です。クラッシュ解消の最終判定はTestFlight実機で行います。</p>
+    </div>
+
+    <h2>次に必要な操作</h2>
+    <div class="step"><div class="number">1</div><div><b>配信を許可する</b><br>この会話で「<span class="key">GitHub送信と次回TestFlight配信を許可します</span>」と伝えてください。Shannon Release Runnerで検証、送信、Xcode Cloud、内部配信まで一貫して進めます。</div></div>
+    <div class="step"><div class="number">2</div><div><b>TestFlightから上書き更新する</b><br>更新が表示されたらそのまま更新してください。iPhoneをMacへ接続する必要はありません。アプリを削除して入れ直す必要もありません。</div></div>
+    <div class="step"><div class="number">3</div><div><b>短い音声で一往復する</b><br>マイクを押し、短く話し、文字化、送信、シャノンの返答、読み上げ、停止まで確認します。</div></div>
+
+    <h2>成功の目印</h2>
+    <div class="card ok">
+      <ul>
+        <li>マイク押下後も画面が落ちず、「聞いている…」へ進む</li>
+        <li>話した内容が入力欄へ入り、送信できる</li>
+        <li>返答の読み上げと停止が動く</li>
+        <li>既存の会話履歴とShannonへの接続が残る</li>
+        <li>新しい固定アイコンと、設定内のアイコン画像プレビューが見える</li>
+      </ul>
+    </div>
+
+    <h2>失敗したときの安全な戻り方</h2>
+    <div class="card warn">
+      <p><b>アプリを削除しないでください。</b> 既存の会話キャッシュと端末の接続情報を守ります。</p>
+      <ul>
+        <li>更新が出ない：TestFlightを開き直す。こちらでビルド処理と内部割当も確認します。</li>
+        <li>再びクラッシュ：Shannonを開き直し、設定 → 音声診断 → コピーをこの会話へ貼ります。</li>
+        <li>文字化だけ進まない：通常の文字入力が使えることを確認し、そのまま利用できます。</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,5 +1,9 @@
 import XCTest
 @testable import ShannonAppCore
+#if canImport(AVFoundation) && canImport(Speech)
+import AVFoundation
+import Speech
+#endif
 
 final class ShannonVoiceConversationTests: XCTestCase {
     func testPrimaryActionFollowsHalfDuplexVoiceState() {
@@ -55,6 +59,30 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertFalse(ShannonVoiceUsageDescriptionPolicy.isPresent("  \n"))
         XCTAssertTrue(ShannonVoiceUsageDescriptionPolicy.isPresent("音声認識に使います"))
     }
+
+#if canImport(AVFoundation) && canImport(Speech)
+    @available(macOS 26.0, *)
+    func testAnalyzerInputOwnsAudioIndependentFromSourceBuffer() throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let source = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8))
+        source.frameLength = 8
+        let sourceChannel = try XCTUnwrap(source.floatChannelData?[0])
+        sourceChannel[0] = 0.25
+
+        let factory = ShannonVoiceAnalyzerInputFactory(outputFormat: format)
+        let input = try factory.make(from: source)
+        sourceChannel[0] = 0.75
+
+        let ownedBuffer = input.buffer
+        let ownedChannel = try XCTUnwrap(ownedBuffer.floatChannelData?[0])
+        XCTAssertEqual(ownedChannel[0], 0.25, accuracy: 0.001)
+    }
+#endif
 
     func testVoiceDiagnosticsPersistBreadcrumbsWithoutSensitiveContent() throws {
         let directory = FileManager.default.temporaryDirectory
