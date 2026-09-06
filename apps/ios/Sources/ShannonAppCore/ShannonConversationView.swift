@@ -56,14 +56,12 @@ public struct ShannonConversationView: View {
             ZStack(alignment: .top) {
                 workspaceContent(palette)
 
-                ShannonWorkspaceSwitcher(
+                ShannonAppHeader(
                     selection: selectedPage,
+                    threadTitle: model.selectedThread?.title ?? "新しいトーク",
                     unreadInitiativeCount: model.unreadInitiativeCount,
-                    agentTasks: model.agentTaskNotices,
                     openThreadDrawer: openThreadDrawer,
-                    openSettings: openSettings,
-                    openAgentTask: openAgentTask,
-                    select: selectWorkspacePage
+                    createThread: createThreadFromHeader
                 )
                 .padding(.top, M3Spacing.extraSmall)
 
@@ -77,6 +75,10 @@ public struct ShannonConversationView: View {
                     ShannonThreadDrawer(
                         model: model,
                         selectedThreadId: model.selectedThreadId,
+                        openTalk: openTalkFromDrawer,
+                        openMemory: openMemoryFromDrawer,
+                        openSettings: openSettingsFromDrawer,
+                        openAgentTask: openAgentTaskFromDrawer,
                         close: closeThreadDrawer
                     )
                     .frame(width: drawerWidth(for: geometry.size.width))
@@ -523,16 +525,6 @@ public struct ShannonConversationView: View {
             }
     }
 
-    private func selectWorkspacePage(_ page: ShannonWorkspacePage) {
-        guard !composerIsFocused else {
-            composerIsFocused = false
-            return
-        }
-        settleWorkspace(on: page)
-        guard page == .talk else { return }
-        Task { await model.acknowledgeVisibleInitiatives() }
-    }
-
     private func settleWorkspace(on page: ShannonWorkspacePage) {
         let changed = page != selectedPage
         composerIsFocused = false
@@ -547,8 +539,37 @@ public struct ShannonConversationView: View {
             composerIsFocused = false
             return
         }
-        guard selectedPage == .talk else { return }
         settleDrawer(open: true)
+    }
+
+    private func createThreadFromHeader() {
+        guard !composerIsFocused else {
+            composerIsFocused = false
+            return
+        }
+        settleWorkspace(on: .talk)
+        Task { await model.createThread(title: nil) }
+    }
+
+    private func openTalkFromDrawer() {
+        settleWorkspace(on: .talk)
+        closeThreadDrawer()
+        Task { await model.acknowledgeVisibleInitiatives() }
+    }
+
+    private func openMemoryFromDrawer() {
+        settleWorkspace(on: .memory)
+        closeThreadDrawer()
+    }
+
+    private func openSettingsFromDrawer() {
+        closeThreadDrawer()
+        openSettings()
+    }
+
+    private func openAgentTaskFromDrawer(_ id: UUID) {
+        closeThreadDrawer()
+        openAgentTask(id)
     }
 
     private func openSettings() {
@@ -1188,7 +1209,7 @@ private enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .talk: "トーク"
-        case .memory: "メモリー"
+        case .memory: "頭の中"
         }
     }
     var symbol: String {
@@ -1203,175 +1224,61 @@ private enum ShannonWorkspaceChrome {
     static let contentTopInset: CGFloat = 72
 }
 
-private struct ShannonWorkspaceSwitcher: View {
+private struct ShannonAppHeader: View {
     let selection: ShannonWorkspacePage
+    let threadTitle: String
     let unreadInitiativeCount: Int
-    let agentTasks: [ShannonAgentTask]
     let openThreadDrawer: () -> Void
-    let openSettings: () -> Void
-    let openAgentTask: (UUID) -> Void
-    let select: (ShannonWorkspacePage) -> Void
+    let createThread: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let palette = M3Palette.resolve(colorScheme)
 
-        HStack(spacing: M3Spacing.small) {
+        HStack(spacing: 0) {
             Button(action: openThreadDrawer) {
-                Image(systemName: "text.justify.leading")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(palette.onSurfaceVariant)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(palette.onSurface)
+                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    if unreadInitiativeCount > 0 {
+                        Text(unreadInitiativeCount > 9 ? "9+" : "\(unreadInitiativeCount)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, unreadInitiativeCount > 9 ? 4 : 3)
+                            .frame(minWidth: 15, minHeight: 15)
+                            .background(palette.error, in: Capsule())
+                            .offset(x: 1, y: 1)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("メニュー")
+
+            Text(selection == .talk ? threadTitle : selection.title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(palette.onSurface)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+                .accessibilityAddTraits(.isHeader)
+
+            Button(action: createThread) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(palette.onSurface)
                     .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                    .background(.thinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
             .opacity(selection == .talk ? 1 : 0)
             .allowsHitTesting(selection == .talk)
             .accessibilityHidden(selection != .talk)
-            .accessibilityLabel("トーク一覧")
-
-            ShannonWorkspaceTrack(
-                selection: selection,
-                palette: palette,
-                unreadInitiativeCount: unreadInitiativeCount,
-                select: select
-            )
-            .frame(maxWidth: .infinity)
-
-            if !agentTasks.isEmpty {
-                Menu {
-                    ForEach(agentTasks) { task in
-                        Button {
-                            openAgentTask(task.id)
-                        } label: {
-                            Label("\(task.title) · \(task.status.japaneseName)", systemImage: task.status.symbolName)
-                        }
-                    }
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: agentTasks.contains(where: { $0.status == .waitingApproval })
-                            ? "hand.raised.fill" : "hammer.fill")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(agentTasks.contains(where: { $0.status == .waitingApproval })
-                                ? Color(hex: 0xA76012) : palette.primary)
-                            .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                            .background(.thinMaterial, in: Circle())
-
-                        Text(agentTasks.count > 9 ? "9+" : "\(agentTasks.count)")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, agentTasks.count > 9 ? 4 : 3)
-                            .frame(minWidth: 15, minHeight: 15)
-                            .background(palette.error, in: Capsule())
-                            .offset(x: 2, y: 1)
-                    }
-                }
-                .accessibilityLabel("作業一覧、\(agentTasks.count)件")
-                .accessibilityHint(agentTasks.contains(where: { $0.status == .waitingApproval })
-                    ? "許可が必要な作業があります" : "実行中または未確認の作業を開きます")
-            }
-
-            Button(action: openSettings) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
-                    .background(.thinMaterial, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("設定")
+            .accessibilityLabel("新しいトーク")
         }
         .padding(.horizontal, M3Spacing.large)
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct ShannonWorkspaceTrack: View {
-    let selection: ShannonWorkspacePage
-    let palette: M3Palette
-    let unreadInitiativeCount: Int
-    let select: (ShannonWorkspacePage) -> Void
-
-    var body: some View {
-        GeometryReader { geometry in
-            let inset = M3Spacing.extraSmall
-            let itemWidth = (geometry.size.width - inset * 2) / 2
-            let indicatorX = inset + itemWidth * CGFloat(selection.rawValue)
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(palette.surface.opacity(0.72))
-                    .overlay {
-                        Capsule().stroke(palette.outlineVariant.opacity(0.48), lineWidth: 0.7)
-                    }
-
-                Capsule()
-                    .fill(palette.primary)
-                    .frame(width: itemWidth, height: 40)
-                    .offset(x: indicatorX)
-                    .animation(.snappy(duration: 0.28, extraBounce: 0.02), value: selection)
-
-                workspaceLabels(
-                    color: palette.onSurfaceVariant,
-                    unreadInitiativeCount: unreadInitiativeCount,
-                    unreadBadgeColor: palette.error
-                )
-                    .accessibilityHidden(true)
-
-                workspaceLabels(
-                    color: palette.onPrimary,
-                    unreadInitiativeCount: unreadInitiativeCount,
-                    unreadBadgeColor: palette.error
-                )
-                    .mask(alignment: .leading) {
-                        Capsule()
-                            .frame(width: itemWidth, height: 40)
-                            .offset(x: indicatorX)
-                    }
-                    .accessibilityHidden(true)
-
-                HStack(spacing: 0) {
-                    ForEach([ShannonWorkspacePage.talk, .memory]) { page in
-                        Button { select(page) } label: {
-                            Color.clear
-                        }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .contentShape(Rectangle())
-                            .accessibilityLabel(page.title)
-                            .accessibilityAddTraits(page == selection ? .isSelected : [])
-                        }
-                }
-                .padding(.horizontal, inset)
-            }
-        }
-        .frame(height: M3TouchTarget.minimum)
-    }
-
-    private func workspaceLabels(
-        color: Color,
-        unreadInitiativeCount: Int,
-        unreadBadgeColor: Color
-    ) -> some View {
-        HStack(spacing: 0) {
-            ForEach([ShannonWorkspacePage.talk, .memory]) { page in
-                HStack(spacing: 6) {
-                    Label(page.title, systemImage: page.symbol)
-                    if page == .talk && unreadInitiativeCount > 0 {
-                        Text(unreadInitiativeCount > 9 ? "9+" : "\(unreadInitiativeCount)")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, unreadInitiativeCount > 9 ? 5 : 4)
-                            .frame(minHeight: 14)
-                            .background(unreadBadgeColor, in: Capsule())
-                            .padding(.leading, -2)
-                    }
-                }
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(color)
-                .frame(maxWidth: .infinity, minHeight: 40)
-            }
-        }
-        .padding(.horizontal, M3Spacing.extraSmall)
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -1392,6 +1299,10 @@ private enum ShannonHaptics {
 private struct ShannonThreadDrawer: View {
     let model: ShannonConversationModel
     let selectedThreadId: String?
+    let openTalk: () -> Void
+    let openMemory: () -> Void
+    let openSettings: () -> Void
+    let openAgentTask: (UUID) -> Void
     let close: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -1405,9 +1316,24 @@ private struct ShannonThreadDrawer: View {
 
         VStack(spacing: 0) {
             HStack {
-                Text("トーク")
+                Text("Shannon")
                     .font(.title2.bold())
                 Spacer()
+                Button {
+                    Task {
+                        isCreating = true
+                        defer { isCreating = false }
+                        await model.createThread(title: nil)
+                        openTalk()
+                    }
+                } label: {
+                    Image(systemName: isCreating ? "ellipsis" : "square.and.pencil")
+                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                }
+                .buttonStyle(.plain)
+                .disabled(isCreating)
+                .accessibilityLabel(isCreating ? "新しいトークを作成中" : "新しいトーク")
+
                 Button(action: close) {
                     Image(systemName: "xmark")
                         .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
@@ -1419,24 +1345,6 @@ private struct ShannonThreadDrawer: View {
             .padding(.horizontal, M3Spacing.large)
             .padding(.bottom, M3Spacing.medium)
 
-            Button {
-                Task {
-                    isCreating = true
-                    defer { isCreating = false }
-                    await model.createThread(title: nil)
-                    close()
-                }
-            } label: {
-                Label(isCreating ? "作成中…" : "新しいトーク", systemImage: "square.and.pencil")
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(palette.primaryContainer, in: RoundedRectangle(cornerRadius: M3Shape.large))
-            }
-            .buttonStyle(.plain)
-            .disabled(isCreating)
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.bottom, M3Spacing.medium)
-
             ScrollView {
                 LazyVStack(spacing: M3Spacing.extraSmall) {
                     ForEach(model.threads, id: \.threadId) { thread in
@@ -1444,7 +1352,7 @@ private struct ShannonThreadDrawer: View {
                             Button {
                                 Task {
                                     await model.selectThread(thread.threadId)
-                                    close()
+                                    openTalk()
                                 }
                             } label: {
                                 HStack(spacing: M3Spacing.medium) {
@@ -1513,6 +1421,59 @@ private struct ShannonThreadDrawer: View {
                     .foregroundStyle(palette.error)
                     .padding(M3Spacing.medium)
             }
+
+            Divider()
+                .overlay(palette.outlineVariant.opacity(0.6))
+
+            VStack(spacing: M3Spacing.extraSmall) {
+                Button(action: openMemory) {
+                    ShannonDrawerDestinationRow(
+                        title: "頭の中",
+                        detail: "いま・知識・日記",
+                        symbol: "brain.head.profile",
+                        badge: nil,
+                        palette: palette
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if let task = model.agentTaskNotices.first {
+                    Button {
+                        openAgentTask(task.id)
+                    } label: {
+                        ShannonDrawerDestinationRow(
+                            title: "作業",
+                            detail: task.status.japaneseName,
+                            symbol: task.status == .waitingApproval ? "hand.raised" : "hammer",
+                            badge: model.agentTaskNotices.count,
+                            palette: palette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    ShannonDrawerDestinationRow(
+                        title: "作業",
+                        detail: "進行中の作業はありません",
+                        symbol: "hammer",
+                        badge: nil,
+                        palette: palette
+                    )
+                    .opacity(0.72)
+                }
+
+                Button(action: openSettings) {
+                    ShannonDrawerDestinationRow(
+                        title: "設定",
+                        detail: nil,
+                        symbol: "gearshape",
+                        badge: nil,
+                        palette: palette
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, M3Spacing.small)
+            .padding(.vertical, M3Spacing.small)
         }
         .background(.regularMaterial)
         .overlay(alignment: .trailing) {
@@ -1549,6 +1510,53 @@ private struct ShannonThreadDrawer: View {
             Label("アーカイブ", systemImage: "archivebox")
         }
         .disabled(model.threads.count <= 1)
+    }
+}
+
+private struct ShannonDrawerDestinationRow: View {
+    let title: String
+    let detail: String?
+    let symbol: String
+    let badge: Int?
+    let palette: M3Palette
+
+    var body: some View {
+        HStack(spacing: M3Spacing.medium) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(palette.brandPresence)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(palette.onSurface)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(palette.onSurfaceVariant)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if let badge, badge > 0 {
+                Text(badge > 9 ? "9+" : "\(badge)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(palette.onPrimary)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(palette.primary, in: Capsule())
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.onSurfaceVariant)
+        }
+        .padding(.horizontal, M3Spacing.medium)
+        .frame(minHeight: 52)
+        .contentShape(Rectangle())
     }
 }
 
@@ -1721,11 +1729,11 @@ private struct ShannonContextReferenceCard: View {
         let palette = M3Palette.resolve(colorScheme)
         HStack(alignment: .top, spacing: M3Spacing.small) {
             Image(systemName: "arrow.uturn.backward.circle.fill")
-                .foregroundStyle(palette.primary)
+                .foregroundStyle(palette.brandPresence)
             VStack(alignment: .leading, spacing: 3) {
                 Text("思い出したこと")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.brandPresence)
                 Text(memory.summary)
                     .font(.caption)
                     .foregroundStyle(palette.onSurfaceVariant)
@@ -1784,7 +1792,7 @@ private struct ShannonMessageRow: View {
             HStack(alignment: .center, spacing: M3Spacing.extraSmall) {
                 ShannonAvatarView(
                     expression: message.emotionSnapshot?.expression ?? .neutral,
-                    size: 36
+                    size: 42
                 )
 
                 Text("シャノン")
@@ -1832,12 +1840,12 @@ private struct ShannonMessageRow: View {
                     .font(.body)
                     .lineSpacing(3)
                     .textSelection(.enabled)
-                    .foregroundStyle(palette.onPrimary)
-                    .tint(palette.primaryContainer)
+                    .foregroundStyle(palette.onPrimaryContainer)
+                    .tint(palette.primary)
                     .padding(.horizontal, M3Spacing.large)
-                    .padding(.vertical, M3Spacing.medium)
+                    .padding(.vertical, M3Spacing.small + 2)
                     .background(
-                        palette.primary,
+                        palette.primaryContainer,
                         in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
                     )
 

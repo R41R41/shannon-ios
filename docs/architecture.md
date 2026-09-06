@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-06 / Realtime voice candidate
+Revision: 2026-09-06 / Clear Signal app shell and Talk
 
 ## System shape
 
@@ -55,13 +55,15 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 ## iOS experience
 
-- Talk and Memory share a root switcher that changes only on an explicit tap; there is no interactive horizontal page swipe.
-- Settings opens independently from the gear button instead of behaving like a third content page.
+- Talk is the product root. Its compact header keeps the thread title centered, opens the common drawer from the left, and creates a new thread from the right.
+- The common drawer holds the thread list plus explicit destinations for “頭の中”, current agent work, and Settings. Talk and Memory are no longer presented as equally weighted tabs or a persistent segmented switcher.
+- Settings opens from the drawer instead of behaving like a third content page.
 - Talk supports multiple threads, a sliding thread list, scroll mode, and character-focused dialogue mode.
 - The thread list has a visible button. A left-edge swipe is retained only as a secondary shortcut on Talk.
-- Assistant messages store the expression used at send time and place a 36pt avatar, name, emotion, time, and copy action in one compact header so the reply body can use the full content width.
+- Assistant messages store the expression used at send time and place a 42pt avatar, name, emotion, time, and copy action in one compact header so the reply body can use the full content width. User messages use a quiet pale-blue container rather than competing with Shannon's presence color.
+- The Clear Signal color system separates Shannon's electric-blue presence accent from the darker accessible action color. Light and dark themes share semantic canvas, surface, user-message, text, state, and warm-emotion roles rather than literal color reuse.
 - Dialogue mode is a presence stage rather than a framed portrait: ambient depth, a subtle reduced-motion-aware breathing treatment, the current emotion, the latest user utterance, and Shannon's reply share one scene. The redundant corner avatar is not shown.
-- Running agent work lives in the common header task menu and beside its source message. The composer-area task capsule is reserved for unacknowledged approval, completion, failure, or cancellation states that need attention.
+- Running agent work is reachable from the common drawer and beside its source message. The composer-area task capsule is reserved for unacknowledged approval, completion, failure, or cancellation states that need attention.
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
