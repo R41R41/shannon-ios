@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 export interface RealtimeVoiceCallRequest {
   sdp: string;
   instructions: string;
@@ -21,6 +19,8 @@ export class RealtimeVoiceError extends Error {
     readonly code: RealtimeVoiceFailureCode,
     readonly upstreamStatus?: number,
     readonly upstreamCode?: string,
+    readonly upstreamRequestId?: string,
+    readonly upstreamDetail?: string,
   ) {
     super(code);
   }
@@ -58,7 +58,10 @@ export class OpenAIRealtimeVoiceGateway {
   }
 
   async createCall(request: RealtimeVoiceCallRequest): Promise<RealtimeVoiceCallResult> {
-    const sdp = request.sdp.trim();
+    // SDP is a line-oriented protocol. Preserve the offer byte-for-byte,
+    // including its final CRLF, instead of trimming protocol-significant
+    // line endings before the multipart upload.
+    const sdp = request.sdp;
     if (!validSdp(sdp)) throw new RealtimeVoiceError('VOICE_REALTIME_INVALID_SDP');
 
     const session = {
@@ -89,7 +92,9 @@ export class OpenAIRealtimeVoiceGateway {
       tracing: null,
       truncation: { type: 'retention_ratio', retention_ratio: 0.8 },
     };
-    const multipart = realtimeCallMultipartBody(sdp, session);
+    const multipart = new FormData();
+    multipart.set('sdp', sdp);
+    multipart.set('session', JSON.stringify(session));
 
     let response: Response;
     try {
@@ -98,9 +103,10 @@ export class OpenAIRealtimeVoiceGateway {
         headers: {
           accept: 'application/sdp',
           authorization: `Bearer ${this.options.apiKey}`,
-          'content-type': multipart.contentType,
         },
-        body: multipart.body,
+        // Let the platform encode FormData and its boundary exactly as OpenAI's
+        // official Realtime proxy example does.
+        body: multipart,
         signal: AbortSignal.timeout(this.timeoutMilliseconds),
       });
     } catch {
@@ -113,6 +119,8 @@ export class OpenAIRealtimeVoiceGateway {
         'VOICE_REALTIME_UPSTREAM_FAILED',
         response.status,
         safeUpstreamCode(answerSdp),
+        safeRequestId(response.headers.get('x-request-id')),
+        safeUpstreamDetail(answerSdp),
       );
     }
     if (!validSdp(answerSdp)) {
@@ -127,28 +135,6 @@ export class OpenAIRealtimeVoiceGateway {
       } : {}),
     };
   }
-}
-
-function realtimeCallMultipartBody(
-  sdp: string,
-  session: Readonly<Record<string, unknown>>,
-): { body: Blob; contentType: string } {
-  const boundary = `----shannon-realtime-${randomUUID().replaceAll('-', '')}`;
-  const body = new Blob([
-    `--${boundary}\r\n`,
-    'Content-Disposition: form-data; name="sdp"\r\n',
-    'Content-Type: application/sdp\r\n\r\n',
-    sdp,
-    `\r\n--${boundary}\r\n`,
-    'Content-Disposition: form-data; name="session"\r\n',
-    'Content-Type: application/json\r\n\r\n',
-    JSON.stringify(session),
-    `\r\n--${boundary}--\r\n`,
-  ]);
-  return {
-    body,
-    contentType: `multipart/form-data; boundary=${boundary}`,
-  };
 }
 
 export function createConfiguredRealtimeVoiceGateway(
@@ -204,6 +190,28 @@ function safeUpstreamCode(body: string): string | undefined {
     if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined;
     const value = (error as Record<string, unknown>).code ?? (error as Record<string, unknown>).type;
     return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,100}$/u.test(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeRequestId(value: string | null): string | undefined {
+  return value && /^[A-Za-z0-9_-]{1,160}$/u.test(value) ? value : undefined;
+}
+
+function safeUpstreamDetail(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const error = (parsed as Record<string, unknown>).error;
+    if (!error || typeof error !== 'object' || Array.isArray(error)) return undefined;
+    const message = (error as Record<string, unknown>).message;
+    if (typeof message !== 'string') return undefined;
+    return message
+      .slice(0, 500)
+      .replace(/a=(?:ice-ufrag|ice-pwd|fingerprint|candidate):[^\r\n]*/giu, '[redacted-sdp-line]')
+      .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu, '[redacted-ip]')
+      .replace(/\bsk-[A-Za-z0-9_-]+\b/gu, '[redacted-credential]');
   } catch {
     return undefined;
   }

@@ -10,7 +10,7 @@ const offer = [
   's=-',
   't=0 0',
   'm=audio 9 UDP/TLS/RTP/SAVPF 111',
-].join('\r\n');
+].join('\r\n') + '\r\n';
 
 const answer = [
   'v=0',
@@ -18,7 +18,7 @@ const answer = [
   's=-',
   't=0 0',
   'm=audio 9 UDP/TLS/RTP/SAVPF 111',
-].join('\r\n');
+].join('\r\n') + '\r\n';
 
 describe('OpenAI realtime voice gateway', () => {
   it('keeps the standard API key server-side and creates a bounded live session', async () => {
@@ -31,23 +31,11 @@ describe('OpenAI realtime voice gateway', () => {
         const headers = new Headers(init?.headers);
         expect(headers.get('accept')).toBe('application/sdp');
         expect(headers.get('authorization')).toBe('Bearer server-key-only');
-        const contentType = headers.get('content-type');
-        expect(contentType).toMatch(/^multipart\/form-data; boundary=----shannon-realtime-[a-f0-9]{32}$/u);
-        const boundary = contentType?.split('boundary=')[1];
-        const multipart = await (init?.body as Blob).text();
-        expect(multipart).toContain([
-          `--${boundary}`,
-          'Content-Disposition: form-data; name="sdp"',
-          'Content-Type: application/sdp',
-          '',
-          offer,
-        ].join('\r\n'));
-        expect(multipart).not.toContain('filename=');
-        const sessionPart = multipart.match(
-          /Content-Disposition: form-data; name="session"\r\nContent-Type: application\/json\r\n\r\n([\s\S]+?)\r\n--/u,
-        );
-        expect(sessionPart?.[1]).toBeTruthy();
-        const session = JSON.parse(sessionPart?.[1] ?? '{}') as Record<string, any>;
+        expect(headers.get('content-type')).toBeNull();
+        expect(init?.body).toBeInstanceOf(FormData);
+        const multipart = init?.body as FormData;
+        expect(multipart.get('sdp')).toBe(offer);
+        const session = JSON.parse(String(multipart.get('session'))) as Record<string, any>;
         expect(session).toMatchObject({
           type: 'realtime',
           model: 'gpt-realtime-2.1-mini',
@@ -78,6 +66,22 @@ describe('OpenAI realtime voice gateway', () => {
       });
   });
 
+  it('preserves the final SDP line ending sent by the WebRTC client', async () => {
+    const gateway = new OpenAIRealtimeVoiceGateway({
+      apiKey: 'server-key-only',
+      fetcher: async (_input, init) => {
+        const multipart = init?.body as FormData;
+        expect(multipart.get('sdp')).toBe(offer);
+        return new Response(answer, { status: 201 });
+      },
+    });
+
+    await expect(gateway.createCall({ sdp: offer, instructions: 'test' })).resolves.toEqual({
+      answerSdp: answer,
+      model: 'gpt-realtime-2.1-mini',
+    });
+  });
+
   it('rejects malformed SDP without contacting OpenAI', async () => {
     let called = false;
     const gateway = new OpenAIRealtimeVoiceGateway({
@@ -99,15 +103,20 @@ describe('OpenAI realtime voice gateway', () => {
     const gateway = new OpenAIRealtimeVoiceGateway({
       apiKey: 'server-key-only',
       fetcher: async () => new Response(JSON.stringify({
-        error: { code: 'model_not_found', message: 'sensitive upstream detail' },
-      }), { status: 404 }),
+        error: {
+          code: 'invalid_offer',
+          message: 'Invalid candidate at 192.0.2.10; a=ice-pwd:secret-value',
+        },
+      }), { status: 400, headers: { 'x-request-id': 'req_safe-123' } }),
     });
 
     await expect(gateway.createCall({ sdp: offer, instructions: 'test' }))
       .rejects.toEqual(expect.objectContaining<Partial<RealtimeVoiceError>>({
         code: 'VOICE_REALTIME_UPSTREAM_FAILED',
-        upstreamStatus: 404,
-        upstreamCode: 'model_not_found',
+        upstreamStatus: 400,
+        upstreamCode: 'invalid_offer',
+        upstreamRequestId: 'req_safe-123',
+        upstreamDetail: 'Invalid candidate at [redacted-ip]; [redacted-sdp-line]',
       }));
   });
 });

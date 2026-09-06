@@ -350,6 +350,8 @@ async function handleRealtimeVoiceCall(
         code: error.code,
         upstreamStatus: error.upstreamStatus,
         upstreamCode: error.upstreamCode,
+        upstreamRequestId: error.upstreamRequestId,
+        upstreamDetail: error.upstreamDetail,
       });
       const status = error.code === 'VOICE_REALTIME_INVALID_SDP' ? 400 : 502;
       sendJson(response, status, {

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 38 — Realtime音声サーバー修正</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#65c9ed; --ink:#173142; --paper:#f7fbfd; --card:#fff; --muted:#587180; --ok:#177a55; --warn:#9a5d00; --line:color-mix(in srgb,var(--blue) 30%,transparent); }
+    @media (prefers-color-scheme:dark) { :root { --ink:#e9f7fc; --paper:#0b161c; --card:#12232c; --muted:#a8c0cb; --ok:#72d7ad; --warn:#ffc56d; } }
+    * { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.72 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; }
+    main { width:min(900px,calc(100% - 32px)); margin:auto; padding:48px 0 80px; }
+    .eyebrow { color:#258bb2; font-weight:800; letter-spacing:.08em; }
+    h1 { font-size:clamp(30px,6vw,50px); line-height:1.12; letter-spacing:-.035em; margin:.3em 0; }
+    h2 { font-size:21px; margin:0 0 10px; } h3 { font-size:16px; margin:0 0 6px; }
+    p { margin:8px 0; } .lead { color:var(--muted); font-size:18px; max-width:760px; }
+    .result { margin:28px 0; padding:20px; border-left:5px solid var(--blue); background:color-mix(in srgb,var(--blue) 10%,var(--card)); border-radius:0 18px 18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:18px 0; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:20px; box-shadow:0 10px 34px rgba(31,111,143,.08); }
+    .step { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:var(--blue); color:#063044; font-weight:850; margin-bottom:12px; }
+    .ok { color:var(--ok); font-weight:750; } .warn { color:var(--warn); font-weight:700; }
+    code { background:color-mix(in srgb,var(--blue) 15%,transparent); padding:.14em .4em; border-radius:7px; overflow-wrap:anywhere; }
+    .approval { border:2px solid var(--blue); margin-top:18px; }
+    ol { padding-left:1.35em; } li + li { margin-top:7px; }
+    @media (max-width:720px) { .grid { grid-template-columns:1fr; } main { padding-top:28px; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · BUILD 38 SERVER RECOVERY</div>
+  <h1>アプリを再配信せず、<br>Realtime接続を直す</h1>
+  <p class="lead">Build 38の実機ログで、iPhoneは音声・データ欄と32件の接続候補を含む完成済みSDPをAzureへ送れていました。失敗地点はAzureからOpenAIへ接続情報を転送する処理です。</p>
+
+  <section class="result">
+    <h2>今回わかったこと</h2>
+    <p><code>ice_gathering=complete</code>、<code>audio_sections=1</code>、<code>data_sections=1</code>、<code>candidates=32</code>を確認しました。Azureの同時刻ログはOpenAIの<code>400 invalid_offer</code>です。</p>
+    <p><strong>訂正：</strong><code>gpt-realtime-2.1-mini</code>は現行の正式モデルです。モデル名は変更しません。</p>
+  </section>
+
+  <div class="grid">
+    <section class="card"><div class="step">1</div><h3>接続情報を改変しない</h3><p>SDP末尾の改行を削除せず、iPhoneが生成した文字列をそのまま保持します。</p></section>
+    <section class="card"><div class="step">2</div><h3>公式と同じ搬送</h3><p>独自のmultipart組み立てをやめ、標準<code>FormData</code>に境界生成を任せます。</p></section>
+    <section class="card"><div class="step">3</div><h3>次の失敗を一度で特定</h3><p>OpenAIのrequest IDと、資格情報・IP・SDP秘密値を伏せた理由だけをサーバーログへ残します。</p></section>
+  </div>
+
+  <section class="card">
+    <h2>検証済み</h2>
+    <p class="ok">API 172件、iOS 77件、署名なしiPhoneビルド、差分検査がすべて成功しました。</p>
+    <p>会話DB、認証、既存トーク、iOSアプリ、App Iconは変更しません。TestFlightの再配信も不要です。</p>
+  </section>
+
+  <section class="card approval">
+    <h2>許可後にこちらで行うこと</h2>
+    <ol>
+      <li>Azure上の対象ソースとSQLite一式を時刻付きでバックアップする。</li>
+      <li>Realtime搬送の2ファイルだけを暗号化されたSSH経由で転送する。</li>
+      <li>Azure上で型検査とAPIテストを実行する。</li>
+      <li><code>shannon-ios.service</code>だけを再起動する。背景ワーカーには触れない。</li>
+      <li>ヘルスチェック、会話件数、接続状態、エラーログを確認する。</li>
+    </ol>
+    <p><strong>許可する場合：</strong>「Build 38 Realtimeサーバー修正のAzure転送・対象ファイルバックアップ・DBバックアップ・APIテスト・APIサービス再起動を許可します」と返信してください。</p>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <h2>反映後の成功条件</h2>
+    <ol>
+      <li>現在のBuild 38で音声ボタンを押す。</li>
+      <li>「ライブ音声に接続できませんでした」が出ず、接続状態になる。</li>
+      <li>話した内容が途中から字幕に現れ、シャノンの字幕と音声返答が出る。</li>
+    </ol>
+  </section>
+
+  <section class="card" style="margin-top:14px">
+    <h2>失敗時の安全な戻し方</h2>
+    <p class="warn">旧ソースを戻して同じAPIサービスだけを再起動します。DB構造は変えないため、会話履歴や接続情報の移行はありません。</p>
+    <p>接続がまだ失敗する場合も、追加された安全なOpenAI診断情報をAzure側で確認できるため、再びTestFlightを作らず次の原因を判断できます。</p>
+  </section>
+</main></body>
+</html>
