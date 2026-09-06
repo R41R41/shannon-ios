@@ -39,18 +39,36 @@ run_app() {
     build
 }
 
+run_release_app() {
+  xcodebuild \
+    -project apps/ios-app/ShannonApp.xcodeproj \
+    -scheme ShannonApp \
+    -configuration Release \
+    -destination 'generic/platform=iOS' \
+    -derivedDataPath .build/ReleaseRunnerDerivedData \
+    CODE_SIGNING_ALLOWED=NO \
+    build
+}
+
+run_release_runner() {
+  "$node_bin" --test scripts/release-runner.test.mjs
+}
+
 target="${1:-all}"
 case "$target" in
   api) run_api ;;
   ios) run_ios ;;
   app) run_app ;;
+  release) run_release_app ;;
+  release-runner) run_release_runner ;;
   all)
     run_api
     run_ios
     run_app
+    run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [api|ios|app|all]" >&2
+    echo "Usage: scripts/verify.sh [api|ios|app|release|release-runner|all]" >&2
     exit 2
     ;;
 esac

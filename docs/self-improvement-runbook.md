@@ -84,6 +84,27 @@ Recovery means restoring the backed-up database and the previous source files, t
 4. Launch the installed bundle.
 5. Check conversation restoration, pairing, the changed flow, and one adjacent flow.
 
+## Shannon Release Runner
+
+`scripts/release-runner.sh` is the single local entry point for routine Xcode Cloud/TestFlight delivery. It reuses the Azure TestFlight distributor; it does not create a second build-assignment system. The shell entry point locates the same bundled Node.js fallback as the repository verifier.
+
+1. `inspect` confirms `R41R41/shannon-ios`, `main`, the exact HEAD, staged-change safety, and visible uncommitted paths.
+2. `prepare` runs the deterministic API/iOS/app checks plus an unsigned iPhone Release build.
+3. `publish` requires both the exact prepared HEAD and `--confirm-external-release`. Use that flag only after a fresh user approval. It skips an already-pushed commit and never force-pushes.
+4. `monitor` reads only the safe Azure distributor projection until the expected Build is assigned to `Shannon Internal`.
+5. Every phase writes a credential-free summary to `.build/release-runner/latest.json`.
+
+The end-to-end form is:
+
+```sh
+scripts/release-runner.sh run \
+  --expected-head EXACT_COMMIT_SHA \
+  --expected-build EXPECTED_BUILD_NUMBER \
+  --confirm-external-release
+```
+
+The Runner may report unrelated unstaged files, because only committed content is pushed. Any staged file stops the run until it is deliberately committed or unstaged. A failed or timed-out run is not completion; inspect the JSON summary and existing TestFlight history before retrying.
+
 ## Data-preservation checks
 
 For persistence-affecting work, compare before/after evidence for:
