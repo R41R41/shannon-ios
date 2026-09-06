@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   compareBuildVersions,
   parseArguments,
@@ -33,4 +34,13 @@ test('accepts only a complete safe distributor projection', () => {
     lastDistributedBuildId: 'opaque-id', version: '31', distributedAt: '2026-09-06T00:00:00Z',
   })), { version: '31', distributedAt: '2026-09-06T00:00:00Z' });
   assert.throws(() => parseDistributionState('{}'), /incomplete/u);
+});
+
+test('declares privacy purpose strings required by realtime voice dependencies', async () => {
+  const plist = await readFile(
+    new URL('../apps/ios-app/ShannonApp/Info.plist', import.meta.url),
+    'utf8',
+  );
+  assert.match(plist, /<key>NSMicrophoneUsageDescription<\/key>/u);
+  assert.match(plist, /<key>NSCameraUsageDescription<\/key>/u);
 });

@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>シャノンとの映像付き会話を有効にした場合にカメラ映像を送るために使用します。音声会話だけでは使用しません。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>シャノンと音声で会話するためにマイクを使用します。</string>
     <key>CFBundleDevelopmentRegion</key>
