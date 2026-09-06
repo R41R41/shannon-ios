@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shannon Color System v30</title>
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#f7fafc,#08131b);--surface:light-dark(#fff,#0f202b);--ink:light-dark(#10212b,#f1f7fa);--sub:light-dark(#536b78,#9db5c2);--line:light-dark(#d8e8f1,#29424f);--brand:light-dark(#0e92ef,#46b9ff);--action:light-dark(#006aa6,#56c0ff);--actionText:light-dark(#fff,#062133);--soft:light-dark(#e7f4fc,#153246);--emotion:light-dark(#e78173,#ff9b88);font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}main{width:min(1050px,calc(100% - 32px));margin:auto;padding:52px 0 90px}.kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);font-weight:700}h1{font-size:clamp(38px,7vw,70px);letter-spacing:-.06em;line-height:.98;margin:13px 0 20px}h2{font-size:clamp(25px,4vw,38px);letter-spacing:-.04em;margin:58px 0 18px}h3{font-size:17px;margin:0 0 8px}.lead{color:var(--sub);font-size:18px;line-height:1.7;max-width:820px}.hero{margin-top:28px;padding:32px;border-radius:30px;background:linear-gradient(145deg,color-mix(in srgb,var(--brand) 12%,var(--surface)),var(--surface));border:1px solid var(--line)}.hero strong{font-size:23px}.hero p{color:var(--sub);line-height:1.65}.scheme{display:grid;grid-template-columns:1fr 1fr;gap:15px}.mode{padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:22px}.palette{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:15px}.swatch{height:92px;border-radius:16px;padding:10px;display:flex;align-items:flex-end;border:1px solid color-mix(in srgb,var(--ink) 12%,transparent);font-size:10px;font-weight:700}.token{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}.token th,.token td{text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}.token th{font-size:11px;color:var(--sub)}.token tr:last-child td{border-bottom:0}.chip{display:inline-block;padding:5px 8px;border-radius:999px;background:var(--soft);color:var(--action);font-size:10px;font-weight:700}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.card{padding:20px;border-radius:20px;background:var(--surface);border:1px solid var(--line)}.card p,.muted{color:var(--sub);font-size:13px;line-height:1.65}.rule{display:grid;grid-template-columns:130px 1fr;gap:20px;padding:18px 0;border-bottom:1px solid var(--line)}.rule:last-child{border-bottom:0}.rule b{font-size:14px}.rule p{color:var(--sub);font-size:13px;line-height:1.6;margin:0}.ratio{display:grid;grid-template-columns:70fr 20fr 8fr 2fr;height:14px;border-radius:99px;overflow:hidden;margin:16px 0 8px}.ratio span:nth-child(1){background:var(--bg);border:1px solid var(--line)}.ratio span:nth-child(2){background:var(--soft)}.ratio span:nth-child(3){background:var(--brand)}.ratio span:nth-child(4){background:var(--emotion)}.ratio-labels{display:flex;justify-content:space-between;color:var(--sub);font-size:10px}.decision{margin-top:22px;padding:18px 20px;border-left:4px solid var(--brand);border-radius:0 17px 17px 0;background:var(--surface);line-height:1.6}.contrast{display:flex;align-items:center;gap:8px}.dot{width:18px;height:18px;border-radius:6px;border:1px solid var(--line)}.footer{margin-top:58px;padding-top:18px;border-top:1px solid var(--line);color:var(--sub);font-size:12px}@media(max-width:760px){.scheme,.grid{grid-template-columns:1fr}.rule{grid-template-columns:1fr}.palette{grid-template-columns:1fr 1fr}}@media(max-width:430px){main{width:calc(100% - 22px);padding-top:28px}.hero{padding:21px}.token{display:block;overflow-x:auto}}
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Shannon · Color System v30 · 2026-09-06</div>
+  <h1>Clear Signal</h1>
+  <p class="lead">アプリアイコンの鮮やかな青をShannonの「存在」、少し深い青をユーザーが押す「操作」に分離する。白／黒の反転アイコンにも自然に接続し、長い会話を読む面は静かに保つ。</p>
+
+  <section class="hero">
+    <span class="chip">推奨案</span>
+    <p><strong>アイコンと同じ青を、全部に塗らない。</strong></p>
+    <p>添付4案の代表色はおおむね <code>#0E82EF</code>〜<code>#65C6F5</code> の高彩度ブルーに集中している。この鮮烈さはロゴ、音声波形、選択状態、今日の関心に残す。白文字を載せる主要ボタンは、アクセシビリティのため <code>#006AA6</code> まで深くする。</p>
+  </section>
+
+  <h2>適応する2つの顔</h2>
+  <div class="scheme">
+    <section class="mode">
+      <span class="chip">Light</span>
+      <h3 style="margin-top:12px">白いv3アイコンが正面</h3>
+      <p class="muted">白〜ごく薄い青を会話の紙面にして、Electric Blueを点で灯す。明るく、透明で、文章が読みやすい。</p>
+      <div class="palette">
+        <div class="swatch" style="background:#f8fbfd;color:#10212b">Canvas<br>#F8FBFD</div>
+        <div class="swatch" style="background:#e7f4fc;color:#10212b">Soft<br>#E7F4FC</div>
+        <div class="swatch" style="background:#0e92ef;color:#fff">Brand<br>#0E92EF</div>
+        <div class="swatch" style="background:#006aa6;color:#fff">Action<br>#006AA6</div>
+      </div>
+    </section>
+    <section class="mode" style="background:#0f202b;color:#f1f7fa;border-color:#29424f">
+      <span class="chip" style="background:#153246;color:#56c0ff">Dark</span>
+      <h3 style="margin-top:12px">黒いv3コピーが裏面</h3>
+      <p style="color:#9db5c2;font-size:13px;line-height:1.65">純黒ではなく青みのある夜色を使う。Electric Blueを少し明るくし、発光ではなく情報の焦点として扱う。</p>
+      <div class="palette">
+        <div class="swatch" style="background:#08131b;color:#f1f7fa;border-color:#29424f">Canvas<br>#08131B</div>
+        <div class="swatch" style="background:#153246;color:#f1f7fa;border-color:#29424f">Soft<br>#153246</div>
+        <div class="swatch" style="background:#46b9ff;color:#062133;border-color:#29424f">Brand<br>#46B9FF</div>
+        <div class="swatch" style="background:#56c0ff;color:#062133;border-color:#29424f">Action<br>#56C0FF</div>
+      </div>
+    </section>
+  </div>
+
+  <h2>Semantic tokens</h2>
+  <table class="token">
+    <thead><tr><th>役割</th><th>Light</th><th>Dark</th><th>使う場所</th><th>使わない場所</th></tr></thead>
+    <tbody>
+      <tr><td><b>brandPresence</b></td><td>#0E92EF</td><td>#46B9FF</td><td>ロゴ、音声波形、選択マーク、今日の関心</td><td>長文背景、大きなカード全面</td></tr>
+      <tr><td><b>actionPrimary</b></td><td>#006AA6</td><td>#56C0FF</td><td>送信、確定、許可など一画面で最重要の操作</td><td>複数の同格ボタン</td></tr>
+      <tr><td><b>canvas</b></td><td>#F8FBFD</td><td>#08131B</td><td>トーク、メモリー、作業の最背面</td><td>状態表現</td></tr>
+      <tr><td><b>surface</b></td><td>#FFFFFF</td><td>#0F202B</td><td>入力欄、設定グループ、作業カード</td><td>シャノンの回答本文</td></tr>
+      <tr><td><b>surfaceTint</b></td><td>#EEF7FC</td><td>#142B39</td><td>選択、hover、関連情報</td><td>強いCTA</td></tr>
+      <tr><td><b>userMessage</b></td><td>#E7F4FC</td><td>#153246</td><td>ユーザー発言の吹き出しだけ</td><td>シャノンの回答</td></tr>
+      <tr><td><b>textPrimary</b></td><td>#10212B</td><td>#F1F7FA</td><td>本文、タイトル</td><td>色付き装飾</td></tr>
+      <tr><td><b>textSecondary</b></td><td>#536B78</td><td>#9DB5C2</td><td>時刻、根拠、確信度、補助文</td><td>必須操作のラベル</td></tr>
+      <tr><td><b>emotionWarm</b></td><td>#E78173</td><td>#FF9B88</td><td>照れ、喜び、親密さの小さな気配</td><td>エラー、警告、主要操作</td></tr>
+    </tbody>
+  </table>
+
+  <h2>色の使用量</h2>
+  <div class="ratio"><span></span><span></span><span></span><span></span></div>
+  <div class="ratio-labels"><span>Neutral canvas 70%</span><span>Blue tint 20%</span><span>Brand 8%</span><span>Emotion 2%</span></div>
+  <div class="grid" style="margin-top:18px">
+    <section class="card"><h3>青は人格と焦点</h3><p>どこを見ればよいか、シャノンがどこにいるかを示す。情報量そのものを色分けしない。</p></section>
+    <section class="card"><h3>白／夜色は思考空間</h3><p>長文、コード、予定、メモリーが増えても疲れにくい面をつくる。</p></section>
+    <section class="card"><h3>暖色は2%まで</h3><p>感情が少し見え隠れするための色。ブランドやエラーの意味と混ぜない。</p></section>
+  </div>
+
+  <h2>アプリアイコン4案との整合</h2>
+  <div class="card">
+    <div class="rule"><b>shannon_v3</b><p>Clear SignalのLight identityとして最も自然。白いホーム画面でも輪郭が残り、UIの余白とつながる。</p></div>
+    <div class="rule"><b>shannon_v3 コピー</b><p>Dark identityとして最も自然。アプリ内ダークモードの青黒いcanvasと連続する。</p></div>
+    <div class="rule"><b>shannon_v2</b><p>ブランド青を全面に見せる強い候補。手動アイコンとして使ってもUI側のbrandPresenceが同系色なので破綻しない。</p></div>
+    <div class="rule"><b>shannon</b><p>黒い記号が強く、技術的な印象。UIは黒を本文色・夜色として持つため、手動選択時も別ブランドには見えない。</p></div>
+  </div>
+
+  <h2>コントラストの境界</h2>
+  <div class="grid">
+    <section class="card"><div class="contrast"><span class="dot" style="background:#0e92ef"></span><h3>Electric + White = 3.29:1</h3></div><p>通常サイズの白文字ボタンには不足。装飾、大きな記号、波形、選択マークに限定。</p></section>
+    <section class="card"><div class="contrast"><span class="dot" style="background:#006aa6"></span><h3>Deep + White = 5.81:1</h3></div><p>Lightの主要ボタンに採用。小さい文字を載せてもAA基準を満たす。</p></section>
+    <section class="card"><div class="contrast"><span class="dot" style="background:#56c0ff"></span><h3>Light Blue + Navy = 8.15:1</h3></div><p>Darkの主要ボタンに採用。黒ではなく青みの強い文字でブランドを保つ。</p></section>
+  </div>
+
+  <h2>画面への適用ルール</h2>
+  <div class="card">
+    <div class="rule"><b>トーク</b><p>シャノンの回答はcanvas直置き。ユーザー発言だけuserMessage。送信／音声ボタンはactionPrimary。</p></div>
+    <div class="rule"><b>ライブ音声</b><p>背景はcanvas。波形と話者状態はbrandPresence。終了はブランド色ではなく意味上のdanger。</p></div>
+    <div class="rule"><b>頭の中</b><p>「いま」の関心に淡いbrand tint。知識と日記はneutral surface。確信度は数値と文言を主にする。</p></div>
+    <div class="rule"><b>作業</b><p>進行中はbrand、完了はsuccess、許可待ちはwarning、失敗はdanger。必ず形と文言を併記。</p></div>
+    <div class="rule"><b>設定</b><p>Apple型のneutral list。アイコン背景だけsoft blue。各項目をカラフルにしない。</p></div>
+  </div>
+
+  <div class="decision"><b>推奨決定:</b> UIの基本スキームはClear Signal。主アイコンは白地のshannon_v3、ダークモードの視覚参照は黒地のshannon_v3コピー。Pure IconとSoft Skyは比較候補として残し、実装にはまだ固定しない。</div>
+
+  <h2>次の確認</h2>
+  <div class="grid">
+    <section class="card"><span class="chip">1</span><h3 style="margin-top:12px">方向を選ぶ</h3><p>比較モックでClear Signal、Pure Icon、Soft Skyをライト／ダーク両方確認する。</p></section>
+    <section class="card"><span class="chip">2</span><h3 style="margin-top:12px">Build 39へ固定</h3><p>選んだtokenをSwiftのsemantic Colorへ実装し、直接hexを画面に書かない。</p></section>
+    <section class="card"><span class="chip">3</span><h3 style="margin-top:12px">実画面監査</h3><p>全画面・全状態をライト／ダークで撮影し、読みにくさと色の過剰使用を一枚ずつ確認する。</p></section>
+  </div>
+
+  <div class="footer">Shannon Color System v30 — design proposal only. No Swift, Azure, GitHub release, or TestFlight state changed.</div>
+</main>
+</body>
+</html>
