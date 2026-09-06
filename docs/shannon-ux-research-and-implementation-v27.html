@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon UX調査・実装計画 v27</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f4fbfe;--paper:#fff;--ink:#102b37;--muted:#5d7782;--line:#c7e5ef;--sky:#55c5eb;--deep:#0b7198;--soft:#e5f7fc;--good:#107457;--goodbg:#e1f6ed;--warn:#93600b;--warnbg:#fff2d7;--red:#a23b35;--redbg:#ffe9e6;--violet:#64509a;--violetbg:#eeeafd;--shadow:0 18px 52px #0e6e9015}
+    @media(prefers-color-scheme:dark){:root{--bg:#07161c;--paper:#10242d;--ink:#e7f7fb;--muted:#a6bec8;--line:#28515f;--sky:#75d9fa;--deep:#99e7ff;--soft:#103641;--good:#79ddb9;--goodbg:#10372b;--warn:#ffd17d;--warnbg:#3c2d13;--red:#ffb4ad;--redbg:#3d2220;--violet:#c8bcff;--violetbg:#2a2542;--shadow:none}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 88% -8%,#68d8fb42,transparent 34rem),var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}main{width:min(1180px,calc(100% - 28px));margin:auto;padding:42px 0 86px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.7rem,6vw,4.7rem);line-height:1.02;letter-spacing:-.055em;margin:.18em 0 .25em;max-width:1030px}h2{font-size:clamp(1.65rem,4vw,2.6rem);line-height:1.16;letter-spacing:-.035em;margin-bottom:16px}h3{font-size:1.08rem;margin:7px 0}.eyebrow{font-size:.74rem;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--deep)}.lead{font-size:1.07rem;max-width:900px;color:var(--muted)}header,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 93%,transparent);box-shadow:var(--shadow)}header{padding:44px;border-radius:34px;position:relative;overflow:hidden}header:after{content:"";position:absolute;right:-110px;top:-150px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,var(--sky),transparent 69%);opacity:.5}.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.chip,.tag{display:inline-block;padding:5px 10px;border-radius:999px;font-size:.73rem;font-weight:850}.chip{border:1px solid var(--line);background:var(--soft);color:var(--deep)}.good{background:var(--goodbg);color:var(--good)}.now{background:var(--warnbg);color:var(--warn)}.risk{background:var(--redbg);color:var(--red)}.future{background:var(--violetbg);color:var(--violet)}section{padding:29px;border-radius:27px;margin-top:18px}.decision{padding:23px;border-radius:21px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 87%,transparent));border:1px solid var(--line);font-size:1.08rem}.decision b{color:var(--deep)}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px;margin-top:15px}.card{grid-column:span 4;padding:20px;border:1px solid var(--line);border-radius:19px;background:var(--paper)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card p,.small{font-size:.9rem;color:var(--muted);margin-bottom:0}.metric{font-size:2rem;font-weight:850;color:var(--deep);line-height:1.1}.finding{display:grid;grid-template-columns:64px 1fr auto;gap:16px;align-items:start;padding:18px 0;border-bottom:1px solid var(--line)}.finding:last-child{border-bottom:0}.prio{display:grid;place-items:center;width:54px;height:54px;border-radius:18px;background:var(--warnbg);color:var(--warn);font-weight:900}.prio.p0{background:var(--redbg);color:var(--red)}.finding p{margin:4px 0 0;color:var(--muted)}.evidence{font-size:.75rem;font-weight:800;color:var(--deep);background:var(--soft);padding:5px 8px;border-radius:999px;white-space:nowrap}.compare{display:grid;grid-template-columns:1fr 54px 1fr;gap:12px;align-items:center}.arrow{text-align:center;color:var(--sky);font-size:1.7rem;font-weight:900}.phone{max-width:365px;margin:auto;border:2px solid color-mix(in srgb,var(--ink) 75%,transparent);border-radius:38px;padding:14px;background:var(--bg);min-height:590px}.top{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:center}.round{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--paper);border:1px solid var(--line)}.seg{display:grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:999px;border:1px solid var(--line)}.seg span{text-align:center;padding:7px;border-radius:999px}.seg .on{background:var(--deep);color:white}.mode{text-align:right;margin:18px 2px;color:var(--deep);font-weight:800}.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-size:1.2rem}.reply-head{display:flex;align-items:center;gap:8px;margin-top:25px}.meta{font-size:.76rem;color:var(--muted)}.reply{font-size:1rem;line-height:1.72;margin-top:8px}.mine{max-width:78%;margin:22px 0 0 auto;padding:11px 14px;border-radius:18px;background:var(--deep);color:white}.composer{margin-top:38px;padding:7px 7px 7px 15px;border-radius:999px;background:color-mix(in srgb,var(--paper) 80%,transparent);border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.send{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--deep);color:white}.stage{display:grid;grid-template-rows:auto auto 1fr auto;min-height:520px;background:linear-gradient(var(--soft),var(--paper));border-radius:28px;overflow:hidden;border:1px solid var(--line);text-align:center}.stage .face{font-size:7.3rem;align-self:center;filter:drop-shadow(0 16px 20px #0b779525)}.bubble{margin:12px 18px;padding:15px 17px;border-radius:22px;background:color-mix(in srgb,var(--paper) 90%,transparent);border:1px solid var(--line);text-align:left}.matrix{width:100%;border-collapse:separate;border-spacing:0;margin-top:15px;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--paper)}.matrix th,.matrix td{padding:13px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}.matrix th{font-size:.76rem;color:var(--deep);background:var(--soft)}.matrix tr:last-child td{border-bottom:0}.matrix td:first-child{font-weight:800}.phases{display:grid;gap:12px;margin-top:16px}.phase{display:grid;grid-template-columns:125px 1fr 230px;gap:17px;padding:19px;border:1px solid var(--line);border-radius:20px;background:var(--paper)}.version{font-size:.76rem;font-weight:900;letter-spacing:.08em;color:var(--deep)}.gate{padding:10px 12px;border-radius:13px;background:var(--soft);color:var(--deep);font-size:.82rem}.flow{display:flex;gap:8px;overflow:auto;padding:3px 0 10px}.step{min-width:170px;flex:1;padding:16px;border-radius:17px;background:var(--paper);border:1px solid var(--line)}.step b{display:block;color:var(--deep)}.step small{color:var(--muted)}ul,ol{padding-left:1.35em}li+li{margin-top:6px}.callout{margin-top:15px;padding:16px 18px;border-left:5px solid var(--sky);border-radius:0 16px 16px 0;background:var(--soft)}footer{padding:26px 5px 0;color:var(--muted);font-size:.84rem}a{color:var(--deep)}
+    @media(max-width:820px){main{width:min(100% - 20px,1180px);padding-top:18px}header,section{padding:22px;border-radius:23px}.grid{grid-template-columns:1fr}.card,.card.wide,.card.full{grid-column:1}.compare{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.finding{grid-template-columns:54px 1fr}.finding .evidence{grid-column:2;justify-self:start}.phase{grid-template-columns:1fr;gap:8px}.matrix thead{display:none}.matrix,.matrix tbody,.matrix tr,.matrix td{display:block}.matrix tr{border-bottom:8px solid var(--soft)}.matrix td{border:0}.matrix td:first-child{padding-bottom:3px}.matrix td:not(:first-child){padding-top:3px}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">Shannon · UX research &amp; implementation plan · v27 · 2026-09-06</div>
+    <h1>かわいいだけでも、<br>高機能なだけでもない。</h1>
+    <p class="lead">Build 38で音声会話の核が通った。次は、トーク・対話・メモリー・作業・設定を「毎日迷わず使える一人のシャノン」に整える。最新ソース、Simulator、Aether／Voyagerの監査資産、Apple HIGとMaterial 3を照合し、重複実装を避けた実装順を定めた。</p>
+    <div class="chips"><span class="chip good">Realtime音声 実機完了</span><span class="chip now">現在地 · 調査と計画完了</span><span class="chip">次 · Build 39 監査基盤＋Talk</span><span class="chip future">実装開始前の確認地点</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">01 / conclusion</div><h2>先に作るのは、新画面ではなく「比較できる仕組み」</h2>
+    <div class="decision"><b>結論：</b>ShannonにもAether／Voyagerと同じ、個人データ・本番接続・課金を使わないUI監査モードを入れる。その固定状態から同じ画面をLight／Dark・大きな文字で撮影し、Talk → Memory → Work／Settingsの順に3つの大きなUXバッチで直す。</div>
+    <div class="grid">
+      <article class="card"><div class="metric">0</div><h3>安全な現行スクリーンショット</h3><p>共有statusにShannonの画像はまだない。実機の個人会話を監査素材にしない。</p></article>
+      <article class="card"><div class="metric">2,217</div><h3>会話Viewの行数</h3><p>Talk、対話、Drawer、設定、アイコン、メッセージが一つのファイルに集まり、見た目の変更が他状態へ波及しやすい。</p></article>
+      <article class="card"><div class="metric">Build 39–41</div><h3>一度に直す範囲</h3><p>3つの体験単位をローカルで仕上げ、最後にまとめてTestFlight確認する。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">02 / evidence</div><h2>調査して分かったこと</h2>
+    <div class="finding"><div class="prio p0">P0</div><div><h3>最新UIを同じ状態で再現できない</h3><p>現在のSimulatorには古いShannonが残り、3モードの旧アイコン設定など、最新ソースと一致しなかった。最新ソースには2モードと画像プレビューが既にあるため、古い見た目を直して二重実装しない仕組みが必要。</p></div><span class="evidence">Simulator＋source</span></div>
+    <div class="finding"><div class="prio p0">P0</div><div><h3>画面より状態の方が多い</h3><p>通常、空、読込中、通信失敗、送信中、許可待ち、長文、キーボード、音声接続中で同じ画面の重心が変わる。現状の単体テストはロジックを守るが、重なり・視線・片手操作を証明しない。</p></div><span class="evidence">tests＋source</span></div>
+    <div class="finding"><div class="prio">P1</div><div><h3>Talkの主役が競合する</h3><p>共通のトーク／メモリー切替、Talk内の「対話／履歴」、作業メニュー、エラー、入力欄が同時に現れ得る。機能は妥当だが、いま何をしている画面かを一段で理解しにくい。</p></div><span class="evidence">ConversationView</span></div>
+    <div class="finding"><div class="prio">P1</div><div><h3>メモリーが「頭の中」と管理画面の中間</h3><p>「いま」に感情と関心だけでなく、コストと自発性評価も並ぶ。ユーザーが知りたいシャノンの今と、運用診断が同格になっている。</p></div><span class="evidence">MemoryView</span></div>
+    <div class="finding"><div class="prio">P1</div><div><h3>小さい補助文字へ情報が集中</h3><p>感情、時刻、根拠、確信度、更新日などがcaption/caption2に集まる。通常サイズでは静かでも、大きな文字で横並びが崩れやすい。</p></div><span class="evidence">77 fixed/truncated sites</span></div>
+    <div class="finding"><div class="prio">P1</div><div><h3>ベースライン試験は環境制限で未完</h3><p><code>scripts/verify.sh ios</code> はSwiftPMのsandbox起動が現在の実行環境に拒否され、コード失敗ではなく環境理由で未実施。実装開始時に通常の検証環境で再実行する。</p></div><span class="evidence">local check</span></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">03 / what to borrow</div><h2>他の2アプリから、見た目ではなく原則を借りる</h2>
+    <div class="grid">
+      <article class="card wide"><span class="tag good">Aether</span><h3>コンテンツの後ろにUIを沈める</h3><p>ヘッダーとcomposerを薄くし、文章が画面の主役になる。Shannonでは会話本文を主役にし、上部切替・入力欄・作業状態を必要な時だけ浮かせる。Aetherの文書UIそのものは複製しない。</p></article>
+      <article class="card wide"><span class="tag good">Voyager</span><h3>固定fixtureと大きな文字で崩れを先に見る</h3><p>起動引数で通常・空・失敗・大きな文字を安全に再現し、同じ条件で改善前後を撮る。Shannonの会話・記憶・タスクにもこの監査方法を移植する。</p></article>
+      <article class="card wide"><span class="tag">Apple HIG</span><h3>iOS標準の読みやすさと操作性</h3><p>Dynamic Typeで階層を保ち、横並びの補助情報は大きな文字で縦へ組み替える。主要操作は44ptを基準とし、safe areaと標準の戻る操作を尊重する。</p></article>
+      <article class="card wide"><span class="tag">Material 3</span><h3>状態は色だけで示さない</h3><p>選択・無効・処理中・失敗を色＋形＋文言で表す。Expressiveな形や動きはシャノンの感情に使い、常時すべてを動かさない。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">04 / talk</div><h2>Talkは「読む」と「向き合う」を明確に分ける</h2>
+    <div class="compare">
+      <div class="phone">
+        <div class="top"><div class="round">☰</div><div class="seg"><span class="on">トーク</span><span>メモリー</span></div><div class="round">⚙</div></div>
+        <div class="mode">対話へ ↗</div>
+        <div class="reply-head"><div class="avatar">☺</div><div><b>シャノン</b><div class="meta">14:42 · 表情はアイコンへ固定</div></div></div>
+        <div class="reply">返答本文は画面幅を使う。感情名や内部状態を毎回説明せず、表情と文脈で感じられるようにする。補助操作は本文より弱くする。</div>
+        <div class="mine">まずは使いやすさを直そう。</div>
+        <div class="composer"><span>メッセージ</span><span class="send">↑</span></div>
+      </div>
+      <div class="arrow">→</div>
+      <div>
+        <div class="stage"><div class="mode" style="padding-right:16px">履歴へ ↗</div><div class="meta">シャノン · 興味津々</div><div class="face">(˶ᵔ ᵕ ᵔ˶)</div><div class="bubble"><b>会話に向き合う場所</b><br><span class="small">顔を大きく、上半身は下へ自然に溶かす。短文は一息で、長文は「続きを読む」。待機／考え中／発話中を同じ舞台の変化として見せる。</span></div></div>
+      </div>
+    </div>
+    <div class="grid">
+      <article class="card"><h3>Scroll mode</h3><p>返信は全幅を維持。40pt前後の表情、名前、時刻だけをコンパクトに置き、感情名は必要な時だけ。コピーは見つけられ、本文選択も維持。</p></article>
+      <article class="card"><h3>Dialogue mode</h3><p>「縦長画像＋吹き出し」から、顔・声・字幕が一つの場にいる構図へ。Live2Dなしでも、crop、光、呼吸、状態遷移で存在感を作る。</p></article>
+      <article class="card"><h3>Composer</h3><p>一つの入力面を維持し、空なら音声、文字があれば送信。背後の会話は見えるが、入力中文字と境界は十分読める。入力中は画面遷移を起こさない。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">05 / memory &amp; settings</div><h2>メモリーは人格、運用情報は設定へ</h2>
+    <div class="grid">
+      <article class="card"><span class="tag now">いま</span><h3>一目で感じる</h3><p>現在の表情、短い状態文、今日の関心、頭に浮かんでいる2件。数値メーターは折りたたみ詳細へ。</p></article>
+      <article class="card"><span class="tag">知識</span><h3>探して直せる</h3><p>カテゴリ、質問、回答を主役にし、根拠・確信度・更新日は詳細へ。手動編集は維持し、会話で直す入口も補助表示する。</p></article>
+      <article class="card"><span class="tag">記憶</span><h3>活動の時間が見える</h3><p>日記を横スクロールだけに閉じず、日付順の縦一覧へ。睡眠、調べ物、覚えたことを静かなタイムラインで読む。</p></article>
+      <article class="card wide"><span class="tag future">設定</span><h3>カードの羅列をグループへ</h3><p>「シャノン」「外観とアイコン」「音声」「アプリと接続」の4区分。音声診断、コスト、自発性評価、配信履歴は通常利用から一段奥へ置く。</p></article>
+      <article class="card wide"><span class="tag good">維持</span><h3>既に良いものは作り直さない</h3><p>トーク／メモリーのタップ切替、設定の独立画面、左端Drawer、タイトル編集、返信の表情固定、全幅本文、コピー、2モードのApp Icon設定はそのまま使う。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">06 / deterministic audit</div><h2>実装する監査シナリオ</h2>
+    <table class="matrix">
+      <thead><tr><th>領域</th><th>固定状態</th><th>必須表示</th><th>見ること</th></tr></thead>
+      <tbody>
+        <tr><td>Talk</td><td>空・通常・長文・送信中・失敗・キーボード</td><td>Light / Dark</td><td>本文幅、metadata、最終行、入力欄、モード導線</td></tr>
+        <tr><td>Dialogue</td><td>待機・考え中・短文・長文・入力中</td><td>Light / Dark</td><td>顔の占有率、吹き出し、視線、画像の下端、集中</td></tr>
+        <tr><td>Threads</td><td>空・複数・選択・未読・タイトル編集</td><td>Light / Dark</td><td>最終時刻、新規作成、長いタイトル、操作の発見性</td></tr>
+        <tr><td>Memory</td><td>いま・知識・日記・空・読込失敗</td><td>Light / Dark</td><td>頭の中らしさ、編集、根拠、戻り、情報密度</td></tr>
+        <tr><td>Work</td><td>提案・実行中・許可待ち・停止・完了・失敗</td><td>Light / Dark</td><td>次に押すもの、通常会話との競合、永続状態</td></tr>
+        <tr><td>Voice</td><td>接続・聞く・考える・話す・失敗</td><td>Light / Dark</td><td>字幕、停止、割込み、状態の理解、再試行</td></tr>
+        <tr><td>Settings</td><td>通常・アイコン・外観・更新・接続不調</td><td>Light / Dark</td><td>区分、画像preview、異常だけが目立つこと</td></tr>
+        <tr><td>Accessibility</td><td>AX3・Reduce Motion・VoiceOver順序</td><td>代表8状態</td><td>縦組み替え、切れ、44pt、色以外の状態表示</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><b>安全境界：</b>専用UserDefaults、固定日時、合成会話、合成記憶、合成タスクを使う。Keychain、本番API、Azure SQLite、ユーザー会話、課金LLMを一切読まない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">07 / implementation</div><h2>3ビルド分を、1回の実機確認へまとめる</h2>
+    <div class="phases">
+      <article class="phase"><div class="version">BUILD 39<br>AUDIT + TALK</div><div><h3>監査基盤と会話の完成度</h3><ul><li><code>--ui-audit</code> と合成fixture</li><li>ViewをTalk、Dialogue、Thread、Settingsへ分割</li><li>返信metadata、空状態、composer、モード導線</li><li>Dialogueのcrop・吹き出し・状態表現</li><li>既に実装済みの比較用App Icon 10案を同梱</li></ul></div><div class="gate">同じTalk状態をLight／Dark／AX3で再撮影し、入力・履歴・音声導線が競合しない</div></article>
+      <article class="phase"><div class="version">BUILD 40<br>MEMORY</div><div><h3>「シャノンの頭の中」へ再編集</h3><ul><li>いま／知識／記憶の情報階層</li><li>コスト・自発性評価を設定へ移動</li><li>日記を縦の時間軸へ</li><li>編集、根拠、確信度の段階表示</li></ul></div><div class="gate">最初の3秒で「今のシャノン」が読め、知識の確認・訂正・根拠へ迷わず進める</div></article>
+      <article class="phase"><div class="version">BUILD 41<br>WORK + POLISH</div><div><h3>作業状態と全体仕上げ</h3><ul><li>作業UIの優先順位を一つに統一</li><li>設定を4グループへ整理</li><li>VoiceOver、Dynamic Type、Reduce Motion</li><li>全matrix再撮影、回帰、署名なしRelease build</li></ul></div><div class="gate">重要状態が重複せず、Light／Dark／大きな文字で主要操作が切れない</div></article>
+      <article class="phase"><div class="version">TESTFLIGHT<br>ONE BATCH</div><div><h3>まとめて実機確認</h3><p>Build 39〜41の成果を一つの候補へまとめる。会話と接続の維持、Talk、Dialogue、Memory、Work、Voice、App Iconを一巡する。</p></div><div class="gate">ユーザーの実機確認後に0.2.x UXフェーズを完了し、声の選択へ進む</div></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">08 / order of work</div><h2>次の実装ターンで行うこと</h2>
+    <div class="flow"><div class="step"><b>1. Baseline</b><small>通常環境でiOS testを再実行し、現在の合格点を固定。</small></div><div class="arrow">→</div><div class="step"><b>2. Audit mode</b><small>合成データと起動シナリオを追加。APIとKeychainを拒否。</small></div><div class="arrow">→</div><div class="step"><b>3. Capture</b><small>TalkとDialogueの改善前画像を取得して注釈。</small></div><div class="arrow">→</div><div class="step"><b>4. Build 39</b><small>体験単位で実装し、同じ状態を再撮影。</small></div><div class="arrow">→</div><div class="step"><b>5. Report</b><small>変更前後、検証、未解決をHTMLで提示。</small></div></div>
+    <div class="callout">この文書の確認後、最初に着手するのはBuild 39です。Azure転送・GitHub push・TestFlight配信はまだ行わず、Build 41のローカル検証まで貯めてから一度だけ許可を確認します。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">09 / references</div><h2>判断に使った正本</h2>
+    <div class="grid">
+      <article class="card wide"><h3>ローカル実装</h3><p><a href="architecture.md">現行アーキテクチャ</a> · <a href="shannon-long-term-roadmap-v26.html">長期計画 v26</a> · <code>ShannonConversationView.swift</code> · <code>ShannonMemoryView.swift</code> · AetherのDebug Preview · VoyagerのUIAuditFixtures。</p></article>
+      <article class="card wide"><h3>公式デザイン指針</h3><p><a href="https://developer.apple.com/design/human-interface-guidelines/design-principles">Apple Design Principles</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/typography">Typography</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/accessibility">Accessibility</a> · <a href="https://developer.apple.com/design/human-interface-guidelines/layout">Layout</a> · <a href="https://m3.material.io/foundations/interaction/states/overview">Material 3 States</a>。</p></article>
+    </div>
+  </section>
+
+  <footer>状態：調査・計画完了。実装は未着手。現行の会話、Realtime音声、記憶、作業、App Iconを壊さないことをBuild 39〜41の回帰条件とする。</footer>
+</main></body>
+</html>
