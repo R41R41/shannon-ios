@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 export interface RealtimeVoiceCallRequest {
   sdp: string;
   instructions: string;
@@ -59,9 +61,7 @@ export class OpenAIRealtimeVoiceGateway {
     const sdp = request.sdp.trim();
     if (!validSdp(sdp)) throw new RealtimeVoiceError('VOICE_REALTIME_INVALID_SDP');
 
-    const form = new FormData();
-    form.append('sdp', new Blob([sdp], { type: 'application/sdp' }), 'offer.sdp');
-    form.append('session', JSON.stringify({
+    const session = {
       type: 'realtime',
       model: this.model,
       instructions: boundedInstructions(request.instructions),
@@ -88,14 +88,19 @@ export class OpenAIRealtimeVoiceGateway {
       },
       tracing: null,
       truncation: { type: 'retention_ratio', retention_ratio: 0.8 },
-    }));
+    };
+    const multipart = realtimeCallMultipartBody(sdp, session);
 
     let response: Response;
     try {
       response = await this.fetcher(this.endpoint, {
         method: 'POST',
-        headers: { authorization: `Bearer ${this.options.apiKey}` },
-        body: form,
+        headers: {
+          accept: 'application/sdp',
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': multipart.contentType,
+        },
+        body: multipart.body,
         signal: AbortSignal.timeout(this.timeoutMilliseconds),
       });
     } catch {
@@ -122,6 +127,28 @@ export class OpenAIRealtimeVoiceGateway {
       } : {}),
     };
   }
+}
+
+function realtimeCallMultipartBody(
+  sdp: string,
+  session: Readonly<Record<string, unknown>>,
+): { body: Blob; contentType: string } {
+  const boundary = `----shannon-realtime-${randomUUID().replaceAll('-', '')}`;
+  const body = new Blob([
+    `--${boundary}\r\n`,
+    'Content-Disposition: form-data; name="sdp"\r\n',
+    'Content-Type: application/sdp\r\n\r\n',
+    sdp,
+    `\r\n--${boundary}\r\n`,
+    'Content-Disposition: form-data; name="session"\r\n',
+    'Content-Type: application/json\r\n\r\n',
+    JSON.stringify(session),
+    `\r\n--${boundary}--\r\n`,
+  ]);
+  return {
+    body,
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
 }
 
 export function createConfiguredRealtimeVoiceGateway(

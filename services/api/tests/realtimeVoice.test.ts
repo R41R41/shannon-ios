@@ -28,10 +28,26 @@ describe('OpenAI realtime voice gateway', () => {
       fetcher: async (input, init) => {
         expect(String(input)).toBe('https://api.openai.com/v1/realtime/calls');
         expect(init?.method).toBe('POST');
-        expect(init?.headers).toEqual({ authorization: 'Bearer server-key-only' });
-        const form = init?.body as FormData;
-        expect(await (form.get('sdp') as Blob).text()).toBe(offer);
-        const session = JSON.parse(String(form.get('session'))) as Record<string, any>;
+        const headers = new Headers(init?.headers);
+        expect(headers.get('accept')).toBe('application/sdp');
+        expect(headers.get('authorization')).toBe('Bearer server-key-only');
+        const contentType = headers.get('content-type');
+        expect(contentType).toMatch(/^multipart\/form-data; boundary=----shannon-realtime-[a-f0-9]{32}$/u);
+        const boundary = contentType?.split('boundary=')[1];
+        const multipart = await (init?.body as Blob).text();
+        expect(multipart).toContain([
+          `--${boundary}`,
+          'Content-Disposition: form-data; name="sdp"',
+          'Content-Type: application/sdp',
+          '',
+          offer,
+        ].join('\r\n'));
+        expect(multipart).not.toContain('filename=');
+        const sessionPart = multipart.match(
+          /Content-Disposition: form-data; name="session"\r\nContent-Type: application\/json\r\n\r\n([\s\S]+?)\r\n--/u,
+        );
+        expect(sessionPart?.[1]).toBeTruthy();
+        const session = JSON.parse(sessionPart?.[1] ?? '{}') as Record<string, any>;
         expect(session).toMatchObject({
           type: 'realtime',
           model: 'gpt-realtime-2.1-mini',
