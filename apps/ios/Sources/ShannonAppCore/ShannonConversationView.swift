@@ -50,7 +50,8 @@ public struct ShannonConversationView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let activeColorScheme = resolvedColorScheme
+        let palette = M3Palette.resolve(activeColorScheme)
 
         GeometryReader { geometry in
             ZStack(alignment: .top) {
@@ -105,6 +106,7 @@ public struct ShannonConversationView: View {
         }
         .background { palette.surface.ignoresSafeArea() }
         .foregroundStyle(palette.onSurface)
+        .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)
         }
@@ -136,11 +138,11 @@ public struct ShannonConversationView: View {
         }
 #if os(iOS)
         .fullScreenCover(isPresented: $showsSettings) {
-            settingsSheet(palette)
+            settingsSheet
         }
 #else
         .sheet(isPresented: $showsSettings) {
-            settingsSheet(palette)
+            settingsSheet
         }
 #endif
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
@@ -400,26 +402,14 @@ public struct ShannonConversationView: View {
     }
 
     private func composer(_ palette: M3Palette) -> some View {
-        VStack(alignment: .leading, spacing: composerIsExpanded ? M3Spacing.extraSmall : 0) {
-            if composerIsExpanded {
-                composerTextField
-                    .padding(.horizontal, M3Spacing.small)
-                    .padding(.top, M3Spacing.small)
-            }
-
-            HStack(alignment: .bottom, spacing: M3Spacing.extraSmall) {
-                composerMenuButton(palette)
-
-                if !composerIsExpanded {
-                    composerTextField
-                        .padding(.leading, 2)
-                } else {
-                    Spacer(minLength: 0)
-                }
-
-                transcriptionButton(palette)
-                composerPrimaryButton(palette)
-            }
+        ShannonAdaptiveComposerLayout(
+            isExpanded: composerIsExpanded,
+            spacing: M3Spacing.extraSmall
+        ) {
+            composerTextField
+            composerMenuButton(palette)
+            transcriptionButton(palette)
+            composerPrimaryButton(palette)
         }
         .padding(6)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: composerIsExpanded ? 24 : M3Shape.extraLarge, style: .continuous))
@@ -436,11 +426,12 @@ public struct ShannonConversationView: View {
     private var composerTextField: some View {
         TextField("シャノンに話す", text: $model.draft, axis: .vertical)
             .font(.body)
-            .lineLimit(composerIsExpanded ? 2...6 : 1...1)
+            .lineLimit(1...6)
             .frame(minHeight: 40)
             .focused($composerIsFocused)
             .onSubmit { sendDraft() }
             .submitLabel(.send)
+            .accessibilityIdentifier("shannon.composer.field")
             .accessibilityHint("複数行入力できます")
     }
 
@@ -506,7 +497,14 @@ public struct ShannonConversationView: View {
         .accessibilityLabel(composerActionLabel)
     }
 
-    private func settingsSheet(_ palette: M3Palette) -> some View {
+    private var settingsSheet: some View {
+        ShannonEnvironmentPaletteReader { palette in
+            settingsSheetContent(palette)
+        }
+        .environment(\.colorScheme, resolvedColorScheme)
+    }
+
+    private func settingsSheetContent(_ palette: M3Palette) -> some View {
         ZStack(alignment: .top) {
             palette.surface
                 .ignoresSafeArea()
@@ -626,7 +624,7 @@ public struct ShannonConversationView: View {
             )
         }
         .sheet(isPresented: $showsAppearanceSettings) {
-            ShannonAppearanceSettingsView()
+            ShannonAppearanceSettingsView(appearanceModeRawValue: $appearanceModeRawValue)
         }
         .sheet(isPresented: $showsTestFlightDelivery) {
             ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
@@ -912,6 +910,18 @@ public struct ShannonConversationView: View {
 
     private var savedAppearanceMode: ShannonAppearanceMode {
         ShannonAppearanceMode(rawValue: appearanceModeRawValue) ?? .system
+    }
+
+    private var resolvedColorScheme: ColorScheme {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDark") { return .dark }
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewLight") { return .light }
+#endif
+        return switch savedAppearanceMode {
+        case .system: colorScheme
+        case .light: .light
+        case .dark: .dark
+        }
     }
 
     private var latestShannonMessageID: UUID? {
@@ -1322,8 +1332,21 @@ private struct ShannonAppIconPreview: View {
     }
 }
 
+private struct ShannonEnvironmentPaletteReader<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+    private let content: (M3Palette) -> Content
+
+    init(@ViewBuilder content: @escaping (M3Palette) -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content(M3Palette.resolve(colorScheme))
+    }
+}
+
 private struct ShannonAppearanceSettingsView: View {
-    @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
+    @Binding var appearanceModeRawValue: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
@@ -1335,6 +1358,10 @@ private struct ShannonAppearanceSettingsView: View {
                 ForEach(ShannonAppearanceMode.allCases) { mode in
                     Button {
                         appearanceModeRawValue = mode.rawValue
+                        Task { @MainActor in
+                            await Task.yield()
+                            dismiss()
+                        }
                     } label: {
                         HStack(spacing: M3Spacing.medium) {
                             Image(systemName: mode.symbolName)
@@ -1376,6 +1403,110 @@ private struct ShannonAppearanceSettingsView: View {
                 }
             }
         }
+    }
+}
+
+private struct ShannonAdaptiveComposerLayout: Layout {
+    let isExpanded: Bool
+    let spacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 4 else { return .zero }
+        let width = proposal.width ?? intrinsicWidth(for: subviews)
+
+        if isExpanded {
+            let fieldSize = subviews[0].sizeThatFits(.init(width: width, height: nil))
+            let controlSizes = subviews.dropFirst().map { $0.sizeThatFits(.unspecified) }
+            let controlHeight = controlSizes.map(\.height).max() ?? 0
+            return CGSize(width: width, height: fieldSize.height + spacing + controlHeight)
+        }
+
+        let controlSizes = subviews.dropFirst().map { $0.sizeThatFits(.unspecified) }
+        let controlsWidth = controlSizes.reduce(0) { $0 + $1.width }
+        let fieldWidth = max(1, width - controlsWidth - spacing * 3)
+        let fieldSize = subviews[0].sizeThatFits(.init(width: fieldWidth, height: nil))
+        let height = max(fieldSize.height, controlSizes.map(\.height).max() ?? 0)
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 4 else { return }
+
+        if isExpanded {
+            let fieldSize = subviews[0].sizeThatFits(.init(width: bounds.width, height: nil))
+            subviews[0].place(
+                at: CGPoint(x: bounds.minX, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: .init(width: bounds.width, height: fieldSize.height)
+            )
+
+            let controlY = bounds.maxY
+            let menuSize = subviews[1].sizeThatFits(.unspecified)
+            let transcriptionSize = subviews[2].sizeThatFits(.unspecified)
+            let primarySize = subviews[3].sizeThatFits(.unspecified)
+            subviews[1].place(
+                at: CGPoint(x: bounds.minX, y: controlY),
+                anchor: .bottomLeading,
+                proposal: .init(menuSize)
+            )
+            subviews[3].place(
+                at: CGPoint(x: bounds.maxX, y: controlY),
+                anchor: .bottomTrailing,
+                proposal: .init(primarySize)
+            )
+            subviews[2].place(
+                at: CGPoint(x: bounds.maxX - primarySize.width - spacing, y: controlY),
+                anchor: .bottomTrailing,
+                proposal: .init(transcriptionSize)
+            )
+            return
+        }
+
+        let menuSize = subviews[1].sizeThatFits(.unspecified)
+        let transcriptionSize = subviews[2].sizeThatFits(.unspecified)
+        let primarySize = subviews[3].sizeThatFits(.unspecified)
+        let fieldWidth = max(
+            1,
+            bounds.width - menuSize.width - transcriptionSize.width - primarySize.width - spacing * 3
+        )
+        let bottomY = bounds.maxY
+        var x = bounds.minX
+
+        subviews[1].place(
+            at: CGPoint(x: x, y: bottomY),
+            anchor: .bottomLeading,
+            proposal: .init(menuSize)
+        )
+        x += menuSize.width + spacing
+        subviews[0].place(
+            at: CGPoint(x: x, y: bottomY),
+            anchor: .bottomLeading,
+            proposal: .init(width: fieldWidth, height: nil)
+        )
+        x += fieldWidth + spacing
+        subviews[2].place(
+            at: CGPoint(x: x, y: bottomY),
+            anchor: .bottomLeading,
+            proposal: .init(transcriptionSize)
+        )
+        subviews[3].place(
+            at: CGPoint(x: bounds.maxX, y: bottomY),
+            anchor: .bottomTrailing,
+            proposal: .init(primarySize)
+        )
+    }
+
+    private func intrinsicWidth(for subviews: Subviews) -> CGFloat {
+        subviews.reduce(0) { $0 + $1.sizeThatFits(.unspecified).width } + spacing * 3
     }
 }
 

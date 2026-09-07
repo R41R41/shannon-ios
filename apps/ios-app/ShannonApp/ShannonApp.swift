@@ -16,7 +16,6 @@ struct ShannonApp: App {
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var pendingPushToken: String?
-    @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -65,7 +64,6 @@ struct ShannonApp: App {
                 memoryModel: memoryModel,
                 testFlightDeliveryModel: testFlightDeliveryModel
             )
-                .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }
@@ -125,18 +123,6 @@ struct ShannonApp: App {
                     }
                 }
 #endif
-        }
-    }
-
-    private var preferredColorScheme: ColorScheme? {
-#if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDark") { return .dark }
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewLight") { return .light }
-#endif
-        return switch ShannonAppearanceMode(rawValue: appearanceModeRawValue) ?? .system {
-        case .system: nil
-        case .light: .light
-        case .dark: .dark
         }
     }
 
