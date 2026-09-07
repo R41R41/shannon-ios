@@ -47,6 +47,41 @@ final class ShannonMessageMarkdownTests: XCTestCase {
         XCTAssertTrue(hasIntent(.code, in: "code", text: text))
     }
 
+    func testParsesMarkdownIntoReadableLayoutBlocks() {
+        let blocks = ShannonMessageMarkdown.blocks(from: """
+        # 結論
+
+        普通の段落です。
+
+        - 一つ目
+        2. 二つ目
+        > 補足
+
+        ```swift
+        let value = 42
+        ```
+
+        ---
+        """)
+
+        XCTAssertEqual(blocks, [
+            .heading(level: 1, text: "結論"),
+            .paragraph("普通の段落です。"),
+            .bullet("一つ目"),
+            .numbered(marker: "2.", text: "二つ目"),
+            .quote("補足"),
+            .code("let value = 42"),
+            .divider,
+        ])
+    }
+
+    func testKeepsConsecutivePlainLinesInOneParagraph() {
+        XCTAssertEqual(
+            ShannonMessageMarkdown.blocks(from: "一行目\n二行目"),
+            [.paragraph("一行目\n二行目")]
+        )
+    }
+
     private func link(in string: String, text: AttributedString) -> URL? {
         guard let range = String(text.characters).range(of: string),
               let attributedRange = attributedRange(for: range, in: text)

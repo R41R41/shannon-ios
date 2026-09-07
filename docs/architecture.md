@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-07 / edge-to-edge Talk and adaptive primary icon
+Revision: 2026-09-07 / edge-to-edge Talk, adaptive composer, and rich replies
 
 ## System shape
 
@@ -33,7 +33,7 @@ The response path is intentionally short and uses one immutable state snapshot:
 1. Authenticate the device and resolve the conversation thread.
 2. Load the latest committed companion state.
 3. Assemble the minimal identity prompt, prompt projection, relevant Aether context, active agent-task projection, and bounded conversation history.
-4. Call the fixed chat model once.
+4. Call the fixed chat model once with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work.
 5. Store the assistant reply, its selected expression, and any immediate explicit user facts.
 6. Enqueue non-blocking emotion, memory, and activity work.
 
@@ -55,14 +55,15 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 ## iOS experience
 
-- Talk is the product root. Conversation content extends behind the status area and composer; restrained top and bottom gradients preserve system-status and input readability without turning either edge into an opaque bar.
+- Talk is the product root. The outer shell does not clip the conversation scroll surface, so message content can move behind both the status area and home-indicator area. Restrained top and bottom gradients preserve system-status and input readability without turning either edge into an opaque bar.
 - Talk has no persistent centered title. Circular material controls float at the upper left and right for the common drawer and new-thread action, leaving the conversation visually continuous beneath them.
 - The common drawer holds the thread list plus explicit destinations for “頭の中”, current agent work, and Settings. Talk and Memory are no longer presented as equally weighted tabs or a persistent segmented switcher.
-- The drawer surface occupies the full display height, including behind the status area. Its interactive content retains a safe top start and enough bottom space for every destination to remain visible above the home indicator.
+- The drawer material occupies the full display height, including behind the status area and home indicator. Its interactive content retains a safe top start and enough bottom space for every destination to remain readable and tappable.
 - Settings opens from the drawer instead of behaving like a third content page.
 - Talk supports multiple threads, a sliding thread list, scroll mode, and character-focused dialogue mode.
-- The thread list has a visible button. A left-edge swipe is retained only as a secondary shortcut on Talk.
+- The thread list has a visible button. A rightward swipe beginning within the left half of Talk is retained as a secondary shortcut; it is disabled while the composer is active.
 - Assistant messages store the expression used at send time and place a 42pt avatar, name, emotion, time, and copy action in one compact header so the reply body can use the full content width. User messages use a quiet pale-blue container rather than competing with Shannon's presence color.
+- Assistant replies render safe, local Markdown blocks for headings, ordered and unordered lists, quotations, code, dividers, emphasis, and approved links. Raw HTML and unsafe URL schemes remain plain text.
 - The Clear Signal color system separates Shannon's electric-blue presence accent from the darker accessible action color. Light and dark themes share semantic canvas, surface, user-message, text, state, and warm-emotion roles rather than literal color reuse.
 - Dialogue mode is a presence stage rather than a framed portrait: ambient depth, a subtle reduced-motion-aware breathing treatment, the current emotion, the latest user utterance, and Shannon's reply share one scene. The redundant corner avatar is not shown.
 - Running agent work is reachable from the common drawer and beside its source message. The composer-area task capsule is reserved for unacknowledged approval, completion, failure, or cancellation states that need attention.
@@ -77,7 +78,7 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - When both final transcripts for one turn arrive, iOS sends only those texts to `POST /v1/voice/realtime/turns`. The API stores the pair in the existing conversation thread, fixes Shannon's expression snapshot, and schedules the normal asynchronous emotion/memory update. Partial captions are not persisted.
 - The Realtime client has an initial ten-minute session ceiling and a per-device call-creation limit. Voice remains a separate cost concern from chat and background work; durable usage metering and a server-authoritative daily Realtime allowance are required before general release.
 - The Build 33 M4A → `POST /v1/voice/transcriptions` path remains a diagnostic fallback during the Realtime rollout. It uses `gpt-transcribe`, a 60-second/5-MiB limit, per-device rate limiting, and the existing `voice` cost lane. Temporary audio is deleted or held only in memory, and diagnostics never store audio, transcripts, messages, credentials, tokens, or file paths.
-- The composer floats over the edge-to-edge conversation with a readability gradient. The message list reserves dynamic visual clearance for multi-line input, voice status, failures, and task notices while remaining visible beneath the lower chrome during scrolling.
+- The composer floats over the edge-to-edge conversation with a readability gradient. It stays as a compact single row when empty, then expands into a text-and-actions layout when focused or populated. File/transcription actions, Realtime voice, and send remain distinct controls. The message list reserves dynamic visual clearance for multi-line input, voice status, failures, and task notices while remaining visible beneath the lower chrome during scrolling.
 
 Live2D and animated widgets remain future work. Current dialogue mode and Realtime voice use a static character-stage asset with state-driven ambient motion.
 

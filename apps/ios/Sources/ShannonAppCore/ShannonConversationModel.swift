@@ -5,6 +5,7 @@ import Observation
 @Observable
 public final class ShannonConversationModel {
     public var draft = ""
+    public private(set) var isDesignPreview = false
     public private(set) var messages: [ConversationMessage]
     public private(set) var threads: [ChatThreadDTO]
     public private(set) var selectedThreadId: String?
@@ -65,6 +66,82 @@ public final class ShannonConversationModel {
             self.messages = []
         }
     }
+
+#if DEBUG
+    public static func designPreview() -> ShannonConversationModel {
+        let now = Date()
+        let emotion = ConversationMessage.EmotionSnapshot(
+            valence: 0.72,
+            arousal: 0.42,
+            openness: 0.80,
+            expression: .curious,
+            stateVersion: 42
+        )
+        let model = ShannonConversationModel(
+            messages: [
+                ConversationMessage(
+                    role: .user,
+                    text: "この画面の改善点を、実装順に整理して。",
+                    sentAt: now.addingTimeInterval(-180)
+                ),
+                ConversationMessage(
+                    role: .shannon,
+                    text: """
+                    ## まず直すところ
+
+                    画面の土台を **端まで続く一枚の会話面** にします。操作は内容の上へ浮かせ、必要なときだけ意識に入るようにします。
+
+                    1. 上下の不透明な帯をなくす
+                    2. 入力欄を入力内容に合わせて広げる
+                    3. 見出し・箇条書き・コードを読み分けられるようにする
+
+                    > シャノンらしさは、青い操作色と表情付きアイコンに絞ります。
+
+                    ```swift
+                    conversation.extendsBehindSystemAreas = true
+                    ```
+                    """,
+                    sentAt: now.addingTimeInterval(-120),
+                    emotionSnapshot: emotion
+                ),
+                ConversationMessage(
+                    role: .user,
+                    text: "入力欄もChatGPTみたいに自然にして。",
+                    sentAt: now.addingTimeInterval(-70)
+                ),
+                ConversationMessage(
+                    role: .shannon,
+                    text: "空のときは一行、入力を始めたら本文と操作の二段に広がる形にします。音声入力とライブ音声も役割を分けて残します。",
+                    sentAt: now.addingTimeInterval(-20),
+                    emotionSnapshot: emotion
+                ),
+                ConversationMessage(
+                    role: .user,
+                    text: "サイドバーも画面の上下いっぱいまで続けて。",
+                    sentAt: now.addingTimeInterval(-10)
+                ),
+                ConversationMessage(
+                    role: .shannon,
+                    text: "背景面だけを端まで延ばし、タイトルと操作はステータス表示やホームインジケータに重ならない位置へ保ちます。会話面とサイドバー面は一枚につながり、操作だけが安全な位置に残る構成です。",
+                    sentAt: now,
+                    emotionSnapshot: emotion
+                ),
+            ],
+            usesDisplayCache: false
+        )
+        let stamp = ISO8601DateFormatter().string(from: now)
+        model.threads = [
+            ChatThreadDTO(threadId: "design-preview", title: "Shannon UIを改善", createdAt: stamp, updatedAt: stamp, messageCount: 6),
+            ChatThreadDTO(threadId: "voice-preview", title: "ライブ音声を調整", createdAt: stamp, updatedAt: stamp, messageCount: 18),
+            ChatThreadDTO(threadId: "roadmap-preview", title: "長期計画", createdAt: stamp, updatedAt: stamp, messageCount: 24),
+        ]
+        model.selectedThreadId = "design-preview"
+        model.didAttemptInitialLoad = true
+        model.didAttemptThreadsLoad = true
+        model.isDesignPreview = true
+        return model
+    }
+#endif
 
     public var selectedThread: ChatThreadDTO? {
         threads.first(where: { $0.threadId == selectedThreadId })

@@ -31,7 +31,22 @@ struct ShannonApp: App {
             apiToken: ShannonRuntimeConfiguration.apiToken,
             connectionStore: connectionStore
         )
+#if DEBUG
+        let usesDesignPreview = ProcessInfo.processInfo.arguments.contains("-ShannonDesignPreview")
+        let initialConversationModel: ShannonConversationModel
+        if usesDesignPreview {
+            let preview = ShannonConversationModel.designPreview()
+            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewComposer") {
+                preview.draft = "この入力欄なら、長い相談も自然に書けそうです"
+            }
+            initialConversationModel = preview
+        } else {
+            initialConversationModel = ShannonConversationModel(client: client)
+        }
+        _conversationModel = State(initialValue: initialConversationModel)
+#else
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+#endif
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
         _connectionModel = State(initialValue: ShannonConnectionModel(
@@ -55,7 +70,7 @@ struct ShannonApp: App {
                     Task { await connectionModel.connect(using: url) }
                 }
                 .onChange(of: scenePhase) {
-                    guard scenePhase == .active else { return }
+                    guard scenePhase == .active, !conversationModel.isDesignPreview else { return }
                     Task {
                         await conversationModel.synchronizeAgentTasks()
                         await refreshInitiativesAndBadge()
@@ -85,6 +100,7 @@ struct ShannonApp: App {
                     Task { await conversationModel.openAgentTaskNotification(taskID) }
                 }
                 .task {
+                    guard !conversationModel.isDesignPreview else { return }
                     if let url = ShannonAppDelegate.takePendingConnectionURL() {
                         await connectionModel.connect(using: url)
                     } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
@@ -113,7 +129,11 @@ struct ShannonApp: App {
     }
 
     private var preferredColorScheme: ColorScheme? {
-        switch ShannonAppearanceMode(rawValue: appearanceModeRawValue) ?? .system {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDark") { return .dark }
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewLight") { return .light }
+#endif
+        return switch ShannonAppearanceMode(rawValue: appearanceModeRawValue) ?? .system {
         case .system: nil
         case .light: .light
         case .dark: .dark

@@ -1,19 +1,21 @@
 import CoreGraphics
 
 enum ShannonWorkspaceMotionPolicy {
-    static let drawerEdgeWidth: CGFloat = 28
+    static let drawerOpeningRegionFraction: CGFloat = 0.5
 
     static func canBeginDrawerDrag(
         isTalkSelected: Bool,
         composerIsFocused: Bool,
         currentProgress: CGFloat,
+        viewWidth: CGFloat,
         startX: CGFloat,
         translation: CGSize
     ) -> Bool {
         guard isTalkSelected, !composerIsFocused else { return false }
         guard abs(translation.width) > abs(translation.height) * 1.15 else { return false }
         if currentProgress > 0 { return true }
-        return startX <= drawerEdgeWidth && translation.width > 0
+        let openingRegionWidth = max(0, viewWidth) * drawerOpeningRegionFraction
+        return startX <= openingRegionWidth && translation.width > 0
     }
 
     static func drawerProgress(

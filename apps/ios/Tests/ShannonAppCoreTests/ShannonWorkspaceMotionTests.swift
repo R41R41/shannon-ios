@@ -3,25 +3,36 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonWorkspaceMotionTests: XCTestCase {
-    func testDrawerStartsOnlyFromTheLeftEdgeOnTalk() {
+    func testDrawerStartsFromTheLeftHalfOnTalk() {
         XCTAssertTrue(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
             isTalkSelected: true,
             composerIsFocused: false,
             currentProgress: 0,
+            viewWidth: 390,
             startX: 20,
+            translation: CGSize(width: 24, height: 2)
+        ))
+        XCTAssertTrue(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
+            isTalkSelected: true,
+            composerIsFocused: false,
+            currentProgress: 0,
+            viewWidth: 390,
+            startX: 180,
             translation: CGSize(width: 24, height: 2)
         ))
         XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
             isTalkSelected: true,
             composerIsFocused: false,
             currentProgress: 0,
-            startX: 120,
+            viewWidth: 390,
+            startX: 220,
             translation: CGSize(width: 24, height: 2)
         ))
         XCTAssertFalse(ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
             isTalkSelected: false,
             composerIsFocused: false,
             currentProgress: 0,
+            viewWidth: 390,
             startX: 20,
             translation: CGSize(width: 24, height: 2)
         ))
@@ -32,6 +43,7 @@ final class ShannonWorkspaceMotionTests: XCTestCase {
             isTalkSelected: true,
             composerIsFocused: true,
             currentProgress: 0,
+            viewWidth: 390,
             startX: 10,
             translation: CGSize(width: 30, height: 1)
         ))
@@ -39,6 +51,7 @@ final class ShannonWorkspaceMotionTests: XCTestCase {
             isTalkSelected: true,
             composerIsFocused: false,
             currentProgress: 0,
+            viewWidth: 390,
             startX: 10,
             translation: CGSize(width: 4, height: 30)
         ))
@@ -49,6 +62,7 @@ final class ShannonWorkspaceMotionTests: XCTestCase {
             isTalkSelected: true,
             composerIsFocused: false,
             currentProgress: 1,
+            viewWidth: 390,
             startX: 220,
             translation: CGSize(width: -24, height: 2)
         ))

@@ -6,6 +6,16 @@ import Foundation
 /// This keeps message content from invoking custom URL schemes when SwiftUI opens
 /// a link, while still allowing ordinary external web pages to be opened.
 enum ShannonMessageMarkdown {
+    enum Block: Equatable {
+        case heading(level: Int, text: String)
+        case bullet(String)
+        case numbered(marker: String, text: String)
+        case quote(String)
+        case code(String)
+        case divider
+        case paragraph(String)
+    }
+
     private static let bareURLExpression = try! NSRegularExpression(
         pattern: #"(?:https?://|www\.)[^\s<>()\[\]{}]+"#,
         options: [.caseInsensitive]
@@ -53,6 +63,79 @@ enum ShannonMessageMarkdown {
         return text
     }
 
+    static func blocks(from source: String) -> [Block] {
+        var result: [Block] = []
+        var paragraphLines: [String] = []
+        var codeLines: [String] = []
+        var insideCode = false
+
+        func flushParagraph() {
+            guard !paragraphLines.isEmpty else { return }
+            result.append(.paragraph(paragraphLines.joined(separator: "\n")))
+            paragraphLines.removeAll(keepingCapacity: true)
+        }
+
+        func flushCode() {
+            result.append(.code(codeLines.joined(separator: "\n")))
+            codeLines.removeAll(keepingCapacity: true)
+        }
+
+        let normalized = source.replacingOccurrences(of: "\r\n", with: "\n")
+        for rawLine in normalized.components(separatedBy: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+            if line.hasPrefix("```") {
+                flushParagraph()
+                if insideCode { flushCode() }
+                insideCode.toggle()
+                continue
+            }
+            if insideCode {
+                codeLines.append(rawLine)
+                continue
+            }
+            if line.isEmpty {
+                flushParagraph()
+                continue
+            }
+            if ["---", "***", "___"].contains(line) {
+                flushParagraph()
+                result.append(.divider)
+                continue
+            }
+
+            let headingLevel = line.prefix { $0 == "#" }.count
+            if (1...6).contains(headingLevel), line.dropFirst(headingLevel).hasPrefix(" ") {
+                flushParagraph()
+                result.append(.heading(
+                    level: headingLevel,
+                    text: String(line.dropFirst(headingLevel + 1))
+                ))
+                continue
+            }
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
+                flushParagraph()
+                result.append(.bullet(String(line.dropFirst(2))))
+                continue
+            }
+            if line.hasPrefix("> ") {
+                flushParagraph()
+                result.append(.quote(String(line.dropFirst(2))))
+                continue
+            }
+            if let numbered = numberedListItem(from: line) {
+                flushParagraph()
+                result.append(.numbered(marker: numbered.marker, text: numbered.text))
+                continue
+            }
+            paragraphLines.append(line)
+        }
+
+        flushParagraph()
+        if insideCode || !codeLines.isEmpty { flushCode() }
+        return result
+    }
+
     private static func attributedRange(
         for stringRange: Range<String.Index>,
         in text: AttributedString
@@ -90,5 +173,17 @@ enum ShannonMessageMarkdown {
             return false
         }
         return !(url.host?.isEmpty ?? true)
+    }
+
+    private static func numberedListItem(from line: String) -> (marker: String, text: String)? {
+        guard let separator = line.firstIndex(of: "."),
+              !line[..<separator].isEmpty,
+              line[..<separator].allSatisfy(\.isNumber)
+        else { return nil }
+        let textStart = line.index(after: separator)
+        guard textStart < line.endIndex, line[textStart] == " " else { return nil }
+        let valueStart = line.index(after: textStart)
+        guard valueStart <= line.endIndex else { return nil }
+        return (String(line[...separator]), String(line[valueStart...]))
     }
 }

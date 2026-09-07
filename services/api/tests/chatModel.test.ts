@@ -63,8 +63,10 @@ describe('OpenAI Responses chat adapter', () => {
         instructions: expect.stringContaining('system state'),
         store: false,
         reasoning: { effort: 'none' },
-        text: { format: { type: 'json_schema', name: 'shannon_chat_turn', strict: true } },
+        text: { verbosity: 'medium', format: { type: 'json_schema', name: 'shannon_chat_turn', strict: true } },
+        max_output_tokens: 2_200,
       });
+      expect(String(body.instructions)).toContain('チャット画面だからという理由だけで情報を省略しない');
       expect(String(body.instructions)).toContain('Shannon自身のアプリをユーザーの指示に基づいて改修');
       expect(String(body.instructions)).toContain('直前の会話から対象を特定');
       expect(String(body.instructions)).toContain('hostHintを「shannon-mac」');
