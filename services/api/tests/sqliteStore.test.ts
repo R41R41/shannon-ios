@@ -109,6 +109,9 @@ describe('SQLite Shannon persistence', () => {
       capturedStateVersion: expected.version,
       messageEmotion: { valence: 0.4, arousal: 0.5, openness: 0.35, expression: 'curious' },
       taskDecision: { disposition: 'propose', reason: '明示的な改修依頼' },
+      artifacts: [{
+        name: 'plan.md', mimeType: 'text/markdown', content: '# Plan\n', summary: '実装計画',
+      }],
     });
     expect(first.events('owner-a').map(event => event.type)).toEqual([
       'state.initialized',
@@ -133,6 +136,9 @@ describe('SQLite Shannon persistence', () => {
       messageEmotion: { expression: 'curious' },
       stateVersion: 2,
       taskDecision: { disposition: 'propose', reason: '明示的な改修依頼' },
+      artifacts: [{
+        name: 'plan.md', mimeType: 'text/markdown', content: '# Plan\n', summary: '実装計画',
+      }],
     });
     expect(reopened.experienceCandidates('owner-a')).toEqual([
       expect.objectContaining({ summary: expect.stringContaining('脳科学の続きを話そう') }),

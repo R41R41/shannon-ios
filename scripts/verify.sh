@@ -50,6 +50,28 @@ run_release_app() {
     build
 }
 
+run_macos_app() {
+  xcodebuild \
+    -project apps/macos-app/ShannonDesk.xcodeproj \
+    -scheme ShannonDesk \
+    -configuration Debug \
+    -destination 'platform=macOS' \
+    -derivedDataPath .build/ShannonDeskDerivedData \
+    CODE_SIGNING_ALLOWED=NO \
+    test
+}
+
+run_release_macos_app() {
+  xcodebuild \
+    -project apps/macos-app/ShannonDesk.xcodeproj \
+    -scheme ShannonDesk \
+    -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -derivedDataPath .build/ShannonDeskReleaseDerivedData \
+    CODE_SIGNING_ALLOWED=NO \
+    build
+}
+
 run_release_runner() {
   "$node_bin" --test scripts/release-runner.test.mjs
 }
@@ -59,16 +81,19 @@ case "$target" in
   api) run_api ;;
   ios) run_ios ;;
   app) run_app ;;
+  mac) run_macos_app ;;
+  mac-release) run_release_macos_app ;;
   release) run_release_app ;;
   release-runner) run_release_runner ;;
   all)
     run_api
     run_ios
     run_app
+    run_macos_app
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [api|ios|app|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [api|ios|app|mac|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac

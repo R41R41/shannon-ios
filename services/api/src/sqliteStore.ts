@@ -20,7 +20,7 @@ import type {
   ClaimedBackgroundJob,
   DailyUserMessage,
 } from './backgroundJobStore.js';
-import type { ShannonConversationItem } from './chatModel.js';
+import type { ShannonConversationItem, ShannonGeneratedArtifact } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
 import type {
   ConversationStore,
@@ -89,6 +89,7 @@ interface MessageMetadata {
   stateVersion?: number;
   messageEmotion?: ShannonMessageEmotion;
   taskDecision?: ShannonTaskDecision;
+  artifacts?: readonly ShannonGeneratedArtifact[];
 }
 
 interface ThreadRow {
@@ -655,6 +656,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
           stateVersion: context.capturedStateVersion,
           messageEmotion: context.messageEmotion,
           ...(context.taskDecision ? { taskDecision: context.taskDecision } : {}),
+          ...(context.artifacts?.length ? { artifacts: context.artifacts } : {}),
         } satisfies MessageMetadata) : null,
       );
       this.insertEvent(scopeKey, 'turn.completed', observedAt, payload, turnId);
@@ -1374,6 +1376,9 @@ function freezeStoredMessage(row: MessageRow): StoredConversationMessage {
     ...(metadata?.messageEmotion ? { messageEmotion: Object.freeze({ ...metadata.messageEmotion }) } : {}),
     ...(metadata?.stateVersion !== undefined ? { stateVersion: metadata.stateVersion } : {}),
     ...(metadata?.taskDecision ? { taskDecision: Object.freeze({ ...metadata.taskDecision }) } : {}),
+    ...(metadata?.artifacts?.length ? {
+      artifacts: Object.freeze(metadata.artifacts.map(artifact => Object.freeze({ ...artifact }))),
+    } : {}),
   });
 }
 
@@ -1385,7 +1390,26 @@ function parseMessageMetadata(raw: string): MessageMetadata | null {
     ...(Number.isSafeInteger(row.stateVersion) ? { stateVersion: row.stateVersion } : {}),
     ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: row.messageEmotion } : {}),
     ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),
+    ...(validGeneratedArtifacts(row.artifacts) ? { artifacts: row.artifacts } : {}),
   };
+}
+
+function validGeneratedArtifacts(value: unknown): value is readonly ShannonGeneratedArtifact[] {
+  if (!Array.isArray(value) || value.length > 2) return false;
+  let totalCharacters = 0;
+  return value.every(candidate => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+    const row = candidate as Partial<ShannonGeneratedArtifact>;
+    totalCharacters += typeof row.content === 'string' ? row.content.length : 0;
+    return typeof row.name === 'string'
+      && row.name.length > 0 && row.name.length <= 120
+      && !/[\\/\u0000-\u001F\u007F]/u.test(row.name)
+      && typeof row.mimeType === 'string'
+      && ['text/plain', 'text/markdown', 'application/json', 'text/csv', 'text/x-source-code'].includes(row.mimeType)
+      && typeof row.content === 'string' && row.content.length <= 12_000
+      && totalCharacters <= 18_000
+      && (row.summary === undefined || (typeof row.summary === 'string' && row.summary.length <= 160));
+  });
 }
 
 function validTaskDecision(value: unknown): value is ShannonTaskDecision {

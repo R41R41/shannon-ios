@@ -6,10 +6,18 @@ class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
+  webSources: Array<{ title: string; url: string }> = [];
+  artifacts: Array<{ name: string; mimeType: string; content: string; summary?: string }> = [];
 
   async generate(request: ShannonChatModelRequest) {
     this.requests.push(request);
-    return { mode: this.mode, model: this.model, reply: `返答${this.requests.length}` };
+    return {
+      mode: this.mode,
+      model: this.model,
+      reply: `返答${this.requests.length}`,
+      ...(this.webSources.length ? { webSources: this.webSources } : {}),
+      ...(this.artifacts.length ? { artifacts: this.artifacts } : {}),
+    };
   }
 }
 
@@ -85,6 +93,119 @@ describe('Shannon local API kernel', () => {
       { role: 'assistant', content: '返答1' },
     ]);
     expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v1]');
+  });
+
+  it('returns generated artifacts and restores them with conversation history', async () => {
+    const model = new RecordingChatModel();
+    model.artifacts = [{
+      name: 'plan.md', mimeType: 'text/markdown', content: '# Plan\n', summary: '実装計画',
+    }];
+    const api = createLocalApiKernel(
+      () => '2026-09-08T00:00:00.000Z',
+      { chatModel: model },
+    );
+
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: 'Markdownにして' },
+    });
+    const threadId = (response.body as { threadId: string }).threadId;
+    const history = await api.dispatch({
+      method: 'GET', path: '/v1/conversation',
+      query: new URLSearchParams({ scopeKey: 'owner-a', threadId }),
+    });
+
+    expect(response).toMatchObject({ status: 200, body: { artifacts: model.artifacts } });
+    expect(history).toMatchObject({
+      status: 200,
+      body: { messages: [
+        { role: 'user' },
+        { role: 'assistant', artifacts: model.artifacts },
+      ] },
+    });
+  });
+
+  it('passes text attachments as separate untrusted reference material without persisting their contents', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-07T03:00:00.000Z',
+      { chatModel: model },
+    );
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a',
+        message: 'この資料を要約して。\n\n📎 notes.md',
+        attachments: [{ name: 'notes.md', mimeType: 'text/markdown', text: '非公開の本文TOKEN-123' }],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(model.requests[0]?.attachments).toEqual([
+      { name: 'notes.md', mimeType: 'text/markdown', text: '非公開の本文TOKEN-123' },
+    ]);
+    expect(model.requests[0]?.message).toContain('📎 notes.md');
+
+    const history = await api.dispatch({
+      method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    });
+    expect(JSON.stringify(history.body)).toContain('📎 notes.md');
+    expect(JSON.stringify(history.body)).not.toContain('TOKEN-123');
+  });
+
+  it('rejects binary-like, unsupported, or oversized chat attachments before calling the model', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(() => '2026-09-07T03:00:00.000Z', { chatModel: model });
+
+    const invalid = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: '見て',
+        attachments: [{ name: 'payload.bin', mimeType: 'application/octet-stream', text: 'x\0y' }],
+      },
+    });
+    const oversized = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: '見て',
+        attachments: [{ name: 'large.txt', mimeType: 'text/plain', text: 'x'.repeat(24_001) }],
+      },
+    });
+
+    expect(invalid).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } });
+    expect(oversized).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } });
+    expect(model.requests).toEqual([]);
+  });
+
+  it('enables web search explicitly and persists a Markdown source section', async () => {
+    const model = new RecordingChatModel();
+    model.webSources = [{ title: 'OpenAI公式', url: 'https://openai.com/news/' }];
+    const api = createLocalApiKernel(() => '2026-09-08T00:00:00.000Z', { chatModel: model });
+
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: '最新情報を調べて', webSearch: true,
+      },
+    });
+
+    expect(model.requests[0]?.useWebSearch).toBe(true);
+    expect(response).toMatchObject({ status: 200, body: {
+      reply: expect.stringContaining('### 参照した情報源\n- [OpenAI公式](https://openai.com/news/)'),
+    } });
+    const history = await api.dispatch({
+      method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    });
+    expect(JSON.stringify(history.body)).toContain('https://openai.com/news/');
+  });
+
+  it('rejects non-boolean web search flags before calling the model', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(() => '2026-09-08T00:00:00.000Z', { chatModel: model });
+
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: '調べて', webSearch: 'yes',
+      },
+    });
+
+    expect(response).toMatchObject({ status: 400, body: { error: 'BAD_REQUEST' } });
+    expect(model.requests).toEqual([]);
   });
 
   it('renames a thread and exposes the saved title in the thread list', async () => {

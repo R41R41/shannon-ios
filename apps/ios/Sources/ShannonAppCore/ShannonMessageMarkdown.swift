@@ -5,8 +5,8 @@ import Foundation
 /// Markdown links and bare web addresses are intentionally limited to HTTP(S).
 /// This keeps message content from invoking custom URL schemes when SwiftUI opens
 /// a link, while still allowing ordinary external web pages to be opened.
-enum ShannonMessageMarkdown {
-    enum Block: Equatable {
+public enum ShannonMessageMarkdown {
+    public enum Block: Equatable {
         case heading(level: Int, text: String)
         case bullet(String)
         case numbered(marker: String, text: String)
@@ -21,7 +21,7 @@ enum ShannonMessageMarkdown {
         options: [.caseInsensitive]
     )
 
-    static func render(_ source: String) -> AttributedString {
+    public static func render(_ source: String) -> AttributedString {
         var text = (try? AttributedString(
             markdown: source,
             options: .init(
@@ -63,7 +63,7 @@ enum ShannonMessageMarkdown {
         return text
     }
 
-    static func blocks(from source: String) -> [Block] {
+    public static func blocks(from source: String) -> [Block] {
         var result: [Block] = []
         var paragraphLines: [String] = []
         var codeLines: [String] = []

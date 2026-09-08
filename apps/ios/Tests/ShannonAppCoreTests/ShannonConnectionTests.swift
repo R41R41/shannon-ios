@@ -67,6 +67,87 @@ final class ShannonConnectionTests: XCTestCase {
         _ = try await client.send(message: "こんにちは", scopeKey: "untrusted-client-scope")
     }
 
+    func testConnectionVerificationUsesStoredCredentialWithoutExposingIt() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "k", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "mac-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test Mac",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://shannon.example/companion/v1/threads?scopeKey=owner-from-server"
+            )
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            return try response(url: request.url!, json: ["threads": []])
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        let verified = await model.verifyConnection()
+        XCTAssertTrue(verified)
+        XCTAssertEqual(model.status, .connected(deviceName: "Test Mac"))
+        XCTAssertEqual(model.verificationLabel, "通信確認済み")
+        guard case .verified = model.verificationStatus else {
+            return XCTFail("Successful authenticated request must be visible as verified")
+        }
+    }
+
+    func testConnectionVerificationRemovesRevokedCredential() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: String(repeating: "r", count: 43),
+            deviceID: "revoked-device",
+            scopeKey: "owner-from-server",
+            displayName: "Revoked Mac",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            let rejected = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["content-type": "application/json"]
+            ))
+            return (rejected, Data("{}".utf8))
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        let verified = await model.verifyConnection()
+        XCTAssertFalse(verified)
+        XCTAssertNil(try store.load())
+        guard case .failed(let message) = model.verificationStatus else {
+            return XCTFail("Revoked credential must be shown as a verification failure")
+        }
+        XCTAssertTrue(message.contains("無効"))
+    }
+
+    func testAPIClientSendsWebSearchOnlyWhenExplicitlyEnabled() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let session = stubSession { request in
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["message"] as? String, "今日の情報を調べて")
+            XCTAssertEqual(json["webSearch"] as? Bool, true)
+            return try response(url: request.url!, json: chatResponseJSON())
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, session: session)
+
+        _ = try await client.send(
+            message: "今日の情報を調べて",
+            scopeKey: "local-owner",
+            threadId: nil,
+            attachments: [],
+            webSearch: true
+        )
+    }
+
     func testAPIClientUploadsVoiceFileWithPairedDeviceCredential() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "v", count: 43)

@@ -10,7 +10,7 @@ import type { ConversationStore } from './conversationStore.js';
 import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
-import type { ShannonTaskDecision } from './chatModel.js';
+import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
 
 export interface CompletedTurn {
   threadTitle?: string;
@@ -21,6 +21,7 @@ export interface CompletedTurn {
   shannonReply: string;
   messageEmotion: ShannonMessageEmotion;
   taskDecision?: ShannonTaskDecision;
+  artifacts?: readonly ShannonGeneratedArtifact[];
   completedAt: string;
 }
 
@@ -110,6 +111,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
         capturedStateVersion: turn.capturedState.version,
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
+        ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
       },
     );
   }
@@ -160,6 +162,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
         capturedStateVersion: turn.capturedState.version,
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
+        ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
       },
     );
   }

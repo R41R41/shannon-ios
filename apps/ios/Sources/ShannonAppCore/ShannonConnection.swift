@@ -102,6 +102,7 @@ public enum ShannonConnectionError: Error, Equatable, LocalizedError {
     case invalidResponse
     case rejected(status: Int)
     case expiredCredential
+    case revokedCredential
     case invalidStoredCredential
     case keychain(OSStatus)
 
@@ -123,10 +124,16 @@ public enum ShannonConnectionError: Error, Equatable, LocalizedError {
             "サーバーに接続できませんでした（HTTP \(status)）。"
         case .expiredCredential:
             "接続の有効期限が切れました。もう一度接続してください。"
+        case .revokedCredential:
+            "この端末の接続は無効になりました。もう一度接続してください。"
         case .invalidStoredCredential:
             "保存された接続情報を読み取れませんでした。"
         case .keychain:
+#if os(macOS)
+            "MacのKeychainへ接続情報を保存できませんでした。"
+#else
             "iPhoneのKeychainへ接続情報を保存できませんでした。"
+#endif
         }
     }
 }
@@ -138,10 +145,18 @@ public enum ShannonConnectionStatus: Equatable, Sendable {
     case failed(message: String)
 }
 
+public enum ShannonConnectionVerificationStatus: Equatable, Sendable {
+    case idle
+    case checking
+    case verified(at: Date)
+    case failed(message: String)
+}
+
 @MainActor
 @Observable
 public final class ShannonConnectionModel {
     public private(set) var status: ShannonConnectionStatus = .disconnected
+    public private(set) var verificationStatus: ShannonConnectionVerificationStatus = .idle
 
     public let baseURL: URL
     private let store: any ShannonConnectionStoreProtocol
@@ -175,7 +190,17 @@ public final class ShannonConnectionModel {
         }
     }
 
+    public var verificationLabel: String {
+        switch verificationStatus {
+        case .idle: "未確認"
+        case .checking: "確認中…"
+        case .verified: "通信確認済み"
+        case .failed: "通信確認に失敗"
+        }
+    }
+
     public func refreshFromKeychain() {
+        verificationStatus = .idle
         do {
             guard let credential = try store.load(), credential.baseURL == baseURL else {
                 status = .disconnected
@@ -248,11 +273,76 @@ public final class ShannonConnectionModel {
             )
             try store.save(credential)
             status = .connected(deviceName: paired.displayName)
+            verificationStatus = .idle
             return true
         } catch {
             status = .failed(message: userMessage(for: error))
             return false
         }
+    }
+
+    @discardableResult
+    public func verifyConnection() async -> Bool {
+        guard !isVerifying else { return false }
+        let credential: ShannonConnectionCredential
+        do {
+            guard let stored = try store.load(), stored.baseURL == baseURL else {
+                status = .disconnected
+                verificationStatus = .failed(message: "接続情報がありません。")
+                return false
+            }
+            guard stored.expiresAt > Date() else {
+                try store.delete()
+                status = .failed(message: ShannonConnectionError.expiredCredential.localizedDescription)
+                verificationStatus = .failed(message: ShannonConnectionError.expiredCredential.localizedDescription)
+                return false
+            }
+            credential = stored
+        } catch {
+            let message = userMessage(for: error)
+            status = .failed(message: message)
+            verificationStatus = .failed(message: message)
+            return false
+        }
+
+        verificationStatus = .checking
+        do {
+            var components = URLComponents(
+                url: baseURL.appending(path: "/v1/threads"),
+                resolvingAgainstBaseURL: false
+            )
+            components?.queryItems = [URLQueryItem(name: "scopeKey", value: credential.scopeKey)]
+            guard let url = components?.url else { throw ShannonConnectionError.invalidResponse }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 15
+            request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw ShannonConnectionError.invalidResponse }
+            if http.statusCode == 401 {
+                try store.delete()
+                throw ShannonConnectionError.revokedCredential
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                throw ShannonConnectionError.rejected(status: http.statusCode)
+            }
+            _ = try JSONDecoder().decode(ThreadListResponseDTO.self, from: data)
+            status = .connected(deviceName: credential.displayName)
+            verificationStatus = .verified(at: Date())
+            return true
+        } catch {
+            let message = userMessage(for: error)
+            if (error as? ShannonConnectionError) == .revokedCredential {
+                status = .failed(message: message)
+            }
+            verificationStatus = .failed(message: message)
+            return false
+        }
+    }
+
+    public var isVerifying: Bool {
+        if case .checking = verificationStatus { return true }
+        return false
     }
 
     public static func pairingCode(from url: URL) -> String? {
@@ -274,6 +364,7 @@ public final class ShannonConnectionModel {
         do {
             try store.delete()
             status = .disconnected
+            verificationStatus = .idle
         } catch {
             status = .failed(message: userMessage(for: error))
         }

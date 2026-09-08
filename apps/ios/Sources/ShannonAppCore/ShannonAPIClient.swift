@@ -2,6 +2,19 @@ import Foundation
 
 public protocol ShannonAPIClientProtocol: Sendable {
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO]
+    ) async throws -> ChatResponseDTO
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool
+    ) async throws -> ChatResponseDTO
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
     func createRealtimeVoiceCall(scopeKey: String, threadId: String?, offerSDP: String) async throws -> ShannonRealtimeVoiceCallDTO
     func commitRealtimeVoiceTurn(
@@ -45,6 +58,32 @@ public protocol ShannonAPIClientProtocol: Sendable {
 }
 
 public extension ShannonAPIClientProtocol {
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO]
+    ) async throws -> ChatResponseDTO {
+        guard attachments.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return try await send(message: message, scopeKey: scopeKey, threadId: threadId)
+    }
+
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool
+    ) async throws -> ChatResponseDTO {
+        guard !webSearch else { throw ShannonAPIError.invalidResponse }
+        return try await send(
+            message: message,
+            scopeKey: scopeKey,
+            threadId: threadId,
+            attachments: attachments
+        )
+    }
+
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO {
         throw ShannonAPIError.invalidResponse
     }
@@ -166,6 +205,31 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
     }
 
     public func send(message: String, scopeKey: String, threadId: String? = nil) async throws -> ChatResponseDTO {
+        try await send(message: message, scopeKey: scopeKey, threadId: threadId, attachments: [], webSearch: false)
+    }
+
+    public func send(
+        message: String,
+        scopeKey: String,
+        threadId: String? = nil,
+        attachments: [ShannonChatAttachmentDTO]
+    ) async throws -> ChatResponseDTO {
+        try await send(
+            message: message,
+            scopeKey: scopeKey,
+            threadId: threadId,
+            attachments: attachments,
+            webSearch: false
+        )
+    }
+
+    public func send(
+        message: String,
+        scopeKey: String,
+        threadId: String? = nil,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool
+    ) async throws -> ChatResponseDTO {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/chat"))
         request.httpMethod = "POST"
@@ -174,7 +238,9 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         request.httpBody = try JSONEncoder().encode(ChatRequestDTO(
             scopeKey: connection?.scopeKey ?? scopeKey,
             message: message,
-            threadId: threadId
+            threadId: threadId,
+            attachments: attachments,
+            webSearch: webSearch
         ))
 
         let (data, response) = try await session.data(for: request)

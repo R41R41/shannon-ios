@@ -155,6 +155,66 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertTrue(model.messages.isEmpty)
     }
 
+    func testAttachmentOnlyTurnUsesVisibleFileNameAndSeparateAttachmentPayload() async {
+        let client = AttachmentClient()
+        let model = ShannonConversationModel(client: client)
+        let attachment = ShannonChatAttachmentDTO(
+            name: "plan.md",
+            mimeType: "text/markdown",
+            text: "# 非公開の計画"
+        )
+
+        await model.sendDraft(attachments: [attachment])
+
+        let captured = await client.captured
+        XCTAssertEqual(captured?.attachments, [attachment])
+        XCTAssertEqual(captured?.message, "この添付資料を確認してください。\n\n📎 plan.md")
+        XCTAssertEqual(model.messages.first?.text, captured?.message)
+        XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
+    }
+
+    func testWebSearchTurnUsesExplicitFlagWithoutChangingVisibleMessage() async {
+        let client = AttachmentClient()
+        let model = ShannonConversationModel(client: client)
+        model.draft = "今日のOpenAI情報を調べて"
+
+        await model.sendDraft(webSearch: true)
+
+        let captured = await client.captured
+        XCTAssertEqual(captured?.message, "今日のOpenAI情報を調べて")
+        XCTAssertEqual(captured?.webSearch, true)
+        XCTAssertEqual(model.messages.first?.text, "今日のOpenAI情報を調べて")
+    }
+
+    func testGeneratedArtifactsRemainAttachedToTheAssistantReply() async {
+        let artifact = ShannonGeneratedArtifactDTO(
+            name: "plan.md",
+            mimeType: "text/markdown",
+            content: "# Plan\n",
+            summary: "実装計画"
+        )
+        let model = ShannonConversationModel(client: StubClient(
+            response: TestFixtures.chatResponse(reply: "用意したよ", artifacts: [artifact])
+        ))
+        model.draft = "Markdownファイルにして"
+
+        await model.sendDraft()
+
+        XCTAssertEqual(model.messages.last?.role, .shannon)
+        XCTAssertEqual(model.messages.last?.artifacts, [artifact])
+    }
+
+    func testGeneratedArtifactFilenameCannotEscapeTheChosenFolder() {
+        XCTAssertEqual(
+            ShannonGeneratedArtifact.safeFilename("../unsafe/plan", mimeType: "text/markdown"),
+            "..-unsafe-plan.md"
+        )
+        XCTAssertEqual(
+            ShannonGeneratedArtifact.safeFilename("   ", mimeType: "application/json"),
+            "shannon-artifact.json"
+        )
+    }
+
     func testEachReplyKeepsItsExpressionSnapshot() async {
         let client = SequenceClient(results: [
             .success(TestFixtures.chatResponse(version: 1, reply: "それは嬉しい", expression: .joyful)),
@@ -571,12 +631,48 @@ private actor InitiativeClient: ShannonAPIClientProtocol {
     }
 }
 
+private actor AttachmentClient: ShannonAPIClientProtocol {
+    struct Captured: Sendable {
+        let message: String
+        let attachments: [ShannonChatAttachmentDTO]
+        let webSearch: Bool
+    }
+
+    private(set) var captured: Captured?
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse()
+    }
+
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO]
+    ) async throws -> ChatResponseDTO {
+        captured = Captured(message: message, attachments: attachments, webSearch: false)
+        return TestFixtures.chatResponse(reply: "資料を確認したよ")
+    }
+
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool
+    ) async throws -> ChatResponseDTO {
+        captured = Captured(message: message, attachments: attachments, webSearch: webSearch)
+        return TestFixtures.chatResponse(reply: "資料を確認したよ")
+    }
+}
+
 private enum TestFixtures {
     static func chatResponse(
         version: Int = 0,
         reply: String = "ok",
         expression: ShannonExpressionDTO = .calm,
-        thread: ChatThreadDTO? = nil
+        thread: ChatThreadDTO? = nil,
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil
     ) -> ChatResponseDTO {
         ChatResponseDTO(
             mode: "local-stub",
@@ -591,6 +687,7 @@ private enum TestFixtures {
             ),
             systemPrompt: "prompt",
             state: state(version: version),
+            artifacts: artifacts,
             thread: thread
         )
     }

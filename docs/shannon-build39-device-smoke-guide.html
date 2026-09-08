@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 39 — iPhone確認ガイド</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --presence: #0e92ef;
+      --action: #1769aa;
+      --bg: #f7fafc;
+      --surface: rgba(255,255,255,.88);
+      --text: #12202e;
+      --muted: #5f6f7e;
+      --line: rgba(14,146,239,.20);
+      --good: #087a55;
+      --warn: #9a5b00;
+      --shadow: 0 18px 50px rgba(16,54,84,.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #071019;
+        --surface: rgba(15,29,42,.88);
+        --text: #edf7ff;
+        --muted: #a7b7c5;
+        --line: rgba(65,174,255,.24);
+        --good: #67d7ac;
+        --warn: #ffc56a;
+        --shadow: 0 18px 60px rgba(0,0,0,.32);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(14,146,239,.16), transparent 34rem),
+        var(--bg);
+      line-height: 1.65;
+    }
+    main { width: min(920px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 80px; }
+    .eyebrow { color: var(--presence); font-weight: 750; letter-spacing: .08em; font-size: .78rem; }
+    h1 { margin: 8px 0 10px; font-size: clamp(2rem, 7vw, 4.4rem); line-height: 1.03; letter-spacing: -.045em; }
+    .lead { margin: 0; max-width: 680px; color: var(--muted); font-size: 1.06rem; }
+    .status {
+      display: inline-flex; align-items: center; gap: 8px; margin-top: 22px;
+      padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--surface); color: var(--good); font-weight: 700;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 5px color-mix(in srgb, var(--good) 15%, transparent); }
+    .grid { display: grid; gap: 16px; margin-top: 34px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 24px; box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+    h2 { margin: 0 0 14px; font-size: 1.18rem; letter-spacing: -.015em; }
+    ol, ul { margin: 0; padding-left: 1.3rem; }
+    li + li { margin-top: 10px; }
+    .step { display: grid; grid-template-columns: 38px 1fr; gap: 13px; align-items: start; }
+    .step + .step { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .number { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--action); color: #fff; font-weight: 800; }
+    .step b { display: block; margin-bottom: 3px; }
+    code { padding: .15em .42em; border-radius: 7px; color: var(--action); background: color-mix(in srgb, var(--presence) 10%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 31px; }
+    .checklist li::before { content: "○"; position: absolute; left: 0; top: -.08em; color: var(--presence); font-size: 1.2rem; font-weight: 800; }
+    .warning { border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+    .warning h2 { color: var(--warn); }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; color: var(--muted); font-size: .84rem; }
+    .meta span { border: 1px solid var(--line); padding: 6px 9px; border-radius: 999px; }
+    @media (min-width: 760px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">SHANNON INTERNAL · DEVICE GATE</div>
+    <h1>Build 39を<br>iPhoneで確認</h1>
+    <p class="lead">Clear Signalの新しいTalk画面を確認しながら、既存の会話・接続・Realtime音声がアップデート後も保たれていることを確かめます。</p>
+    <div class="status"><span class="dot"></span>TestFlight内部配信まで完了</div>
+
+    <section class="grid two">
+      <article class="card">
+        <h2>目的</h2>
+        <ul>
+          <li>Build 39が同じShannonとして安全に更新される</li>
+          <li>保存済みデータとAzure接続が維持される</li>
+          <li>新しいApp ShellとTalkの操作感を実機で評価できる</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>今回の配信</h2>
+        <ul>
+          <li>Version <code>0.1.0</code> / Build <code>39</code></li>
+          <li>Commit <code>ed10a63</code></li>
+          <li>配布先 <code>Shannon Internal</code></li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>更新手順</h2>
+        <div class="step"><span class="number">1</span><div><b>TestFlightを開く</b>Shannonのページを下へ引いて更新し、Build 39の「アップデート」を押します。</div></div>
+        <div class="step"><span class="number">2</span><div><b>上書き更新する</b>ホーム画面から削除せず、そのままアップデートします。これが既存データ維持の正しい確認方法です。</div></div>
+        <div class="step"><span class="number">3</span><div><b>Shannonを起動する</b>最初の画面がTalkになり、上部にメニュー・現在のトーク名・新規トークが並ぶことを確認します。</div></div>
+      </article>
+
+      <article class="card">
+        <h2>成功チェック</h2>
+        <ul class="checklist">
+          <li>以前のトークと会話内容が残っている</li>
+          <li>シャノンへ短いメッセージを送り、返答できる</li>
+          <li>上部が「メニュー／現在のトーク名／新規トーク」の構成になっている</li>
+          <li>メニューがスライドして現れ、「トーク一覧・頭の中・作業・設定」を開ける</li>
+          <li>シャノンの表情アイコンが以前より少し大きい</li>
+          <li>ユーザー発言が淡い青の吹き出しで表示される</li>
+          <li>ライト／ダークの両方で文字が読みやすく、Clear Signalの青が自然に見える</li>
+          <li>Realtime音声を一度だけ短く開始し、接続・発話字幕・返答音声が動く</li>
+        </ul>
+      </article>
+
+      <article class="card warning">
+        <h2>うまくいかない時</h2>
+        <ul>
+          <li><b>Build 39が見えない：</b>TestFlightを終了して開き直すか、数分待ってページを再更新します。</li>
+          <li><b>会話や接続が消えた：</b>アプリを削除・再接続せず、その画面で止めて状況を教えてください。</li>
+          <li><b>Realtime音声が失敗：</b>設定の音声診断からログをコピーしてください。音声・本文・鍵は記録されません。</li>
+          <li><b>表示崩れ：</b>個人的な会話本文を隠したスクリーンショットと、ライト／ダークのどちらかを教えてください。</li>
+        </ul>
+      </article>
+    </section>
+
+    <div class="meta">
+      <span>Archive ✓</span><span>Upload ✓</span><span>Processing ✓</span><span>Assignment ✓</span><span>Install 待ち</span><span>Smoke 待ち</span>
+    </div>
+  </main>
+</body>
+</html>

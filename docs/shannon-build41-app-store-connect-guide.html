@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 41 — App Store ConnectからTestFlight配信</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#0e92ef; --deep:#0868b8; --ink:#10212d; --muted:#637887; --card:rgba(255,255,255,.88); --line:rgba(14,146,239,.2); }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif; color:var(--ink); background:linear-gradient(180deg,#dff3ff 0,#f7fbfe 34%,#fff 100%); line-height:1.65; }
+    main { width:min(780px,calc(100% - 32px)); margin:auto; padding:48px 0 72px; }
+    .hero { padding:30px; border-radius:28px; color:#fff; background:linear-gradient(135deg,var(--blue),var(--deep)); box-shadow:0 18px 50px rgba(14,146,239,.24); }
+    h1 { margin:0 0 8px; font-size:clamp(28px,6vw,44px); line-height:1.14; }
+    .hero p { margin:0; opacity:.9; }
+    .status { display:inline-flex; margin-top:20px; padding:8px 13px; border-radius:999px; background:rgba(255,255,255,.18); font-weight:700; }
+    section { margin-top:20px; padding:24px; border:1px solid var(--line); border-radius:24px; background:var(--card); box-shadow:0 10px 32px rgba(23,60,82,.07); }
+    h2 { margin:0 0 12px; font-size:21px; }
+    ol, ul { margin:8px 0 0; padding-left:1.35em; }
+    li + li { margin-top:10px; }
+    .check { list-style:none; padding:0; }
+    .check li { padding:12px 14px 12px 42px; position:relative; border-radius:14px; background:rgba(14,146,239,.07); }
+    .check li::before { content:"✓"; position:absolute; left:15px; color:var(--blue); font-weight:800; }
+    .warn { border-left:4px solid var(--blue); padding-left:18px; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:rgba(14,146,239,.09); padding:.12em .38em; border-radius:6px; }
+    .small { color:var(--muted); font-size:14px; }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#f1f8fc; --muted:#9cb0bd; --card:rgba(14,29,39,.9); --line:rgba(80,184,255,.24); }
+      body { background:linear-gradient(180deg,#071f2e 0,#06131c 38%,#03090d 100%); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <h1>Shannon Build 41</h1>
+    <p>App Store ConnectでApple側の処理を確認し、Shannon Internalへ安全に配信します。</p>
+    <div class="status">GitHub main送信済み · Apple側確認はユーザー対応</div>
+  </div>
+
+  <section>
+    <h2>目的と現在地</h2>
+    <p>確定commit <code>b37423d</code> はGitHubの<code>main</code>へ送信済みです。API 172件、iOS 84件、Debug／ReleaseのiPhone向けビルドも成功しています。ここから先のApp Store Connect操作だけを行います。</p>
+  </section>
+
+  <section>
+    <h2>1. Xcode CloudのBuild 41を確認</h2>
+    <ol>
+      <li>App Store Connectで<strong>Shannon</strong>を開きます。</li>
+      <li><strong>Xcode Cloud</strong>を開き、最新の実行を選びます。</li>
+      <li>対象が<strong>Build 41</strong>で、ソースのcommitが<code>b37423d</code>から始まることを確認します。</li>
+      <li>ArchiveとUploadが完了するまで待ちます。進行中なら追加実行や再送信はしません。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>2. TestFlightのApple処理を確認</h2>
+    <ol>
+      <li>Shannonの<strong>TestFlight → iOS</strong>を開きます。</li>
+      <li><code>0.1.0 (41)</code>が表示されるまで待ちます。</li>
+      <li>「処理中」の場合は、そのままAppleの処理完了を待ちます。</li>
+      <li>Build 41を開き、輸出コンプライアンスなどの確認が表示された場合だけ、既存Buildと同じShannonの回答方針で完了します。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>3. Shannon Internalへ追加</h2>
+    <ol>
+      <li>Build 41の<strong>グループ</strong>または<strong>テスター</strong>欄を開きます。</li>
+      <li>内部グループ<strong>Shannon Internal</strong>を追加します。</li>
+      <li>ステータスが<strong>テスト中</strong>になり、Shannon InternalにBuild 41が表示されることを確認します。</li>
+    </ol>
+    <p class="small">外部テスト、App Store審査、公開配信は今回の対象ではありません。</p>
+  </section>
+
+  <section>
+    <h2>4. iPhoneで更新</h2>
+    <ol>
+      <li>iPhoneで<strong>TestFlight → Shannon</strong>を開きます。</li>
+      <li><strong>アップデート</strong>を押します。</li>
+      <li>Shannonの設定やTestFlightの表示で<code>0.1.0 (41)</code>を確認します。</li>
+    </ol>
+    <p class="small"><strong>Shannonを削除しないでください。</strong>既存の会話・接続情報を保ったまま上書き更新します。</p>
+  </section>
+
+  <section>
+    <h2>成功の目安</h2>
+    <ul class="check">
+      <li>Xcode CloudのBuild 41でArchiveとUploadが成功している</li>
+      <li>TestFlightのBuild 41でApple処理が完了している</li>
+      <li>Build 41がShannon Internalに割り当てられている</li>
+      <li>iPhoneのTestFlightからBuild 41へ更新できる</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>更新後の簡易確認</h2>
+    <ul class="check">
+      <li>既存のトーク、会話履歴、シャノンへの接続が維持されている</li>
+      <li>Talk本文が画面の上下端まで続き、時刻・ホーム表示はグラデーションで読める</li>
+      <li>入力欄が文字量に合わせて広がり、送信できる</li>
+      <li>見出し、箇条書き、引用、コードがMarkdownとして読みやすく表示される</li>
+      <li>返信のコピーができる</li>
+      <li>画面左側から右へスワイプするとサイドバーが開く</li>
+      <li>ライブ音声が接続でき、字幕・音声返答・履歴保存が保たれている</li>
+    </ul>
+  </section>
+
+  <section class="warn">
+    <h2>うまくいかない場合</h2>
+    <ul>
+      <li>Build 41がない：Xcode Cloudで実行中か失敗かを確認し、同じビルドを重複起動しないでください。</li>
+      <li>TestFlightが「処理中」：通常は待つだけです。数分後に再読込します。</li>
+      <li>Shannon Internalに追加できない：Build 41のApple処理完了と、内部グループを選んでいることを確認します。</li>
+      <li>iPhoneに更新が出ない：TestFlightを下へ引いて再読込し、数分待ちます。</li>
+      <li>失敗表示がある：画面、Build番号、表示された文言をそのまま共有してください。Shannonは削除しません。</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

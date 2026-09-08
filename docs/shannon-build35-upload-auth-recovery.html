@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 35 — Appleアップロード認証の安全な復旧</title>
+  <style>
+    :root { color-scheme: light dark; --blue:#65c9ed; --ink:#14212a; --muted:#667782; --card:#ffffff; --bg:#f4f9fc; --line:#d8e8f0; --ok:#16794b; --warn:#a65b00; }
+    @media (prefers-color-scheme: dark) { :root { --ink:#edf7fb; --muted:#a9bdc7; --card:#162229; --bg:#0d151a; --line:#2d4652; --ok:#6ed7a4; --warn:#ffc16d; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; }
+    main { max-width:920px; margin:auto; padding:36px 20px 64px; }
+    h1 { font-size:clamp(28px,5vw,46px); line-height:1.15; margin:0 0 12px; }
+    h2 { margin:34px 0 12px; font-size:22px; }
+    p { margin:8px 0; }
+    .lead { color:var(--muted); font-size:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:20px; margin:16px 0; box-shadow:0 12px 28px rgba(31,95,120,.08); }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:16px; }
+    .step { min-height:110px; padding:14px; border-radius:16px; background:color-mix(in srgb,var(--blue) 15%,var(--card)); border:1px solid var(--line); }
+    .step b { display:block; font-size:13px; color:var(--muted); margin-bottom:5px; }
+    .ok { color:var(--ok); font-weight:700; }
+    .warn { color:var(--warn); font-weight:700; }
+    code { background:color-mix(in srgb,var(--blue) 12%,var(--card)); padding:.12em .35em; border-radius:6px; }
+    ul,ol { padding-left:1.25em; }
+    @media (max-width:720px) { .flow { grid-template-columns:1fr; } .step { min-height:0; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Build 35のAppleアップロードを安全に復旧する</h1>
+  <p class="lead">Xcode Cloudのビルド失敗ではありません。ArchiveとApp Store向け書き出しは完了しており、Apple側への最後の受け渡し認証だけが失敗しています。</p>
+
+  <section class="card">
+    <h2>判明したこと</h2>
+    <ul>
+      <li class="ok">Realtime音声実装、WebRTC、署名、Archive、IPA書き出しは正常です。</li>
+      <li>Build 34とClean Build 35は、どちらもXcode CloudのSession Proxy認証で同じ停止をしました。</li>
+      <li>Macにある旧API鍵は、Azureの現行配布鍵とは別物でした。そのためMacからの直接検証は401になりました。</li>
+      <li class="ok">Azureの現行配布鍵はApple APIへ正常に接続でき、Build 33を照会できています。</li>
+    </ul>
+  </section>
+
+  <h2>今回だけの復旧フロー</h2>
+  <div class="flow">
+    <div class="step"><b>1</b>Azureの現行鍵を暗号化SSHでMacの一時フォルダへ転送</div>
+    <div class="step"><b>2</b>一時鍵を所有者だけが読める<code>0600</code>に固定</div>
+    <div class="step"><b>3</b>取得済みの署名済みBuild 35 IPAをAppleへ検証・送信</div>
+    <div class="step"><b>4</b>Apple ProcessingとShannon Internal割当を監視</div>
+    <div class="step"><b>5</b>一時鍵を削除し、残っていないことを確認</div>
+  </div>
+
+  <section class="card">
+    <h2>ユーザーが行うこと</h2>
+    <ol>
+      <li>Macのロック画面が出ている場合は、通常どおりMacへログインして画面を表示します。</li>
+      <li>Codexへ「ロック解除しました」と返します。</li>
+    </ol>
+    <p>鍵のダウンロード、コピー、ターミナル操作、App Store Connect操作は不要です。ロック解除後の確認とアップロードはCodexが続行します。</p>
+  </section>
+
+  <section class="card">
+    <h2>成功条件</h2>
+    <ol>
+      <li>Appleの事前検証とIPAアップロードが成功する。</li>
+      <li>Build 35が処理済みになり、<strong>Shannon Internal</strong>へ割り当てられる。</li>
+      <li>TestFlightでBuild 35へ更新可能になる。</li>
+      <li>Macの一時フォルダから秘密鍵が削除される。</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>失敗した場合の安全な戻し方</h2>
+    <ul>
+      <li>Build 33は現在のTestFlight版として残るため、既存アプリは壊れません。</li>
+      <li>Azureの本番API、DB、現行配布鍵は変更しません。</li>
+      <li>アップロード成否にかかわらずMacの一時鍵を削除します。</li>
+      <li>認証が拒否された場合は連続再試行せず、Apple側の権限だけを切り分けます。</li>
+    </ul>
+  </section>
+
+  <p class="warn">秘密鍵本体、API key、session、Apple固有IDはログやHTMLへ記録しません。</p>
+</main>
+</body>
+</html>

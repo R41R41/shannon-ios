@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Roadmap v31 — Appearance, Voice, Mac</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --presence:#0e92ef; --action:#0875c9; --ink:#102532; --muted:#617885;
+      --canvas:#f7fbfe; --paper:#fff; --soft:#e9f6fd; --line:#cde8f6;
+      --good:#087a60; --good-bg:#e2f7ef; --warm:#e58a7a;
+      --shadow:0 18px 55px rgba(24,73,101,.10);
+    }
+    *{box-sizing:border-box} html{scroll-behavior:smooth}
+    body{margin:0;background:radial-gradient(circle at 90% -8%,#5cc7ff3d,transparent 34rem),var(--canvas);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","Yu Gothic",sans-serif}
+    main{width:min(1120px,calc(100% - 28px));margin:auto;padding:38px 0 84px}
+    header,section{border:1px solid var(--line);background:color-mix(in srgb,var(--paper) 94%,transparent);box-shadow:var(--shadow)}
+    header{padding:clamp(28px,5vw,54px);border-radius:34px;position:relative;overflow:hidden}
+    header:after{content:"∞";position:absolute;right:-20px;bottom:-128px;font-size:390px;font-weight:900;line-height:1;color:#0e92ef12;pointer-events:none}
+    h1,h2,h3,p{margin-top:0}h1{font-size:clamp(2.45rem,6vw,4.8rem);line-height:1.02;letter-spacing:-.06em;margin:.12em 0 .25em;max-width:900px}h2{font-size:clamp(1.6rem,4vw,2.55rem);line-height:1.16;letter-spacing:-.035em;margin-bottom:14px}h3{font-size:1.07rem;margin:4px 0 7px}
+    .eyebrow{font-size:.74rem;font-weight:900;letter-spacing:.15em;text-transform:uppercase;color:var(--action)}
+    .lead{font-size:1.08rem;max-width:820px;color:var(--muted)}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}.chip,.tag{display:inline-block;padding:6px 11px;border-radius:999px;font-size:.74rem;font-weight:850}.chip{background:var(--soft);border:1px solid var(--line);color:var(--action)}.done{background:var(--good-bg);color:var(--good)}.now{background:#dff2ff;color:#0569b3}.next{background:#eee9ff;color:#5a43aa}.later{background:#eef1f3;color:#53646e}
+    section{padding:clamp(22px,4vw,34px);border-radius:28px;margin-top:18px}
+    .statement{padding:24px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,var(--soft),color-mix(in srgb,var(--paper) 88%,transparent));font-size:clamp(1.18rem,2.4vw,1.75rem);line-height:1.48;letter-spacing:-.022em}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px;margin-top:16px}.card{grid-column:span 4;padding:20px;border:1px solid var(--line);border-radius:20px;background:var(--paper)}.card.wide{grid-column:span 6}.card.full{grid-column:1/-1}.card p,.small{color:var(--muted);font-size:.9rem;margin-bottom:0}
+    .icon-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-top:18px}.mode{padding:20px;border:1px solid var(--line);border-radius:22px;background:var(--paper);position:relative}.mode.recommended{border:2px solid var(--presence);box-shadow:0 12px 35px #0e92ef18}.mode .tag{margin-bottom:9px}.pair{display:flex;gap:10px;margin:14px 0}.appicon{width:66px;height:66px;border-radius:15px;display:grid;place-items:center;font-size:27px;font-weight:900;box-shadow:0 4px 12px #0002;overflow:hidden;position:relative}.appicon:before{content:"∞"}.appicon.light{background:#fff;color:#078ce8;border:1px solid #dcecf5}.appicon.dark{background:#087fe0;color:#fff}.appicon.auto{background:linear-gradient(135deg,#0e92ef,#78d3ff);color:white}.arrow{align-self:center;color:var(--presence);font-weight:900;font-size:18px}
+    .rule{padding:15px 17px;border-left:5px solid var(--presence);border-radius:0 16px 16px 0;background:var(--soft);margin-top:16px}.warning{border-left-color:var(--warm)}
+    .release{display:grid;grid-template-columns:150px 1fr 230px;gap:18px;align-items:start;padding:21px;border:1px solid var(--line);border-radius:21px;background:var(--paper);margin-top:11px}.release.primary{border:2px solid var(--presence);background:color-mix(in srgb,var(--soft) 60%,var(--paper))}.version{font-size:.75rem;font-weight:900;letter-spacing:.09em;color:var(--action)}.gate{padding:10px 12px;border-radius:13px;background:var(--soft);color:var(--action);font-size:.82rem}.release p{margin:5px 0 0;color:var(--muted)}
+    .timeline{display:grid;gap:11px;margin-top:17px}.phase{display:grid;grid-template-columns:115px 1fr 220px;gap:18px;align-items:start;padding:20px;border:1px solid var(--line);border-radius:20px;background:var(--paper)}.phase.active{border:2px solid var(--presence)}
+    ul,ol{padding-left:1.35em}li+li{margin-top:7px}.check{list-style:none;padding:0}.check li{padding:10px 12px 10px 38px;position:relative;border-radius:13px;background:var(--soft)}.check li:before{content:"✓";position:absolute;left:14px;color:var(--good);font-weight:900}
+    details{border:1px solid var(--line);border-radius:16px;background:var(--paper);padding:13px 16px}details+details{margin-top:9px}summary{cursor:pointer;font-weight:800}
+    footer{padding:26px 5px 0;color:var(--muted);font-size:.84rem}a{color:var(--action)}
+    @media(prefers-color-scheme:dark){:root{--ink:#edf7fc;--muted:#9cb3c0;--canvas:#06131b;--paper:#0d202b;--soft:#0b2c3d;--line:#17435a;--good:#70d8b8;--good-bg:#10382f;--shadow:0 18px 55px #0005}.now{background:#0a3650;color:#83d5ff}.next{background:#292441;color:#c4b8ff}.later{background:#1b2931;color:#b4c4cc}.appicon.light{color:#078ce8}.appicon.dark{background:#0d8ceb}}
+    @media(max-width:800px){.card,.card.wide{grid-column:1/-1}.icon-modes{grid-template-columns:1fr}.release,.phase{grid-template-columns:1fr;gap:8px}.gate{margin-top:2px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Shannon roadmap v31 · 2026-09-07</div>
+    <h1>便利さを磨き、<br>声とMacへ進む。</h1>
+    <p class="lead">Build 38でRealtime音声、Build 41〜42で会話UIの刷新と安定化まで到達した。次はアイコンだけの小さな配信にせず、0.3「Voice Identity &amp; Reliability」の最初の完成単位と一緒に進める。</p>
+    <div class="chips"><span class="chip done">Realtime音声・字幕・履歴 完成</span><span class="chip done">Markdown・edge-to-edge UI 実装済み</span><span class="chip now">Build 42 実機確認待ち</span><span class="chip next">NEXT · Voice Identity</span><span class="chip later">Mac Deskを前倒し</span></div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Product outcome</div>
+    <h2>最終的に実現する体験</h2>
+    <div class="statement">iPhoneでは、短い相談も自然な音声会話もすぐ始められる。Macでは、ChatGPTの代わりに長い思考・調査・文章・コードを任せられる。どちらで話しても、同じシャノンが会話・記憶・声・作業の続きを理解している。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Next icon model</div>
+    <h2>アプリアイコンは3つの変更方法にする</h2>
+    <p class="lead">現状のprimary iconのLight／Dark artworkはiPhone本体の外観には追従するが、Shannonアプリ内で選んだ外観には追従しない。次版ではLight／Darkを明示的なalternate iconとしても収録し、アプリ側から切り替える。</p>
+    <div class="icon-modes">
+      <article class="mode">
+        <span class="tag next">人格</span><h3>シャノンに任せる</h3>
+        <div class="pair"><div class="appicon auto"></div><span class="arrow">→</span><div class="appicon dark"></div></div>
+        <p>時刻とシャノンの感情で、既存の表情アイコンへ変化する。現在の自動モードを維持する。</p>
+      </article>
+      <article class="mode recommended">
+        <span class="tag now">追加</span><h3>モードに連動</h3>
+        <div class="pair"><div class="appicon light"></div><span class="arrow">↔</span><div class="appicon dark"></div></div>
+        <p>Shannonの外観がライトならLight、ダークならDark。「端末に合わせる」の場合は、解決された端末外観へ追従する。</p>
+      </article>
+      <article class="mode">
+        <span class="tag later">明示選択</span><h3>自分で選ぶ</h3>
+        <div class="pair"><div class="appicon light"></div><div class="appicon dark"></div></div>
+        <p>「ライト固定」「ダーク固定」と既存の表情アイコンを並べる。画面の外観と無関係に、選んだアイコンを維持する。</p>
+      </article>
+    </div>
+    <div class="rule"><strong>大事な違い：</strong>「モードに連動」はアプリ内の外観設定へ追従する動的選択。「自分で選ぶ」のLight／Darkは外観を変えても固定する明示選択。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Immediate release plan</div>
+    <h2>次の配信をアイコンだけにしない</h2>
+    <article class="release">
+      <div class="version">BUILD 42</div>
+      <div><h3>Stability checkpoint</h3><p>入力欄クラッシュとsystem/light/dark切替を実機で確認する。ここは新機能を混ぜず、現在の修正が本当に安定したかを確定する。</p></div>
+      <div class="gate">完了条件：入力・複数行・3外観・既存会話が実機で正常</div>
+    </article>
+    <article class="release primary">
+      <div class="version">NEXT BUILD</div>
+      <div><h3>Appearance-linked Icon + Voice Identity 1</h3><p>3つのアイコン変更方法、Light／Darkの手動選択、声候補の試聴・選択、次回音声セッションへの反映を一つの「Shannonの見た目と声を選べる」完成単位にする。</p></div>
+      <div class="gate">完了条件：見た目と声を選び、再起動後も保持される</div>
+    </article>
+    <article class="release">
+      <div class="version">FOLLOW-UP</div>
+      <div><h3>Voice Reliability 2</h3><p>再接続、Bluetooth／イヤホン、割り込み、アプリの中断復帰、通信失敗、使用量表示を検証し、毎日使える音声へ仕上げる。</p></div>
+      <div class="gate">完了条件：失敗時の理由と戻り方が分かり、会話を失わない</div>
+    </article>
+    <div class="rule warning"><strong>配信番号について：</strong>Apple側の実際の次番号を正とする。ここでは機能のまとまりを定義し、番号を理由に未完成機能を急いで混ぜない。</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Do not rebuild</div>
+    <h2>すでにあるものは土台として使う</h2>
+    <div class="grid">
+      <article class="card"><span class="tag done">既存</span><h3>Realtime音声</h3><p>WebRTC接続、発話中字幕、返答字幕・音声、割り込み、履歴保存は作り直さない。</p></article>
+      <article class="card"><span class="tag done">既存</span><h3>会話と記憶</h3><p>Azure正本、複数トーク、自動タイトル、感情、知識、日記、端末再接続を流用する。</p></article>
+      <article class="card"><span class="tag done">既存</span><h3>作業と配信</h3><p>永続タスク、承認、Agent Host、GitHub、Release Runner、TestFlight履歴を流用する。</p></article>
+      <article class="card wide"><span class="tag done">既存</span><h3>ChatGPT型の会話面</h3><p>edge-to-edge、Markdown、コピー、可変入力欄、全高ドロワーを基礎にし、状態別UX監査で粗さを直す。</p></article>
+      <article class="card wide"><span class="tag now">不足</span><h3>新たに作るもの</h3><p>声の候補・試聴・同期、Mac native client、検索・添付、プロジェクト文脈、信頼できる再接続と予算UI。</p></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Long-term sequence</div>
+    <h2>長期計画：1.0までの順番</h2>
+    <div class="timeline">
+      <article class="phase"><div class="version">DONE · 0.1</div><div><h3>Companion Foundation</h3><p>会話、記憶、感情、関心、自発通知、作業、遠隔配信、Realtime音声。</p></div><div class="gate">基盤は完成。重複実装しない</div></article>
+      <article class="phase"><div class="version">CLOSING · 0.2</div><div><h3>Usability &amp; Presence</h3><p>新会話UI、Markdown、入力欄、ライト／ダーク、全高ドロワー。Build 42の実機安定確認と、残る主要状態のスクリーンショット監査で閉じる。</p></div><div class="gate">片手で迷わず使え、クラッシュしない</div></article>
+      <article class="phase active"><div class="version">NEXT · 0.3</div><div><h3>Voice Identity &amp; Reliability</h3><p>声の試聴・選択・同期、見た目と声のidentity設定、再接続、イヤホン、割り込み、通信失敗、音声予算。</p></div><div class="gate">日常会話として安心して使える</div></article>
+      <article class="phase"><div class="version">0.4</div><div><h3>Shannon Desk for Mac</h3><p>macOS SwiftUI版。iPhoneと同じ会話・記憶・声・作業へ接続し、広いMarkdown、コード、コピー、検索、添付、キーボード操作を提供する。</p></div><div class="gate">ChatGPTの普段使いを置き換えられる</div></article>
+      <article class="phase"><div class="version">0.5</div><div><h3>World &amp; Initiative</h3><p>ニュース、天気、論文、GitHub等を予算内で読み、出典つきで必要な時だけ提案する。情報源の発見・購読候補も承認制にする。</p></div><div class="gate">有用だが、騒がしくない</div></article>
+      <article class="phase"><div class="version">0.6</div><div><h3>Context &amp; Work</h3><p>Aether文書とVoyagerタスクを参照し、相談→提案→承認→実行→検証→正本反映案を一貫して進める。</p></div><div class="gate">長い作業でも現在地を失わない</div></article>
+      <article class="phase"><div class="version">1.0</div><div><h3>Daily Companion</h3><p>文字・声・記憶・情報・仕事が、iPhoneとMacで一人のシャノンとして続く。費用、権限、復旧、移行も日常利用に耐える。</p></div><div class="gate">便利さを中心に、人格が静かに見える</div></article>
+      <article class="phase"><div class="version">1.x → 2.0</div><div><h3>Presence &amp; Self Extension</h3><p>Widget、Live Activities、Live2D、背景音声、隔離されたスキル生成。価値と安全性が確認できたものだけ段階導入する。</p></div><div class="gate">存在感は増やすが、主導権は奪わない</div></article>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Why Mac moves earlier</div>
+    <h2>Mac版をWorldより先へ前倒しする</h2>
+    <p>最終目標が「ChatGPTを置き換える」なら、外部情報を広く読む前に、長文・コード・検索・添付・キーボードが快適な作業面を作る方が価値が大きい。World機能はMacとiPhoneの両方で結果を受け取れる土台ができてから載せる。</p>
+    <ul class="check">
+      <li>新しい巨大バックエンドは作らず、現在のAzure会話正本へ接続する</li>
+      <li>最初のMac版は会話・同期・Markdown・コピー・検索に絞る</li>
+      <li>ファイル添付とAgent Host作業は、権限表示を伴う次の縦切りで追加する</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">Quality gates</div>
+    <h2>各フェーズで必ず残す証拠</h2>
+    <details open><summary>機能の重複防止</summary><p>開始時に現行コード・API・実機状態を棚卸しし、「流用するもの」と「新規に作るもの」を作業記録へ明記する。</p></details>
+    <details><summary>UIの品質</summary><p>通常・空・処理中・失敗、ライト・ダーク、大きな文字、Reduced Motionを画面単位で撮影して比較する。</p></details>
+    <details><summary>データと更新の安全</summary><p>会話、記憶、接続、タスク、音声履歴をアップデート後も維持する。アプリ削除を回復手順にしない。</p></details>
+    <details><summary>配信の完了条件</summary><p>Build、Archive、Upload、Processing、Assignment、Install、Smokeを分け、TestFlight更新と実機の主要導線まで確認する。</p></details>
+  </section>
+
+  <footer>現行実装の正本: <a href="architecture.md">architecture.md</a> · 製品ビジョン: <a href="shannon-product-vision-and-macos-v25.html">v25</a> · 旧長期計画: <a href="shannon-long-term-roadmap-v26.html">v26</a><br>v31の主な変更は、アプリ内外観へ連動するアイコンモードの追加、Voice Identityの開始、Mac Deskの前倒し。製品コードや配信状態はこの計画書の作成だけでは変更していない。</footer>
+</main>
+</body>
+</html>

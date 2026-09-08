@@ -1,5 +1,5 @@
 import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
-import type { ShannonChatMode } from './chatModel.js';
+import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from './chatModel.js';
 
 export interface ApiRequest {
   method: 'GET' | 'POST';
@@ -17,6 +17,8 @@ export interface ChatRequest {
   scopeKey: string;
   message: string;
   threadId?: string;
+  attachments?: ShannonChatAttachment[];
+  webSearch?: boolean;
 }
 
 export interface ChatThread {
@@ -41,6 +43,7 @@ export interface ChatResponse {
   messageEmotion: ShannonMessageEmotion;
   systemPrompt: string;
   state: CompanionStateSnapshot;
+  artifacts?: ShannonGeneratedArtifact[];
   uiBlocks?: Array<{
     type: 'agent_task_proposal';
     proposalId: string;

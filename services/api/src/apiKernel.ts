@@ -8,7 +8,12 @@ import {
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backgroundUpdates.js';
-import { LocalStubChatModel, type ShannonChatModel } from './chatModel.js';
+import {
+  LocalStubChatModel,
+  type ShannonChatAttachment,
+  type ShannonChatModel,
+  type ShannonWebSource,
+} from './chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
 import {
@@ -580,6 +585,13 @@ export class ShannonApiKernel {
       if (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 8_000) {
         return badRequest('message must be 1..8000 characters');
       }
+      const attachments = validatedChatAttachments(body.attachments);
+      if (attachments === null) {
+        return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
+      }
+      if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') {
+        return badRequest('webSearch must be a boolean');
+      }
 
       const message = body.message.trim();
       const threadId = this.conversationStore.threadId(body.scopeKey, body.threadId?.trim());
@@ -598,22 +610,26 @@ export class ShannonApiKernel {
         systemPrompt,
         history: this.conversationStore.history(body.scopeKey, threadId),
         message,
+        ...(attachments.length ? { attachments } : {}),
+        ...(body.webSearch === true ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
+      const reply = appendWebSources(completion.reply, completion.webSources ?? []);
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
         captured.temperament,
-        { userMessage: message, shannonReply: completion.reply },
+        { userMessage: message, shannonReply: reply },
       );
       const response: ChatResponse = {
         mode: completion.mode,
         model: completion.model,
-        reply: completion.reply,
+        reply,
         threadId,
         snapshotVersion: captured.version,
         messageEmotion,
         systemPrompt,
         state: captured,
+        ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
         ...(completion.taskProposal ? {
           uiBlocks: [{
             type: 'agent_task_proposal' as const,
@@ -628,10 +644,11 @@ export class ShannonApiKernel {
         threadId,
         capturedState: captured,
         userMessage: message,
-        shannonReply: completion.reply,
+        shannonReply: reply,
         ...(completion.threadTitle ? { threadTitle: completion.threadTitle } : {}),
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
+        ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
         completedAt: this.now(),
       };
       const experience = this.background.recordTurn(completedTurn);
@@ -700,8 +717,45 @@ function badRequest(message: string): ApiResponse {
   return { status: 400, body: { error: 'BAD_REQUEST', message } };
 }
 
+function appendWebSources(reply: string, sources: readonly ShannonWebSource[]): string {
+  if (!sources.length) return reply;
+  const links = sources.map(source => `- [${source.title}](${source.url})`);
+  return `${reply.trim()}\n\n### 参照した情報源\n${links.join('\n')}`;
+}
+
 function validBoundedString(value: unknown, maximum: number): value is string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= maximum;
+}
+
+const allowedChatAttachmentMimeTypes = new Set([
+  'text/plain', 'text/markdown', 'text/csv', 'text/html', 'text/css',
+  'text/x-swift', 'text/javascript', 'text/typescript', 'text/jsx',
+  'text/x-python', 'text/x-ruby', 'text/x-shellscript',
+  'application/json', 'application/xml', 'application/yaml', 'application/sql',
+]);
+
+function validatedChatAttachments(value: unknown): ShannonChatAttachment[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 4) return null;
+  let total = 0;
+  const names = new Set<string>();
+  const result: ShannonChatAttachment[] = [];
+  for (const item of value) {
+    if (!objectBody(item)
+      || !validBoundedString(item.name, 180)
+      || names.has(item.name)
+      || typeof item.mimeType !== 'string'
+      || !allowedChatAttachmentMimeTypes.has(item.mimeType)
+      || typeof item.text !== 'string'
+      || !item.text.trim()
+      || item.text.length > 24_000
+      || item.text.includes('\0')) return null;
+    total += item.text.length;
+    if (total > 48_000) return null;
+    names.add(item.name);
+    result.push({ name: item.name, mimeType: item.mimeType, text: item.text });
+  }
+  return result;
 }
 
 function validPlan(value: unknown): value is AgentPlanItem[] {

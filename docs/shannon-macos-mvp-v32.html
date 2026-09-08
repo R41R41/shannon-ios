@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shannon Desk for Mac — MVP設計と実装計画 v32</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f5f4;--surface:#fff;--soft:#eeeeec;--ink:#181817;--muted:#6c6c68;--line:#d8d8d4;--presence:#118bd0;--warm:#b1684c;--good:#34735d;--shadow:0 18px 54px rgba(0,0,0,.10)}
+@media(prefers-color-scheme:dark){:root{--bg:#101010;--surface:#1c1c1b;--soft:#262624;--ink:#efefec;--muted:#aaa9a4;--line:#373735;--presence:#50b9ee;--warm:#df997c;--good:#78b99f;--shadow:0 18px 54px rgba(0,0,0,.36)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif;line-height:1.7}main{max-width:1120px;margin:auto;padding:52px 24px 90px}.hero{padding:42px;border-radius:28px;background:var(--surface);box-shadow:var(--shadow)}.eyebrow{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--presence);font-weight:700}h1{font-size:clamp(34px,6vw,68px);line-height:1.08;letter-spacing:-.04em;margin:12px 0 18px;max-width:850px}h2{font-size:28px;line-height:1.25;margin:0 0 16px}h3{font-size:17px;margin:0 0 6px}p{margin:0 0 14px}.lead{font-size:19px;max-width:780px;color:var(--muted)}section{margin-top:54px}.principles,.phases,.facts{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.card{grid-column:span 4;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.card.wide{grid-column:span 6}.number{font-size:12px;color:var(--muted);margin-bottom:20px}.window{overflow:hidden;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow)}.bar{height:42px;border-bottom:1px solid var(--line);background:var(--soft);display:flex;align-items:center;padding:0 14px;gap:7px}.dot{width:10px;height:10px;border-radius:50%;background:var(--line)}.shell{display:grid;grid-template-columns:220px minmax(380px,1fr) 276px;min-height:480px}.side,.inspect{padding:18px;background:var(--soft)}.side{border-right:1px solid var(--line)}.inspect{border-left:1px solid var(--line)}.brand{font-weight:700;margin-bottom:18px}.nav{padding:8px 10px;border-radius:8px;margin:3px 0}.nav.active{background:color-mix(in srgb,var(--ink) 9%,transparent)}.nav small{float:right;color:var(--muted)}.main{display:flex;flex-direction:column;min-width:0}.status{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line);background:var(--bg)}.status div{padding:8px 12px;border-right:1px solid var(--line);overflow:hidden}.status small,.label{display:block;color:var(--muted);font-size:11px}.status b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.conversation{padding:26px 34px;flex:1}.user{margin-left:auto;max-width:70%;padding:9px 13px;border-radius:15px;background:var(--soft)}.shannon{margin-top:22px}.name{font-weight:700;margin-bottom:9px}.name i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--presence);margin-right:7px}.answer{max-width:640px}.composer{margin:12px 26px 20px;padding:12px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--muted)}.inspect h3{margin-top:18px}.emotion{color:var(--warm)}.progress{height:5px;border-radius:9px;background:var(--line);overflow:hidden;margin-top:10px}.progress span{display:block;width:55%;height:100%;background:var(--ink)}.phase{grid-column:span 12;display:grid;grid-template-columns:150px 1fr 240px;gap:20px;padding:20px 0;border-top:1px solid var(--line)}.phase .state{color:var(--muted)}.phase.current .state{color:var(--presence);font-weight:700}.rule{padding:18px;border-left:3px solid var(--presence);background:var(--surface);margin-top:18px}.fact{grid-column:span 3;padding:18px 0;border-top:2px solid var(--ink)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.done{color:var(--good)}.later{color:var(--muted)}footer{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}@media(max-width:850px){.card,.card.wide{grid-column:span 12}.shell{grid-template-columns:170px 1fr}.inspect{display:none}.phase{grid-template-columns:1fr}.fact{grid-column:span 6}}@media(max-width:560px){main{padding:24px 14px 60px}.hero{padding:26px}.side{display:none}.shell{grid-template-columns:1fr}.status{grid-template-columns:1fr}.fact{grid-column:span 12}}
+</style>
+</head>
+<body><main>
+<header class="hero">
+  <div class="eyebrow">Shannon Desk · Product &amp; Implementation v32</div>
+  <h1>会話しながら、仕事の現在地を見失わない。</h1>
+  <p class="lead">ChatGPTの便利さを基準に、作業全体・いま・次を一つの面へ統合するMac版Shannon。人格は派手なキャラクター演出ではなく、表情、自発的な一言、判断を急がせない存在感として静かに現れます。</p>
+</header>
+
+<section>
+  <div class="eyebrow">Product principles</div><h2>設計判断を支える4本柱</h2>
+  <div class="principles">
+    <article class="card"><div class="number">01</div><h3>会話が主役</h3><p>広いMarkdown、コード、コピー、キーボード操作。固定パネルやブランド色が読書を邪魔しない。</p></article>
+    <article class="card"><div class="number">02</div><h3>作業を俯瞰</h3><p>提案・進行・確認待ち・完了を、会話ログではなく永続タスクから構成する。</p></article>
+    <article class="card"><div class="number">03</div><h3>いま／次が分かる</h3><p>細かなコマンドではなく、ユーザーに意味のある工程と次の行動を常に示す。</p></article>
+    <article class="card"><div class="number">04</div><h3>静かな自発性と感情</h3><p>気づきは提案に留め、重要な変更はユーザーが開始・許可する。感情は判断の根拠にしない。</p></article>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Desktop information architecture</div><h2>3列だが、常に3列ではない</h2>
+  <div class="window" role="img" aria-label="Shannon Deskのサイドバー、会話、現在地インスペクタの構成">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <div class="shell">
+      <aside class="side"><div class="brand">Shannon</div><div class="nav active">会話</div><div class="nav">作業全体 <small>2</small></div><div class="nav">頭の中</div><br><span class="label">トーク</span><div class="nav">Shannon Deskを設計</div><div class="nav">長期計画</div></aside>
+      <div class="main"><div class="status"><div><small>目的</small><b>Mac版を日常利用へ</b></div><div><small>いま</small><b>会話と作業を接続中</b></div><div><small>次</small><b>Macビルドを検証</b></div></div><div class="conversation"><div class="user">この方向で進めてください。</div><div class="shannon"><div class="name"><i></i>シャノン · 集中している</div><div class="answer"><strong>Mac版の最初の縦切りを実装しています。</strong><p>iPhoneと同じ会話・記憶・作業を使いながら、Macでは広い読書面と現在地を同時に扱える構成です。</p><ol><li>共有Coreを流用</li><li>ネイティブ3列UI</li><li>永続タスクから作業面を構成</li></ol></div></div></div><div class="composer">シャノンに話す　　⌘↩︎で送信</div></div>
+      <aside class="inspect"><span class="label">現在地</span><h3>目的</h3><p>Macでも同じシャノンと仕事を続ける</p><h3>いま</h3><p>共有モデルと画面を接続中</p><div class="progress"><span></span></div><h3>次</h3><p>アプリターゲットをビルド</p><h3 class="emotion">シャノンの様子</h3><p>集中している</p></aside>
+    </div>
+  </div>
+  <div class="rule"><strong>人間工学上の決定：</strong>右の現在地は通常会話では閉じる。作業中、確認待ち、またはユーザーが開いた時だけ表示する。水色は面積ではなく存在の小さな点と重要な注意に限定する。</div>
+</section>
+
+<section>
+  <div class="eyebrow">Reuse, not rebuild</div><h2>同じものを二重に作らない</h2>
+  <div class="facts">
+    <div class="fact"><h3 class="done">共有済み</h3><p>API client、Keychain接続、会話同期、キャッシュ</p></div>
+    <div class="fact"><h3 class="done">共有済み</h3><p>Markdown解析、22表情、記憶モデル</p></div>
+    <div class="fact"><h3 class="done">共有済み</h3><p>Agent Task、計画、承認、検証結果</p></div>
+    <div class="fact"><h3>Mac固有</h3><p>ウィンドウ、メニュー、キーボード、インスペクタ</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Delivery sequence</div><h2>実装順</h2>
+  <div class="phases">
+    <article class="phase current"><div class="state">NOW · M0</div><div><h3>Native shell + shared core</h3><p>会話、トーク切替、Markdown、コピー、入力、作業全体、現在地、承認、記憶、外観。</p></div><div>署名なしMac build + 共有Core tests</div></article>
+    <article class="phase"><div class="state">NEXT · M1</div><div><h3>ChatGPT parity essentials</h3><p>ファイル／画像添付、Web検索、ソース表示、ドラッグ＆ドロップ、検索、停止・再生成。</p></div><div>実資料を渡すE2E smoke</div></article>
+    <article class="phase"><div class="state">M2</div><div><h3>Work-native Mac</h3><p>複数作業、承認センター、成果物プレビュー、差分、ターミナル／ブラウザの安全な受け渡し。</p></div><div>再起動・中断復帰・失敗回復</div></article>
+    <article class="phase"><div class="state">M3</div><div><h3>Voice &amp; continuity</h3><p>ライブ音声、声の選択、iPhoneとの引継ぎ、通知、メニューバーから素早く開始。</p></div><div>日常利用と費用境界を確認</div></article>
+    <article class="phase"><div class="state">M4</div><div><h3>Distribution</h3><p>macOS署名、sandbox、notarization、App Store ConnectのmacOS platform、更新と復旧。</p></div><div>ユーザーがASC操作を担当</div></article>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Implemented in this slice</div><h2>現在の到達点</h2>
+  <p><code>apps/macos-app/ShannonDesk.xcodeproj</code> を追加し、<code>apps/ios</code> の共有Coreへ接続。Swift packageはmacOS上で86テスト成功。macOSアプリの入口も共有Coreに対して型検査済みです。</p>
+  <p class="later">未完了：実アプリの署名・配布、添付、Web検索、ライブ音声。これらをM0の完了と偽らず、次の縦切りとして追跡します。</p>
+</section>
+
+<footer>現行実装の正本は <code>docs/architecture.md</code>。この文書は製品判断とMVP順序の説明用で、秘密値、証明書、API key、実データを含みません。</footer>
+</main></body></html>

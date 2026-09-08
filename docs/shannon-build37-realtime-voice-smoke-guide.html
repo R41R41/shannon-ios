@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 37 — Realtime音声 実機確認</title>
+  <style>
+    :root { color-scheme: light dark; --blue:#53c5ee; --ink:#153247; --muted:#607d8e; --card:#ffffff; --bg:#f3fbff; --ok:#dff7eb; --warn:#fff2cf; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(180deg,#eaf8ff,var(--bg)); color:var(--ink); }
+    main { max-width:820px; margin:0 auto; padding:40px 20px 64px; }
+    header,section { background:color-mix(in srgb,var(--card) 92%,transparent); border:1px solid #bfe8f8; border-radius:24px; padding:24px; margin-bottom:16px; box-shadow:0 14px 40px rgba(40,150,195,.10); }
+    h1 { margin:0 0 8px; font-size:30px; }
+    h2 { margin:0 0 14px; font-size:20px; }
+    p,li { line-height:1.7; }
+    ol,ul { padding-left:24px; }
+    li { margin:9px 0; }
+    .badge { display:inline-block; padding:7px 11px; border-radius:999px; background:var(--blue); color:#052635; font-weight:700; }
+    .ok,.warn { border-radius:16px; padding:14px 16px; }
+    .ok { background:var(--ok); color:#174b34; }
+    .warn { background:var(--warn); color:#5a4310; }
+    code { font-family:ui-monospace,SFMono-Regular,monospace; }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#e8f7ff; --muted:#aac4d2; --card:#0c2635; --bg:#061722; --ok:#123d2c; --warn:#493914; }
+      body { background:linear-gradient(180deg,#082231,var(--bg)); }
+      header,section { border-color:#22546e; }
+      .ok { color:#dff7eb; } .warn { color:#fff2cf; }
+    }
+  </style>
+</head>
+<body><main>
+  <header>
+    <span class="badge">TestFlight Build 37</span>
+    <h1>Realtime音声会話の実機確認</h1>
+    <p>発話中の文字起こしを見ながら、シャノンと途切れにくい音声対話ができることを確認します。Build 37は「Shannon Internal」で配信済みです。</p>
+  </header>
+
+  <section>
+    <h2>1. 更新</h2>
+    <ol>
+      <li>iPhoneでTestFlightを開きます。</li>
+      <li>Shannonの「アップデート」を押します。</li>
+      <li>Shannonの設定または診断表示で、ビルド番号が <strong>37</strong> であることを確認します。</li>
+    </ol>
+    <div class="ok">成功：TestFlight上の最新版がBuild 37になり、Shannonを起動できる。</div>
+  </section>
+
+  <section>
+    <h2>2. 既存データの維持</h2>
+    <ul>
+      <li>以前のトーク一覧と会話履歴が残っている。</li>
+      <li>通常のテキスト送信にシャノンが返答する。</li>
+      <li>設定画面のアプリアイコン候補が画像付きで表示される。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. Realtime音声の主要テスト</h2>
+    <ol>
+      <li>既存トークを一つ開き、音声ボタンを押します。クラッシュせず音声画面へ入ることを確認します。</li>
+      <li>「今日は音声会話のテストをしているよ」と自然な速さで話します。</li>
+      <li>自分の発話が、話している途中から画面へ文字として増えていくことを確認します。</li>
+      <li>話し終えると自動的にターンが切り替わり、シャノンの返答字幕が増えながら音声が再生されることを確認します。</li>
+      <li>シャノンが話している途中に「ちょっと待って」と話し、返答を中断してこちらの発話へ切り替えられることを確認します。</li>
+      <li>音声画面を閉じ、今のやり取りが元のトーク履歴に保存されていることを確認します。</li>
+    </ol>
+    <div class="ok">合格：開始・発話中字幕・自動ターン・返答字幕と音声・割り込み・履歴保存のすべてが動く。</div>
+  </section>
+
+  <section>
+    <h2>問題が起きた場合</h2>
+    <ol>
+      <li>Shannonを再起動し、同じ操作を一度だけ再試行します。</li>
+      <li>設定の音声診断からログをコピーします。音声、文字起こし本文、鍵、認証情報は記録されません。</li>
+      <li>「どの手順で」「何が表示されたか」と診断ログを共有してください。クラッシュした場合は、押した直後か、字幕表示後かも添えてください。</li>
+    </ol>
+    <div class="warn">安全な復帰：Build 37で通常チャットが使える限り、音声だけを止めてテキスト会話を続けられます。アプリ削除は会話状態の確認が終わるまで行わないでください。</div>
+  </section>
+</main></body>
+</html>

@@ -21,7 +21,7 @@ public struct ShannonConnectionView: View {
                         VStack(alignment: .leading, spacing: M3Spacing.medium) {
                             Label("最初の一度だけ", systemImage: "link.badge.plus")
                                 .font(.title3.weight(.semibold))
-                            Text("シャノン専用の接続リンクを開くと、このiPhoneは自動で結ばれます。コード入力や毎回の設定は必要ありません。")
+                            Text("シャノン専用の接続リンクを開くと、この\(deviceNoun)は自動で結ばれます。コード入力や毎回の設定は必要ありません。")
                                 .font(.callout)
                                 .foregroundStyle(palette.onSurfaceVariant)
                             if case .connecting = model.status {
@@ -35,17 +35,44 @@ public struct ShannonConnectionView: View {
                         .padding(M3Spacing.large)
                         .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
                     } else {
-                        Button(role: .destructive) { model.disconnect() } label: {
-                            Label("このiPhoneの接続を解除", systemImage: "link.badge.minus")
-                                .frame(maxWidth: .infinity, minHeight: M3TouchTarget.minimum)
+                        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("認証された通信")
+                                        .font(.headline)
+                                    Text(model.verificationLabel)
+                                        .font(.callout)
+                                        .foregroundStyle(verificationColor(palette))
+                                }
+                                Spacer()
+                                if model.isVerifying {
+                                    ProgressView().controlSize(.small)
+                                }
+                                Button("接続を確認") {
+                                    Task { await model.verifyConnection() }
+                                }
+                                .disabled(model.isVerifying)
+                            }
+                            if case .failed(let message) = model.verificationStatus {
+                                Text(message)
+                                    .font(.caption)
+                                    .foregroundStyle(palette.error)
+                            }
+                            Divider()
+                            Button(role: .destructive) { model.disconnect() } label: {
+                                Label("この\(deviceNoun)の接続を解除", systemImage: "link.badge.minus")
+                                    .frame(maxWidth: .infinity, minHeight: M3TouchTarget.minimum)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
+                        .padding(M3Spacing.large)
+                        .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
                     }
 
                     VStack(alignment: .leading, spacing: M3Spacing.medium) {
-                        Label("秘密はiPhoneの中に", systemImage: "lock.shield")
+                        Label("秘密は\(deviceNoun)の中に", systemImage: "lock.shield")
                             .font(.title3.weight(.semibold))
-                        Text("端末トークンは、このiPhoneをロック解除している間だけ読めるKeychainへ保存します。OpenAI APIキーや接続コードは保存しません。")
+                        Text("端末トークンは、この\(deviceNoun)のKeychainへ保存します。OpenAI APIキーや接続コードは保存しません。")
                             .font(.callout)
                             .foregroundStyle(palette.onSurfaceVariant)
                         Text(model.baseURL.host ?? model.baseURL.absoluteString)
@@ -84,7 +111,7 @@ public struct ShannonConnectionView: View {
                         .font(.callout)
                         .foregroundStyle(palette.error)
                 } else {
-                    Text(model.isConnected ? "会話と記憶を安全に同期できます" : "接続すると、Macなしで話せます")
+                    Text(model.isConnected ? "会話と記憶を安全に同期できます" : disconnectedDescription)
                         .font(.callout)
                         .foregroundStyle(palette.onSurfaceVariant)
                 }
@@ -109,5 +136,29 @@ public struct ShannonConnectionView: View {
         case .failed: palette.error
         default: palette.primary
         }
+    }
+
+    private func verificationColor(_ palette: M3Palette) -> Color {
+        switch model.verificationStatus {
+        case .verified: Color(hex: 0x2E7D32)
+        case .failed: palette.error
+        default: palette.onSurfaceVariant
+        }
+    }
+
+    private var deviceNoun: String {
+#if os(macOS)
+        "Mac"
+#else
+        "iPhone"
+#endif
+    }
+
+    private var disconnectedDescription: String {
+#if os(macOS)
+        "接続すると、iPhoneと同じシャノンへ続きます"
+#else
+        "接続すると、Macなしで話せます"
+#endif
     }
 }

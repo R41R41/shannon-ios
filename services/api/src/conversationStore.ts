@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RecallCandidate, ShannonMessageEmotion } from '@shannon/cognition';
-import type { ShannonConversationItem } from './chatModel.js';
+import type { ShannonConversationItem, ShannonGeneratedArtifact } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
@@ -23,6 +23,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   messageEmotion?: ShannonMessageEmotion;
   stateVersion?: number;
   taskDecision?: ShannonTaskDecision;
+  artifacts?: readonly ShannonGeneratedArtifact[];
 }
 
 export interface TurnPersistenceContext {
@@ -30,6 +31,7 @@ export interface TurnPersistenceContext {
   messageEmotion: ShannonMessageEmotion;
   capturedStateVersion: number;
   taskDecision?: ShannonTaskDecision;
+  artifacts?: readonly ShannonGeneratedArtifact[];
 }
 
 export interface ConversationStore {
@@ -155,6 +157,9 @@ export class InMemoryConversationStore implements ConversationStore {
     return Object.freeze(threadMessages.map(item => Object.freeze({
       ...item,
       ...(item.messageEmotion ? { messageEmotion: Object.freeze({ ...item.messageEmotion }) } : {}),
+      ...(item.artifacts?.length ? {
+        artifacts: Object.freeze(item.artifacts.map(artifact => Object.freeze({ ...artifact }))),
+      } : {}),
     })));
   }
 
@@ -192,6 +197,9 @@ export class InMemoryConversationStore implements ConversationStore {
           messageEmotion: Object.freeze({ ...context.messageEmotion }),
           stateVersion: context.capturedStateVersion,
           ...(context.taskDecision ? { taskDecision: Object.freeze({ ...context.taskDecision }) } : {}),
+          ...(context.artifacts?.length ? {
+            artifacts: Object.freeze(context.artifacts.map(artifact => Object.freeze({ ...artifact }))),
+          } : {}),
         } : {}),
       },
     );

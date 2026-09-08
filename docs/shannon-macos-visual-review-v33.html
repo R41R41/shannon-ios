@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Desk 実画面レビュー v33</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f4f2; --panel:#fff; --ink:#171717; --muted:#686868; --line:#deded9; --signal:#4f6ea8; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#111; --panel:#1c1c1c; --ink:#f3f3f3; --muted:#aaa; --line:#343434; --signal:#9bb5ec; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif; line-height:1.55; }
+    main { max-width:1480px; margin:auto; padding:56px 28px 80px; }
+    header { max-width:880px; margin-bottom:42px; }
+    .eyebrow { color:var(--signal); font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:8px 0 12px; font-size:clamp(32px,5vw,62px); line-height:1.04; letter-spacing:-.04em; }
+    h2 { margin:0 0 8px; font-size:24px; letter-spacing:-.02em; }
+    p { margin:0; color:var(--muted); }
+    .facts { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+    .fact { border:1px solid var(--line); border-radius:999px; padding:7px 12px; background:var(--panel); font-size:13px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+    figure { margin:0; overflow:hidden; border:1px solid var(--line); border-radius:20px; background:var(--panel); box-shadow:0 12px 34px rgba(0,0,0,.08); }
+    img { width:100%; height:auto; display:block; background:#111; }
+    figcaption { padding:18px 20px 20px; }
+    figcaption p { font-size:14px; }
+    .conclusion { margin-top:28px; padding:24px; border:1px solid var(--line); border-radius:18px; background:var(--panel); }
+    .conclusion ul { margin:12px 0 0; padding-left:1.3em; color:var(--muted); }
+    @media (max-width:900px) { .grid { grid-template-columns:1fr; } main { padding:36px 18px 60px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Native SwiftUI · Build verification</div>
+      <h1>Shannon Desk<br>最初の実画面</h1>
+      <p>コンセプト画像ではなく、macOS向けXcodeターゲットを実際にビルド・起動して撮影した画面です。ニュートラルな作業面を基礎に、シャノンの水色は存在・感情・注意の小さな信号だけに使っています。</p>
+      <div class="facts">
+        <span class="fact">macOS 14+</span><span class="fact">NavigationSplitView</span><span class="fact">Markdown</span><span class="fact">87 tests passed</span><span class="fact">Unsigned Debug build passed</span>
+      </div>
+    </header>
+
+    <section class="grid" aria-label="Shannon Desk screenshots">
+      <figure>
+        <img src="screenshots/shannon-macos-talk-light-v32.png" alt="ライトモードのShannon Desk会話画面">
+        <figcaption><h2>会話 · ライト</h2><p>会話を中央に置き、目的・いま・次を一行で把握。Markdown、コード、コピー、複数行composerを同じ面に収めています。</p></figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/shannon-macos-talk-dark-v32.png" alt="ダークモードのShannon Desk会話画面">
+        <figcaption><h2>会話 · ダーク</h2><p>情報階層を色面ではなく文字・余白・細い境界で維持。表情アイコンと小さなpresence signalだけが人格を示します。</p></figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/shannon-macos-work-light-v32.png" alt="ライトモードのShannon Desk作業全体画面">
+        <figcaption><h2>作業全体 · ライト</h2><p>「いま／これから／完了」を一つの面で俯瞰。右の現在地では目的、現在の行動、次、感情、工程を確認できます。</p></figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/shannon-macos-work-dark-v32.png" alt="ダークモードのShannon Desk作業全体画面">
+        <figcaption><h2>作業全体 · ダーク</h2><p>提案は自動実行せず、開始をユーザーが決める境界を明示。進捗と次の一手だけを短く残します。</p></figcaption>
+      </figure>
+    </section>
+
+    <section class="conclusion">
+      <h2>今回確認できたこと</h2>
+      <ul>
+        <li>ライト／ダークの切替がアプリ内設定から即時反映される</li>
+        <li>会話・作業全体・現在地パネルが同一の共有Coreから描画される</li>
+        <li>撮影用サンプルのトーク切替でネットワークへ誤接続せず、不要な警告を出さない</li>
+        <li>次工程はファイル添付・Web検索／調査のM1。その前にこの実画面へのフィードバックを反映する</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

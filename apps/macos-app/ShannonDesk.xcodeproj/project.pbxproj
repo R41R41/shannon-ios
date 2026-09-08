@@ -1,0 +1,490 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1292101892A8F78044C67282 /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320D03717EA643F3A6F062AF /* ShannonDesktopAttachment.swift */; };
+		20084256A6409A433E249470 /* ShannonDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CF75EA4D32B1808551A7D8 /* ShannonDeskApp.swift */; };
+		29665B8C902DBAF03F3514C3 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA3A0CB9EE837BAEEA079BD2 /* ShannonAppCore */; };
+		371AEE95DF0C36F1C2DA96BB /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 320D03717EA643F3A6F062AF /* ShannonDesktopAttachment.swift */; };
+		4E5578219B8C05A2263C20D6 /* ShannonDesktopArtifactDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55F92D5DFB6126202C3244A /* ShannonDesktopArtifactDocument.swift */; };
+		5BEB6909039C6FEBFA3FFACE /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = F810BACDCAA3FC4D8EFBD3BA /* ShannonAppCore */; };
+		660FBE40206E1414CC0BE895 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC27E206E97F695859C5599 /* ShannonDesktopSupport.swift */; };
+		8768BFD5CBB2BB920CD5C5EA /* ShannonDesktopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF5D25D62E6C3C6566F922C3 /* ShannonDesktopView.swift */; };
+		C5675096179028215097BF94 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FAE1A7B961ECFA98BB6F9CA /* Cocoa.framework */; };
+		CC809B0B3395209BCA186553 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6FAE1A7B961ECFA98BB6F9CA /* Cocoa.framework */; };
+		E5B8E1A7FE853EB129AE579E /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC27E206E97F695859C5599 /* ShannonDesktopSupport.swift */; };
+		E99BDA2BE158F8F3D8379F54 /* ShannonDesktopSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF9679A12650E56F26EDB63 /* ShannonDesktopSupportTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		03494878E8173BBCD3092FD8 /* ShannonDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShannonDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		320D03717EA643F3A6F062AF /* ShannonDesktopAttachment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopAttachment.swift; sourceTree = "<group>"; };
+		34662F2576B9005E025AB42D /* ShannonDesk.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShannonDesk.entitlements; sourceTree = "<group>"; };
+		3BF9679A12650E56F26EDB63 /* ShannonDesktopSupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupportTests.swift; sourceTree = "<group>"; };
+		3EC27E206E97F695859C5599 /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
+		4F852FC207FA4B3EE24F1523 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		6FAE1A7B961ECFA98BB6F9CA /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		7BDE9BA60788B31E4988F2B5 /* ShannonDeskTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShannonDeskTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0CF75EA4D32B1808551A7D8 /* ShannonDeskApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDeskApp.swift; sourceTree = "<group>"; };
+		D55F92D5DFB6126202C3244A /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
+		EF5D25D62E6C3C6566F922C3 /* ShannonDesktopView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		42E99BE442F0E37E4E6F1177 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC809B0B3395209BCA186553 /* Cocoa.framework in Frameworks */,
+				5BEB6909039C6FEBFA3FFACE /* ShannonAppCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A7A3B61C0C3F03A4C12DFF28 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C5675096179028215097BF94 /* Cocoa.framework in Frameworks */,
+				29665B8C902DBAF03F3514C3 /* ShannonAppCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2297F6043E76E553A4C451B8 /* ShannonDeskTests */ = {
+			isa = PBXGroup;
+			children = (
+				3BF9679A12650E56F26EDB63 /* ShannonDesktopSupportTests.swift */,
+			);
+			name = ShannonDeskTests;
+			path = ShannonDeskTests;
+			sourceTree = "<group>";
+		};
+		3775338DA16F689306EAA5A5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				03494878E8173BBCD3092FD8 /* ShannonDesk.app */,
+				7BDE9BA60788B31E4988F2B5 /* ShannonDeskTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5E3C47F2B3F5AE6FF12AA79E = {
+			isa = PBXGroup;
+			children = (
+				3775338DA16F689306EAA5A5 /* Products */,
+				AFDCDA51F1D645C7C6FDEE9A /* Frameworks */,
+				6EFCB521684653B8CF0CA05A /* ShannonDesk */,
+				2297F6043E76E553A4C451B8 /* ShannonDeskTests */,
+			);
+			sourceTree = "<group>";
+		};
+		6EFCB521684653B8CF0CA05A /* ShannonDesk */ = {
+			isa = PBXGroup;
+			children = (
+				4F852FC207FA4B3EE24F1523 /* Info.plist */,
+				34662F2576B9005E025AB42D /* ShannonDesk.entitlements */,
+				B0CF75EA4D32B1808551A7D8 /* ShannonDeskApp.swift */,
+				D55F92D5DFB6126202C3244A /* ShannonDesktopArtifactDocument.swift */,
+				320D03717EA643F3A6F062AF /* ShannonDesktopAttachment.swift */,
+				3EC27E206E97F695859C5599 /* ShannonDesktopSupport.swift */,
+				EF5D25D62E6C3C6566F922C3 /* ShannonDesktopView.swift */,
+			);
+			name = ShannonDesk;
+			path = ShannonDesk;
+			sourceTree = "<group>";
+		};
+		809DF96BB805EC316E3BD1B4 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				6FAE1A7B961ECFA98BB6F9CA /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		AFDCDA51F1D645C7C6FDEE9A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				809DF96BB805EC316E3BD1B4 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6AF7E64307BE6A9D495AE363 /* ShannonDeskTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 730D33E8FF97C6E3235F4AB4 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */;
+			buildPhases = (
+				10CF1A77B74E747E9C2B8A17 /* Sources */,
+				A7A3B61C0C3F03A4C12DFF28 /* Frameworks */,
+				2AC7700911C1B94780DC362D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShannonDeskTests;
+			packageProductDependencies = (
+				AA3A0CB9EE837BAEEA079BD2 /* ShannonAppCore */,
+			);
+			productName = ShannonDeskTests;
+			productReference = 7BDE9BA60788B31E4988F2B5 /* ShannonDeskTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C99B9B6EF941A2389E5E1889 /* ShannonDesk */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E60B4E6C40394906BC5CFA0 /* Build configuration list for PBXNativeTarget "ShannonDesk" */;
+			buildPhases = (
+				1D9FBEE70410909A70B4C3FF /* Sources */,
+				42E99BE442F0E37E4E6F1177 /* Frameworks */,
+				5D84FC59076CA7FC5F1C148A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShannonDesk;
+			packageProductDependencies = (
+				F810BACDCAA3FC4D8EFBD3BA /* ShannonAppCore */,
+			);
+			productName = ShannonDesk;
+			productReference = 03494878E8173BBCD3092FD8 /* ShannonDesk.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4D032285A44714CE0F875940 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+			};
+			buildConfigurationList = 36288A1C711228898102AF59 /* Build configuration list for PBXProject "ShannonDesk" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5E3C47F2B3F5AE6FF12AA79E;
+			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				C618FD72F8F9F9F7645801B0 /* XCLocalSwiftPackageReference "ios" */,
+			);
+			preferredProjectObjectVersion = 100;
+			productRefGroup = 3775338DA16F689306EAA5A5 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C99B9B6EF941A2389E5E1889 /* ShannonDesk */,
+				6AF7E64307BE6A9D495AE363 /* ShannonDeskTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2AC7700911C1B94780DC362D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D84FC59076CA7FC5F1C148A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		10CF1A77B74E747E9C2B8A17 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E99BDA2BE158F8F3D8379F54 /* ShannonDesktopSupportTests.swift in Sources */,
+				1292101892A8F78044C67282 /* ShannonDesktopAttachment.swift in Sources */,
+				660FBE40206E1414CC0BE895 /* ShannonDesktopSupport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1D9FBEE70410909A70B4C3FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				20084256A6409A433E249470 /* ShannonDeskApp.swift in Sources */,
+				4E5578219B8C05A2263C20D6 /* ShannonDesktopArtifactDocument.swift in Sources */,
+				371AEE95DF0C36F1C2DA96BB /* ShannonDesktopAttachment.swift in Sources */,
+				E5B8E1A7FE853EB129AE579E /* ShannonDesktopSupport.swift in Sources */,
+				8768BFD5CBB2BB920CD5C5EA /* ShannonDesktopView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		899E182E4FE693992DB2ACDE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon.macos.tests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		8BA6A04292BE63F14A1DB08E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShannonDesk/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SHANNON_API_BASE_URL = "https://sh4nnon.com/companion";
+				SHANNON_API_TOKEN = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		AD017F44C58BD18781C64ECC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DABA8DD84F0C1D7527F8EAF6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShannonDesk/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SHANNON_API_BASE_URL = "https://sh4nnon.com/companion";
+				SHANNON_API_TOKEN = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		DAD5A1D9E94BC619A29CC51E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		F6B8D336FDC74A0EF8D5E037 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon.macos.tests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		36288A1C711228898102AF59 /* Build configuration list for PBXProject "ShannonDesk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AD017F44C58BD18781C64ECC /* Debug */,
+				DAD5A1D9E94BC619A29CC51E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		730D33E8FF97C6E3235F4AB4 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6B8D336FDC74A0EF8D5E037 /* Release */,
+				899E182E4FE693992DB2ACDE /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E60B4E6C40394906BC5CFA0 /* Build configuration list for PBXNativeTarget "ShannonDesk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DABA8DD84F0C1D7527F8EAF6 /* Release */,
+				8BA6A04292BE63F14A1DB08E /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		C618FD72F8F9F9F7645801B0 /* XCLocalSwiftPackageReference "ios" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ios;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA3A0CB9EE837BAEEA079BD2 /* ShannonAppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C618FD72F8F9F9F7645801B0 /* XCLocalSwiftPackageReference "ios" */;
+			productName = ShannonAppCore;
+		};
+		F810BACDCAA3FC4D8EFBD3BA /* ShannonAppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C618FD72F8F9F9F7645801B0 /* XCLocalSwiftPackageReference "ios" */;
+			productName = ShannonAppCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 4D032285A44714CE0F875940 /* Project object */;
+}

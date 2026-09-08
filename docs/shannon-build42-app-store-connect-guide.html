@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 42 — 入力欄・外観hotfixの配信確認</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#0e92ef; --deep:#0868b8; --ink:#10212d; --muted:#637887; --card:rgba(255,255,255,.88); --line:rgba(14,146,239,.2); }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans",sans-serif; color:var(--ink); background:linear-gradient(180deg,#dff3ff 0,#f7fbfe 34%,#fff 100%); line-height:1.65; }
+    main { width:min(780px,calc(100% - 32px)); margin:auto; padding:48px 0 72px; }
+    .hero { padding:30px; border-radius:28px; color:#fff; background:linear-gradient(135deg,var(--blue),var(--deep)); box-shadow:0 18px 50px rgba(14,146,239,.24); }
+    h1 { margin:0 0 8px; font-size:clamp(28px,6vw,44px); line-height:1.14; }
+    .hero p { margin:0; opacity:.92; }
+    .status { display:inline-flex; margin-top:20px; padding:8px 13px; border-radius:999px; background:rgba(255,255,255,.18); font-weight:700; }
+    section { margin-top:20px; padding:24px; border:1px solid var(--line); border-radius:24px; background:var(--card); box-shadow:0 10px 32px rgba(23,60,82,.07); }
+    h2 { margin:0 0 12px; font-size:21px; }
+    ol, ul { margin:8px 0 0; padding-left:1.35em; }
+    li + li { margin-top:10px; }
+    .check { list-style:none; padding:0; }
+    .check li { padding:12px 14px 12px 42px; position:relative; border-radius:14px; background:rgba(14,146,239,.07); }
+    .check li::before { content:"✓"; position:absolute; left:15px; color:var(--blue); font-weight:800; }
+    .warn { border-left:4px solid var(--blue); padding-left:18px; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:rgba(14,146,239,.09); padding:.12em .38em; border-radius:6px; }
+    .small { color:var(--muted); font-size:14px; }
+    @media (prefers-color-scheme:dark) {
+      :root { --ink:#f1f8fc; --muted:#9cb0bd; --card:rgba(14,29,39,.9); --line:rgba(80,184,255,.24); }
+      body { background:linear-gradient(180deg,#071f2e 0,#06131c 38%,#03090d 100%); }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <h1>Shannon Build 42</h1>
+    <p>入力欄クラッシュと外観切替を直したhotfixを、既存データを保ったまま確認します。</p>
+    <div class="status">commit d05aec9 · GitHub main送信済み</div>
+  </div>
+
+  <section>
+    <h2>目的と現在地</h2>
+    <p>確定commit <code>d05aec9</code>はGitHubの<code>main</code>へ送信済みです。Release RunnerでAPI 172件、iOS 84件、Debug／ReleaseのiPhone向けビルドが成功しています。こちらからApp Store Connectは操作していません。</p>
+  </section>
+
+  <section>
+    <h2>1. Xcode Cloudを確認</h2>
+    <ol>
+      <li>App Store Connectで<strong>Shannon → Xcode Cloud</strong>を開きます。</li>
+      <li>commitが<code>d05aec9</code>から始まる最新実行を選びます。</li>
+      <li>表示されたBuild番号を確認します。順番どおりなら<strong>42</strong>です。</li>
+      <li>ArchiveとUploadが完了するまで待ちます。実行中なら重複して再実行しません。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>2. TestFlightへ割り当てる</h2>
+    <ol>
+      <li><strong>TestFlight → iOS</strong>で同じBuild番号を開きます。</li>
+      <li>Appleの処理が終わり「テスト可能」になるまで待ちます。</li>
+      <li>内部グループ<strong>Shannon Internal</strong>へ追加します。</li>
+      <li>外部テストやApp Store公開は選びません。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>3. iPhoneで上書き更新</h2>
+    <ol>
+      <li>iPhoneで<strong>TestFlight → Shannon</strong>を開きます。</li>
+      <li><strong>アップデート</strong>を押します。Shannonは削除しません。</li>
+      <li>更新後にShannonを起動し、既存トークと接続が残っていることを確認します。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>4. 今回の必須Smoke</h2>
+    <ul class="check">
+      <li>入力欄をタップしてもクラッシュせず、キーボードが表示される</li>
+      <li>1行と複数行の文字を入力し、入力欄が自然に広がる</li>
+      <li>設定 → 外観 → ライトを選ぶと、設定画面を含めて明るい表示になる</li>
+      <li>設定 → 外観 → ダークを選ぶと、設定画面を含めて暗い表示になる</li>
+      <li>iPhone本体をダークにした状態で「端末に合わせる」を選ぶと、Shannonもダークになる</li>
+      <li>既存の会話履歴、接続、ライブ音声が維持されている</li>
+    </ul>
+  </section>
+
+  <section class="warn">
+    <h2>失敗したときの安全な戻り方</h2>
+    <ul>
+      <li>Buildが見つからない：Xcode Cloudの最新実行とcommit <code>d05aec9</code>を確認します。新しいcommitは作りません。</li>
+      <li>処理中：数分待って再読込します。同じBuildを再送信しません。</li>
+      <li>更新が出ない：Shannon Internalへの割当を確認し、TestFlightを下へ引いて再読込します。</li>
+      <li>クラッシュする：Shannonを削除せず、発生時刻と「入力欄をタップ直後」など直前操作だけを共有します。</li>
+      <li>外観が変わらない：選んだ項目と、iPhone本体の外観設定を共有します。会話や接続の初期化はしません。</li>
+    </ul>
+    <p class="small">Apple側で表示されたBuild番号が42以外なら、その番号を正として共有してください。</p>
+  </section>
+</main>
+</body>
+</html>

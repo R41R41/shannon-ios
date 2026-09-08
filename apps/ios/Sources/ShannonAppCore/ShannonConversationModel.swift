@@ -37,6 +37,8 @@ public final class ShannonConversationModel {
     private var acknowledgedAgentTaskIDs: Set<UUID>
     private var threadListRevision = 0
     private var titleEditRevisions: [String: Int] = [:]
+    private var pendingAttachmentsByMessageID: [UUID: [ShannonChatAttachmentDTO]] = [:]
+    private var pendingWebSearchMessageIDs: Set<UUID> = []
 
     public init(
         scopeKey: String = "local-owner",
@@ -102,7 +104,13 @@ public final class ShannonConversationModel {
                     ```
                     """,
                     sentAt: now.addingTimeInterval(-120),
-                    emotionSnapshot: emotion
+                    emotionSnapshot: emotion,
+                    artifacts: [ShannonGeneratedArtifactDTO(
+                        name: "shannon-interface-plan.md",
+                        mimeType: "text/markdown",
+                        content: "# Shannon Desk\n\n会話と作業を一つの流れにする。\n",
+                        summary: "会話画面の改善方針"
+                    )]
                 ),
                 ConversationMessage(
                     role: .user,
@@ -136,6 +144,34 @@ public final class ShannonConversationModel {
             ChatThreadDTO(threadId: "roadmap-preview", title: "長期計画", createdAt: stamp, updatedAt: stamp, messageCount: 24),
         ]
         model.selectedThreadId = "design-preview"
+        var runningTask = ShannonAgentTaskFixtures.running(
+            threadID: "design-preview",
+            sourceMessageID: model.messages.last(where: { $0.role == .shannon })?.id,
+            now: now.addingTimeInterval(-45)
+        )
+        runningTask.title = "Shannon Deskを実装"
+        runningTask.goal = "Macでも会話・記憶・作業が一人のシャノンとして続く状態にする"
+        runningTask.summary = "会話・作業・記憶を共有モデルへ接続し、最初のネイティブ画面まで確認済み。"
+        runningTask.currentAction = "生成物の会話内プレビューと安全な保存を接続済み"
+        runningTask.plan = [
+            .init(id: "design", title: "UIと情報設計を確定", status: .completed),
+            .init(id: "shell", title: "macOSアプリの土台を作る", status: .completed),
+            .init(id: "connect", title: "会話と作業を接続", status: .completed),
+            .init(id: "verify", title: "実機相当のMacビルドを検証", status: .completed),
+            .init(id: "polish", title: "会話面とサイドバーを調整", status: .completed),
+            .init(id: "m1", title: "ファイル添付とWeb検索を接続", status: .completed),
+            .init(id: "artifact", title: "生成物の保存とプレビューを接続", status: .completed),
+            .init(id: "pairing", title: "Mac実接続と配布準備へ進む", status: .pending),
+        ]
+        var proposedTask = ShannonAgentTaskFixtures.proposed(threadID: "design-preview", now: now.addingTimeInterval(-20))
+        proposedTask.title = "Mac実接続と配布準備"
+        proposedTask.goal = "同じShannonへ安全に接続し、Macへ導入できる完成単位へ進める"
+        proposedTask.summary = "ペアリング、実API smoke、署名・配布経路を順に検証する。"
+        var completedTask = ShannonAgentTaskFixtures.completed(threadID: "design-preview", now: now.addingTimeInterval(-3600))
+        completedTask.title = "Build 42の安定確認"
+        completedTask.goal = "入力欄と外観切替がクラッシュせず動くことを確認する"
+        completedTask.summary = "入力・複数行・ライト／ダーク／システム切替を確認済み。"
+        model.agentTasks = [runningTask, proposedTask, completedTask]
         model.didAttemptInitialLoad = true
         model.didAttemptThreadsLoad = true
         model.isDesignPreview = true
@@ -215,13 +251,28 @@ public final class ShannonConversationModel {
         agentTaskActionErrors.removeValue(forKey: id)
     }
 
-    public func sendDraft() async {
+    public func sendDraft(
+        attachments: [ShannonChatAttachmentDTO] = [],
+        webSearch: Bool = false
+    ) async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isSending else { return }
+        guard (!text.isEmpty || !attachments.isEmpty), !isSending else { return }
         draft = ""
-        let message = ConversationMessage(role: .user, text: text, deliveryState: .sending)
+        let messageText = Self.messageText(text: text, attachments: attachments)
+        let message = ConversationMessage(role: .user, text: messageText, deliveryState: .sending)
         messages.append(message)
-        await send(text: text, userMessageID: message.id)
+        if !attachments.isEmpty {
+            pendingAttachmentsByMessageID[message.id] = attachments
+        }
+        if webSearch {
+            pendingWebSearchMessageIDs.insert(message.id)
+        }
+        await send(
+            text: messageText,
+            userMessageID: message.id,
+            attachments: attachments,
+            webSearch: webSearch
+        )
     }
 
     public func transcribeVoice(_ recording: ShannonVoiceRecording) async throws -> String {
@@ -316,6 +367,12 @@ public final class ShannonConversationModel {
         cacheCurrentHistory()
         selectedThreadId = threadId
         messages = threadId.flatMap { cachedHistories[$0]?.map(\.message) } ?? []
+#if DEBUG
+        if isDesignPreview {
+            errorMessage = nil
+            return
+        }
+#endif
         await reloadConversation(threadId: threadId)
         await acknowledgeVisibleInitiatives()
     }
@@ -435,7 +492,12 @@ public final class ShannonConversationModel {
         else { return }
 
         updateDeliveryState(for: message.id, to: .sending)
-        await send(text: message.text, userMessageID: message.id)
+        await send(
+            text: message.text,
+            userMessageID: message.id,
+            attachments: pendingAttachmentsByMessageID[message.id] ?? [],
+            webSearch: pendingWebSearchMessageIDs.contains(message.id)
+        )
     }
 
     public func dismissError() {
@@ -788,7 +850,13 @@ public final class ShannonConversationModel {
     }
 
     public var canSendDraft: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending && !isLoadingHistory
+        canSendDraft(attachmentCount: 0)
+    }
+
+    public func canSendDraft(attachmentCount: Int) -> Bool {
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachmentCount > 0)
+            && !isSending
+            && !isLoadingHistory
     }
 
     public var currentExpression: ShannonExpressionDTO {
@@ -808,14 +876,27 @@ public final class ShannonConversationModel {
             .max(by: { $0.relevance < $1.relevance })
     }
 
-    private func send(text: String, userMessageID: UUID) async {
+    private func send(
+        text: String,
+        userMessageID: UUID,
+        attachments: [ShannonChatAttachmentDTO] = [],
+        webSearch: Bool = false
+    ) async {
         errorMessage = nil
         isSending = true
         let titleRevisionsAtSend = titleEditRevisions
 
         do {
-            let response = try await client.send(message: text, scopeKey: scopeKey, threadId: selectedThreadId)
+            let response = try await client.send(
+                message: text,
+                scopeKey: scopeKey,
+                threadId: selectedThreadId,
+                attachments: attachments,
+                webSearch: webSearch
+            )
             updateDeliveryState(for: userMessageID, to: .sent)
+            pendingAttachmentsByMessageID.removeValue(forKey: userMessageID)
+            pendingWebSearchMessageIDs.remove(userMessageID)
             state = response.state
             selectedThreadId = response.threadId
             let emotion = response.messageEmotion
@@ -828,7 +909,8 @@ public final class ShannonConversationModel {
                     openness: emotion.openness,
                     expression: emotion.expression,
                     stateVersion: response.snapshotVersion
-                )
+                ),
+                artifacts: response.artifacts ?? []
             )
             messages.append(replyMessage)
             installAgentTaskProposals(
@@ -862,6 +944,16 @@ public final class ShannonConversationModel {
             errorMessage = "シャノンに接続できませんでした。ローカルAPIを確認してください。"
         }
         isSending = false
+    }
+
+    private static func messageText(
+        text: String,
+        attachments: [ShannonChatAttachmentDTO]
+    ) -> String {
+        let instruction = text.isEmpty ? "この添付資料を確認してください。" : text
+        guard !attachments.isEmpty else { return instruction }
+        let files = attachments.map { "📎 \($0.name)" }.joined(separator: "\n")
+        return "\(instruction)\n\n\(files)"
     }
 
     private func updateDeliveryState(for id: UUID, to deliveryState: ConversationMessage.DeliveryState) {
@@ -995,7 +1087,8 @@ public final class ShannonConversationModel {
             role: role,
             text: message.content,
             sentAt: parseDate(message.observedAt),
-            emotionSnapshot: emotionSnapshot
+            emotionSnapshot: emotionSnapshot,
+            artifacts: message.artifacts ?? []
         )
     }
 

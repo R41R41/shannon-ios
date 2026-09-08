@@ -135,11 +135,47 @@ public struct ChatRequestDTO: Codable, Equatable, Sendable {
     public let scopeKey: String
     public let message: String
     public let threadId: String?
+    public let attachments: [ShannonChatAttachmentDTO]?
+    public let webSearch: Bool?
 
-    public init(scopeKey: String, message: String, threadId: String? = nil) {
+    public init(
+        scopeKey: String,
+        message: String,
+        threadId: String? = nil,
+        attachments: [ShannonChatAttachmentDTO] = [],
+        webSearch: Bool = false
+    ) {
         self.scopeKey = scopeKey
         self.message = message
         self.threadId = threadId
+        self.attachments = attachments.isEmpty ? nil : attachments
+        self.webSearch = webSearch ? true : nil
+    }
+}
+
+public struct ShannonChatAttachmentDTO: Codable, Equatable, Sendable {
+    public let name: String
+    public let mimeType: String
+    public let text: String
+
+    public init(name: String, mimeType: String, text: String) {
+        self.name = name
+        self.mimeType = mimeType
+        self.text = text
+    }
+}
+
+public struct ShannonGeneratedArtifactDTO: Codable, Equatable, Sendable {
+    public let name: String
+    public let mimeType: String
+    public let content: String
+    public let summary: String?
+
+    public init(name: String, mimeType: String, content: String, summary: String? = nil) {
+        self.name = name
+        self.mimeType = mimeType
+        self.content = content
+        self.summary = summary
     }
 }
 
@@ -273,6 +309,7 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public let systemPrompt: String
     public let state: CompanionStateDTO
     public let uiBlocks: [ShannonUIBlockDTO]?
+    public let artifacts: [ShannonGeneratedArtifactDTO]?
 
     public init(
         mode: String,
@@ -283,6 +320,7 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
         systemPrompt: String,
         state: CompanionStateDTO,
         uiBlocks: [ShannonUIBlockDTO]? = nil,
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil,
         thread: ChatThreadDTO? = nil
     ) {
         self.thread = thread
@@ -294,6 +332,7 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
         self.systemPrompt = systemPrompt
         self.state = state
         self.uiBlocks = uiBlocks
+        self.artifacts = artifacts
     }
 }
 
@@ -331,6 +370,25 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let observedAt: String
     public let messageEmotion: ShannonMessageEmotionDTO?
     public let stateVersion: Int?
+    public let artifacts: [ShannonGeneratedArtifactDTO]?
+
+    public init(
+        id: String,
+        role: String,
+        content: String,
+        observedAt: String,
+        messageEmotion: ShannonMessageEmotionDTO? = nil,
+        stateVersion: Int? = nil,
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.observedAt = observedAt
+        self.messageEmotion = messageEmotion
+        self.stateVersion = stateVersion
+        self.artifacts = artifacts
+    }
 }
 
 public struct ConversationHistoryResponseDTO: Codable, Equatable, Sendable {
@@ -793,6 +851,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let sentAt: Date
     public let deliveryState: DeliveryState
     public let emotionSnapshot: EmotionSnapshot?
+    public let artifacts: [ShannonGeneratedArtifactDTO]
 
     public init(
         id: UUID = UUID(),
@@ -800,7 +859,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         text: String,
         sentAt: Date = Date(),
         deliveryState: DeliveryState = .sent,
-        emotionSnapshot: EmotionSnapshot? = nil
+        emotionSnapshot: EmotionSnapshot? = nil,
+        artifacts: [ShannonGeneratedArtifactDTO] = []
     ) {
         self.id = id
         self.role = role
@@ -808,6 +868,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         self.sentAt = sentAt
         self.deliveryState = deliveryState
         self.emotionSnapshot = emotionSnapshot
+        self.artifacts = artifacts
     }
 
     public func withDeliveryState(_ deliveryState: DeliveryState) -> ConversationMessage {
@@ -817,7 +878,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             text: text,
             sentAt: sentAt,
             deliveryState: deliveryState,
-            emotionSnapshot: emotionSnapshot
+            emotionSnapshot: emotionSnapshot,
+            artifacts: artifacts
         )
     }
 }

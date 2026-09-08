@@ -1,6 +1,6 @@
-# Shannon iOS
+# Shannon
 
-既存Shannonとは独立した、Shannon iOSアプリと専用バックエンドのリポジトリ。
+iPhoneとMacで一人のシャノンへつながる、ネイティブクライアントと専用バックエンドのリポジトリ。
 
 ## 方針
 
@@ -16,6 +16,7 @@
 
 - `apps/ios`: SwiftUI会話画面、API client、ViewModel、22表情リソースのSwift Package。
 - `apps/ios-app`: 実機起動用のXcodeアプリ。`apps/ios`をローカルPackageとして利用する。
+- `apps/macos-app`: Mac向けShannon Desk。会話・記憶・永続作業をiPhoneと同じCore／Azure正本へ接続する。
 - `services/api`: APIと独立worker。SQLiteで会話・共有状態・追記型経験ログ・再開可能な背景ジョブを永続化する。
 - `packages/cognition`: 感情・関心・ユーザー情報・想起記憶・プロンプト投影の純粋な核。
 - `docs`: アーキテクチャと運用方針。
@@ -38,8 +39,12 @@ Codexを含む全開発経路では、同じ検証入口を使う。
 scripts/verify.sh api
 scripts/verify.sh ios
 scripts/verify.sh app
+scripts/verify.sh mac
+scripts/verify.sh mac-release
 scripts/verify.sh all
 ```
+
+`mac` はMac固有のユニットテストとDebugアプリを検証し、`mac-release` は署名なしのReleaseアプリを生成する。Mac固有UIは `apps/macos-app`、iPhone固有UIは `apps/ios-app`、両者で共有する状態・通信・Markdown処理は `apps/ios/Sources/ShannonAppCore` に置く。
 
 別ターミナルで背景workerを起動する。APIは感情・想起・睡眠処理を待たない。
 

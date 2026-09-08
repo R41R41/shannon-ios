@@ -1,15 +1,16 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-07 / edge-to-edge Talk, adaptive composer, and rich replies
+Revision: 2026-09-08 / Shannon Desk M1 connection and worktree checkpoint
 
 ## System shape
 
 ```text
-iPhone app
-  ├─ Talk / dialogue / threads / memory / settings
-  ├─ Keychain pairing token
-  └─ local conversation cache
+iPhone app + Shannon Desk for Mac
+  ├─ shared conversation, thread, memory, and agent-task models
+  ├─ platform-native Talk / work / memory / settings surfaces
+  ├─ per-device Keychain pairing token
+  └─ per-device local conversation cache
           │ paired HTTPS
           ▼
 Azure VM: API + SQLite + background workers
@@ -84,6 +85,25 @@ Live2D and animated widgets remain future work. Current dialogue mode and Realti
 
 Background voice activation remains deliberately later work. Realtime voice starts only from an explicit user tap and ends when dismissed, when the app leaves the active scene, or when the session ceiling is reached.
 
+## macOS experience
+
+- `apps/macos-app` is a separate native macOS application target inside the Shannon repository. It is another client for the same Shannon product, not a separate personality, backend, or data store.
+- The Mac target uses the same `com.r41r41.shannon` bundle identifier as the iPhone target so App Store Connect can add macOS to the existing Shannon app record. It remains a separate Xcode target and may advance its platform-specific build number independently.
+- `apps/ios` remains the shared Apple-client core. It already targets iOS 17 and macOS 14; networking, pairing, conversation state, thread operations, memory, Markdown parsing, artifact validation, expression assets, and durable agent-task projections are reused rather than reimplemented. Mac presentation, attachment loading, save-panel integration, keyboard commands, and native-window behavior stay in `apps/macos-app`.
+- The default Mac layout is a `NavigationSplitView`: thread and destination sidebar, a neutral reading/work surface, and an inspector that opens only when work context is useful.
+- Talk preserves the ChatGPT-like reading hierarchy: a wide Markdown response, quiet user messages, copy, multi-line composer, keyboard submission, search-ready thread navigation, and minimal permanent chrome.
+- When a task is active, a compact `目的 / いま / 次` strip connects the conversation to the work state. The dedicated `作業全体` destination groups durable tasks into active, proposed, and finished work. Selecting one opens the `現在地` inspector with goal, current action, next action, emotion, plan, and approval controls.
+- Shannon's blue is not a page fill or default selection color. It is reserved for a small presence signal, identity, and genuinely important attention. Native neutral macOS materials and semantic system colors carry most of the interface.
+- Shannon may surface proactive proposals, but proposed work remains visibly distinct from active work and requires the user to start it. Approval-required operations remain explicit in the inspector.
+- Mac Talk accepts up to four bounded UTF-8 text, Markdown, code, CSV, or JSON attachments. File contents are sent as separate non-trusted reference blocks and are not persisted in conversation history; only the user-visible file names remain with the turn.
+- Web research is opt-in per turn. When selected, Azure enables the OpenAI Responses built-in web-search tool with a three-call ceiling and asks for source metadata. Safe unique HTTP(S) sources are appended to the Markdown reply and therefore remain visible in the shared conversation history. Ordinary turns do not enable search.
+- Search results and attachments are both non-trusted evidence. Neither may override Shannon's system/developer instructions or authorize external operations.
+- A chat reply may contain up to two bounded UTF-8 generated artifacts (plain text, Markdown, JSON, CSV, or source text). Artifacts are validated as non-executable data, returned with the reply, and persisted in assistant-message metadata so a reopened conversation keeps its previews.
+- Mac Talk renders each generated artifact as a separate conversation card. Opening it shows Markdown or monospaced text in a modal preview. Export is available only from that preview and always opens the native macOS save panel; Shannon never chooses the destination, bypasses overwrite confirmation, or writes from model text alone.
+- Generated artifact filenames are validated on the API and sanitized again on the client. Path separators and control characters cannot escape the user-selected save location.
+- macOS uses its own Keychain pairing record on the device. A credential is never copied through source code, logs, or documentation.
+- A restored credential is not treated as proof of current reachability. Shannon Desk performs an authenticated thread-list request on launch and after pairing, shows the result in Settings, and removes a server-revoked credential on HTTP 401. A network failure preserves the credential so the user can retry without pairing again.
+
 ## Aether boundary
 
 Shannon reads only a bounded, purpose-built Aether context projection. Proposed changes are written to Aether's proposal inbox for review; Shannon does not directly rewrite Aether's canonical data.
@@ -134,9 +154,11 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 
 ## Code ownership
 
-- `apps/ios`: presentation, gestures, local cache, API client, Keychain-facing connection state.
-- `apps/ios-app`: entitlements, signing, icons, and application lifecycle.
-- `services/api`: contracts, authentication, persistence, chat orchestration, background workers, Agent Host protocol, Aether/world integrations.
+- `apps/ios-app/**`: iPhone-only presentation, gestures, app lifecycle, entitlements, signing, icons, and device operations.
+- `apps/macos-app/**`: Mac-only presentation, attachment loading, save panels, keyboard commands, sandbox entitlements, application lifecycle, windows, and Mac tests.
+- `apps/ios/Sources/ShannonAppCore/**`: shared Apple-client models, API client, cache, connection state, Markdown parsing, artifacts, and reusable assets. Changes are integrated by the Shannon main task rather than either platform-only task.
+- `services/api/**`: contracts, authentication, persistence, chat orchestration, background workers, Agent Host protocol, Aether/world integrations. Changes are integrated by the Shannon main task.
+- `docs/architecture.md`, `scripts/verify.sh`, database schema, and Shannon progress JSON are also Shannon main-task integration surfaces.
 - `packages/cognition`: pure shared-state and prompt-projection rules.
 - `deploy/macos`: launchd configuration for the local Agent Host.
 - `deploy/azure`: production services, optional isolated cloud Agent Host, and configuration examples.

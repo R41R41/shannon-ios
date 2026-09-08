@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Build 36 — Macロック解除</title>
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+    body { margin: 0; background: #f4fbff; color: #163144; }
+    main { max-width: 720px; margin: 48px auto; padding: 0 24px; }
+    article { padding: 28px; border: 1px solid #b9e7ff; border-radius: 24px; background: rgba(255,255,255,.86); box-shadow: 0 16px 48px rgba(31,143,195,.12); }
+    h1 { margin-top: 0; font-size: 28px; }
+    h2 { margin-top: 28px; font-size: 18px; }
+    li { margin: 10px 0; line-height: 1.6; }
+    .ok { padding: 14px 16px; border-radius: 14px; background: #dff7eb; color: #174b34; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #071722; color: #e8f7ff; }
+      article { background: #0d2635; border-color: #22546e; }
+      .ok { background: #123d2c; color: #dff7eb; }
+    }
+  </style>
+</head>
+<body>
+<main><article>
+  <h1>Build 36 配信を再開するためのMacロック解除</h1>
+  <p>目的は、完成済みのBuild 36をXcodeからAppleへ検証・アップロードすることです。コード、Azure、DBには追加変更を行いません。</p>
+  <h2>手順</h2>
+  <ol>
+    <li>Macの画面を表示し、ログインパスワードまたはTouch IDでロックを解除します。</li>
+    <li>Xcodeが見えるデスクトップまで戻ります。</li>
+    <li>このタスクに「ロック解除しました」と送ってください。</li>
+    <li>配信処理中は、完了の連絡までMacをスリープさせないでください。</li>
+  </ol>
+  <h2>成功の状態</h2>
+  <p class="ok">こちらからXcodeのBuild 36アーカイブを開け、Appleへの検証とTestFlightアップロードを再開できます。</p>
+  <h2>うまくいかない場合</h2>
+  <p>画面がすぐ消える場合は、電源に接続したまま再度解除してください。Build 36のアーカイブは保存済みなので、再ビルドやデータ復旧は不要です。</p>
+</article></main>
+</body>
+</html>
