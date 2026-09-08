@@ -36,6 +36,18 @@ import {
 import { randomUUID } from 'node:crypto';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
+import {
+  DisabledVoyagerTaskDestination,
+  InMemoryOrganizeStore,
+  LocalOrganizeExtractor,
+  OrganizeError,
+  isOrganizeCommand,
+  messagesAfterCursor,
+  type OrganizeDecision,
+  type OrganizeExtractor,
+  type OrganizeStore,
+  type VoyagerTaskDestination,
+} from './organize.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -136,6 +148,9 @@ export interface ShannonApiKernelOptions {
   testFlightDelivery?: TestFlightDeliveryReader;
   defaultAgentHost?: string;
   dailyMind?: DailyMindReader;
+  organizeStore?: OrganizeStore;
+  organizeExtractor?: OrganizeExtractor;
+  voyagerDestination?: VoyagerTaskDestination;
 }
 
 export class ShannonApiKernel {
@@ -151,6 +166,9 @@ export class ShannonApiKernel {
   private readonly testFlightDelivery: TestFlightDeliveryReader | null;
   private readonly defaultAgentHost: string | null;
   private readonly dailyMind: DailyMindReader | null;
+  private readonly organizeStore: OrganizeStore;
+  private readonly organizeExtractor: OrganizeExtractor;
+  private readonly voyagerDestination: VoyagerTaskDestination;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -173,6 +191,9 @@ export class ShannonApiKernel {
       ? options.defaultAgentHost.trim()
       : null;
     this.dailyMind = options.dailyMind ?? null;
+    this.organizeStore = options.organizeStore ?? new InMemoryOrganizeStore();
+    this.organizeExtractor = options.organizeExtractor ?? new LocalOrganizeExtractor();
+    this.voyagerDestination = options.voyagerDestination ?? new DisabledVoyagerTaskDestination();
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
@@ -252,6 +273,82 @@ export class ShannonApiKernel {
           activeFailureCode: null,
           history: [],
         },
+      };
+    }
+
+    if (request.method === 'GET' && request.path === '/v1/organize/sessions') {
+      const scopeKey = request.query?.get('scopeKey');
+      const threadId = request.query?.get('threadId')?.trim();
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!threadId) return badRequest('threadId is required');
+      return { status: 200, body: { sessions: this.organizeStore.list(scopeKey, threadId) } };
+    }
+
+    const organizeSessionMatch = request.path.match(/^\/v1\/organize\/sessions\/([^/]+)$/);
+    if (request.method === 'GET' && organizeSessionMatch) {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      const session = this.organizeStore.get(scopeKey, decodeURIComponent(organizeSessionMatch[1] ?? ''));
+      return session ? { status: 200, body: { session } } : { status: 404, body: { error: 'SESSION_NOT_FOUND' } };
+    }
+
+    const organizeDecisionMatch = request.path.match(/^\/v1\/organize\/sessions\/([^/]+)\/items\/([^/]+)\/decision$/);
+    if (request.method === 'POST' && organizeDecisionMatch) {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!Number.isInteger(request.body.expectedRevision) || Number(request.body.expectedRevision) < 1) return badRequest('expectedRevision is invalid');
+      if (!['accepted', 'rejected', 'deferred'].includes(String(request.body.decision))) return badRequest('decision is invalid');
+      if (request.body.title !== undefined && !validBoundedString(request.body.title, 500)) return badRequest('title is invalid');
+      if (request.body.details !== undefined && (typeof request.body.details !== 'string' || request.body.details.length > 1_000)) return badRequest('details is invalid');
+      try {
+        const session = this.organizeStore.decide(
+          scopeKey,
+          decodeURIComponent(organizeDecisionMatch[1] ?? ''),
+          decodeURIComponent(organizeDecisionMatch[2] ?? ''),
+          Number(request.body.expectedRevision),
+          request.body.decision as OrganizeDecision,
+          {
+            ...(typeof request.body.title === 'string' ? { title: request.body.title } : {}),
+            ...(typeof request.body.details === 'string' ? { details: request.body.details } : {}),
+          },
+          this.now(),
+        );
+        return { status: 200, body: { session } };
+      } catch (error) { return organizeErrorResponse(error); }
+    }
+
+    const organizeApplyMatch = request.path.match(/^\/v1\/organize\/sessions\/([^/]+)\/apply$/);
+    if (request.method === 'POST' && organizeApplyMatch) {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!Number.isInteger(request.body.expectedRevision) || Number(request.body.expectedRevision) < 1) return badRequest('expectedRevision is invalid');
+      const sessionId = decodeURIComponent(organizeApplyMatch[1] ?? '');
+      let session = this.organizeStore.get(scopeKey, sessionId);
+      if (!session) return { status: 404, body: { error: 'SESSION_NOT_FOUND' } };
+      if (session.revision !== Number(request.body.expectedRevision)) return { status: 409, body: { error: 'REVISION_CONFLICT' } };
+      if (session.state === 'applied') {
+        const applied = session.items.flatMap(item => item.destinationStatus === 'applied' && item.result ? [item.result] : []);
+        return { status: 200, body: { session, appliedCount: applied.length, tasks: applied } };
+      }
+      if (session.items.some(item => item.decision === 'proposed')) {
+        return { status: 409, body: { error: 'REVIEW_INCOMPLETE' } };
+      }
+      for (const item of session.items.filter(value => value.decision === 'accepted' && value.destinationStatus !== 'applied')) {
+        try {
+          const result = await this.voyagerDestination.apply(session, item);
+          session = this.organizeStore.recordAttempt(scopeKey, sessionId, item.id, result, undefined, this.now());
+        } catch (error) {
+          const code = error instanceof OrganizeError ? error.code : 'DESTINATION_UNAVAILABLE';
+          session = this.organizeStore.recordAttempt(scopeKey, sessionId, item.id, undefined, code, this.now());
+        }
+      }
+      session = this.organizeStore.finishApply(scopeKey, sessionId, this.now());
+      const applied = session.items.flatMap(item => item.destinationStatus === 'applied' && item.result ? [item.result] : []);
+      return {
+        status: 200,
+        body: { session, appliedCount: applied.length, tasks: applied },
       };
     }
 
@@ -605,6 +702,41 @@ export class ShannonApiKernel {
         threadId,
       );
       const systemPrompt = [basePrompt, dailyMindPrompt, aetherPrompt, taskPrompt].filter(Boolean).join('\n\n');
+      if (isOrganizeCommand(message)) {
+        const completeHistory = this.conversationStore.conversationHistory(body.scopeKey, threadId);
+        const source = messagesAfterCursor(completeHistory, this.organizeStore.cursor(body.scopeKey, threadId)).slice(-100);
+        const drafts = await this.organizeExtractor.extract(body.scopeKey, source.map(item => ({ role: item.role, content: item.content })));
+        let session = this.organizeStore.create({
+          scopeKey: body.scopeKey,
+          threadId,
+          sourceMessageIds: source.map(item => item.id),
+          drafts,
+        }, this.now());
+        const reply = drafts.length
+          ? `Voyagerへ送るTask案を${drafts.length}件まとめたよ。内容を確認して、採用する案を選んでください。`
+          : '今回の範囲には、Voyagerへ送るTask案は見つかりませんでした。';
+        const messageEmotion = createShannonMessageEmotion(
+          projectEmotionReaction(captured, message), captured.temperament,
+          { userMessage: message, shannonReply: reply },
+        );
+        const completedTurn = {
+          scopeKey: body.scopeKey, threadId, capturedState: captured, userMessage: message, shannonReply: reply,
+          messageEmotion, completedAt: this.now(),
+        };
+        const experience = this.background.recordTurn(completedTurn);
+        const lastMessage = this.conversationStore.conversationHistory(body.scopeKey, threadId).at(-1);
+        if (lastMessage) session = this.organizeStore.setCommandThrough(body.scopeKey, session.id, lastMessage.id, this.now());
+        this.background.schedule(completedTurn, experience.id);
+        return {
+          status: 200,
+          body: {
+            mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId,
+            snapshotVersion: captured.version, messageEmotion, systemPrompt, state: captured,
+            thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId),
+            uiBlocks: [{ type: 'organize_session', session }],
+          } satisfies ChatResponse,
+        };
+      }
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt,
@@ -663,6 +795,11 @@ export class ShannonApiKernel {
   waitForBackground(scopeKey: string): Promise<void> {
     return this.background.waitForIdle(scopeKey);
   }
+}
+
+function organizeErrorResponse(error: unknown): ApiResponse {
+  if (error instanceof OrganizeError) return { status: error.status, body: { error: error.code, retryable: error.retryable } };
+  throw error;
 }
 
 function voiceHistoryProjection(history: readonly { role: 'user' | 'assistant'; content: string }[]): string {

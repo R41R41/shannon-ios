@@ -353,6 +353,23 @@ public struct ShannonConversationView: View {
                                 )
                                 .id("agent-task-\(task.id.uuidString)")
                             }
+                            if let session = model.organizeSession(sourceMessageID: message.id) {
+                                ShannonOrganizeSessionCard(
+                                    session: session,
+                                    isWorking: model.pendingOrganizeSessionIDs.contains(session.id),
+                                    error: model.organizeActionErrors[session.id],
+                                    decide: { itemID, decision, title, details in
+                                        Task {
+                                            await model.decideOrganizeItem(
+                                                sessionID: session.id, itemID: itemID,
+                                                decision: decision, title: title, details: details
+                                            )
+                                        }
+                                    },
+                                    apply: { Task { await model.applyOrganizeSession(session.id) } }
+                                )
+                                .id("organize-session-\(session.id)")
+                            }
                         }
                     }
 

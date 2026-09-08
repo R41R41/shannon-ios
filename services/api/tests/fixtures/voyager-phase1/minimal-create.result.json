@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.0",
+  "requestId": "00000000-0000-4000-8000-000000000001",
+  "idempotencyKey": "00000000-0000-4000-8000-000000000002",
+  "status": "applied",
+  "result": {
+    "system": "voyager",
+    "resourceType": "task",
+    "resourceId": "00000000-0000-4000-8000-000000000003",
+    "title": "ShannonとVoyagerの連携を確認する",
+    "summary": "ローカル環境でThinking Taskが1件だけ同期されることを確認する。",
+    "updatedAt": "2026-09-08T00:00:01.000Z",
+    "href": null
+  },
+  "revision": 1,
+  "processedAt": "2026-09-08T00:00:01.000Z"
+}

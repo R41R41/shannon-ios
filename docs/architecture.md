@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-08 / Shannon Desk M1 connection and worktree checkpoint
+Revision: 2026-09-09 / Shannon × Voyager Phase 1 local vertical slice
 
 ## System shape
 
@@ -104,6 +104,18 @@ Background voice activation remains deliberately later work. Realtime voice star
 - macOS uses its own Keychain pairing record on the device. A credential is never copied through source code, logs, or documentation.
 - A restored credential is not treated as proof of current reachability. Shannon Desk performs an authenticated thread-list request on launch and after pairing, shows the result in Settings, and removes a server-revoked credential on HTTP 401. A network failure preserves the credential so the user can retry without pairing again.
 
+## Explicit conversation organization and Voyager Phase 1
+
+The exact standalone command `整理して` enters a separate, explicit organization lane instead of the ordinary chat model lane. The API freezes at most 100 messages after the last successfully applied organization cursor, extracts up to 12 bounded Voyager Task drafts, and stores them as a durable `OrganizeSession`. The command and Shannon's review prompt remain normal conversation messages, so both iPhone and Mac can restore the review card after leaving or relaunching the app.
+
+Each draft begins as `proposed`. The user can accept, edit and accept, reject, or defer each item. These review operations change only Shannon's `OrganizeSession`; they do not call Voyager. The final `反映` action sends only accepted items through the server-side Voyager adapter. A failed item remains retryable and reuses its original request ID, idempotency key, creation time, and byte-equivalent command body. Once an item has been attempted, its reviewed contents are frozen so a retry cannot silently reuse an idempotency key for a different command.
+
+Phase 1 is intentionally create-only. Voyager receives a destination-authenticated Syzygy contract v1 command, creates one top-level `thinking` Task with no Project, and stores a bounded Shannon `workSession` Reference plus separate provenance. The iPhone and Mac never receive the destination credential and call only Shannon's API. Missing destination configuration fails closed; device credentials cannot substitute for the destination credential.
+
+Successful final application shows the created count, Task names, and Voyager Task References. The cursor advances only when the session is fully applied, including a session whose proposals were all rejected or deferred. Existing Task updates, status changes, deletion, bulk operations, Project assignment, Aether writes, and automatic background organization remain outside Phase 1.
+
+Runtime configuration uses all three of `SHANNON_VOYAGER_INTEGRATION_URL`, `SHANNON_VOYAGER_INTEGRATION_TOKEN`, and `SHANNON_VOYAGER_WORKSPACE_ID`. `SHANNON_ORGANIZE_MODEL` is optional and falls back to the normal Shannon model. The extractor hashes the owner scope before using it as a prompt-cache key; raw scope identifiers are not sent in that metadata.
+
 ## Aether boundary
 
 Shannon reads only a bounded, purpose-built Aether context projection. Proposed changes are written to Aether's proposal inbox for review; Shannon does not directly rewrite Aether's canonical data.
@@ -149,6 +161,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Notifications | `push_registrations`, `push_delivery_state` |
 | TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
 | Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |
+| Explicit organization | `organize_sessions`, `organize_items`, `organize_thread_cursors` |
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 

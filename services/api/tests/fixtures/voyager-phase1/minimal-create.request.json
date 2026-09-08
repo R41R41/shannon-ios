@@ -1,0 +1,30 @@
+{
+  "contractVersion": "1.0",
+  "requestId": "00000000-0000-4000-8000-000000000001",
+  "idempotencyKey": "00000000-0000-4000-8000-000000000002",
+  "workspaceId": "configured-workspace",
+  "projectId": null,
+  "source": {
+    "system": "shannon",
+    "resourceType": "workSession",
+    "resourceId": "organize-session-fixture",
+    "title": "会話を整理",
+    "summary": "ユーザーが確認したTask案",
+    "updatedAt": "2026-09-08T00:00:00.000Z",
+    "href": "shannon://work-sessions/organize-session-fixture"
+  },
+  "kind": "voyager.taskChange",
+  "payload": {
+    "operation": "create",
+    "changes": {
+      "title": "ShannonとVoyagerの連携を確認する",
+      "details": "ローカル環境でThinking Taskが1件だけ同期されることを確認する。"
+    }
+  },
+  "provenance": {
+    "conversationId": "thread-fixture",
+    "messageIds": ["message-fixture"],
+    "reason": "整理して"
+  },
+  "createdAt": "2026-09-08T00:00:00.000Z"
+}

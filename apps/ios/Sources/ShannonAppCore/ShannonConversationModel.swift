@@ -25,6 +25,9 @@ public final class ShannonConversationModel {
     public private(set) var agentTasks: [ShannonAgentTask]
     public private(set) var pendingAgentTaskActionIDs: Set<UUID> = []
     public private(set) var agentTaskActionErrors: [UUID: String] = [:]
+    public private(set) var organizeSessions: [ShannonOrganizeSessionDTO] = []
+    public private(set) var pendingOrganizeSessionIDs: Set<String> = []
+    public private(set) var organizeActionErrors: [String: String] = [:]
 
     private let scopeKey: String
     private let client: any ShannonAPIClientProtocol
@@ -237,6 +240,60 @@ public final class ShannonConversationModel {
 
     public func agentTask(sourceMessageID: UUID) -> ShannonAgentTask? {
         selectedThreadAgentTasks.first(where: { $0.sourceMessageID == sourceMessageID })
+    }
+
+    public func organizeSession(sourceMessageID: UUID) -> ShannonOrganizeSessionDTO? {
+        organizeSessions.first { session in
+            session.commandThroughMessageId.flatMap(UUID.init(uuidString:)) == sourceMessageID
+        }
+    }
+
+    public func decideOrganizeItem(
+        sessionID: String,
+        itemID: String,
+        decision: ShannonOrganizeDecisionDTO,
+        title: String? = nil,
+        details: String? = nil
+    ) async {
+        guard let session = organizeSessions.first(where: { $0.id == sessionID }),
+              !pendingOrganizeSessionIDs.contains(sessionID) else { return }
+        pendingOrganizeSessionIDs.insert(sessionID)
+        organizeActionErrors.removeValue(forKey: sessionID)
+        defer { pendingOrganizeSessionIDs.remove(sessionID) }
+        do {
+            let updated = try await client.decideOrganizeItem(
+                scopeKey: scopeKey, sessionId: sessionID, itemId: itemID,
+                expectedRevision: session.revision, decision: decision,
+                title: title, details: details
+            )
+            upsertOrganizeSession(updated)
+        } catch {
+            organizeActionErrors[sessionID] = "Task案を更新できませんでした。もう一度お試しください。"
+        }
+    }
+
+    public func applyOrganizeSession(_ sessionID: String) async {
+        guard let session = organizeSessions.first(where: { $0.id == sessionID }),
+              !pendingOrganizeSessionIDs.contains(sessionID) else { return }
+        pendingOrganizeSessionIDs.insert(sessionID)
+        organizeActionErrors.removeValue(forKey: sessionID)
+        defer { pendingOrganizeSessionIDs.remove(sessionID) }
+        do {
+            let result = try await client.applyOrganizeSession(
+                scopeKey: scopeKey, sessionId: sessionID, expectedRevision: session.revision
+            )
+            upsertOrganizeSession(result.session)
+            if result.session.state == .partiallyApplied {
+                organizeActionErrors[sessionID] = "一部をVoyagerへ反映できませんでした。同じ内容で再試行できます。"
+            } else if result.appliedCount > 0 {
+                let names = result.tasks.map(\.title).joined(separator: "、")
+                statusMessage = "Voyagerに\(result.appliedCount)件反映しました：\(names)"
+            } else {
+                statusMessage = "今回はVoyagerへ反映するTaskはありません。"
+            }
+        } catch {
+            organizeActionErrors[sessionID] = "Voyagerへ反映できませんでした。接続回復後に同じ内容で再試行できます。"
+        }
     }
 
     public func isAgentTaskActionInFlight(_ id: UUID) -> Bool {
@@ -460,6 +517,9 @@ public final class ShannonConversationModel {
             selectedThreadId = response.threadId
             messages = response.messages.compactMap(Self.conversationMessage)
             state = response.state
+            organizeSessions = (try? await client.loadOrganizeSessions(
+                scopeKey: scopeKey, threadId: response.threadId
+            )) ?? []
             await loadThreads(force: true)
 
             if let selected = threads.firstIndex(where: { $0.threadId == response.threadId }) {
@@ -900,7 +960,9 @@ public final class ShannonConversationModel {
             state = response.state
             selectedThreadId = response.threadId
             let emotion = response.messageEmotion
+            let organizeSession = response.uiBlocks?.compactMap(\.session).first
             let replyMessage = ConversationMessage(
+                id: organizeSession?.commandThroughMessageId.flatMap(UUID.init(uuidString:)) ?? UUID(),
                 role: .shannon,
                 text: response.reply,
                 emotionSnapshot: ConversationMessage.EmotionSnapshot(
@@ -918,6 +980,7 @@ public final class ShannonConversationModel {
                 threadID: response.threadId,
                 sourceMessageID: replyMessage.id
             )
+            if let organizeSession { upsertOrganizeSession(organizeSession) }
             if let thread = response.thread, thread.threadId == response.threadId {
                 let existing = threads.first { $0.threadId == thread.threadId }
                 let editedDuringSend = titleRevisionsAtSend[thread.threadId, default: 0]
@@ -1041,7 +1104,8 @@ public final class ShannonConversationModel {
         sourceMessageID: UUID
     ) {
         for block in blocks where block.type == "agent_task_proposal" {
-            let detail = [block.goal, block.risk].compactMap { value in
+            guard let title = block.title, let goal = block.goal else { continue }
+            let detail = [goal, block.risk].compactMap { value in
                 guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
                 return value
             }.joined(separator: "\n")
@@ -1049,15 +1113,24 @@ public final class ShannonConversationModel {
                 id: block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID(),
                 conversationThreadID: threadID,
                 sourceMessageID: sourceMessageID,
-                title: block.title,
-                goal: block.goal,
+                title: title,
+                goal: goal,
                 hostHint: block.hostHint,
                 projectHint: block.projectHint,
                 status: .proposed,
-                summary: detail.isEmpty ? block.goal : detail
+                summary: detail.isEmpty ? goal : detail
             )
             upsertAgentTask(task)
         }
+    }
+
+    private func upsertOrganizeSession(_ session: ShannonOrganizeSessionDTO) {
+        if let index = organizeSessions.firstIndex(where: { $0.id == session.id }) {
+            organizeSessions[index] = session
+        } else {
+            organizeSessions.append(session)
+        }
+        organizeSessions.sort { $0.createdAt < $1.createdAt }
     }
 
     private func nextAgentSequence(_ task: ShannonAgentTask) -> Int {

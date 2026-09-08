@@ -1,5 +1,6 @@
 import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
 import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from './chatModel.js';
+import type { OrganizeSession } from './organize.js';
 
 export interface ApiRequest {
   method: 'GET' | 'POST';
@@ -52,6 +53,9 @@ export interface ChatResponse {
     hostHint?: string;
     projectHint?: string;
     risk?: string;
+  } | {
+    type: 'organize_session';
+    session: OrganizeSession;
   }>;
 }
 

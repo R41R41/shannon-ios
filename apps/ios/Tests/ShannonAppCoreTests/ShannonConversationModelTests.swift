@@ -3,6 +3,37 @@ import XCTest
 
 @MainActor
 final class ShannonConversationModelTests: XCTestCase {
+    func testOrganizeSessionAttachesToReplyAndAppliesOnlyAfterReview() async {
+        let client = OrganizeClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        model.draft = "整理して"
+
+        await model.sendDraft()
+
+        let replyID = UUID(uuidString: TestFixtures.organizeMessageID)
+        XCTAssertEqual(model.messages.last?.id, replyID)
+        XCTAssertEqual(model.organizeSession(sourceMessageID: replyID!)?.items.first?.decision, .proposed)
+        var applyCount = await client.currentApplyCount()
+        XCTAssertEqual(applyCount, 0)
+
+        await model.decideOrganizeItem(
+            sessionID: TestFixtures.organizeSessionID,
+            itemID: TestFixtures.organizeItemID,
+            decision: .accepted,
+            title: "確認済みTask",
+            details: "確認済みの内容"
+        )
+        XCTAssertEqual(model.organizeSessions.first?.items.first?.title, "確認済みTask")
+        applyCount = await client.currentApplyCount()
+        XCTAssertEqual(applyCount, 0)
+
+        await model.applyOrganizeSession(TestFixtures.organizeSessionID)
+        applyCount = await client.currentApplyCount()
+        XCTAssertEqual(applyCount, 1)
+        XCTAssertEqual(model.organizeSessions.first?.state, .applied)
+        XCTAssertEqual(model.organizeSessions.first?.items.first?.result?.resourceType, "task")
+    }
+
     func testGeneratedTitleArrivesWithAssistantReplyAndRestoresFromDisplayCache() async {
         let scopeKey = "title-test-\(UUID().uuidString)"
         defer { UserDefaults.standard.removeObject(forKey: "shannon.conversation-cache.v1.\(scopeKey)") }
@@ -666,13 +697,75 @@ private actor AttachmentClient: ShannonAPIClientProtocol {
     }
 }
 
+private actor OrganizeClient: ShannonAPIClientProtocol {
+    private(set) var applyCount = 0
+    private var session = TestFixtures.organizeSession()
+
+    func currentApplyCount() -> Int { applyCount }
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        TestFixtures.chatResponse(
+            reply: "Task案を確認してね",
+            uiBlocks: [ShannonUIBlockDTO(type: "organize_session", session: session)]
+        )
+    }
+
+    func decideOrganizeItem(
+        scopeKey: String,
+        sessionId: String,
+        itemId: String,
+        expectedRevision: Int,
+        decision: ShannonOrganizeDecisionDTO,
+        title: String?,
+        details: String?
+    ) async throws -> ShannonOrganizeSessionDTO {
+        let item = session.items[0]
+        session = TestFixtures.organizeSession(
+            state: .readyForReview,
+            revision: expectedRevision + 1,
+            item: ShannonOrganizeItemDTO(
+                id: item.id,
+                title: title ?? item.title,
+                details: details ?? item.details,
+                decision: decision,
+                destinationStatus: .pending,
+                requestId: item.requestId,
+                idempotencyKey: item.idempotencyKey,
+                result: nil,
+                errorCode: nil
+            )
+        )
+        return session
+    }
+
+    func applyOrganizeSession(scopeKey: String, sessionId: String, expectedRevision: Int) async throws -> ShannonOrganizeApplyResponseDTO {
+        applyCount += 1
+        let item = session.items[0]
+        let reference = ShannonVoyagerTaskReferenceDTO(
+            system: "voyager", resourceType: "task", resourceId: "00000000-0000-4000-8000-000000000003",
+            title: item.title, summary: item.details, updatedAt: "2026-09-08T00:00:10.000Z", href: nil
+        )
+        session = TestFixtures.organizeSession(
+            state: .applied,
+            revision: expectedRevision + 1,
+            item: ShannonOrganizeItemDTO(
+                id: item.id, title: item.title, details: item.details, decision: .accepted,
+                destinationStatus: .applied, requestId: item.requestId, idempotencyKey: item.idempotencyKey,
+                result: reference, errorCode: nil
+            )
+        )
+        return ShannonOrganizeApplyResponseDTO(session: session, appliedCount: 1, tasks: [reference])
+    }
+}
+
 private enum TestFixtures {
     static func chatResponse(
         version: Int = 0,
         reply: String = "ok",
         expression: ShannonExpressionDTO = .calm,
         thread: ChatThreadDTO? = nil,
-        artifacts: [ShannonGeneratedArtifactDTO]? = nil
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil,
+        uiBlocks: [ShannonUIBlockDTO]? = nil
     ) -> ChatResponseDTO {
         ChatResponseDTO(
             mode: "local-stub",
@@ -687,8 +780,43 @@ private enum TestFixtures {
             ),
             systemPrompt: "prompt",
             state: state(version: version),
+            uiBlocks: uiBlocks,
             artifacts: artifacts,
             thread: thread
+        )
+    }
+
+    static let organizeSessionID = "00000000-0000-4000-8000-000000000010"
+    static let organizeItemID = "00000000-0000-4000-8000-000000000011"
+    static let organizeMessageID = "00000000-0000-4000-8000-000000000012"
+
+    static func organizeSession(
+        state: ShannonOrganizeSessionStateDTO = .readyForReview,
+        revision: Int = 1,
+        item: ShannonOrganizeItemDTO? = nil
+    ) -> ShannonOrganizeSessionDTO {
+        ShannonOrganizeSessionDTO(
+            id: organizeSessionID,
+            scopeKey: "local-owner",
+            threadId: "test-thread",
+            state: state,
+            revision: revision,
+            sourceMessageIds: ["00000000-0000-4000-8000-000000000013"],
+            commandThroughMessageId: organizeMessageID,
+            items: [item ?? ShannonOrganizeItemDTO(
+                id: organizeItemID,
+                title: "Task案",
+                details: "短い実行内容",
+                decision: .proposed,
+                destinationStatus: .pending,
+                requestId: "00000000-0000-4000-8000-000000000014",
+                idempotencyKey: "00000000-0000-4000-8000-000000000015",
+                result: nil,
+                errorCode: nil
+            )],
+            createdAt: "2026-09-08T00:00:00.000Z",
+            updatedAt: "2026-09-08T00:00:00.000Z",
+            appliedAt: state == .applied ? "2026-09-08T00:00:10.000Z" : nil
         )
     }
 

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon × Voyager Phase 1 ローカル実装 v41</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5f6f8;--panel:#fff;--text:#18202a;--sub:#62707d;--line:#dbe1e7;--blue:#1678b8;--soft:#eaf4fa;--ok:#18734f;--warn:#936312}
+    @media(prefers-color-scheme:dark){:root{--bg:#0e1115;--panel:#171b20;--text:#edf2f6;--sub:#a8b3be;--line:#303842;--blue:#61bced;--soft:#122b39;--ok:#62ca99;--warn:#e3b759}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1050px;margin:auto;padding:42px 22px 80px}h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.08;letter-spacing:-.045em;margin:.15em 0}.lead{max-width:820px;color:var(--sub);font-size:1.1rem}.eyebrow{color:var(--blue);font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-size:.76rem}.chips{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0}.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 11px;font-size:.82rem}.ok{color:var(--ok)}.warn{color:var(--warn)}h2{margin:2.2em 0 .75em;font-size:1.45rem}.hero,.card,.step{background:var(--panel);border:1px solid var(--line);border-radius:18px}.hero{padding:22px 24px;border-left:5px solid var(--ok)}.hero strong{font-size:1.18rem}.flow{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}.step{padding:13px;position:relative;font-size:.87rem}.step:not(:last-child):after{content:"→";position:absolute;right:-11px;top:38%;color:var(--blue);font-weight:800;z-index:2}.step b{display:block}.step small{color:var(--sub)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:14px}.card{padding:18px}.card h3{margin:.05em 0 .45em;font-size:1rem}.metric{font-size:2rem;font-weight:760;letter-spacing:-.04em}.metric small{font-size:.8rem;color:var(--sub);font-weight:500}table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}th,td{text-align:left;vertical-align:top;padding:12px 13px;border-bottom:1px solid var(--line)}th{font-size:.8rem;color:var(--sub);background:color-mix(in srgb,var(--panel) 82%,var(--soft))}tr:last-child td{border-bottom:0}code{background:var(--soft);padding:.12em .35em;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.87em}ul{padding-left:1.25em}.note{border-left:4px solid var(--warn);padding:10px 14px;background:color-mix(in srgb,var(--warn) 8%,transparent)}footer{margin-top:42px;padding-top:16px;border-top:1px solid var(--line);color:var(--sub);font-size:.82rem}
+    @media(max-width:780px){main{padding:28px 15px 60px}.flow{grid-template-columns:1fr}.step:not(:last-child):after{content:"↓";right:49%;top:auto;bottom:-17px}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon × Voyager / phase 1 local checkpoint v41</div>
+  <h1>「整理して」からVoyagerへ、<br>承認つきで届くところまで完成</h1>
+  <p class="lead">前回の合意をShannonのAPI・iPhone・Macへ縦に実装し、Voyagerの実schemaと実SQLite処理まで合成データで接続した。本番、Azure、実ユーザーデータ、TestFlightにはまだ触れていない。</p>
+  <div class="chips"><span class="chip ok">実装完了</span><span class="chip ok">両backend適合</span><span class="chip ok">承認前書込ゼロ</span><span class="chip warn">本番未接続</span></div>
+
+  <section class="hero"><strong>現在地</strong><p>Phase 1のローカル完成条件は満たした。通常会話を壊さず、明示的な「整理して」だけが別レーンへ入り、ユーザーが最終「反映」を押したTask案だけをVoyagerへ作成できる。</p></section>
+
+  <h2>実際の流れ</h2>
+  <div class="flow">
+    <div class="step"><b>会話</b><small>前回cursor以降を対象</small></div>
+    <div class="step"><b>整理して</b><small>単独コマンドだけで開始</small></div>
+    <div class="step"><b>Task案</b><small>最大12件を永続保存</small></div>
+    <div class="step"><b>確認</b><small>採用・編集・却下・保留</small></div>
+    <div class="step"><b>反映</b><small>ここで初めて外部送信</small></div>
+    <div class="step"><b>Voyager</b><small>Thinking Taskとして同期</small></div>
+  </div>
+
+  <h2>検証結果</h2>
+  <div class="grid">
+    <div class="card"><div class="metric">186 <small>API tests</small></div><p>型検査を含むAPI全回帰が成功。Voyager共通fixtureとの完全一致と再送固定も確認。</p></div>
+    <div class="card"><div class="metric">92 <small>Swift tests</small></div><p>共有Apple core、会話復元、レビュー、編集後反映、既存UI回帰がすべて成功。</p></div>
+    <div class="card"><div class="metric">1 <small>Voyager Task</small></div><p>合成E2Eで最終反映後だけ1件作成。承認前と編集確認中は0件。</p></div>
+    <div class="card"><div class="metric">rev 1 <small>normal sync</small></div><p>Thinking、top-level、Projectなし、Shannon Work Session参照つきで通常同期から取得。</p></div>
+  </div>
+
+  <h2>安全境界</h2>
+  <table><thead><tr><th>境界</th><th>今回の実装</th></tr></thead><tbody>
+    <tr><td>書込タイミング</td><td>カード内の採用・編集ではShannon DBだけを更新。最終「反映」までVoyager呼出しなし。</td></tr>
+    <tr><td>再送</td><td>request ID、idempotency key、作成時刻、本文を固定。同じ操作の再試行で二重Taskを作らない。</td></tr>
+    <tr><td>権限</td><td>iPhone／MacはShannon APIだけを呼ぶ。Voyager専用credentialはサーバー側だけに置く。</td></tr>
+    <tr><td>保存</td><td>Session、各案、判断、結果、cursorを加法SQLite tableへ保存。再起動後も復元できる。</td></tr>
+    <tr><td>対象外</td><td>既存Task更新、状態変更、削除、一括操作、Project割当、Aether書込、自動整理。</td></tr>
+  </tbody></table>
+
+  <h2>ここから先</h2>
+  <ul>
+    <li><strong>次の安全な工程：</strong>専用destination credentialの発行方法とrotation／revocationを決め、Azure staging相当で接続する。</li>
+    <li><strong>その後：</strong>iPhoneとMacの実画面で、レビュー復元、編集、部分失敗、再試行、成功Referenceを状態別に確認する。</li>
+    <li><strong>本番判断：</strong>本番DBバックアップ、設定、サービス再起動、架空Task smokeを別承認単位で行う。TestFlightはUI確認が必要な段階だけ。</li>
+    <li><strong>Phase 2候補：</strong>Project割当または既存Task更新のどちらか一方を、Voyager側のowner検証と競合設計後に追加する。</li>
+  </ul>
+  <p class="note"><strong>Xcode環境メモ：</strong>共有Swift Packageの92件は成功。今回のCodex管理環境では、Xcodeが内部で使う二重sandboxがOSに拒否され、Xcode project buildだけ再実行できなかった。ソースの失敗ではなく既知の実行環境制約であり、本番・配布へ進む前には通常Xcode環境でiPhone／Mac app buildを再確認する。</p>
+
+  <footer>Shannon製品・配布正本: shannon-ios。Voyager側はbranch codex/shannon-task-execution-impact / adapter commit c33d5ba / fixture-server commit 116dbe3を読み取り利用。秘密値・実データ・本番IDは記載していない。2026-09-09。</footer>
+</main></body>
+</html>

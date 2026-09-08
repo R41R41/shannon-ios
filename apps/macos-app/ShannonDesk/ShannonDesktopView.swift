@@ -316,6 +316,23 @@ public struct ShannonDesktopRootView: View {
                         ForEach(conversation.messages) { message in
                             DesktopMessageView(message: message)
                                 .id(message.id)
+                            if let session = conversation.organizeSession(sourceMessageID: message.id) {
+                                ShannonOrganizeSessionCard(
+                                    session: session,
+                                    isWorking: conversation.pendingOrganizeSessionIDs.contains(session.id),
+                                    error: conversation.organizeActionErrors[session.id],
+                                    decide: { itemID, decision, title, details in
+                                        Task {
+                                            await conversation.decideOrganizeItem(
+                                                sessionID: session.id, itemID: itemID,
+                                                decision: decision, title: title, details: details
+                                            )
+                                        }
+                                    },
+                                    apply: { Task { await conversation.applyOrganizeSession(session.id) } }
+                                )
+                                .id("organize-session-\(session.id)")
+                            }
                         }
                         if conversation.isSending {
                             HStack(spacing: 8) {

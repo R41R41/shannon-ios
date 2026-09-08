@@ -190,20 +190,22 @@ public struct ChatThreadDTO: Codable, Equatable, Sendable {
 public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
     public let type: String
     public let proposalId: String?
-    public let title: String
-    public let goal: String
+    public let title: String?
+    public let goal: String?
     public let hostHint: String?
     public let projectHint: String?
     public let risk: String?
+    public let session: ShannonOrganizeSessionDTO?
 
     public init(
         type: String = "agent_task_proposal",
         proposalId: String? = nil,
-        title: String,
-        goal: String,
+        title: String? = nil,
+        goal: String? = nil,
         hostHint: String? = nil,
         projectHint: String? = nil,
-        risk: String? = nil
+        risk: String? = nil,
+        session: ShannonOrganizeSessionDTO? = nil
     ) {
         self.type = type
         self.proposalId = proposalId
@@ -212,7 +214,86 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
         self.hostHint = hostHint
         self.projectHint = projectHint
         self.risk = risk
+        self.session = session
     }
+}
+
+public enum ShannonOrganizeDecisionDTO: String, Codable, Equatable, Sendable {
+    case proposed, accepted, rejected, deferred
+}
+
+public enum ShannonOrganizeDestinationStatusDTO: String, Codable, Equatable, Sendable {
+    case pending, applied, failed
+}
+
+public enum ShannonOrganizeSessionStateDTO: String, Codable, Equatable, Sendable {
+    case readyForReview = "ready_for_review"
+    case partiallyApplied = "partially_applied"
+    case applied
+}
+
+public struct ShannonVoyagerTaskReferenceDTO: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { resourceId }
+    public let system: String
+    public let resourceType: String
+    public let resourceId: String
+    public let title: String
+    public let summary: String?
+    public let updatedAt: String
+    public let href: String?
+}
+
+public struct ShannonOrganizeItemDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let details: String
+    public let decision: ShannonOrganizeDecisionDTO
+    public let destinationStatus: ShannonOrganizeDestinationStatusDTO
+    public let requestId: String
+    public let idempotencyKey: String
+    public let result: ShannonVoyagerTaskReferenceDTO?
+    public let errorCode: String?
+}
+
+public struct ShannonOrganizeSessionDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let scopeKey: String
+    public let threadId: String
+    public let state: ShannonOrganizeSessionStateDTO
+    public let revision: Int
+    public let sourceMessageIds: [String]
+    public let commandThroughMessageId: String?
+    public let items: [ShannonOrganizeItemDTO]
+    public let createdAt: String
+    public let updatedAt: String
+    public let appliedAt: String?
+}
+
+public struct ShannonOrganizeSessionEnvelopeDTO: Codable, Equatable, Sendable {
+    public let session: ShannonOrganizeSessionDTO
+}
+
+public struct ShannonOrganizeSessionListDTO: Codable, Equatable, Sendable {
+    public let sessions: [ShannonOrganizeSessionDTO]
+}
+
+public struct ShannonOrganizeDecisionRequestDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let expectedRevision: Int
+    public let decision: ShannonOrganizeDecisionDTO
+    public let title: String?
+    public let details: String?
+}
+
+public struct ShannonOrganizeApplyRequestDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let expectedRevision: Int
+}
+
+public struct ShannonOrganizeApplyResponseDTO: Codable, Equatable, Sendable {
+    public let session: ShannonOrganizeSessionDTO
+    public let appliedCount: Int
+    public let tasks: [ShannonVoyagerTaskReferenceDTO]
 }
 
 public struct ShannonAgentTimelineEventDTO: Codable, Equatable, Sendable {

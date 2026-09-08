@@ -21,6 +21,11 @@ import { SQLiteAgentTaskStore } from './agentTaskStore.js';
 import { SQLiteTestFlightDeliveryStore } from './testflightDeliveryStore.js';
 import { SQLiteDailyMindStore } from './dailyMind.js';
 import {
+  SQLiteOrganizeStore,
+  createConfiguredOrganizeExtractor,
+  createConfiguredVoyagerDestination,
+} from './organize.js';
+import {
   createConfiguredVoiceTranscriber,
   normalizedVoiceMimeType,
   parsedVoiceDurationSeconds,
@@ -43,6 +48,7 @@ const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now)
 const agentTaskStore = new SQLiteAgentTaskStore(configuredDatabasePath());
 const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredDatabasePath());
 const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
+const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const realtimeVoiceGateway = createConfiguredRealtimeVoiceGateway(process.env);
 const kernel = createLocalApiKernel(now, {
@@ -66,6 +72,9 @@ const kernel = createLocalApiKernel(now, {
   testFlightDelivery: testFlightDeliveryStore,
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST,
   dailyMind: dailyMindStore,
+  organizeStore,
+  organizeExtractor: createConfiguredOrganizeExtractor(process.env),
+  voyagerDestination: createConfiguredVoyagerDestination(process.env),
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
@@ -198,6 +207,7 @@ function shutdown(): void {
     agentTaskStore.close();
     testFlightDeliveryStore.close();
     dailyMindStore.close();
+    organizeStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });
