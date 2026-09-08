@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Shannon「整理して」MVP 影響分析 v39</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg:#f6f7f9; --panel:#fff; --soft:#eef2f6; --text:#15202b; --sub:#586777;
+      --line:#d8e0e8; --blue:#087bbf; --blue-soft:#e3f3fc; --green:#18794e;
+      --amber:#9a6700; --red:#b42318; --shadow:0 14px 38px rgba(25,40,56,.08);
+    }
+    @media (prefers-color-scheme:dark) {
+      :root { --bg:#0e1115; --panel:#171b20; --soft:#20262d; --text:#edf3f8; --sub:#a9b7c4;
+        --line:#303943; --blue:#55b9ee; --blue-soft:#112d3c; --green:#57c796;
+        --amber:#e7b74e; --red:#ff8b82; --shadow:none; }
+    }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.68}
+    main{max-width:1120px;margin:auto;padding:42px 24px 90px} h1{font-size:clamp(2rem,5vw,3.6rem);line-height:1.08;letter-spacing:-.045em;margin:.25em 0}
+    h2{font-size:1.55rem;margin:2.2em 0 .75em;letter-spacing:-.02em} h3{font-size:1.06rem;margin:1.5em 0 .45em}
+    p{margin:.55em 0} .eyebrow{color:var(--blue);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:.78rem}
+    .lead{font-size:1.16rem;max-width:850px;color:var(--sub)} .meta{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 30px}
+    .pill{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 11px;font-size:.82rem}
+    .pill.ok{color:var(--green)} .pill.hold{color:var(--amber)} .pill.stop{color:var(--red)}
+    .hero,.card{background:var(--panel);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow)}
+    .hero{padding:24px 26px;border-left:5px solid var(--blue)} .hero strong{font-size:1.2rem}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{padding:19px}
+    .card h3{margin-top:0}.number{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--blue-soft);color:var(--blue);font-weight:800;margin-right:8px}
+    .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:stretch;margin:18px 0}
+    .flow .step{padding:14px;border-radius:15px;background:var(--panel);border:1px solid var(--line);position:relative;font-size:.9rem}
+    .flow .step:not(:last-child)::after{content:"→";position:absolute;right:-12px;top:40%;z-index:2;color:var(--blue);font-weight:800}
+    .step b{display:block;margin-bottom:4px}.step small{color:var(--sub)}
+    table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;font-size:.91rem}
+    th,td{text-align:left;vertical-align:top;padding:12px 13px;border-bottom:1px solid var(--line)} th{background:var(--soft);font-size:.8rem;color:var(--sub)} tr:last-child td{border-bottom:0}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);border-radius:6px;padding:.12em .34em;font-size:.88em;overflow-wrap:anywhere}
+    pre{background:#111820;color:#dceaf5;border-radius:16px;padding:18px;overflow:auto;line-height:1.48;font-size:.86rem;border:1px solid var(--line)}
+    ul,ol{padding-left:1.35em} li{margin:.34em 0}.note{border-left:4px solid var(--amber);padding:10px 14px;background:color-mix(in srgb,var(--amber) 10%,transparent);border-radius:0 12px 12px 0}
+    .danger{border-left-color:var(--red);background:color-mix(in srgb,var(--red) 9%,transparent)}
+    .tag{display:inline-block;border-radius:7px;padding:2px 7px;font-size:.73rem;font-weight:700;margin-right:5px;background:var(--soft)}
+    .yes{color:var(--green)}.no{color:var(--red)}.maybe{color:var(--amber)}
+    .files td:first-child{width:33%}.decision td:first-child{width:4em;font-weight:800;color:var(--amber)}
+    footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--sub);font-size:.82rem}
+    @media(max-width:760px){main{padding:28px 16px 64px}.flow{grid-template-columns:1fr}.flow .step:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-17px}table{display:block;overflow-x:auto}.hero{padding:20px}}
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Shannon / Syzygy / impact analysis v39</div>
+  <h1>「整理して」は、<br>Shannonの新しい司令レーンになる</h1>
+  <p class="lead">通常会話を重くせず、明示指示のときだけ会話の決定・文書候補・行動候補を整理し、ユーザーが選んだ後だけAetherとVoyagerへ送る。その設計は現行Shannonと整合する。ただし、提案中の共通契約はまだ実装へ固定できる状態ではない。</p>
+  <div class="meta">
+    <span class="pill ok">Mac checkpoint a54812b 保持</span>
+    <span class="pill ok">現行先端 fcade6f / clean</span>
+    <span class="pill hold">影響分析のみ</span>
+    <span class="pill stop">他アプリ変更なし</span>
+    <span class="pill stop">契約freezeなし</span>
+  </div>
+
+  <section class="hero">
+    <strong>推奨判断：条件付きで採用。実装はまだ始めない。</strong>
+    <p>製品責務、ユーザー承認、Shannon APIだけを使うクライアント境界は妥当。最初に下記の未決事項と共通fixtureを確定し、その後Shannon内部のdurable session＋fake adapterから縦に作る。既存Aether outboxは新規文書の暫定adapterとしてのみ再利用でき、更新提案を安全に代替することはできない。</p>
+  </section>
+
+  <h2>今回の安全な区切り</h2>
+  <div class="grid">
+    <div class="card"><h3><span class="number">1</span>Mac作業</h3><p><code>a54812b</code>を履歴上に保持したまま、M2操作基盤は<code>fcade6f</code>でコミット済み。作業ツリーもclean。</p></div>
+    <div class="card"><h3><span class="number">2</span>残る実機項目</h3><p>Macの実Shannon pairing smokeは次の検証項目として残っているが、ソース変更は安全なcheckpointまで完了しており、新方針の分析を妨げない。</p></div>
+    <div class="card"><h3><span class="number">3</span>今回の変更範囲</h3><p>このHTMLだけ。API、DB、iPhone/Macクライアント、Aether、Voyager、Azure、GitHub、配布状態は変更しない。</p></div>
+  </div>
+
+  <h2>推奨アーキテクチャ</h2>
+  <div class="flow">
+    <div class="step"><b>通常会話</b><small>既存FCAを維持。追加整理処理を待たない。</small></div>
+    <div class="step"><b>明示コマンド</b><small>単独の「整理して」または専用操作だけを決定的に認識。</small></div>
+    <div class="step"><b>OrganizeSession</b><small>前回cursor以降を固定し、別レーンで構造化。</small></div>
+    <div class="step"><b>レビュー</b><small>質問、編集、採用、却下、後で。ここでは外部書込なし。</small></div>
+    <div class="step"><b>反映</b><small>承認済みitemだけをserver adapterから一件ずつ送信。</small></div>
+  </div>
+  <pre>iPhone / Mac client
+        │ paired Shannon API only
+        ▼
+Shannon API
+  ├─ ordinary chat lane ──────────────── 既存の短い応答経路
+  ├─ organize session store ─────────── durable / resumable / revisioned
+  ├─ organize analysis worker ───────── 明示指示時だけLLM構造化
+  └─ destination adapters
+       ├─ Aether adapter ────────────── proposal inboxだけ
+       └─ Voyager adapter ───────────── atomic task mutationだけ
+              │
+              └─ user-approved item only</pre>
+  <p class="note"><strong>重要：</strong>「要点を整理して」「添付資料を整理して」のような通常の文章整理は既存チャットで処理し、Syzygy整理を起動しない。初版は単独の<code>整理して</code>と専用ボタンに限定するのが誤発火を最も減らす。</p>
+
+  <h2>現行資産：そのまま使えるもの／使えないもの</h2>
+  <table>
+    <thead><tr><th>現行資産</th><th>再利用</th><th>判断</th></tr></thead>
+    <tbody>
+      <tr><td><code>conversation_threads</code> / <code>conversation_messages</code></td><td class="yes">高い</td><td>不変message IDと順序があり、source cursor・provenance・jumpの基礎になる。ただし新規送信直後のSwift側message IDはserver IDではない。</td></tr>
+      <tr><td>SQLite migration / transaction / restart-safe store</td><td class="yes">高い</td><td>OrganizeSession、item、apply attempt、thread section、rolling summaryを加法migrationで追加できる。</td></tr>
+      <tr><td>paired device authと<code>bindScope</code></td><td class="yes">高い</td><td>client-supplied scopeを認証principalへ束縛する既存境界を全organize APIでも使う。</td></tr>
+      <tr><td><code>agent_tasks</code>のevent / idempotent command / restart復元</td><td class="maybe">設計を借用</td><td>durability、event順序、冪等commandの実装知見は使える。ただしCodex作業と整理セッションは状態機械も所有者も違うため同じtableには入れない。</td></tr>
+      <tr><td>既存の承認カード</td><td class="maybe">見た目だけ</td><td>Codexのlive approval専用。single/multi/approval質問と、提案の採用・却下・保留は新しい型として分離する。</td></tr>
+      <tr><td><code>ShannonUIBlockDTO</code> / message下カード</td><td class="yes">拡張点</td><td>既存agent task proposalに加えてorganize session referenceを表示できる。ただし巨大なsession全体をchat responseへ埋め込まない。</td></tr>
+      <tr><td>iOS/Mac <code>ScrollViewReader</code></td><td class="yes">高い</td><td>message jumpのUI基礎。未ロード位置へ飛ぶためのanchor取得APIとページ読込は新設が必要。</td></tr>
+      <tr><td>Macのタイトル検索</td><td class="maybe">入口を維持</td><td>現在は端末内のtitle部分一致だけ。server側のtitle/section/summary検索へ段階的に置換する。</td></tr>
+      <tr><td>Aether bounded context</td><td class="yes">高い</td><td>既存文書候補やrevision照合に使う。ただし全本文・全タスク複製は禁止を維持する。</td></tr>
+      <tr><td>既存Aether file outbox</td><td class="maybe">限定的</td><td>新規文書proposalの暫定配送には使える。既存文書update、状態照会、destination idempotencyの代替にはならない。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>既存Aether proposal endpointとの差分</h2>
+  <table>
+    <thead><tr><th>観点</th><th>現在</th><th>新案</th><th>移行判断</th></tr></thead>
+    <tbody>
+      <tr><td>経路</td><td>client → Shannon <code>POST /v1/aether/proposals</code> → local file outbox</td><td>client → Shannon organize API → server adapter → Aether integration API</td><td>clientの直接送信操作は互換維持可能。</td></tr>
+      <tr><td>起点</td><td>1件のShannon返答を手動送信</td><td>cursor範囲の会話から複数itemを抽出し、レビュー後に送信</td><td>別機能として追加。上書きしない。</td></tr>
+      <tr><td>operation</td><td><code>new-note</code> / <code>append</code></td><td><code>create</code> / <code>update</code>（変更後全文）</td><td><strong>appendとupdateは意味が違う。</strong>自動変換禁止。</td></tr>
+      <tr><td>競合</td><td><code>expectedUpdatedAt</code>文字列</td><td><code>expectedRevision</code>整数、409</td><td>Aether正本側のrevision契約が必要。</td></tr>
+      <tr><td>追跡</td><td>IDと作成時刻のみ</td><td>request/idempotency/workspace/project/source/provenance</td><td>adapterのdurable delivery記録が必要。</td></tr>
+      <tr><td>状態照会</td><td>なし</td><td>GETで<code>pendingReview</code>等を取得</td><td>現在のfile dropだけでは実現不可。</td></tr>
+      <tr><td>容量</td><td>本文6,000文字</td><td>schema案は1,000,000文字</td><td>MVP上限を決め直す。モデル出力・画面・APIを考えると1MBは過大。</td></tr>
+      <tr><td>所有境界</td><td>storeは<code>scopeKey</code>をfile配置に使わない</td><td>workspaceとownerをdestination側でも検証</td><td>複数owner前提では現行outboxの分離を強化。</td></tr>
+      <tr><td>確定文書</td><td>Aether側で保存／diffへ進む既存導線</td><td>proposal inboxまで。直接確定しない</td><td>原則は一致。精密レビューはAether所有のまま。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>候補となる型とAPI（未確定案）</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Shannon内部型</h3>
+      <ul>
+        <li><code>OrganizeSession</code> + <code>sessionRevision</code></li>
+        <li><code>OrganizeSourceCursor</code>（fromExclusive / through）</li>
+        <li><code>OrganizeItem</code> tagged union</li>
+        <li><code>ClarificationCard</code>（single / multi / approval）</li>
+        <li><code>ReviewDecision</code>（accept / editedAccept / reject / defer）</li>
+        <li><code>DestinationAttempt</code> + safe receipt</li>
+        <li><code>ThreadSection</code> / <code>RollingThreadSummary</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Shannon client API</h3>
+      <ul>
+        <li><code>POST /v1/organize/sessions</code></li>
+        <li><code>GET /v1/organize/sessions/{id}</code></li>
+        <li><code>POST /v1/organize/sessions/{id}/answers</code></li>
+        <li><code>POST /v1/organize/sessions/{id}/items/{itemId}/decision</code></li>
+        <li><code>POST /v1/organize/sessions/{id}/apply</code></li>
+        <li><code>POST /v1/organize/sessions/{id}/retry</code></li>
+        <li><code>GET /v1/threads/search</code></li>
+        <li><code>GET /v1/threads/{id}/navigation</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>server-to-server adapter</h3>
+      <ul>
+        <li><code>AetherProposalDestination</code></li>
+        <li><code>VoyagerTaskDestination</code></li>
+        <li><code>FakeOrganizeDestination</code>（先にE2E）</li>
+        <li><code>SyzygyCommandEnvelope</code>（freeze後だけ）</li>
+        <li>credentialは環境変数／秘密ストアのみ</li>
+        <li>ログはID・状態・safe error codeのみ</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>変更候補ファイル</h2>
+  <table class="files">
+    <thead><tr><th>候補</th><th>役割と方針</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag">新規</span><code>services/api/src/organizeContracts.ts</code></td><td>Shannon内部session/card/item型。共通schemaを直接コピーせず、adapter境界で変換する。</td></tr>
+      <tr><td><span class="tag">新規</span><code>services/api/src/organizeStore.ts</code></td><td>session、item decision、attempt、cursorをSQLiteへdurable保存。CAS用revisionを持つ。</td></tr>
+      <tr><td><span class="tag">新規</span><code>services/api/src/organizeService.ts</code></td><td>range確定、解析enqueue、回答後再解析、review、apply、partial retryの状態機械。</td></tr>
+      <tr><td><span class="tag">新規</span><code>services/api/src/organizeModel.ts</code></td><td>チャット応答とは別のstrict structured output。抽出5分類と不足質問だけを生成。</td></tr>
+      <tr><td><span class="tag">新規</span><code>services/api/src/syzygyAdapters.ts</code></td><td>Aether/Voyager destination interface、timeout、idempotency、safe error変換。最初はfake。</td></tr>
+      <tr><td><span class="tag">変更</span><code>services/api/src/contracts.ts</code></td><td>client-facing DTOのみ追加。destinationの共通契約とは分離。</td></tr>
+      <tr><td><span class="tag">変更</span><code>services/api/src/apiKernel.ts</code></td><td>organize routesと明示triggerの入口。通常chatの1-call経路を変えない。</td></tr>
+      <tr><td><span class="tag">変更</span><code>services/api/src/server.ts</code></td><td>store/worker/adapter注入、paired scope binding、body limit方針。</td></tr>
+      <tr><td><span class="tag">変更</span><code>services/api/src/sqliteStore.ts</code></td><td>schema v10候補。会話message anchorのrange queryとthread navigation storeを加法追加。</td></tr>
+      <tr><td><span class="tag">新規</span><code>services/api/src/threadNavigation.ts</code></td><td>section更新、rolling summary CAS、検索projection、jump anchor。</td></tr>
+      <tr><td><span class="tag">変更</span><code>apps/ios/Sources/ShannonAppCore/Models.swift</code></td><td>session/card/item/navigation DTO。server message IDをクライアントでも保持できる型へ。</td></tr>
+      <tr><td><span class="tag">変更</span><code>apps/ios/Sources/ShannonAppCore/ShannonAPIClient.swift</code></td><td>Shannon organize/navigation APIだけを呼ぶ。Aether/Voyager credentialは持たない。</td></tr>
+      <tr><td><span class="tag">変更</span><code>apps/ios/Sources/ShannonAppCore/ShannonConversationModel.swift</code></td><td>session復元、optimistic decision、revision競合時refresh、message jump。</td></tr>
+      <tr><td><span class="tag">新規</span><code>apps/ios/Sources/ShannonAppCore/Organize/*</code></td><td>single/multi/approval、proposal review、結果カードをiPhone/Mac共通のsemantic部品へ。</td></tr>
+      <tr><td><span class="tag">変更</span><code>apps/ios/Sources/ShannonAppCore/ShannonConversationView.swift</code></td><td>会話中のcompact session card、iPhone用review sheet、目次とjump。</td></tr>
+      <tr><td><span class="tag">変更</span><code>apps/macos-app/ShannonDesk/ShannonDesktopView.swift</code></td><td>右inspectorを整理レビュー／目次にも利用し、既存作業inspectorと競合しない選択規則を追加。</td></tr>
+      <tr><td><span class="tag">試験</span><code>services/api/tests/organize*.test.ts</code><br><code>apps/ios/Tests/.../ShannonOrganizeTests.swift</code></td><td>下記fixtureを実行。実Aether/Voyagerや有料LLMは既定テストで呼ばない。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>thread目次・jump・rolling summary・検索</h2>
+  <table>
+    <thead><tr><th>機能</th><th>推奨設計</th><th>依存／注意</th></tr></thead>
+    <tbody>
+      <tr><td>AI目次</td><td><code>ThreadSection</code>をserver正本にし、範囲はserver message IDで保持。</td><td>整理抽出と同じLLM出力へ無理に混ぜず、background laneで更新。</td></tr>
+      <tr><td>message jump</td><td>sectionの<code>startMessageId</code>へjump。未ロードならanchor周辺を取得してからscroll。</td><td>現在のclientは直近履歴だけで、新規返信時のserver IDも失うため契約変更が先。</td></tr>
+      <tr><td>rolling summary</td><td><code>throughMessageId</code>とrevisionを持ち、古いworker結果はCASで捨てる。</td><td>通常応答を待たせない。失敗しても会話を失敗扱いにしない。</td></tr>
+      <tr><td>横断検索</td><td>title + section title/summary + rolling summary。結果はthread/section/snippet/anchor。</td><td>全文やAether本文を索引へ複製しない。owner scope必須。</td></tr>
+      <tr><td>thread内全文検索</td><td>開いているthreadだけをserver range queryまたは端末のロード済み範囲で検索。</td><td>長いthreadではpaginationと一致位置の安定化が必要。</td></tr>
+    </tbody>
+  </table>
+  <p class="note">実装順は、message identity → anchor pagination → section/summary → 検索UI。検索UIから始めると、結果は出ても正しい場所へ飛べない。</p>
+
+  <h2>互換性と運用リスク</h2>
+  <div class="grid">
+    <div class="card"><h3>通常会話の遅延</h3><p>organize解析を既存<code>/v1/chat</code>のモデル出力へ常時追加すると、全会話のschemaとtokenを膨らませる。明示時だけ別model/workerを使う。</p></div>
+    <div class="card"><h3>message IDの不一致</h3><p>serverはmessage IDを保存するが、送信直後のSwiftモデルは新しいローカルUUIDを作る。provenanceとjumpの前にserver IDを返して保持する。</p></div>
+    <div class="card"><h3>部分成功とcursor</h3><p>cursorを早く進めると失敗itemが消え、遅く進めると再提案が重複する。失敗は元sessionから再送し、次回解析へ混ぜない規則が必要。</p></div>
+    <div class="card"><h3>二重承認</h3><p>reviewの「採用」と最終「反映」を混同しない。採用はsession内状態、外部writeは反映操作の一度だけ。</p></div>
+    <div class="card"><h3>複数端末競合</h3><p>iPhoneとMacが同じsessionを編集できるため、decisionには<code>expectedSessionRevision</code>を要求し409で再読込する。</p></div>
+    <div class="card"><h3>外部正本の変化</h3><p>提案後に文書／タスクが変わる。expectedRevision競合では直接修復せず、再取得してユーザーへ再判断を返す。</p></div>
+    <div class="card"><h3>秘密と過剰ログ</h3><p>destination credential、会話全文、文書本文をattempt logへ残さない。provenanceはmessage IDと短い理由だけ。</p></div>
+    <div class="card"><h3>既存UIとの衝突</h3><p>Mac右inspectorは作業現在地に利用中。整理レビューを開いた時だけmodeを切替え、同時に2種類を重ねない。</p></div>
+  </div>
+
+  <h2>契約案で確定前に直す点</h2>
+  <ol>
+    <li><strong>schemaにOrganizeSessionと確認カードがない。</strong>現JSONはdestination command/resultのみ。Shannon内部契約を別schemaとして定義する。</li>
+    <li><strong>Voyager createの<code>thinking</code>が必須ではない。</strong><code>status</code>が省略できるため、schemaで必須化するかadapterが強制注入する。</li>
+    <li><strong><code>workSession</code>とOrganizeSessionの呼称が曖昧。</strong>Referenceへ<code>organizeSession</code>を足すか、両者を同一概念と明記する。</li>
+    <li><strong>Aether <code>append</code>と<code>update</code>全文が非互換。</strong>更新adapterは新endpoint完成まで無効にする。</li>
+    <li><strong>共通resultの<code>pendingReview</code>はAether寄り。</strong>Voyagerの即時<code>applied</code>とdestination別resultをどう表すかfixtureで確定する。</li>
+    <li><strong>1MB本文と現在の64KB client request上限が不釣り合い。</strong>本文はserver内保持、client decisionはIDだけにするか、MVP上限を縮める。</li>
+    <li><strong>session全体のapply receiptが未定義。</strong>一件ごとのcommand resultとは別に、Shannon所有の件数／失敗／再試行状態が必要。</li>
+  </ol>
+
+  <h2>必要fixture</h2>
+  <div class="grid">
+    <div class="card"><h3>trigger / range</h3><ul><li>単独「整理して」は起動</li><li>「要点を整理して」は通常chat</li><li>引用内の「整理して」は非起動</li><li>初回は先頭、2回目はcursor以降</li><li>trigger message自身は抽出対象外</li></ul></div>
+    <div class="card"><h3>cards / review</h3><ul><li>single 2〜8、multi 2〜12</li><li>other自由入力</li><li>編集後の再validation</li><li>reject理由は任意</li><li>deferは外部writeゼロ</li><li>once approvalのみ</li></ul></div>
+    <div class="card"><h3>delivery</h3><ul><li>同key同bodyはduplicate</li><li>同key別bodyは409</li><li>Aether revision conflict</li><li>Voyager whole-task atomicity</li><li>completed暗黙再開拒否</li><li>partial retryは失敗itemだけ</li></ul></div>
+    <div class="card"><h3>durability</h3><ul><li>API/worker再起動後に復元</li><li>background/foreground復帰</li><li>iPhone/Mac同時編集409</li><li>古い解析結果のCAS拒否</li><li>session中のsource保持</li></ul></div>
+    <div class="card"><h3>navigation</h3><ul><li>日本語・全半角・大小文字検索</li><li>title/section/summary順位</li><li>未ロードmessageへjump</li><li>削除／archive済みanchor</li><li>summary failureでもchat継続</li></ul></div>
+    <div class="card"><h3>privacy / bounds</h3><ul><li>会話全文をdestination logへ出さない</li><li>最大item/message/content件数</li><li>workspace owner分離</li><li>未知field拒否</li><li>秘密値をreceiptへ返さない</li></ul></div>
+  </div>
+
+  <h2>ユーザーと確定すべき未決事項</h2>
+  <table class="decision">
+    <thead><tr><th>#</th><th>判断</th><th>推奨初期値</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>何をtriggerとするか</td><td>単独の「整理して」＋専用ボタンだけ。類似表現は通常chat。</td></tr>
+      <tr><td>2</td><td>cursorをいつ進めるか</td><td>レビュー確定時に進め、失敗／保留は元sessionに残す。次回抽出へ再混入させない。</td></tr>
+      <tr><td>3</td><td>部分成功後の最終状態</td><td><code>partiallyApplied</code>。失敗itemだけ再試行、成功は巻き戻さない。</td></tr>
+      <tr><td>4</td><td>Aether updateの本文形式</td><td>変更後全文＋expected integer revision。既存appendへの変換は禁止。</td></tr>
+      <tr><td>5</td><td>Voyager既存task候補の探し方</td><td>server adapterがbounded task projectionを検索し、曖昧ならsingleSelect質問。</td></tr>
+      <tr><td>6</td><td>workspace / project identity</td><td>認証済みowner設定から解決。モデルやclientに自由入力させない。</td></tr>
+      <tr><td>7</td><td>1 sessionの上限</td><td>source 100 messages、item 20、Aether案5、Voyager案12、質問5から開始。</td></tr>
+      <tr><td>8</td><td>「後で」の見せ方</td><td>同じthreadの整理履歴に残し、サイドバーに常駐badgeは出さない。</td></tr>
+      <tr><td>9</td><td>目次更新頻度</td><td>一定message数または明確なtopic変化後にbackground更新。毎turnは避ける。</td></tr>
+      <tr><td>10</td><td>Aether/Voyagerへのdeeplink</td><td>MVP結果にはReferenceを保持。UIリンクはdestination側の安定deeplink確定後に表示。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>実装に進む場合の段階計画</h2>
+  <ol>
+    <li><strong>Decision gate：</strong>上の10項目と正常／競合／重複fixtureをユーザー確認。共通schemaを修正してfreeze。</li>
+    <li><strong>Identity foundation：</strong>server message IDのclient保持、anchor range API、加法DB migrationを実装。</li>
+    <li><strong>Shannon-only vertical slice：</strong>durable OrganizeSession、exact trigger、fake model、fake adapters、review UI。外部書込ゼロ。</li>
+    <li><strong>Model extraction：</strong>strict structured outputを明示時だけ実行。cost-bearing live evalは別承認・記録。</li>
+    <li><strong>Destination adapters：</strong>freeze済みfixtureに対してAether/Voyager接続。資格情報はserverだけ。</li>
+    <li><strong>End-to-end apply：</strong>partial success、retry、restart、複数端末競合を合成環境で検証。</li>
+    <li><strong>Thread navigation：</strong>section、rolling summary、jump、server searchの順に追加。</li>
+    <li><strong>配布判断：</strong>API/iOS/Macの検証後、Azure/TestFlightは別の明示依頼で実施。</li>
+  </ol>
+  <p class="note danger"><strong>この順番で守る境界：</strong>destination endpointが未完成でもShannon UIをfake adapterで検証できる。逆に、共通契約が未確定のまま他repoへ先に型やendpointを作ると、3アプリ同時の作り直しになる。</p>
+
+  <h2>今回の結論</h2>
+  <div class="hero">
+    <strong>次の作業は「契約確認用の視覚プロトタイプ＋fixture確定」が最小で価値の高い一歩。</strong>
+    <p>方針の中心は採用してよい。Shannonは司令役、Aether/Voyagerは正本、ユーザーは最終判断者のままにする。一方、現在のschema案をそのまま実装せず、上記の7つの契約穴と10の未決事項を先に閉じる。合意後はShannon-only vertical sliceから始めれば、Mac M1/M2成果や現行会話を崩さず進められる。</p>
+  </div>
+
+  <footer>
+    根拠: <code>Aether_Shannon_Voyager_Concept_MVP.md</code>（2026-09-08）、<code>TI-IMPROVEMENT-004-syzygy-organize-contract-v1.md</code>、<code>syzygy-organize-contract-v1.schema.json</code>、Shannon現行<code>docs/architecture.md</code>、<code>docs/self-improvement-runbook.md</code>、実装ソース。調査時点: 2026-09-08。秘密値・実データは掲載していない。
+  </footer>
+</main></body></html>
