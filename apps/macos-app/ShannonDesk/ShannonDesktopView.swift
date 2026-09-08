@@ -8,13 +8,15 @@ public struct ShannonDesktopRootView: View {
     private let connection: ShannonConnectionModel
     private let memory: ShannonMemoryModel
 
-    @State private var destination: DesktopDestination = .talk
+    @SceneStorage("shannon.desktop.destination") private var destinationRawValue = DesktopDestination.talk.rawValue
+    @SceneStorage("shannon.desktop.selectedThread") private var restoredThreadID: String?
+    @SceneStorage("shannon.desktop.showsInspector") private var showsInspector = false
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
-    @State private var showsInspector = false
     @State private var showsConnection = false
     @State private var renameThread: ChatThreadDTO?
     @State private var renameText = ""
+    @FocusState private var focusedControl: ShannonDesktopFocusedControl?
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     public init(
@@ -54,6 +56,7 @@ public struct ShannonDesktopRootView: View {
                 await connection.verifyConnection()
             }
             await conversation.loadConversationIfNeeded()
+            await restoreSelectedThreadIfAvailable()
             if !conversation.isDesignPreview {
                 await conversation.synchronizeAgentTasks()
                 await conversation.refreshInitiatives()
@@ -64,15 +67,37 @@ public struct ShannonDesktopRootView: View {
                 selectedTaskID = conversation.latestActiveAgentTask?.id
             }
         }
+        .onChange(of: conversation.selectedThreadId) {
+            restoredThreadID = conversation.selectedThreadId
+        }
+        .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
         .frame(minWidth: 860, minHeight: 600)
     }
 
     private var filteredThreads: [ChatThreadDTO] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return conversation.threads }
-        return conversation.threads.filter { $0.title.localizedCaseInsensitiveContains(query) }
+        ShannonDesktopThreadSearch.matches(conversation.threads, query: searchText)
+    }
+
+    private var destination: DesktopDestination {
+        DesktopDestination(rawValue: destinationRawValue) ?? .talk
+    }
+
+    private var desktopCommandActions: ShannonDesktopCommandActions {
+        ShannonDesktopCommandActions(
+            focusThreadSearch: focusThreadSearch,
+            showTalk: { selectDestination(.talk) },
+            showWork: { selectDestination(.work) },
+            showMemory: { selectDestination(.memory) },
+            showSettings: { selectDestination(.settings) },
+            toggleInspector: {
+                selectedTaskID = selectedTaskID
+                    ?? conversation.latestActiveAgentTask?.id
+                    ?? conversation.agentTasks.first?.id
+                showsInspector.toggle()
+            }
+        )
     }
 
     private var selectedTask: ShannonAgentTask? {
@@ -104,7 +129,7 @@ public struct ShannonDesktopRootView: View {
                 Button {
                     Task {
                         await conversation.createThread(title: nil)
-                        destination = .talk
+                        selectDestination(.talk)
                     }
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -121,6 +146,26 @@ public struct ShannonDesktopRootView: View {
                     .foregroundStyle(.secondary)
                 TextField("トークを検索", text: $searchText)
                     .textFieldStyle(.plain)
+                    .focused($focusedControl, equals: .threadSearch)
+                    .onSubmit { openFirstSearchResult() }
+                    .onExitCommand {
+                        if searchText.isEmpty {
+                            focusedControl = nil
+                        } else {
+                            searchText = ""
+                        }
+                    }
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        focusedControl = .threadSearch
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("検索を消去")
+                }
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
@@ -134,19 +179,19 @@ public struct ShannonDesktopRootView: View {
                         symbol: "bubble.left.and.bubble.right",
                         badge: conversation.unreadInitiativeCount,
                         selected: destination == .talk
-                    ) { destination = .talk }
+                    ) { selectDestination(.talk) }
                     DesktopSidebarButton(
                         title: "作業全体",
                         symbol: "point.3.connected.trianglepath.dotted",
                         badge: conversation.unreadAgentTaskCount,
                         selected: destination == .work
-                    ) { destination = .work }
+                    ) { selectDestination(.work) }
                     DesktopSidebarButton(
                         title: "頭の中",
                         symbol: "brain.head.profile",
                         badge: 0,
                         selected: destination == .memory
-                    ) { destination = .memory }
+                    ) { selectDestination(.memory) }
                 }
 
                 Section("トーク") {
@@ -154,7 +199,7 @@ public struct ShannonDesktopRootView: View {
                         Button {
                             Task {
                                 await conversation.selectThread(thread.threadId)
-                                destination = .talk
+                                selectDestination(.talk)
                             }
                         } label: {
                             HStack(spacing: 8) {
@@ -182,6 +227,12 @@ public struct ShannonDesktopRootView: View {
                             .disabled(conversation.threads.count <= 1)
                         }
                     }
+                    if filteredThreads.isEmpty {
+                        Text("一致するトークはありません")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 8)
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -193,7 +244,7 @@ public struct ShannonDesktopRootView: View {
                     symbol: "gearshape",
                     badge: 0,
                     selected: destination == .settings
-                ) { destination = .settings }
+                ) { selectDestination(.settings) }
 
                 Button {
                     showsConnection = true
@@ -560,19 +611,39 @@ public struct ShannonDesktopRootView: View {
         showsInspector = true
     }
 
+    private func selectDestination(_ destination: DesktopDestination) {
+        destinationRawValue = destination.rawValue
+    }
+
+    private func focusThreadSearch() {
+        selectDestination(.talk)
+        focusedControl = .threadSearch
+    }
+
+    private func openFirstSearchResult() {
+        guard let threadID = ShannonDesktopThreadSearch.firstResultID(
+            in: conversation.threads,
+            query: searchText
+        ) else { return }
+        Task {
+            await conversation.selectThread(threadID)
+            selectDestination(.talk)
+        }
+    }
+
+    private func restoreSelectedThreadIfAvailable() async {
+        guard let restoredThreadID,
+              restoredThreadID != conversation.selectedThreadId,
+              conversation.threads.contains(where: { $0.threadId == restoredThreadID }) else { return }
+        await conversation.selectThread(restoredThreadID)
+    }
+
     private func saveThreadRename() {
         guard let thread = renameThread else { return }
         let value = renameText
         renameThread = nil
         Task { _ = await conversation.renameThread(thread.threadId, title: value) }
     }
-}
-
-private enum DesktopDestination: Hashable {
-    case talk
-    case work
-    case memory
-    case settings
 }
 
 private struct DesktopSidebarButton: View {

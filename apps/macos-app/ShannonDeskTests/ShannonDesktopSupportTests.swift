@@ -2,6 +2,39 @@ import ShannonAppCore
 import XCTest
 
 final class ShannonDesktopWorkProjectionTests: XCTestCase {
+    func testThreadSearchMatchesCaseDiacriticsAndFullWidthText() {
+        let threads = [
+            makeThread(id: "clear", title: "Clear Signal の配色"),
+            makeThread(id: "cafe", title: "Caféでのメモ"),
+            makeThread(id: "other", title: "長期計画"),
+        ]
+
+        XCTAssertEqual(
+            ShannonDesktopThreadSearch.matches(threads, query: "ＣＬＥＡＲ").map(\.threadId),
+            ["clear"]
+        )
+        XCTAssertEqual(
+            ShannonDesktopThreadSearch.matches(threads, query: "cafe").map(\.threadId),
+            ["cafe"]
+        )
+    }
+
+    func testThreadSearchPreservesServerOrderAndReturnsFirstResult() {
+        let threads = [
+            makeThread(id: "new", title: "Mac版 UI"),
+            makeThread(id: "old", title: "Mac版 設計"),
+        ]
+
+        XCTAssertEqual(
+            ShannonDesktopThreadSearch.firstResultID(in: threads, query: "Mac版"),
+            "new"
+        )
+        XCTAssertEqual(
+            ShannonDesktopThreadSearch.matches(threads, query: "  ").map(\.threadId),
+            ["new", "old"]
+        )
+    }
+
     func testAttachmentLoaderReadsSupportedUTF8TextAndKeepsItsMetadata() throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("shannon-attachment-\(UUID().uuidString)", isDirectory: true)
@@ -94,5 +127,16 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             createdAt: updatedAt,
             updatedAt: updatedAt
         )
+    }
+
+    private func makeThread(id: String, title: String) -> ChatThreadDTO {
+        let data = try! JSONSerialization.data(withJSONObject: [
+            "threadId": id,
+            "title": title,
+            "createdAt": "2026-09-08T00:00:00Z",
+            "updatedAt": "2026-09-08T00:00:00Z",
+            "messageCount": 1,
+        ])
+        return try! JSONDecoder().decode(ChatThreadDTO.self, from: data)
     }
 }

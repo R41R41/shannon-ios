@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Desk M2 操作基盤 v38</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5f5f2;--panel:#fff;--text:#171717;--muted:#666;--line:#deded8;--accent:#1677a9;--ok:#247a4d}
+    @media(prefers-color-scheme:dark){:root{--bg:#101010;--panel:#1e1e1e;--text:#f4f4f4;--muted:#aaa;--line:#393939;--accent:#72c8ef;--ok:#67d69b}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}
+    main{max-width:1040px;margin:auto;padding:44px 22px 88px}h1{font-size:clamp(34px,6vw,54px);line-height:1.08;margin:.2em 0}h2{margin-top:44px}h3{margin-bottom:4px}
+    .lead{font-size:20px;max-width:760px}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}.ok{border-left:4px solid var(--ok)}
+    kbd{font:14px ui-monospace,SFMono-Regular,Menlo,monospace;background:color-mix(in srgb,var(--text) 8%,transparent);border:1px solid var(--line);border-radius:6px;padding:3px 7px}img{width:100%;border:1px solid var(--line);border-radius:18px;display:block}a{color:var(--accent)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  </style>
+</head>
+<body><main>
+  <p class="muted">Shannon Desk · M2操作基盤チェックpoint · 2026-09-08</p>
+  <h1>Macらしく、探して、移動して、続きから。</h1>
+  <p class="lead">新しい画面を増やさず、既存の会話・作業全体・頭の中をキーボードで横断し、アプリを閉じても同じ場所から再開できるようにしました。</p>
+
+  <h2>今回できたこと</h2>
+  <div class="grid">
+    <section class="card"><h3>すぐ検索</h3><p><kbd>⌘F</kbd> でどの画面からでもトーク検索へ移動。大文字小文字、全角半角、アクセント記号の差を吸収します。Enterで先頭結果を開き、Escで検索を消去します。</p></section>
+    <section class="card"><h3>すぐ移動</h3><p><kbd>⌘1</kbd> 会話、<kbd>⌘2</kbd> 作業全体、<kbd>⌘3</kbd> 頭の中、<kbd>⌘4</kbd> 設定。<kbd>⌘⌥I</kbd> で現在地インスペクタを開閉します。</p></section>
+    <section class="card"><h3>続きから再開</h3><p>前回開いていた面、選択中のトーク、現在地インスペクタの開閉をシーン単位で保存。終了・再起動後にも作業の文脈を戻します。</p></section>
+  </div>
+
+  <h2>視覚確認</h2>
+  <p class="muted">デザイン用の安全なオフラインデータで確認。検索語「shannon」により、対象トークだけが残っています。</p>
+  <img src="screenshots/shannon-macos-m2-search-shortcut.png" alt="Shannon Deskのトーク検索画面">
+  <p class="muted">次の画面は <kbd>⌘2</kbd> で移動し、アプリを終了・再起動した後にも復元された「作業全体」です。</p>
+  <img src="screenshots/shannon-macos-m2-work-resume.png" alt="再起動後に復元された作業全体画面">
+
+  <h2>検証結果</h2>
+  <div class="card ok"><strong>ローカル品質ゲート合格</strong><ul><li>Mac Debug build + 7 unit tests: 合格</li><li>検索の全角半角・大文字小文字・アクセント記号: 合格</li><li>⌘F、⌘2、終了後の画面復元を実アプリで確認: 合格</li><li>署名なしUniversal Mac Release build（arm64 / x86_64）: 合格</li></ul></div>
+
+  <h2>境界と次</h2>
+  <p>変更はMac専用の <code>apps/macos-app/**</code> とこの記録だけです。iPhone、共有コア、API、DB、署名、GitHub、App Store Connect、TestFlightには触れていません。</p>
+  <ol><li>今回のM2操作基盤を共通checkpointへ統合する。</li><li>実ShannonへMacを接続し、履歴取得・新規送信・作業同期のsmoke testを行う。</li><li>結果が通った後に、Mac署名・内部配布を独立したリリース工程として行う。</li></ol>
+  <p>実接続でユーザー操作が必要になった時は、<a href="shannon-macos-m2-real-connection-guide-v38.html">専用ガイド</a>だけを見れば進められます。</p>
+</main></body>
+</html>

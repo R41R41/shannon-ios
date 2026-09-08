@@ -1,5 +1,58 @@
 import Foundation
 import ShannonAppCore
+import SwiftUI
+
+enum DesktopDestination: String, CaseIterable, Hashable {
+    case talk
+    case work
+    case memory
+    case settings
+}
+
+enum ShannonDesktopFocusedControl: Hashable {
+    case threadSearch
+}
+
+struct ShannonDesktopCommandActions {
+    let focusThreadSearch: () -> Void
+    let showTalk: () -> Void
+    let showWork: () -> Void
+    let showMemory: () -> Void
+    let showSettings: () -> Void
+    let toggleInspector: () -> Void
+}
+
+private struct ShannonDesktopCommandActionsKey: FocusedValueKey {
+    typealias Value = ShannonDesktopCommandActions
+}
+
+extension FocusedValues {
+    var shannonDesktopCommandActions: ShannonDesktopCommandActions? {
+        get { self[ShannonDesktopCommandActionsKey.self] }
+        set { self[ShannonDesktopCommandActionsKey.self] = newValue }
+    }
+}
+
+enum ShannonDesktopThreadSearch {
+    static func matches(_ threads: [ChatThreadDTO], query: String) -> [ChatThreadDTO] {
+        let foldedQuery = normalized(query)
+        guard !foldedQuery.isEmpty else { return threads }
+        return threads.filter { normalized($0.title).contains(foldedQuery) }
+    }
+
+    static func firstResultID(in threads: [ChatThreadDTO], query: String) -> String? {
+        matches(threads, query: query).first?.threadId
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                locale: .current
+            )
+    }
+}
 
 struct ShannonDesktopWorkProjection {
     let active: [ShannonAgentTask]

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Desk 実接続ガイド v38</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5f5f2;--panel:#fff;--text:#171717;--muted:#666;--line:#ddd;--accent:#1677a9;--ok:#247a4d;--warn:#c07b16}
+    @media(prefers-color-scheme:dark){:root{--bg:#101010;--panel:#1e1e1e;--text:#f4f4f4;--muted:#aaa;--line:#393939;--accent:#72c8ef;--ok:#67d69b;--warn:#efb257}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}main{max-width:880px;margin:auto;padding:44px 22px 88px}h1{font-size:clamp(34px,6vw,50px);line-height:1.1}.muted{color:var(--muted)}.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0}.ok{border-left:4px solid var(--ok)}.warn{border-left:4px solid var(--warn)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent)}
+  </style>
+</head>
+<body><main>
+  <p class="muted">Shannon Desk · ユーザー操作が必要になった時だけ使う · 2026-09-08</p>
+  <h1>Macを実Shannonへ安全に接続する</h1>
+  <p>目的は、Macへ端末固有・期限付きの接続資格を渡し、iPhoneと同じ会話、記憶、作業へ接続できることを確認することです。接続前のiPhone履歴やAzureの正本は削除・置換しません。</p>
+
+  <h2>実行するタイミング</h2>
+  <div class="card warn"><strong>まだこちらから「実接続テストを始めます」と案内されていなければ、実行不要です。</strong><p>署名済みMac Debug buildを用意し、他のApple署名・TestFlight作業が動いていない区切りで行います。</p></div>
+
+  <h2>手順</h2>
+  <ol>
+    <li>iPhoneのShannonを開き、設定内の接続端末管理から「新しい端末を接続」を選びます。</li>
+    <li>端末名へ「このMac」と入力し、接続リンクを1件だけ発行します。</li>
+    <li>発行された <code>shannon://connect/...</code> をAirDropなどの端末間共有でMacへ渡し、Macで開きます。リンクをチャット、Git、HTML、メモへ貼り付けないでください。</li>
+    <li>Shannon Deskの左下が「接続済み・このMac」になったら、その行を開きます。</li>
+    <li>「接続を確認」を押し、「認証された通信」が「確認済み」になるまで待ちます。</li>
+    <li>トーク一覧に既存履歴が出ることだけ確認し、結果をこちらへ「接続確認済み」と伝えます。テスト送信はこちらで手順を区切って実施します。</li>
+  </ol>
+
+  <h2>成功の見え方</h2>
+  <div class="card ok"><ul><li>左下: 「接続済み・このMac」</li><li>接続詳細: 「認証された通信・確認済み」</li><li>既存トークのタイトルが表示される</li><li>iPhone側の会話履歴が変わらず残る</li></ul></div>
+
+  <h2>失敗した時の安全な戻し方</h2>
+  <div class="card"><ul><li>通信失敗: Macのネット接続を確認し、「接続を確認」をもう一度だけ押します。</li><li>401／無効: 古い資格は使わず、新しい接続リンクを1件だけ発行します。</li><li>リンクが別アプリで開く: 操作を止め、URLをどこにも貼らず「Macで開かなかった」と伝えてください。</li><li>履歴が空: 新しい会話を作らず停止します。iPhoneの履歴は削除しないでください。</li></ul></div>
+
+  <h2>共有しないもの</h2>
+  <p>接続URL、token、API key、証明書、秘密鍵、Keychainの内容、実会話本文はスクリーンショットや報告へ含めません。</p>
+</main></body>
+</html>

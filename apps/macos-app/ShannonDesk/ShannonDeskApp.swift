@@ -59,21 +59,7 @@ struct ShannonDeskApp: App {
         .defaultSize(width: 1220, height: 790)
         .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("新しいトーク") {
-                    Task { await conversationModel.createThread(title: nil) }
-                }
-                .keyboardShortcut("n")
-            }
-            CommandMenu("Shannon") {
-                Button("会話と作業を更新") {
-                    Task {
-                        await conversationModel.loadThreads(force: true)
-                        await conversationModel.synchronizeAgentTasks()
-                    }
-                }
-                .keyboardShortcut("r")
-            }
+            ShannonDeskCommands(conversation: conversationModel)
         }
 
         Settings {
@@ -89,6 +75,57 @@ struct ShannonDeskApp: App {
         case .system: nil
         case .light: .light
         case .dark: .dark
+        }
+    }
+}
+
+private struct ShannonDeskCommands: Commands {
+    let conversation: ShannonConversationModel
+    @FocusedValue(\.shannonDesktopCommandActions) private var actions
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("新しいトーク") {
+                Task { await conversation.createThread(title: nil) }
+                actions?.showTalk()
+            }
+            .keyboardShortcut("n")
+        }
+
+        CommandMenu("Shannon") {
+            Button("トークを検索") {
+                actions?.focusThreadSearch()
+            }
+            .keyboardShortcut("f")
+            .disabled(actions == nil)
+
+            Divider()
+
+            Button("会話") { actions?.showTalk() }
+                .keyboardShortcut("1")
+                .disabled(actions == nil)
+            Button("作業全体") { actions?.showWork() }
+                .keyboardShortcut("2")
+                .disabled(actions == nil)
+            Button("頭の中") { actions?.showMemory() }
+                .keyboardShortcut("3")
+                .disabled(actions == nil)
+            Button("設定") { actions?.showSettings() }
+                .keyboardShortcut("4")
+                .disabled(actions == nil)
+            Button("現在地インスペクタ") { actions?.toggleInspector() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(actions == nil)
+
+            Divider()
+
+            Button("会話と作業を更新") {
+                Task {
+                    await conversation.loadThreads(force: true)
+                    await conversation.synchronizeAgentTasks()
+                }
+            }
+            .keyboardShortcut("r")
         }
     }
 }
