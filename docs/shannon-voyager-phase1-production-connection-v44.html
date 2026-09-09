@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager Phase 1 本番接続結果</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#0a84ff; --green:#30d158; --orange:#ff9f0a; --panel:color-mix(in srgb,Canvas 92%,var(--blue) 8%); }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.65; background:Canvas; color:CanvasText; }
+    main { max-width:860px; margin:auto; padding:48px 24px 80px; }
+    h1 { font-size:clamp(1.8rem,5vw,3rem); line-height:1.15; }
+    h2 { margin-top:42px; }
+    .hero,.card { padding:20px; border-radius:20px; background:var(--panel); }
+    .hero { border-left:5px solid var(--green); }
+    .ok { color:var(--green); font-weight:700; }
+    .wait { color:var(--orange); font-weight:700; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    li { margin:.55rem 0; }
+  </style>
+</head>
+<body><main>
+  <h1>Shannon × Voyager<br>本番接続完了</h1>
+  <p class="hero"><span class="ok">サーバー接続は正常です。</span><br>新しいiOSビルドやTestFlight配信は不要です。iPhoneが戻ったら、既存の整理カードから1回再試行するだけで最終確認できます。</p>
+
+  <h2>完了したこと</h2>
+  <div class="card"><ul>
+    <li>Voyagerへcreate-only連携APIを配備</li>
+    <li>専用token・owner・workspaceを通常の端末認証から分離</li>
+    <li>秘密値を表示せず、所有者限定の<code>0600</code>設定ファイルで共有</li>
+    <li>Shannon APIが共有設定を直接読み込むように接続</li>
+    <li>Shannon APIとVoyager APIを本番で稼働確認</li>
+    <li>認証付き経路がVoyagerへ到達することを、Taskを作らない不正形式テストで確認</li>
+  </ul></div>
+
+  <h2>データ安全性</h2>
+  <ul>
+    <li>Voyagerは配備前にソースとDBをバックアップ。DBの<code>quick_check</code>は<code>ok</code>。</li>
+    <li>Voyagerの既存239 recordsは不変。合成Taskは明確な1件だけ。</li>
+    <li>同じ合成要求を3回送ってもTaskは1件のみで、冪等性を確認。</li>
+    <li>Shannonも設定変更前にサービス定義、設定、SQLiteをバックアップ。</li>
+    <li>Shannon DBの<code>integrity_check</code>は<code>ok</code>。11トーク、84メッセージ、整理session 1件、候補1件を維持。</li>
+  </ul>
+
+  <h2>iPhoneが戻った後の最終確認</h2>
+  <ol>
+    <li>Shannonを通常どおり開きます。更新や再インストールは不要です。</li>
+    <li>前回「一部未反映」となった整理カードで、<strong>「同じ内容でもう一度反映」</strong>を押します。</li>
+    <li>カードが反映済みになり、VoyagerにThinking Taskが1件だけ現れることを確認します。</li>
+    <li>同じボタンを誤って再操作しても、同じTaskが増えないことを確認します。</li>
+  </ol>
+  <p class="wait">この実会話E2Eだけが未完了です。iPhoneが戻るまでは、サーバーを正常接続した状態で待機します。</p>
+
+  <h2>問題が出た場合</h2>
+  <ul>
+    <li>再び<code>DESTINATION_UNAVAILABLE</code>なら、繰り返し押さず画面をそのまま共有してください。</li>
+    <li>別のエラーなら、カードに表示されたエラー名を共有してください。秘密値や会話本文のコピーは不要です。</li>
+    <li>サーバー側は両アプリとも配備前バックアップから復元できます。</li>
+  </ul>
+</main></body>
+</html>
