@@ -163,7 +163,7 @@ private struct ShannonOrganizeItemRow: View {
         _operation = State(initialValue: initialOperation)
         _target = State(initialValue: item.target)
         _selectedProjectIDs = State(initialValue: Set(item.projectIds ?? []))
-        _taskQuery = State(initialValue: item.target?.title ?? item.title)
+        _taskQuery = State(initialValue: item.targetQuery ?? item.target?.title ?? item.title)
     }
 
     var body: some View {
@@ -180,6 +180,11 @@ private struct ShannonOrganizeItemRow: View {
                     if !item.details.isEmpty { Text(item.details).font(.caption).foregroundStyle(.secondary) }
                     if let target = item.target {
                         Label("変更元：\(target.title) · rev \(target.revision)", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if item.operation == .update {
+                        Label("変更項目：\(updateFieldSummary)", systemImage: "slider.horizontal.3")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -250,7 +255,9 @@ private struct ShannonOrganizeItemRow: View {
                 ForEach(candidates) { candidate in
                     Button {
                         target = candidate
-                        selectedProjectIDs = Set(candidate.projectIds)
+                        if !changesTitle { title = candidate.title }
+                        if !changesDetails { details = candidate.details }
+                        selectedProjectIDs = projectSelectionRequired ? [] : Set(candidate.projectIds)
                     } label: {
                         HStack(alignment: .top) {
                             Image(systemName: target?.id == candidate.id ? "checkmark.circle.fill" : "circle")
@@ -271,7 +278,8 @@ private struct ShannonOrganizeItemRow: View {
                         Text("変更前").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                         Text(target.title).font(.caption)
                         if !target.details.isEmpty { Text(target.details).font(.caption2).foregroundStyle(.secondary) }
-                        Text("変更後").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("変更後：\(updateFieldSummary)のみ")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                     }
                 } else {
                     Text("更新するTaskを1件選んでください。推測では反映しません。")
@@ -279,26 +287,48 @@ private struct ShannonOrganizeItemRow: View {
                 }
             }
 
-            TextField("Task名", text: $title).textFieldStyle(.roundedBorder)
-            TextField("実行内容", text: $details, axis: .vertical)
-                .lineLimit(2...5)
-                .textFieldStyle(.roundedBorder)
+            if operation == .create || changesTitle {
+                TextField("Task名", text: $title).textFieldStyle(.roundedBorder)
+            } else if let target {
+                Label("タイトルは変更しません：\(target.title)", systemImage: "lock")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
 
-            Menu {
-                Button { selectedProjectIDs.removeAll() } label: {
-                    Label("Projectなし", systemImage: selectedProjectIDs.isEmpty ? "checkmark" : "folder")
-                }
-                ForEach(projects) { project in
-                    Button {
-                        if selectedProjectIDs.contains(project.id) { selectedProjectIDs.remove(project.id) }
-                        else { selectedProjectIDs.insert(project.id) }
-                    } label: {
-                        Label(project.title, systemImage: selectedProjectIDs.contains(project.id) ? "checkmark" : "folder")
+            if operation == .create || changesDetails {
+                TextField("実行内容", text: $details, axis: .vertical)
+                    .lineLimit(2...5)
+                    .textFieldStyle(.roundedBorder)
+            } else if target != nil {
+                Label("詳細は変更しません", systemImage: "lock")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            if operation == .create || changesProjects {
+                Menu {
+                    if !projectSelectionRequired {
+                        Button { selectedProjectIDs.removeAll() } label: {
+                            Label("Projectなし", systemImage: selectedProjectIDs.isEmpty ? "checkmark" : "folder")
+                        }
                     }
+                    ForEach(projects) { project in
+                        Button {
+                            if selectedProjectIDs.contains(project.id) { selectedProjectIDs.remove(project.id) }
+                            else { selectedProjectIDs.insert(project.id) }
+                        } label: {
+                            Label(project.title, systemImage: selectedProjectIDs.contains(project.id) ? "checkmark" : "folder")
+                        }
+                    }
+                } label: {
+                    Label(selectedProjectSummary, systemImage: "folder")
+                        .font(.caption)
                 }
-            } label: {
-                Label(selectedProjectSummary, systemImage: "folder")
-                    .font(.caption)
+                if projectSelectionRequired && selectedProjectIDs.isEmpty {
+                    Text("この依頼ではProjectを1件以上選んでください。未選択では反映できません。")
+                        .font(.caption2).foregroundStyle(.orange)
+                }
+            } else if let target {
+                Label(selectedProjectNames(for: target.projectIds) ?? "Projectなし（変更しません）", systemImage: "lock")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
@@ -307,7 +337,9 @@ private struct ShannonOrganizeItemRow: View {
                     isConfiguring = false
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation == .update && target == nil))
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || (operation == .update && target == nil)
+                    || (projectSelectionRequired && selectedProjectIDs.isEmpty))
                 Button("戻る") { resetDraft(); isConfiguring = false }
             }
             .font(.caption)
@@ -331,7 +363,7 @@ private struct ShannonOrganizeItemRow: View {
         operation = item.operation ?? .create
         target = item.target
         selectedProjectIDs = Set(item.projectIds ?? [])
-        taskQuery = item.target?.title ?? item.title
+        taskQuery = item.targetQuery ?? item.target?.title ?? item.title
     }
 
     private var failureMessage: String {
@@ -339,8 +371,37 @@ private struct ShannonOrganizeItemRow: View {
         case "REVISION_CONFLICT": "Voyager側でTaskが更新されました。新しく「整理して」で候補を作り直してください。"
         case "TASK_NOT_EDITABLE": "完了または取消済みのTaskは更新できません。"
         case "PROJECT_NOT_FOUND": "選択したProjectが見つかりません。新しく「整理して」で選び直してください。"
+        case "PROJECT_SELECTION_REQUIRED": "Projectを1件以上選んでから採用してください。"
         default: "未反映：\(item.errorCode ?? "接続エラー")"
         }
+    }
+
+    private var effectiveUpdateFields: Set<ShannonOrganizeUpdateFieldDTO> {
+        guard operation == .update else { return [] }
+        if item.operation == .update, let fields = item.updateFields, !fields.isEmpty { return Set(fields) }
+        return [.title, .details, .projectIds]
+    }
+
+    private var changesTitle: Bool { effectiveUpdateFields.contains(.title) }
+    private var changesDetails: Bool { effectiveUpdateFields.contains(.details) }
+    private var changesProjects: Bool { effectiveUpdateFields.contains(.projectIds) }
+    private var projectSelectionRequired: Bool {
+        operation == .update && changesProjects && item.projectSelectionRequired == true
+    }
+
+    private var updateFieldSummary: String {
+        let names = [
+            ShannonOrganizeUpdateFieldDTO.title,
+            .details,
+            .projectIds,
+        ].filter(effectiveUpdateFields.contains).map { field in
+            switch field {
+            case .title: "タイトル"
+            case .details: "詳細"
+            case .projectIds: "Project"
+            }
+        }
+        return names.isEmpty ? "なし" : names.joined(separator: "・")
     }
 
     private var decisionSymbol: String {

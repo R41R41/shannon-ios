@@ -236,6 +236,10 @@ public enum ShannonOrganizeOperationDTO: String, Codable, Equatable, Hashable, S
     case create, update
 }
 
+public enum ShannonOrganizeUpdateFieldDTO: String, Codable, Equatable, Hashable, Sendable {
+    case title, details, projectIds
+}
+
 public struct ShannonVoyagerTaskProjectionDTO: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
@@ -296,6 +300,9 @@ public struct ShannonOrganizeItemDTO: Codable, Equatable, Identifiable, Sendable
     public let operation: ShannonOrganizeOperationDTO?
     public let target: ShannonVoyagerTaskProjectionDTO?
     public let projectIds: [String]?
+    public let targetQuery: String?
+    public let updateFields: [ShannonOrganizeUpdateFieldDTO]?
+    public let projectSelectionRequired: Bool?
     public let decision: ShannonOrganizeDecisionDTO
     public let destinationStatus: ShannonOrganizeDestinationStatusDTO
     public let requestId: String
@@ -310,6 +317,9 @@ public struct ShannonOrganizeItemDTO: Codable, Equatable, Identifiable, Sendable
         operation: ShannonOrganizeOperationDTO? = nil,
         target: ShannonVoyagerTaskProjectionDTO? = nil,
         projectIds: [String]? = nil,
+        targetQuery: String? = nil,
+        updateFields: [ShannonOrganizeUpdateFieldDTO]? = nil,
+        projectSelectionRequired: Bool? = nil,
         decision: ShannonOrganizeDecisionDTO,
         destinationStatus: ShannonOrganizeDestinationStatusDTO,
         requestId: String,
@@ -323,6 +333,9 @@ public struct ShannonOrganizeItemDTO: Codable, Equatable, Identifiable, Sendable
         self.operation = operation
         self.target = target
         self.projectIds = projectIds
+        self.targetQuery = targetQuery
+        self.updateFields = updateFields
+        self.projectSelectionRequired = projectSelectionRequired
         self.decision = decision
         self.destinationStatus = destinationStatus
         self.requestId = requestId

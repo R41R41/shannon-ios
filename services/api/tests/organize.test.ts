@@ -9,6 +9,7 @@ import {
   InMemoryOrganizeStore,
   HttpVoyagerCatalog,
   HttpVoyagerTaskDestination,
+  OpenAIOrganizeExtractor,
   OrganizeError,
   SQLiteOrganizeStore,
   isOrganizeCommand,
@@ -77,6 +78,32 @@ describe('Shannon organize sessions', () => {
     expect(isOrganizeCommand('  整理して。 ')).toBe(true);
     expect(isOrganizeCommand('要点を整理して')).toBe(false);
     expect(isOrganizeCommand('「整理して」と表示して')).toBe(false);
+  });
+
+  it('turns the reported Japanese update request into field-level changes without calling the model', async () => {
+    let modelCalled = false;
+    const extractor = new OpenAIOrganizeExtractor({
+      apiKey: 'synthetic-key',
+      model: 'synthetic-model',
+      fetcher: async () => {
+        modelCalled = true;
+        throw new Error('must not call model for an explicit update');
+      },
+    });
+    const drafts = await extractor.extract('owner-a', [{
+      role: 'user',
+      content: 'Voyagerにある「シャノンとVoyagerの実機連携を確認する」の詳細を「Shannon Phase 2の実機確認に成功」に更新して、合うProjectを選びたい。',
+    }]);
+
+    expect(modelCalled).toBe(false);
+    expect(drafts).toEqual([{
+      operation: 'update',
+      targetQuery: 'シャノンとVoyagerの実機連携を確認する',
+      title: 'シャノンとVoyagerの実機連携を確認する',
+      details: 'Shannon Phase 2の実機確認に成功',
+      updateFields: ['details', 'projectIds'],
+      projectSelectionRequired: true,
+    }]);
   });
 
   it('extracts after the prior cursor and sends only after accepted review', async () => {
@@ -192,6 +219,29 @@ describe('Shannon organize sessions', () => {
     reopened.close();
   });
 
+  it('does not accept a Project-selection update until a Project is chosen', () => {
+    const store = new InMemoryOrganizeStore();
+    const target = {
+      id: 'task-existing', title: '既存Task', details: '変更前', status: 'thinking',
+      projectIds: [], revision: 3, updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+    const session = store.create({
+      scopeKey: 'owner-a', threadId: 'thread-a', sourceMessageIds: ['message-a'], drafts: [{
+        operation: 'update', targetQuery: '既存Task', title: '既存Task', details: '変更後',
+        updateFields: ['details', 'projectIds'], projectSelectionRequired: true,
+      }],
+    }, '2026-09-09T00:00:00.000Z');
+
+    expect(() => store.decide(
+      'owner-a', session.id, session.items[0]!.id, session.revision, 'accepted',
+      { operation: 'update', target, projectIds: [] }, '2026-09-09T00:00:01.000Z',
+    )).toThrowError(expect.objectContaining({ code: 'PROJECT_SELECTION_REQUIRED' }));
+    expect(store.decide(
+      'owner-a', session.id, session.items[0]!.id, session.revision, 'accepted',
+      { operation: 'update', target, projectIds: ['project-shannon'] }, '2026-09-09T00:00:02.000Z',
+    )).toMatchObject({ items: [{ decision: 'accepted', projectIds: ['project-shannon'] }] });
+  });
+
   it('migrates old SQLite rows as Phase 1 create items', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'shannon-organize-migration-')), 'store.sqlite');
     const legacy = new DatabaseSync(path);
@@ -278,7 +328,9 @@ describe('Shannon organize sessions', () => {
       operation: 'update', target: {
         id: '00000000-0000-4000-8000-000000000101', title: '既存Taskを確認する', details: '検索候補に必要な説明だけを返す。',
         status: 'pending', projectIds: [], revision: 1, updatedAt: '2026-09-08T23:00:00.000Z',
-      }, projectIds: ['00000000-0000-4000-8000-000000000104'], decision: 'accepted', destinationStatus: 'pending',
+      }, projectIds: ['00000000-0000-4000-8000-000000000104'],
+      targetQuery: '既存Taskを確認する', updateFields: ['title', 'details', 'projectIds'], projectSelectionRequired: false,
+      decision: 'accepted', destinationStatus: 'pending',
       requestId: '00000000-0000-4000-8000-000000000102', idempotencyKey: '00000000-0000-4000-8000-000000000103',
     };
     const session: OrganizeSession = {
@@ -288,6 +340,42 @@ describe('Shannon organize sessions', () => {
     await destination.apply(session, item);
     expect(JSON.parse(recordedBody)).toEqual(expectedRequest);
     expect(recordedHeaders.get('x-syzygy-contract-version')).toBe('1.1');
+  });
+
+  it('omits an unchanged title and requires the requested Project choice', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const destination = new HttpVoyagerTaskDestination({
+      endpoint: 'http://127.0.0.1:41000/api/integrations/syzygy/v1/task-changes:apply',
+      token: 'synthetic-destination-token', workspaceId: 'configured-workspace',
+      fetcher: async (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return new Response(JSON.stringify({ result: {
+          system: 'voyager', resourceType: 'task', resourceId: 'task-existing',
+          title: 'シャノンとVoyagerの実機連携を確認する', summary: 'Shannon Phase 2の実機確認に成功',
+          updatedAt: '2026-09-09T00:00:01.000Z', href: null,
+        } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    const item: OrganizeItem = {
+      id: 'incident-item', title: 'シャノンとVoyagerの実機連携を確認する', details: 'Shannon Phase 2の実機確認に成功',
+      operation: 'update', target: {
+        id: 'task-existing', title: 'シャノンとVoyagerの実機連携を確認する', details: '変更前の詳細',
+        status: 'thinking', projectIds: [], revision: 3, updatedAt: '2026-09-09T00:00:00.000Z',
+      }, projectIds: [], targetQuery: 'シャノンとVoyagerの実機連携を確認する',
+      updateFields: ['details', 'projectIds'], projectSelectionRequired: true,
+      decision: 'accepted', destinationStatus: 'pending', requestId: 'request', idempotencyKey: 'key',
+    };
+    const session: OrganizeSession = {
+      id: 'session', scopeKey: 'owner', threadId: 'thread', state: 'ready_for_review', revision: 2,
+      sourceMessageIds: ['message'], items: [item], createdAt: '2026-09-09T00:00:00.000Z', updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+
+    await expect(destination.apply(session, item)).rejects.toMatchObject({ code: 'PROJECT_SELECTION_REQUIRED' });
+    await destination.apply(session, { ...item, projectIds: ['project-shannon'] });
+    expect((bodies[0]!.payload as { changes: Record<string, unknown> }).changes).toEqual({
+      details: 'Shannon Phase 2の実機確認に成功',
+      projectIds: ['project-shannon'],
+    });
   });
 
   it('sends the Voyager Phase 1 fixture byte-equivalently on retry', async () => {
@@ -321,6 +409,9 @@ describe('Shannon organize sessions', () => {
       details: 'ローカル環境でThinking Taskが1件だけ同期されることを確認する。',
       operation: 'create',
       projectIds: [],
+      targetQuery: '',
+      updateFields: [],
+      projectSelectionRequired: false,
       decision: 'accepted',
       destinationStatus: 'pending',
       requestId: '00000000-0000-4000-8000-000000000001',

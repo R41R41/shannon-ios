@@ -7,6 +7,7 @@ export type OrganizeDecision = 'proposed' | 'accepted' | 'rejected' | 'deferred'
 export type OrganizeDestinationStatus = 'pending' | 'applied' | 'failed';
 export type OrganizeSessionState = 'ready_for_review' | 'partially_applied' | 'applied';
 export type OrganizeOperation = 'create' | 'update';
+export type OrganizeUpdateField = 'title' | 'details' | 'projectIds';
 
 export interface VoyagerTaskProjection {
   id: string;
@@ -31,6 +32,9 @@ export interface OrganizeTaskDraft {
   operation?: OrganizeOperation;
   target?: VoyagerTaskProjection;
   projectIds?: string[];
+  targetQuery?: string;
+  updateFields?: OrganizeUpdateField[];
+  projectSelectionRequired?: boolean;
 }
 
 export interface VoyagerTaskReference {
@@ -47,6 +51,9 @@ export interface OrganizeItem extends OrganizeTaskDraft {
   id: string;
   operation: OrganizeOperation;
   projectIds: string[];
+  targetQuery: string;
+  updateFields: OrganizeUpdateField[];
+  projectSelectionRequired: boolean;
   decision: OrganizeDecision;
   destinationStatus: OrganizeDestinationStatus;
   requestId: string;
@@ -94,13 +101,20 @@ export class InMemoryOrganizeStore implements OrganizeStore {
     const session: OrganizeSession = {
       id: randomUUID(), scopeKey: input.scopeKey, threadId: input.threadId,
       state: 'ready_for_review', revision: 1, sourceMessageIds: [...new Set(input.sourceMessageIds)],
-      items: input.drafts.slice(0, 12).map(draft => ({
-        id: randomUUID(), title: bounded(draft.title, 500), details: bounded(draft.details, 1_000),
-        operation: normalizedOperation(draft.operation, draft.target),
-        ...(draft.target ? { target: normalizedTaskProjection(draft.target) } : {}),
-        projectIds: normalizedIds(draft.projectIds ?? []),
-        decision: 'proposed', destinationStatus: 'pending', requestId: randomUUID(), idempotencyKey: randomUUID(),
-      })),
+      items: input.drafts.slice(0, 12).map(draft => {
+        const operation = normalizedOperation(draft.operation, draft.target);
+        const updateFields = normalizedUpdateFields(draft.updateFields, operation);
+        return {
+          id: randomUUID(), title: bounded(draft.title, 500), details: bounded(draft.details, 1_000),
+          operation,
+          ...(draft.target ? { target: normalizedTaskProjection(draft.target) } : {}),
+          projectIds: normalizedIds(draft.projectIds ?? []),
+          targetQuery: bounded(draft.targetQuery ?? draft.target?.title ?? (operation === 'update' ? draft.title : ''), 160),
+          updateFields,
+          projectSelectionRequired: operation === 'update' && updateFields.includes('projectIds') && draft.projectSelectionRequired === true,
+          decision: 'proposed', destinationStatus: 'pending', requestId: randomUUID(), idempotencyKey: randomUUID(),
+        };
+      }),
       createdAt: now, updatedAt: now,
     };
     this.sessions.set(session.id, session);
@@ -131,6 +145,13 @@ export class InMemoryOrganizeStore implements OrganizeStore {
         ...(edit.operation !== undefined || edit.target !== undefined ? operationEdit(item, edit) : {}),
         ...(edit.projectIds !== undefined ? { projectIds: normalizedIds(edit.projectIds) } : {}),
       } : item);
+      const changed = items[index]!;
+      if (decision === 'accepted' && changed.operation === 'update' && !changed.target) {
+        throw new OrganizeError('TARGET_REQUIRED', 400);
+      }
+      if (decision === 'accepted' && changed.projectSelectionRequired && changed.projectIds.length === 0) {
+        throw new OrganizeError('PROJECT_SELECTION_REQUIRED', 400);
+      }
       return { ...session, items, revision: session.revision + 1, updatedAt: now };
     });
   }
@@ -195,6 +216,9 @@ export class SQLiteOrganizeStore implements OrganizeStore {
     this.ensureItemColumn('operation', "TEXT NOT NULL DEFAULT 'create'");
     this.ensureItemColumn('target_json', 'TEXT');
     this.ensureItemColumn('project_ids_json', "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureItemColumn('target_query', "TEXT NOT NULL DEFAULT ''");
+    this.ensureItemColumn('update_fields_json', "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureItemColumn('project_selection_required', 'INTEGER NOT NULL DEFAULT 0');
   }
   close(): void { this.database.close(); }
   cursor(scopeKey: string, threadId: string): string | undefined {
@@ -214,11 +238,12 @@ export class SQLiteOrganizeStore implements OrganizeStore {
         (session_id,scope_key,thread_id,state,revision,source_message_ids_json,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?)`).run(session.id, session.scopeKey, session.threadId, session.state, session.revision, JSON.stringify(session.sourceMessageIds), now, now);
       const insert = this.database.prepare(`INSERT INTO organize_items
-        (item_id,session_id,position,title,details,operation,target_json,project_ids_json,decision,destination_status,request_id,idempotency_key)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`);
+        (item_id,session_id,position,title,details,operation,target_json,project_ids_json,target_query,update_fields_json,project_selection_required,decision,destination_status,request_id,idempotency_key)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       session.items.forEach((item, position) => insert.run(
         item.id, session.id, position, item.title, item.details, item.operation,
-        item.target ? JSON.stringify(item.target) : null, JSON.stringify(item.projectIds),
+        item.target ? JSON.stringify(item.target) : null, JSON.stringify(item.projectIds), item.targetQuery,
+        JSON.stringify(item.updateFields), item.projectSelectionRequired ? 1 : 0,
         item.decision, item.destinationStatus, item.requestId, item.idempotencyKey,
       ));
       this.database.exec('COMMIT;');
@@ -244,6 +269,10 @@ export class SQLiteOrganizeStore implements OrganizeStore {
       ? operationEdit(item, edit)
       : { operation: item.operation, ...(item.target ? { target: item.target } : {}) };
     const projectIds = edit.projectIds === undefined ? item.projectIds : normalizedIds(edit.projectIds);
+    if (decision === 'accepted' && operation.operation === 'update' && !operation.target) throw new OrganizeError('TARGET_REQUIRED', 400);
+    if (decision === 'accepted' && item.projectSelectionRequired && projectIds.length === 0) {
+      throw new OrganizeError('PROJECT_SELECTION_REQUIRED', 400);
+    }
     this.database.exec('BEGIN IMMEDIATE;');
     try {
       const changed = this.database.prepare('UPDATE organize_sessions SET revision=revision+1, updated_at=? WHERE session_id=? AND scope_key=? AND revision=?').run(now, sessionId, scopeKey, expectedRevision);
@@ -297,15 +326,24 @@ export class SQLiteOrganizeStore implements OrganizeStore {
       revision: Number(row.revision), sourceMessageIds: JSON.parse(String(row.source_message_ids_json)) as string[],
       ...(row.command_through_message_id ? { commandThroughMessageId: String(row.command_through_message_id) } : {}),
       createdAt: String(row.created_at), updatedAt: String(row.updated_at), ...(row.applied_at ? { appliedAt: String(row.applied_at) } : {}),
-      items: items.map(item => ({
-        id: String(item.item_id), title: String(item.title), details: String(item.details), decision: item.decision as OrganizeDecision,
-        operation: item.operation === 'update' ? 'update' : 'create',
-        ...(item.target_json ? { target: normalizedTaskProjection(JSON.parse(String(item.target_json)) as VoyagerTaskProjection) } : {}),
-        projectIds: normalizedIds(item.project_ids_json ? JSON.parse(String(item.project_ids_json)) as string[] : []),
-        destinationStatus: item.destination_status as OrganizeDestinationStatus, requestId: String(item.request_id), idempotencyKey: String(item.idempotency_key),
-        ...(item.result_json ? { result: JSON.parse(String(item.result_json)) as VoyagerTaskReference } : {}),
-        ...(item.error_code ? { errorCode: String(item.error_code) } : {}),
-      })),
+      items: items.map(item => {
+        const operation: OrganizeOperation = item.operation === 'update' ? 'update' : 'create';
+        const target = item.target_json
+          ? normalizedTaskProjection(JSON.parse(String(item.target_json)) as VoyagerTaskProjection)
+          : undefined;
+        return {
+          id: String(item.item_id), title: String(item.title), details: String(item.details), decision: item.decision as OrganizeDecision,
+          operation,
+          ...(target ? { target } : {}),
+          projectIds: normalizedIds(item.project_ids_json ? JSON.parse(String(item.project_ids_json)) as string[] : []),
+          targetQuery: bounded(String(item.target_query ?? ''), 160) || (operation === 'update' ? target?.title ?? String(item.title) : ''),
+          updateFields: storedUpdateFields(operation, item.update_fields_json),
+          projectSelectionRequired: operation === 'update' && Number(item.project_selection_required ?? 0) === 1,
+          destinationStatus: item.destination_status as OrganizeDestinationStatus, requestId: String(item.request_id), idempotencyKey: String(item.idempotency_key),
+          ...(item.result_json ? { result: JSON.parse(String(item.result_json)) as VoyagerTaskReference } : {}),
+          ...(item.error_code ? { errorCode: String(item.error_code) } : {}),
+        };
+      }),
     };
   }
 
@@ -323,6 +361,8 @@ export interface OrganizeExtractor {
 export class LocalOrganizeExtractor implements OrganizeExtractor {
   readonly mode = 'local-stub';
   async extract(_scopeKey: string, messages: readonly ShannonConversationItem[]): Promise<OrganizeTaskDraft[]> {
+    const explicitUpdate = explicitVoyagerUpdateDraft(messages);
+    if (explicitUpdate) return [explicitUpdate];
     const last = [...messages].reverse().find(message => message.role === 'user' && !isOrganizeCommand(message.content));
     if (!last) return [];
     const text = last.content.replace(/\s+/gu, ' ').trim();
@@ -335,6 +375,8 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
   constructor(private readonly options: { apiKey: string; model: string; endpoint?: string; fetcher?: typeof fetch; }) {}
   async extract(scopeKey: string, messages: readonly ShannonConversationItem[]): Promise<OrganizeTaskDraft[]> {
     if (!messages.length) return [];
+    const explicitUpdate = explicitVoyagerUpdateDraft(messages);
+    if (explicitUpdate) return [explicitUpdate];
     const response = await (this.options.fetcher ?? fetch)(this.options.endpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
@@ -342,7 +384,8 @@ export class OpenAIOrganizeExtractor implements OrganizeExtractor {
         model: this.options.model,
         instructions: `会話から、ユーザーが実際に行いたい未完了の行動だけをVoyager Task案へ変換する。\n
 各案は単独で着手できる粒度にする。単なる話題、完了済み事項、Shannonの相槌、内部推論はTaskにしない。\n
-titleは動詞で終わる短い日本語、detailsはユーザーが確認できる具体的な実行内容を最大1000文字で書く。会話全文を複製しない。最大12件。`,
+新規Taskはoperation=create、targetQuery=""、updateFields=[]、projectSelectionRequired=falseとする。titleは動詞で終わる短い日本語、detailsは具体的な実行内容にする。\n
+既存Taskの更新依頼はoperation=updateとし、targetQueryへ対象Taskを検索できる元の名前、updateFieldsへユーザーが変更を求めたフィールドだけを入れる。変更を求められていないtitleを絶対にupdateFieldsへ入れず、更新操作の説明をtitleやdetailsとして生成しない。title/detailsには変更後の値を入れ、変更しないフィールドは空文字にする。Projectを選びたい依頼はupdateFieldsへprojectIdsを入れ、projectSelectionRequired=trueにする。会話全文を複製しない。最大12件。`,
         input: messages.slice(-100).map(message => ({ role: message.role, content: message.content.slice(0, 4_000) })),
         reasoning: { effort: 'none' },
         text: { verbosity: 'low', format: {
@@ -351,7 +394,15 @@ titleは動詞で終わる短い日本語、detailsはユーザーが確認で�
             type: 'object', additionalProperties: false,
             properties: { tasks: { type: 'array', maxItems: 12, items: {
               type: 'object', additionalProperties: false,
-              properties: { title: { type: 'string' }, details: { type: 'string' } }, required: ['title', 'details'],
+              properties: {
+                operation: { type: 'string', enum: ['create', 'update'] },
+                targetQuery: { type: 'string' },
+                title: { type: 'string' },
+                details: { type: 'string' },
+                updateFields: { type: 'array', maxItems: 3, items: { type: 'string', enum: ['title', 'details', 'projectIds'] } },
+                projectSelectionRequired: { type: 'boolean' },
+              },
+              required: ['operation', 'targetQuery', 'title', 'details', 'updateFields', 'projectSelectionRequired'],
             } } }, required: ['tasks'],
           },
         } },
@@ -369,8 +420,27 @@ titleは動詞で終わる短い日本語、detailsはユーザーが確認で�
     return (decoded as { tasks: unknown[] }).tasks.map(value => {
       if (!value || typeof value !== 'object') throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
       const row = value as Record<string, unknown>;
-      if (typeof row.title !== 'string' || typeof row.details !== 'string') throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
-      return { title: requiredBounded(row.title, 500, 'title'), details: bounded(row.details, 1_000) };
+      if (typeof row.operation !== 'string' || !['create', 'update'].includes(row.operation)
+        || typeof row.targetQuery !== 'string' || typeof row.title !== 'string' || typeof row.details !== 'string'
+        || !Array.isArray(row.updateFields) || typeof row.projectSelectionRequired !== 'boolean') {
+        throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
+      }
+      const operation = row.operation as OrganizeOperation;
+      if (operation === 'create') {
+        return { title: requiredBounded(row.title, 500, 'title'), details: bounded(row.details, 1_000), operation };
+      }
+      const targetQuery = requiredBounded(row.targetQuery, 160, 'targetQuery');
+      const updateFields = normalizedUpdateFields(row.updateFields as OrganizeUpdateField[], operation, false);
+      const projectSelectionRequired = row.projectSelectionRequired === true;
+      const fields = projectSelectionRequired && !updateFields.includes('projectIds')
+        ? [...updateFields, 'projectIds' as const]
+        : updateFields;
+      if (fields.length === 0) throw new OrganizeError('EXTRACTION_RESPONSE_INVALID', 502);
+      return {
+        operation, targetQuery, updateFields: fields, projectSelectionRequired,
+        title: fields.includes('title') ? requiredBounded(row.title, 500, 'title') : targetQuery,
+        details: fields.includes('details') ? bounded(row.details, 1_000) : '',
+      };
     });
   }
 }
@@ -455,11 +525,21 @@ export class HttpVoyagerTaskDestination implements VoyagerTaskDestination {
   async apply(session: OrganizeSession, item: OrganizeItem): Promise<VoyagerTaskReference> {
     const isPhaseTwo = item.operation === 'update' || item.projectIds.length > 0;
     if (item.operation === 'update' && !item.target) throw new OrganizeError('TARGET_REQUIRED', 400);
+    if (item.operation === 'update' && item.updateFields.length === 0) throw new OrganizeError('UPDATE_FIELDS_REQUIRED', 400);
+    if (item.operation === 'update' && item.projectSelectionRequired && item.projectIds.length === 0) {
+      throw new OrganizeError('PROJECT_SELECTION_REQUIRED', 400);
+    }
     const contractVersion = isPhaseTwo ? '1.1' : '1.0';
-    const changes = {
-      title: item.title,
-      ...(isPhaseTwo ? { details: item.details, projectIds: item.projectIds } : item.details ? { details: item.details } : {}),
-    };
+    const changes = item.operation === 'update'
+      ? {
+          ...(item.updateFields.includes('title') ? { title: item.title } : {}),
+          ...(item.updateFields.includes('details') ? { details: item.details } : {}),
+          ...(item.updateFields.includes('projectIds') ? { projectIds: item.projectIds } : {}),
+        }
+      : {
+          title: item.title,
+          ...(isPhaseTwo ? { details: item.details, projectIds: item.projectIds } : item.details ? { details: item.details } : {}),
+        };
     const body = {
       contractVersion, requestId: item.requestId, idempotencyKey: item.idempotencyKey,
       workspaceId: this.options.workspaceId, projectId: null,
@@ -522,6 +602,27 @@ export function isOrganizeCommand(value: string): boolean {
   return value.normalize('NFKC').trim().replace(/[。.!！?？]+$/u, '').trim() === '整理して';
 }
 
+export function explicitVoyagerUpdateDraft(messages: readonly ShannonConversationItem[]): OrganizeTaskDraft | undefined {
+  const last = [...messages].reverse().find(message => message.role === 'user' && !isOrganizeCommand(message.content));
+  if (!last) return undefined;
+  const text = last.content.normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  const match = text.match(/^Voyagerにある[「"](.{1,160}?)[」"]の詳細を[「"]([\s\S]{1,1000}?)[」"]に更新して(?:、|,|して|、?\s*)?(.*)$/u);
+  if (!match) return undefined;
+  const targetQuery = requiredBounded(match[1] ?? '', 160, 'targetQuery');
+  const details = bounded(match[2] ?? '', 1_000);
+  if (!details) return undefined;
+  const remainder = match[3] ?? '';
+  const projectSelectionRequired = /(?:Project|プロジェクト).{0,40}(?:選|割り当て)/iu.test(remainder);
+  return {
+    operation: 'update',
+    targetQuery,
+    title: targetQuery,
+    details,
+    updateFields: projectSelectionRequired ? ['details', 'projectIds'] : ['details'],
+    projectSelectionRequired,
+  };
+}
+
 export function messagesAfterCursor(messages: readonly StoredConversationMessage[], cursor?: string): StoredConversationMessage[] {
   if (!cursor) return [...messages];
   const index = messages.findIndex(message => message.id === cursor);
@@ -538,9 +639,7 @@ function requiredBounded(value: string, limit: number, field: string): string {
 }
 function cloneSession(session: OrganizeSession): OrganizeSession { return structuredClone(session); }
 function normalizedOperation(operation: OrganizeOperation | undefined, target: VoyagerTaskProjection | undefined): OrganizeOperation {
-  const value = operation ?? (target ? 'update' : 'create');
-  if (value === 'update' && !target) throw new OrganizeError('TARGET_REQUIRED', 400);
-  return value;
+  return operation ?? (target ? 'update' : 'create');
 }
 function operationEdit(item: OrganizeItem, edit: Partial<OrganizeTaskDraft>): Pick<OrganizeItem, 'operation' | 'target'> {
   const operation = edit.operation ?? (edit.target ? 'update' : item.operation);
@@ -554,6 +653,27 @@ function normalizedIds(values: readonly string[]): string[] {
     throw new OrganizeError('PROJECT_IDS_INVALID', 400);
   }
   return [...new Set(values.map(value => requiredBounded(value, 160, 'projectId')))];
+}
+function normalizedUpdateFields(
+  values: readonly OrganizeUpdateField[] | undefined,
+  operation: OrganizeOperation,
+  legacyDefault = true,
+): OrganizeUpdateField[] {
+  if (operation === 'create') return [];
+  if (values === undefined || (legacyDefault && values.length === 0)) return ['title', 'details', 'projectIds'];
+  if (!Array.isArray(values) || values.length > 3 || values.some(value => !['title', 'details', 'projectIds'].includes(value))) {
+    throw new OrganizeError('UPDATE_FIELDS_INVALID', 400);
+  }
+  return [...new Set(values)];
+}
+function storedUpdateFields(operation: OrganizeOperation, value: unknown): OrganizeUpdateField[] {
+  if (operation === 'create') return [];
+  if (typeof value !== 'string' || !value.trim()) return ['title', 'details', 'projectIds'];
+  try {
+    return normalizedUpdateFields(JSON.parse(value) as OrganizeUpdateField[], operation);
+  } catch {
+    return ['title', 'details', 'projectIds'];
+  }
 }
 function normalizedTaskProjection(value: VoyagerTaskProjection): VoyagerTaskProjection {
   if (!value || typeof value !== 'object') throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
