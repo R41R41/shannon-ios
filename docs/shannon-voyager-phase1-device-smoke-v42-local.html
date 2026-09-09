@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager Phase 1 — iPhone実機確認</title>
+  <style>
+    :root { color-scheme: light dark; --accent:#0e92ef; --ok:#18864b; --warn:#b66a00; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.65; background:Canvas; color:CanvasText; }
+    main { max-width:820px; margin:auto; padding:40px 22px 72px; }
+    h1 { font-size:clamp(28px,5vw,42px); line-height:1.2; }
+    h2 { margin-top:38px; border-top:1px solid color-mix(in srgb, CanvasText 14%, transparent); padding-top:24px; }
+    .status,.step,.recovery { border:1px solid color-mix(in srgb, CanvasText 14%, transparent); border-radius:18px; padding:18px; margin:14px 0; background:color-mix(in srgb, Canvas 94%, var(--accent) 6%); }
+    .ok { color:var(--ok); font-weight:700; }
+    .warn { color:var(--warn); font-weight:700; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:color-mix(in srgb, CanvasText 8%, transparent); padding:.12em .35em; border-radius:6px; }
+    li { margin:.55em 0; }
+  </style>
+</head>
+<body><main>
+  <p class="ok">導入済み</p>
+  <h1>「整理して」をiPhoneで確認する</h1>
+  <div class="status">
+    <strong>対象</strong> Shannon iPhone版 0.1.0 (Development 2)／commit <code>d0000d1</code><br>
+    <strong>導入方法</strong> 接続済みiPhoneへ既存アプリを削除せず上書き<br>
+    <strong>サーバー</strong> Shannon Azure API反映済み<br>
+    <strong>今回の到達点</strong> 候補作成・確認・編集・採用・除外・保留と、安全な未接続表示
+  </div>
+
+  <h2>目的</h2>
+  <p>会話の中からVoyager Task候補を作り、あなたが内容を確認し終えるまで外部へ書き込まれないことを実機で確かめます。Voyager本番の専用接続はまだ無効なので、最後の反映だけは意図的に失敗します。</p>
+
+  <h2>確認手順</h2>
+  <div class="step">
+    <strong>1. 起動とデータ維持</strong>
+    <ol>
+      <li>iPhoneでShannonを開きます。</li>
+      <li>既存のトーク一覧と会話が残っていることを確認します。</li>
+      <li>通常の短いメッセージを送り、シャノンから返答が来ることを確認します。</li>
+    </ol>
+    <p class="ok">成功：再接続画面にならず、既存会話と通常会話が使えます。</p>
+  </div>
+
+  <div class="step">
+    <strong>2. 安全なテスト会話</strong>
+    <ol>
+      <li>新しいトークを作ります。</li>
+      <li><code>明日、ShannonとVoyagerの連携結果を確認したい。</code> と送ります。</li>
+      <li>続けて、メッセージ単体で <code>整理して</code> と送ります。</li>
+    </ol>
+    <p class="ok">成功：「Voyager Task案」カードが表示され、候補はまだ未確定です。</p>
+  </div>
+
+  <div class="step">
+    <strong>3. 確認操作</strong>
+    <ol>
+      <li>「編集」を押し、Task名を <code>ShannonとVoyagerの実機連携を確認する</code> に変えます。</li>
+      <li>「編集して採用」を押します。</li>
+      <li>複数候補が出た場合、残りを「今回は保留」または「除外」にします。</li>
+      <li>未判断の候補が残っている間、「採用したTaskを反映」が押せないことも確認します。</li>
+    </ol>
+    <p class="ok">成功：判断状態がカードに残り、画面を閉じても同じトークへ戻れば復元されます。</p>
+  </div>
+
+  <div class="step">
+    <strong>4. 最終反映の安全確認</strong>
+    <ol>
+      <li>全候補を判断した後、「採用したTaskを反映」を押します。</li>
+      <li><span class="warn">「Voyagerへ反映できませんでした。接続回復後に同じ内容で再試行できます。」</span>と表示されることを確認します。</li>
+    </ol>
+    <p>これは今回の想定結果です。VoyagerにTaskは作られず、採用内容と再試行情報はShannon側に残ります。</p>
+  </div>
+
+  <h2>成功条件</h2>
+  <ul>
+    <li>既存会話と接続が維持されている。</li>
+    <li><code>整理して</code> で確認カードが出る。</li>
+    <li>編集・採用・除外・保留が動く。</li>
+    <li>全候補を判断するまで最終反映できない。</li>
+    <li>未接続でもクラッシュせず、再試行可能な説明が出る。</li>
+  </ul>
+
+  <h2>問題が起きたとき</h2>
+  <div class="recovery">
+    <ul>
+      <li>アプリが起動しない：iPhoneのロックを解除し、Macとの接続を維持してください。アプリは削除しないでください。</li>
+      <li>再接続画面が出る：そこで止めてください。既存のKeychain情報を消さず、こちらで接続状態を調べます。</li>
+      <li>カードが出ない：送信した文が単独の <code>整理して</code> か確認し、同じトークで一度だけ再送します。</li>
+      <li>クラッシュする：再インストールやデータ削除をせず、発生した操作と時刻を教えてください。</li>
+    </ul>
+  </div>
+</main></body>
+</html>
