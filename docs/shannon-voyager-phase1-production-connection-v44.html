@@ -20,7 +20,7 @@
 </head>
 <body><main>
   <h1>Shannon × Voyager<br>本番接続完了</h1>
-  <p class="hero"><span class="ok">サーバー接続は正常です。</span><br>新しいiOSビルドやTestFlight配信は不要です。iPhoneが戻ったら、既存の整理カードから1回再試行するだけで最終確認できます。</p>
+  <p class="hero"><span class="ok">本番接続と実会話E2Eはすべて成功しました。</span><br>既存のiPhone版Shannonから、承認済みTaskをVoyagerへ1件だけ作成できました。新しいiOSビルドやTestFlight配信は不要でした。</p>
 
   <h2>完了したこと</h2>
   <div class="card"><ul>
@@ -41,14 +41,16 @@
     <li>Shannon DBの<code>integrity_check</code>は<code>ok</code>。11トーク、84メッセージ、整理session 1件、候補1件を維持。</li>
   </ul>
 
-  <h2>iPhoneが戻った後の最終確認</h2>
-  <ol>
-    <li>Shannonを通常どおり開きます。更新や再インストールは不要です。</li>
-    <li>前回「一部未反映」となった整理カードで、<strong>「同じ内容でもう一度反映」</strong>を押します。</li>
-    <li>カードが反映済みになり、VoyagerにThinking Taskが1件だけ現れることを確認します。</li>
-    <li>同じボタンを誤って再操作しても、同じTaskが増えないことを確認します。</li>
-  </ol>
-  <p class="wait">この実会話E2Eだけが未完了です。iPhoneが戻るまでは、サーバーを正常接続した状態で待機します。</p>
+  <h2>実会話E2Eの結果</h2>
+  <div class="card"><ul>
+    <li class="ok">iPhoneの保持済み整理カードから再試行成功</li>
+    <li class="ok">カードが「反映済み」へ更新</li>
+    <li class="ok">Voyagerにも対象Taskが表示</li>
+    <li class="ok">Shannonの整理sessionは<code>applied</code>、cursorも更新済み</li>
+    <li class="ok">Voyager DBには対象IDが正確に1件だけ存在</li>
+    <li class="ok">状態<code>thinking</code>、親Taskなし、Project割当なし</li>
+  </ul></div>
+  <p>ShannonとVoyagerのDB整合性、両APIの稼働も最終確認済みです。Phase 1の完了条件を満たしました。</p>
 
   <h2>問題が出た場合</h2>
   <ul>
