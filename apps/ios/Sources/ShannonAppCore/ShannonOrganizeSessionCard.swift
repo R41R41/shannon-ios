@@ -4,20 +4,38 @@ public struct ShannonOrganizeSessionCard: View {
     let session: ShannonOrganizeSessionDTO
     let isWorking: Bool
     let error: String?
-    let decide: (String, ShannonOrganizeDecisionDTO, String?, String?) -> Void
+    let taskCandidatesByItemID: [String: [ShannonVoyagerTaskProjectionDTO]]
+    let projects: [ShannonVoyagerProjectProjectionDTO]
+    let pendingCatalogItemIDs: Set<String>
+    let catalogErrorsByItemID: [String: String]
+    let decide: (String, ShannonOrganizeDecisionDTO, String?, String?, ShannonOrganizeOperationDTO?, ShannonVoyagerTaskProjectionDTO?, [String]?) -> Void
+    let searchTasks: (String, String) -> Void
+    let loadProjects: (String) -> Void
     let apply: () -> Void
 
     public init(
         session: ShannonOrganizeSessionDTO,
         isWorking: Bool,
         error: String?,
-        decide: @escaping (String, ShannonOrganizeDecisionDTO, String?, String?) -> Void,
+        taskCandidatesByItemID: [String: [ShannonVoyagerTaskProjectionDTO]] = [:],
+        projects: [ShannonVoyagerProjectProjectionDTO] = [],
+        pendingCatalogItemIDs: Set<String> = [],
+        catalogErrorsByItemID: [String: String] = [:],
+        decide: @escaping (String, ShannonOrganizeDecisionDTO, String?, String?, ShannonOrganizeOperationDTO?, ShannonVoyagerTaskProjectionDTO?, [String]?) -> Void,
+        searchTasks: @escaping (String, String) -> Void = { _, _ in },
+        loadProjects: @escaping (String) -> Void = { _ in },
         apply: @escaping () -> Void
     ) {
         self.session = session
         self.isWorking = isWorking
         self.error = error
+        self.taskCandidatesByItemID = taskCandidatesByItemID
+        self.projects = projects
+        self.pendingCatalogItemIDs = pendingCatalogItemIDs
+        self.catalogErrorsByItemID = catalogErrorsByItemID
         self.decide = decide
+        self.searchTasks = searchTasks
+        self.loadProjects = loadProjects
         self.apply = apply
     }
 
@@ -40,8 +58,16 @@ public struct ShannonOrganizeSessionCard: View {
                 ForEach(session.items) { item in
                     ShannonOrganizeItemRow(
                         item: item,
+                        candidates: taskCandidatesByItemID[item.id] ?? [],
+                        projects: projects,
+                        isLoadingCatalog: pendingCatalogItemIDs.contains(item.id),
+                        catalogError: catalogErrorsByItemID[item.id],
                         disabled: isWorking || session.state == .applied,
-                        decide: { decision, title, details in decide(item.id, decision, title, details) }
+                        decide: { decision, title, details, operation, target, projectIds in
+                            decide(item.id, decision, title, details, operation, target, projectIds)
+                        },
+                        searchTasks: { searchTasks(item.id, $0) },
+                        loadProjects: { loadProjects(item.id) }
                     )
                     if item.id != session.items.last?.id { Divider() }
                 }
@@ -84,60 +110,91 @@ public struct ShannonOrganizeSessionCard: View {
         }
     }
 
-    private var canApply: Bool {
-        !session.items.contains(where: { $0.decision == .proposed })
-    }
+    private var canApply: Bool { !session.items.contains(where: { $0.decision == .proposed }) }
 
     private var applyLabel: String {
         if session.state == .partiallyApplied { return "同じ内容でもう一度反映" }
-        return session.items.contains(where: { $0.decision == .accepted }) ? "採用したTaskを反映" : "整理を完了"
+        return session.items.contains(where: { $0.decision == .accepted }) ? "採用した変更を反映" : "整理を完了"
     }
 }
 
 private struct ShannonOrganizeItemRow: View {
     let item: ShannonOrganizeItemDTO
+    let candidates: [ShannonVoyagerTaskProjectionDTO]
+    let projects: [ShannonVoyagerProjectProjectionDTO]
+    let isLoadingCatalog: Bool
+    let catalogError: String?
     let disabled: Bool
-    let decide: (ShannonOrganizeDecisionDTO, String?, String?) -> Void
-    @State private var isEditing = false
+    let decide: (ShannonOrganizeDecisionDTO, String?, String?, ShannonOrganizeOperationDTO?, ShannonVoyagerTaskProjectionDTO?, [String]?) -> Void
+    let searchTasks: (String) -> Void
+    let loadProjects: () -> Void
+
+    @State private var isConfiguring = false
     @State private var title: String
     @State private var details: String
+    @State private var operation: ShannonOrganizeOperationDTO
+    @State private var target: ShannonVoyagerTaskProjectionDTO?
+    @State private var selectedProjectIDs: Set<String>
+    @State private var taskQuery: String
 
     init(
         item: ShannonOrganizeItemDTO,
+        candidates: [ShannonVoyagerTaskProjectionDTO],
+        projects: [ShannonVoyagerProjectProjectionDTO],
+        isLoadingCatalog: Bool,
+        catalogError: String?,
         disabled: Bool,
-        decide: @escaping (ShannonOrganizeDecisionDTO, String?, String?) -> Void
+        decide: @escaping (ShannonOrganizeDecisionDTO, String?, String?, ShannonOrganizeOperationDTO?, ShannonVoyagerTaskProjectionDTO?, [String]?) -> Void,
+        searchTasks: @escaping (String) -> Void,
+        loadProjects: @escaping () -> Void
     ) {
         self.item = item
+        self.candidates = candidates
+        self.projects = projects
+        self.isLoadingCatalog = isLoadingCatalog
+        self.catalogError = catalogError
         self.disabled = disabled
         self.decide = decide
+        self.searchTasks = searchTasks
+        self.loadProjects = loadProjects
+        let initialOperation = item.operation ?? .create
         _title = State(initialValue: item.title)
         _details = State(initialValue: item.details)
+        _operation = State(initialValue: initialOperation)
+        _target = State(initialValue: item.target)
+        _selectedProjectIDs = State(initialValue: Set(item.projectIds ?? []))
+        _taskQuery = State(initialValue: item.target?.title ?? item.title)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: decisionSymbol)
                     .foregroundStyle(decisionColor)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 5) {
-                    if isEditing {
-                        TextField("Task名", text: $title)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("実行内容", text: $details, axis: .vertical)
-                            .lineLimit(2...5)
-                            .textFieldStyle(.roundedBorder)
-                    } else {
-                        Text(item.title).font(.subheadline.weight(.semibold))
-                        if !item.details.isEmpty {
-                            Text(item.details).font(.caption).foregroundStyle(.secondary)
-                        }
+                    Text(item.operation == .update ? "既存Taskを更新" : "新規Task")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(item.title).font(.subheadline.weight(.semibold))
+                    if !item.details.isEmpty { Text(item.details).font(.caption).foregroundStyle(.secondary) }
+                    if let target = item.target {
+                        Label("変更元：\(target.title) · rev \(target.revision)", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let names = selectedProjectNames(for: item.projectIds ?? []) {
+                        Label(names, systemImage: "folder")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
 
+            if isConfiguring && item.destinationStatus == .pending { configurationEditor }
+
             if let result = item.result {
-                Label("Voyagerに作成：\(result.title)", systemImage: "checkmark.circle.fill")
+                Label("Voyagerに\(item.operation == .update ? "更新" : "作成")：\(result.title)", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.green)
                 Text("Task Reference: \(result.resourceId)")
@@ -145,36 +202,20 @@ private struct ShannonOrganizeItemRow: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } else if item.destinationStatus == .failed {
-                Text("未反映：\(item.errorCode ?? "接続エラー")")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                Text(failureMessage).font(.caption).foregroundStyle(.orange)
             }
 
-            if item.destinationStatus == .pending {
+            if item.destinationStatus == .pending && !isConfiguring {
                 HStack(spacing: 8) {
-                    if isEditing {
-                        Button("編集して採用") {
-                            decide(.accepted, title, details)
-                            isEditing = false
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("戻る") {
-                            title = item.title
-                            details = item.details
-                            isEditing = false
-                        }
-                    } else {
-                        Button(item.decision == .accepted ? "採用済み" : "採用") { decide(.accepted, nil, nil) }
-                            .buttonStyle(.borderedProminent)
-                        Button("編集") { isEditing = true }
-                        Menu {
-                            Button("今回は保留") { decide(.deferred, nil, nil) }
-                            Button("除外") { decide(.rejected, nil, nil) }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                        }
+                    Button(item.decision == .accepted ? "採用済み" : "確認して採用") {
+                        isConfiguring = true
+                        loadProjects()
                     }
+                    .buttonStyle(.borderedProminent)
+                    Menu {
+                        Button("今回は保留") { decide(.deferred, nil, nil, nil, nil, nil) }
+                        Button("除外") { decide(.rejected, nil, nil, nil, nil, nil) }
+                    } label: { Image(systemName: "ellipsis") }
                 }
                 .font(.caption)
                 .disabled(disabled)
@@ -182,6 +223,124 @@ private struct ShannonOrganizeItemRow: View {
         }
         .onChange(of: item.title) { title = item.title }
         .onChange(of: item.details) { details = item.details }
+    }
+
+    @ViewBuilder
+    private var configurationEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("反映方法", selection: $operation) {
+                Text("新規作成").tag(ShannonOrganizeOperationDTO.create)
+                Text("既存を更新").tag(ShannonOrganizeOperationDTO.update)
+            }
+            .pickerStyle(.segmented)
+
+            if operation == .update {
+                HStack(spacing: 8) {
+                    TextField("Task名で検索", text: $taskQuery).textFieldStyle(.roundedBorder)
+                    Button { searchTasks(taskQuery) } label: {
+                        if isLoadingCatalog { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "magnifyingglass") }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(taskQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoadingCatalog)
+                }
+
+                if let catalogError { Text(catalogError).font(.caption2).foregroundStyle(.orange) }
+
+                ForEach(candidates) { candidate in
+                    Button {
+                        target = candidate
+                        selectedProjectIDs = Set(candidate.projectIds)
+                    } label: {
+                        HStack(alignment: .top) {
+                            Image(systemName: target?.id == candidate.id ? "checkmark.circle.fill" : "circle")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(candidate.title).font(.caption.weight(.semibold))
+                                Text("\(candidate.status) · rev \(candidate.revision)")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let target {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("変更前").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(target.title).font(.caption)
+                        if !target.details.isEmpty { Text(target.details).font(.caption2).foregroundStyle(.secondary) }
+                        Text("変更後").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("更新するTaskを1件選んでください。推測では反映しません。")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+
+            TextField("Task名", text: $title).textFieldStyle(.roundedBorder)
+            TextField("実行内容", text: $details, axis: .vertical)
+                .lineLimit(2...5)
+                .textFieldStyle(.roundedBorder)
+
+            Menu {
+                Button { selectedProjectIDs.removeAll() } label: {
+                    Label("Projectなし", systemImage: selectedProjectIDs.isEmpty ? "checkmark" : "folder")
+                }
+                ForEach(projects) { project in
+                    Button {
+                        if selectedProjectIDs.contains(project.id) { selectedProjectIDs.remove(project.id) }
+                        else { selectedProjectIDs.insert(project.id) }
+                    } label: {
+                        Label(project.title, systemImage: selectedProjectIDs.contains(project.id) ? "checkmark" : "folder")
+                    }
+                }
+            } label: {
+                Label(selectedProjectSummary, systemImage: "folder")
+                    .font(.caption)
+            }
+
+            HStack(spacing: 8) {
+                Button("この内容を採用") {
+                    decide(.accepted, title, details, operation, operation == .update ? target : nil, Array(selectedProjectIDs).sorted())
+                    isConfiguring = false
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (operation == .update && target == nil))
+                Button("戻る") { resetDraft(); isConfiguring = false }
+            }
+            .font(.caption)
+        }
+        .padding(10)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .disabled(disabled)
+    }
+
+    private var selectedProjectSummary: String { selectedProjectNames(for: Array(selectedProjectIDs)) ?? "Projectなし" }
+
+    private func selectedProjectNames(for ids: [String]) -> String? {
+        guard !ids.isEmpty else { return nil }
+        return ids.map { id in projects.first(where: { $0.id == id })?.title ?? "Project \(id.prefix(6))" }
+            .joined(separator: "、")
+    }
+
+    private func resetDraft() {
+        title = item.title
+        details = item.details
+        operation = item.operation ?? .create
+        target = item.target
+        selectedProjectIDs = Set(item.projectIds ?? [])
+        taskQuery = item.target?.title ?? item.title
+    }
+
+    private var failureMessage: String {
+        switch item.errorCode {
+        case "REVISION_CONFLICT": "Voyager側でTaskが更新されました。新しく「整理して」で候補を作り直してください。"
+        case "TASK_NOT_EDITABLE": "完了または取消済みのTaskは更新できません。"
+        case "PROJECT_NOT_FOUND": "選択したProjectが見つかりません。新しく「整理して」で選び直してください。"
+        default: "未反映：\(item.errorCode ?? "接続エラー")"
+        }
     }
 
     private var decisionSymbol: String {

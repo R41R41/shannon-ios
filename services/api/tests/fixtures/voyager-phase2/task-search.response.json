@@ -1,0 +1,17 @@
+{
+  "contractVersion": "1.1",
+  "workspaceId": "configured-workspace",
+  "query": "既存Task",
+  "limit": 8,
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "title": "既存Taskを確認する",
+      "details": "検索候補に必要な説明だけを返す。",
+      "status": "pending",
+      "projectIds": [],
+      "revision": 1,
+      "updatedAt": "2026-09-08T23:00:00.000Z"
+    }
+  ]
+}

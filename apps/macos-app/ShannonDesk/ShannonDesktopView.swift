@@ -321,13 +321,24 @@ public struct ShannonDesktopRootView: View {
                                     session: session,
                                     isWorking: conversation.pendingOrganizeSessionIDs.contains(session.id),
                                     error: conversation.organizeActionErrors[session.id],
-                                    decide: { itemID, decision, title, details in
+                                    taskCandidatesByItemID: conversation.voyagerTaskCandidatesByItemID,
+                                    projects: conversation.voyagerProjects,
+                                    pendingCatalogItemIDs: conversation.pendingVoyagerCatalogItemIDs,
+                                    catalogErrorsByItemID: conversation.voyagerCatalogErrorsByItemID,
+                                    decide: { itemID, decision, title, details, operation, target, projectIds in
                                         Task {
                                             await conversation.decideOrganizeItem(
                                                 sessionID: session.id, itemID: itemID,
-                                                decision: decision, title: title, details: details
+                                                decision: decision, title: title, details: details,
+                                                operation: operation, target: target, projectIds: projectIds
                                             )
                                         }
+                                    },
+                                    searchTasks: { itemID, query in
+                                        Task { await conversation.searchVoyagerTasks(itemID: itemID, query: query) }
+                                    },
+                                    loadProjects: { itemID in
+                                        Task { await conversation.loadVoyagerProjects(itemID: itemID) }
                                     },
                                     apply: { Task { await conversation.applyOrganizeSession(session.id) } }
                                 )

@@ -232,6 +232,52 @@ public enum ShannonOrganizeSessionStateDTO: String, Codable, Equatable, Sendable
     case applied
 }
 
+public enum ShannonOrganizeOperationDTO: String, Codable, Equatable, Hashable, Sendable {
+    case create, update
+}
+
+public struct ShannonVoyagerTaskProjectionDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let details: String
+    public let status: String
+    public let projectIds: [String]
+    public let revision: Int
+    public let updatedAt: String
+
+    public init(id: String, title: String, details: String, status: String, projectIds: [String], revision: Int, updatedAt: String) {
+        self.id = id
+        self.title = title
+        self.details = details
+        self.status = status
+        self.projectIds = projectIds
+        self.revision = revision
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct ShannonVoyagerProjectProjectionDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let title: String
+    public let revision: Int
+    public let updatedAt: String
+
+    public init(id: String, title: String, revision: Int, updatedAt: String) {
+        self.id = id
+        self.title = title
+        self.revision = revision
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct ShannonVoyagerTaskProjectionListDTO: Codable, Equatable, Sendable {
+    public let items: [ShannonVoyagerTaskProjectionDTO]
+}
+
+public struct ShannonVoyagerProjectProjectionListDTO: Codable, Equatable, Sendable {
+    public let items: [ShannonVoyagerProjectProjectionDTO]
+}
+
 public struct ShannonVoyagerTaskReferenceDTO: Codable, Equatable, Identifiable, Sendable {
     public var id: String { resourceId }
     public let system: String
@@ -247,12 +293,43 @@ public struct ShannonOrganizeItemDTO: Codable, Equatable, Identifiable, Sendable
     public let id: String
     public let title: String
     public let details: String
+    public let operation: ShannonOrganizeOperationDTO?
+    public let target: ShannonVoyagerTaskProjectionDTO?
+    public let projectIds: [String]?
     public let decision: ShannonOrganizeDecisionDTO
     public let destinationStatus: ShannonOrganizeDestinationStatusDTO
     public let requestId: String
     public let idempotencyKey: String
     public let result: ShannonVoyagerTaskReferenceDTO?
     public let errorCode: String?
+
+    public init(
+        id: String,
+        title: String,
+        details: String,
+        operation: ShannonOrganizeOperationDTO? = nil,
+        target: ShannonVoyagerTaskProjectionDTO? = nil,
+        projectIds: [String]? = nil,
+        decision: ShannonOrganizeDecisionDTO,
+        destinationStatus: ShannonOrganizeDestinationStatusDTO,
+        requestId: String,
+        idempotencyKey: String,
+        result: ShannonVoyagerTaskReferenceDTO?,
+        errorCode: String?
+    ) {
+        self.id = id
+        self.title = title
+        self.details = details
+        self.operation = operation
+        self.target = target
+        self.projectIds = projectIds
+        self.decision = decision
+        self.destinationStatus = destinationStatus
+        self.requestId = requestId
+        self.idempotencyKey = idempotencyKey
+        self.result = result
+        self.errorCode = errorCode
+    }
 }
 
 public struct ShannonOrganizeSessionDTO: Codable, Equatable, Identifiable, Sendable {
@@ -283,6 +360,29 @@ public struct ShannonOrganizeDecisionRequestDTO: Codable, Equatable, Sendable {
     public let decision: ShannonOrganizeDecisionDTO
     public let title: String?
     public let details: String?
+    public let operation: ShannonOrganizeOperationDTO?
+    public let target: ShannonVoyagerTaskProjectionDTO?
+    public let projectIds: [String]?
+
+    public init(
+        scopeKey: String,
+        expectedRevision: Int,
+        decision: ShannonOrganizeDecisionDTO,
+        title: String?,
+        details: String?,
+        operation: ShannonOrganizeOperationDTO? = nil,
+        target: ShannonVoyagerTaskProjectionDTO? = nil,
+        projectIds: [String]? = nil
+    ) {
+        self.scopeKey = scopeKey
+        self.expectedRevision = expectedRevision
+        self.decision = decision
+        self.title = title
+        self.details = details
+        self.operation = operation
+        self.target = target
+        self.projectIds = projectIds
+    }
 }
 
 public struct ShannonOrganizeApplyRequestDTO: Codable, Equatable, Sendable {

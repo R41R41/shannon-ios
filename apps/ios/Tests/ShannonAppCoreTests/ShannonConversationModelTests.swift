@@ -34,6 +34,34 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertEqual(model.organizeSessions.first?.items.first?.result?.resourceType, "task")
     }
 
+    func testOrganizePhaseTwoLoadsCandidatesAndKeepsUpdateTargetThroughReview() async {
+        let client = OrganizeClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        model.draft = "整理して"
+        await model.sendDraft()
+
+        await model.searchVoyagerTasks(itemID: TestFixtures.organizeItemID, query: "既存Task")
+        let target = model.voyagerTaskCandidatesByItemID[TestFixtures.organizeItemID]?.first
+        XCTAssertEqual(target?.revision, 4)
+        XCTAssertEqual(model.voyagerProjects.first?.title, "Shannon")
+
+        await model.decideOrganizeItem(
+            sessionID: TestFixtures.organizeSessionID,
+            itemID: TestFixtures.organizeItemID,
+            decision: .accepted,
+            title: "既存Taskを更新する",
+            details: "実機確認結果を追記する",
+            operation: .update,
+            target: target,
+            projectIds: ["project-shannon"]
+        )
+
+        let reviewed = model.organizeSessions.first?.items.first
+        XCTAssertEqual(reviewed?.operation, .update)
+        XCTAssertEqual(reviewed?.target?.id, "task-existing")
+        XCTAssertEqual(reviewed?.projectIds, ["project-shannon"])
+    }
+
     func testGeneratedTitleArrivesWithAssistantReplyAndRestoresFromDisplayCache() async {
         let scopeKey = "title-test-\(UUID().uuidString)"
         defer { UserDefaults.standard.removeObject(forKey: "shannon.conversation-cache.v1.\(scopeKey)") }
@@ -719,6 +747,25 @@ private actor OrganizeClient: ShannonAPIClientProtocol {
         title: String?,
         details: String?
     ) async throws -> ShannonOrganizeSessionDTO {
+        try await decideOrganizeItemV2(
+            scopeKey: scopeKey, sessionId: sessionId, itemId: itemId,
+            expectedRevision: expectedRevision, decision: decision,
+            title: title, details: details, operation: nil, target: nil, projectIds: nil
+        )
+    }
+
+    func decideOrganizeItemV2(
+        scopeKey: String,
+        sessionId: String,
+        itemId: String,
+        expectedRevision: Int,
+        decision: ShannonOrganizeDecisionDTO,
+        title: String?,
+        details: String?,
+        operation: ShannonOrganizeOperationDTO?,
+        target: ShannonVoyagerTaskProjectionDTO?,
+        projectIds: [String]?
+    ) async throws -> ShannonOrganizeSessionDTO {
         let item = session.items[0]
         session = TestFixtures.organizeSession(
             state: .readyForReview,
@@ -727,6 +774,9 @@ private actor OrganizeClient: ShannonAPIClientProtocol {
                 id: item.id,
                 title: title ?? item.title,
                 details: details ?? item.details,
+                operation: operation,
+                target: target,
+                projectIds: projectIds,
                 decision: decision,
                 destinationStatus: .pending,
                 requestId: item.requestId,
@@ -736,6 +786,19 @@ private actor OrganizeClient: ShannonAPIClientProtocol {
             )
         )
         return session
+    }
+
+    func searchVoyagerTasks(scopeKey: String, query: String) async throws -> [ShannonVoyagerTaskProjectionDTO] {
+        [ShannonVoyagerTaskProjectionDTO(
+            id: "task-existing", title: "既存Task", details: "現在の詳細", status: "pending",
+            projectIds: [], revision: 4, updatedAt: "2026-09-09T00:00:00.000Z"
+        )]
+    }
+
+    func loadVoyagerProjects(scopeKey: String) async throws -> [ShannonVoyagerProjectProjectionDTO] {
+        [ShannonVoyagerProjectProjectionDTO(
+            id: "project-shannon", title: "Shannon", revision: 2, updatedAt: "2026-09-09T00:00:00.000Z"
+        )]
     }
 
     func applyOrganizeSession(scopeKey: String, sessionId: String, expectedRevision: Int) async throws -> ShannonOrganizeApplyResponseDTO {
@@ -749,7 +812,9 @@ private actor OrganizeClient: ShannonAPIClientProtocol {
             state: .applied,
             revision: expectedRevision + 1,
             item: ShannonOrganizeItemDTO(
-                id: item.id, title: item.title, details: item.details, decision: .accepted,
+                id: item.id, title: item.title, details: item.details,
+                operation: item.operation, target: item.target, projectIds: item.projectIds,
+                decision: .accepted,
                 destinationStatus: .applied, requestId: item.requestId, idempotencyKey: item.idempotencyKey,
                 result: reference, errorCode: nil
             )

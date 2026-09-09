@@ -38,6 +38,7 @@ import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import {
   DisabledVoyagerTaskDestination,
+  DisabledVoyagerCatalog,
   InMemoryOrganizeStore,
   LocalOrganizeExtractor,
   OrganizeError,
@@ -47,6 +48,8 @@ import {
   type OrganizeExtractor,
   type OrganizeStore,
   type VoyagerTaskDestination,
+  type VoyagerCatalog,
+  type VoyagerTaskProjection,
 } from './organize.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
@@ -117,6 +120,21 @@ function validAgentHostHint(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,100}$/u.test(value.trim());
 }
 
+function validVoyagerTaskProjection(value: unknown): value is VoyagerTaskProjection {
+  return objectBody(value)
+    && validBoundedString(value.id, 160)
+    && validBoundedString(value.title, 500)
+    && typeof value.details === 'string'
+    && value.details.length <= 1_000
+    && validBoundedString(value.status, 80)
+    && Array.isArray(value.projectIds)
+    && value.projectIds.length <= 12
+    && value.projectIds.every(id => validBoundedString(id, 160))
+    && Number.isInteger(value.revision)
+    && Number(value.revision) >= 1
+    && validBoundedString(value.updatedAt, 80);
+}
+
 function optionalFiniteNumber(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value));
 }
@@ -151,6 +169,7 @@ export interface ShannonApiKernelOptions {
   organizeStore?: OrganizeStore;
   organizeExtractor?: OrganizeExtractor;
   voyagerDestination?: VoyagerTaskDestination;
+  voyagerCatalog?: VoyagerCatalog;
 }
 
 export class ShannonApiKernel {
@@ -169,6 +188,7 @@ export class ShannonApiKernel {
   private readonly organizeStore: OrganizeStore;
   private readonly organizeExtractor: OrganizeExtractor;
   private readonly voyagerDestination: VoyagerTaskDestination;
+  private readonly voyagerCatalog: VoyagerCatalog;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -194,6 +214,7 @@ export class ShannonApiKernel {
     this.organizeStore = options.organizeStore ?? new InMemoryOrganizeStore();
     this.organizeExtractor = options.organizeExtractor ?? new LocalOrganizeExtractor();
     this.voyagerDestination = options.voyagerDestination ?? new DisabledVoyagerTaskDestination();
+    this.voyagerCatalog = options.voyagerCatalog ?? new DisabledVoyagerCatalog();
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
@@ -284,6 +305,30 @@ export class ShannonApiKernel {
       return { status: 200, body: { sessions: this.organizeStore.list(scopeKey, threadId) } };
     }
 
+    if (request.method === 'GET' && request.path === '/v1/integrations/voyager/tasks') {
+      const scopeKey = request.query?.get('scopeKey');
+      const query = request.query?.get('query')?.trim() ?? '';
+      const limit = Number(request.query?.get('limit') ?? '8');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!validBoundedString(query, 160)) return badRequest('query is required');
+      if (!Number.isInteger(limit) || limit < 1 || limit > 8) return badRequest('limit is invalid');
+      try {
+        const items = await this.voyagerCatalog.searchTasks(query, limit);
+        return { status: 200, body: { items } };
+      } catch (error) { return organizeErrorResponse(error); }
+    }
+
+    if (request.method === 'GET' && request.path === '/v1/integrations/voyager/projects') {
+      const scopeKey = request.query?.get('scopeKey');
+      const limit = Number(request.query?.get('limit') ?? '20');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20) return badRequest('limit is invalid');
+      try {
+        const items = await this.voyagerCatalog.listProjects(limit);
+        return { status: 200, body: { items } };
+      } catch (error) { return organizeErrorResponse(error); }
+    }
+
     const organizeSessionMatch = request.path.match(/^\/v1\/organize\/sessions\/([^/]+)$/);
     if (request.method === 'GET' && organizeSessionMatch) {
       const scopeKey = request.query?.get('scopeKey');
@@ -301,6 +346,10 @@ export class ShannonApiKernel {
       if (!['accepted', 'rejected', 'deferred'].includes(String(request.body.decision))) return badRequest('decision is invalid');
       if (request.body.title !== undefined && !validBoundedString(request.body.title, 500)) return badRequest('title is invalid');
       if (request.body.details !== undefined && (typeof request.body.details !== 'string' || request.body.details.length > 1_000)) return badRequest('details is invalid');
+      if (request.body.operation !== undefined && !['create', 'update'].includes(String(request.body.operation))) return badRequest('operation is invalid');
+      if (request.body.projectIds !== undefined && (!Array.isArray(request.body.projectIds) || request.body.projectIds.length > 12 || !request.body.projectIds.every(value => validBoundedString(value, 160)))) return badRequest('projectIds is invalid');
+      if (request.body.target !== undefined && !validVoyagerTaskProjection(request.body.target)) return badRequest('target is invalid');
+      if (request.body.operation === 'update' && request.body.target === undefined) return badRequest('target is required');
       try {
         const session = this.organizeStore.decide(
           scopeKey,
@@ -311,6 +360,9 @@ export class ShannonApiKernel {
           {
             ...(typeof request.body.title === 'string' ? { title: request.body.title } : {}),
             ...(typeof request.body.details === 'string' ? { details: request.body.details } : {}),
+            ...(request.body.operation === 'create' || request.body.operation === 'update' ? { operation: request.body.operation } : {}),
+            ...(validVoyagerTaskProjection(request.body.target) ? { target: request.body.target } : {}),
+            ...(Array.isArray(request.body.projectIds) ? { projectIds: request.body.projectIds as string[] } : {}),
           },
           this.now(),
         );

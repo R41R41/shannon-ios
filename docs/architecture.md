@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-09 / Shannon × Voyager Phase 1 local vertical slice
+Revision: 2026-09-09 / Shannon × Voyager Phase 2 local vertical slice
 
 ## System shape
 
@@ -104,15 +104,17 @@ Background voice activation remains deliberately later work. Realtime voice star
 - macOS uses its own Keychain pairing record on the device. A credential is never copied through source code, logs, or documentation.
 - A restored credential is not treated as proof of current reachability. Shannon Desk performs an authenticated thread-list request on launch and after pairing, shows the result in Settings, and removes a server-revoked credential on HTTP 401. A network failure preserves the credential so the user can retry without pairing again.
 
-## Explicit conversation organization and Voyager Phase 1
+## Explicit conversation organization and Voyager Phase 2
 
 The exact standalone command `整理して` enters a separate, explicit organization lane instead of the ordinary chat model lane. The API freezes at most 100 messages after the last successfully applied organization cursor, extracts up to 12 bounded Voyager Task drafts, and stores them as a durable `OrganizeSession`. The command and Shannon's review prompt remain normal conversation messages, so both iPhone and Mac can restore the review card after leaving or relaunching the app.
 
-Each draft begins as `proposed`. The user can accept, edit and accept, reject, or defer each item. These review operations change only Shannon's `OrganizeSession`; they do not call Voyager. The final `反映` action sends only accepted items through the server-side Voyager adapter. A failed item remains retryable and reuses its original request ID, idempotency key, creation time, and byte-equivalent command body. Once an item has been attempted, its reviewed contents are frozen so a retry cannot silently reuse an idempotency key for a different command.
+Each draft begins as `proposed`. The user can accept, edit and accept, reject, or defer each item. These review operations change only Shannon's `OrganizeSession`; they do not call Voyager. The user can keep a proposal as a new Task or search at most eight bounded existing Task projections, choose exactly one target, compare its stored title/details with the proposed values, and select only existing Project projections. Shannon never guesses among candidates. The final `反映` action sends only accepted items through the server-side Voyager adapter. A failed item remains retryable with its frozen request ID, idempotency key, creation time, target snapshot, expected revision, and command body.
 
-Phase 1 is intentionally create-only. Voyager receives a destination-authenticated Syzygy contract v1 command, creates one top-level `thinking` Task with no Project, and stores a bounded Shannon `workSession` Reference plus separate provenance. The iPhone and Mac never receive the destination credential and call only Shannon's API. Missing destination configuration fails closed; device credentials cannot substitute for the destination credential.
+Phase 1 remains byte-compatible as Syzygy contract `1.0`: a top-level `thinking` Task with no Project. Phase 2 uses contract `1.1` only when assigning Projects or updating an existing Task. Its read projection contains only Task ID, title, bounded details, status, Project IDs, revision and update time, or the corresponding bounded Project identity. An update requires the selected Task ID and captured `expectedRevision` and may change only title, details and Project IDs. Voyager rejects terminal Tasks, stale revisions, unknown Projects, status/deadline/priority/tag edits, deletion, subtree replacement and bulk operations without a partial write.
 
-Successful final application shows the created count, Task names, and Voyager Task References. The cursor advances only when the session is fully applied, including a session whose proposals were all rejected or deferred. Existing Task updates, status changes, deletion, bulk operations, Project assignment, Aether writes, and automatic background organization remain outside Phase 1.
+The iPhone and Mac call only Shannon's authenticated proxy endpoints. They never receive the Voyager destination credential or workspace credential. Shannon caps UI-facing task results at eight and Project results at twenty even though the destination contract permits a wider server-side maximum. Missing destination configuration fails closed; device credentials cannot substitute for the destination credential.
+
+Successful final application shows the applied count, Task names, and Voyager Task References. The cursor advances only when the session is fully applied, including a session whose proposals were all rejected or deferred. Status changes, deadlines, priorities, tags, deletion, bulk operations, Aether writes, and automatic background organization remain outside Phase 2.
 
 Runtime configuration uses all three of `SHANNON_VOYAGER_INTEGRATION_URL`, `SHANNON_VOYAGER_INTEGRATION_TOKEN`, and `SHANNON_VOYAGER_WORKSPACE_ID`. `SHANNON_ORGANIZE_MODEL` is optional and falls back to the normal Shannon model. The extractor hashes the owner scope before using it as a prompt-cache key; raw scope identifiers are not sent in that metadata.
 

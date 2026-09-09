@@ -1,0 +1,38 @@
+{
+  "contractVersion": "1.1",
+  "requestId": "00000000-0000-4000-8000-000000000102",
+  "idempotencyKey": "00000000-0000-4000-8000-000000000103",
+  "workspaceId": "configured-workspace",
+  "projectId": null,
+  "source": {
+    "system": "shannon",
+    "resourceType": "workSession",
+    "resourceId": "phase2-work-session-fixture",
+    "title": "会話を整理",
+    "summary": "ユーザーが確認した既存Taskの更新案",
+    "updatedAt": "2026-09-09T00:00:00.000Z",
+    "href": "shannon://work-sessions/phase2-work-session-fixture"
+  },
+  "kind": "voyager.taskChange",
+  "payload": {
+    "operation": "update",
+    "targetTaskId": "00000000-0000-4000-8000-000000000101",
+    "expectedRevision": 1,
+    "changes": {
+      "title": "既存Taskを安全に整理する",
+      "details": "title、details、projectIdsだけを原子的に更新する。",
+      "projectIds": [
+        "00000000-0000-4000-8000-000000000104"
+      ]
+    },
+    "reason": "ユーザーが既存Taskへの反映を承認"
+  },
+  "provenance": {
+    "conversationId": "phase2-thread-fixture",
+    "messageIds": [
+      "phase2-message-fixture"
+    ],
+    "reason": "整理して"
+  },
+  "createdAt": "2026-09-09T00:00:00.000Z"
+}

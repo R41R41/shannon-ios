@@ -6,8 +6,32 @@ import type { StoredConversationMessage } from './conversationStore.js';
 export type OrganizeDecision = 'proposed' | 'accepted' | 'rejected' | 'deferred';
 export type OrganizeDestinationStatus = 'pending' | 'applied' | 'failed';
 export type OrganizeSessionState = 'ready_for_review' | 'partially_applied' | 'applied';
+export type OrganizeOperation = 'create' | 'update';
 
-export interface OrganizeTaskDraft { title: string; details: string; }
+export interface VoyagerTaskProjection {
+  id: string;
+  title: string;
+  details: string;
+  status: string;
+  projectIds: string[];
+  revision: number;
+  updatedAt: string;
+}
+
+export interface VoyagerProjectProjection {
+  id: string;
+  title: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface OrganizeTaskDraft {
+  title: string;
+  details: string;
+  operation?: OrganizeOperation;
+  target?: VoyagerTaskProjection;
+  projectIds?: string[];
+}
 
 export interface VoyagerTaskReference {
   system: 'voyager';
@@ -21,6 +45,8 @@ export interface VoyagerTaskReference {
 
 export interface OrganizeItem extends OrganizeTaskDraft {
   id: string;
+  operation: OrganizeOperation;
+  projectIds: string[];
   decision: OrganizeDecision;
   destinationStatus: OrganizeDestinationStatus;
   requestId: string;
@@ -70,6 +96,9 @@ export class InMemoryOrganizeStore implements OrganizeStore {
       state: 'ready_for_review', revision: 1, sourceMessageIds: [...new Set(input.sourceMessageIds)],
       items: input.drafts.slice(0, 12).map(draft => ({
         id: randomUUID(), title: bounded(draft.title, 500), details: bounded(draft.details, 1_000),
+        operation: normalizedOperation(draft.operation, draft.target),
+        ...(draft.target ? { target: normalizedTaskProjection(draft.target) } : {}),
+        projectIds: normalizedIds(draft.projectIds ?? []),
         decision: 'proposed', destinationStatus: 'pending', requestId: randomUUID(), idempotencyKey: randomUUID(),
       })),
       createdAt: now, updatedAt: now,
@@ -99,6 +128,8 @@ export class InMemoryOrganizeStore implements OrganizeStore {
         decision,
         ...(edit.title !== undefined ? { title: requiredBounded(edit.title, 500, 'title') } : {}),
         ...(edit.details !== undefined ? { details: bounded(edit.details, 1_000) } : {}),
+        ...(edit.operation !== undefined || edit.target !== undefined ? operationEdit(item, edit) : {}),
+        ...(edit.projectIds !== undefined ? { projectIds: normalizedIds(edit.projectIds) } : {}),
       } : item);
       return { ...session, items, revision: session.revision + 1, updatedAt: now };
     });
@@ -161,6 +192,9 @@ export class SQLiteOrganizeStore implements OrganizeStore {
       CREATE INDEX IF NOT EXISTS idx_organize_sessions_scope ON organize_sessions(scope_key, thread_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_organize_items_session ON organize_items(session_id, position);
     `);
+    this.ensureItemColumn('operation', "TEXT NOT NULL DEFAULT 'create'");
+    this.ensureItemColumn('target_json', 'TEXT');
+    this.ensureItemColumn('project_ids_json', "TEXT NOT NULL DEFAULT '[]'");
   }
   close(): void { this.database.close(); }
   cursor(scopeKey: string, threadId: string): string | undefined {
@@ -180,9 +214,13 @@ export class SQLiteOrganizeStore implements OrganizeStore {
         (session_id,scope_key,thread_id,state,revision,source_message_ids_json,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?)`).run(session.id, session.scopeKey, session.threadId, session.state, session.revision, JSON.stringify(session.sourceMessageIds), now, now);
       const insert = this.database.prepare(`INSERT INTO organize_items
-        (item_id,session_id,position,title,details,decision,destination_status,request_id,idempotency_key)
-        VALUES(?,?,?,?,?,?,?,?,?)`);
-      session.items.forEach((item, position) => insert.run(item.id, session.id, position, item.title, item.details, item.decision, item.destinationStatus, item.requestId, item.idempotencyKey));
+        (item_id,session_id,position,title,details,operation,target_json,project_ids_json,decision,destination_status,request_id,idempotency_key)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`);
+      session.items.forEach((item, position) => insert.run(
+        item.id, session.id, position, item.title, item.details, item.operation,
+        item.target ? JSON.stringify(item.target) : null, JSON.stringify(item.projectIds),
+        item.decision, item.destinationStatus, item.requestId, item.idempotencyKey,
+      ));
       this.database.exec('COMMIT;');
       return session;
     } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
@@ -202,11 +240,21 @@ export class SQLiteOrganizeStore implements OrganizeStore {
     if (item.destinationStatus !== 'pending') throw new OrganizeError('ITEM_ALREADY_ATTEMPTED', 409);
     const title = edit.title === undefined ? item.title : requiredBounded(edit.title, 500, 'title');
     const details = edit.details === undefined ? item.details : bounded(edit.details, 1_000);
+    const operation = edit.operation !== undefined || edit.target !== undefined
+      ? operationEdit(item, edit)
+      : { operation: item.operation, ...(item.target ? { target: item.target } : {}) };
+    const projectIds = edit.projectIds === undefined ? item.projectIds : normalizedIds(edit.projectIds);
     this.database.exec('BEGIN IMMEDIATE;');
     try {
       const changed = this.database.prepare('UPDATE organize_sessions SET revision=revision+1, updated_at=? WHERE session_id=? AND scope_key=? AND revision=?').run(now, sessionId, scopeKey, expectedRevision);
       if (Number(changed.changes) !== 1) throw new OrganizeError('REVISION_CONFLICT', 409);
-      this.database.prepare('UPDATE organize_items SET decision=?, title=?, details=? WHERE item_id=? AND session_id=?').run(decision, title, details, itemId, sessionId);
+      this.database.prepare(`UPDATE organize_items
+        SET decision=?, title=?, details=?, operation=?, target_json=?, project_ids_json=?
+        WHERE item_id=? AND session_id=?`).run(
+        decision, title, details, operation.operation,
+        operation.target ? JSON.stringify(operation.target) : null,
+        JSON.stringify(projectIds), itemId, sessionId,
+      );
       this.database.exec('COMMIT;');
     } catch (error) { this.database.exec('ROLLBACK;'); throw error; }
     return this.require(scopeKey, sessionId);
@@ -251,11 +299,19 @@ export class SQLiteOrganizeStore implements OrganizeStore {
       createdAt: String(row.created_at), updatedAt: String(row.updated_at), ...(row.applied_at ? { appliedAt: String(row.applied_at) } : {}),
       items: items.map(item => ({
         id: String(item.item_id), title: String(item.title), details: String(item.details), decision: item.decision as OrganizeDecision,
+        operation: item.operation === 'update' ? 'update' : 'create',
+        ...(item.target_json ? { target: normalizedTaskProjection(JSON.parse(String(item.target_json)) as VoyagerTaskProjection) } : {}),
+        projectIds: normalizedIds(item.project_ids_json ? JSON.parse(String(item.project_ids_json)) as string[] : []),
         destinationStatus: item.destination_status as OrganizeDestinationStatus, requestId: String(item.request_id), idempotencyKey: String(item.idempotency_key),
         ...(item.result_json ? { result: JSON.parse(String(item.result_json)) as VoyagerTaskReference } : {}),
         ...(item.error_code ? { errorCode: String(item.error_code) } : {}),
       })),
     };
+  }
+
+  private ensureItemColumn(name: string, declaration: string): void {
+    const columns = this.database.prepare('PRAGMA table_info(organize_items)').all() as Array<{ name: string }>;
+    if (!columns.some(column => column.name === name)) this.database.exec(`ALTER TABLE organize_items ADD COLUMN ${name} ${declaration}`);
   }
 }
 
@@ -331,6 +387,65 @@ export interface VoyagerTaskDestination {
   apply(session: OrganizeSession, item: OrganizeItem): Promise<VoyagerTaskReference>;
 }
 
+export interface VoyagerCatalog {
+  searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]>;
+  listProjects(limit: number): Promise<VoyagerProjectProjection[]>;
+}
+
+export class DisabledVoyagerCatalog implements VoyagerCatalog {
+  async searchTasks(): Promise<VoyagerTaskProjection[]> { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
+  async listProjects(): Promise<VoyagerProjectProjection[]> { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
+}
+
+export class HttpVoyagerCatalog implements VoyagerCatalog {
+  constructor(private readonly options: {
+    tasksEndpoint: string;
+    projectsEndpoint: string;
+    token: string;
+    workspaceId: string;
+    fetcher?: typeof fetch;
+  }) {}
+
+  async searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]> {
+    const url = new URL(this.options.tasksEndpoint);
+    url.searchParams.set('workspaceId', this.options.workspaceId);
+    url.searchParams.set('query', requiredBounded(query, 160, 'query'));
+    url.searchParams.set('limit', String(normalizedLimit(limit, 20, 50)));
+    const value = await this.read(url);
+    return projectionItems(value).map(value => normalizedTaskProjection(value as VoyagerTaskProjection));
+  }
+
+  async listProjects(limit: number): Promise<VoyagerProjectProjection[]> {
+    const url = new URL(this.options.projectsEndpoint);
+    url.searchParams.set('workspaceId', this.options.workspaceId);
+    url.searchParams.set('limit', String(normalizedLimit(limit, 20, 50)));
+    const value = await this.read(url);
+    return projectionItems(value).map(value => normalizedProjectProjection(value as VoyagerProjectProjection));
+  }
+
+  private async read(url: URL): Promise<Record<string, unknown>> {
+    let response: Response;
+    try {
+      response = await (this.options.fetcher ?? fetch)(url, {
+        headers: {
+          authorization: `Bearer ${this.options.token}`,
+          'x-syzygy-contract-version': '1.1',
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
+    const value = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) {
+      const error = typeof value.error === 'object' && value.error ? value.error as Record<string, unknown> : {};
+      throw new OrganizeError(typeof error.code === 'string' ? error.code : 'DESTINATION_UNAVAILABLE', response.status, error.retryable === true);
+    }
+    if (value.contractVersion !== '1.1' || value.workspaceId !== this.options.workspaceId) {
+      throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+    }
+    return value;
+  }
+}
+
 export class DisabledVoyagerTaskDestination implements VoyagerTaskDestination {
   async apply(): Promise<VoyagerTaskReference> { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
 }
@@ -338,17 +453,34 @@ export class DisabledVoyagerTaskDestination implements VoyagerTaskDestination {
 export class HttpVoyagerTaskDestination implements VoyagerTaskDestination {
   constructor(private readonly options: { endpoint: string; token: string; workspaceId: string; fetcher?: typeof fetch; }) {}
   async apply(session: OrganizeSession, item: OrganizeItem): Promise<VoyagerTaskReference> {
+    const isPhaseTwo = item.operation === 'update' || item.projectIds.length > 0;
+    if (item.operation === 'update' && !item.target) throw new OrganizeError('TARGET_REQUIRED', 400);
+    const contractVersion = isPhaseTwo ? '1.1' : '1.0';
+    const changes = {
+      title: item.title,
+      ...(isPhaseTwo ? { details: item.details, projectIds: item.projectIds } : item.details ? { details: item.details } : {}),
+    };
     const body = {
-      contractVersion: '1.0', requestId: item.requestId, idempotencyKey: item.idempotencyKey,
+      contractVersion, requestId: item.requestId, idempotencyKey: item.idempotencyKey,
       workspaceId: this.options.workspaceId, projectId: null,
-      source: { system: 'shannon', resourceType: 'workSession', resourceId: session.id, title: '会話を整理', summary: 'ユーザーが確認したTask案', updatedAt: session.createdAt, href: `shannon://work-sessions/${session.id}` },
-      kind: 'voyager.taskChange', payload: { operation: 'create', changes: { title: item.title, ...(item.details ? { details: item.details } : {}) } },
+      source: {
+        system: 'shannon', resourceType: 'workSession', resourceId: session.id, title: '会話を整理',
+        summary: item.operation === 'update' ? 'ユーザーが確認した既存Taskの更新案' : isPhaseTwo ? 'ユーザーが確認した新規Task案' : 'ユーザーが確認したTask案',
+        updatedAt: session.createdAt, href: `shannon://work-sessions/${session.id}`,
+      },
+      kind: 'voyager.taskChange',
+      payload: item.operation === 'update'
+        ? {
+            operation: 'update', targetTaskId: item.target!.id, expectedRevision: item.target!.revision,
+            changes, reason: 'ユーザーが既存Taskへの反映を承認',
+          }
+        : { operation: 'create', changes },
       provenance: { conversationId: session.threadId, messageIds: session.sourceMessageIds, reason: '整理して' }, createdAt: session.createdAt,
     };
     let response: Response;
     try {
       response = await (this.options.fetcher ?? fetch)(this.options.endpoint, {
-        method: 'POST', headers: { authorization: `Bearer ${this.options.token}`, 'content-type': 'application/json; charset=utf-8', 'idempotency-key': item.idempotencyKey, 'x-syzygy-contract-version': '1.0' },
+        method: 'POST', headers: { authorization: `Bearer ${this.options.token}`, 'content-type': 'application/json; charset=utf-8', 'idempotency-key': item.idempotencyKey, 'x-syzygy-contract-version': contractVersion },
         body: JSON.stringify(body), signal: AbortSignal.timeout(15_000),
       });
     } catch { throw new OrganizeError('DESTINATION_UNAVAILABLE', 503, true); }
@@ -370,6 +502,22 @@ export function createConfiguredVoyagerDestination(environment: Readonly<Record<
   return endpoint && token && workspaceId ? new HttpVoyagerTaskDestination({ endpoint, token, workspaceId }) : new DisabledVoyagerTaskDestination();
 }
 
+export function createConfiguredVoyagerCatalog(environment: Readonly<Record<string, string | undefined>> = process.env): VoyagerCatalog {
+  const applyEndpoint = environment.SHANNON_VOYAGER_INTEGRATION_URL?.trim();
+  const token = environment.SHANNON_VOYAGER_INTEGRATION_TOKEN?.trim();
+  const workspaceId = environment.SHANNON_VOYAGER_WORKSPACE_ID?.trim();
+  if (!applyEndpoint || !token || !workspaceId) return new DisabledVoyagerCatalog();
+  let tasksEndpoint: string;
+  let projectsEndpoint: string;
+  try {
+    const base = new URL(applyEndpoint);
+    const prefix = base.pathname.replace(/\/task-changes:apply$/u, '');
+    tasksEndpoint = environment.SHANNON_VOYAGER_TASK_SEARCH_URL?.trim() || new URL(`${prefix}/tasks/search`, base).toString();
+    projectsEndpoint = environment.SHANNON_VOYAGER_PROJECTS_URL?.trim() || new URL(`${prefix}/projects`, base).toString();
+  } catch { return new DisabledVoyagerCatalog(); }
+  return new HttpVoyagerCatalog({ tasksEndpoint, projectsEndpoint, token, workspaceId });
+}
+
 export function isOrganizeCommand(value: string): boolean {
   return value.normalize('NFKC').trim().replace(/[。.!！?？]+$/u, '').trim() === '整理して';
 }
@@ -389,6 +537,54 @@ function requiredBounded(value: string, limit: number, field: string): string {
   const result = bounded(value, limit); if (!result) throw new OrganizeError(`${field.toUpperCase()}_INVALID`, 400); return result;
 }
 function cloneSession(session: OrganizeSession): OrganizeSession { return structuredClone(session); }
+function normalizedOperation(operation: OrganizeOperation | undefined, target: VoyagerTaskProjection | undefined): OrganizeOperation {
+  const value = operation ?? (target ? 'update' : 'create');
+  if (value === 'update' && !target) throw new OrganizeError('TARGET_REQUIRED', 400);
+  return value;
+}
+function operationEdit(item: OrganizeItem, edit: Partial<OrganizeTaskDraft>): Pick<OrganizeItem, 'operation' | 'target'> {
+  const operation = edit.operation ?? (edit.target ? 'update' : item.operation);
+  if (operation === 'create') return { operation, target: undefined };
+  const target = edit.target ?? item.target;
+  if (!target) throw new OrganizeError('TARGET_REQUIRED', 400);
+  return { operation, target: normalizedTaskProjection(target) };
+}
+function normalizedIds(values: readonly string[]): string[] {
+  if (!Array.isArray(values) || values.length > 12 || values.some(value => typeof value !== 'string')) {
+    throw new OrganizeError('PROJECT_IDS_INVALID', 400);
+  }
+  return [...new Set(values.map(value => requiredBounded(value, 160, 'projectId')))];
+}
+function normalizedTaskProjection(value: VoyagerTaskProjection): VoyagerTaskProjection {
+  if (!value || typeof value !== 'object') throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+  if (typeof value.id !== 'string' || typeof value.title !== 'string' || typeof value.details !== 'string'
+    || !Array.isArray(value.projectIds) || !Number.isInteger(value.revision) || value.revision < 1
+    || typeof value.status !== 'string' || typeof value.updatedAt !== 'string') {
+    throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+  }
+  return {
+    id: requiredBounded(value.id, 160, 'taskId'), title: requiredBounded(value.title, 500, 'title'),
+    details: bounded(value.details ?? '', 1_000), status: requiredBounded(value.status, 80, 'status'),
+    projectIds: normalizedIds(value.projectIds ?? []), revision: value.revision, updatedAt: requiredBounded(value.updatedAt, 80, 'updatedAt'),
+  };
+}
+function normalizedProjectProjection(value: VoyagerProjectProjection): VoyagerProjectProjection {
+  if (!value || typeof value !== 'object' || typeof value.id !== 'string' || typeof value.title !== 'string'
+    || !Number.isInteger(value.revision) || value.revision < 1 || typeof value.updatedAt !== 'string') {
+    throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+  }
+  return {
+    id: requiredBounded(value.id, 160, 'projectId'), title: requiredBounded(value.title, 500, 'title'),
+    revision: value.revision, updatedAt: requiredBounded(value.updatedAt, 80, 'updatedAt'),
+  };
+}
+function projectionItems(value: Record<string, unknown>): unknown[] {
+  if (!Array.isArray(value.items)) throw new OrganizeError('DESTINATION_RESPONSE_INVALID', 502);
+  return value.items;
+}
+function normalizedLimit(value: number, fallback: number, maximum: number): number {
+  return Number.isInteger(value) && value > 0 ? Math.min(value, maximum) : fallback;
+}
 function extractResponseText(output: unknown): string {
   if (!Array.isArray(output)) return '';
   return output.flatMap(item => {

@@ -23,6 +23,7 @@ import { SQLiteDailyMindStore } from './dailyMind.js';
 import {
   SQLiteOrganizeStore,
   createConfiguredOrganizeExtractor,
+  createConfiguredVoyagerCatalog,
   createConfiguredVoyagerDestination,
 } from './organize.js';
 import {
@@ -74,6 +75,7 @@ const kernel = createLocalApiKernel(now, {
   dailyMind: dailyMindStore,
   organizeStore,
   organizeExtractor: createConfiguredOrganizeExtractor(process.env),
+  voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
