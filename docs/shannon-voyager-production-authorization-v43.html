@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager 本番接続 — Voyager側の許可</title>
+  <style>
+    :root { color-scheme: light dark; --accent:#0a84ff; --ok:#30d158; --warn:#ff9f0a; --panel:color-mix(in srgb, Canvas 92%, var(--accent) 8%); }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.65; background:Canvas; color:CanvasText; }
+    main { max-width:820px; margin:auto; padding:48px 24px 80px; }
+    h1 { font-size:clamp(1.8rem,5vw,3rem); line-height:1.15; margin:0 0 16px; }
+    h2 { margin-top:40px; }
+    .lead,.card { border-radius:20px; padding:20px; background:var(--panel); }
+    .lead { border-left:5px solid var(--accent); }
+    .copy { white-space:pre-wrap; word-break:break-word; padding:18px; border-radius:14px; background:color-mix(in srgb, Canvas 82%, CanvasText 18%); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .ok { color:var(--ok); font-weight:700; }
+    .warn { color:var(--warn); font-weight:700; }
+    li { margin:.6rem 0; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Voyager側の本番接続を許可する</h1>
+  <p class="lead">目的は、Shannonの「整理して」で承認したTask案を、Voyagerへ安全に1件だけ送れるようにすることです。iPhone、TestFlight、App Store Connectの操作は不要です。</p>
+
+  <h2>必要な理由</h2>
+  <p>Shannon側は実装・Azure配備・実機の未接続時Smokeまで完了しています。現在の <code>DESTINATION_UNAVAILABLE</code> は、Voyager本番APIが未接続であるための正常な安全停止です。</p>
+  <p>Voyagerは別アプリ・別データのため、Voyagerのタスク内でユーザー本人が本番変更を明示的に許可する必要があります。</p>
+
+  <h2>やること（約1分）</h2>
+  <ol>
+    <li>Codexのサイドバーで <strong>「Voyager｜MVP統括」</strong> を開きます。</li>
+    <li>下の文章をそのまま送信します。</li>
+    <li>Voyagerがバックアップ、API配備、専用接続情報の設定、合成Task 1件の疎通確認を終えるまで待ちます。</li>
+  </ol>
+
+  <div class="copy">Shannon × Voyager Phase 1の本番接続を許可します。Voyager側のソースとDBを先にバックアップし、create-only Syzygy adapterの配備、専用token・owner・workspace設定、APIテスト、Voyager APIサービス再起動、明確に識別できる合成Task 1件のcreate/idempotency疎通確認まで進めてください。既存Taskは変更せず、秘密値はチャットやログに表示せず、0600のファイルで扱ってください。iPhone・TestFlight・App Store Connectの操作は不要です。</div>
+
+  <h2>成功した状態</h2>
+  <div class="card">
+    <ul>
+      <li class="ok">Voyager APIサービスが正常稼働している</li>
+      <li class="ok">専用接続情報が権限 <code>0600</code> で保存されている</li>
+      <li class="ok">合成Task 1件が作成され、同じ要求の再送で重複しない</li>
+      <li class="ok">Shannonへ渡す接続先と秘密ファイルの場所だけが報告される</li>
+    </ul>
+  </div>
+
+  <h2>失敗した場合の安全な戻し方</h2>
+  <ul>
+    <li>Voyager APIが起動しなければ、作業前バックアップのソースと環境設定へ戻し、サービスを再起動します。</li>
+    <li>DB整合性に問題があれば、作業を止めてバックアップを保持します。既存Taskへ追加変更はしません。</li>
+    <li>専用tokenが画面やログへ露出した疑いがあれば、そのtokenを破棄して新しく発行します。</li>
+    <li>合成Taskは明確な名前で1件だけ作り、確認後にVoyager側の判断で保持または削除します。</li>
+  </ul>
+
+  <p class="warn">この許可が完了するまで、Shannon側は接続情報を設定せず、現在の安全停止状態を維持します。</p>
+</main>
+</body>
+</html>
