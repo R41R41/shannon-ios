@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager Phase 2 設計</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --accent:#0a84ff; --violet:#7d5ce7; --green:#24a865; --orange:#d97706;
+      --line:color-mix(in srgb, CanvasText 14%, transparent);
+      --panel:color-mix(in srgb, Canvas 94%, CanvasText 6%);
+      --soft:color-mix(in srgb, Canvas 90%, var(--accent) 10%);
+      --muted:color-mix(in srgb, CanvasText 62%, transparent);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:Canvas; color:CanvasText; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.62; }
+    main { width:min(1100px,100%); margin:auto; padding:48px 22px 88px; }
+    h1 { font-size:clamp(2rem,5vw,3.6rem); line-height:1.08; letter-spacing:-.035em; margin:.25em 0; }
+    h2 { margin:52px 0 18px; font-size:1.55rem; }
+    h3 { margin:0 0 10px; }
+    p { max-width:76ch; }
+    .eyebrow,.chip { color:var(--accent); font-weight:700; font-size:.84rem; letter-spacing:.04em; }
+    .hero { padding:28px; border:1px solid var(--line); border-radius:28px; background:linear-gradient(145deg,var(--soft),var(--panel)); }
+    .hero strong { color:var(--green); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:16px; }
+    .card { padding:20px; border:1px solid var(--line); border-radius:22px; background:var(--panel); }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-items:stretch; }
+    .step { padding:16px 12px; border:1px solid var(--line); border-radius:18px; background:var(--panel); text-align:center; }
+    .step b { display:block; color:var(--accent); margin-bottom:5px; }
+    .phone { width:min(390px,100%); margin:auto; border:1px solid var(--line); border-radius:34px; padding:18px; background:color-mix(in srgb, Canvas 97%, CanvasText 3%); box-shadow:0 22px 55px color-mix(in srgb, CanvasText 16%, transparent); }
+    .message { margin:13px 0; padding:13px 15px; border-radius:18px; background:var(--soft); }
+    .proposal { border:1px solid var(--line); border-radius:20px; overflow:hidden; background:var(--panel); }
+    .proposal header,.proposal footer { padding:14px 16px; }
+    .proposal header { display:flex; justify-content:space-between; gap:8px; border-bottom:1px solid var(--line); }
+    .diff { padding:4px 16px 13px; }
+    .row { display:grid; grid-template-columns:70px 1fr; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+    .row:last-child { border:0; }
+    .before { color:var(--muted); text-decoration:line-through; }
+    .after { color:var(--green); font-weight:650; }
+    .project { display:inline-block; padding:5px 10px; border-radius:999px; background:color-mix(in srgb,var(--violet) 18%,Canvas); color:color-mix(in srgb,var(--violet) 80%,CanvasText); font-weight:650; }
+    .buttons { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    button { border:0; border-radius:13px; padding:11px; font:inherit; font-weight:700; }
+    .primary { color:white; background:var(--accent); }
+    .secondary { color:CanvasText; background:color-mix(in srgb,CanvasText 8%,Canvas); }
+    table { width:100%; border-collapse:collapse; font-size:.94rem; }
+    th,td { padding:11px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
+    .ok { color:var(--green); font-weight:700; }
+    .hold { color:var(--orange); font-weight:700; }
+    ul { padding-left:1.25rem; }
+    li { margin:.45rem 0; }
+    @media(max-width:760px) { .flow { grid-template-columns:1fr; } .flow .step { text-align:left; } table { display:block; overflow:auto; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON × VOYAGER · PHASE 2 · 2026-09-09</div>
+  <h1>作るだけから、<br>正しく更新するへ。</h1>
+  <section class="hero">
+    <p><strong>Phase 2へ着手します。</strong> 最初の完成単位は、ShannonがVoyagerの既存TaskやProjectを限定検索し、ユーザーへ変更前後を見せ、明示承認された1件だけをrevision付きで反映する流れです。</p>
+    <p>初版で変えられるのは、未完了Taskの<strong>タイトル・詳細・Project割り当て</strong>だけです。状態、期限、優先度、削除、複数件一括操作は安全性と所有権を確認する後続段階へ送ります。</p>
+  </section>
+
+  <h2>完成時の体験</h2>
+  <div class="flow">
+    <div class="step"><b>1 · 会話</b>変更内容を話す</div>
+    <div class="step"><b>2 · 整理して</b>対象範囲を固定</div>
+    <div class="step"><b>3 · 照合</b>Voyagerの候補を限定検索</div>
+    <div class="step"><b>4 · 確認</b>変更前後とProjectを見る</div>
+    <div class="step"><b>5 · 反映</b>承認済みだけを1件ずつ更新</div>
+  </div>
+
+  <h2>Shannonに表示する確認カード</h2>
+  <div class="grid">
+    <div class="phone">
+      <div class="message">Voyager連携の確認Taskに、実機成功結果を書いてProject「Shannon」に入れて。整理して</div>
+      <p>既存Taskへの更新案を1件まとめたよ。対象と変更内容を確認してください。</p>
+      <article class="proposal">
+        <header><strong>Voyager Task 更新案</strong><span class="chip">未反映</span></header>
+        <div class="diff">
+          <p><strong>シャノンとVoyagerの実機連携を確認する</strong></p>
+          <div class="row"><span>詳細</span><div><div class="before">データ反映を確認する</div><div class="after">実機連携と履歴保存を確認済み</div></div></div>
+          <div class="row"><span>Project</span><div><span class="project">Shannon</span></div></div>
+          <div class="row"><span>状態</span><div>思考中 <small>（変更しない）</small></div></div>
+        </div>
+        <footer>
+          <div class="buttons"><button class="secondary">後で</button><button class="primary">採用</button></div>
+        </footer>
+      </article>
+    </div>
+    <div class="card">
+      <h3>対象が曖昧なとき</h3>
+      <p>タイトルの似たTaskが複数ある場合、Shannonは推測で更新しません。最大8件の候補を出し、ユーザーが1件を選んだ後にだけ変更案を作ります。</p>
+      <h3>反映直前に変わったとき</h3>
+      <p><code>expectedRevision</code>が一致しなければ競合として停止します。自動上書きや「別Taskを作る」への自動切替はしません。</p>
+      <h3>Projectが見つからないとき</h3>
+      <p>存在するProjectの選択肢を出します。文字列だけで未知のProjectを勝手に新規作成しません。</p>
+    </div>
+  </div>
+
+  <h2>実装境界</h2>
+  <table>
+    <thead><tr><th>層</th><th>Phase 2で追加</th><th>維持する安全境界</th></tr></thead>
+    <tbody>
+      <tr><td>Shannon UI</td><td>新規／更新の明示、変更前後、対象Task、Project、競合表示</td><td>カード内の採用だけではVoyagerへ送らず、最後の「反映」が必要</td></tr>
+      <tr><td>Shannon API</td><td>限定検索proxy、対象Reference・revision・patchの永続化、update command生成</td><td>iPhone／MacはVoyager資格情報を持たず、Shannon APIだけを呼ぶ</td></tr>
+      <tr><td>Voyager API</td><td>Task検索、Project候補、update、Project存在確認</td><td>destination専用credential、owner/workspace限定、delete/bulk拒否</td></tr>
+      <tr><td>Voyager正本</td><td>1 Taskレコードへの原子的更新</td><td>全subtask tree、完了状態、他Projectの正本を暗黙変更しない</td></tr>
+    </tbody>
+  </table>
+
+  <h2>後方互換なAPI案</h2>
+  <div class="grid">
+    <div class="card"><h3>候補を読む</h3><p><code>GET /api/integrations/syzygy/v1/tasks?query=...&amp;limit=8</code></p><p><code>GET /api/integrations/syzygy/v1/projects?limit=30</code></p><p>Taskはid、title、details、status、projectIds、revision、updatedAtだけを返します。</p></div>
+    <div class="card"><h3>承認後に更新</h3><p>既存の<code>POST /api/integrations/syzygy/v1/task-changes:apply</code>へ<code>operation: update</code>を追加します。</p><p><code>targetTaskId</code>と<code>expectedRevision</code>を必須にし、<code>changes</code>はtitle/details/projectIdsだけを許可します。</p></div>
+  </div>
+
+  <h2>変更候補</h2>
+  <table>
+    <thead><tr><th>Shannonファイル</th><th>役割</th></tr></thead>
+    <tbody>
+      <tr><td><code>services/api/src/organize.ts</code></td><td>item kind、target snapshot、project selection、create/update command</td></tr>
+      <tr><td><code>services/api/src/apiKernel.ts</code></td><td>Voyager候補検索と選択・反映route</td></tr>
+      <tr><td><code>services/api/tests/organize.test.ts</code></td><td>確認前無変更、曖昧候補、競合、再試行、Project割当</td></tr>
+      <tr><td><code>apps/ios/.../Models.swift</code></td><td>操作種別、対象Task、before/after、Project DTO</td></tr>
+      <tr><td><code>ShannonOrganizeSessionCard.swift</code></td><td>更新差分、対象選択、Project選択、競合表示</td></tr>
+      <tr><td><code>docs/architecture.md</code></td><td>Phase 2の正本境界</td></tr>
+    </tbody>
+  </table>
+
+  <h2>既存資産と必要fixture</h2>
+  <div class="grid">
+    <div class="card"><h3 class="ok">再利用できるもの</h3><ul><li>Phase 1のOrganizeSession、承認、cursor</li><li>request IDとidempotency keyの固定</li><li>Voyagerのrevision、SQLite transaction、通常sync</li><li>destination専用credentialと本番接続</li></ul></div>
+    <div class="card"><h3>追加する試験</h3><ul><li>候補0件／1件／同名複数件</li><li>revision一致更新／競合停止</li><li>Project存在／別owner／不存在</li><li>done・cancel・未知fieldの拒否</li><li>同じbodyの安全な再送</li><li>通常Voyager同期で同じTask更新が見えること</li></ul></div>
+  </div>
+
+  <h2>段階</h2>
+  <ol>
+    <li><strong>2A 契約とfixture:</strong> ShannonとVoyagerで同じJSONを受理・拒否できる状態。</li>
+    <li><strong>2B ローカル縦切り:</strong> 合成Taskを検索し、差分確認後に更新、通常syncまで検証。</li>
+    <li><strong>2C 本番サーバー:</strong> 両DBバックアップ後、read/update権限だけを追加。</li>
+    <li><strong>2D 実機:</strong> 既存Shannonカードから実Task 1件を更新し、Voyager表示とDBを照合。</li>
+  </ol>
+
+  <h2>今回は保留するもの</h2>
+  <p><span class="hold">Aether文書提案、Task状態・期限・優先度の変更、削除、複数件一括更新、自動整理</span>はこの完成単位へ混ぜません。Phase 2の安全な更新経路を実機で確立した後、別の承認境界として追加します。</p>
+</main></body>
+</html>
