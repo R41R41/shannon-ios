@@ -105,6 +105,63 @@ struct ShannonDesktopTaskActionPolicy: Equatable {
     }
 }
 
+struct ShannonDesktopConversationOutlineEntry: Equatable, Identifiable {
+    enum Kind: Equatable {
+        case request
+        case heading
+    }
+
+    let id: String
+    let messageID: UUID
+    let title: String
+    let level: Int
+    let kind: Kind
+}
+
+enum ShannonDesktopConversationOutline {
+    static func entries(from messages: [ConversationMessage]) -> [ShannonDesktopConversationOutlineEntry] {
+        var result: [ShannonDesktopConversationOutlineEntry] = []
+        for message in messages {
+            switch message.role {
+            case .user:
+                guard let title = excerpt(from: message.text) else { continue }
+                result.append(ShannonDesktopConversationOutlineEntry(
+                    id: "\(message.id.uuidString)-request",
+                    messageID: message.id,
+                    title: title,
+                    level: 0,
+                    kind: .request
+                ))
+            case .shannon:
+                for (index, block) in ShannonMessageMarkdown.blocks(from: message.text).enumerated() {
+                    guard case let .heading(level, text) = block else { continue }
+                    let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { continue }
+                    result.append(ShannonDesktopConversationOutlineEntry(
+                        id: "\(message.id.uuidString)-heading-\(index)",
+                        messageID: message.id,
+                        title: title,
+                        level: level,
+                        kind: .heading
+                    ))
+                }
+            }
+        }
+        return result
+    }
+
+    private static func excerpt(from text: String) -> String? {
+        let compact = text
+            .split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !compact.isEmpty else { return nil }
+        let limit = 68
+        guard compact.count > limit else { return compact }
+        return String(compact.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+}
+
 enum DesktopExpressionLabel {
     static func label(for expression: ShannonExpressionDTO) -> String {
         switch expression {

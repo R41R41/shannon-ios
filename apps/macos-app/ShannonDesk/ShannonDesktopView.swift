@@ -16,6 +16,7 @@ public struct ShannonDesktopRootView: View {
     @State private var requestedMessageJumpID: UUID?
     @State private var messageJumpRevision = 0
     @State private var steeringText = ""
+    @State private var showsConversationOutline = false
     @State private var showsConnection = false
     @State private var renameThread: ChatThreadDTO?
     @State private var renameText = ""
@@ -75,6 +76,7 @@ public struct ShannonDesktopRootView: View {
         }
         .onChange(of: conversation.selectedThreadId) {
             restoredThreadID = conversation.selectedThreadId
+            showsConversationOutline = false
         }
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
@@ -116,6 +118,10 @@ public struct ShannonDesktopRootView: View {
 
     private var workProjection: ShannonDesktopWorkProjection {
         ShannonDesktopWorkProjection(tasks: conversation.agentTasks)
+    }
+
+    private var conversationOutline: [ShannonDesktopConversationOutlineEntry] {
+        ShannonDesktopConversationOutline.entries(from: conversation.messages)
     }
 
     private var renameAlertBinding: Binding<Bool> {
@@ -444,6 +450,21 @@ public struct ShannonDesktopRootView: View {
                 Text(DesktopExpressionLabel.label(for: conversation.currentExpression))
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+            Button {
+                showsConversationOutline.toggle()
+            } label: {
+                Image(systemName: "list.bullet.indent")
+            }
+            .buttonStyle(.borderless)
+            .disabled(conversationOutline.isEmpty)
+            .help("会話の目次")
+            .popover(isPresented: $showsConversationOutline, arrowEdge: .bottom) {
+                DesktopConversationOutlineView(entries: conversationOutline) { entry in
+                    showsConversationOutline = false
+                    requestedMessageJumpID = entry.messageID
+                    messageJumpRevision &+= 1
+                }
             }
             Button {
                 selectedTaskID = conversation.latestActiveAgentTask?.id ?? conversation.agentTasks.first?.id
@@ -945,6 +966,54 @@ private struct DesktopMessageView: View {
                 }
             }
         }
+    }
+}
+
+private struct DesktopConversationOutlineView: View {
+    let entries: [ShannonDesktopConversationOutlineEntry]
+    let select: (ShannonDesktopConversationOutlineEntry) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("会話の目次")
+                    .font(.headline)
+                Text("依頼と、シャノンの返答にある見出し")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(14)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(entries) { entry in
+                        Button {
+                            select(entry)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: entry.kind == .request ? "person.fill" : "textformat")
+                                    .font(.caption)
+                                    .foregroundStyle(entry.kind == .request ? Color.secondary : Color.accentColor)
+                                    .frame(width: 16)
+                                Text(entry.title)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.leading, entry.kind == .heading ? CGFloat(max(0, entry.level - 1)) * 12 : 0)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(6)
+            }
+        }
+        .frame(width: 340, height: min(CGFloat(entries.count) * 45 + 84, 500))
     }
 }
 

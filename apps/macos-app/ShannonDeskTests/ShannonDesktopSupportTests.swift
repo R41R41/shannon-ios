@@ -153,6 +153,34 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertFalse(completed.canCancel)
     }
 
+    func testConversationOutlineIncludesRequestsAndMarkdownHeadings() {
+        let requestID = UUID()
+        let answerID = UUID()
+        let messages = [
+            ConversationMessage(
+                id: requestID,
+                role: .user,
+                text: "  Mac版の作業全体を もっと分かりやすくして  "
+            ),
+            ConversationMessage(
+                id: answerID,
+                role: .shannon,
+                text: "# 現在地\n本文\n## 次にやること\n```\n# コード内は除外\n```"
+            ),
+        ]
+
+        let entries = ShannonDesktopConversationOutline.entries(from: messages)
+
+        XCTAssertEqual(entries.map(\.messageID), [requestID, answerID, answerID])
+        XCTAssertEqual(entries.map(\.title), [
+            "Mac版の作業全体を もっと分かりやすくして",
+            "現在地",
+            "次にやること",
+        ])
+        XCTAssertEqual(entries.map(\.level), [0, 1, 2])
+        XCTAssertEqual(entries.map(\.kind), [.request, .heading, .heading])
+    }
+
     private func makeTask(
         status: ShannonAgentTaskStatus,
         updatedAt: Date = Date(),
