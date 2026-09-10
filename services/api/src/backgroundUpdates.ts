@@ -14,6 +14,7 @@ import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.
 
 export interface CompletedTurn {
   threadTitle?: string;
+  threadSummary?: string;
   scopeKey: string;
   threadId: string;
   capturedState: CompanionStateSnapshot;
@@ -110,6 +111,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
+        ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
         ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
       },
@@ -161,6 +163,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
+        ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
         ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
       },

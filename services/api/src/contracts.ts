@@ -28,6 +28,8 @@ export interface ChatThread {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  summary?: string;
+  sections?: readonly string[];
 }
 
 export interface ThreadListRequest {

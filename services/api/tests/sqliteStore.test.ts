@@ -386,7 +386,7 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 9 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 10 });
     database.close();
   });
 
@@ -436,6 +436,36 @@ describe('SQLite Shannon persistence', () => {
       expect.objectContaining({ lane: 'voice', calls: 1, estimatedCostUsd: 0.000075 }),
     ]);
     migrated.close();
+  });
+
+  it('migrates v9 conversation threads to optional rolling summaries without losing history', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: sequenceClock() });
+    const threadId = first.createThread('owner-a', '既存トーク');
+    first.appendTurn(
+      'owner-a', threadId, '今どこ？', '検索まで完了しました。', '2026-09-05T00:00:00.000Z',
+    );
+    first.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.exec('ALTER TABLE conversation_threads DROP COLUMN summary; PRAGMA user_version = 9;');
+    legacy.close();
+
+    const migrated = new SQLiteShannonStore({ path, now: sequenceClock() });
+    expect(migrated.conversationHistory('owner-a', threadId).map(item => item.content))
+      .toEqual(['今どこ？', '検索まで完了しました。']);
+    expect(migrated.listThreads('owner-a')[0]).toMatchObject({
+      threadId,
+      title: '既存トーク',
+      summary: '検索まで完了しました。',
+    });
+    migrated.close();
+
+    const database = new DatabaseSync(path);
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 10 });
+    expect(database.prepare("PRAGMA table_info('conversation_threads')").all())
+      .toContainEqual(expect.objectContaining({ name: 'summary' }));
+    database.close();
   });
 
   it('continues FCA history after an API process restart and reacts on the current icon', async () => {

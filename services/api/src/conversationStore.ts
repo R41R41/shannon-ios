@@ -30,6 +30,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
 
 export interface TurnPersistenceContext {
   threadTitle?: string;
+  threadSummary?: string;
   messageEmotion: ShannonMessageEmotion;
   capturedStateVersion: number;
   taskDecision?: ShannonTaskDecision;
@@ -44,6 +45,7 @@ export interface ConversationStore {
   needsAutomaticThreadTitle(scopeKey: string, threadId: string): boolean;
   archiveThread(scopeKey: string, threadId: string): boolean;
   history(scopeKey: string, threadId?: string): readonly ShannonConversationItem[];
+  threadSummary(scopeKey: string, threadId: string): string | undefined;
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[];
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
   appendTurn(
@@ -59,6 +61,7 @@ export interface ConversationStore {
 export class InMemoryConversationStore implements ConversationStore {
   private readonly conversations = new Map<string, Map<string, StoredConversationMessage[]>>();
   private readonly threadTitles = new Map<string, Map<string, string>>();
+  private readonly threadSummaries = new Map<string, Map<string, string>>();
   private readonly protectedTitles = new Map<string, Set<string>>();
   private readonly experiences = new Map<string, ShannonExperience[]>();
   private readonly archivedThreads = new Map<string, Set<string>>();
@@ -81,13 +84,15 @@ export class InMemoryConversationStore implements ConversationStore {
       const last = ordered[ordered.length - 1];
       const customTitle = threadTitles.get(threadId);
       const navigation = threadNavigation(messages);
+      const rollingSummary = this.threadSummaries.get(scopeKey)?.get(threadId);
+      const effectiveSummary = rollingSummary ?? navigation.summary;
       return Object.freeze({
         threadId,
         title: customTitle ?? DEFAULT_THREAD_TITLE,
         createdAt: ordered[0]?.observedAt ?? new Date().toISOString(),
         updatedAt: last?.observedAt ?? new Date().toISOString(),
         messageCount: messages.length,
-        ...(navigation.summary ? { summary: navigation.summary } : {}),
+        ...(effectiveSummary ? { summary: effectiveSummary } : {}),
         ...(navigation.sections.length ? { sections: navigation.sections } : {}),
       });
     }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
@@ -156,6 +161,11 @@ export class InMemoryConversationStore implements ConversationStore {
       .map(item => Object.freeze({ role: item.role, content: item.content })));
   }
 
+  threadSummary(scopeKey: string, threadId: string): string | undefined {
+    return this.threadSummaries.get(scopeKey)?.get(threadId)
+      ?? threadNavigation(this.conversations.get(scopeKey)?.get(threadId) ?? []).summary;
+  }
+
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] {
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     const threadMessages = this.conversations.get(scopeKey)?.get(effectiveThreadId) ?? [];
@@ -191,6 +201,12 @@ export class InMemoryConversationStore implements ConversationStore {
       this.threadTitles.set(scopeKey, titles);
       this.protectTitle(scopeKey, resolvedThreadId);
     }
+    const summaries = this.threadSummaries.get(scopeKey) ?? new Map<string, string>();
+    const nextSummary = context?.threadSummary ?? threadNavigation([
+      { role: 'assistant', content: shannonReply },
+    ]).summary;
+    if (nextSummary) summaries.set(resolvedThreadId, nextSummary);
+    this.threadSummaries.set(scopeKey, summaries);
     conversation.push(
       { id: randomUUID(), role: 'user', content: userMessage, observedAt },
       {
@@ -237,13 +253,16 @@ export function threadNavigation(
 ): { summary?: string; sections: readonly string[] } {
   const assistantMessages = messages.filter(message => message.role === 'assistant');
   const latest = assistantMessages.at(-1)?.content ?? '';
-  const summary = latest
+  const compactSummary = latest
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/[*_>`~\[\]]/g, '')
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 180);
+    .trim();
+  const summaryCharacters = Array.from(compactSummary);
+  const summary = summaryCharacters.length <= 180
+    ? compactSummary
+    : `${summaryCharacters.slice(0, 179).join('')}…`;
   const seen = new Set<string>();
   const sections: string[] = [];
   for (const message of assistantMessages) {

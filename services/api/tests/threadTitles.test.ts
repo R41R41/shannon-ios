@@ -21,8 +21,13 @@ class ControlledChatModel implements ShannonChatModel {
     this.requests.push(request);
     return new Promise((resolve, reject) => this.pending.push({ resolve, reject }));
   }
-  reply(threadTitle: string | undefined = '京都の週末旅行') {
-    this.pending.shift()!.resolve({ mode: this.mode, model: this.model, reply: '京都で庭園を巡ろう。', threadTitle });
+  reply(
+    threadTitle: string | undefined = '京都の週末旅行',
+    threadSummary: string | undefined = '京都への週末旅行を計画中。庭園を巡る案が出ている。',
+  ) {
+    this.pending.shift()!.resolve({
+      mode: this.mode, model: this.model, reply: '京都で庭園を巡ろう。', threadTitle, threadSummary,
+    });
   }
 }
 
@@ -65,13 +70,19 @@ describe.each(['memory', 'sqlite'] as const)('%s automatic thread titles', kind 
     expect(store.listThreads('owner')[0]).toMatchObject({ title: '新しいトーク', messageCount: 0 });
     model.reply();
     expect(await pending).toMatchObject({ status: 200, body: {
-      reply: '京都で庭園を巡ろう。', thread: { threadId, title: '京都の週末旅行', messageCount: 2 },
+      reply: '京都で庭園を巡ろう。',
+      thread: {
+        threadId, title: '京都の週末旅行', messageCount: 2,
+        summary: '京都への週末旅行を計画中。庭園を巡る案が出ている。',
+      },
     } });
     expect(store.conversationHistory('owner', threadId).map(item => item.role)).toEqual(['user', 'assistant']);
     expect(await api.dispatch({ method: 'GET', path: '/v1/threads', query: new URLSearchParams({ scopeKey: 'owner' }) }))
       .toMatchObject({ body: { threads: [expect.objectContaining({ title: '京都の週末旅行' })] } });
     const second = send(threadId);
     expect(model.requests[1]?.generateThreadTitle).toBe(false);
+    expect(model.requests[1]?.priorThreadSummary)
+      .toBe('京都への週末旅行を計画中。庭園を巡る案が出ている。');
     model.reply('別のタイトル');
     expect(await second).toMatchObject({ body: { thread: { title: '京都の週末旅行', messageCount: 4 } } });
     await api.waitForBackground('owner');
@@ -130,6 +141,28 @@ describe.each(['memory', 'sqlite'] as const)('%s automatic thread titles', kind 
       summary: '現在地 作業と会話を接続しました。 次にやること 横断検索を追加します。',
       sections: ['現在地', '次にやること'],
     });
+  });
+
+  it('updates the rolling summary on later turns and keeps deterministic fallback', async () => {
+    const { store, create } = fixture();
+    const threadId = await create('Mac版の相談');
+    store.appendTurn(
+      'owner', threadId, '設計を始めよう', 'まず画面構成を決めます。', '2026-09-05T00:01:00.000Z',
+    );
+    expect(store.listThreads('owner')[0]?.summary).toBe('まず画面構成を決めます。');
+
+    store.appendTurn(
+      'owner', threadId, '実装まで進めて', '検索を実装しました。', '2026-09-05T00:02:00.000Z',
+      {
+        threadSummary: 'Mac版を実装中。画面構成が決まり、検索まで完了。次は実接続を確認する。',
+        capturedStateVersion: 1,
+        messageEmotion: {
+          valence: 0.2, arousal: 0.4, openness: 0.7, expression: 'curious',
+        },
+      },
+    );
+    expect(store.listThreads('owner')[0]?.summary)
+      .toBe('Mac版を実装中。画面構成が決まり、検索まで完了。次は実接続を確認する。');
   });
 
   it('leaves a failed first turn untitled and generates on retry, including implicit threads', async () => {

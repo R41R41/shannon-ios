@@ -45,7 +45,7 @@ import {
 import { migrateAgentTasks } from './agentTaskStore.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -99,11 +99,19 @@ interface ThreadRow {
   created_at: string;
   updated_at: string;
   message_count: number;
+  summary: string | null;
 }
 
 interface ThreadNavigationRow {
   thread_id: string;
   content: string;
+}
+
+function boundedStoredThreadSummary(value: string | null | undefined): string | undefined {
+  const compact = value?.trim();
+  if (!compact) return undefined;
+  const characters = Array.from(compact);
+  return characters.length <= 180 ? compact : `${characters.slice(0, 179).join('')}…`;
 }
 
 interface KnowledgeAnswerRow {
@@ -487,7 +495,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   listThreads(scopeKey: string): readonly ConversationThread[] {
     const rows = this.database.prepare(`
-      SELECT thread_id, title, created_at, updated_at,
+      SELECT thread_id, title, created_at, updated_at, summary,
         (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.scope_key = ct.scope_key AND cm.thread_id = ct.thread_id) AS message_count
       FROM conversation_threads ct
       WHERE ct.scope_key = ? AND ct.archived_at IS NULL
@@ -507,13 +515,15 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     }
     return Object.freeze(rows.map(row => {
       const navigation = threadNavigation(messagesByThread.get(row.thread_id) ?? []);
+      const rollingSummary = boundedStoredThreadSummary(row.summary);
+      const effectiveSummary = rollingSummary ?? navigation.summary;
       return Object.freeze({
         threadId: row.thread_id,
         title: row.title,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         messageCount: Number(row.message_count),
-        ...(navigation.summary ? { summary: navigation.summary } : {}),
+        ...(effectiveSummary ? { summary: effectiveSummary } : {}),
         ...(navigation.sections.length ? { sections: navigation.sections } : {}),
       });
     }));
@@ -590,6 +600,21 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       .map(item => Object.freeze({ role: item.role, content: item.content })));
   }
 
+  threadSummary(scopeKey: string, threadId: string): string | undefined {
+    const row = this.database.prepare(`
+      SELECT summary FROM conversation_threads
+      WHERE scope_key = ? AND thread_id = ? AND archived_at IS NULL
+    `).get(scopeKey, threadId) as unknown as { summary: string | null } | undefined;
+    const rollingSummary = boundedStoredThreadSummary(row?.summary);
+    if (rollingSummary) return rollingSummary;
+    const latest = this.database.prepare(`
+      SELECT content FROM conversation_messages
+      WHERE scope_key = ? AND thread_id = ? AND role = 'assistant'
+      ORDER BY sequence DESC LIMIT 1
+    `).get(scopeKey, threadId) as unknown as { content: string } | undefined;
+    return latest ? threadNavigation([{ role: 'assistant', content: latest.content }]).summary : undefined;
+  }
+
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] {
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     const rows = this.database.prepare(`
@@ -639,6 +664,9 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     this.ensureThread(scopeKey, effectiveThreadId, null);
     const summary = summarizeExperience(userMessage, shannonReply);
+    const threadSummary = context?.threadSummary ?? threadNavigation([
+      { role: 'assistant', content: shannonReply },
+    ]).summary ?? null;
     const payload: TurnPayload = {
       userMessage,
       shannonReply,
@@ -658,8 +686,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         `).run(initialThreadTitle(context?.threadTitle, userMessage), scopeKey, effectiveThreadId);
       }
       this.database.prepare(`
-        UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?
-      `).run(observedAt, scopeKey, effectiveThreadId);
+        UPDATE conversation_threads SET updated_at = ?, summary = ? WHERE scope_key = ? AND thread_id = ?
+      `).run(observedAt, threadSummary, scopeKey, effectiveThreadId);
       const insert = this.database.prepare(`
         INSERT INTO conversation_messages
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
@@ -1039,6 +1067,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       if (previousVersion < 7) migrateAgentTasks(this.database);
       if (previousVersion < 8) this.migrateThreadTitleOrigin();
       if (previousVersion < 9) this.migrateVoiceUsageLane();
+      if (previousVersion < 10) this.migrateThreadSummary();
       this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }
@@ -1048,6 +1077,13 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     if (!columns.some(column => column.name === 'title_origin')) {
       // Legacy titles have no edit provenance; preserve even manually chosen default titles.
       this.database.exec("ALTER TABLE conversation_threads ADD COLUMN title_origin TEXT NOT NULL DEFAULT 'manual';");
+    }
+  }
+
+  private migrateThreadSummary(): void {
+    const columns = this.database.prepare("PRAGMA table_info('conversation_threads')").all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'summary')) {
+      this.database.exec('ALTER TABLE conversation_threads ADD COLUMN summary TEXT;');
     }
   }
 

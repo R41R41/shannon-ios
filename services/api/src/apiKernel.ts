@@ -790,10 +790,12 @@ export class ShannonApiKernel {
           } satisfies ChatResponse,
         };
       }
+      const priorThreadSummary = this.conversationStore.threadSummary(body.scopeKey, threadId);
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt,
         history: this.conversationStore.history(body.scopeKey, threadId),
+        ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),
         ...(body.webSearch === true ? { useWebSearch: true } : {}),
@@ -832,6 +834,7 @@ export class ShannonApiKernel {
         userMessage: message,
         shannonReply: reply,
         ...(completion.threadTitle ? { threadTitle: completion.threadTitle } : {}),
+        ...(completion.threadSummary ? { threadSummary: completion.threadSummary } : {}),
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
