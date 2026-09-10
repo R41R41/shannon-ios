@@ -185,6 +185,26 @@ public struct ChatThreadDTO: Codable, Equatable, Sendable {
     public let createdAt: String
     public let updatedAt: String
     public let messageCount: Int
+    public let summary: String?
+    public let sections: [String]?
+
+    public init(
+        threadId: String,
+        title: String,
+        createdAt: String,
+        updatedAt: String,
+        messageCount: Int,
+        summary: String? = nil,
+        sections: [String]? = nil
+    ) {
+        self.threadId = threadId
+        self.title = title
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.messageCount = messageCount
+        self.summary = summary
+        self.sections = sections
+    }
 }
 
 public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {

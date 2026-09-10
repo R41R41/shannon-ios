@@ -512,7 +512,9 @@ public final class ShannonConversationModel {
                 title: trimmedTitle,
                 createdAt: existing.createdAt,
                 updatedAt: existing.updatedAt,
-                messageCount: existing.messageCount
+                messageCount: existing.messageCount,
+                summary: existing.summary,
+                sections: existing.sections
             )
             persistDisplayCache()
             return true

@@ -214,9 +214,17 @@ public struct ShannonDesktopRootView: View {
                                 selectDestination(.talk)
                             }
                         } label: {
-                            HStack(spacing: 8) {
-                                Text(thread.title)
-                                    .lineLimit(1)
+                            HStack(alignment: .top, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(thread.title)
+                                        .lineLimit(1)
+                                    if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
+                                        Text(context)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                }
                                 Spacer(minLength: 4)
                                 if thread.threadId == conversation.selectedThreadId {
                                     Circle()

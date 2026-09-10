@@ -35,6 +35,25 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
     }
 
+    func testThreadSearchIncludesServerSummaryAndSections() {
+        let threads = [
+            makeThread(
+                id: "context",
+                title: "日々の相談",
+                summary: "Mac版の現在地を整理しました",
+                sections: ["次にやること", "検証結果"]
+            ),
+            makeThread(id: "other", title: "買い物")
+        ]
+
+        XCTAssertEqual(ShannonDesktopThreadSearch.matches(threads, query: "現在地").map(\.threadId), ["context"])
+        XCTAssertEqual(ShannonDesktopThreadSearch.matches(threads, query: "検証結果").map(\.threadId), ["context"])
+        XCTAssertEqual(
+            ShannonDesktopThreadSearch.matchContext(for: threads[0], query: "次にやること"),
+            "次にやること"
+        )
+    }
+
     func testAttachmentLoaderReadsSupportedUTF8TextAndKeepsItsMetadata() throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("shannon-attachment-\(UUID().uuidString)", isDirectory: true)
@@ -201,14 +220,20 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
     }
 
-    private func makeThread(id: String, title: String) -> ChatThreadDTO {
-        let data = try! JSONSerialization.data(withJSONObject: [
-            "threadId": id,
-            "title": title,
-            "createdAt": "2026-09-08T00:00:00Z",
-            "updatedAt": "2026-09-08T00:00:00Z",
-            "messageCount": 1,
-        ])
-        return try! JSONDecoder().decode(ChatThreadDTO.self, from: data)
+    private func makeThread(
+        id: String,
+        title: String,
+        summary: String? = nil,
+        sections: [String]? = nil
+    ) -> ChatThreadDTO {
+        ChatThreadDTO(
+            threadId: id,
+            title: title,
+            createdAt: "2026-09-08T00:00:00Z",
+            updatedAt: "2026-09-08T00:00:00Z",
+            messageCount: 1,
+            summary: summary,
+            sections: sections
+        )
     }
 }

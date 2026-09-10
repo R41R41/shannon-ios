@@ -29,6 +29,7 @@ import type {
   StoredConversationMessage,
   TurnPersistenceContext,
 } from './conversationStore.js';
+import { threadNavigation } from './conversationStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 import type { ActivityItem } from './memoryService.js';
 import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
@@ -98,6 +99,11 @@ interface ThreadRow {
   created_at: string;
   updated_at: string;
   message_count: number;
+}
+
+interface ThreadNavigationRow {
+  thread_id: string;
+  content: string;
 }
 
 interface KnowledgeAnswerRow {
@@ -487,13 +493,30 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       WHERE ct.scope_key = ? AND ct.archived_at IS NULL
       ORDER BY ct.updated_at DESC, ct.created_at DESC
     `).all(scopeKey) as unknown as ThreadRow[];
-    return Object.freeze(rows.map(row => Object.freeze({
-      threadId: row.thread_id,
-      title: row.title,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      messageCount: Number(row.message_count),
-    })));
+    const navigationRows = this.database.prepare(`
+      SELECT thread_id, content
+      FROM conversation_messages
+      WHERE scope_key = ? AND role = 'assistant'
+      ORDER BY observed_at ASC, message_id ASC
+    `).all(scopeKey) as unknown as ThreadNavigationRow[];
+    const messagesByThread = new Map<string, Array<{ role: 'assistant'; content: string }>>();
+    for (const row of navigationRows) {
+      const messages = messagesByThread.get(row.thread_id) ?? [];
+      messages.push({ role: 'assistant', content: row.content });
+      messagesByThread.set(row.thread_id, messages);
+    }
+    return Object.freeze(rows.map(row => {
+      const navigation = threadNavigation(messagesByThread.get(row.thread_id) ?? []);
+      return Object.freeze({
+        threadId: row.thread_id,
+        title: row.title,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        messageCount: Number(row.message_count),
+        ...(navigation.summary ? { summary: navigation.summary } : {}),
+        ...(navigation.sections.length ? { sections: navigation.sections } : {}),
+      });
+    }));
   }
 
   threadId(scopeKey: string, threadId?: string): string {

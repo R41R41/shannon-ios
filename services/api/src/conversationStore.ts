@@ -15,6 +15,8 @@ export interface ConversationThread {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  summary?: string;
+  sections?: readonly string[];
 }
 
 export interface StoredConversationMessage extends ShannonConversationItem {
@@ -78,12 +80,15 @@ export class InMemoryConversationStore implements ConversationStore {
       const ordered = [...messages].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
       const last = ordered[ordered.length - 1];
       const customTitle = threadTitles.get(threadId);
+      const navigation = threadNavigation(messages);
       return Object.freeze({
         threadId,
         title: customTitle ?? DEFAULT_THREAD_TITLE,
         createdAt: ordered[0]?.observedAt ?? new Date().toISOString(),
         updatedAt: last?.observedAt ?? new Date().toISOString(),
         messageCount: messages.length,
+        ...(navigation.summary ? { summary: navigation.summary } : {}),
+        ...(navigation.sections.length ? { sections: navigation.sections } : {}),
       });
     }).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
   }
@@ -225,4 +230,40 @@ function summarizeExperience(userMessage: string, shannonReply: string): string 
   const user = userMessage.replace(/\s+/g, ' ').trim().slice(0, 220);
   const shannon = shannonReply.replace(/\s+/g, ' ').trim().slice(0, 140);
   return `ユーザー: ${user} / シャノン: ${shannon}`;
+}
+
+export function threadNavigation(
+  messages: readonly Pick<StoredConversationMessage, 'role' | 'content'>[],
+): { summary?: string; sections: readonly string[] } {
+  const assistantMessages = messages.filter(message => message.role === 'assistant');
+  const latest = assistantMessages.at(-1)?.content ?? '';
+  const summary = latest
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_>`~\[\]]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  const seen = new Set<string>();
+  const sections: string[] = [];
+  for (const message of assistantMessages) {
+    let insideCode = false;
+    for (const rawLine of message.content.replace(/\r\n/g, '\n').split('\n')) {
+      const line = rawLine.trim();
+      if (line.startsWith('```')) {
+        insideCode = !insideCode;
+        continue;
+      }
+      if (insideCode) continue;
+      const match = /^(#{1,6})\s+(.+)$/.exec(line);
+      const title = match?.[2]?.trim();
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      sections.push(title.slice(0, 100));
+    }
+  }
+  return {
+    ...(summary ? { summary } : {}),
+    sections: Object.freeze(sections.slice(-12)),
+  };
 }

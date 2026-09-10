@@ -114,6 +114,24 @@ describe.each(['memory', 'sqlite'] as const)('%s automatic thread titles', kind 
     await api.waitForBackground('owner');
   });
 
+  it('returns a bounded latest-reply summary and Markdown sections for navigation', async () => {
+    const { store, create } = fixture();
+    const threadId = await create('Mac版の相談');
+    store.appendTurn(
+      'owner',
+      threadId,
+      '今どこまでできている？',
+      '# 現在地\n作業と会話を接続しました。\n```swift\n# コード内\n```\n## 次にやること\n横断検索を追加します。',
+      '2026-09-05T00:01:00.000Z',
+    );
+
+    expect(store.listThreads('owner')[0]).toMatchObject({
+      threadId,
+      summary: '現在地 作業と会話を接続しました。 次にやること 横断検索を追加します。',
+      sections: ['現在地', '次にやること'],
+    });
+  });
+
   it('leaves a failed first turn untitled and generates on retry, including implicit threads', async () => {
     const { api, store, model, send } = fixture();
     const failed = send();
