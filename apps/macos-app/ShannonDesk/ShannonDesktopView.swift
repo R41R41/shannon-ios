@@ -13,6 +13,9 @@ public struct ShannonDesktopRootView: View {
     @SceneStorage("shannon.desktop.showsInspector") private var showsInspector = false
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
+    @State private var requestedMessageJumpID: UUID?
+    @State private var messageJumpRevision = 0
+    @State private var steeringText = ""
     @State private var showsConnection = false
     @State private var renameThread: ChatThreadDTO?
     @State private var renameText = ""
@@ -66,6 +69,9 @@ public struct ShannonDesktopRootView: View {
             if selectedTaskID == nil {
                 selectedTaskID = conversation.latestActiveAgentTask?.id
             }
+        }
+        .onChange(of: selectedTaskID) {
+            steeringText = ""
         }
         .onChange(of: conversation.selectedThreadId) {
             restoredThreadID = conversation.selectedThreadId
@@ -360,9 +366,11 @@ public struct ShannonDesktopRootView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: conversation.messages.count) {
-                    if let id = conversation.messages.last?.id {
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .bottom) }
-                    }
+                    scrollConversation(using: proxy)
+                }
+                .task(id: messageJumpRevision) {
+                    await Task.yield()
+                    scrollConversation(using: proxy)
                 }
             }
         }
@@ -473,6 +481,7 @@ public struct ShannonDesktopRootView: View {
                         title: "いま",
                         subtitle: "進行・確認待ち・一時停止",
                         tasks: workProjection.active,
+                        threads: conversation.threads,
                         selectedTaskID: selectedTaskID,
                         select: selectTask
                     )
@@ -480,6 +489,7 @@ public struct ShannonDesktopRootView: View {
                         title: "これから",
                         subtitle: "シャノンからの提案。開始はあなたが決めます",
                         tasks: workProjection.proposed,
+                        threads: conversation.threads,
                         selectedTaskID: selectedTaskID,
                         select: selectTask
                     )
@@ -487,6 +497,7 @@ public struct ShannonDesktopRootView: View {
                         title: "完了",
                         subtitle: "検証結果と変更内容を残します",
                         tasks: workProjection.finished,
+                        threads: conversation.threads,
                         selectedTaskID: selectedTaskID,
                         select: selectTask
                     )
@@ -550,12 +561,36 @@ public struct ShannonDesktopRootView: View {
                             )
                             .foregroundStyle(.secondary)
                         }
+                        DesktopInspectorSection(title: "会話") {
+                            let context = ShannonDesktopConversationContext(task: task)
+                            Label(context.title(in: conversation.threads), systemImage: "bubble.left.and.text.bubble.right")
+                                .foregroundStyle(.secondary)
+                            Button(context.sourceMessageID == nil ? "元のトークを開く" : "依頼したメッセージへ移動") {
+                                openTaskConversation(task)
+                            }
+                        }
 
-                        if task.status == .proposed {
+                        if let error = conversation.agentTaskActionError(task.id) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Text(error)
+                                    .font(.callout)
+                                Spacer(minLength: 8)
+                                Button("閉じる") { conversation.dismissAgentTaskActionError(task.id) }
+                                    .buttonStyle(.borderless)
+                            }
+                            .padding(12)
+                            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                        }
+
+                        let policy = ShannonDesktopTaskActionPolicy(status: task.status)
+                        if policy.canStart {
                             Button("この作業を始める") {
                                 Task { await conversation.startAgentTask(task.id) }
                             }
                             .buttonStyle(.borderedProminent)
+                            .disabled(conversation.isAgentTaskActionInFlight(task.id))
                         }
 
                         if let approval = task.pendingApproval {
@@ -587,6 +622,103 @@ public struct ShannonDesktopRootView: View {
                                         .foregroundStyle(item.status == .pending ? .secondary : .primary)
                                 }
                             }
+                        }
+
+                        if !task.timeline.isEmpty {
+                            DesktopInspectorSection(title: "最近の進捗") {
+                                ForEach(Array(task.timeline.suffix(6))) { event in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack(alignment: .firstTextBaseline) {
+                                            Image(systemName: event.tone.desktopSymbolName)
+                                                .foregroundStyle(event.tone.desktopColor)
+                                            Text(event.title)
+                                            Spacer(minLength: 8)
+                                            Text(event.occurredAt, style: .time)
+                                                .font(.caption)
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        if let detail = event.detail, !detail.isEmpty {
+                                            Text(detail)
+                                                .font(.callout)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.leading, 22)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !task.changes.isEmpty {
+                            DesktopInspectorSection(title: "変更") {
+                                ForEach(task.changes) { change in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(change.displayName)
+                                        Text(change.summary)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                        if change.additions > 0 || change.deletions > 0 {
+                                            Text("+\(change.additions)  −\(change.deletions)")
+                                                .font(.caption.monospacedDigit())
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !task.tests.isEmpty {
+                            DesktopInspectorSection(title: "検証") {
+                                ForEach(task.tests) { test in
+                                    Label {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(test.name)
+                                            if let detail = test.detail, !detail.isEmpty {
+                                                Text(detail)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    } icon: {
+                                        Image(systemName: test.status.desktopSymbolName)
+                                            .foregroundStyle(test.status.desktopColor)
+                                    }
+                                }
+                            }
+                        }
+
+                        if policy.canSteer {
+                            DesktopInspectorSection(title: "追加の指示") {
+                                TextField("この作業へ伝えること", text: $steeringText, axis: .vertical)
+                                    .lineLimit(2...5)
+                                Button("指示を送る") {
+                                    let instruction = steeringText
+                                    steeringText = ""
+                                    Task { await conversation.steerAgentTask(task.id, instruction: instruction) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(
+                                    steeringText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        || conversation.isAgentTaskActionInFlight(task.id)
+                                )
+                            }
+                        }
+
+                        if policy.canPause || policy.canResume || policy.canCancel {
+                            Divider()
+                            HStack {
+                                if policy.canPause || policy.canResume {
+                                    Button(policy.canResume ? "作業を再開" : "一時停止") {
+                                        Task { await conversation.toggleAgentTaskPause(task.id) }
+                                    }
+                                }
+                                Spacer()
+                                if policy.canCancel {
+                                    Button(policy.canStart ? "今回は始めない" : "作業を中止", role: .destructive) {
+                                        Task { await conversation.cancelAgentTask(task.id) }
+                                    }
+                                }
+                            }
+                            .disabled(conversation.isAgentTaskActionInFlight(task.id))
                         }
                     }
                     .padding(18)
@@ -637,6 +769,30 @@ public struct ShannonDesktopRootView: View {
     private func selectTask(_ task: ShannonAgentTask) {
         selectedTaskID = task.id
         showsInspector = true
+    }
+
+    private func openTaskConversation(_ task: ShannonAgentTask) {
+        let context = ShannonDesktopConversationContext(task: task)
+        Task {
+            await conversation.selectThread(context.threadID)
+            selectDestination(.talk)
+            requestedMessageJumpID = context.sourceMessageID
+            messageJumpRevision &+= 1
+        }
+    }
+
+    private func scrollConversation(using proxy: ScrollViewProxy) {
+        if let requestedMessageJumpID,
+           conversation.messages.contains(where: { $0.id == requestedMessageJumpID }) {
+            withAnimation(.easeOut(duration: 0.24)) {
+                proxy.scrollTo(requestedMessageJumpID, anchor: .center)
+            }
+            self.requestedMessageJumpID = nil
+        } else if requestedMessageJumpID == nil, let id = conversation.messages.last?.id {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(id, anchor: .bottom)
+            }
+        }
     }
 
     private func selectDestination(_ destination: DesktopDestination) {
@@ -1133,6 +1289,7 @@ private struct DesktopTaskSection: View {
     let title: String
     let subtitle: String
     let tasks: [ShannonAgentTask]
+    let threads: [ChatThreadDTO]
     let selectedTaskID: UUID?
     let select: (ShannonAgentTask) -> Void
 
@@ -1161,6 +1318,13 @@ private struct DesktopTaskSection: View {
                                         .font(.callout)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
+                                    Label(
+                                        ShannonDesktopConversationContext(task: task).title(in: threads),
+                                        systemImage: "bubble.left"
+                                    )
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
                                 }
                                 Spacer()
                                 if let progress = task.progressFraction {
@@ -1203,5 +1367,45 @@ private struct DesktopInspectorSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension ShannonAgentEventTone {
+    var desktopSymbolName: String {
+        switch self {
+        case .neutral: "circle"
+        case .progress: "arrow.right.circle.fill"
+        case .success: "checkmark.circle.fill"
+        case .warning: "exclamationmark.circle.fill"
+        case .error: "xmark.octagon.fill"
+        }
+    }
+
+    var desktopColor: Color {
+        switch self {
+        case .neutral: .secondary
+        case .progress: .accentColor
+        case .success: .green
+        case .warning: .orange
+        case .error: .red
+        }
+    }
+}
+
+private extension ShannonAgentTestStatus {
+    var desktopSymbolName: String {
+        switch self {
+        case .pending: "clock"
+        case .passed: "checkmark.circle.fill"
+        case .failed: "xmark.circle.fill"
+        }
+    }
+
+    var desktopColor: Color {
+        switch self {
+        case .pending: .secondary
+        case .passed: .green
+        case .failed: .red
+        }
     }
 }

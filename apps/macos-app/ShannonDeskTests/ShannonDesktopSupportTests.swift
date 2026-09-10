@@ -112,13 +112,57 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
     }
 
+    func testTaskConversationContextPreservesSourceAndResolvesThreadTitle() {
+        let sourceMessageID = UUID()
+        let task = makeTask(
+            status: .running,
+            conversationThreadID: "thread-work",
+            sourceMessageID: sourceMessageID
+        )
+        let context = ShannonDesktopConversationContext(task: task)
+
+        XCTAssertEqual(context.threadID, "thread-work")
+        XCTAssertEqual(context.sourceMessageID, sourceMessageID)
+        XCTAssertEqual(
+            context.title(in: [makeThread(id: "thread-work", title: "Mac版を仕上げる")]),
+            "Mac版を仕上げる"
+        )
+        XCTAssertEqual(context.title(in: []), "この作業を始めたトーク")
+    }
+
+    func testTaskActionPolicyFollowsDurableStatus() {
+        let proposed = ShannonDesktopTaskActionPolicy(status: .proposed)
+        XCTAssertTrue(proposed.canStart)
+        XCTAssertFalse(proposed.canSteer)
+        XCTAssertTrue(proposed.canCancel)
+
+        let running = ShannonDesktopTaskActionPolicy(status: .running)
+        XCTAssertTrue(running.canPause)
+        XCTAssertTrue(running.canSteer)
+        XCTAssertTrue(running.canCancel)
+
+        let paused = ShannonDesktopTaskActionPolicy(status: .paused)
+        XCTAssertTrue(paused.canResume)
+        XCTAssertTrue(paused.canSteer)
+
+        let completed = ShannonDesktopTaskActionPolicy(status: .completed)
+        XCTAssertFalse(completed.canStart)
+        XCTAssertFalse(completed.canPause)
+        XCTAssertFalse(completed.canResume)
+        XCTAssertFalse(completed.canSteer)
+        XCTAssertFalse(completed.canCancel)
+    }
+
     private func makeTask(
         status: ShannonAgentTaskStatus,
         updatedAt: Date = Date(),
-        plan: [ShannonAgentPlanItem] = []
+        plan: [ShannonAgentPlanItem] = [],
+        conversationThreadID: String = "thread-test",
+        sourceMessageID: UUID? = nil
     ) -> ShannonAgentTask {
         ShannonAgentTask(
-            conversationThreadID: "thread-test",
+            conversationThreadID: conversationThreadID,
+            sourceMessageID: sourceMessageID,
             title: "Mac版を仕上げる",
             goal: "Macで会話と作業を継続できる",
             status: status,

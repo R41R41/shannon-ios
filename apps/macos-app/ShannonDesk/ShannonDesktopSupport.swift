@@ -75,6 +75,36 @@ struct ShannonDesktopWorkProjection {
     }
 }
 
+struct ShannonDesktopConversationContext: Equatable {
+    let threadID: String
+    let sourceMessageID: UUID?
+
+    init(task: ShannonAgentTask) {
+        threadID = task.conversationThreadID
+        sourceMessageID = task.sourceMessageID
+    }
+
+    func title(in threads: [ChatThreadDTO]) -> String {
+        threads.first(where: { $0.threadId == threadID })?.title ?? "この作業を始めたトーク"
+    }
+}
+
+struct ShannonDesktopTaskActionPolicy: Equatable {
+    let canStart: Bool
+    let canPause: Bool
+    let canResume: Bool
+    let canSteer: Bool
+    let canCancel: Bool
+
+    init(status: ShannonAgentTaskStatus) {
+        canStart = status == .proposed
+        canPause = status == .running
+        canResume = status == .paused
+        canSteer = [.queued, .starting, .running, .waitingApproval, .paused].contains(status)
+        canCancel = !status.isTerminal
+    }
+}
+
 enum DesktopExpressionLabel {
     static func label(for expression: ShannonExpressionDTO) -> String {
         switch expression {
