@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon 0.1.0 (43) — TestFlight配信手順</title>
+  <style>
+    :root { color-scheme:light dark; --accent:#087fc2; --paper:#f5f7f8; --card:#fff; --ink:#16242c; --muted:#5d6e77; --line:#d9e1e5; --ok:#15764f; --warn:#9a5b00; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#0d1114; --card:#171c20; --ink:#edf3f6; --muted:#a8b5bc; --line:#303940; --ok:#72d5a8; --warn:#ffc267; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.7 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; }
+    main { width:min(880px,calc(100% - 32px)); margin:auto; padding:48px 0 80px; }
+    h1 { margin:.2em 0; font-size:clamp(30px,5vw,48px); line-height:1.18; letter-spacing:-.03em; }
+    h2 { margin:0 0 10px; font-size:21px; }
+    p { margin:8px 0; }
+    .eyebrow { color:var(--accent); font-weight:750; letter-spacing:.07em; }
+    .lead { max-width:740px; color:var(--muted); font-size:18px; }
+    .identity { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:26px 0; }
+    .pill,.card { border:1px solid var(--line); background:var(--card); border-radius:18px; padding:18px; }
+    .pill small { display:block; color:var(--muted); } .pill strong { font-size:18px; }
+    .steps { display:grid; gap:14px; }
+    ol { margin:8px 0 0; padding-left:1.5em; } li { margin:.35em 0; }
+    code { padding:.12em .4em; border-radius:6px; background:color-mix(in srgb,var(--accent) 12%,transparent); }
+    .ok { color:var(--ok); font-weight:700; } .warn { color:var(--warn); font-weight:650; }
+    @media (max-width:700px) { .identity { grid-template-columns:1fr 1fr; } main { padding-top:28px; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · USER-OPERATED RELEASE</div>
+  <h1>0.1.0 (43) を<br>TestFlightへ配信する</h1>
+  <p class="lead">Build 42の安定性を土台に、Voyager Phase 2の意味安全修正と重複カード抑止を含む安定候補です。XcodeとApp Store Connectの外部操作だけを、あなたが行います。</p>
+
+  <div class="identity">
+    <div class="pill"><small>App</small><strong>Shannon</strong></div>
+    <div class="pill"><small>Version</small><strong>0.1.0</strong></div>
+    <div class="pill"><small>Build</small><strong>43</strong></div>
+    <div class="pill"><small>Group</small><strong>Shannon Internal</strong></div>
+  </div>
+
+  <div class="steps">
+    <section class="card">
+      <h2>1. XcodeでArchive</h2>
+      <ol>
+        <li><code>apps/ios-app/ShannonApp.xcodeproj</code> をXcodeで開く。</li>
+        <li>Schemeが <strong>ShannonApp</strong>、実行先が <strong>Any iOS Device (arm64)</strong> であることを確認する。</li>
+        <li>Target → GeneralでVersion <strong>0.1.0</strong>、Build <strong>43</strong> を確認する。</li>
+        <li>Signing &amp; Capabilitiesは既存のAutomatic SigningとTeamを維持する。Bundle IDは変更しない。</li>
+        <li>メニューの Product → Archive を選ぶ。</li>
+      </ol>
+      <p class="ok">成功：Organizerに Shannon 0.1.0 (43) のArchiveが1件表示されます。</p>
+    </section>
+
+    <section class="card">
+      <h2>2. App Store ConnectへUpload</h2>
+      <ol>
+        <li>Organizerで今作ったArchiveを選び、Distribute Appを押す。</li>
+        <li><strong>App Store Connect → Upload</strong> を選び、既定の自動管理設定のまま進む。</li>
+        <li>検証結果に問題がなければUploadを実行する。</li>
+      </ol>
+      <p class="ok">成功：Upload完了が表示され、App Store ConnectのTestFlightでBuild 43が処理中になります。</p>
+    </section>
+
+    <section class="card">
+      <h2>3. TestFlight内部配布</h2>
+      <ol>
+        <li>App Store Connect → Shannon → TestFlight → iOS を開く。</li>
+        <li>Build 43が「テスト準備完了」になるまで待つ。</li>
+        <li>必要なら輸出コンプライアンスで、アプリが非免除暗号を使用しない旨を確認する。</li>
+        <li>Build 43を内部グループ <strong>Shannon Internal</strong> に追加する。</li>
+      </ol>
+      <p class="ok">成功：Shannon Internalのテスターに0.1.0 (43)が表示されます。</p>
+    </section>
+
+    <section class="card">
+      <h2>4. iPhoneで更新・安定確認</h2>
+      <ol>
+        <li>アプリを削除せず、TestFlightからBuild 43へ更新する。</li>
+        <li>既存の接続、トーク履歴、設定が残っていることを確認する。</li>
+        <li>既存トークを開き、入力欄をタップして短い通常会話を1往復する。</li>
+        <li>外観を「端末に合わせる／ライト／ダーク」で切り替える。</li>
+        <li>Voyager更新依頼では「作業を始める」カードが重複せず、<code>整理して</code> 後にVoyager Task案だけが出ることを確認する。</li>
+        <li>音声ボタンから短く1往復し、字幕・音声・履歴保存を確認する。</li>
+      </ol>
+      <p class="ok">成功：クラッシュせず、既存データを維持し、通常会話・外観・整理・音声の主要導線が通ります。</p>
+    </section>
+
+    <section class="card">
+      <h2>安全な復旧</h2>
+      <p class="warn">Upload後に失敗したBuild番号は再利用しません。再Archiveが必要なら、こちらへ結果を伝えてください。次のBuild番号へ進めます。</p>
+      <ul>
+        <li>署名エラー：Bundle IDやTeamを変更せず、Xcodeのエラー全文を共有する。</li>
+        <li>処理が長い：同じArchiveを再Uploadせず、App Store Connectの処理状態を待つ。</li>
+        <li>実機不具合：アプリを削除しない。操作、表示された文言、再現手順だけを共有する。</li>
+        <li>Build 43が不合格でも、Build 42はTestFlight上に残り、ロールバックできます。</li>
+      </ul>
+    </section>
+  </div>
+</main></body>
+</html>
