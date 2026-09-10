@@ -200,6 +200,27 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(entries.map(\.kind), [.request, .heading, .heading])
     }
 
+    func testConversationSearchTargetPrefersSectionThenFallsBackToMessageBody() {
+        let requestID = UUID()
+        let firstAnswerID = UUID()
+        let latestAnswerID = UUID()
+        let messages = [
+            ConversationMessage(id: requestID, role: .user, text: "配色を確認したい"),
+            ConversationMessage(id: firstAnswerID, role: .shannon, text: "## 検証結果\n配色は正常です。"),
+            ConversationMessage(id: latestAnswerID, role: .shannon, text: "次は横断検索を仕上げます。"),
+        ]
+
+        XCTAssertEqual(
+            ShannonDesktopConversationOutline.searchTargetMessageID(in: messages, query: "検証結果"),
+            firstAnswerID
+        )
+        XCTAssertEqual(
+            ShannonDesktopConversationOutline.searchTargetMessageID(in: messages, query: "横断検索"),
+            latestAnswerID
+        )
+        XCTAssertNil(ShannonDesktopConversationOutline.searchTargetMessageID(in: messages, query: ""))
+    }
+
     private func makeTask(
         status: ShannonAgentTaskStatus,
         updatedAt: Date = Date(),

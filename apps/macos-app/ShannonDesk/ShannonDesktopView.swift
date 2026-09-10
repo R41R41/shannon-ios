@@ -209,10 +209,7 @@ public struct ShannonDesktopRootView: View {
                 Section("トーク") {
                     ForEach(filteredThreads, id: \.threadId) { thread in
                         Button {
-                            Task {
-                                await conversation.selectThread(thread.threadId)
-                                selectDestination(.talk)
-                            }
+                            Task { await openSidebarThread(thread) }
                         } label: {
                             HStack(alignment: .top, spacing: 8) {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -808,6 +805,18 @@ public struct ShannonDesktopRootView: View {
             requestedMessageJumpID = context.sourceMessageID
             messageJumpRevision &+= 1
         }
+    }
+
+    private func openSidebarThread(_ thread: ChatThreadDTO) async {
+        let query = searchText
+        await conversation.selectThread(thread.threadId)
+        selectDestination(.talk)
+        guard let target = ShannonDesktopConversationOutline.searchTargetMessageID(
+            in: conversation.messages,
+            query: query
+        ) else { return }
+        requestedMessageJumpID = target
+        messageJumpRevision &+= 1
     }
 
     private func scrollConversation(using proxy: ScrollViewProxy) {

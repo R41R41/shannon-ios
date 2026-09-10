@@ -163,6 +163,15 @@ enum ShannonDesktopConversationOutline {
         return result
     }
 
+    static func searchTargetMessageID(in messages: [ConversationMessage], query: String) -> UUID? {
+        let query = normalized(query)
+        guard !query.isEmpty else { return nil }
+        if let section = entries(from: messages).first(where: { normalized($0.title).contains(query) }) {
+            return section.messageID
+        }
+        return messages.reversed().first { normalized($0.text).contains(query) }?.id
+    }
+
     private static func excerpt(from text: String) -> String? {
         let compact = text
             .split(whereSeparator: \Character.isWhitespace)
@@ -172,6 +181,16 @@ enum ShannonDesktopConversationOutline {
         let limit = 68
         guard compact.count > limit else { return compact }
         return String(compact.prefix(limit)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+    }
+
+
+    private static func normalized(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                locale: .current
+            )
     }
 }
 
