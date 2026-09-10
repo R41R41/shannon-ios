@@ -1028,7 +1028,9 @@ public final class ShannonConversationModel {
                     title: editedDuringSend ? (existing?.title ?? thread.title) : thread.title,
                     createdAt: thread.createdAt,
                     updatedAt: thread.updatedAt,
-                    messageCount: thread.messageCount
+                    messageCount: thread.messageCount,
+                    summary: thread.summary ?? existing?.summary,
+                    sections: thread.sections ?? existing?.sections
                 )
                 threads.removeAll { $0.threadId == updated.threadId }
                 threads.insert(updated, at: 0)

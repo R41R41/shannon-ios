@@ -80,6 +80,8 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
         XCTAssertEqual(model.selectedThread?.title, "京都の庭園巡り")
         XCTAssertEqual(model.selectedThread?.messageCount, 2)
+        XCTAssertEqual(model.selectedThread?.summary, "京都旅行を計画中。庭園を巡る案が出ている。")
+        XCTAssertEqual(model.selectedThread?.sections, ["候補", "次の確認"])
         let listLoads = await client.listLoads
         XCTAssertEqual(listLoads, 1, "The title must not wait for another thread-list request")
         XCTAssertFalse(model.isSending)
@@ -446,10 +448,16 @@ private actor TitleClient: ShannonAPIClientProtocol {
     private var listWaiter: CheckedContinuation<Void, Never>?
     private var shouldDelayList = false
 
-    private func thread(title: String = "新しいトーク", messageCount: Int = 0) -> ChatThreadDTO {
+    private func thread(
+        title: String = "新しいトーク",
+        messageCount: Int = 0,
+        summary: String? = nil,
+        sections: [String]? = nil
+    ) -> ChatThreadDTO {
         ChatThreadDTO(
             threadId: "test-thread", title: title, createdAt: "2026-09-05T00:00:00Z",
-            updatedAt: "2026-09-05T00:00:01Z", messageCount: messageCount
+            updatedAt: "2026-09-05T00:00:01Z", messageCount: messageCount,
+            summary: summary, sections: sections
         )
     }
 
@@ -468,7 +476,13 @@ private actor TitleClient: ShannonAPIClientProtocol {
 
     func completeSend() {
         pendingSend?.resume(returning: TestFixtures.chatResponse(
-            reply: "庭園を巡るのはどうかな。", thread: thread(title: "京都の庭園巡り", messageCount: 2)
+            reply: "庭園を巡るのはどうかな。",
+            thread: thread(
+                title: "京都の庭園巡り",
+                messageCount: 2,
+                summary: "京都旅行を計画中。庭園を巡る案が出ている。",
+                sections: ["候補", "次の確認"]
+            )
         ))
         pendingSend = nil
     }

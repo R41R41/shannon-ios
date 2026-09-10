@@ -494,10 +494,13 @@ public struct ShannonDesktopRootView: View {
                 Image(systemName: "list.bullet.indent")
             }
             .buttonStyle(.borderless)
-            .disabled(conversationOutline.isEmpty)
+            .disabled(conversationOutline.isEmpty && conversation.selectedThread?.summary == nil)
             .help("会話の目次")
             .popover(isPresented: $showsConversationOutline, arrowEdge: .bottom) {
-                DesktopConversationOutlineView(entries: conversationOutline) { entry in
+                DesktopConversationOutlineView(
+                    summary: conversation.selectedThread?.summary,
+                    entries: conversationOutline
+                ) { entry in
                     showsConversationOutline = false
                     requestedMessageJumpID = entry.messageID
                     messageJumpRevision &+= 1
@@ -1019,8 +1022,15 @@ private struct DesktopMessageView: View {
 }
 
 private struct DesktopConversationOutlineView: View {
+    let summary: String?
     let entries: [ShannonDesktopConversationOutlineEntry]
     let select: (ShannonDesktopConversationOutlineEntry) -> Void
+
+    private var visibleSummary: String? {
+        guard let summary else { return nil }
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1034,6 +1044,23 @@ private struct DesktopConversationOutlineView: View {
             .padding(14)
 
             Divider()
+
+            if let summary = visibleSummary {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label("現在地", systemImage: "location.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                    Text(summary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+                .padding(8)
+
+                Divider()
+            }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -1062,7 +1089,10 @@ private struct DesktopConversationOutlineView: View {
                 .padding(6)
             }
         }
-        .frame(width: 340, height: min(CGFloat(entries.count) * 45 + 84, 500))
+        .frame(
+            width: 340,
+            height: min(CGFloat(entries.count) * 45 + (visibleSummary == nil ? 84 : 170), 500)
+        )
     }
 }
 
