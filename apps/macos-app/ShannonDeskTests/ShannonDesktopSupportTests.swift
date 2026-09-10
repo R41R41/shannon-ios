@@ -54,6 +54,32 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         )
     }
 
+    func testThreadProjectionSeparatesUnreadInitiativesWithoutChangingSearchOrder() {
+        let threads = [
+            makeThread(id: "recent", title: "最近の会話"),
+            makeThread(id: "initiative", title: "シャノンからの提案", summary: "新しい発見があります"),
+            makeThread(id: "older", title: "以前の会話"),
+        ]
+
+        let normal = ShannonDesktopThreadProjection(
+            threads: threads,
+            initiativeThreadIDs: ["initiative"],
+            query: ""
+        )
+        XCTAssertEqual(normal.initiative.map(\.threadId), ["initiative"])
+        XCTAssertEqual(normal.conversations.map(\.threadId), ["recent", "older"])
+        XCTAssertEqual(normal.allVisible.map(\.threadId), ["initiative", "recent", "older"])
+
+        let search = ShannonDesktopThreadProjection(
+            threads: threads,
+            initiativeThreadIDs: ["initiative"],
+            query: "新しい"
+        )
+        XCTAssertTrue(search.isSearching)
+        XCTAssertTrue(search.initiative.isEmpty)
+        XCTAssertEqual(search.conversations.map(\.threadId), ["initiative"])
+    }
+
     func testAttachmentLoaderReadsSupportedUTF8TextAndKeepsItsMetadata() throws {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("shannon-attachment-\(UUID().uuidString)", isDirectory: true)

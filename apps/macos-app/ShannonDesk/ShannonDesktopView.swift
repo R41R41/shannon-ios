@@ -66,6 +66,14 @@ public struct ShannonDesktopRootView: View {
                 await conversation.refreshInitiatives()
             }
         }
+        .task(id: connection.isConnected) {
+            guard connection.isConnected, !conversation.isDesignPreview else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await conversation.refreshInitiatives()
+            }
+        }
         .onChange(of: conversation.latestActiveAgentTask?.id) {
             if selectedTaskID == nil {
                 selectedTaskID = conversation.latestActiveAgentTask?.id
@@ -84,8 +92,12 @@ public struct ShannonDesktopRootView: View {
         .frame(minWidth: 860, minHeight: 600)
     }
 
-    private var filteredThreads: [ChatThreadDTO] {
-        ShannonDesktopThreadSearch.matches(conversation.threads, query: searchText)
+    private var threadProjection: ShannonDesktopThreadProjection {
+        ShannonDesktopThreadProjection(
+            threads: conversation.threads,
+            initiativeThreadIDs: conversation.initiativeThreadIDs,
+            query: searchText
+        )
     }
 
     private var destination: DesktopDestination {
@@ -206,45 +218,22 @@ public struct ShannonDesktopRootView: View {
                     ) { selectDestination(.memory) }
                 }
 
-                Section("トーク") {
-                    ForEach(filteredThreads, id: \.threadId) { thread in
-                        Button {
-                            Task { await openSidebarThread(thread) }
-                        } label: {
-                            HStack(alignment: .top, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(thread.title)
-                                        .lineLimit(1)
-                                    if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
-                                        Text(context)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(2)
-                                    }
-                                }
-                                Spacer(minLength: 4)
-                                if thread.threadId == conversation.selectedThreadId {
-                                    Circle()
-                                        .fill(Color.accentColor)
-                                        .frame(width: 5, height: 5)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                            .contentShape(Rectangle())
+                if !threadProjection.initiative.isEmpty {
+                    Section {
+                        ForEach(threadProjection.initiative, id: \.threadId) { thread in
+                            threadRow(thread, showsInitiativeSignal: true)
                         }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("タイトルを変更") {
-                                renameThread = thread
-                                renameText = thread.title
-                            }
-                            Button("アーカイブ", role: .destructive) {
-                                Task { await conversation.archiveThread(thread.threadId) }
-                            }
-                            .disabled(conversation.threads.count <= 1)
-                        }
+                    } header: {
+                        Label("シャノンから", systemImage: "sparkles")
+                            .foregroundStyle(Color.accentColor)
                     }
-                    if filteredThreads.isEmpty {
+                }
+
+                Section(threadProjection.isSearching ? "検索結果" : "トーク") {
+                    ForEach(threadProjection.conversations, id: \.threadId) { thread in
+                        threadRow(thread, showsInitiativeSignal: false)
+                    }
+                    if threadProjection.allVisible.isEmpty {
                         Text("一致するトークはありません")
                             .font(.callout)
                             .foregroundStyle(.secondary)
@@ -282,6 +271,49 @@ public struct ShannonDesktopRootView: View {
             .padding(8)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func threadRow(_ thread: ChatThreadDTO, showsInitiativeSignal: Bool) -> some View {
+        Button {
+            Task { await openSidebarThread(thread) }
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(thread.title)
+                        .lineLimit(1)
+                    if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
+                        Text(context)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 4)
+                if showsInitiativeSignal {
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityLabel("シャノンからの新しい話")
+                } else if thread.threadId == conversation.selectedThreadId {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 5, height: 5)
+                        .accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("タイトルを変更") {
+                renameThread = thread
+                renameText = thread.title
+            }
+            Button("アーカイブ", role: .destructive) {
+                Task { await conversation.archiveThread(thread.threadId) }
+            }
+            .disabled(conversation.threads.count <= 1)
+        }
     }
 
     @ViewBuilder

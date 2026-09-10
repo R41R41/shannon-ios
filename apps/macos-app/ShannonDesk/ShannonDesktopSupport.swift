@@ -67,6 +67,29 @@ enum ShannonDesktopThreadSearch {
     }
 }
 
+struct ShannonDesktopThreadProjection {
+    let initiative: [ChatThreadDTO]
+    let conversations: [ChatThreadDTO]
+    let isSearching: Bool
+
+    init(threads: [ChatThreadDTO], initiativeThreadIDs: Set<String>, query: String) {
+        let isSearching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let visible = ShannonDesktopThreadSearch.matches(threads, query: query)
+        self.isSearching = isSearching
+        if isSearching {
+            initiative = []
+            conversations = visible
+        } else {
+            initiative = visible.filter { initiativeThreadIDs.contains($0.threadId) }
+            conversations = visible.filter { !initiativeThreadIDs.contains($0.threadId) }
+        }
+    }
+
+    var allVisible: [ChatThreadDTO] {
+        initiative + conversations
+    }
+}
+
 struct ShannonDesktopWorkProjection {
     let active: [ShannonAgentTask]
     let proposed: [ShannonAgentTask]
