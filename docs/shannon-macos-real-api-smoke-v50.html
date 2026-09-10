@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon Desk 実API確認ガイド v50</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f5f5f2;--panel:#fff;--text:#171717;--muted:#686868;--line:#deded8;--accent:#1677a9;--ok:#247a4d;--warn:#b86f10}
+    @media(prefers-color-scheme:dark){:root{--bg:#101010;--panel:#1e1e1e;--text:#f4f4f4;--muted:#aaa;--line:#393939;--accent:#72c8ef;--ok:#67d69b;--warn:#efb257}}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.75 -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif}
+    main{max-width:900px;margin:auto;padding:44px 22px 88px}h1{font-size:clamp(34px,6vw,50px);line-height:1.1;margin:.2em 0}h2{margin-top:42px}.lead{font-size:19px;max-width:760px}.muted{color:var(--muted)}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0}.ok{border-left:4px solid var(--ok)}.warn{border-left:4px solid var(--warn)}
+    code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}code{color:var(--accent);overflow-wrap:anywhere}kbd{border:1px solid var(--line);border-radius:6px;padding:2px 6px}li{margin:.55em 0}
+  </style>
+</head>
+<body><main>
+  <p class="muted">Shannon Desk · 実API pairing smoke · 2026-09-11</p>
+  <h1>Macでも、同じ会話と作業の続きを安全に開く</h1>
+  <p class="lead">目的は、Shannon Deskを端末固有の資格で実Shannonへ接続し、iPhoneと共通の会話・作業が読めること、Macを閉じても同じ現在地へ戻れることを確認することです。</p>
+
+  <div class="card warn">
+    <strong>このガイドは、開発側から実接続確認を案内された時だけ使います。</strong>
+    <p>接続URLは資格情報です。チャット、スクリーンショット、Git、メモへ貼り付けません。現在の安定版TestFlight Build 43は削除しません。</p>
+  </div>
+
+  <h2>1. Macアプリを起動</h2>
+  <ol>
+    <li>Xcodeで <code>/Users/arairyo/Documents/Codex/2026-08-31/shannon-macos-m3/apps/macos-app/ShannonDesk.xcodeproj</code> を開きます。</li>
+    <li>Schemeを <strong>ShannonDesk</strong>、実行先を <strong>My Mac</strong> にしてRunします。Simulatorは使いません。</li>
+    <li>左下が「未接続」で、アプリが操作可能なことを確認します。</li>
+  </ol>
+
+  <h2>2. iPhoneから一度だけ接続</h2>
+  <ol>
+    <li>iPhoneのShannonで、設定 → 接続端末管理 → 新しい端末を接続、の順に開きます。</li>
+    <li>端末名を「このMac」にして接続リンクを1件だけ発行します。</li>
+    <li>リンクをAirDropなどでMacへ渡し、Mac上で直接開きます。URL本文は共有・報告しません。</li>
+    <li>Shannon Desk左下の接続行を開き、「接続を確認」を押します。</li>
+  </ol>
+
+  <h2>3. 読み取り中心の確認</h2>
+  <ol>
+    <li>「認証された通信」が「確認済み」になり、既存トークのタイトルが表示されることを確認します。</li>
+    <li>既存トークを1件開き、履歴が読めること、<kbd>⌘F</kbd>でタイトル検索できることを確認します。</li>
+    <li>「作業全体」を開き、作業を1件選んで現在地インスペクタを開きます。元トークへの移動ができることを確認します。</li>
+    <li>その状態でShannon Deskを終了・再起動し、同じ画面・トーク・選択作業・インスペクタ開閉が復元されることを確認します。</li>
+  </ol>
+
+  <h2>4. 書き込み確認（案内があった場合だけ）</h2>
+  <ol>
+    <li>新しいトークを作り、「Mac接続確認。短く返事をしてください」と1回だけ送ります。</li>
+    <li>返答後、iPhoneにも同じトークと返答が見えることを確認します。</li>
+    <li>不要ならトークのメニューからアーカイブします。履歴やアプリ自体は削除しません。</li>
+  </ol>
+
+  <h2>成功の見え方</h2>
+  <div class="card ok"><ul>
+    <li>端末名「このMac」で認証済み通信になる</li>
+    <li>既存会話と作業が読み込まれ、元会話へ往復できる</li>
+    <li>終了後も選んでいた現在地へ復元される</li>
+    <li>書き込み確認を行った場合、MacとiPhoneに同じトークが見える</li>
+  </ul></div>
+
+  <h2>今回の互換性境界</h2>
+  <p>AI rolling summaryの「現在地」はMac側に実装済みですが、API変更を本番へ統合・配備するまでは既存トークに表示されません。表示されなくても、この段階の接続失敗とは判定しません。既存APIが返す会話・作業・見出しで確認を続けます。</p>
+
+  <h2>失敗した時の安全な戻し方</h2>
+  <div class="card"><ul>
+    <li><strong>通信失敗:</strong> Macのネット接続を確認し、「接続を確認」をもう一度だけ押します。</li>
+    <li><strong>401／無効:</strong> 古いリンクを再利用せず、iPhoneで新しい接続リンクを1件だけ発行します。</li>
+    <li><strong>履歴が空・内容が違う:</strong> 新規送信をせず終了し、iPhone側の履歴は削除しません。</li>
+    <li><strong>Macだけ切り離す:</strong> 左下の接続詳細から「このMacの接続を解除」を選びます。iPhoneアプリとサーバー上の会話は残ります。</li>
+    <li><strong>クラッシュ:</strong> 再送や再接続を繰り返さず、直前に押した項目だけを報告します。資格情報や実会話本文は報告へ含めません。</li>
+  </ul></div>
+</main></body>
+</html>
