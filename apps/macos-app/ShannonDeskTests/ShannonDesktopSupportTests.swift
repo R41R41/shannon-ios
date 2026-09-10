@@ -140,6 +140,27 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertEqual(projection.finished.map(\.id), [completed.id])
     }
 
+    func testTaskRestorationKeepsKnownSelectionAndFallsBackByWorkPriority() {
+        let active = makeTask(status: .running)
+        let proposed = makeTask(status: .proposed)
+        let completed = makeTask(status: .completed)
+        let tasks = [completed, proposed, active]
+
+        XCTAssertEqual(
+            ShannonDesktopTaskRestoration.resolve(rawValue: completed.id.uuidString, tasks: tasks),
+            completed.id
+        )
+        XCTAssertEqual(
+            ShannonDesktopTaskRestoration.resolve(rawValue: UUID().uuidString, tasks: tasks),
+            active.id
+        )
+        XCTAssertEqual(
+            ShannonDesktopTaskRestoration.resolve(rawValue: "not-a-uuid", tasks: [completed, proposed]),
+            proposed.id
+        )
+        XCTAssertNil(ShannonDesktopTaskRestoration.resolve(rawValue: nil, tasks: []))
+    }
+
     func testNextActionPrefersApprovalThenPendingPlanItem() {
         let approval = makeTask(status: .waitingApproval)
         let running = makeTask(

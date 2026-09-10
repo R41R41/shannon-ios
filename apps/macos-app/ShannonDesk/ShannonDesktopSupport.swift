@@ -111,6 +111,21 @@ struct ShannonDesktopWorkProjection {
     }
 }
 
+enum ShannonDesktopTaskRestoration {
+    static func resolve(rawValue: String?, tasks: [ShannonAgentTask]) -> UUID? {
+        if let rawValue,
+           let restoredID = UUID(uuidString: rawValue),
+           tasks.contains(where: { $0.id == restoredID }) {
+            return restoredID
+        }
+
+        let projection = ShannonDesktopWorkProjection(tasks: tasks)
+        return projection.active.first?.id
+            ?? projection.proposed.first?.id
+            ?? projection.finished.first?.id
+    }
+}
+
 struct ShannonDesktopConversationContext: Equatable {
     let threadID: String
     let sourceMessageID: UUID?

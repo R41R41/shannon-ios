@@ -10,6 +10,7 @@ public struct ShannonDesktopRootView: View {
 
     @SceneStorage("shannon.desktop.destination") private var destinationRawValue = DesktopDestination.talk.rawValue
     @SceneStorage("shannon.desktop.selectedThread") private var restoredThreadID: String?
+    @SceneStorage("shannon.desktop.selectedTask") private var restoredTaskID: String?
     @SceneStorage("shannon.desktop.showsInspector") private var showsInspector = false
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
@@ -65,6 +66,7 @@ public struct ShannonDesktopRootView: View {
                 await conversation.synchronizeAgentTasks()
                 await conversation.refreshInitiatives()
             }
+            restoreSelectedTaskIfAvailable()
         }
         .task(id: connection.isConnected) {
             guard connection.isConnected, !conversation.isDesignPreview else { return }
@@ -74,13 +76,14 @@ public struct ShannonDesktopRootView: View {
                 await conversation.refreshInitiatives()
             }
         }
-        .onChange(of: conversation.latestActiveAgentTask?.id) {
-            if selectedTaskID == nil {
-                selectedTaskID = conversation.latestActiveAgentTask?.id
-            }
+        .onChange(of: conversation.agentTasks.map(\.id)) {
+            restoreSelectedTaskIfAvailable()
         }
         .onChange(of: selectedTaskID) {
             steeringText = ""
+            if let selectedTaskID {
+                restoredTaskID = selectedTaskID.uuidString
+            }
         }
         .onChange(of: conversation.selectedThreadId) {
             restoredThreadID = conversation.selectedThreadId
@@ -893,6 +896,16 @@ public struct ShannonDesktopRootView: View {
               restoredThreadID != conversation.selectedThreadId,
               conversation.threads.contains(where: { $0.threadId == restoredThreadID }) else { return }
         await conversation.selectThread(restoredThreadID)
+    }
+
+    private func restoreSelectedTaskIfAvailable() {
+        let resolvedID = ShannonDesktopTaskRestoration.resolve(
+            rawValue: restoredTaskID,
+            tasks: conversation.agentTasks
+        )
+        if selectedTaskID != resolvedID {
+            selectedTaskID = resolvedID
+        }
     }
 
     private func saveThreadRename() {
