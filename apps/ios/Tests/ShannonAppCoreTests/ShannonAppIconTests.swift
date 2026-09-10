@@ -19,7 +19,7 @@ final class ShannonAppIconTests: XCTestCase {
     func testPreviewAssetNamesAreUnique() {
         let names = ShannonAppIconChoice.allCases.map(\.previewAssetName)
         XCTAssertEqual(Set(names).count, names.count)
-        XCTAssertEqual(ShannonAppIconChoice.primary.previewAssetName, ShannonAppIconAssets.primaryLightPreviewAssetName)
+        XCTAssertEqual(ShannonAppIconChoice.light.previewAssetName, ShannonAppIconAssets.primaryLightPreviewAssetName)
     }
 
     func testEveryExpressionMapsToAnEmotionIcon() {
@@ -33,15 +33,23 @@ final class ShannonAppIconTests: XCTestCase {
         )
     }
 
-    func testModeOffersOnlyAutomaticAndManualSelection() {
-        XCTAssertEqual(ShannonAppIconMode.allCases, [.automatic, .manual])
+    func testModeOffersAutomaticAppearanceLinkedAndManualSelection() {
+        XCTAssertEqual(ShannonAppIconMode.allCases, [.automatic, .appearance, .manual])
     }
 
-    func testManualChoicesContainDefaultThenOnlyShannonExpressions() {
-        XCTAssertEqual(ShannonAppIconChoice.manualChoices.first, .primary)
-        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.dropFirst()), ShannonAppIconChoice.emotionChoices)
-        XCTAssertEqual(ShannonAppIconChoice.primary.alternateIconName, nil)
+    func testManualChoicesContainLightDarkThenShannonExpressions() {
+        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.prefix(2)), [.light, .dark])
+        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.dropFirst(2)), ShannonAppIconChoice.emotionChoices)
+        XCTAssertEqual(ShannonAppIconChoice.light.alternateIconName, "ShannonIconLight")
+        XCTAssertEqual(ShannonAppIconChoice.dark.alternateIconName, "ShannonIconDark")
         XCTAssertFalse(ShannonAppIconChoice.allCases.contains { $0.rawValue.contains("Compare") })
+    }
+
+    func testAppearanceMapsToDedicatedAlternateIcons() {
+        XCTAssertEqual(ShannonAppIconAppearance.light.choice, .light)
+        XCTAssertEqual(ShannonAppIconAppearance.dark.choice, .dark)
+        XCTAssertEqual(ShannonAppIconChoice.light.previewAssetName, ShannonAppIconAssets.primaryLightPreviewAssetName)
+        XCTAssertEqual(ShannonAppIconChoice.dark.previewAssetName, ShannonAppIconAssets.primaryDarkPreviewAssetName)
     }
 
     func testPrimaryExpressionMappingsRemainStable() {

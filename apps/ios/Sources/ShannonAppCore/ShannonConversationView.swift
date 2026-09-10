@@ -190,6 +190,11 @@ public struct ShannonConversationView: View {
         .onChange(of: model.currentExpression) {
             Task { await appIconModel.updateAutomatically(for: model.currentExpression) }
         }
+        .onChange(of: activeColorScheme) {
+            Task {
+                await appIconModel.updateForAppearance(appIconAppearance(for: activeColorScheme))
+            }
+        }
         .task(id: appIconModel.nextRefreshAt) {
             guard let refreshAt = appIconModel.nextRefreshAt else { return }
             let delay = max(0, refreshAt.timeIntervalSinceNow)
@@ -202,7 +207,10 @@ public struct ShannonConversationView: View {
             connectionModel?.refreshFromKeychain()
             await model.loadConversationIfNeeded()
             await model.refreshInitiatives()
-            await appIconModel.activate(for: model.currentExpression)
+            await appIconModel.activate(
+                for: model.currentExpression,
+                appearance: appIconAppearance(for: activeColorScheme)
+            )
         }
 #if DEBUG
         .onAppear {
@@ -952,6 +960,10 @@ public struct ShannonConversationView: View {
         }
     }
 
+    private func appIconAppearance(for colorScheme: ColorScheme) -> ShannonAppIconAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
     private var latestShannonMessageID: UUID? {
         model.messages.last(where: { $0.role == .shannon })?.id
     }
@@ -1090,7 +1102,7 @@ private struct ShannonAppIconSettingsView: View {
                 VStack(alignment: .leading, spacing: M3Spacing.large) {
                     HStack(spacing: M3Spacing.large) {
                         ShannonAppIconPreview(
-                            assetName: previewAssetName(for: model.activeChoice ?? .primary),
+                            assetName: previewAssetName(for: model.activeChoice ?? appearanceChoice),
                             size: 76,
                             accessibilityLabel: "現在のアイコン"
                         )
@@ -1122,7 +1134,11 @@ private struct ShannonAppIconSettingsView: View {
                         ForEach(ShannonAppIconMode.allCases) { mode in
                             Button {
                                 Task {
-                                    await model.selectMode(mode, expression: expression)
+                                    await model.selectMode(
+                                        mode,
+                                        expression: expression,
+                                        appearance: iconAppearance
+                                    )
                                 }
                             } label: {
                                 HStack(spacing: M3Spacing.medium) {
@@ -1227,6 +1243,23 @@ private struct ShannonAppIconSettingsView: View {
             .frame(width: 66, height: 56, alignment: .leading)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("時刻と感情で変わるアイコン")
+        case .appearance:
+            ZStack(alignment: .leading) {
+                ShannonAppIconPreview(
+                    assetName: ShannonAppIconChoice.light.previewAssetName,
+                    size: 48,
+                    accessibilityLabel: "ライトアイコン"
+                )
+                ShannonAppIconPreview(
+                    assetName: ShannonAppIconChoice.dark.previewAssetName,
+                    size: 48,
+                    accessibilityLabel: "ダークアイコン"
+                )
+                .offset(x: 18)
+            }
+            .frame(width: 66, height: 56, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("アプリのライト・ダークモードに連動するアイコン")
         case .manual:
             ShannonAppIconPreview(
                 assetName: previewAssetName(for: model.manualChoice),
@@ -1251,6 +1284,8 @@ private struct ShannonAppIconSettingsView: View {
         switch mode {
         case .automatic:
             "時刻とシャノンの感情で変化"
+        case .appearance:
+            "アプリ内のライト・ダーク表示と一緒に切替"
         case .manual:
             "\(model.manualChoice.japaneseName)を使用"
         }
@@ -1317,10 +1352,15 @@ private struct ShannonAppIconSettingsView: View {
     }
 
     private func previewAssetName(for choice: ShannonAppIconChoice) -> String {
-        guard choice == .primary else { return choice.previewAssetName }
-        return colorScheme == .dark
-            ? ShannonAppIconAssets.primaryDarkPreviewAssetName
-            : ShannonAppIconAssets.primaryLightPreviewAssetName
+        choice.previewAssetName
+    }
+
+    private var iconAppearance: ShannonAppIconAppearance {
+        colorScheme == .dark ? .dark : .light
+    }
+
+    private var appearanceChoice: ShannonAppIconChoice {
+        iconAppearance.choice
     }
 }
 

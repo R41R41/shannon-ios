@@ -8,6 +8,7 @@ import AppKit
 
 public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
     case automatic
+    case appearance
     case manual
 
     public var id: String { rawValue }
@@ -15,13 +16,15 @@ public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
     public var japaneseName: String {
         switch self {
         case .automatic: "シャノンに任せる"
+        case .appearance: "モードに連動"
         case .manual: "自分で選ぶ"
         }
     }
 }
 
 public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
-    case primary = "__primary__"
+    case light = "ShannonIconLight"
+    case dark = "ShannonIconDark"
     case calm = "ShannonIconCalm"
     case joyful = "ShannonIconJoyful"
     case curious = "ShannonIconCurious"
@@ -39,24 +42,24 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         .laughing, .tender, .bashful, .determined, .sleeping,
     ]
 
-    public static let manualChoices: [Self] = [.primary] + emotionChoices
+    public static let manualChoices: [Self] = [.light, .dark] + emotionChoices
 
     public var id: String { rawValue }
 
     public var previewAssetName: String {
         switch self {
-        case .primary: ShannonAppIconAssets.primaryLightPreviewAssetName
+        case .light: ShannonAppIconAssets.primaryLightPreviewAssetName
+        case .dark: ShannonAppIconAssets.primaryDarkPreviewAssetName
         default: "shannon-app-icon-preview-\(rawValue)"
         }
     }
 
-    public var alternateIconName: String? {
-        self == .primary ? nil : rawValue
-    }
+    public var alternateIconName: String { rawValue }
 
     public var japaneseName: String {
         switch self {
-        case .primary: "デフォルト"
+        case .light: "ライト"
+        case .dark: "ダーク"
         case .calm: "穏やか"
         case .joyful: "うれしい"
         case .curious: "興味津々"
@@ -73,7 +76,8 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
 
     public var symbolName: String {
         switch self {
-        case .primary: "app.fill"
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
         case .calm: "cup.and.saucer.fill"
         case .joyful: "hands.sparkles.fill"
         case .curious: "magnifyingglass"
@@ -110,6 +114,18 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
             .sleepy
         case .jealous, .wry, .exasperated, .annoyed:
             .exasperated
+        }
+    }
+}
+
+public enum ShannonAppIconAppearance: String, Equatable, Sendable {
+    case light
+    case dark
+
+    public var choice: ShannonAppIconChoice {
+        switch self {
+        case .light: .light
+        case .dark: .dark
         }
     }
 }
@@ -264,12 +280,12 @@ public final class ShannonAppIconModel {
             .flatMap(ShannonAppIconChoice.init(rawValue:))
         if storedMode == "fixed" {
             mode = .manual
-            manualChoice = .primary
+            manualChoice = .light
             defaults.set(ShannonAppIconMode.manual.rawValue, forKey: Keys.mode)
-            defaults.set(ShannonAppIconChoice.primary.rawValue, forKey: Keys.manualChoice)
+            defaults.set(ShannonAppIconChoice.light.rawValue, forKey: Keys.manualChoice)
         } else {
             mode = storedMode.flatMap(ShannonAppIconMode.init(rawValue:)) ?? .automatic
-            manualChoice = storedChoice ?? .primary
+            manualChoice = storedChoice ?? .light
         }
 #if canImport(UIKit)
         activeChoice = UIApplication.shared.alternateIconName
@@ -280,11 +296,12 @@ public final class ShannonAppIconModel {
     }
 
     public var activeTitle: String {
-        activeChoice?.japaneseName ?? ShannonAppIconChoice.primary.japaneseName
+        activeChoice?.japaneseName ?? "端末のデフォルト"
     }
 
     public func activate(
         for expression: ShannonExpressionDTO,
+        appearance: ShannonAppIconAppearance,
         now: Date = Date(),
         recordsLateNightUse: Bool = true
     ) async {
@@ -292,6 +309,9 @@ public final class ShannonAppIconModel {
         switch mode {
         case .manual:
             await apply(choice: manualChoice, now: now)
+        case .appearance:
+            nextRefreshAt = nil
+            await apply(choice: appearance.choice, now: now)
         case .automatic:
             if recordsLateNightUse, Calendar.current.component(.hour, from: now) < 6 {
                 UserDefaults.standard.set(now.addingTimeInterval(30 * 60), forKey: Keys.awakeUntil)
@@ -303,13 +323,18 @@ public final class ShannonAppIconModel {
     public func selectMode(
         _ newMode: ShannonAppIconMode,
         expression: ShannonExpressionDTO,
+        appearance: ShannonAppIconAppearance,
         now: Date = Date()
     ) async {
         mode = newMode
         UserDefaults.standard.set(newMode.rawValue, forKey: Keys.mode)
         switch newMode {
         case .manual:
+            nextRefreshAt = nil
             await apply(choice: manualChoice, now: now)
+        case .appearance:
+            nextRefreshAt = nil
+            await apply(choice: appearance.choice, now: now)
         case .automatic:
             await updateAutomatically(for: expression, now: now, force: true)
         }
@@ -372,6 +397,15 @@ public final class ShannonAppIconModel {
         defaults.set(updatedRecent.suffix(2).map(\.rawValue), forKey: Keys.recentDayChoices)
     }
 
+    public func updateForAppearance(
+        _ appearance: ShannonAppIconAppearance,
+        now: Date = Date()
+    ) async {
+        guard mode == .appearance else { return }
+        nextRefreshAt = nil
+        await apply(choice: appearance.choice, now: now)
+    }
+
     public func dismissError() {
         errorMessage = nil
     }
@@ -383,16 +417,15 @@ public final class ShannonAppIconModel {
 #endif
     }
 
-    private func apply(choice: ShannonAppIconChoice?, now: Date) async {
+    private func apply(choice: ShannonAppIconChoice, now: Date) async {
 #if canImport(UIKit)
         guard UIApplication.shared.supportsAlternateIcons else {
             errorMessage = "この端末ではアイコンを切り替えられません。"
             return
         }
-        let normalizedChoice = choice == .primary ? nil : choice
-        let alternateIconName = normalizedChoice?.alternateIconName
+        let alternateIconName = choice.alternateIconName
         guard UIApplication.shared.alternateIconName != alternateIconName else {
-            activeChoice = normalizedChoice
+            activeChoice = choice
             return
         }
 
@@ -409,10 +442,10 @@ public final class ShannonAppIconModel {
             refresh()
             return
         }
-        activeChoice = normalizedChoice
+        activeChoice = choice
         UserDefaults.standard.set(now, forKey: Keys.lastChangedAt)
 #else
-        activeChoice = choice == .primary ? nil : choice
+        activeChoice = choice
 #endif
     }
 }

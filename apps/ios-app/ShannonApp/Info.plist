@@ -19,6 +19,10 @@
         </dict>
         <key>CFBundleAlternateIcons</key>
         <dict>
+            <key>ShannonIconLight</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconLight</string></array></dict>
+            <key>ShannonIconDark</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconDark</string></array></dict>
             <key>ShannonIconCalm</key>
             <dict><key>CFBundleIconFiles</key><array><string>ShannonIconCalm</string></array></dict>
             <key>ShannonIconJoyful</key>
