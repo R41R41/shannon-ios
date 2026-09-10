@@ -602,6 +602,10 @@ export function isOrganizeCommand(value: string): boolean {
   return value.normalize('NFKC').trim().replace(/[。.!！?？]+$/u, '').trim() === '整理して';
 }
 
+export function isExplicitVoyagerUpdateRequest(value: string): boolean {
+  return explicitVoyagerUpdateDraft([{ role: 'user', content: value }]) !== undefined;
+}
+
 export function explicitVoyagerUpdateDraft(messages: readonly ShannonConversationItem[]): OrganizeTaskDraft | undefined {
   const last = [...messages].reverse().find(message => message.role === 'user' && !isOrganizeCommand(message.content));
   if (!last) return undefined;

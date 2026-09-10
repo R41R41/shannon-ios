@@ -8,6 +8,8 @@ class RecordingChatModel implements ShannonChatModel {
   readonly requests: ShannonChatModelRequest[] = [];
   webSources: Array<{ title: string; url: string }> = [];
   artifacts: Array<{ name: string; mimeType: string; content: string; summary?: string }> = [];
+  taskProposal?: { title: string; goal: string; hostHint?: string; projectHint?: string; risk?: string };
+  taskDecision?: { disposition: 'none' | 'clarify' | 'propose'; reason: string };
 
   async generate(request: ShannonChatModelRequest) {
     this.requests.push(request);
@@ -17,6 +19,8 @@ class RecordingChatModel implements ShannonChatModel {
       reply: `返答${this.requests.length}`,
       ...(this.webSources.length ? { webSources: this.webSources } : {}),
       ...(this.artifacts.length ? { artifacts: this.artifacts } : {}),
+      ...(this.taskProposal ? { taskProposal: this.taskProposal } : {}),
+      ...(this.taskDecision ? { taskDecision: this.taskDecision } : {}),
     };
   }
 }
@@ -93,6 +97,56 @@ describe('Shannon local API kernel', () => {
       { role: 'assistant', content: '返答1' },
     ]);
     expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v1]');
+  });
+
+  it('suppresses a duplicate agent-work card for an explicit Voyager update request', async () => {
+    const model = new RecordingChatModel();
+    model.taskDecision = { disposition: 'propose', reason: '更新依頼を作業として誤認' };
+    model.taskProposal = {
+      title: 'Voyager タスクの詳細とプロジェクトを更新',
+      goal: 'Voyager上のタスクを更新する',
+      projectHint: 'shannon-ios',
+    };
+    const api = createLocalApiKernel(
+      () => '2026-09-10T00:00:00.000Z',
+      { chatModel: model },
+    );
+
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a',
+        message: 'Voyagerにある「シャノンとVoyagerの実機連携を確認する」の詳細を「Shannon Phase 2の実機確認に成功」に更新して、合うProjectを選びたい。',
+      },
+    });
+
+    expect(response).toMatchObject({ status: 200, body: { reply: '返答1' } });
+    expect((response.body as { uiBlocks?: unknown }).uiBlocks).toBeUndefined();
+    expect(model.requests).toHaveLength(1);
+  });
+
+  it('keeps agent-work cards for ordinary Shannon implementation requests', async () => {
+    const model = new RecordingChatModel();
+    model.taskDecision = { disposition: 'propose', reason: 'Shannonの明示的な実装依頼' };
+    model.taskProposal = {
+      title: '入力欄を改善',
+      goal: 'Shannonの入力欄を使いやすくする',
+      projectHint: 'shannon-ios',
+    };
+    const api = createLocalApiKernel(
+      () => '2026-09-10T00:00:00.000Z',
+      { chatModel: model },
+    );
+
+    const response = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: 'Shannonの入力欄を改善して',
+      },
+    });
+
+    expect(response).toMatchObject({
+      status: 200,
+      body: { uiBlocks: [{ type: 'agent_task_proposal', title: '入力欄を改善' }] },
+    });
   });
 
   it('returns generated artifacts and restores them with conversation history', async () => {

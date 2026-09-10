@@ -42,6 +42,7 @@ import {
   InMemoryOrganizeStore,
   LocalOrganizeExtractor,
   OrganizeError,
+  isExplicitVoyagerUpdateRequest,
   isOrganizeCommand,
   messagesAfterCursor,
   type OrganizeDecision,
@@ -799,6 +800,7 @@ export class ShannonApiKernel {
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
       const reply = appendWebSources(completion.reply, completion.webSources ?? []);
+      const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
         captured.temperament,
@@ -814,7 +816,7 @@ export class ShannonApiKernel {
         systemPrompt,
         state: captured,
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-        ...(completion.taskProposal ? {
+        ...(completion.taskProposal && !suppressAgentTaskProposal ? {
           uiBlocks: [{
             type: 'agent_task_proposal' as const,
             proposalId: randomUUID(),

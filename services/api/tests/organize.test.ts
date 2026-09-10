@@ -12,6 +12,7 @@ import {
   OpenAIOrganizeExtractor,
   OrganizeError,
   SQLiteOrganizeStore,
+  isExplicitVoyagerUpdateRequest,
   isOrganizeCommand,
   type OrganizeExtractor,
   type OrganizeItem,
@@ -78,6 +79,14 @@ describe('Shannon organize sessions', () => {
     expect(isOrganizeCommand('  整理して。 ')).toBe(true);
     expect(isOrganizeCommand('要点を整理して')).toBe(false);
     expect(isOrganizeCommand('「整理して」と表示して')).toBe(false);
+  });
+
+  it('recognizes only the bounded explicit Voyager update form for proposal suppression', () => {
+    expect(isExplicitVoyagerUpdateRequest(
+      'Voyagerにある「既存Task」の詳細を「更新後」に更新して、合うProjectを選びたい。',
+    )).toBe(true);
+    expect(isExplicitVoyagerUpdateRequest('Shannonの入力欄を更新して')).toBe(false);
+    expect(isExplicitVoyagerUpdateRequest('Voyagerの使い方を相談したい')).toBe(false);
   });
 
   it('turns the reported Japanese update request into field-level changes without calling the model', async () => {
