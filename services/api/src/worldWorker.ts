@@ -176,7 +176,7 @@ async function discoverOneTrialFeed(items: readonly WorldItemInput[], worldStore
       const html = await safeHtml(pageURL);
       const feed = discoverFeedLinks(html, pageURL)[0];
       if (!feed || !(await publicURL(feed))) continue;
-      worldStore.addTrialSubscription(feed.href, pageURL.hostname, `Hacker Newsの「${item.title.slice(0, 140)}」から見つけた`);
+      worldStore.proposeSubscription(feed.href, pageURL.hostname, `Hacker Newsの「${item.title.slice(0, 140)}」から見つけた`);
       return;
     } catch {
       // Exploration failures are intentionally isolated from the approved source fetch.

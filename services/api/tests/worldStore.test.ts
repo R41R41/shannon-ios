@@ -46,6 +46,75 @@ describe('autonomous world store', () => {
     database.close();
   });
 
+  it('keeps a discovered feed disabled until the user approves its trial', () => {
+    const path = databasePath();
+    const discoveredAt = '2026-09-02T00:00:00.000Z';
+    const approvedAt = '2026-09-03T00:00:00.000Z';
+    const store = new SQLiteWorldStore(path, () => discoveredAt);
+
+    expect(store.proposeSubscription(
+      'https://blog.example/feed.xml',
+      'Example',
+      'Hacker Newsから見つけた',
+    )).toBe(true);
+    const proposal = store.subscriptions()[0]!;
+    expect(proposal).toMatchObject({
+      title: 'Example',
+      status: 'paused',
+      approval: 'pending',
+      fetchedItemCount: 0,
+    });
+    expect(store.dueSources(discoveredAt).some(source => source.url === proposal.feedURL)).toBe(false);
+
+    const approved = store.decideSubscription(proposal.id, 'approve', proposal.updatedAt, approvedAt);
+    expect(approved).toMatchObject({ status: 'trial', approval: 'approved' });
+    expect(store.dueSources(approvedAt).some(source => source.url === proposal.feedURL)).toBe(true);
+    expect(() => store.decideSubscription(proposal.id, 'reject', proposal.updatedAt, approvedAt))
+      .toThrow('WORLD_SUBSCRIPTION_ALREADY_DECIDED');
+    store.close();
+  });
+
+  it('rejects a subscription proposal without creating an RSS source', () => {
+    const now = '2026-09-02T00:00:00.000Z';
+    const store = new SQLiteWorldStore(databasePath(), () => now);
+    expect(store.proposeSubscription('https://no.example/feed', 'No', '発見')).toBe(true);
+    const proposal = store.subscriptions()[0]!;
+    const rejected = store.decideSubscription(proposal.id, 'reject', proposal.updatedAt);
+    expect(rejected).toMatchObject({ status: 'rejected', approval: 'rejected' });
+    expect(store.dueSources(now).some(source => source.url === proposal.feedURL)).toBe(false);
+    store.close();
+  });
+
+  it('adds approval state to existing subscription databases without losing rows', () => {
+    const path = databasePath();
+    const database = new DatabaseSync(path);
+    database.exec(`
+      CREATE TABLE subscriptions (
+        subscription_id TEXT PRIMARY KEY,
+        feed_url TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('trial','active','paused','rejected')),
+        reason TEXT NOT NULL,
+        trial_started_at TEXT NOT NULL,
+        trial_expires_at TEXT NOT NULL,
+        score REAL NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO subscriptions VALUES (
+        'existing', 'https://existing.example/feed', 'Existing', 'active', '以前に承認済み',
+        '2026-08-01T00:00:00.000Z', '2026-08-08T00:00:00.000Z', 1,
+        '2026-08-08T00:00:00.000Z'
+      );
+    `);
+    database.close();
+
+    const store = new SQLiteWorldStore(path, () => '2026-09-02T00:00:00.000Z');
+    expect(store.subscriptions()).toEqual([
+      expect.objectContaining({ id: 'existing', approval: 'approved', status: 'active' }),
+    ]);
+    store.close();
+  });
+
   it('limits self-discovered RSS trials to one per week and three at once', () => {
     const store = new SQLiteWorldStore(databasePath(), () => '2026-09-02T00:00:00.000Z');
     expect(store.addTrialSubscription('https://one.example/feed', 'One', '発見', '2026-09-01T00:00:00.000Z')).toBe(true);

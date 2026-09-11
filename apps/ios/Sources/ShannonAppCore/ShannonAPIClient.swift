@@ -45,6 +45,13 @@ public protocol ShannonAPIClientProtocol: Sendable {
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO
     func loadInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO
     func markInitiativesRead(scopeKey: String) async throws -> Int
+    func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO]
+    func decideWorldSubscription(
+        scopeKey: String,
+        subscriptionID: String,
+        decision: ShannonWorldSubscriptionDecisionDTO,
+        expectedUpdatedAt: String
+    ) async throws -> ShannonWorldSubscriptionDTO
     func registerPushToken(
         scopeKey: String,
         deviceToken: String,
@@ -233,6 +240,17 @@ public extension ShannonAPIClientProtocol {
     }
 
     func markInitiativesRead(scopeKey: String) async throws -> Int { 0 }
+
+    func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO] { [] }
+
+    func decideWorldSubscription(
+        scopeKey: String,
+        subscriptionID: String,
+        decision: ShannonWorldSubscriptionDecisionDTO,
+        expectedUpdatedAt: String
+    ) async throws -> ShannonWorldSubscriptionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
 
     func registerPushToken(
         scopeKey: String,
@@ -620,6 +638,44 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         ))
         let result: ShannonInitiativeReadResponseDTO = try await response(ShannonInitiativeReadResponseDTO.self, for: request)
         return result.markedRead
+    }
+
+    public func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO] {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/world/subscriptions"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey),
+        ]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonWorldSubscriptionListDTO.self, for: request).subscriptions
+    }
+
+    public func decideWorldSubscription(
+        scopeKey: String,
+        subscriptionID: String,
+        decision: ShannonWorldSubscriptionDecisionDTO,
+        expectedUpdatedAt: String
+    ) async throws -> ShannonWorldSubscriptionDTO {
+        let connection = currentConnection()
+        let encodedID = subscriptionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+            ?? subscriptionID
+        var request = URLRequest(
+            url: baseURL.appending(path: "/v1/world/subscriptions/\(encodedID)/decision")
+        )
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonWorldSubscriptionDecisionRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            decision: decision,
+            expectedUpdatedAt: expectedUpdatedAt
+        ))
+        return try await response(ShannonWorldSubscriptionDTO.self, for: request)
     }
 
     public func registerPushToken(

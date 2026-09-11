@@ -36,6 +36,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
+import type { WorldSubscriptionReader } from './worldStore.js';
 import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
@@ -179,6 +180,7 @@ export interface ShannonApiKernelOptions {
   voyagerDestination?: VoyagerTaskDestination;
   voyagerCatalog?: VoyagerCatalog;
   voiceIdentity?: ShannonVoiceIdentityStore;
+  worldSubscriptions?: WorldSubscriptionReader;
 }
 
 export class ShannonApiKernel {
@@ -199,6 +201,7 @@ export class ShannonApiKernel {
   private readonly voyagerDestination: VoyagerTaskDestination;
   private readonly voyagerCatalog: VoyagerCatalog;
   private readonly voiceIdentity: ShannonVoiceIdentityStore;
+  private readonly worldSubscriptions: WorldSubscriptionReader | null;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -226,6 +229,7 @@ export class ShannonApiKernel {
     this.voyagerDestination = options.voyagerDestination ?? new DisabledVoyagerTaskDestination();
     this.voyagerCatalog = options.voyagerCatalog ?? new DisabledVoyagerCatalog();
     this.voiceIdentity = options.voiceIdentity ?? new InMemoryVoiceIdentityStore();
+    this.worldSubscriptions = options.worldSubscriptions ?? null;
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
@@ -617,6 +621,50 @@ export class ShannonApiKernel {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: this.memoryStore.dashboard(scopeKey) };
+    }
+
+    if (request.method === 'GET' && request.path === '/v1/world/subscriptions') {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!this.worldSubscriptions) return { status: 503, body: { error: 'WORLD_UNAVAILABLE' } };
+      return { status: 200, body: { subscriptions: this.worldSubscriptions.subscriptions() } };
+    }
+
+    const worldSubscriptionDecision = request.path.match(/^\/v1\/world\/subscriptions\/([^/]+)\/decision$/u);
+    if (request.method === 'POST' && worldSubscriptionDecision) {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      const decision = request.body.decision;
+      const expectedUpdatedAt = request.body.expectedUpdatedAt;
+      const subscriptionID = decodeURIComponent(worldSubscriptionDecision[1] ?? '');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!validBoundedString(subscriptionID, 160)) return badRequest('subscription id is invalid');
+      if (decision !== 'approve' && decision !== 'reject') return badRequest('decision is invalid');
+      if (!validBoundedString(expectedUpdatedAt, 80)) return badRequest('expectedUpdatedAt is invalid');
+      if (!this.worldSubscriptions) return { status: 503, body: { error: 'WORLD_UNAVAILABLE' } };
+      try {
+        return {
+          status: 200,
+          body: this.worldSubscriptions.decideSubscription(
+            subscriptionID,
+            decision,
+            expectedUpdatedAt,
+            this.now(),
+          ),
+        };
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        if (error.message === 'WORLD_SUBSCRIPTION_NOT_FOUND') {
+          return { status: 404, body: { error: error.message } };
+        }
+        if (error.message === 'WORLD_SUBSCRIPTION_STALE' || error.message === 'WORLD_SUBSCRIPTION_ALREADY_DECIDED') {
+          return { status: 409, body: { error: error.message } };
+        }
+        if (error.message === 'WORLD_SUBSCRIPTION_LIMIT') {
+          return { status: 429, body: { error: error.message } };
+        }
+        throw error;
+      }
     }
 
     if (request.method === 'GET' && request.path === '/v1/initiatives') {

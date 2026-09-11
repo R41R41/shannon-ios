@@ -16,6 +16,7 @@ struct ShannonApp: App {
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var voiceIdentityModel: ShannonVoiceIdentityModel
+    @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var pendingPushToken: String?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -50,6 +51,7 @@ struct ShannonApp: App {
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
+        _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
         _connectionModel = State(initialValue: ShannonConnectionModel(
             baseURL: ShannonRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
@@ -65,7 +67,8 @@ struct ShannonApp: App {
                 connectionModel: connectionModel,
                 memoryModel: memoryModel,
                 testFlightDeliveryModel: testFlightDeliveryModel,
-                voiceIdentityModel: voiceIdentityModel
+                voiceIdentityModel: voiceIdentityModel,
+                worldSubscriptionModel: worldSubscriptionModel
             )
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }

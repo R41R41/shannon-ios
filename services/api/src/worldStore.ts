@@ -45,6 +45,32 @@ export interface WorldReader {
   latestItems(limit?: number): readonly WorldItem[];
 }
 
+export type WorldSubscriptionApproval = 'pending' | 'approved' | 'rejected';
+export type WorldSubscriptionStatus = 'trial' | 'active' | 'paused' | 'rejected';
+
+export interface WorldSubscription {
+  id: string;
+  feedURL: string;
+  title: string;
+  status: WorldSubscriptionStatus;
+  approval: WorldSubscriptionApproval;
+  reason: string;
+  discoveredAt: string;
+  trialExpiresAt: string;
+  fetchedItemCount: number;
+  updatedAt: string;
+}
+
+export interface WorldSubscriptionReader {
+  subscriptions(): readonly WorldSubscription[];
+  decideSubscription(
+    id: string,
+    decision: 'approve' | 'reject',
+    expectedUpdatedAt: string,
+    decidedAt?: string,
+  ): WorldSubscription;
+}
+
 export class SQLiteWorldStore {
   private readonly database: DatabaseSync;
 
@@ -130,16 +156,20 @@ export class SQLiteWorldStore {
     `).run(failedAt, retryAt, code.slice(0, 160), source.id);
   }
 
-  addTrialSubscription(feedURL: string, title: string, reason: string, discoveredAt = this.now()): boolean {
+  proposeSubscription(feedURL: string, title: string, reason: string, discoveredAt = this.now()): boolean {
     const existing = this.database.prepare(`SELECT 1 AS found FROM subscriptions WHERE feed_url = ?`).get(feedURL);
     if (existing) return false;
     const statuses = this.database.prepare(`
-      SELECT status, COUNT(*) AS count FROM subscriptions
-      WHERE status IN ('trial', 'active') GROUP BY status
-    `).all() as unknown as Array<{ status: string; count: number }>;
+      SELECT status, approval_status, COUNT(*) AS count FROM subscriptions
+      WHERE status IN ('trial', 'active') OR approval_status = 'pending'
+      GROUP BY status, approval_status
+    `).all() as unknown as Array<{ status: string; approval_status: string; count: number }>;
     const trials = Number(statuses.find(row => row.status === 'trial')?.count ?? 0);
     const active = Number(statuses.find(row => row.status === 'active')?.count ?? 0);
-    if (trials >= MAX_TRIAL_SUBSCRIPTIONS || active >= MAX_ACTIVE_SUBSCRIPTIONS) return false;
+    const pending = statuses
+      .filter(row => row.approval_status === 'pending')
+      .reduce((sum, row) => sum + Number(row.count), 0);
+    if (pending + trials >= MAX_TRIAL_SUBSCRIPTIONS || active >= MAX_ACTIVE_SUBSCRIPTIONS) return false;
     const weekStart = new Date(Date.parse(discoveredAt) - 7 * 86_400_000).toISOString();
     const recent = this.database.prepare(`
       SELECT COUNT(*) AS count FROM subscriptions WHERE trial_started_at >= ?
@@ -149,14 +179,92 @@ export class SQLiteWorldStore {
     const expiresAt = new Date(Date.parse(discoveredAt) + 7 * 86_400_000).toISOString();
     this.database.prepare(`
       INSERT INTO subscriptions
-        (subscription_id, feed_url, title, status, reason, trial_started_at, trial_expires_at, score, updated_at)
-      VALUES (?, ?, ?, 'trial', ?, ?, ?, 0, ?)
+        (subscription_id, feed_url, title, status, approval_status, reason,
+         trial_started_at, trial_expires_at, score, updated_at)
+      VALUES (?, ?, ?, 'paused', 'pending', ?, ?, ?, 0, ?)
       ON CONFLICT(feed_url) DO NOTHING
     `).run(id, feedURL, title.slice(0, 200), reason.slice(0, 500), discoveredAt, expiresAt, discoveredAt);
-    this.upsertSource({
-      id: `rss:${id}`, kind: 'rss', title, url: feedURL, query: null, intervalMinutes: 720, nextRunAt: discoveredAt,
-    });
     return true;
+  }
+
+  /** Explicit/internal compatibility helper. New self-discovery must use proposeSubscription. */
+  addTrialSubscription(feedURL: string, title: string, reason: string, discoveredAt = this.now()): boolean {
+    if (!this.proposeSubscription(feedURL, title, reason, discoveredAt)) return false;
+    const id = createHash('sha256').update(feedURL).digest('hex').slice(0, 24);
+    this.decideSubscription(id, 'approve', discoveredAt, discoveredAt);
+    return true;
+  }
+
+  subscriptions(): readonly WorldSubscription[] {
+    const rows = this.database.prepare(`
+      SELECT s.subscription_id, s.feed_url, s.title, s.status, s.approval_status, s.reason,
+        s.trial_started_at, s.trial_expires_at, s.updated_at,
+        COUNT(wi.item_id) AS fetched_item_count
+      FROM subscriptions s
+      LEFT JOIN world_items wi ON wi.source_id = 'rss:' || s.subscription_id
+      GROUP BY s.subscription_id
+      ORDER BY CASE s.approval_status WHEN 'pending' THEN 0 ELSE 1 END, s.updated_at DESC
+      LIMIT 50
+    `).all() as unknown as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map(row => this.subscriptionFromRow(row)));
+  }
+
+  decideSubscription(
+    id: string,
+    decision: 'approve' | 'reject',
+    expectedUpdatedAt: string,
+    decidedAt = this.now(),
+  ): WorldSubscription {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const row = this.database.prepare(`
+        SELECT subscription_id, feed_url, title, status, approval_status, reason,
+          trial_started_at, trial_expires_at, updated_at
+        FROM subscriptions WHERE subscription_id = ?
+      `).get(id) as unknown as Record<string, unknown> | undefined;
+      if (!row) throw new Error('WORLD_SUBSCRIPTION_NOT_FOUND');
+      if (String(row.approval_status) !== 'pending') throw new Error('WORLD_SUBSCRIPTION_ALREADY_DECIDED');
+      if (String(row.updated_at) !== expectedUpdatedAt) throw new Error('WORLD_SUBSCRIPTION_STALE');
+
+      if (decision === 'reject') {
+        this.database.prepare(`
+          UPDATE subscriptions
+          SET status = 'rejected', approval_status = 'rejected', updated_at = ?
+          WHERE subscription_id = ?
+        `).run(decidedAt, id);
+      } else {
+        const trials = this.database.prepare(`
+          SELECT COUNT(*) AS count FROM subscriptions WHERE status = 'trial'
+        `).get() as unknown as { count: number };
+        const active = this.database.prepare(`
+          SELECT COUNT(*) AS count FROM subscriptions WHERE status = 'active'
+        `).get() as unknown as { count: number };
+        if (Number(trials.count) >= MAX_TRIAL_SUBSCRIPTIONS || Number(active.count) >= MAX_ACTIVE_SUBSCRIPTIONS) {
+          throw new Error('WORLD_SUBSCRIPTION_LIMIT');
+        }
+        const expiresAt = new Date(Date.parse(decidedAt) + 7 * 86_400_000).toISOString();
+        this.database.prepare(`
+          UPDATE subscriptions SET status = 'trial', approval_status = 'approved',
+            trial_started_at = ?, trial_expires_at = ?, updated_at = ?
+          WHERE subscription_id = ?
+        `).run(decidedAt, expiresAt, decidedAt, id);
+        this.upsertSource({
+          id: `rss:${id}`,
+          kind: 'rss',
+          title: String(row.title),
+          url: String(row.feed_url),
+          query: null,
+          intervalMinutes: 720,
+          nextRunAt: decidedAt,
+        });
+        this.database.prepare(`UPDATE world_sources SET enabled = 1 WHERE source_id = ?`).run(`rss:${id}`);
+      }
+      this.database.exec('COMMIT');
+      return this.subscription(id);
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   reviewExpiredTrials(at = this.now()): { activated: number; paused: number } {
@@ -311,6 +419,7 @@ export class SQLiteWorldStore {
         metadata_json TEXT NOT NULL DEFAULT '{}'
       );
     `);
+    this.ensureSubscriptionApprovalColumn();
   }
 
   private seedConfiguredSources(): void {
@@ -347,6 +456,46 @@ export class SQLiteWorldStore {
       ON CONFLICT(source_id) DO UPDATE SET
         title = excluded.title, url = excluded.url, query = excluded.query, interval_minutes = excluded.interval_minutes
     `).run(source.id, source.kind, source.title, source.url, source.query, source.intervalMinutes, source.nextRunAt);
+  }
+
+  private subscription(id: string): WorldSubscription {
+    const row = this.database.prepare(`
+      SELECT s.subscription_id, s.feed_url, s.title, s.status, s.approval_status, s.reason,
+        s.trial_started_at, s.trial_expires_at, s.updated_at,
+        COUNT(wi.item_id) AS fetched_item_count
+      FROM subscriptions s
+      LEFT JOIN world_items wi ON wi.source_id = 'rss:' || s.subscription_id
+      WHERE s.subscription_id = ?
+      GROUP BY s.subscription_id
+    `).get(id) as unknown as Record<string, unknown> | undefined;
+    if (!row) throw new Error('WORLD_SUBSCRIPTION_NOT_FOUND');
+    return this.subscriptionFromRow(row);
+  }
+
+  private subscriptionFromRow(row: Record<string, unknown>): WorldSubscription {
+    return Object.freeze({
+      id: String(row.subscription_id),
+      feedURL: String(row.feed_url),
+      title: String(row.title),
+      status: String(row.status) as WorldSubscriptionStatus,
+      approval: String(row.approval_status) as WorldSubscriptionApproval,
+      reason: String(row.reason),
+      discoveredAt: String(row.trial_started_at),
+      trialExpiresAt: String(row.trial_expires_at),
+      fetchedItemCount: Number(row.fetched_item_count ?? 0),
+      updatedAt: String(row.updated_at),
+    });
+  }
+
+  private ensureSubscriptionApprovalColumn(): void {
+    const columns = this.database.prepare(`PRAGMA table_info(subscriptions)`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'approval_status')) {
+      this.database.exec(`
+        ALTER TABLE subscriptions
+        ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'
+          CHECK (approval_status IN ('pending','approved','rejected'))
+      `);
+    }
   }
 
   private secureFiles(): void {

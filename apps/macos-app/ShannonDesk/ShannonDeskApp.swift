@@ -8,6 +8,7 @@ struct ShannonDeskApp: App {
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel
     @State private var voiceIdentityModel: ShannonVoiceIdentityModel
+    @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -40,6 +41,7 @@ struct ShannonDeskApp: App {
         ))
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
+        _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
     }
 
     var body: some Scene {
@@ -48,7 +50,8 @@ struct ShannonDeskApp: App {
                 conversation: conversationModel,
                 connection: connectionModel,
                 memory: memoryModel,
-                voiceIdentity: voiceIdentityModel
+                voiceIdentity: voiceIdentityModel,
+                worldSubscriptions: worldSubscriptionModel
             )
             .preferredColorScheme(preferredColorScheme)
             .onOpenURL { url in
@@ -69,7 +72,8 @@ struct ShannonDeskApp: App {
             ShannonDesktopSettingsScene(
                 connection: connectionModel,
                 appearanceRawValue: $appearanceRawValue,
-                voiceIdentity: voiceIdentityModel
+                voiceIdentity: voiceIdentityModel,
+                worldSubscriptions: worldSubscriptionModel
             )
         }
     }
@@ -153,6 +157,8 @@ private struct ShannonDesktopSettingsScene: View {
     let connection: ShannonConnectionModel
     @Binding var appearanceRawValue: String
     let voiceIdentity: ShannonVoiceIdentityModel
+    let worldSubscriptions: ShannonWorldSubscriptionModel
+    @State private var showsWorldSubscriptions = false
 
     var body: some View {
         Form {
@@ -164,6 +170,9 @@ private struct ShannonDesktopSettingsScene: View {
             LabeledContent("接続", value: connection.statusLabel)
             LabeledContent("通信", value: connection.verificationLabel)
             ShannonDesktopVoiceIdentitySettings(model: voiceIdentity)
+            Button("情報源（\(worldSubscriptions.summary)）") {
+                showsWorldSubscriptions = true
+            }
             if connection.isConnected {
                 Button("接続を確認") {
                     Task { await connection.verifyConnection() }
@@ -175,7 +184,12 @@ private struct ShannonDesktopSettingsScene: View {
         .padding(24)
         .frame(width: 540, height: 420)
         .task { await voiceIdentity.reload() }
+        .task { await worldSubscriptions.reload() }
         .onDisappear { voiceIdentity.stopPreview() }
+        .sheet(isPresented: $showsWorldSubscriptions) {
+            ShannonWorldSubscriptionView(model: worldSubscriptions)
+                .frame(minWidth: 560, minHeight: 560)
+        }
     }
 }
 

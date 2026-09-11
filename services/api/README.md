@@ -13,6 +13,8 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `GET /v1/voice/identity` / `POST /v1/voice/identity`（scopeごとの声選択を取得・保存）
 - `POST /v1/voice/identity/preview`（ペアリング済み端末だけが固定日本語文を試聴。1日12回まで）
 - `POST /v1/voice/realtime/calls`（保存済みの声を新しいRealtimeセッションへ適用）
+- `GET /v1/world/subscriptions`（承認待ち候補と試読・購読状態を取得）
+- `POST /v1/world/subscriptions/:id/decision`（最新`updatedAt`を指定し、候補を承認または見送り。承認後だけ7日間の試読を開始）
 
 loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必須で、全endpointが`Authorization: Bearer ...`を要求する。実機用の`lan`モードは全インターフェースではなく、MacのプライベートIPv4アドレスを1つ選んで待ち受ける。
 

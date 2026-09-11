@@ -11,6 +11,7 @@ public struct ShannonConversationView: View {
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var voiceIdentityModel: ShannonVoiceIdentityModel
+    @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var appIconModel = ShannonAppIconModel()
     @State private var voiceModel = ShannonVoiceConversationModel()
     @State private var realtimeVoiceModel = ShannonRealtimeVoiceSessionModel()
@@ -21,6 +22,7 @@ public struct ShannonConversationView: View {
     @State private var showsTestFlightDelivery = false
     @State private var showsVoiceDiagnostics = false
     @State private var showsVoiceIdentity = false
+    @State private var showsWorldSubscriptions = false
     @State private var showsLiveVoice = false
     @State private var showsSettings = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
@@ -44,13 +46,15 @@ public struct ShannonConversationView: View {
         connectionModel: ShannonConnectionModel? = nil,
         memoryModel: ShannonMemoryModel = ShannonMemoryModel(),
         testFlightDeliveryModel: ShannonTestFlightDeliveryModel = ShannonTestFlightDeliveryModel(),
-        voiceIdentityModel: ShannonVoiceIdentityModel = ShannonVoiceIdentityModel()
+        voiceIdentityModel: ShannonVoiceIdentityModel = ShannonVoiceIdentityModel(),
+        worldSubscriptionModel: ShannonWorldSubscriptionModel = ShannonWorldSubscriptionModel()
     ) {
         _model = State(initialValue: model)
         _connectionModel = State(initialValue: connectionModel)
         _memoryModel = State(initialValue: memoryModel)
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
         _voiceIdentityModel = State(initialValue: voiceIdentityModel)
+        _worldSubscriptionModel = State(initialValue: worldSubscriptionModel)
     }
 
     public var body: some View {
@@ -604,6 +608,15 @@ public struct ShannonConversationView: View {
                     }
                     .buttonStyle(.plain)
 
+                    Button { showsWorldSubscriptions = true } label: {
+                        ShannonSettingsRow(
+                            title: "情報源",
+                            detail: worldSubscriptionModel.summary,
+                            symbol: "newspaper"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
                     Button { showsVoiceDiagnostics = true } label: {
                         ShannonSettingsRow(
                             title: "音声診断",
@@ -685,6 +698,9 @@ public struct ShannonConversationView: View {
         }
         .sheet(isPresented: $showsVoiceIdentity) {
             ShannonVoiceIdentityView(model: voiceIdentityModel)
+        }
+        .sheet(isPresented: $showsWorldSubscriptions) {
+            ShannonWorldSubscriptionView(model: worldSubscriptionModel)
         }
     }
 

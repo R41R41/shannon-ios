@@ -8,6 +8,7 @@ public struct ShannonDesktopRootView: View {
     private let connection: ShannonConnectionModel
     private let memory: ShannonMemoryModel
     private let voiceIdentity: ShannonVoiceIdentityModel
+    private let worldSubscriptions: ShannonWorldSubscriptionModel
 
     @SceneStorage("shannon.desktop.destination") private var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") private var restoredThreadID: String?
@@ -25,6 +26,7 @@ public struct ShannonDesktopRootView: View {
     @State private var steeringText = ""
     @State private var showsConversationOutline = false
     @State private var showsConnection = false
+    @State private var showsWorldSubscriptions = false
     @State private var renameThread: ChatThreadDTO?
     @State private var renameText = ""
     @FocusState private var focusedControl: ShannonDesktopFocusedControl?
@@ -34,12 +36,14 @@ public struct ShannonDesktopRootView: View {
         conversation: ShannonConversationModel,
         connection: ShannonConnectionModel,
         memory: ShannonMemoryModel,
-        voiceIdentity: ShannonVoiceIdentityModel
+        voiceIdentity: ShannonVoiceIdentityModel,
+        worldSubscriptions: ShannonWorldSubscriptionModel
     ) {
         self.conversation = conversation
         self.connection = connection
         self.memory = memory
         self.voiceIdentity = voiceIdentity
+        self.worldSubscriptions = worldSubscriptions
     }
 
     public var body: some View {
@@ -57,6 +61,10 @@ public struct ShannonDesktopRootView: View {
         .sheet(isPresented: $showsConnection) {
             ShannonConnectionView(model: connection)
                 .frame(minWidth: 520, minHeight: 500)
+        }
+        .sheet(isPresented: $showsWorldSubscriptions) {
+            ShannonWorldSubscriptionView(model: worldSubscriptions)
+                .frame(minWidth: 560, minHeight: 560)
         }
         .alert("トークタイトルを変更", isPresented: renameAlertBinding) {
             TextField("タイトル", text: $renameText)
@@ -870,6 +878,17 @@ public struct ShannonDesktopRootView: View {
                 }
             }
 
+            Section("情報源") {
+                LabeledContent("状態", value: worldSubscriptions.summary)
+                Button("購読候補と試読を見る") {
+                    showsWorldSubscriptions = true
+                }
+                if let errorMessage = worldSubscriptions.errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
+            }
+
             Section("Shannon Desk") {
                 LabeledContent("会話と記憶", value: "iPhoneと共通")
                 LabeledContent("作業の正本", value: "Azureの永続タスク")
@@ -880,6 +899,7 @@ public struct ShannonDesktopRootView: View {
         .formStyle(.grouped)
         .padding(24)
         .navigationTitle("設定")
+        .task { await worldSubscriptions.reload() }
         .onDisappear { voiceIdentity.stopPreview() }
     }
 

@@ -107,6 +107,54 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(updated.preference.selectedVoice, "cedar")
     }
 
+    func testAPIClientLoadsAndDecidesWorldSubscriptionWithBoundScope() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "s", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "world-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(
+                    request.url?.absoluteString,
+                    "https://shannon.example/companion/v1/world/subscriptions?scopeKey=owner-from-server"
+                )
+                return try response(url: request.url!, json: ["subscriptions": [worldSubscriptionJSON()]])
+            }
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://shannon.example/companion/v1/world/subscriptions/feed-1/decision"
+            )
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+            XCTAssertEqual(json["decision"] as? String, "approve")
+            XCTAssertEqual(json["expectedUpdatedAt"] as? String, "before")
+            var updated = worldSubscriptionJSON()
+            updated["approval"] = "approved"
+            updated["status"] = "trial"
+            updated["updatedAt"] = "after"
+            return try response(url: request.url!, json: updated)
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let subscriptions = try await client.loadWorldSubscriptions(scopeKey: "untrusted-client-scope")
+        let updated = try await client.decideWorldSubscription(
+            scopeKey: "untrusted-client-scope",
+            subscriptionID: subscriptions[0].id,
+            decision: .approve,
+            expectedUpdatedAt: subscriptions[0].updatedAt
+        )
+        XCTAssertEqual(subscriptions[0].approval, .pending)
+        XCTAssertEqual(updated.status, .trial)
+    }
+
     func testAPIClientLoadsVoicePreviewAsAuthenticatedAudioOnly() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "w", count: 43)
@@ -658,6 +706,21 @@ private func voiceIdentityResponseJSON() -> [String: Any] {
             ["id": "cedar", "name": "Cedar"],
             ["id": "coral", "name": "Coral"],
         ],
+    ]
+}
+
+private func worldSubscriptionJSON() -> [String: Any] {
+    [
+        "id": "feed-1",
+        "feedURL": "https://example.com/feed.xml",
+        "title": "Example",
+        "status": "paused",
+        "approval": "pending",
+        "reason": "Hacker Newsから見つけた",
+        "discoveredAt": "2026-09-11T00:00:00.000Z",
+        "trialExpiresAt": "2026-09-18T00:00:00.000Z",
+        "fetchedItemCount": 0,
+        "updatedAt": "before",
     ]
 }
 

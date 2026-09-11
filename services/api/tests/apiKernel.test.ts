@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
 import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
+import type { WorldSubscription } from '../src/worldStore.js';
 
 class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -112,6 +113,48 @@ describe('Shannon local API kernel', () => {
     })).toEqual({ status: 200, body: dashboard });
     expect(await api.dispatch({ method: 'GET', path: '/v1/testflight/delivery' }))
       .toMatchObject({ status: 400 });
+  });
+
+  it('lists world subscription proposals and requires a fresh explicit decision', async () => {
+    let subscription: WorldSubscription = {
+      id: 'feed-1', feedURL: 'https://example.com/feed', title: 'Example',
+      status: 'paused', approval: 'pending', reason: '見つけた',
+      discoveredAt: '2026-09-11T00:00:00.000Z', trialExpiresAt: '2026-09-18T00:00:00.000Z',
+      fetchedItemCount: 0, updatedAt: '2026-09-11T00:00:00.000Z',
+    };
+    const api = createLocalApiKernel(
+      () => '2026-09-11T01:00:00.000Z',
+      {
+        worldSubscriptions: {
+          subscriptions: () => [subscription],
+          decideSubscription: (id, decision, expectedUpdatedAt, decidedAt) => {
+            expect(id).toBe('feed-1');
+            expect(decision).toBe('approve');
+            expect(expectedUpdatedAt).toBe(subscription.updatedAt);
+            subscription = {
+              ...subscription, status: 'trial', approval: 'approved',
+              updatedAt: decidedAt ?? subscription.updatedAt,
+            };
+            return subscription;
+          },
+        },
+      },
+    );
+
+    expect(await api.dispatch({
+      method: 'GET', path: '/v1/world/subscriptions',
+      query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    })).toMatchObject({ status: 200, body: { subscriptions: [{ approval: 'pending' }] } });
+    expect(await api.dispatch({
+      method: 'POST', path: '/v1/world/subscriptions/feed-1/decision', body: {
+        scopeKey: 'owner-a', decision: 'approve', expectedUpdatedAt: subscription.updatedAt,
+      },
+    })).toMatchObject({ status: 200, body: { status: 'trial', approval: 'approved' } });
+    expect(await api.dispatch({
+      method: 'POST', path: '/v1/world/subscriptions/feed-1/decision', body: {
+        scopeKey: 'owner-a', decision: 'later', expectedUpdatedAt: subscription.updatedAt,
+      },
+    })).toMatchObject({ status: 400 });
   });
 
   it('captures one immutable state version for a chat turn', async () => {

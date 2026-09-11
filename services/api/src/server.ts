@@ -94,6 +94,7 @@ const kernel = createLocalApiKernel(now, {
   voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   voiceIdentity: voiceIdentityStore,
+  worldSubscriptions: worldStore,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
