@@ -120,6 +120,14 @@ final class ShannonConnectionTests: XCTestCase {
         ))
         let session = stubSession { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.url?.path == "/companion/v1/world/sources" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertEqual(
+                    request.url?.absoluteString,
+                    "https://shannon.example/companion/v1/world/sources?scopeKey=owner-from-server"
+                )
+                return try response(url: request.url!, json: ["sources": [worldSourceJSON()]])
+            }
             if request.httpMethod == "GET" {
                 XCTAssertEqual(
                     request.url?.absoluteString,
@@ -144,6 +152,7 @@ final class ShannonConnectionTests: XCTestCase {
         }
         let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
 
+        let sources = try await client.loadWorldSources(scopeKey: "untrusted-client-scope")
         let subscriptions = try await client.loadWorldSubscriptions(scopeKey: "untrusted-client-scope")
         let updated = try await client.decideWorldSubscription(
             scopeKey: "untrusted-client-scope",
@@ -151,6 +160,8 @@ final class ShannonConnectionTests: XCTestCase {
             decision: .approve,
             expectedUpdatedAt: subscriptions[0].updatedAt
         )
+        XCTAssertEqual(sources[0].title, "Hacker News")
+        XCTAssertEqual(sources[0].fetchedItemCount, 12)
         XCTAssertEqual(subscriptions[0].approval, .pending)
         XCTAssertEqual(updated.status, .trial)
     }
@@ -721,6 +732,22 @@ private func worldSubscriptionJSON() -> [String: Any] {
         "trialExpiresAt": "2026-09-18T00:00:00.000Z",
         "fetchedItemCount": 0,
         "updatedAt": "before",
+    ]
+}
+
+private func worldSourceJSON() -> [String: Any] {
+    [
+        "id": "hn:top",
+        "kind": "hacker-news",
+        "title": "Hacker News",
+        "url": "https://news.ycombinator.com/",
+        "enabled": true,
+        "intervalMinutes": 360,
+        "lastRunAt": "2026-09-11T00:00:00.000Z",
+        "nextRunAt": "2026-09-11T06:00:00.000Z",
+        "hasError": false,
+        "fetchedItemCount": 12,
+        "origin": "built-in",
     ]
 }
 

@@ -117,7 +117,12 @@ public final class ShannonConversationModel {
                         mimeType: "text/markdown",
                         content: "# Shannon Desk\n\n会話と作業を一つの流れにする。\n",
                         summary: "会話画面の改善方針"
-                    )]
+                    )],
+                    sourceAttribution: ShannonSourceAttributionDTO(
+                        title: "Hacker News",
+                        url: "https://news.ycombinator.com/",
+                        reason: "今日の関心に近く、会話画面の設計に関係していたから。"
+                    )
                 ),
                 ConversationMessage(
                     role: .user,
@@ -1201,7 +1206,8 @@ public final class ShannonConversationModel {
             text: message.content,
             sentAt: parseDate(message.observedAt),
             emotionSnapshot: emotionSnapshot,
-            artifacts: message.artifacts ?? []
+            artifacts: message.artifacts ?? [],
+            sourceAttribution: message.sourceAttribution
         )
     }
 

@@ -2282,8 +2282,45 @@ private struct ShannonMessageRow: View {
                 .textSelection(.enabled)
                 .tint(palette.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let attribution = message.sourceAttribution,
+               let sourceURL = safeSourceURL(attribution.url) {
+                Link(destination: sourceURL) {
+                    HStack(alignment: .top, spacing: M3Spacing.small) {
+                        Image(systemName: "link")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.primary)
+                            .frame(width: 22, height: 22)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("出典 · \(attribution.title)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(palette.onSurface)
+                            Text("選んだ理由: \(attribution.reason)")
+                                .font(.caption2)
+                                .foregroundStyle(palette.onSurfaceVariant)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(palette.onSurfaceVariant)
+                    }
+                    .padding(.horizontal, M3Spacing.medium)
+                    .padding(.vertical, M3Spacing.small)
+                    .background(
+                        palette.surfaceContainer,
+                        in: RoundedRectangle(cornerRadius: M3Shape.medium, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("出典 \(attribution.title)。選んだ理由 \(attribution.reason)")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func safeSourceURL(_ raw: String) -> URL? {
+        guard let url = URL(string: raw), url.scheme == "https" || url.scheme == "http" else { return nil }
+        return url
     }
 
     private func userMessage(_ palette: M3Palette) -> some View {

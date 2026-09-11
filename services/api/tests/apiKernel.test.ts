@@ -126,6 +126,12 @@ describe('Shannon local API kernel', () => {
       () => '2026-09-11T01:00:00.000Z',
       {
         worldSubscriptions: {
+          sources: () => [{
+            id: 'hn:top', kind: 'hacker-news', title: 'Hacker News',
+            url: 'https://news.ycombinator.com/', enabled: true, intervalMinutes: 360,
+            nextRunAt: '2026-09-11T06:00:00.000Z', hasError: false,
+            fetchedItemCount: 12, origin: 'built-in',
+          }],
           subscriptions: () => [subscription],
           decideSubscription: (id, decision, expectedUpdatedAt, decidedAt) => {
             expect(id).toBe('feed-1');
@@ -145,6 +151,13 @@ describe('Shannon local API kernel', () => {
       method: 'GET', path: '/v1/world/subscriptions',
       query: new URLSearchParams({ scopeKey: 'owner-a' }),
     })).toMatchObject({ status: 200, body: { subscriptions: [{ approval: 'pending' }] } });
+    expect(await api.dispatch({
+      method: 'GET', path: '/v1/world/sources',
+      query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    })).toMatchObject({
+      status: 200,
+      body: { sources: [{ title: 'Hacker News', enabled: true, fetchedItemCount: 12 }] },
+    });
     expect(await api.dispatch({
       method: 'POST', path: '/v1/world/subscriptions/feed-1/decision', body: {
         scopeKey: 'owner-a', decision: 'approve', expectedUpdatedAt: subscription.updatedAt,

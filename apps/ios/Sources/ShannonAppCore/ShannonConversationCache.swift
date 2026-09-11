@@ -17,6 +17,7 @@ struct ShannonConversationCache {
         let deliveryState: String
         let emotionSnapshot: CachedEmotion?
         let artifacts: [ShannonGeneratedArtifactDTO]?
+        let sourceAttribution: ShannonSourceAttributionDTO?
 
         init(_ message: ConversationMessage) {
             id = message.id
@@ -30,6 +31,7 @@ struct ShannonConversationCache {
             }
             emotionSnapshot = message.emotionSnapshot.map(CachedEmotion.init)
             artifacts = message.artifacts.isEmpty ? nil : message.artifacts
+            sourceAttribution = message.sourceAttribution
         }
 
         var message: ConversationMessage {
@@ -40,7 +42,8 @@ struct ShannonConversationCache {
                 sentAt: sentAt,
                 deliveryState: deliveryState == "failed" ? .failed : .sent,
                 emotionSnapshot: emotionSnapshot?.value,
-                artifacts: artifacts ?? []
+                artifacts: artifacts ?? [],
+                sourceAttribution: sourceAttribution
             )
         }
     }

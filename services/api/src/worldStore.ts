@@ -61,7 +61,24 @@ export interface WorldSubscription {
   updatedAt: string;
 }
 
+export type WorldSourceOrigin = 'built-in' | 'approved-subscription';
+
+export interface WorldSourceSummary {
+  id: string;
+  kind: WorldSourceKind;
+  title: string;
+  url: string;
+  enabled: boolean;
+  intervalMinutes: number;
+  lastRunAt?: string;
+  nextRunAt: string;
+  hasError: boolean;
+  fetchedItemCount: number;
+  origin: WorldSourceOrigin;
+}
+
 export interface WorldSubscriptionReader {
+  sources(): readonly WorldSourceSummary[];
   subscriptions(): readonly WorldSubscription[];
   decideSubscription(
     id: string,
@@ -193,6 +210,33 @@ export class SQLiteWorldStore {
     const id = createHash('sha256').update(feedURL).digest('hex').slice(0, 24);
     this.decideSubscription(id, 'approve', discoveredAt, discoveredAt);
     return true;
+  }
+
+  sources(): readonly WorldSourceSummary[] {
+    const rows = this.database.prepare(`
+      SELECT ws.source_id, ws.kind, ws.title, ws.url, ws.enabled, ws.interval_minutes,
+        ws.last_run_at, ws.next_run_at, ws.last_error,
+        COUNT(wi.item_id) AS fetched_item_count,
+        CASE WHEN s.subscription_id IS NULL THEN 'built-in' ELSE 'approved-subscription' END AS origin
+      FROM world_sources ws
+      LEFT JOIN world_items wi ON wi.source_id = ws.source_id
+      LEFT JOIN subscriptions s ON ws.source_id = 'rss:' || s.subscription_id
+      GROUP BY ws.source_id
+      ORDER BY ws.enabled DESC, origin ASC, ws.title ASC
+    `).all() as unknown as Array<Record<string, unknown>>;
+    return Object.freeze(rows.map(row => Object.freeze({
+      id: String(row.source_id),
+      kind: String(row.kind) as WorldSourceKind,
+      title: String(row.title),
+      url: String(row.url),
+      enabled: Number(row.enabled) === 1,
+      intervalMinutes: Number(row.interval_minutes),
+      ...(row.last_run_at === null ? {} : { lastRunAt: String(row.last_run_at) }),
+      nextRunAt: String(row.next_run_at),
+      hasError: row.last_error !== null,
+      fetchedItemCount: Number(row.fetched_item_count),
+      origin: String(row.origin) as WorldSourceOrigin,
+    })));
   }
 
   subscriptions(): readonly WorldSubscription[] {

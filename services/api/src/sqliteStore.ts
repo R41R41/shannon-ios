@@ -26,6 +26,7 @@ import type {
   ConversationStore,
   ConversationThread,
   ShannonExperience,
+  ShannonSourceAttribution,
   StoredConversationMessage,
   TurnPersistenceContext,
 } from './conversationStore.js';
@@ -96,6 +97,7 @@ interface MessageMetadata {
   messageEmotion?: ShannonMessageEmotion;
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
+  sourceAttribution?: ShannonSourceAttribution;
 }
 
 interface ThreadRow {
@@ -1515,6 +1517,9 @@ function freezeStoredMessage(row: MessageRow): StoredConversationMessage {
     ...(metadata?.artifacts?.length ? {
       artifacts: Object.freeze(metadata.artifacts.map(artifact => Object.freeze({ ...artifact }))),
     } : {}),
+    ...(metadata?.sourceAttribution ? {
+      sourceAttribution: Object.freeze({ ...metadata.sourceAttribution }),
+    } : {}),
   });
 }
 
@@ -1527,7 +1532,22 @@ function parseMessageMetadata(raw: string): MessageMetadata | null {
     ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: row.messageEmotion } : {}),
     ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),
     ...(validGeneratedArtifacts(row.artifacts) ? { artifacts: row.artifacts } : {}),
+    ...(validSourceAttribution(row.sourceAttribution) ? { sourceAttribution: row.sourceAttribution } : {}),
   };
+}
+
+function validSourceAttribution(value: unknown): value is ShannonSourceAttribution {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Partial<ShannonSourceAttribution>;
+  if (typeof row.title !== 'string' || !row.title.trim() || row.title.length > 200) return false;
+  if (typeof row.url !== 'string' || row.url.length > 2_000) return false;
+  if (typeof row.reason !== 'string' || !row.reason.trim() || row.reason.length > 500) return false;
+  try {
+    const url = new URL(row.url);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 function validGeneratedArtifacts(value: unknown): value is readonly ShannonGeneratedArtifact[] {

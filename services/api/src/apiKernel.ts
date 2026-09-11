@@ -630,6 +630,13 @@ export class ShannonApiKernel {
       return { status: 200, body: { subscriptions: this.worldSubscriptions.subscriptions() } };
     }
 
+    if (request.method === 'GET' && request.path === '/v1/world/sources') {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!this.worldSubscriptions) return { status: 503, body: { error: 'WORLD_UNAVAILABLE' } };
+      return { status: 200, body: { sources: this.worldSubscriptions.sources() } };
+    }
+
     const worldSubscriptionDecision = request.path.match(/^\/v1\/world\/subscriptions\/([^/]+)\/decision$/u);
     if (request.method === 'POST' && worldSubscriptionDecision) {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');

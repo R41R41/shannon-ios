@@ -238,6 +238,8 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const initiativeId = randomUUID();
     const threadId = this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
+    const reason = dailyFocus?.reason
+      ?? (interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。');
     const content = dailyFocus?.openingLine
       ? `${dailyFocus.openingLine}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : interest
@@ -254,6 +256,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       initiativeId,
       sourceItemId: candidate.item_id,
       dailyMindDayKey: dailyFocus?.dayKey ?? null,
+      sourceAttribution: {
+        title: truncate(candidate.source_title, 200),
+        url: candidate.url,
+        reason: truncate(reason, 500),
+      },
     });
 
     this.database.exec('BEGIN IMMEDIATE');

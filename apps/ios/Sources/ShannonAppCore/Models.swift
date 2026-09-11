@@ -667,6 +667,7 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let messageEmotion: ShannonMessageEmotionDTO?
     public let stateVersion: Int?
     public let artifacts: [ShannonGeneratedArtifactDTO]?
+    public let sourceAttribution: ShannonSourceAttributionDTO?
 
     public init(
         id: String,
@@ -675,7 +676,8 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
         observedAt: String,
         messageEmotion: ShannonMessageEmotionDTO? = nil,
         stateVersion: Int? = nil,
-        artifacts: [ShannonGeneratedArtifactDTO]? = nil
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil,
+        sourceAttribution: ShannonSourceAttributionDTO? = nil
     ) {
         self.id = id
         self.role = role
@@ -684,6 +686,19 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
         self.messageEmotion = messageEmotion
         self.stateVersion = stateVersion
         self.artifacts = artifacts
+        self.sourceAttribution = sourceAttribution
+    }
+}
+
+public struct ShannonSourceAttributionDTO: Codable, Equatable, Sendable {
+    public let title: String
+    public let url: String
+    public let reason: String
+
+    public init(title: String, url: String, reason: String) {
+        self.title = title
+        self.url = url
+        self.reason = reason
     }
 }
 
@@ -1148,6 +1163,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let deliveryState: DeliveryState
     public let emotionSnapshot: EmotionSnapshot?
     public let artifacts: [ShannonGeneratedArtifactDTO]
+    public let sourceAttribution: ShannonSourceAttributionDTO?
 
     public init(
         id: UUID = UUID(),
@@ -1156,7 +1172,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         sentAt: Date = Date(),
         deliveryState: DeliveryState = .sent,
         emotionSnapshot: EmotionSnapshot? = nil,
-        artifacts: [ShannonGeneratedArtifactDTO] = []
+        artifacts: [ShannonGeneratedArtifactDTO] = [],
+        sourceAttribution: ShannonSourceAttributionDTO? = nil
     ) {
         self.id = id
         self.role = role
@@ -1165,6 +1182,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         self.deliveryState = deliveryState
         self.emotionSnapshot = emotionSnapshot
         self.artifacts = artifacts
+        self.sourceAttribution = sourceAttribution
     }
 
     public func withDeliveryState(_ deliveryState: DeliveryState) -> ConversationMessage {
@@ -1175,7 +1193,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             sentAt: sentAt,
             deliveryState: deliveryState,
             emotionSnapshot: emotionSnapshot,
-            artifacts: artifacts
+            artifacts: artifacts,
+            sourceAttribution: sourceAttribution
         )
     }
 }

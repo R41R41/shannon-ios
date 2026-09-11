@@ -38,7 +38,15 @@ describe('Shannon initiative loop', () => {
       expect.objectContaining({ threadId, expression: expect.any(String), sourceURL: 'https://example.com/agents' }),
     ]);
     expect(state.conversationHistory('owner', threadId)).toEqual([
-      expect.objectContaining({ role: 'assistant', content: expect.stringContaining('AI agents') }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.stringContaining('AI agents'),
+        sourceAttribution: {
+          title: 'Hacker News',
+          url: 'https://example.com/agents',
+          reason: '今日の関心「AI agents」と近いから。',
+        },
+      }),
     ]);
     expect(initiatives.markAllRead('owner')).toBe(1);
     expect(initiatives.unreadMessages('owner')).toEqual([]);
@@ -86,6 +94,8 @@ describe('Shannon initiative loop', () => {
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map([['owner', focus]]))).toMatchObject({ sent: 1 });
     expect(state.conversationHistory('owner', threadId).at(-1)?.content)
       .toContain('昨日の話と少しつながるものを見つけた。');
+    expect(state.conversationHistory('owner', threadId).at(-1)?.sourceAttribution)
+      .toEqual({ title: 'Hacker News', url: 'https://example.com/focus', reason: focus.reason });
 
     initiatives.close();
     world.close();

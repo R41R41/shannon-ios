@@ -91,6 +91,35 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertEqual(restored.messages.map(\.text), model.messages.map(\.text))
     }
 
+    func testSourceAttributionRestoresFromDisplayCache() throws {
+        let suiteName = "shannon-source-cache-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let cache = ShannonConversationCache(defaults: defaults)
+        let attribution = ShannonSourceAttributionDTO(
+            title: "Hacker News",
+            url: "https://example.com/agents",
+            reason: "今日の関心と近いから。"
+        )
+        let message = ConversationMessage(
+            role: .shannon,
+            text: "気になる記事を見つけた。",
+            sourceAttribution: attribution
+        )
+        cache.save(
+            ShannonConversationCache.Snapshot(
+                threads: [],
+                selectedThreadId: "thread-a",
+                histories: ["thread-a": [ShannonConversationCache.CachedMessage(message)]],
+                state: nil
+            ),
+            scopeKey: "owner-a"
+        )
+
+        let restored = try XCTUnwrap(cache.load(scopeKey: "owner-a"))
+        XCTAssertEqual(restored.histories["thread-a"]?.first?.message.sourceAttribution, attribution)
+    }
+
     func testManualTitleEditedDuringSendWinsOverEarlierChatResponse() async {
         for title in ["自分の旅行メモ", "新しいトーク"] {
             let client = TitleClient()
@@ -335,7 +364,12 @@ final class ShannonConversationModelTests: XCTestCase {
                         openness: 0.5,
                         expression: .joyful
                     ),
-                    stateVersion: 4
+                    stateVersion: 4,
+                    sourceAttribution: ShannonSourceAttributionDTO(
+                        title: "Hacker News",
+                        url: "https://example.com/agents",
+                        reason: "今日の関心と近いから。"
+                    )
                 ),
             ],
             state: TestFixtures.state(version: 5)
@@ -348,6 +382,8 @@ final class ShannonConversationModelTests: XCTestCase {
 
         XCTAssertEqual(model.messages.map(\.text), ["昨日の話", "覚えているよ"])
         XCTAssertEqual(model.messages.last?.emotionSnapshot?.expression, .joyful)
+        XCTAssertEqual(model.messages.last?.sourceAttribution?.title, "Hacker News")
+        XCTAssertEqual(model.messages.last?.sourceAttribution?.reason, "今日の関心と近いから。")
         XCTAssertEqual(model.currentExpression, .joyful)
         XCTAssertEqual(model.state?.version, 5)
         let loadCount = await client.loadCount

@@ -45,6 +45,7 @@ public protocol ShannonAPIClientProtocol: Sendable {
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO
     func loadInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO
     func markInitiativesRead(scopeKey: String) async throws -> Int
+    func loadWorldSources(scopeKey: String) async throws -> [ShannonWorldSourceDTO]
     func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO]
     func decideWorldSubscription(
         scopeKey: String,
@@ -240,6 +241,8 @@ public extension ShannonAPIClientProtocol {
     }
 
     func markInitiativesRead(scopeKey: String) async throws -> Int { 0 }
+
+    func loadWorldSources(scopeKey: String) async throws -> [ShannonWorldSourceDTO] { [] }
 
     func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO] { [] }
 
@@ -653,6 +656,21 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         var request = URLRequest(url: url)
         authorize(&request, connection: connection)
         return try await response(ShannonWorldSubscriptionListDTO.self, for: request).subscriptions
+    }
+
+    public func loadWorldSources(scopeKey: String) async throws -> [ShannonWorldSourceDTO] {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/world/sources"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey),
+        ]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonWorldSourceListDTO.self, for: request).sources
     }
 
     public func decideWorldSubscription(

@@ -9,6 +9,12 @@ export interface ShannonExperience extends RecallCandidate {
   shannonReply: string;
 }
 
+export interface ShannonSourceAttribution {
+  title: string;
+  url: string;
+  reason: string;
+}
+
 export interface ConversationThread {
   threadId: string;
   title: string;
@@ -26,6 +32,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   stateVersion?: number;
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
+  sourceAttribution?: ShannonSourceAttribution;
 }
 
 export interface TurnPersistenceContext {
@@ -174,6 +181,9 @@ export class InMemoryConversationStore implements ConversationStore {
       ...(item.messageEmotion ? { messageEmotion: Object.freeze({ ...item.messageEmotion }) } : {}),
       ...(item.artifacts?.length ? {
         artifacts: Object.freeze(item.artifacts.map(artifact => Object.freeze({ ...artifact }))),
+      } : {}),
+      ...(item.sourceAttribution ? {
+        sourceAttribution: Object.freeze({ ...item.sourceAttribution }),
       } : {}),
     })));
   }

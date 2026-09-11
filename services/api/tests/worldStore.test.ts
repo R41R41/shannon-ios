@@ -24,6 +24,19 @@ describe('autonomous world store', () => {
     expect(store.latestItems()).toEqual([
       expect.objectContaining({ title: '記事', sourceTitle: source.title }),
     ]);
+    expect(store.sources()).toContainEqual(expect.objectContaining({
+      id: source.id,
+      enabled: true,
+      lastRunAt: now,
+      hasError: false,
+      fetchedItemCount: 1,
+      origin: 'built-in',
+    }));
+    const failedSource = sources.find(candidate => candidate.id !== source.id)!;
+    store.recordFailure(failedSource, 'INTERNAL_UPSTREAM_DETAIL', now);
+    const failedSummary = store.sources().find(candidate => candidate.id === failedSource.id)!;
+    expect(failedSummary).toMatchObject({ hasError: true, lastRunAt: now });
+    expect(JSON.stringify(failedSummary)).not.toContain('INTERNAL_UPSTREAM_DETAIL');
     store.close();
 
     const database = new DatabaseSync(path);
@@ -69,6 +82,12 @@ describe('autonomous world store', () => {
     const approved = store.decideSubscription(proposal.id, 'approve', proposal.updatedAt, approvedAt);
     expect(approved).toMatchObject({ status: 'trial', approval: 'approved' });
     expect(store.dueSources(approvedAt).some(source => source.url === proposal.feedURL)).toBe(true);
+    expect(store.sources()).toContainEqual(expect.objectContaining({
+      id: `rss:${proposal.id}`,
+      enabled: true,
+      fetchedItemCount: 0,
+      origin: 'approved-subscription',
+    }));
     expect(() => store.decideSubscription(proposal.id, 'reject', proposal.updatedAt, approvedAt))
       .toThrow('WORLD_SUBSCRIPTION_ALREADY_DECIDED');
     store.close();
