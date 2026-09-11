@@ -10,6 +10,8 @@ import {
 } from './llmUsage.js';
 import type { WorldItem } from './worldStore.js';
 
+const DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
+
 export interface DailyMindFocus {
   scopeKey: string;
   dayKey: string;
@@ -93,7 +95,7 @@ export class SQLiteDailyMindStore implements DailyMindReader {
         continue;
       }
       const interests = parsedInterests(row.snapshot_json);
-      const candidate = selectCandidate(candidates, interests);
+      const candidate = selectCandidate(candidates, interests, at);
       let generated: DailyMindModelResult | null = null;
       try {
         generated = await model.generate({ scopeKey: row.scope_key, recentInterests: interests, candidate });
@@ -276,9 +278,16 @@ function parsedInterests(snapshotJson: string): string[] {
   } catch { return []; }
 }
 
-function selectCandidate(candidates: readonly WorldItem[], interests: readonly string[]): WorldItem | null {
+function selectCandidate(candidates: readonly WorldItem[], interests: readonly string[], at: string): WorldItem | null {
+  const cutoff = Date.parse(at) - DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS;
+  const maximumPublishedAt = Date.parse(at) + 24 * 60 * 60_000;
   const tokens = [...new Set(interests.flatMap(value => normalize(value).split(/[\s、,・/]+/u)).filter(value => value.length >= 2))];
-  const ranked = candidates.slice(0, 40).map((candidate, index) => {
+  const ranked = candidates.filter(candidate => {
+    const discoveredAt = Date.parse(candidate.discoveredAt);
+    const publishedAt = candidate.publishedAt ? Date.parse(candidate.publishedAt) : discoveredAt;
+    return Number.isFinite(discoveredAt) && discoveredAt >= cutoff
+      && Number.isFinite(publishedAt) && publishedAt >= cutoff && publishedAt <= maximumPublishedAt;
+  }).slice(0, 40).map((candidate, index) => {
     const text = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
     const matches = tokens.filter(token => text.includes(token)).length;
     return { candidate, score: matches * 10 - index };

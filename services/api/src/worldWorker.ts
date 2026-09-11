@@ -3,6 +3,8 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { discoverFeedLinks, SQLiteWorldStore, type WorldItemInput, type WorldSource } from './worldStore.js';
+import { summarizeJmaForecast } from './jmaForecast.js';
+import { parseSyndicationFeed } from './syndicationFeed.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
@@ -88,12 +90,15 @@ async function fetchSource(source: WorldSource): Promise<readonly WorldItemInput
 }
 
 async function fetchJma(source: WorldSource): Promise<WorldItemInput[]> {
-  const value = await json(source.url);
-  if (!Array.isArray(value)) throw new Error('WORLD_JMA_INVALID');
-  const first = object(value[0]);
-  const publishing = string(first?.publishingOffice) ?? '気象庁';
-  const report = string(first?.reportDatetime) ?? new Date().toISOString();
-  return [{ externalId: report, title: `${publishing}の天気予報`, url: source.url, summary: JSON.stringify(value).slice(0, 4_000), publishedAt: report, author: publishing }];
+  const forecast = summarizeJmaForecast(await json(source.url));
+  return [{
+    externalId: forecast.reportDatetime,
+    title: forecast.title,
+    url: source.url,
+    summary: forecast.summary,
+    publishedAt: forecast.reportDatetime,
+    author: forecast.publishingOffice,
+  }];
 }
 
 async function fetchHackerNews(source: WorldSource): Promise<WorldItemInput[]> {
@@ -103,13 +108,23 @@ async function fetchHackerNews(source: WorldSource): Promise<WorldItemInput[]> {
   return rows.flatMap(value => {
     const row = object(value); const id = number(row?.id); const title = string(row?.title);
     if (id === null || !title) return [];
-    return [{ externalId: String(id), title, url: string(row?.url) ?? `https://news.ycombinator.com/item?id=${id}`, author: string(row?.by) ?? undefined }];
+    const publishedSeconds = number(row?.time);
+    const publishedAt = publishedSeconds !== null && publishedSeconds >= 0 && publishedSeconds <= 4_102_444_800
+      ? new Date(publishedSeconds * 1_000).toISOString()
+      : undefined;
+    return [{
+      externalId: String(id),
+      title,
+      url: string(row?.url) ?? `https://news.ycombinator.com/item?id=${id}`,
+      author: string(row?.by) ?? undefined,
+      publishedAt,
+    }];
   });
 }
 
 async function fetchArxiv(source: WorldSource): Promise<WorldItemInput[]> {
   const url = new URL(source.url); url.searchParams.set('search_query', source.query ?? 'all:AI'); url.searchParams.set('max_results', '10');
-  return parseAtom(await text(url.href));
+  return parseSyndicationFeed(await text(url.href), url);
 }
 
 async function fetchPubmed(source: WorldSource): Promise<WorldItemInput[]> {
@@ -141,16 +156,12 @@ async function fetchGithub(source: WorldSource): Promise<WorldItemInput[]> {
 }
 
 async function fetchRss(source: WorldSource): Promise<WorldItemInput[]> {
-  return parseAtom(await text(source.url));
-}
-
-function parseAtom(xml: string): WorldItemInput[] {
-  const blocks = [...xml.matchAll(/<(?:entry|item)\b[\s\S]*?<\/(?:entry|item)>/giu)].slice(0, 15).map(match => match[0]);
-  return blocks.flatMap(block => {
-    const title = clean(tag(block, 'title')); const url = attribute(block, 'link', 'href') ?? clean(tag(block, 'link'));
-    const id = clean(tag(block, 'id')) || clean(tag(block, 'guid')) || url; if (!title || !id || !url) return [];
-    return [{ externalId: id, title, url, summary: clean(tag(block, 'summary')) || clean(tag(block, 'description')) || undefined, publishedAt: clean(tag(block, 'published')) || clean(tag(block, 'pubDate')) || undefined }];
-  });
+  const allowedCategories = source.query?.startsWith('categories:')
+    ? source.query.slice('categories:'.length).split('|').map(item => item.trim()).filter(Boolean)
+    : undefined;
+  const sourceURL = new URL(source.url);
+  const feed = await safeFeed(sourceURL);
+  return parseSyndicationFeed(feed.body, feed.url, { allowedCategories });
 }
 
 async function json(url: string, headers: Record<string, string> = {}): Promise<unknown> {
@@ -159,11 +170,9 @@ async function json(url: string, headers: Record<string, string> = {}): Promise<
 }
 async function text(url: string): Promise<string> {
   const response = await fetch(url, { headers: { 'user-agent': 'Shannon/0.1' }, signal: requestSignal(15_000) });
-  if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`); return response.text();
+  if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`);
+  return boundedResponseText(response, 2_000_000, 'WORLD_FEED_TOO_LARGE');
 }
-function tag(value: string, name: string): string { return value.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`, 'iu'))?.[1] ?? ''; }
-function attribute(value: string, name: string, attributeName: string): string | null { return value.match(new RegExp(`<${name}\\b[^>]*${attributeName}=["']([^"']+)["']`, 'iu'))?.[1] ?? null; }
-function clean(value: string): string { return value.replace(/<!\[CDATA\[|\]\]>/gu, '').replace(/<[^>]+>/gu, ' ').replace(/&amp;/gu, '&').replace(/\s+/gu, ' ').trim(); }
 function object(value: unknown): Record<string, unknown> | null { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function string(value: unknown): string | null { return typeof value === 'string' && value ? value : null; }
 function number(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
@@ -197,11 +206,48 @@ async function safeHtml(url: URL, redirectCount = 0): Promise<string> {
   }
   if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`);
   if (!(response.headers.get('content-type') ?? '').toLowerCase().includes('text/html')) throw new Error('WORLD_NOT_HTML');
+  return boundedResponseText(response, 1_500_000, 'WORLD_PAGE_TOO_LARGE');
+}
+
+async function safeFeed(url: URL, redirectCount = 0): Promise<{ readonly body: string; readonly url: URL }> {
+  if (!(await publicURL(url))) throw new Error('WORLD_PRIVATE_URL');
+  const response = await fetch(url, {
+    headers: { 'user-agent': 'Shannon/0.1' }, redirect: 'manual', signal: requestSignal(15_000),
+  });
+  if (response.status >= 300 && response.status < 400) {
+    if (redirectCount >= 3) throw new Error('WORLD_REDIRECT_LIMIT');
+    const location = response.headers.get('location');
+    if (!location) throw new Error('WORLD_REDIRECT_INVALID');
+    return safeFeed(new URL(location, url), redirectCount + 1);
+  }
+  if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`);
+  const body = await boundedResponseText(response, 2_000_000, 'WORLD_FEED_TOO_LARGE');
+  return { body, url };
+}
+
+async function boundedResponseText(response: Response, maximumBytes: number, errorCode: string): Promise<string> {
   const declaredSize = Number(response.headers.get('content-length') ?? 0);
-  if (declaredSize > 1_500_000) throw new Error('WORLD_PAGE_TOO_LARGE');
-  const body = await response.text();
-  if (body.length > 1_500_000) throw new Error('WORLD_PAGE_TOO_LARGE');
-  return body;
+  if (declaredSize > maximumBytes) throw new Error(errorCode);
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      byteLength += chunk.byteLength;
+      if (byteLength > maximumBytes) {
+        await reader.cancel(errorCode);
+        throw new Error(errorCode);
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, byteLength).toString('utf8');
 }
 
 function requestSignal(timeoutMilliseconds: number): AbortSignal {
@@ -210,7 +256,8 @@ function requestSignal(timeoutMilliseconds: number): AbortSignal {
 
 async function publicURL(url: URL): Promise<boolean> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
-  const hostname = url.hostname.toLowerCase();
+  if (url.username || url.password) return false;
+  const hostname = url.hostname.replace(/^\[|\]$/gu, '').toLowerCase();
   if (hostname === 'localhost' || hostname.endsWith('.local')) return false;
   const directFamily = isIP(hostname);
   const addresses = directFamily ? [{ address: hostname, family: directFamily }] : await lookup(hostname, { all: true });
@@ -218,8 +265,11 @@ async function publicURL(url: URL): Promise<boolean> {
 }
 
 function privateAddress(address: string): boolean {
-  const value = address.toLowerCase();
+  const value = address.replace(/^\[|\]$/gu, '').toLowerCase();
   if (value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:')) return true;
+  if (value.startsWith('::ffff:') && value.slice('::ffff:'.length).includes('.')) {
+    return privateAddress(value.slice('::ffff:'.length));
+  }
   const octets = value.split('.').map(Number);
   if (octets.length !== 4 || octets.some(item => !Number.isInteger(item))) return false;
   return octets[0] === 0 || octets[0] === 10 || octets[0] === 127

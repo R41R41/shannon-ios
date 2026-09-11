@@ -57,6 +57,7 @@ interface CandidateRow {
   title: string;
   url: string;
   summary: string | null;
+  published_at: string | null;
   discovered_at: string;
 }
 
@@ -145,6 +146,12 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       const preferred = dailyFocus?.sourceItemId
         ? candidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
         : undefined;
+      if (dailyFocus?.sourceItemId && !preferred) {
+        // A weather or otherwise excluded focus must never donate its wording or
+        // explanation to an unrelated eligible source.
+        lastStop = 'nothing-worth-saying';
+        continue;
+      }
       const selected = preferred
         ? { ...preferred, score: candidateScore(preferred, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at) }
         : selectCandidate(candidates, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at);
@@ -315,17 +322,26 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   private candidates(scopeKey: string, at: string): CandidateRow[] {
     const cutoff = new Date(Date.parse(at) - CANDIDATE_MAX_AGE_MILLISECONDS).toISOString();
     return this.database.prepare(`
-      SELECT wi.item_id, ws.title AS source_title, wi.title, wi.url, wi.summary, wi.discovered_at
+      SELECT wi.item_id, ws.title AS source_title, wi.title, wi.url, wi.summary,
+        wi.published_at, wi.discovered_at
       FROM world_items wi
       JOIN world_sources ws ON ws.source_id = wi.source_id
       WHERE wi.discovered_at >= ?
+        AND (
+          wi.published_at IS NULL
+          OR (
+            julianday(wi.published_at) IS NOT NULL
+            AND julianday(wi.published_at) >= julianday(?)
+            AND julianday(wi.published_at) <= julianday(?) + 1
+          )
+        )
         AND ws.kind <> 'weather'
         AND NOT EXISTS (
           SELECT 1 FROM initiative_messages im
           WHERE im.scope_key = ? AND im.source_item_id = wi.item_id
         )
       ORDER BY wi.discovered_at DESC LIMIT 80
-    `).all(cutoff, scopeKey) as unknown as CandidateRow[];
+    `).all(cutoff, cutoff, at, scopeKey) as unknown as CandidateRow[];
   }
 
   private hasRecentUserMessage(scopeKey: string, at: string): boolean {

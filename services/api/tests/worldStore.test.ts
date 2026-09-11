@@ -18,6 +18,12 @@ describe('autonomous world store', () => {
       'weather', 'hacker-news', 'arxiv', 'pubmed', 'rss',
     ]));
     expect(sources.map(source => source.kind)).not.toContain('mastodon');
+    expect(sources).toContainEqual(expect.objectContaining({
+      id: 'digital:news',
+      title: 'デジタル庁・報道発表／政策',
+      url: 'https://www.digital.go.jp/rss/news.xml',
+      query: 'categories:報道発表|政策',
+    }));
     const source = sources[0]!;
     expect(store.recordSuccess(source, [{ externalId: 'same', title: '記事', url: 'https://example.com/a' }], now)).toBe(1);
     expect(store.recordSuccess(source, [{ externalId: 'same', title: '記事', url: 'https://example.com/a' }], now)).toBe(0);

@@ -475,6 +475,7 @@ export class SQLiteWorldStore {
       { id: 'pubmed:ai', kind: 'pubmed', title: 'PubMed・AI', url: 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi', query: 'artificial intelligence', intervalMinutes: 1440, nextRunAt: now },
       { id: 'zenn:all', kind: 'rss', title: 'Zenn', url: 'https://zenn.dev/feed', query: null, intervalMinutes: 360, nextRunAt: now },
       { id: 'cao:news', kind: 'rss', title: '内閣府', url: 'https://www.cao.go.jp/rss/news.rdf', query: null, intervalMinutes: 1440, nextRunAt: now },
+      { id: 'digital:news', kind: 'rss', title: 'デジタル庁・報道発表／政策', url: 'https://www.digital.go.jp/rss/news.xml', query: 'categories:報道発表|政策', intervalMinutes: 720, nextRunAt: now },
     ];
     const blueskyQuery = process.env.SHANNON_BLUESKY_QUERY?.trim();
     if (blueskyQuery) sources.push({

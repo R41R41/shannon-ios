@@ -120,6 +120,93 @@ describe('Shannon initiative loop', () => {
     initiatives.close();
     state.close();
   });
+
+  it('does not attach a weather focus explanation to an unrelated news item', () => {
+    const path = databasePath();
+    const at = '2026-09-05T04:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    state.createThread('owner', 'いつものトーク');
+    const world = new SQLiteWorldStore(path, () => at);
+    const weather = world.dueSources(at).find(item => item.kind === 'weather')!;
+    world.recordSuccess(weather, [{
+      externalId: 'forecast', title: '東京地方: 今日 雨', url: weather.url,
+      summary: '今日: 雨（降水確率 最大60%）',
+    }], at);
+    const news = world.dueSources(at).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(news, [{
+      externalId: 'unrelated', title: 'Unrelated software story', url: 'https://example.com/unrelated',
+    }], at);
+    const weatherItem = world.latestItems(10).find(item => item.sourceId === weather.id)!;
+    const focus: DailyMindFocus = {
+      scopeKey: 'owner', dayKey: '2026-09-05', topic: '東京の雨', reason: '今日は雨が続きそうだから。',
+      sourceItemId: weatherItem.id, sourceTitle: weatherItem.sourceTitle, sourceURL: weatherItem.url,
+      openingLine: '傘を持って出たほうがよさそう。', createdAt: at, expiresAt: '2026-09-05T15:00:00.000Z',
+    };
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+
+    expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map([['owner', focus]])))
+      .toEqual({ considered: 1, sent: 0, stopped: 'nothing-worth-saying' });
+    expect(initiatives.unreadMessages('owner')).toEqual([]);
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
+
+  it('does not surface an old article as new when a feed is first discovered', () => {
+    const path = databasePath();
+    const at = '2026-09-05T04:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    state.apply('owner', { type: 'interest-observed', interest: 'AI agents' });
+    const world = new SQLiteWorldStore(path, () => at);
+    const source = world.dueSources(at).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(source, [{
+      externalId: 'old-agent-story',
+      title: 'AI agents from an old feed archive',
+      url: 'https://example.com/old-agents',
+      publishedAt: '2026-08-01T00:00:00.000Z',
+    }], at);
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+
+    expect(initiatives.runOnce(at)).toEqual({
+      considered: 0, sent: 0, stopped: 'nothing-worth-saying',
+    });
+    expect(initiatives.unreadMessages('owner')).toEqual([]);
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
+
+  it.each(['not-a-date', '2099-01-01T00:00:00.000Z'])(
+    'does not treat an invalid or implausibly future publication timestamp as fresh: %s',
+    publishedAt => {
+      const path = databasePath();
+      const at = '2026-09-05T04:00:00.000Z';
+      const state = new SQLiteShannonStore({ path, now: () => at });
+      state.snapshot('owner');
+      state.apply('owner', { type: 'interest-observed', interest: 'AI agents' });
+      const world = new SQLiteWorldStore(path, () => at);
+      const source = world.dueSources(at).find(item => item.kind === 'hacker-news')!;
+      world.recordSuccess(source, [{
+        externalId: 'invalid-date-agent-story',
+        title: 'AI agents with an invalid publication date',
+        url: 'https://example.com/invalid-date-agents',
+        publishedAt,
+      }], at);
+      const initiatives = new SQLiteInitiativeStore(path, () => at);
+
+      expect(initiatives.runOnce(at)).toEqual({
+        considered: 0, sent: 0, stopped: 'nothing-worth-saying',
+      });
+
+      initiatives.close();
+      world.close();
+      state.close();
+    },
+  );
 });
 
 function databasePath(): string {

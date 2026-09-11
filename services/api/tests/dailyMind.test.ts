@@ -49,6 +49,29 @@ describe('daily Shannon mind', () => {
     state.close();
   });
 
+  it('does not turn a stale world item into today\'s focus', async () => {
+    const path = databasePath();
+    const at = '2026-09-05T02:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    const daily = new SQLiteDailyMindStore(path, () => at);
+    const oldItem = {
+      ...worldItem('old-news', '先月のニュース'),
+      discoveredAt: '2026-09-05T01:00:00.000Z',
+      publishedAt: '2026-08-01T00:00:00.000Z',
+    };
+
+    const result = await daily.ensureForKnownScopes([oldItem], { generate: async () => null });
+
+    expect(result.get('owner')).toMatchObject({
+      topic: '今日は静かに周りを見る',
+      reason: '急いで話題を作らず、今日の出来事を静かに見ていたいから。',
+    });
+    expect(result.get('owner')?.sourceItemId).toBeUndefined();
+    daily.close();
+    state.close();
+  });
+
   it('records a bounded model call and stops at the shared background budget', async () => {
     const events: unknown[] = [];
     let spent = 0;
