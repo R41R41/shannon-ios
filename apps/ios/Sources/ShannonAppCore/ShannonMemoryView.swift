@@ -428,6 +428,17 @@ private struct ShannonInitiativeEvaluationCard: View {
             }
             .font(.caption)
             .foregroundStyle(palette.onSurfaceVariant)
+            if let suppressed = evaluation.repeatedCandidatesSuppressed, suppressed > 0 {
+                Label("重複候補を\(suppressed)件、静かに除外", systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+            }
+            if !sourceSummary.isEmpty {
+                Text("配信元: \(sourceSummary)")
+                    .font(.caption)
+                    .foregroundStyle(palette.onSurfaceVariant)
+                    .lineLimit(2)
+            }
         }
         .padding(M3Spacing.large)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
@@ -439,6 +450,12 @@ private struct ShannonInitiativeEvaluationCard: View {
 
     private var silentRuns: Int {
         evaluation.stopped.values.reduce(0, +)
+    }
+
+    private var sourceSummary: String {
+        (evaluation.deliveredBySource ?? []).prefix(3)
+            .map { "\($0.sourceTitle) \($0.count)件" }
+            .joined(separator: "・")
     }
 }
 

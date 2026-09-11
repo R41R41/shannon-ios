@@ -43,6 +43,8 @@ export interface InitiativeEvaluationSummary {
   delivered: number;
   deliveryRate: number;
   candidatesConsidered: number;
+  repeatedCandidatesSuppressed: number;
+  deliveredBySource: readonly Readonly<{ sourceTitle: string; count: number }>[];
   stopped: Readonly<Record<Exclude<InitiativeLoopResult['stopped'], null>, number>>;
 }
 
@@ -101,12 +103,14 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         run_id TEXT PRIMARY KEY,
         considered INTEGER NOT NULL CHECK (considered >= 0),
         sent INTEGER NOT NULL CHECK (sent >= 0),
+        repeated_suppressed INTEGER NOT NULL DEFAULT 0 CHECK (repeated_suppressed >= 0),
         stopped TEXT,
         occurred_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS initiative_loop_runs_occurred
         ON initiative_loop_runs (occurred_at DESC);
     `);
+    this.migrateInitiativeLoopRuns();
     this.secureFiles();
   }
 
@@ -130,6 +134,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
 
     let considered = 0;
     let sent = 0;
+    let repeatedSuppressed = 0;
     let lastStop: InitiativeLoopResult['stopped'] = null;
     for (const scope of scopes) {
       const dayKey = `${local.year}-${pad(local.month)}-${pad(local.day)}`;
@@ -152,6 +157,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       considered += candidates.length;
       const recentSignals = this.recentSignals(scope.scope_key, at);
       const distinctCandidates = candidates.filter(candidate => !isRepeatedWorldSignal(signalCandidate(candidate), recentSignals));
+      repeatedSuppressed += candidates.length - distinctCandidates.length;
       const preferred = dailyFocus?.sourceItemId
         ? distinctCandidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
         : undefined;
@@ -173,16 +179,26 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       lastStop = null;
     }
     this.secureFiles();
-    return this.finish({ considered, sent, stopped: sent > 0 ? null : lastStop }, at);
+    return this.finish({ considered, sent, stopped: sent > 0 ? null : lastStop }, at, repeatedSuppressed);
   }
 
   initiativeEvaluation(windowDays = 30, at = this.now()): InitiativeEvaluationSummary {
     const days = Math.max(1, Math.min(90, Math.trunc(windowDays)));
     const cutoff = new Date(Date.parse(at) - days * 24 * 60 * 60_000).toISOString();
     const rows = this.database.prepare(`
-      SELECT considered, sent, stopped FROM initiative_loop_runs
+      SELECT considered, sent, repeated_suppressed, stopped FROM initiative_loop_runs
       WHERE occurred_at >= ? ORDER BY occurred_at DESC
-    `).all(cutoff) as unknown as Array<{ considered: number; sent: number; stopped: string | null }>;
+    `).all(cutoff) as unknown as Array<{
+      considered: number; sent: number; repeated_suppressed: number; stopped: string | null;
+    }>;
+    const sourceRows = this.database.prepare(`
+      SELECT source_title, COUNT(*) AS count
+      FROM initiative_messages
+      WHERE created_at >= ?
+      GROUP BY source_title
+      ORDER BY count DESC, source_title ASC
+      LIMIT 8
+    `).all(cutoff) as unknown as Array<{ source_title: string; count: number }>;
     const stopped = {
       'quiet-hours': 0, 'no-owner': 0, 'today-is-enough': 0,
       'recent-conversation': 0, 'nothing-worth-saying': 0,
@@ -197,6 +213,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       delivered,
       deliveryRate: eligible.length ? Math.round((delivered / eligible.length) * 10_000) / 10_000 : 0,
       candidatesConsidered: rows.reduce((sum, row) => sum + Number(row.considered), 0),
+      repeatedCandidatesSuppressed: rows.reduce((sum, row) => sum + Number(row.repeated_suppressed), 0),
+      deliveredBySource: Object.freeze(sourceRows.map(row => Object.freeze({
+        sourceTitle: row.source_title,
+        count: Number(row.count),
+      }))),
       stopped: Object.freeze(stopped),
     });
   }
@@ -231,15 +252,25 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     this.database.close();
   }
 
-  private finish(result: InitiativeLoopResult, at: string): InitiativeLoopResult {
+  private finish(result: InitiativeLoopResult, at: string, repeatedSuppressed = 0): InitiativeLoopResult {
     this.database.prepare(`
-      INSERT INTO initiative_loop_runs (run_id, considered, sent, stopped, occurred_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(randomUUID(), result.considered, result.sent, result.stopped, at);
+      INSERT INTO initiative_loop_runs (run_id, considered, sent, repeated_suppressed, stopped, occurred_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(randomUUID(), result.considered, result.sent, repeatedSuppressed, result.stopped, at);
     this.database.prepare(`DELETE FROM initiative_loop_runs WHERE occurred_at < ?`)
       .run(new Date(Date.parse(at) - 90 * 24 * 60 * 60_000).toISOString());
     this.secureFiles();
     return Object.freeze({ ...result });
+  }
+
+  private migrateInitiativeLoopRuns(): void {
+    const columns = this.database.prepare(`PRAGMA table_info(initiative_loop_runs)`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'repeated_suppressed')) {
+      this.database.exec(`
+        ALTER TABLE initiative_loop_runs
+        ADD COLUMN repeated_suppressed INTEGER NOT NULL DEFAULT 0 CHECK (repeated_suppressed >= 0)
+      `);
+    }
   }
 
   private persistMessage(

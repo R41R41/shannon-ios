@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
@@ -32,6 +33,8 @@ describe('Shannon initiative loop', () => {
     expect(initiatives.runOnce()).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
     expect(initiatives.initiativeEvaluation()).toMatchObject({
       runs: 2, eligibleRuns: 2, delivered: 1, deliveryRate: 0.5,
+      repeatedCandidatesSuppressed: 0,
+      deliveredBySource: [{ sourceTitle: 'Hacker News', count: 1 }],
       stopped: { 'today-is-enough': 1 },
     });
     expect(initiatives.unreadMessages('owner')).toEqual([
@@ -247,6 +250,13 @@ describe('Shannon initiative loop', () => {
       'https://news.example.com/agent-memory?utm_source=hn',
       'https://papers.example.net/agent-planning',
     ]);
+    expect(initiatives.initiativeEvaluation(30, secondDay)).toMatchObject({
+      repeatedCandidatesSuppressed: 1,
+      deliveredBySource: [
+        { sourceTitle: 'Hacker News', count: 1 },
+        { sourceTitle: 'PubMed・AI', count: 1 },
+      ],
+    });
 
     initiatives.close();
     world.close();
@@ -326,6 +336,32 @@ describe('Shannon initiative loop', () => {
     initiatives.close();
     world.close();
     state.close();
+  });
+
+  it('migrates evaluation databases created before repeat suppression was recorded', () => {
+    const path = databasePath();
+    const database = new DatabaseSync(path);
+    database.exec(`
+      CREATE TABLE initiative_loop_runs (
+        run_id TEXT PRIMARY KEY,
+        considered INTEGER NOT NULL CHECK (considered >= 0),
+        sent INTEGER NOT NULL CHECK (sent >= 0),
+        stopped TEXT,
+        occurred_at TEXT NOT NULL
+      );
+      INSERT INTO initiative_loop_runs (run_id, considered, sent, stopped, occurred_at)
+      VALUES ('legacy-run', 3, 1, NULL, '2026-09-03T03:00:00.000Z');
+    `);
+    database.close();
+
+    const initiatives = new SQLiteInitiativeStore(path, () => '2026-09-03T04:00:00.000Z');
+    expect(initiatives.initiativeEvaluation()).toMatchObject({
+      runs: 1,
+      delivered: 1,
+      repeatedCandidatesSuppressed: 0,
+      deliveredBySource: [],
+    });
+    initiatives.close();
   });
 });
 

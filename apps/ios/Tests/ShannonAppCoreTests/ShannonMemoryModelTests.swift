@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class ShannonMemoryModelTests: XCTestCase {
+    func testInitiativeEvaluationDecodesLegacyAndAggregateOnlyPayloads() throws {
+        let legacy = Data(#"""
+        {
+            "windowDays":30,"runs":2,"eligibleRuns":2,"delivered":1,"deliveryRate":0.5,
+            "candidatesConsidered":4,"stopped":{"today-is-enough":1}
+        }
+        """#.utf8)
+        let legacyEvaluation = try JSONDecoder().decode(ShannonInitiativeEvaluationDTO.self, from: legacy)
+        XCTAssertNil(legacyEvaluation.repeatedCandidatesSuppressed)
+        XCTAssertNil(legacyEvaluation.deliveredBySource)
+
+        let current = Data(#"""
+        {
+            "windowDays":30,"runs":2,"eligibleRuns":2,"delivered":1,"deliveryRate":0.5,
+            "candidatesConsidered":4,"repeatedCandidatesSuppressed":2,
+            "deliveredBySource":[{"sourceTitle":"Hacker News","count":1}],
+            "stopped":{"today-is-enough":1}
+        }
+        """#.utf8)
+        let currentEvaluation = try JSONDecoder().decode(ShannonInitiativeEvaluationDTO.self, from: current)
+        XCTAssertEqual(currentEvaluation.repeatedCandidatesSuppressed, 2)
+        XCTAssertEqual(currentEvaluation.deliveredBySource, [
+            ShannonInitiativeSourceCountDTO(sourceTitle: "Hacker News", count: 1)
+        ])
+    }
+
     func testLoadsAllFourMemoryKindsAndLatestSleepReport() async {
         let dashboard = MemoryFixtures.dashboard()
         let client = MemoryClient(loadResult: .success(dashboard), mutationResult: .success(dashboard))

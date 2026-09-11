@@ -1020,7 +1020,14 @@ public struct ShannonInitiativeEvaluationDTO: Codable, Equatable, Sendable {
     public let delivered: Int
     public let deliveryRate: Double
     public let candidatesConsidered: Int
+    public let repeatedCandidatesSuppressed: Int?
+    public let deliveredBySource: [ShannonInitiativeSourceCountDTO]?
     public let stopped: [String: Int]
+}
+
+public struct ShannonInitiativeSourceCountDTO: Codable, Equatable, Sendable {
+    public let sourceTitle: String
+    public let count: Int
 }
 
 public struct ShannonPersonalityProfileDTO: Codable, Equatable, Sendable {
