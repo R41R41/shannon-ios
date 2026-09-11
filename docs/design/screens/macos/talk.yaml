@@ -1,0 +1,39 @@
+schema_version: 1
+screen_id: shannon-macos-talk
+platform: macos
+baseline_commit: e21033582dca6254d213040440ad50536b05de19
+last_verified_at: 2026-09-12
+user_job: "シャノンとの会話を読み、入力し、添付やWeb調査を伴う返答を同じトークで継続する"
+primary_action: "入力欄からメッセージを送信する"
+preserve:
+  - "会話履歴と選択中トークの復元"
+  - "Shannon本文、ユーザー吹き出し、添付、出典、生成物、整理カードの区別"
+  - "Light、Dark、Systemの既存外観"
+  - "会話から作業と設定へ移動できるアプリシェル"
+improve:
+  - "長い会話でも読み位置と入力状態を失わない"
+  - "補助操作と状態表示の視覚ノイズを抑える"
+do_not_change:
+  - "会話、記憶、作業の正本と同期規則"
+  - "ユーザー確認前にVoyagerやAetherへ書き込まない境界"
+  - "既存の情報階層、意味色、キャラクター表現"
+states:
+  loading: "履歴取得中であることを示し、入力済み内容を破棄しない"
+  empty: "最初の会話を始められる入力欄と静かな案内を示す"
+  error: "直前の表示可能な履歴を保ち、原因を秘密情報なしで示して再試行可能にする"
+  offline: "ローカル表示キャッシュを保ち、未送信または再接続待ちを区別する"
+  conflict: "新しいサーバー状態を優先して再読込し、ユーザー入力を黙って失わない"
+  selection: "選択中トークとフォーカス中の操作を色以外でも判別できる"
+accessibility:
+  dynamic_type: "主要本文とラベルは拡大時にも切り捨てず、必要なら縦に伸びる"
+  voiceover: "話者、本文、時刻、状態、ボタンの役割を読み上げ順に提供する"
+  target_size: "主要操作のヒット領域を44ポイント以上にする"
+  focus: "キーボード移動、入力欄、選択トークのフォーカスを予測可能に保つ"
+  reduce_motion: "意味をアニメーションだけに依存させず、Reduce Motionで不要な移動を抑える"
+evidence:
+  current:
+    - "docs/screenshots/shannon-macos-talk-dark-v32.png"
+    - "docs/screenshots/shannon-macos-talk-light-v32.png"
+    - "docs/screenshots/shannon-macos-talk-system-v32.png"
+  approved: []
+  privacy: "サンプルまたは非機密表示だけを保存し、認証情報と実会話本文を含めない"

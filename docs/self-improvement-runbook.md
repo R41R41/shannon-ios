@@ -24,16 +24,18 @@ The Agent Host must distinguish a finished Codex turn from a finished Shannon ta
 Use the single repository entry point:
 
 ```sh
+scripts/verify.sh fast
 scripts/verify.sh api
 scripts/verify.sh ios
 scripts/verify.sh app
 scripts/verify.sh all
 ```
 
+- `fast`: Canonical documentation, screen contracts, cross-app fixtures, and architecture boundaries. No network, production, signing, Simulator, or device access.
 - `api`: TypeScript typecheck and deterministic API tests.
 - `ios`: Swift package tests.
 - `app`: generic unsigned iOS application build.
-- `all`: all three in sequence.
+- `all`: fast checks, API tests, Swift package tests, unsigned iOS build, Mac tests, and Release Runner tests in sequence.
 
 Real-LLM evaluations are opt-in because they cost money. Run them only for changes to extraction, proposal decisions, or model behavior and record that cost-bearing tests were intentionally used.
 

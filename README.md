@@ -2,6 +2,19 @@
 
 iPhoneとMacで一人のシャノンへつながる、ネイティブクライアントと専用バックエンドのリポジトリ。
 
+## 現在の正本
+
+| 関心 | 正本 |
+| --- | --- |
+| Product | このREADMEの[方針](#方針) |
+| Architecture | [`docs/architecture.md`](docs/architecture.md) |
+| Design | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| Release | [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md) |
+| Branching | [`docs/BRANCHING.md`](docs/BRANCHING.md) |
+| Verification | [`scripts/verify.sh`](scripts/verify.sh)（`fast` / `all`） |
+
+`docs/shannon-*.html` は意思決定と配布の履歴であり、明示的に指定されない限り現在仕様の正本ではない。実装に着手する時はこの表から読み始める。
+
 ## 方針
 
 - v1は固定LLMを使う。
@@ -36,6 +49,7 @@ pnpm dev:api
 Codexを含む全開発経路では、同じ検証入口を使う。
 
 ```sh
+scripts/verify.sh fast
 scripts/verify.sh api
 scripts/verify.sh ios
 scripts/verify.sh app
@@ -44,7 +58,7 @@ scripts/verify.sh mac-release
 scripts/verify.sh all
 ```
 
-`mac` はMac固有のユニットテストとDebugアプリを検証し、`mac-release` は署名なしのReleaseアプリを生成する。Mac固有UIは `apps/macos-app`、iPhone固有UIは `apps/ios-app`、両者で共有する状態・通信・Markdown処理は `apps/ios/Sources/ShannonAppCore` に置く。
+`fast` は正本リンク、画面契約、横断fixture、責務境界を外部通信なしで検査する。`mac` はMac固有のユニットテストとDebugアプリを検証し、`mac-release` は署名なしのReleaseアプリを生成する。Mac固有UIは `apps/macos-app`、iPhone固有UIは `apps/ios-app`、両者で共有する状態・通信・Markdown処理は `apps/ios/Sources/ShannonAppCore` に置く。
 
 別ターミナルで背景workerを起動する。APIは感情・想起・睡眠処理を待たない。
 
@@ -90,4 +104,4 @@ Azure接続とペアリングの安全境界は [`docs/shannon-azure-pairing.htm
 
 独立workerと睡眠バッチは [`docs/shannon-background-sleep.html`](docs/shannon-background-sleep.html) で視覚的に確認できる。
 
-現在の実装上の正本は [`docs/architecture.md`](docs/architecture.md)、自己改修の完了条件と配備・復旧手順は [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md) にまとめている。番号付きHTML資料は設計履歴であり、明示的に指定されない限り現在仕様より優先しない。
+現在の正本と履歴資料の区別は冒頭の「現在の正本」に集約している。

@@ -28,6 +28,11 @@ run_architecture() {
   "$node_bin" scripts/check-architecture.mjs
 }
 
+run_fast() {
+  "$node_bin" scripts/check-harness.mjs
+  run_architecture
+}
+
 run_ios() {
   swift test --package-path apps/ios
 }
@@ -82,16 +87,17 @@ run_release_runner() {
 
 target="${1:-all}"
 case "$target" in
+  fast) run_fast ;;
   architecture) run_architecture ;;
-  api) run_architecture; run_api ;;
-  ios) run_architecture; run_ios ;;
-  app) run_architecture; run_app ;;
-  mac) run_architecture; run_macos_app ;;
+  api) run_fast; run_api ;;
+  ios) run_fast; run_ios ;;
+  app) run_fast; run_app ;;
+  mac) run_fast; run_macos_app ;;
   mac-release) run_release_macos_app ;;
   release) run_release_app ;;
   release-runner) run_release_runner ;;
   all)
-    run_architecture
+    run_fast
     run_api
     run_ios
     run_app
@@ -99,7 +105,7 @@ case "$target" in
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [architecture|api|ios|app|mac|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [fast|architecture|api|ios|app|mac|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac
