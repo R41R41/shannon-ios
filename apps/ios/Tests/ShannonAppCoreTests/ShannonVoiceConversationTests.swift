@@ -73,7 +73,7 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertEqual(event(#"{"type":"input_audio_buffer.speech_started"}"#), .speechStarted)
         XCTAssertEqual(event(#"{"type":"input_audio_buffer.speech_stopped"}"#), .speechStopped)
         XCTAssertEqual(event(#"{"type":"response.created"}"#), .responseStarted)
-        XCTAssertEqual(event(#"{"type":"response.done"}"#), .responseFinished)
+        XCTAssertEqual(event(#"{"type":"response.done"}"#), .responseFinished(nil))
         XCTAssertEqual(
             event(#"{"type":"response.output_audio_transcript.delta","delta":"うん"}"#),
             .outputTranscriptDelta("うん")
@@ -81,6 +81,53 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertEqual(
             event(#"{"type":"error","error":{"code":"session_expired","message":"secret"}}"#),
             .failed("session_expired")
+        )
+    }
+
+    func testRealtimeResponseUsageDecodesAndAccumulatesWithoutRawResponseContent() throws {
+        let decoded = try XCTUnwrap(event(#"{"type":"response.done","response":{"usage":{"total_tokens":31,"input_tokens":20,"output_tokens":11,"input_token_details":{"cached_tokens":4,"audio_tokens":8},"output_token_details":{"audio_tokens":7}}}}"#))
+        guard case .responseFinished(let sample) = decoded else {
+            return XCTFail("Expected response usage")
+        }
+        XCTAssertEqual(
+            sample,
+            ShannonRealtimeVoiceUsage(
+                totalTokens: 31,
+                inputTokens: 20,
+                outputTokens: 11,
+                cachedInputTokens: 4,
+                inputAudioTokens: 8,
+                outputAudioTokens: 7
+            )
+        )
+
+        var total = ShannonRealtimeVoiceUsage.zero
+        total.append(try XCTUnwrap(sample))
+        total.append(ShannonRealtimeVoiceUsage(totalTokens: 9, inputTokens: 5, outputTokens: 4))
+        XCTAssertEqual(total.totalTokens, 40)
+        XCTAssertEqual(total.inputTokens, 25)
+        XCTAssertEqual(total.outputTokens, 15)
+    }
+
+    func testRealtimeSessionBudgetClampsAndFormatsRemainingTime() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(
+            ShannonRealtimeVoiceBudgetPolicy.remainingLabel(startedAt: start, now: start),
+            "残り 10:00"
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceBudgetPolicy.remainingLabel(
+                startedAt: start,
+                now: start.addingTimeInterval(125)
+            ),
+            "残り 07:55"
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceBudgetPolicy.remainingSeconds(
+                startedAt: start,
+                now: start.addingTimeInterval(999)
+            ),
+            0
         )
     }
 

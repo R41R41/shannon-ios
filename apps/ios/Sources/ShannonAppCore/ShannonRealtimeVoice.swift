@@ -64,6 +64,56 @@ public enum ShannonRealtimeVoiceInterruptionAction: Equatable, Sendable {
     case fail
 }
 
+public struct ShannonRealtimeVoiceUsage: Equatable, Sendable {
+    public private(set) var totalTokens: Int
+    public private(set) var inputTokens: Int
+    public private(set) var outputTokens: Int
+    public private(set) var cachedInputTokens: Int
+    public private(set) var inputAudioTokens: Int
+    public private(set) var outputAudioTokens: Int
+
+    public static let zero = ShannonRealtimeVoiceUsage()
+
+    public init(
+        totalTokens: Int = 0,
+        inputTokens: Int = 0,
+        outputTokens: Int = 0,
+        cachedInputTokens: Int = 0,
+        inputAudioTokens: Int = 0,
+        outputAudioTokens: Int = 0
+    ) {
+        self.totalTokens = max(0, totalTokens)
+        self.inputTokens = max(0, inputTokens)
+        self.outputTokens = max(0, outputTokens)
+        self.cachedInputTokens = max(0, cachedInputTokens)
+        self.inputAudioTokens = max(0, inputAudioTokens)
+        self.outputAudioTokens = max(0, outputAudioTokens)
+    }
+
+    public mutating func append(_ value: ShannonRealtimeVoiceUsage) {
+        totalTokens += value.totalTokens
+        inputTokens += value.inputTokens
+        outputTokens += value.outputTokens
+        cachedInputTokens += value.cachedInputTokens
+        inputAudioTokens += value.inputAudioTokens
+        outputAudioTokens += value.outputAudioTokens
+    }
+}
+
+public enum ShannonRealtimeVoiceBudgetPolicy {
+    public static let maximumSessionDurationSeconds = 10 * 60
+
+    public static func remainingSeconds(startedAt: Date, now: Date) -> Int {
+        let elapsed = max(0, Int(now.timeIntervalSince(startedAt)))
+        return max(0, maximumSessionDurationSeconds - elapsed)
+    }
+
+    public static func remainingLabel(startedAt: Date, now: Date) -> String {
+        let seconds = remainingSeconds(startedAt: startedAt, now: now)
+        return String(format: "残り %02d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
 public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
     case sessionReady
     case speechStarted
@@ -73,7 +123,7 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
     case outputTranscriptDelta(String)
     case outputTranscriptDone(String)
     case responseStarted
-    case responseFinished
+    case responseFinished(ShannonRealtimeVoiceUsage?)
     case failed(String?)
 
     public static func decode(_ data: Data) -> Self? {
@@ -93,13 +143,29 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
         case "response.output_audio_transcript.done", "response.audio_transcript.done":
             return .outputTranscriptDone(object["transcript"] as? String ?? "")
         case "response.created": return .responseStarted
-        case "response.done": return .responseFinished
+        case "response.done":
+            let response = object["response"] as? [String: Any]
+            return .responseFinished(decodeUsage(response?["usage"]))
         case "error":
             let error = object["error"] as? [String: Any]
             let code = error?["code"] as? String ?? error?["type"] as? String
             return .failed(code)
         default: return nil
         }
+    }
+
+    private static func decodeUsage(_ value: Any?) -> ShannonRealtimeVoiceUsage? {
+        guard let usage = value as? [String: Any] else { return nil }
+        let inputDetails = usage["input_token_details"] as? [String: Any]
+        let outputDetails = usage["output_token_details"] as? [String: Any]
+        return ShannonRealtimeVoiceUsage(
+            totalTokens: usage["total_tokens"] as? Int ?? 0,
+            inputTokens: usage["input_tokens"] as? Int ?? 0,
+            outputTokens: usage["output_tokens"] as? Int ?? 0,
+            cachedInputTokens: inputDetails?["cached_tokens"] as? Int ?? 0,
+            inputAudioTokens: inputDetails?["audio_tokens"] as? Int ?? 0,
+            outputAudioTokens: outputDetails?["audio_tokens"] as? Int ?? 0
+        )
     }
 }
 
@@ -182,6 +248,7 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var errorMessage: String?
     public private(set) var isMuted = false
     public private(set) var sessionStartedAt: Date?
+    public private(set) var usage = ShannonRealtimeVoiceUsage.zero
 
     private var transport: ShannonWebRTCVoiceTransport?
     private var transcriptState = ShannonRealtimeVoiceTranscriptState()
@@ -205,6 +272,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         userTranscript = ""
         shannonTranscript = ""
         transcriptState = ShannonRealtimeVoiceTranscriptState()
+        usage = .zero
         diagnostics.record("realtime.start.requested")
 
         let granted = await AVAudioApplication.requestRecordPermission()
@@ -316,7 +384,8 @@ public final class ShannonRealtimeVoiceSessionModel {
             phase = .thinking
         case .outputTranscriptDelta:
             phase = .speaking
-        case .responseFinished:
+        case .responseFinished(let responseUsage):
+            if let responseUsage { usage.append(responseUsage) }
             if phase != .failed { phase = .listening }
         case .failed(let code):
             diagnostics.record("realtime.event.failed", metadata: ["code": code ?? "unknown"])
@@ -371,7 +440,7 @@ public final class ShannonRealtimeVoiceSessionModel {
     private func scheduleSessionLimit() {
         sessionLimitTask?.cancel()
         sessionLimitTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(10 * 60))
+            try? await Task.sleep(for: .seconds(ShannonRealtimeVoiceBudgetPolicy.maximumSessionDurationSeconds))
             guard !Task.isCancelled else { return }
             self?.fail("10分経過したため、音声会話をいったん終了しました。もう一度つなぐと再開できます。")
         }
@@ -701,6 +770,7 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var errorMessage: String? = "ライブ音声はiPhoneで利用できます。"
     public private(set) var isMuted = false
     public private(set) var sessionStartedAt: Date?
+    public private(set) var usage = ShannonRealtimeVoiceUsage.zero
     public init() {}
     public func start(
         createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
@@ -797,6 +867,29 @@ public struct ShannonLiveVoiceView: View {
                             .foregroundStyle(palette.error)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, M3Spacing.large)
+                    }
+
+                    if let startedAt = model.sessionStartedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            HStack(spacing: M3Spacing.medium) {
+                                Label(
+                                    ShannonRealtimeVoiceBudgetPolicy.remainingLabel(
+                                        startedAt: startedAt,
+                                        now: context.date
+                                    ),
+                                    systemImage: "clock"
+                                )
+                                if model.usage.totalTokens > 0 {
+                                    Label(
+                                        "\(model.usage.totalTokens.formatted()) トークン",
+                                        systemImage: "waveform.badge.magnifyingglass"
+                                    )
+                                }
+                            }
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(palette.onSurfaceVariant)
+                            .accessibilityElement(children: .combine)
+                        }
                     }
 
                     controls(palette)
