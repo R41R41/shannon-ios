@@ -71,6 +71,28 @@ describe('push notification delivery', () => {
     push.close();
   });
 
+  it('cancels a transient retry after that initiative thread has been read', async () => {
+    const path = createInitiative();
+    const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
+    push.register(
+      { deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' },
+      'de'.repeat(32),
+      'sandbox',
+    );
+    const pending = push.pending()[0]!;
+    push.record(pending, {
+      delivered: false, permanentFailure: false, status: 503, reason: 'ServiceUnavailable',
+    }, '2026-09-03T03:01:00.000Z');
+    expect(push.pending('2026-09-03T03:05:59.000Z')).toEqual([]);
+    expect(push.pending('2026-09-03T03:06:00.000Z')).toHaveLength(1);
+
+    const initiatives = new SQLiteInitiativeStore(path);
+    expect(initiatives.markRead('owner', pending.threadId)).toBe(1);
+    expect(push.pending('2026-09-03T03:06:00.000Z')).toEqual([]);
+    initiatives.close();
+    push.close();
+  });
+
   it('delivers terminal agent task events only once', async () => {
     const { path, taskId } = createAgentTask();
     const push = new SQLitePushNotificationStore(path, () => '2026-09-04T04:01:00.000Z');

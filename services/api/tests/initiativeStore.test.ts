@@ -51,7 +51,7 @@ describe('Shannon initiative loop', () => {
         },
       }),
     ]);
-    expect(initiatives.markAllRead('owner')).toBe(1);
+    expect(initiatives.markRead('owner')).toBe(1);
     expect(initiatives.unreadMessages('owner')).toEqual([]);
 
     initiatives.close();
@@ -361,6 +361,26 @@ describe('Shannon initiative loop', () => {
       repeatedCandidatesSuppressed: 0,
       deliveredBySource: [],
     });
+    initiatives.close();
+  });
+
+  it('acknowledges only the initiative thread the user actually opened', () => {
+    const path = databasePath();
+    const initiatives = new SQLiteInitiativeStore(path, () => '2026-09-05T04:00:00.000Z');
+    const database = new DatabaseSync(path);
+    const insert = database.prepare(`
+      INSERT INTO initiative_messages
+        (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
+         content, expression, day_key, created_at, read_at)
+      VALUES (?, 'owner', ?, ?, 'Hacker News', 'https://example.com/story',
+              '本文', 'curious', ?, ?, NULL)
+    `);
+    insert.run('initiative-a', 'thread-a', 'item-a', '2026-09-04', '2026-09-04T03:00:00.000Z');
+    insert.run('initiative-b', 'thread-b', 'item-b', '2026-09-05', '2026-09-05T03:00:00.000Z');
+    database.close();
+
+    expect(initiatives.markRead('owner', 'thread-b')).toBe(1);
+    expect(initiatives.unreadMessages('owner').map(message => message.threadId)).toEqual(['thread-a']);
     initiatives.close();
   });
 });

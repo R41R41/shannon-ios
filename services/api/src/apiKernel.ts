@@ -685,7 +685,13 @@ export class ShannonApiKernel {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
       const scopeKey = request.body.scopeKey;
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      const markedRead = this.initiativeInbox?.markAllRead(scopeKey, this.now()) ?? 0;
+      const rawThreadId = request.body.threadId;
+      if (rawThreadId !== undefined
+        && (typeof rawThreadId !== 'string' || !rawThreadId.trim() || rawThreadId.length > 160)) {
+        return badRequest('threadId is invalid');
+      }
+      const threadId = typeof rawThreadId === 'string' ? rawThreadId.trim() : undefined;
+      const markedRead = this.initiativeInbox?.markRead(scopeKey, threadId, this.now()) ?? 0;
       return { status: 200, body: { markedRead } };
     }
 

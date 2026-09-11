@@ -27,7 +27,7 @@ export interface InitiativeMessage {
 
 export interface InitiativeInbox {
   unreadMessages(scopeKey: string): readonly InitiativeMessage[];
-  markAllRead(scopeKey: string, readAt?: string): number;
+  markRead(scopeKey: string, threadId?: string, readAt?: string): number;
 }
 
 export type InitiativeLoopResult = Readonly<{
@@ -241,10 +241,16 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     })));
   }
 
-  markAllRead(scopeKey: string, readAt = this.now()): number {
-    return Number(this.database.prepare(`
-      UPDATE initiative_messages SET read_at = ? WHERE scope_key = ? AND read_at IS NULL
-    `).run(readAt, scopeKey).changes);
+  markRead(scopeKey: string, threadId?: string, readAt = this.now()): number {
+    const result = threadId
+      ? this.database.prepare(`
+          UPDATE initiative_messages SET read_at = ?
+          WHERE scope_key = ? AND thread_id = ? AND read_at IS NULL
+        `).run(readAt, scopeKey, threadId)
+      : this.database.prepare(`
+          UPDATE initiative_messages SET read_at = ? WHERE scope_key = ? AND read_at IS NULL
+        `).run(readAt, scopeKey);
+    return Number(result.changes);
   }
 
   close(): void {

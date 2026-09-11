@@ -769,6 +769,7 @@ public struct ShannonInitiativeInboxDTO: Codable, Equatable, Sendable {
 
 public struct ShannonInitiativeReadRequestDTO: Codable, Equatable, Sendable {
     public let scopeKey: String
+    public let threadId: String?
 }
 
 public struct ShannonInitiativeReadResponseDTO: Codable, Equatable, Sendable {

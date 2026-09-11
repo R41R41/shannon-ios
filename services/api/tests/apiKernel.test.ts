@@ -642,8 +642,9 @@ describe('Shannon local API kernel', () => {
             expression: 'curious', sourceTitle: 'Hacker News', sourceURL: 'https://example.com',
             createdAt: '2026-09-03T02:00:00.000Z',
           }],
-          markAllRead: scopeKey => {
+          markRead: (scopeKey, threadId) => {
             expect(scopeKey).toBe('owner-a');
+            expect(threadId).toBe('thread-1');
             acknowledged = true;
             return 1;
           },
@@ -654,7 +655,7 @@ describe('Shannon local API kernel', () => {
       method: 'GET', path: '/v1/initiatives', query: new URLSearchParams({ scopeKey: 'owner-a' }),
     })).toMatchObject({ status: 200, body: { unreadCount: 1 } });
     expect(await api.dispatch({
-      method: 'POST', path: '/v1/initiatives/read', body: { scopeKey: 'owner-a' },
+      method: 'POST', path: '/v1/initiatives/read', body: { scopeKey: 'owner-a', threadId: 'thread-1' },
     })).toEqual({ status: 200, body: { markedRead: 1 } });
     expect(model.requests).toEqual([]);
   });

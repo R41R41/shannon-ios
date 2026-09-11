@@ -456,6 +456,8 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertTrue(model.initiativeThreadIDs.isEmpty)
         let explicitAcknowledgements = await client.markReadCount
         XCTAssertEqual(explicitAcknowledgements, 1)
+        let acknowledgedThreads = await client.markReadThreadIDs
+        XCTAssertEqual(acknowledgedThreads, ["initiative-thread"])
     }
 
     func testSelectingTheAlreadyVisibleInitiativeThreadAcknowledgesIt() async {
@@ -677,6 +679,7 @@ private actor RenameThreadClient: ShannonAPIClientProtocol {
 
 private actor InitiativeClient: ShannonAPIClientProtocol {
     private(set) var markReadCount = 0
+    private(set) var markReadThreadIDs: [String?] = []
 
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
         TestFixtures.chatResponse()
@@ -700,8 +703,9 @@ private actor InitiativeClient: ShannonAPIClientProtocol {
         )
     }
 
-    func markInitiativesRead(scopeKey: String) async throws -> Int {
+    func markInitiativesRead(scopeKey: String, threadId: String?) async throws -> Int {
         markReadCount += 1
+        markReadThreadIDs.append(threadId)
         return 1
     }
 

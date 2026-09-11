@@ -1072,10 +1072,12 @@ public final class ShannonConversationModel {
     }
 
     private func markInitiativesRead() async {
+        guard let threadId = selectedThreadId else { return }
         do {
-            _ = try await client.markInitiativesRead(scopeKey: scopeKey)
-            unreadInitiativeCount = 0
-            initiativeThreadIDs.removeAll()
+            let markedRead = try await client.markInitiativesRead(scopeKey: scopeKey, threadId: threadId)
+            guard markedRead > 0 else { return }
+            unreadInitiativeCount = max(0, unreadInitiativeCount - markedRead)
+            initiativeThreadIDs.remove(threadId)
         } catch {
             // It is safe to retry acknowledgement on the next foreground refresh.
         }

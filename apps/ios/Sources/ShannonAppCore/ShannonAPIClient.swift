@@ -44,7 +44,7 @@ public protocol ShannonAPIClientProtocol: Sendable {
     ) async throws -> ShannonMemoryDashboardDTO
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO
     func loadInitiatives(scopeKey: String) async throws -> ShannonInitiativeInboxDTO
-    func markInitiativesRead(scopeKey: String) async throws -> Int
+    func markInitiativesRead(scopeKey: String, threadId: String?) async throws -> Int
     func loadWorldSources(scopeKey: String) async throws -> [ShannonWorldSourceDTO]
     func loadWorldSubscriptions(scopeKey: String) async throws -> [ShannonWorldSubscriptionDTO]
     func decideWorldSubscription(
@@ -240,7 +240,7 @@ public extension ShannonAPIClientProtocol {
         ShannonInitiativeInboxDTO(unreadCount: 0, messages: [])
     }
 
-    func markInitiativesRead(scopeKey: String) async throws -> Int { 0 }
+    func markInitiativesRead(scopeKey: String, threadId: String?) async throws -> Int { 0 }
 
     func loadWorldSources(scopeKey: String) async throws -> [ShannonWorldSourceDTO] { [] }
 
@@ -630,14 +630,15 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         return try await response(ShannonInitiativeInboxDTO.self, for: request)
     }
 
-    public func markInitiativesRead(scopeKey: String) async throws -> Int {
+    public func markInitiativesRead(scopeKey: String, threadId: String?) async throws -> Int {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/initiatives/read"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         authorize(&request, connection: connection)
         request.httpBody = try JSONEncoder().encode(ShannonInitiativeReadRequestDTO(
-            scopeKey: connection?.scopeKey ?? scopeKey
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            threadId: threadId
         ))
         let result: ShannonInitiativeReadResponseDTO = try await response(ShannonInitiativeReadResponseDTO.self, for: request)
         return result.markedRead
