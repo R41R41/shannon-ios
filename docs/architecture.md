@@ -110,6 +110,7 @@ Background voice activation remains deliberately later work. Realtime voice star
 - Mac Talk renders each generated artifact as a separate conversation card. Opening it shows Markdown or monospaced text in a modal preview. Export is available only from that preview and always opens the native macOS save panel; Shannon never chooses the destination, bypasses overwrite confirmation, or writes from model text alone.
 - Generated artifact filenames are validated on the API and sanitized again on the client. Path separators and control characters cannot escape the user-selected save location.
 - macOS uses its own Keychain pairing record on the device. A credential is never copied through source code, logs, or documentation.
+- Production pairing codes are currently issued by the trusted operator through the Azure `authCli.ts issue-code` command and delivered directly to Shannon Desk as a one-time `shannon://connect` URL. The iPhone app does not yet provide device-management or pairing-link issuance UI, so user instructions must not point to a nonexistent Settings screen.
 - A restored credential is not treated as proof of current reachability. Shannon Desk performs an authenticated thread-list request on launch and after pairing, shows the result in Settings, and removes a server-revoked credential on HTTP 401. A network failure preserves the credential so the user can retry without pairing again.
 
 ## Explicit conversation organization and Voyager Phase 2
