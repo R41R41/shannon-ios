@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-11 / Voice Identity 1 local vertical slice
+Revision: 2026-09-11 / Voice Identity and Voice Reliability local vertical slices
 
 ## System shape
 
@@ -80,7 +80,9 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Input-transcription delta events update the visible “あなた” caption while the user is still speaking. Output-audio-transcript delta events update Shannon's caption while her audio is playing. Server VAD creates responses automatically and permits natural interruption.
 - A Realtime session receives the same bounded Shannon identity, committed shared state, today's interest, recent thread history, and live-voice behavior rules. It cannot claim that an external task was executed; visible work and approval continue in Talk.
 - When both final transcripts for one turn arrive, iOS sends only those texts to `POST /v1/voice/realtime/turns`. The API stores the pair in the existing conversation thread, fixes Shannon's expression snapshot, and schedules the normal asynchronous emotion/memory update. Partial captions are not persisted.
-- The Realtime client has an initial ten-minute session ceiling and a per-device call-creation limit. Voice remains a separate cost concern from chat and background work; durable usage metering and a server-authoritative daily Realtime allowance are required before general release.
+- A temporary WebRTC disconnection gets a five-second recovery window. A restored connection continues the same conversation; a permanent failure or ten-minute session limit leaves the modal open with an explicit retry path. Each start has a generation identity so permission, offer, answer, transport, and transcript-persistence callbacks from an ended attempt cannot mutate the replacement session.
+- iOS observes audio-session interruptions, route changes, and media-services resets. A resumable interruption reactivates the session; a non-resumable interruption and a media-services reset fail with a visible reason and retry. Bluetooth HFP and A2DP routes are enabled, while route-change diagnostics contain only reason codes rather than audio or conversation content.
+- The Realtime client has an initial ten-minute session ceiling and a per-device call-creation limit. While connected, the modal shows the remaining session time and accumulates the token fields returned by `response.done` for that session; it does not retain the raw response payload. This display is diagnostic rather than a monetary or daily allowance. Voice remains a separate cost concern from chat and background work; durable usage metering and a server-authoritative daily Realtime allowance are still required before general release.
 - The Build 33 M4A → `POST /v1/voice/transcriptions` path remains a diagnostic fallback during the Realtime rollout. It uses `gpt-transcribe`, a 60-second/5-MiB limit, per-device rate limiting, and the existing `voice` cost lane. Temporary audio is deleted or held only in memory, and diagnostics never store audio, transcripts, messages, credentials, tokens, or file paths.
 - The composer floats over the edge-to-edge conversation with a readability gradient. It stays as a compact single row when empty, then expands into a text-and-actions layout when focused or populated. The same text-input instance is retained while the custom layout moves it; keyboard focus never destroys and recreates the active UIKit text view. File/transcription actions, Realtime voice, and send remain distinct controls. The message list reserves dynamic visual clearance for multi-line input, voice status, failures, and task notices while remaining visible beneath the lower chrome during scrolling.
 
