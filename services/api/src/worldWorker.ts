@@ -5,6 +5,8 @@ import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { discoverFeedLinks, SQLiteWorldStore, type WorldItemInput, type WorldSource } from './worldStore.js';
 import { summarizeJmaForecast } from './jmaForecast.js';
 import { parseSyndicationFeed } from './syndicationFeed.js';
+import { parsePubmedSearchIds, parsePubmedSummaries, pubmedSummaryURL } from './pubmed.js';
+import { parseBlueskyPosts } from './bluesky.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
@@ -130,20 +132,14 @@ async function fetchArxiv(source: WorldSource): Promise<WorldItemInput[]> {
 async function fetchPubmed(source: WorldSource): Promise<WorldItemInput[]> {
   const url = new URL(source.url); url.searchParams.set('db', 'pubmed'); url.searchParams.set('retmode', 'json');
   url.searchParams.set('retmax', '10'); url.searchParams.set('sort', 'pub date'); url.searchParams.set('term', source.query ?? 'artificial intelligence');
-  const value = object(await json(url.href)); const result = object(value?.esearchresult); const ids = result?.idlist;
-  if (!Array.isArray(ids)) return [];
-  return ids.map(id => ({ externalId: String(id), title: `PubMed ${String(id)}`, url: `https://pubmed.ncbi.nlm.nih.gov/${String(id)}/` }));
+  const ids = parsePubmedSearchIds(await json(url.href));
+  if (!ids.length) return [];
+  return [...parsePubmedSummaries(await json(pubmedSummaryURL(url, ids).href), ids)];
 }
 
 async function fetchBluesky(source: WorldSource): Promise<WorldItemInput[]> {
-  const url = new URL(source.url); url.searchParams.set('q', source.query ?? 'AI'); url.searchParams.set('limit', '10');
-  const value = object(await json(url.href)); const posts = value?.posts;
-  if (!Array.isArray(posts)) return [];
-  return posts.flatMap(value => {
-    const row = object(value); const uri = string(row?.uri); const record = object(row?.record); const body = string(record?.text);
-    if (!uri || !body) return [];
-    return [{ externalId: uri, title: body.slice(0, 120), url: `https://bsky.app/`, summary: body }];
-  });
+  const url = new URL(source.url); url.searchParams.set('q', source.query ?? 'AI'); url.searchParams.set('limit', '10'); url.searchParams.set('sort', 'latest');
+  return [...parseBlueskyPosts(await json(url.href))];
 }
 
 async function fetchGithub(source: WorldSource): Promise<WorldItemInput[]> {

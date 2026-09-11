@@ -120,6 +120,19 @@ export class SQLiteWorldStore {
     let inserted = 0;
     this.database.exec('BEGIN IMMEDIATE');
     try {
+      const legacyPredicate = source.kind === 'pubmed'
+        ? "title = 'PubMed ' || external_id"
+        : source.kind === 'bluesky' ? "url = 'https://bsky.app/'" : null;
+      if (legacyPredicate) {
+        this.database.prepare(`
+          DELETE FROM observations WHERE item_id IN (
+            SELECT item_id FROM world_items WHERE source_id = ? AND ${legacyPredicate}
+          )
+        `).run(source.id);
+        this.database.prepare(`
+          DELETE FROM world_items WHERE source_id = ? AND ${legacyPredicate}
+        `).run(source.id);
+      }
       const insertItem = this.database.prepare(`
         INSERT OR IGNORE INTO world_items
           (item_id, source_id, external_id, title, url, summary, author, published_at, discovered_at, content_hash)
@@ -131,10 +144,11 @@ export class SQLiteWorldStore {
         VALUES (?, ?, 'owner', ?, ?, ?)
       `);
       for (const item of items.slice(0, 30)) {
+        const externalId = item.externalId.slice(0, 300);
         const itemId = randomUUID();
         const hash = createHash('sha256').update(`${item.title}\n${item.summary ?? ''}\n${item.url}`).digest('hex');
         const result = insertItem.run(
-          itemId, source.id, item.externalId.slice(0, 300), item.title.slice(0, 500), item.url.slice(0, 2_000),
+          itemId, source.id, externalId, item.title.slice(0, 500), item.url.slice(0, 2_000),
           item.summary?.slice(0, 4_000) ?? null, item.author?.slice(0, 200) ?? null,
           item.publishedAt ?? null, completedAt, hash,
         );

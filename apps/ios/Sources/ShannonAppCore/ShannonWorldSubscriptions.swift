@@ -277,6 +277,10 @@ public struct ShannonWorldSubscriptionView: View {
                     Text("標準の公開情報源と、あなたが承認した候補だけを読みます。候補は承認後に7日間だけ試読し、役立たなければ自動で停止します。非公開・認証が必要な情報源は対象外です。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if let noticeURL = URL(string: "https://www.ncbi.nlm.nih.gov/home/about/policies/") {
+                        Link("PubMed／NCBIの免責・著作権", destination: noticeURL)
+                            .font(.footnote)
+                    }
                 }
 
                 if let errorMessage = model.errorMessage {

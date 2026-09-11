@@ -168,6 +168,50 @@ describe('autonomous world store', () => {
     database.close();
   });
 
+  it('replaces only legacy PubMed and Bluesky placeholder items with richer metadata', () => {
+    const path = databasePath();
+    const now = '2026-09-02T00:00:00.000Z';
+    const previousQuery = process.env.SHANNON_BLUESKY_QUERY;
+    process.env.SHANNON_BLUESKY_QUERY = 'AI';
+    const store = new SQLiteWorldStore(path, () => now);
+    if (previousQuery === undefined) delete process.env.SHANNON_BLUESKY_QUERY;
+    else process.env.SHANNON_BLUESKY_QUERY = previousQuery;
+    const pubmed = store.dueSources(now).find(source => source.kind === 'pubmed')!;
+    expect(store.recordSuccess(pubmed, [
+      { externalId: '42', title: 'PubMed 42', url: 'https://pubmed.ncbi.nlm.nih.gov/42/' },
+      { externalId: '43', title: 'PubMed 43', url: 'https://pubmed.ncbi.nlm.nih.gov/43/' },
+    ], now)).toBe(2);
+    expect(store.recordSuccess(pubmed, [{
+      externalId: '42', title: 'Actual paper', url: 'https://pubmed.ncbi.nlm.nih.gov/42/',
+      summary: 'Journal', author: 'Author A', publishedAt: '2026-09-01T00:00:00.000Z',
+    }], now)).toBe(1);
+    expect(store.latestItems()).toEqual([
+      expect.objectContaining({ title: 'Actual paper', summary: 'Journal', author: 'Author A' }),
+    ]);
+
+    const bluesky = store.dueSources(now).find(source => source.kind === 'bluesky')!;
+    expect(store.recordSuccess(bluesky, [
+      { externalId: 'at://did:plc:test/app.bsky.feed.post/key', title: 'A post', url: 'https://bsky.app/' },
+      { externalId: 'at://did:plc:test/app.bsky.feed.post/old', title: 'Old post', url: 'https://bsky.app/' },
+    ], now)).toBe(2);
+    expect(store.recordSuccess(bluesky, [{
+      externalId: 'at://did:plc:test/app.bsky.feed.post/key', title: 'A post',
+      url: 'https://bsky.app/profile/did:plc:test/post/key', author: '@test.example',
+      publishedAt: '2026-09-01T01:00:00.000Z',
+    }], now)).toBe(1);
+    expect(store.latestItems()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Actual paper', summary: 'Journal', author: 'Author A' }),
+      expect.objectContaining({ title: 'A post', author: '@test.example' }),
+    ]));
+    store.close();
+
+    const database = new DatabaseSync(path);
+    expect(database.prepare('SELECT COUNT(*) AS count FROM world_items WHERE source_id = ?').get(pubmed.id)).toEqual({ count: 1 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM world_items WHERE source_id = ?').get(bluesky.id)).toEqual({ count: 1 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM observations').get()).toEqual({ count: 2 });
+    database.close();
+  });
+
   it('discovers RSS and Atom hints without accepting ordinary links', () => {
     const links = discoverFeedLinks(`
       <link rel="alternate" type="application/rss+xml" href="/feed.xml">
