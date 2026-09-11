@@ -270,6 +270,11 @@ public extension ShannonAPIClientProtocol {
 public enum ShannonAPIError: Error, Equatable {
     case invalidResponse
     case rejected(status: Int)
+    case realtimeVoiceRejected(status: Int, code: String?)
+}
+
+private struct ShannonRealtimeVoiceErrorDTO: Decodable {
+    let error: String?
 }
 
 public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
@@ -369,7 +374,13 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
         request.httpBody = Data(offerSDP.utf8)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        guard (200..<300).contains(http.statusCode) else {
+            let payload = try? JSONDecoder().decode(ShannonRealtimeVoiceErrorDTO.self, from: data)
+            throw ShannonAPIError.realtimeVoiceRejected(
+                status: http.statusCode,
+                code: payload?.error
+            )
+        }
         guard let answerSDP = String(data: data, encoding: .utf8), answerSDP.hasPrefix("v=0") else {
             throw ShannonAPIError.invalidResponse
         }
@@ -379,7 +390,10 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
             answerSDP: answerSDP,
             threadID: resolvedThreadID,
             model: http.value(forHTTPHeaderField: "x-shannon-realtime-model"),
-            callID: http.value(forHTTPHeaderField: "x-shannon-realtime-call-id")
+            callID: http.value(forHTTPHeaderField: "x-shannon-realtime-call-id"),
+            dailyRemainingSeconds: http.value(
+                forHTTPHeaderField: "x-shannon-realtime-daily-remaining-seconds"
+            ).flatMap(Int.init)
         )
     }
 

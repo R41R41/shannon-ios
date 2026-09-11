@@ -39,4 +39,6 @@ OpenAIキーがある場合、睡眠分析はResponses APIのstrict JSON Schema�
 
 音声入力は会話とは別の`voice`費用レーンで記録する。1リクエストは60秒・5 MiBまで、既定の日次上限は`$0.10`。APIは音声をファイルへ保存せず、OpenAIへの文字起こし要求が終わるとメモリから破棄する。上限は`SHANNON_VOICE_DAILY_BUDGET_USD`で変更できる。
 
+Realtime音声は通話作成の成功単位をSQLiteへ永続予約し、日本時間の日次上限をAPI側で強制する。1回はiPhone側の上限と同じ10分として保守的に予約し、既定は1日60分。上流で通話作成に失敗した予約は取り消し、成功した予約はAPI再起動後も残る。上限は`SHANNON_VOICE_REALTIME_DAILY_MINUTES`で10〜1440分の範囲に変更でき、超過後もテキスト会話は使える。
+
 Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。未選択時は`SHANNON_VOICE_REALTIME_VOICE`が候補内ならそれを使い、それ以外は`marin`へ安全に戻る。選択は`voice_identity_preferences`へscope分離して保存し、進行中の音声を差し替えず次回のRealtime call作成時に読む。試聴は既定`gpt-4o-mini-tts`へサーバー固定文だけを送り、音声・本文を永続化しない。モデルとendpointは`SHANNON_VOICE_PREVIEW_MODEL`、`SHANNON_VOICE_PREVIEW_ENDPOINT`で変更できる。

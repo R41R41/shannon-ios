@@ -386,8 +386,41 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 10 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 11 });
     database.close();
+  });
+
+  it('atomically reserves the Realtime daily allowance and releases failed call attempts', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: sequenceClock() });
+    const request = {
+      scopeKey: 'owner-a',
+      dayKey: '2026-09-11',
+      reservedSeconds: 600,
+      dailyLimitSeconds: 1_200,
+      createdAt: '2026-09-11T00:00:00.000Z',
+    };
+    const firstReservation = first.reserveRealtimeVoiceSession(request);
+    const secondReservation = first.reserveRealtimeVoiceSession({
+      ...request, createdAt: '2026-09-11T00:10:00.000Z',
+    });
+    expect(firstReservation?.remainingSeconds).toBe(600);
+    expect(secondReservation?.remainingSeconds).toBe(0);
+    expect(first.reserveRealtimeVoiceSession(request)).toBeNull();
+    expect(first.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-11')).toBe(1_200);
+    expect(first.reserveRealtimeVoiceSession({ ...request, scopeKey: 'owner-b' })).not.toBeNull();
+
+    first.releaseRealtimeVoiceSessionReservation(secondReservation!.reservationId);
+    expect(first.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-11')).toBe(600);
+    expect(first.reserveRealtimeVoiceSession({
+      ...request, createdAt: '2026-09-11T00:20:00.000Z',
+    })?.remainingSeconds).toBe(0);
+    first.close();
+
+    const reopened = new SQLiteShannonStore({ path, now: sequenceClock() });
+    expect(reopened.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-11')).toBe(1_200);
+    expect(reopened.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-12')).toBe(0);
+    reopened.close();
   });
 
   it('migrates v8 LLM usage to the voice lane without losing existing cost history', () => {
@@ -462,9 +495,39 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 10 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 11 });
     expect(database.prepare("PRAGMA table_info('conversation_threads')").all())
       .toContainEqual(expect.objectContaining({ name: 'summary' }));
+    database.close();
+  });
+
+  it('migrates v10 with a restart-safe Realtime allowance ledger', () => {
+    const path = databasePath();
+    const first = new SQLiteShannonStore({ path, now: sequenceClock() });
+    const threadId = first.createThread('owner-a', '残すトーク');
+    first.appendTurn('owner-a', threadId, '残して', '残します', '2026-09-10T00:00:00.000Z');
+    first.close();
+
+    const legacy = new DatabaseSync(path);
+    legacy.exec('DROP TABLE realtime_voice_session_reservations; PRAGMA user_version = 10;');
+    legacy.close();
+
+    const migrated = new SQLiteShannonStore({ path, now: sequenceClock() });
+    expect(migrated.conversationHistory('owner-a', threadId).map(item => item.content))
+      .toEqual(['残して', '残します']);
+    expect(migrated.reserveRealtimeVoiceSession({
+      scopeKey: 'owner-a',
+      dayKey: '2026-09-11',
+      reservedSeconds: 600,
+      dailyLimitSeconds: 3_600,
+      createdAt: '2026-09-11T00:00:00.000Z',
+    })?.remainingSeconds).toBe(3_000);
+    migrated.close();
+
+    const database = new DatabaseSync(path);
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 11 });
+    expect(database.prepare("PRAGMA table_info('realtime_voice_session_reservations')").all())
+      .toContainEqual(expect.objectContaining({ name: 'reserved_seconds' }));
     database.close();
   });
 

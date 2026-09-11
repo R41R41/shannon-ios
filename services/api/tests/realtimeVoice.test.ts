@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  configuredRealtimeDailyAllowanceSeconds,
   OpenAIRealtimeVoiceGateway,
+  realtimeVoiceJapanDayKey,
   RealtimeVoiceError,
+  SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS,
 } from '../src/realtimeVoice.js';
 
 const offer = [
@@ -21,6 +24,22 @@ const answer = [
 ].join('\r\n') + '\r\n';
 
 describe('OpenAI realtime voice gateway', () => {
+  it('uses a bounded server-authoritative daily allowance in Japan time', () => {
+    expect(configuredRealtimeDailyAllowanceSeconds({})).toBe(
+      SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS,
+    );
+    expect(configuredRealtimeDailyAllowanceSeconds({
+      SHANNON_VOICE_REALTIME_DAILY_MINUTES: '90',
+    })).toBe(90 * 60);
+    expect(configuredRealtimeDailyAllowanceSeconds({
+      SHANNON_VOICE_REALTIME_DAILY_MINUTES: '9',
+    })).toBe(SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS);
+    expect(configuredRealtimeDailyAllowanceSeconds({
+      SHANNON_VOICE_REALTIME_DAILY_MINUTES: 'not-a-number',
+    })).toBe(SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS);
+    expect(realtimeVoiceJapanDayKey(new Date('2026-09-10T15:01:00.000Z'))).toBe('2026-09-11');
+  });
+
   it('keeps the standard API key server-side and creates a bounded live session', async () => {
     const gateway = new OpenAIRealtimeVoiceGateway({
       apiKey: 'server-key-only',

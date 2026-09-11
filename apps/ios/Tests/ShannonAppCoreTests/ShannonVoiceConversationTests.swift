@@ -129,6 +129,28 @@ final class ShannonVoiceConversationTests: XCTestCase {
             ),
             0
         )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceBudgetPolicy.dailyRemainingLabel(seconds: 3_000),
+            "本日あと最大 50分"
+        )
+    }
+
+    func testRealtimeFailurePresentationExplainsDailyAllowanceAndKeepsTextAvailable() {
+        XCTAssertEqual(
+            ShannonRealtimeVoiceFailurePresentation.startMessage(
+                for: ShannonAPIError.realtimeVoiceRejected(
+                    status: 429,
+                    code: "VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED"
+                )
+            ),
+            "今日はライブ音声を十分使いました。テキスト会話は引き続き使えます。"
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceFailurePresentation.startMessage(
+                for: ShannonAPIError.realtimeVoiceRejected(status: 429, code: "RATE_LIMITED")
+            ),
+            "短時間に接続が続きました。少し待ってからもう一度お試しください。"
+        )
     }
 
     func testRealtimeOfferDiagnosticsDescribeStructureWithoutKeepingSDP() {

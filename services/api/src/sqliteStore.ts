@@ -33,6 +33,11 @@ import { threadNavigation } from './conversationStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 import type { ActivityItem } from './memoryService.js';
 import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
+import type {
+  RealtimeVoiceReservationStore,
+  RealtimeVoiceSessionReservation,
+  RealtimeVoiceSessionReservationRequest,
+} from './realtimeVoice.js';
 import {
   DEFAULT_QUESTION_DEFINITIONS,
   classifyQuestion,
@@ -45,7 +50,7 @@ import {
 import { migrateAgentTasks } from './agentTaskStore.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 interface StateRow {
@@ -163,7 +168,7 @@ export interface SQLiteShannonStoreOptions {
  * Durable adapter only. Cognition remains in packages/cognition; this class
  * stores immutable snapshots, conversation messages, and append-only events.
  */
-export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore {
+export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore {
   private readonly database: DatabaseSync;
   private readonly maximumModelConversationItems: number;
   private readonly maximumDisplayedConversationItems: number;
@@ -416,6 +421,63 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
         AND date(datetime(occurred_at, '+9 hours')) = ?
     `).get(scopeKey, dayKey) as unknown as { cost: number };
     return Number(row.cost);
+  }
+
+  reserveRealtimeVoiceSession(
+    request: RealtimeVoiceSessionReservationRequest,
+  ): RealtimeVoiceSessionReservation | null {
+    const scopeKey = request.scopeKey.trim();
+    if (!scopeKey) throw new Error('REALTIME_VOICE_SCOPE_REQUIRED');
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(request.dayKey)) throw new Error('REALTIME_VOICE_DAY_INVALID');
+    if (!Number.isInteger(request.reservedSeconds) || request.reservedSeconds <= 0) {
+      throw new Error('REALTIME_VOICE_RESERVATION_INVALID');
+    }
+    if (!Number.isInteger(request.dailyLimitSeconds) || request.dailyLimitSeconds < request.reservedSeconds) {
+      throw new Error('REALTIME_VOICE_DAILY_LIMIT_INVALID');
+    }
+    if (!Number.isFinite(Date.parse(request.createdAt))) throw new Error('REALTIME_VOICE_CREATED_AT_INVALID');
+
+    return this.transaction(() => {
+      const row = this.database.prepare(`
+        SELECT COALESCE(SUM(reserved_seconds), 0) AS reserved_seconds
+        FROM realtime_voice_session_reservations
+        WHERE scope_key = ? AND day_key = ?
+      `).get(scopeKey, request.dayKey) as unknown as { reserved_seconds: number };
+      const alreadyReserved = Number(row.reserved_seconds);
+      if (alreadyReserved + request.reservedSeconds > request.dailyLimitSeconds) return null;
+
+      const reservationId = randomUUID();
+      this.database.prepare(`
+        INSERT INTO realtime_voice_session_reservations
+          (reservation_id, scope_key, day_key, reserved_seconds, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        reservationId,
+        scopeKey,
+        request.dayKey,
+        request.reservedSeconds,
+        request.createdAt,
+      );
+      return Object.freeze({
+        reservationId,
+        remainingSeconds: request.dailyLimitSeconds - alreadyReserved - request.reservedSeconds,
+      });
+    });
+  }
+
+  releaseRealtimeVoiceSessionReservation(reservationId: string): void {
+    this.database.prepare(`
+      DELETE FROM realtime_voice_session_reservations WHERE reservation_id = ?
+    `).run(reservationId);
+  }
+
+  realtimeVoiceReservedSecondsForDay(scopeKey: string, dayKey: string): number {
+    const row = this.database.prepare(`
+      SELECT COALESCE(SUM(reserved_seconds), 0) AS reserved_seconds
+      FROM realtime_voice_session_reservations
+      WHERE scope_key = ? AND day_key = ?
+    `).get(scopeKey, dayKey) as unknown as { reserved_seconds: number };
+    return Number(row.reserved_seconds);
   }
 
   llmUsageSummary(scopeKey: string, monthKey: string): readonly {
@@ -1068,6 +1130,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       if (previousVersion < 8) this.migrateThreadTitleOrigin();
       if (previousVersion < 9) this.migrateVoiceUsageLane();
       if (previousVersion < 10) this.migrateThreadSummary();
+      if (previousVersion < 11) this.migrateRealtimeVoiceReservations();
       this.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }
@@ -1242,6 +1305,20 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
       DROP TABLE llm_usage_events_before_voice;
       CREATE INDEX llm_usage_events_month_lane
         ON llm_usage_events (occurred_at, lane);
+    `);
+  }
+
+  private migrateRealtimeVoiceReservations(): void {
+    this.database.exec(`
+      CREATE TABLE IF NOT EXISTS realtime_voice_session_reservations (
+        reservation_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        reserved_seconds INTEGER NOT NULL CHECK (reserved_seconds > 0),
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS realtime_voice_session_reservations_scope_day
+        ON realtime_voice_session_reservations (scope_key, day_key);
     `);
   }
 

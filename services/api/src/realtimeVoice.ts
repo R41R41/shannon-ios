@@ -10,6 +10,29 @@ export interface RealtimeVoiceCallResult {
   model: string;
 }
 
+export interface RealtimeVoiceSessionReservationRequest {
+  scopeKey: string;
+  dayKey: string;
+  reservedSeconds: number;
+  dailyLimitSeconds: number;
+  createdAt: string;
+}
+
+export interface RealtimeVoiceSessionReservation {
+  reservationId: string;
+  remainingSeconds: number;
+}
+
+export interface RealtimeVoiceReservationStore {
+  reserveRealtimeVoiceSession(
+    request: RealtimeVoiceSessionReservationRequest,
+  ): RealtimeVoiceSessionReservation | null;
+  releaseRealtimeVoiceSessionReservation(reservationId: string): void;
+}
+
+export const SHANNON_REALTIME_SESSION_RESERVATION_SECONDS = 10 * 60;
+export const SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS = 60 * 60;
+
 export type RealtimeVoiceFailureCode =
   | 'VOICE_REALTIME_NOT_CONFIGURED'
   | 'VOICE_REALTIME_INVALID_SDP'
@@ -151,6 +174,24 @@ export function createConfiguredRealtimeVoiceGateway(
     voice: environment.SHANNON_VOICE_REALTIME_VOICE,
     timeoutMilliseconds: optionalInteger(environment.SHANNON_VOICE_REALTIME_TIMEOUT_MS),
   });
+}
+
+export function configuredRealtimeDailyAllowanceSeconds(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  const value = environment.SHANNON_VOICE_REALTIME_DAILY_MINUTES?.trim();
+  if (!value) return SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS;
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes < 10 || minutes > 24 * 60) {
+    return SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS;
+  }
+  return minutes * 60;
+}
+
+export function realtimeVoiceJapanDayKey(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date);
 }
 
 function validSdp(value: string): boolean {

@@ -555,12 +555,20 @@ public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     public let threadID: String
     public let model: String?
     public let callID: String?
+    public let dailyRemainingSeconds: Int?
 
-    public init(answerSDP: String, threadID: String, model: String? = nil, callID: String? = nil) {
+    public init(
+        answerSDP: String,
+        threadID: String,
+        model: String? = nil,
+        callID: String? = nil,
+        dailyRemainingSeconds: Int? = nil
+    ) {
         self.answerSDP = answerSDP
         self.threadID = threadID
         self.model = model
         self.callID = callID
+        self.dailyRemainingSeconds = dailyRemainingSeconds
     }
 }
 

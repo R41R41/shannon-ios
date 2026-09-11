@@ -112,6 +112,31 @@ public enum ShannonRealtimeVoiceBudgetPolicy {
         let seconds = remainingSeconds(startedAt: startedAt, now: now)
         return String(format: "残り %02d:%02d", seconds / 60, seconds % 60)
     }
+
+    public static func dailyRemainingLabel(seconds: Int) -> String {
+        "本日あと最大 \(max(0, seconds) / 60)分"
+    }
+}
+
+public enum ShannonRealtimeVoiceFailurePresentation {
+    public static func startMessage(for error: Error) -> String {
+        guard let apiError = error as? ShannonAPIError,
+              case let .realtimeVoiceRejected(status, code) = apiError else {
+            return "ライブ音声に接続できませんでした。少し待ってもう一度お試しください。"
+        }
+        switch code {
+        case "VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED":
+            return "今日はライブ音声を十分使いました。テキスト会話は引き続き使えます。"
+        case "RATE_LIMITED":
+            return "短時間に接続が続きました。少し待ってからもう一度お試しください。"
+        case "VOICE_REALTIME_NOT_CONFIGURED":
+            return "ライブ音声は現在利用できません。テキスト会話は引き続き使えます。"
+        default:
+            return status == 401
+                ? "Shannonとの接続を設定し直してから、もう一度お試しください。"
+                : "ライブ音声に接続できませんでした。少し待ってもう一度お試しください。"
+        }
+    }
 }
 
 public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
@@ -249,6 +274,7 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var isMuted = false
     public private(set) var sessionStartedAt: Date?
     public private(set) var usage = ShannonRealtimeVoiceUsage.zero
+    public private(set) var dailyRemainingSeconds: Int?
 
     private var transport: ShannonWebRTCVoiceTransport?
     private var transcriptState = ShannonRealtimeVoiceTranscriptState()
@@ -273,6 +299,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         shannonTranscript = ""
         transcriptState = ShannonRealtimeVoiceTranscriptState()
         usage = .zero
+        dailyRemainingSeconds = nil
         diagnostics.record("realtime.start.requested")
 
         let granted = await AVAudioApplication.requestRecordPermission()
@@ -336,6 +363,7 @@ public final class ShannonRealtimeVoiceSessionModel {
                 return
             }
             diagnostics.record("realtime.answer.received", metadata: ["model": call.model ?? "unknown"])
+            dailyRemainingSeconds = call.dailyRemainingSeconds
             try await transport.acceptAnswer(call.answerSDP)
             guard generation == sessionGeneration else {
                 transport.close()
@@ -347,7 +375,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         } catch {
             guard generation == sessionGeneration else { return }
             diagnostics.record("realtime.start.failed", metadata: safeErrorMetadata(error))
-            fail("ライブ音声に接続できませんでした。少し待ってもう一度お試しください。")
+            fail(ShannonRealtimeVoiceFailurePresentation.startMessage(for: error))
         }
     }
 
@@ -771,6 +799,7 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var isMuted = false
     public private(set) var sessionStartedAt: Date?
     public private(set) var usage = ShannonRealtimeVoiceUsage.zero
+    public private(set) var dailyRemainingSeconds: Int?
     public init() {}
     public func start(
         createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
@@ -871,19 +900,12 @@ public struct ShannonLiveVoiceView: View {
 
                     if let startedAt = model.sessionStartedAt {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
-                            HStack(spacing: M3Spacing.medium) {
-                                Label(
-                                    ShannonRealtimeVoiceBudgetPolicy.remainingLabel(
-                                        startedAt: startedAt,
-                                        now: context.date
-                                    ),
-                                    systemImage: "clock"
-                                )
-                                if model.usage.totalTokens > 0 {
-                                    Label(
-                                        "\(model.usage.totalTokens.formatted()) トークン",
-                                        systemImage: "waveform.badge.magnifyingglass"
-                                    )
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: M3Spacing.medium) {
+                                    sessionMetricLabels(startedAt: startedAt, now: context.date)
+                                }
+                                VStack(alignment: .leading, spacing: 4) {
+                                    sessionMetricLabels(startedAt: startedAt, now: context.date)
                                 }
                             }
                             .font(.caption.monospacedDigit())
@@ -906,6 +928,26 @@ public struct ShannonLiveVoiceView: View {
             await model.start(createCall: createCall, commitTurn: commitTurn)
         }
         .onDisappear { model.stop() }
+    }
+
+    @ViewBuilder
+    private func sessionMetricLabels(startedAt: Date, now: Date) -> some View {
+        Label(
+            ShannonRealtimeVoiceBudgetPolicy.remainingLabel(startedAt: startedAt, now: now),
+            systemImage: "clock"
+        )
+        if let dailyRemainingSeconds = model.dailyRemainingSeconds {
+            Label(
+                ShannonRealtimeVoiceBudgetPolicy.dailyRemainingLabel(seconds: dailyRemainingSeconds),
+                systemImage: "calendar"
+            )
+        }
+        if model.usage.totalTokens > 0 {
+            Label(
+                "\(model.usage.totalTokens.formatted()) トークン",
+                systemImage: "waveform.badge.magnifyingglass"
+            )
+        }
     }
 
     private func topBar(_ palette: M3Palette) -> some View {

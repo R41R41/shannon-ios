@@ -34,8 +34,11 @@ import {
   VoiceTranscriptionError,
 } from './voiceTranscription.js';
 import {
+  configuredRealtimeDailyAllowanceSeconds,
   createConfiguredRealtimeVoiceGateway,
+  realtimeVoiceJapanDayKey,
   RealtimeVoiceError,
+  SHANNON_REALTIME_SESSION_RESERVATION_SECONDS,
 } from './realtimeVoice.js';
 import {
   createConfiguredVoicePreviewGateway,
@@ -58,6 +61,7 @@ const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const realtimeVoiceGateway = createConfiguredRealtimeVoiceGateway(process.env);
+const realtimeVoiceDailyAllowanceSeconds = configuredRealtimeDailyAllowanceSeconds(process.env);
 const configuredRealtimeVoice = realtimeVoiceGateway?.defaultVoice;
 const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
   ? configuredRealtimeVoice
@@ -352,6 +356,8 @@ async function handleRealtimeVoiceCall(
     return;
   }
 
+  let reservationId: string | undefined;
+  let upstreamCallCreated = false;
   try {
     const contentType = request.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
     if (contentType !== 'application/sdp') {
@@ -361,21 +367,42 @@ async function handleRealtimeVoiceCall(
     const offer = Buffer.from(await readBytes(request, 128 * 1024)).toString('utf8');
     const requestedThreadId = scalarHeader(request.headers['x-shannon-thread-id']);
     const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId);
+    const createdAt = now();
+    const reservation = persistentStore.reserveRealtimeVoiceSession({
+      scopeKey: principal.scopeKey,
+      dayKey: realtimeVoiceJapanDayKey(new Date(createdAt)),
+      reservedSeconds: SHANNON_REALTIME_SESSION_RESERVATION_SECONDS,
+      dailyLimitSeconds: realtimeVoiceDailyAllowanceSeconds,
+      createdAt,
+    });
+    if (!reservation) {
+      sendJson(response, 429, {
+        error: 'VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED',
+        message: '今日はライブ音声を十分使いました。テキスト会話は引き続き使えます。',
+      });
+      return;
+    }
+    reservationId = reservation.reservationId;
     const result = await realtimeVoiceGateway.createCall({
       sdp: offer,
       instructions: session.instructions,
       voice: session.voice,
     });
+    upstreamCallCreated = true;
     response.writeHead(200, {
       'content-type': 'application/sdp; charset=utf-8',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'x-shannon-thread-id': session.threadId,
       'x-shannon-realtime-model': result.model,
+      'x-shannon-realtime-daily-remaining-seconds': String(reservation.remainingSeconds),
       ...(result.callId ? { 'x-shannon-realtime-call-id': result.callId } : {}),
     });
     response.end(result.answerSdp);
   } catch (error) {
+    if (reservationId && !upstreamCallCreated) {
+      persistentStore.releaseRealtimeVoiceSessionReservation(reservationId);
+    }
     if (error instanceof RealtimeVoiceError) {
       console.warn('Shannon realtime voice call failed', {
         code: error.code,

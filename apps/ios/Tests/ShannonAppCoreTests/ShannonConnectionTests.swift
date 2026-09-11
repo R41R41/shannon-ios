@@ -283,6 +283,7 @@ final class ShannonConnectionTests: XCTestCase {
                         "content-type": "application/sdp",
                         "x-shannon-thread-id": "thread-voice",
                         "x-shannon-realtime-model": "gpt-realtime-2.1-mini",
+                        "x-shannon-realtime-daily-remaining-seconds": "3000",
                     ]
                 ))
                 return (response, Data("v=0\r\ns=answer\r\n".utf8))
@@ -304,6 +305,7 @@ final class ShannonConnectionTests: XCTestCase {
         )
         XCTAssertEqual(call.threadID, "thread-voice")
         XCTAssertEqual(call.model, "gpt-realtime-2.1-mini")
+        XCTAssertEqual(call.dailyRemainingSeconds, 3_000)
 
         let turn = try await client.commitRealtimeVoiceTurn(
             scopeKey: "untrusted-client-scope", threadId: call.threadID,
@@ -311,6 +313,47 @@ final class ShannonConnectionTests: XCTestCase {
         )
         XCTAssertEqual(turn.threadId, "thread-voice")
         XCTAssertEqual(requestCount, 2)
+    }
+
+    func testAPIClientPreservesRealtimeAllowanceRejectionCode() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "r", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-voice-budget",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 429, httpVersion: "HTTP/1.1",
+                headerFields: ["content-type": "application/json"]
+            ))
+            return (
+                response,
+                Data(#"{"error":"VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED","message":"ignored"}"#.utf8)
+            )
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        do {
+            _ = try await client.createRealtimeVoiceCall(
+                scopeKey: "untrusted-client-scope",
+                threadId: nil,
+                offerSDP: "v=0\r\ns=offer with enough bytes\r\n"
+            )
+            XCTFail("Expected the daily allowance rejection")
+        } catch {
+            XCTAssertEqual(
+                error as? ShannonAPIError,
+                .realtimeVoiceRejected(
+                    status: 429,
+                    code: "VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED"
+                )
+            )
+        }
     }
 
     func testAPIClientRegistersAPNsTokenWithPairedDeviceCredential() async throws {
