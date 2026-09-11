@@ -176,6 +176,7 @@ public final class ShannonConnectionModel {
     private let store: any ShannonConnectionStoreProtocol
     private let session: URLSession
     private let deviceName: @Sendable () -> String
+    private var connectedDeviceRevision = 0
 
     public init(
         baseURL: URL,
@@ -286,6 +287,8 @@ public final class ShannonConnectionModel {
                 expiresAt: expiresAt
             )
             try store.save(credential)
+            connectedDeviceRevision += 1
+            connectedDevices = []
             status = .connected(deviceName: paired.displayName)
             verificationStatus = .idle
             return true
@@ -393,6 +396,7 @@ public final class ShannonConnectionModel {
                 throw ShannonConnectionError.rejected(status: http.statusCode)
             }
             try store.delete()
+            connectedDeviceRevision += 1
             status = .disconnected
             verificationStatus = .idle
             connectedDevices = []
@@ -407,6 +411,7 @@ public final class ShannonConnectionModel {
     public func loadConnectedDevices() async {
         guard !isLoadingDevices else { return }
         guard let credential = credentialForAuthenticatedRequest() else { return }
+        let revision = connectedDeviceRevision
         isLoadingDevices = true
         deviceManagementError = nil
         defer { isLoadingDevices = false }
@@ -417,8 +422,15 @@ public final class ShannonConnectionModel {
             request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
             let (data, response) = try await session.data(for: request)
             try handleAuthenticatedResponse(response)
-            connectedDevices = try JSONDecoder().decode(DeviceListResponse.self, from: data).devices
+            let devices = try JSONDecoder().decode(DeviceListResponse.self, from: data).devices
+            connectedDevices = Self.applyingLoadedDevices(
+                devices,
+                loadedAtRevision: revision,
+                currentRevision: connectedDeviceRevision,
+                currentDevices: connectedDevices
+            )
         } catch {
+            guard revision == connectedDeviceRevision else { return }
             deviceManagementError = userMessage(for: error)
         }
     }
@@ -442,6 +454,7 @@ public final class ShannonConnectionModel {
             ))
             let (_, response) = try await session.data(for: request)
             try handleAuthenticatedResponse(response)
+            connectedDeviceRevision += 1
             connectedDevices.removeAll { $0.id == device.id }
             return true
         } catch {
@@ -463,6 +476,15 @@ public final class ShannonConnectionModel {
 #else
         return false
 #endif
+    }
+
+    static func applyingLoadedDevices(
+        _ loadedDevices: [ShannonConnectedDevice],
+        loadedAtRevision: Int,
+        currentRevision: Int,
+        currentDevices: [ShannonConnectedDevice]
+    ) -> [ShannonConnectedDevice] {
+        loadedAtRevision == currentRevision ? loadedDevices : currentDevices
     }
 
     private func userMessage(for error: Error) -> String {

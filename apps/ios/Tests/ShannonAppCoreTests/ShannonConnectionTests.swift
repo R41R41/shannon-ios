@@ -304,6 +304,30 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(requestCount, 2)
     }
 
+    func testAStaleDeviceReloadKeepsTheNewerDeviceState() {
+        let current = [connectedDevice(id: "5555555555555555", name: "Test iPhone", isCurrent: true)]
+        let stale = current + [connectedDevice(id: "6666666666666666", name: "Revoked Mac", isCurrent: false)]
+
+        XCTAssertEqual(
+            ShannonConnectionModel.applyingLoadedDevices(
+                stale,
+                loadedAtRevision: 4,
+                currentRevision: 5,
+                currentDevices: current
+            ),
+            current
+        )
+        XCTAssertEqual(
+            ShannonConnectionModel.applyingLoadedDevices(
+                stale,
+                loadedAtRevision: 5,
+                currentRevision: 5,
+                currentDevices: current
+            ),
+            stale
+        )
+    }
+
     func testDisconnectRevokesCurrentDeviceBeforeDeletingCredential() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "x", count: 43)
@@ -755,6 +779,16 @@ private func response(url: URL, json: [String: Any]) throws -> (HTTPURLResponse,
         headerFields: ["content-type": "application/json"]
     ))
     return (response, try JSONSerialization.data(withJSONObject: json))
+}
+
+private func connectedDevice(id: String, name: String, isCurrent: Bool) -> ShannonConnectedDevice {
+    ShannonConnectedDevice(
+        deviceId: id,
+        displayName: name,
+        expiresAt: "2027-08-31T00:00:00.000Z",
+        lastUsedAt: nil,
+        isCurrent: isCurrent
+    )
 }
 
 private func requestBody(_ request: URLRequest) -> Data? {
