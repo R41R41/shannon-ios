@@ -36,6 +36,8 @@ export interface PushNotificationSender {
 const DEVICE_TOKEN_PATTERN = /^[a-f0-9]{64,200}$/iu;
 const MAXIMUM_PUSH_AGE_MILLISECONDS = 12 * 60 * 60_000;
 const MAXIMUM_ATTEMPTS = 3;
+const DELIVERY_LEASE_MILLISECONDS = 5 * 60_000;
+const DELIVERY_STATE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
 
 export class SQLitePushNotificationStore {
   private readonly database: DatabaseSync;
@@ -66,11 +68,13 @@ export class SQLitePushNotificationStore {
         delivered_at TEXT,
         last_status INTEGER,
         last_error TEXT,
+        leased_until TEXT,
         PRIMARY KEY (initiative_id, device_id)
       );
       CREATE INDEX IF NOT EXISTS push_delivery_state_retry
         ON push_delivery_state (delivered_at, next_attempt_at, attempts);
     `);
+    this.ensureDeliveryLeaseColumn();
     this.secureFiles();
   }
 
@@ -117,10 +121,11 @@ export class SQLitePushNotificationStore {
           delivery.delivered_at IS NULL
           AND delivery.attempts < ?
           AND delivery.next_attempt_at <= ?
+          AND (delivery.leased_until IS NULL OR delivery.leased_until <= ?)
         ))
       ORDER BY im.created_at ASC
       LIMIT ?
-    `).all(cutoff, MAXIMUM_ATTEMPTS, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
+    `).all(cutoff, MAXIMUM_ATTEMPTS, at, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
     const initiatives: PendingPushNotification[] = initiativeRows.map(row => ({
       kind: 'initiative',
       initiativeId: String(row.initiative_id),
@@ -158,10 +163,11 @@ export class SQLitePushNotificationStore {
             delivery.delivered_at IS NULL
             AND delivery.attempts < ?
             AND delivery.next_attempt_at <= ?
+            AND (delivery.leased_until IS NULL OR delivery.leased_until <= ?)
           ))
         ORDER BY e.occurred_at ASC
         LIMIT ?
-      `).all(cutoff, MAXIMUM_ATTEMPTS, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
+      `).all(cutoff, MAXIMUM_ATTEMPTS, at, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
     const agentTasks: PendingPushNotification[] = agentRows.map(row => {
       const eventType = String(row.event_type);
       const taskTitle = String(row.title);
@@ -207,10 +213,11 @@ export class SQLitePushNotificationStore {
             delivery.delivered_at IS NULL
             AND delivery.attempts < ?
             AND delivery.next_attempt_at <= ?
+            AND (delivery.leased_until IS NULL OR delivery.leased_until <= ?)
           ))
         ORDER BY e.opened_at ASC
         LIMIT ?
-      `).all(cutoff, MAXIMUM_ATTEMPTS, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
+      `).all(cutoff, MAXIMUM_ATTEMPTS, at, at, boundedLimit) as unknown as Array<Record<string, unknown>>;
     const testFlightFailures: PendingPushNotification[] = testFlightRows.map(row => ({
       kind: 'testflight_failure',
       initiativeId: `testflight:${String(row.episode_id)}`,
@@ -230,6 +237,31 @@ export class SQLitePushNotificationStore {
       .map(notification => Object.freeze(notification)));
   }
 
+  claim(notification: PendingPushNotification, at = this.now()): boolean {
+    const leasedUntil = new Date(Date.parse(at) + DELIVERY_LEASE_MILLISECONDS).toISOString();
+    const result = this.database.prepare(`
+      INSERT INTO push_delivery_state
+        (initiative_id, device_id, attempts, next_attempt_at, delivered_at, last_status, last_error, leased_until)
+      VALUES (?, ?, 0, ?, NULL, NULL, NULL, ?)
+      ON CONFLICT(initiative_id, device_id) DO UPDATE SET
+        leased_until = excluded.leased_until
+      WHERE push_delivery_state.delivered_at IS NULL
+        AND push_delivery_state.attempts < ?
+        AND push_delivery_state.next_attempt_at <= ?
+        AND (push_delivery_state.leased_until IS NULL OR push_delivery_state.leased_until <= ?)
+    `).run(
+      notification.initiativeId,
+      notification.deviceId,
+      at,
+      leasedUntil,
+      MAXIMUM_ATTEMPTS,
+      at,
+      at,
+    );
+    this.secureFiles();
+    return Number(result.changes) === 1;
+  }
+
   record(notification: PendingPushNotification, result: PushDeliveryResult, at = this.now()): void {
     const existing = this.database.prepare(`
       SELECT attempts FROM push_delivery_state WHERE initiative_id = ? AND device_id = ?
@@ -239,14 +271,15 @@ export class SQLitePushNotificationStore {
     const nextAttemptAt = new Date(Date.parse(at) + retryDelay).toISOString();
     this.database.prepare(`
       INSERT INTO push_delivery_state
-        (initiative_id, device_id, attempts, next_attempt_at, delivered_at, last_status, last_error)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        (initiative_id, device_id, attempts, next_attempt_at, delivered_at, last_status, last_error, leased_until)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
       ON CONFLICT(initiative_id, device_id) DO UPDATE SET
         attempts = excluded.attempts,
         next_attempt_at = excluded.next_attempt_at,
         delivered_at = excluded.delivered_at,
         last_status = excluded.last_status,
-        last_error = excluded.last_error
+        last_error = excluded.last_error,
+        leased_until = NULL
     `).run(
       notification.initiativeId,
       notification.deviceId,
@@ -264,6 +297,27 @@ export class SQLitePushNotificationStore {
     this.secureFiles();
   }
 
+  prune(at = this.now()): number {
+    const cutoff = new Date(Date.parse(at) - DELIVERY_STATE_RETENTION_MILLISECONDS).toISOString();
+    const retainedTestFlightState = this.tableExists('testflight_delivery_runs')
+      ? `AND NOT (
+          initiative_id LIKE 'testflight:%'
+          AND EXISTS (
+            SELECT 1 FROM testflight_delivery_runs run
+            WHERE run.notification_key = push_delivery_state.initiative_id
+          )
+        )`
+      : '';
+    const result = this.database.prepare(`
+      DELETE FROM push_delivery_state
+      WHERE COALESCE(delivered_at, next_attempt_at) < ?
+        AND (leased_until IS NULL OR leased_until <= ?)
+        ${retainedTestFlightState}
+    `).run(cutoff, at);
+    this.secureFiles();
+    return Number(result.changes);
+  }
+
   close(): void {
     this.secureFiles();
     this.database.close();
@@ -271,6 +325,13 @@ export class SQLitePushNotificationStore {
 
   private tableExists(name: string): boolean {
     return Boolean(this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
+  }
+
+  private ensureDeliveryLeaseColumn(): void {
+    const columns = this.database.prepare(`PRAGMA table_info(push_delivery_state)`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'leased_until')) {
+      this.database.exec(`ALTER TABLE push_delivery_state ADD COLUMN leased_until TEXT;`);
+    }
   }
 
   private secureFiles(): void {
@@ -397,6 +458,7 @@ export async function deliverPendingPushNotifications(
   let attempted = 0;
   let delivered = 0;
   for (const notification of store.pending(at)) {
+    if (!store.claim(notification, at)) continue;
     attempted += 1;
     try {
       const result = await sender.send(notification);

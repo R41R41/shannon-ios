@@ -58,6 +58,7 @@ try {
     if (stopping) break;
     store.reviewExpiredTrials();
     store.prune();
+    pushStore.prune();
     const now = Date.now();
     if (now >= nextInitiativeCheckAt) {
       const at = new Date(now).toISOString();
