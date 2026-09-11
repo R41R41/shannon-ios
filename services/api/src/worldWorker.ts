@@ -7,6 +7,10 @@ import { summarizeJmaForecast } from './jmaForecast.js';
 import { parseSyndicationFeed } from './syndicationFeed.js';
 import { parsePubmedSearchIds, parsePubmedSummaries, pubmedSummaryURL } from './pubmed.js';
 import { parseBlueskyPosts } from './bluesky.js';
+import { parseHackerNewsItems, parseHackerNewsTopIds } from './hackerNews.js';
+import { parseArxivFeed, prepareArxivQuery } from './arxiv.js';
+import { parseGithubReleases } from './githubReleases.js';
+import { isPrivateOrReservedAddress } from './ipSafety.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { nextInitiativeDelayMilliseconds } from './initiativeSchedule.js';
 import { createConfiguredDailyMindModel, SQLiteDailyMindStore } from './dailyMind.js';
@@ -104,29 +108,15 @@ async function fetchJma(source: WorldSource): Promise<WorldItemInput[]> {
 }
 
 async function fetchHackerNews(source: WorldSource): Promise<WorldItemInput[]> {
-  const ids = await json(`${source.url}/topstories.json`);
-  if (!Array.isArray(ids)) throw new Error('WORLD_HN_INVALID');
-  const rows = await Promise.all(ids.slice(0, 10).map(id => json(`${source.url}/item/${String(id)}.json`)));
-  return rows.flatMap(value => {
-    const row = object(value); const id = number(row?.id); const title = string(row?.title);
-    if (id === null || !title) return [];
-    const publishedSeconds = number(row?.time);
-    const publishedAt = publishedSeconds !== null && publishedSeconds >= 0 && publishedSeconds <= 4_102_444_800
-      ? new Date(publishedSeconds * 1_000).toISOString()
-      : undefined;
-    return [{
-      externalId: String(id),
-      title,
-      url: string(row?.url) ?? `https://news.ycombinator.com/item?id=${id}`,
-      author: string(row?.by) ?? undefined,
-      publishedAt,
-    }];
-  });
+  const ids = parseHackerNewsTopIds(await json(`${source.url}/topstories.json`));
+  if (!ids.length) throw new Error('WORLD_HN_INVALID');
+  const rows = await Promise.all(ids.map(id => json(`${source.url}/item/${id}.json`)));
+  return [...parseHackerNewsItems(rows, ids)];
 }
 
 async function fetchArxiv(source: WorldSource): Promise<WorldItemInput[]> {
-  const url = new URL(source.url); url.searchParams.set('search_query', source.query ?? 'all:AI'); url.searchParams.set('max_results', '10');
-  return parseSyndicationFeed(await text(url.href), url);
+  const url = prepareArxivQuery(source.url, source.query ?? 'all:AI');
+  return [...parseArxivFeed(await text(url.href), url)];
 }
 
 async function fetchPubmed(source: WorldSource): Promise<WorldItemInput[]> {
@@ -143,12 +133,12 @@ async function fetchBluesky(source: WorldSource): Promise<WorldItemInput[]> {
 }
 
 async function fetchGithub(source: WorldSource): Promise<WorldItemInput[]> {
-  const value = await json(source.url, { 'user-agent': 'Shannon/0.1' });
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 10).flatMap(value => {
-    const row = object(value); const id = number(row?.id); const title = string(row?.name) ?? string(row?.tag_name); const url = string(row?.html_url);
-    return id !== null && title && url ? [{ externalId: String(id), title, url, summary: string(row?.body) ?? undefined, publishedAt: string(row?.published_at) ?? undefined }] : [];
-  });
+  const url = new URL(source.url); url.searchParams.set('per_page', '10'); url.searchParams.set('page', '1');
+  return [...parseGithubReleases(await json(url.href, {
+    accept: 'application/vnd.github+json',
+    'x-github-api-version': '2026-03-10',
+    'user-agent': 'Shannon/0.1',
+  }), source.query ?? '')];
 }
 
 async function fetchRss(source: WorldSource): Promise<WorldItemInput[]> {
@@ -162,7 +152,9 @@ async function fetchRss(source: WorldSource): Promise<WorldItemInput[]> {
 
 async function json(url: string, headers: Record<string, string> = {}): Promise<unknown> {
   const response = await fetch(url, { headers, signal: requestSignal(15_000) });
-  if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`); return response.json();
+  if (!response.ok) throw new Error(`WORLD_HTTP_${response.status}`);
+  const body = await boundedResponseText(response, 2_000_000, 'WORLD_JSON_TOO_LARGE');
+  try { return JSON.parse(body) as unknown; } catch { throw new Error('WORLD_JSON_INVALID'); }
 }
 async function text(url: string): Promise<string> {
   const response = await fetch(url, { headers: { 'user-agent': 'Shannon/0.1' }, signal: requestSignal(15_000) });
@@ -171,7 +163,6 @@ async function text(url: string): Promise<string> {
 }
 function object(value: unknown): Record<string, unknown> | null { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function string(value: unknown): string | null { return typeof value === 'string' && value ? value : null; }
-function number(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
 function safeCode(error: unknown): string { return error instanceof Error ? error.message.replace(/[^A-Z0-9_:-]/giu, '_').slice(0, 120) : 'WORLD_UNKNOWN'; }
 
 async function discoverOneTrialFeed(items: readonly WorldItemInput[], worldStore: SQLiteWorldStore): Promise<void> {
@@ -253,24 +244,9 @@ function requestSignal(timeoutMilliseconds: number): AbortSignal {
 async function publicURL(url: URL): Promise<boolean> {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
   if (url.username || url.password) return false;
-  const hostname = url.hostname.replace(/^\[|\]$/gu, '').toLowerCase();
-  if (hostname === 'localhost' || hostname.endsWith('.local')) return false;
+  const hostname = url.hostname.replace(/^\[|\]$/gu, '').replace(/\.$/u, '').toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) return false;
   const directFamily = isIP(hostname);
   const addresses = directFamily ? [{ address: hostname, family: directFamily }] : await lookup(hostname, { all: true });
-  return addresses.length > 0 && addresses.every(({ address }) => !privateAddress(address));
-}
-
-function privateAddress(address: string): boolean {
-  const value = address.replace(/^\[|\]$/gu, '').toLowerCase();
-  if (value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:')) return true;
-  if (value.startsWith('::ffff:') && value.slice('::ffff:'.length).includes('.')) {
-    return privateAddress(value.slice('::ffff:'.length));
-  }
-  const octets = value.split('.').map(Number);
-  if (octets.length !== 4 || octets.some(item => !Number.isInteger(item))) return false;
-  return octets[0] === 0 || octets[0] === 10 || octets[0] === 127
-    || (octets[0] === 169 && octets[1] === 254)
-    || (octets[0] === 172 && (octets[1] ?? 0) >= 16 && (octets[1] ?? 0) <= 31)
-    || (octets[0] === 192 && octets[1] === 168)
-    || (octets[0] ?? 0) >= 224;
+  return addresses.length > 0 && addresses.every(({ address }) => !isPrivateOrReservedAddress(address));
 }

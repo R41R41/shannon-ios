@@ -31,6 +31,8 @@ describe('syndication feed parsing', () => {
         <entry><id>unsafe</id><title>Unsafe</title><link href="javascript:alert(1)"/></entry>
         <entry><id>credential</id><title>Credential</title><link href="https://user:secret@example.com/a"/></entry>
         <entry><id>private</id><title>Private</title><link href="http://127.0.0.1/admin"/></entry>
+        <entry><id>mapped</id><title>Mapped private</title><link href="http://[::ffff:7f00:1]/admin"/></entry>
+        <entry><id>local-dot</id><title>Local trailing dot</title><link href="http://localhost./admin"/></entry>
       </feed>
     `, new URL('https://example.com/feed.xml'));
 

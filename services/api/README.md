@@ -25,6 +25,10 @@ Worldから届いた自発メッセージには、会話履歴上の任意フィ
 
 PubMedはESearchのIDをそのまま表示せず、同じ公式E-utilitiesのESummaryで照合できた論文だけを実タイトル、著者、掲載誌、公開日、論文固有URLつきで保存する。著作権上の扱いが異なる抄録本文は複製せず、情報源画面からNCBIの免責・著作権ポリシーを確認できる。Blueskyは公式`postView`のAT URIと著者DIDを照合し、変更され得るhandleではなくDIDから安定した投稿固有URLを作り、本文、著者、作成日時を保持する。bot以外の有効なcontent labelや自己申告ラベルが付いた投稿、不正な識別子、公開日時を検証できないレスポンスは自発表示用のカードにしない。既存DBのID-only PubMedカードとBlueskyトップURLは、各情報源の次回取得時に古い観測と一緒に除去してから安全な現行結果を保存し、通常の重複排除は維持する。
 
+arXivは公式Atom APIを`submittedDate`の降順で1日1回だけ読み、正規のarXiv論文ID、初回投稿日、abstract URL、最大3名の著者と抄録を検証できるentryだけを保存する。API自身のerror entryや外部hostの識別子は保存しない。Hacker Newsは公式top storiesのうち、要求IDと一致する未削除・liveな`story`だけを扱い、作成時刻、著者、score、comment数を保持する。外部URLがcredential、private IP、非HTTP(S)などの場合は安全なHN discussion URLへ戻す。GitHub Releasesは`owner/repository`設定を境界検証し、同じrepositoryの公開済みreleaseだけをrelease ID、tag、公開日時、著者、release notesつきで保存する。draft、別repository、欠損日時、不正URLは除外する。公式JSON応答は取得時にも2MBで打ち切る。旧形式のHN・arXiv・GitHub行は、次回成功取得時に古い観測と一緒に置換する。
+
+Worldのタイトル・本文・release notes・抄録はすべて非信頼の公開データとして扱う。Daily Mindのモデル境界では、候補内の命令、role変更、権限要求を指示として扱わないことを固定し、候補は話題選定の引用資料にだけ使う。
+
 loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必須で、全endpointが`Authorization: Bearer ...`を要求する。実機用の`lan`モードは全インターフェースではなく、MacのプライベートIPv4アドレスを1つ選んで待ち受ける。
 
 `POST /v1/chat`は、返信本文と同時に`messageEmotion`を返す。これは取得済み共有状態と今回の入力から同じ連続感情則で投影した軽量な反応で、共有状態自体は変更しない。iOS側はこの値を投稿ごとに保存・再現する。

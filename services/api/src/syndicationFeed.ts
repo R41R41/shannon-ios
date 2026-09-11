@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { isPrivateOrReservedAddress } from './ipSafety.js';
 import type { WorldItemInput } from './worldStore.js';
 
 export interface SyndicationFeedOptions {
@@ -35,7 +36,10 @@ export function parseSyndicationFeed(
       || clean(tag(block, 'dc:date'))
       || clean(tag(block, 'updated')),
     );
-    const author = bounded(clean(tag(block, 'dc:creator')) || clean(tag(block, 'name')), 200);
+    const atomAuthors = tags(block, 'name').map(clean).filter(Boolean);
+    const author = bounded(clean(tag(block, 'dc:creator')) || (
+      atomAuthors.length > 3 ? `${atomAuthors.slice(0, 3).join(', ')} ほか` : atomAuthors.join(', ')
+    ), 200);
     return [{
       externalId,
       title,
@@ -53,30 +57,14 @@ function safeWebURL(value: string, baseURL: URL): string | null {
     const url = new URL(decodeEntities(value), baseURL);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
     if (url.username || url.password) return null;
-    const hostname = url.hostname.replace(/^\[|\]$/gu, '').toLowerCase();
-    if (hostname === 'localhost' || hostname.endsWith('.local')) return null;
-    if (isIP(hostname) && privateLiteralAddress(hostname)) return null;
+    const hostname = url.hostname.replace(/^\[|\]$/gu, '').replace(/\.$/u, '').toLowerCase();
+    if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) return null;
+    if (isIP(hostname) && isPrivateOrReservedAddress(hostname)) return null;
     url.hash = '';
     return url.href.length <= 2_000 ? url.href : null;
   } catch {
     return null;
   }
-}
-
-function privateLiteralAddress(value: string): boolean {
-  if (value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:')) {
-    return true;
-  }
-  if (value.startsWith('::ffff:') && value.slice('::ffff:'.length).includes('.')) {
-    return privateLiteralAddress(value.slice('::ffff:'.length));
-  }
-  const octets = value.split('.').map(Number);
-  if (octets.length !== 4 || octets.some(item => !Number.isInteger(item))) return false;
-  return octets[0] === 0 || octets[0] === 10 || octets[0] === 127
-    || (octets[0] === 169 && octets[1] === 254)
-    || (octets[0] === 172 && (octets[1] ?? 0) >= 16 && (octets[1] ?? 0) <= 31)
-    || (octets[0] === 192 && octets[1] === 168)
-    || (octets[0] ?? 0) >= 224;
 }
 
 function validTimestamp(value: string): string | null {

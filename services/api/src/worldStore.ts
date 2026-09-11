@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { configuredGithubRepositories } from './githubReleases.js';
 
 const MAX_TRIAL_SUBSCRIPTIONS = 3;
 const MAX_ACTIVE_SUBSCRIPTIONS = 10;
@@ -122,7 +123,10 @@ export class SQLiteWorldStore {
     try {
       const legacyPredicate = source.kind === 'pubmed'
         ? "title = 'PubMed ' || external_id"
-        : source.kind === 'bluesky' ? "url = 'https://bsky.app/'" : null;
+        : source.kind === 'bluesky' ? "url = 'https://bsky.app/'"
+          : source.kind === 'hacker-news' ? 'summary IS NULL'
+            : source.kind === 'arxiv' ? "(external_id LIKE 'http://arxiv.org/abs/%' OR external_id LIKE 'https://arxiv.org/abs/%')"
+              : source.kind === 'github' ? 'author IS NULL' : null;
       if (legacyPredicate) {
         this.database.prepare(`
           DELETE FROM observations WHERE item_id IN (
@@ -496,7 +500,7 @@ export class SQLiteWorldStore {
       id: 'bluesky:interest', kind: 'bluesky', title: 'Bluesky', url: 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts',
       query: blueskyQuery, intervalMinutes: 360, nextRunAt: now,
     });
-    for (const repo of (process.env.SHANNON_GITHUB_REPOS ?? '').split(',').map(item => item.trim()).filter(Boolean)) {
+    for (const repo of configuredGithubRepositories(process.env.SHANNON_GITHUB_REPOS ?? '')) {
       sources.push({
         id: `github:${repo}`, kind: 'github', title: `GitHub・${repo}`, url: `https://api.github.com/repos/${repo}/releases`,
         query: repo, intervalMinutes: 720, nextRunAt: now,

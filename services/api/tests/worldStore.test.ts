@@ -212,6 +212,47 @@ describe('autonomous world store', () => {
     database.close();
   });
 
+  it('replaces legacy HN, arXiv, and GitHub rows when richer validated metadata arrives', () => {
+    const path = databasePath();
+    const now = '2026-09-02T00:00:00.000Z';
+    const previousRepositories = process.env.SHANNON_GITHUB_REPOS;
+    process.env.SHANNON_GITHUB_REPOS = 'openai/openai-node';
+    const store = new SQLiteWorldStore(path, () => now);
+    if (previousRepositories === undefined) delete process.env.SHANNON_GITHUB_REPOS;
+    else process.env.SHANNON_GITHUB_REPOS = previousRepositories;
+
+    const cases = [
+      {
+        source: store.dueSources(now).find(source => source.kind === 'hacker-news')!,
+        legacy: { externalId: '42', title: 'Old HN', url: 'http://127.0.0.1/internal' },
+        current: { externalId: '42', title: 'Current HN', url: 'https://news.ycombinator.com/item?id=42', summary: '12 points・3 comments', author: 'alice', publishedAt: now },
+      },
+      {
+        source: store.dueSources(now).find(source => source.kind === 'arxiv')!,
+        legacy: { externalId: 'http://arxiv.org/abs/2609.01234', title: 'Old paper', url: 'http://arxiv.org/abs/2609.01234', author: 'Alice', publishedAt: now },
+        current: { externalId: '2609.01234', title: 'Current paper', url: 'https://arxiv.org/abs/2609.01234', summary: 'Abstract', author: 'Alice, Bob', publishedAt: now },
+      },
+      {
+        source: store.dueSources(now).find(source => source.kind === 'github')!,
+        legacy: { externalId: '7', title: 'v1', url: 'https://github.com/openai/openai-node/releases/tag/v1', publishedAt: now },
+        current: { externalId: '7', title: 'Version 1', url: 'https://github.com/openai/openai-node/releases/tag/v1', summary: 'Changes', author: 'release-bot', publishedAt: now },
+      },
+    ];
+    for (const value of cases) {
+      expect(store.recordSuccess(value.source, [value.legacy], now)).toBe(1);
+      expect(store.recordSuccess(value.source, [value.current], now)).toBe(1);
+    }
+    store.close();
+
+    const database = new DatabaseSync(path);
+    for (const value of cases) {
+      expect(database.prepare('SELECT COUNT(*) AS count FROM world_items WHERE source_id = ?').get(value.source.id)).toEqual({ count: 1 });
+    }
+    expect(database.prepare("SELECT COUNT(*) AS count FROM world_items WHERE title LIKE 'Old %'").get()).toEqual({ count: 0 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM observations').get()).toEqual({ count: 3 });
+    database.close();
+  });
+
   it('discovers RSS and Atom hints without accepting ordinary links', () => {
     const links = discoverFeedLinks(`
       <link rel="alternate" type="application/rss+xml" href="/feed.xml">
