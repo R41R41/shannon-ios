@@ -161,6 +161,35 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertNil(ShannonDesktopTaskRestoration.resolve(rawValue: nil, tasks: []))
     }
 
+    func testWindowRestorationUsesSceneStateBeforeLastWindowFallback() {
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: "work", lastRawValue: "memory"),
+            .work
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: nil, lastRawValue: "memory"),
+            .memory
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: "unknown", lastRawValue: "unknown"),
+            .talk
+        )
+
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.identifier(sceneValue: "scene-thread", lastValue: "last-thread"),
+            "scene-thread"
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.identifier(sceneValue: nil, lastValue: "last-thread"),
+            "last-thread"
+        )
+        XCTAssertNil(ShannonDesktopWindowRestoration.identifier(sceneValue: nil, lastValue: ""))
+
+        XCTAssertTrue(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: "visible", lastValue: false))
+        XCTAssertFalse(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: "hidden", lastValue: true))
+        XCTAssertTrue(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: nil, lastValue: true))
+    }
+
     func testNextActionPrefersApprovalThenPendingPlanItem() {
         let approval = makeTask(status: .waitingApproval)
         let running = makeTask(

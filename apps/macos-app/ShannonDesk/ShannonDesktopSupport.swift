@@ -13,6 +13,28 @@ enum ShannonDesktopFocusedControl: Hashable {
     case threadSearch
 }
 
+enum ShannonDesktopWindowRestoration {
+    static func destination(sceneRawValue: String?, lastRawValue: String) -> DesktopDestination {
+        if let sceneRawValue, let destination = DesktopDestination(rawValue: sceneRawValue) {
+            return destination
+        }
+        return DesktopDestination(rawValue: lastRawValue) ?? .talk
+    }
+
+    static func identifier(sceneValue: String?, lastValue: String) -> String? {
+        if let sceneValue, !sceneValue.isEmpty { return sceneValue }
+        return lastValue.isEmpty ? nil : lastValue
+    }
+
+    static func inspectorVisible(sceneRawValue: String?, lastValue: Bool) -> Bool {
+        switch sceneRawValue {
+        case "visible": true
+        case "hidden": false
+        default: lastValue
+        }
+    }
+}
+
 struct ShannonDesktopCommandActions {
     let focusThreadSearch: () -> Void
     let showTalk: () -> Void

@@ -8,12 +8,17 @@ public struct ShannonDesktopRootView: View {
     private let connection: ShannonConnectionModel
     private let memory: ShannonMemoryModel
 
-    @SceneStorage("shannon.desktop.destination") private var destinationRawValue = DesktopDestination.talk.rawValue
+    @SceneStorage("shannon.desktop.destination") private var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") private var restoredThreadID: String?
     @SceneStorage("shannon.desktop.selectedTask") private var restoredTaskID: String?
-    @SceneStorage("shannon.desktop.showsInspector") private var showsInspector = false
+    @SceneStorage("shannon.desktop.showsInspector") private var restoredInspectorRawValue: String?
+    @AppStorage("shannon.desktop.lastDestination") private var lastDestinationRawValue = DesktopDestination.talk.rawValue
+    @AppStorage("shannon.desktop.lastSelectedThread") private var lastRestoredThreadID = ""
+    @AppStorage("shannon.desktop.lastSelectedTask") private var lastRestoredTaskID = ""
+    @AppStorage("shannon.desktop.lastShowsInspector") private var lastShowsInspector = false
     @State private var searchText = ""
     @State private var selectedTaskID: UUID?
+    @State private var showsInspector = false
     @State private var requestedMessageJumpID: UUID?
     @State private var messageJumpRevision = 0
     @State private var steeringText = ""
@@ -57,6 +62,7 @@ public struct ShannonDesktopRootView: View {
                 .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .task {
+            restoreWindowChromeIfAvailable()
             if connection.isConnected && !conversation.isDesignPreview {
                 await connection.verifyConnection()
             }
@@ -83,11 +89,17 @@ public struct ShannonDesktopRootView: View {
             steeringText = ""
             if let selectedTaskID {
                 restoredTaskID = selectedTaskID.uuidString
+                lastRestoredTaskID = selectedTaskID.uuidString
             }
         }
         .onChange(of: conversation.selectedThreadId) {
             restoredThreadID = conversation.selectedThreadId
+            lastRestoredThreadID = conversation.selectedThreadId ?? ""
             showsConversationOutline = false
+        }
+        .onChange(of: showsInspector) {
+            restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
+            lastShowsInspector = showsInspector
         }
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
@@ -104,7 +116,10 @@ public struct ShannonDesktopRootView: View {
     }
 
     private var destination: DesktopDestination {
-        DesktopDestination(rawValue: destinationRawValue) ?? .talk
+        ShannonDesktopWindowRestoration.destination(
+            sceneRawValue: restoredDestinationRawValue,
+            lastRawValue: lastDestinationRawValue
+        )
     }
 
     private var desktopCommandActions: ShannonDesktopCommandActions {
@@ -872,7 +887,8 @@ public struct ShannonDesktopRootView: View {
     }
 
     private func selectDestination(_ destination: DesktopDestination) {
-        destinationRawValue = destination.rawValue
+        restoredDestinationRawValue = destination.rawValue
+        lastDestinationRawValue = destination.rawValue
     }
 
     private func focusThreadSearch() {
@@ -892,19 +908,39 @@ public struct ShannonDesktopRootView: View {
     }
 
     private func restoreSelectedThreadIfAvailable() async {
-        guard let restoredThreadID,
-              restoredThreadID != conversation.selectedThreadId,
-              conversation.threads.contains(where: { $0.threadId == restoredThreadID }) else { return }
-        await conversation.selectThread(restoredThreadID)
+        let candidate = ShannonDesktopWindowRestoration.identifier(
+            sceneValue: restoredThreadID,
+            lastValue: lastRestoredThreadID
+        )
+        guard let candidate,
+              candidate != conversation.selectedThreadId,
+              conversation.threads.contains(where: { $0.threadId == candidate }) else { return }
+        await conversation.selectThread(candidate)
     }
 
     private func restoreSelectedTaskIfAvailable() {
         let resolvedID = ShannonDesktopTaskRestoration.resolve(
-            rawValue: restoredTaskID,
+            rawValue: ShannonDesktopWindowRestoration.identifier(
+                sceneValue: restoredTaskID,
+                lastValue: lastRestoredTaskID
+            ),
             tasks: conversation.agentTasks
         )
         if selectedTaskID != resolvedID {
             selectedTaskID = resolvedID
+        }
+    }
+
+    private func restoreWindowChromeIfAvailable() {
+        if restoredDestinationRawValue == nil {
+            restoredDestinationRawValue = destination.rawValue
+        }
+        showsInspector = ShannonDesktopWindowRestoration.inspectorVisible(
+            sceneRawValue: restoredInspectorRawValue,
+            lastValue: lastShowsInspector
+        )
+        if restoredInspectorRawValue == nil {
+            restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
         }
     }
 
