@@ -602,7 +602,7 @@ private struct ShannonCurrentStateCard: View {
         .padding(M3Spacing.large)
         .background(
             LinearGradient(
-                colors: [palette.surface, palette.primaryContainer.opacity(0.18)],
+                colors: [palette.surface, palette.intelligenceSoft.opacity(0.28)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
@@ -813,7 +813,7 @@ private struct MemoryCard: View {
                     Text(item.kind.japaneseName)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(palette.primary)
-                    if item.pinned { Image(systemName: "pin.fill").foregroundStyle(palette.tertiary) }
+                    if item.pinned { Image(systemName: "pin.fill").foregroundStyle(palette.warning) }
                     if item.status != .active {
                         Text(item.status == .rejected ? "事実ではない" : "忘れる")
                             .font(.caption2.weight(.semibold))
@@ -1145,7 +1145,7 @@ private struct ShannonSleepReportView: View {
                         Text("いまの理解").font(.caption.weight(.semibold)).foregroundStyle(palette.primary)
                         Text(conflict.currentText)
                         Divider()
-                        Text("新しく見つけた表現").font(.caption.weight(.semibold)).foregroundStyle(palette.tertiary)
+                        Text("新しく見つけた表現").font(.caption.weight(.semibold)).foregroundStyle(palette.onSurface)
                         Text(conflict.candidateText)
                         Text(conflict.reason).font(.caption).foregroundStyle(palette.onSurfaceVariant)
                     }

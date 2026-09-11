@@ -31,6 +31,7 @@ public struct ShannonDesktopRootView: View {
     @State private var renameText = ""
     @FocusState private var focusedControl: ShannonDesktopFocusedControl?
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(
         conversation: ShannonConversationModel,
@@ -118,7 +119,12 @@ public struct ShannonDesktopRootView: View {
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
+        .tint(shannonActionColor)
         .frame(minWidth: 860, minHeight: 600)
+    }
+
+    private var shannonActionColor: Color {
+        .shannonAction(for: colorScheme)
     }
 
     private var threadProjection: ShannonDesktopThreadProjection {

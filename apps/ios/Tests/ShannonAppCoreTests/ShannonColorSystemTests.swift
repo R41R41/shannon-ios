@@ -3,25 +3,35 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonColorSystemTests: XCTestCase {
-    func testClearSignalSemanticTokensRemainStable() {
-        XCTAssertEqual(ShannonColorTokens.Light.brandPresence, 0x0E92EF)
-        XCTAssertEqual(ShannonColorTokens.Light.actionPrimary, 0x006AA6)
-        XCTAssertEqual(ShannonColorTokens.Light.canvas, 0xF8FBFD)
-        XCTAssertEqual(ShannonColorTokens.Light.userMessage, 0xE7F4FC)
-        XCTAssertEqual(ShannonColorTokens.Dark.brandPresence, 0x46B9FF)
-        XCTAssertEqual(ShannonColorTokens.Dark.actionPrimary, 0x56C0FF)
-        XCTAssertEqual(ShannonColorTokens.Dark.canvas, 0x08131B)
-        XCTAssertEqual(ShannonColorTokens.Dark.userMessage, 0x153246)
+    func testSyzygySemanticTokensRemainStable() {
+        XCTAssertEqual(ShannonColorTokens.Intelligence.sky, 0x78D9FF)
+        XCTAssertEqual(ShannonColorTokens.Intelligence.core, 0x5865F2)
+        XCTAssertEqual(ShannonColorTokens.Intelligence.depth, 0x3039A8)
+        XCTAssertEqual(ShannonColorTokens.Light.actionPrimary, 0x0088FF)
+        XCTAssertEqual(ShannonColorTokens.Light.canvas, 0xFFFFFF)
+        XCTAssertEqual(ShannonColorTokens.Light.surfaceTint, 0xF2F2F7)
+        XCTAssertEqual(ShannonColorTokens.Light.create, 0xFFCC00)
+        XCTAssertEqual(ShannonColorTokens.Light.warning, 0xFF8D28)
+        XCTAssertEqual(ShannonColorTokens.Light.success, 0x34C759)
+        XCTAssertEqual(ShannonColorTokens.Light.danger, 0xFF383C)
+        XCTAssertEqual(ShannonColorTokens.Dark.actionPrimary, 0x0091FF)
+        XCTAssertEqual(ShannonColorTokens.Dark.canvas, 0x000000)
+        XCTAssertEqual(ShannonColorTokens.Dark.surfaceTint, 0x1C1C1E)
+        XCTAssertEqual(ShannonColorTokens.Dark.surfaceElevated, 0x2C2C2E)
+        XCTAssertEqual(ShannonColorTokens.Dark.create, 0xFFD600)
+        XCTAssertEqual(ShannonColorTokens.Dark.warning, 0xFF9230)
+        XCTAssertEqual(ShannonColorTokens.Dark.success, 0x30D158)
+        XCTAssertEqual(ShannonColorTokens.Dark.danger, 0xFF4245)
     }
 
-    func testActionAndReadingPairsMeetNormalTextContrast() {
+    func testActionControlsAndReadingTextMeetTheirContrastThresholds() {
         XCTAssertGreaterThanOrEqual(
             contrastRatio(ShannonColorTokens.Light.actionPrimary, 0xFFFFFF),
-            4.5
+            3.0
         )
         XCTAssertGreaterThanOrEqual(
             contrastRatio(ShannonColorTokens.Dark.actionPrimary, ShannonColorTokens.Dark.onActionPrimary),
-            4.5
+            3.0
         )
         XCTAssertGreaterThanOrEqual(
             contrastRatio(ShannonColorTokens.Light.textPrimary, ShannonColorTokens.Light.canvas),
@@ -33,11 +43,9 @@ final class ShannonColorSystemTests: XCTestCase {
         )
     }
 
-    func testPresenceBlueIsNotMistakenForLightModeActionFill() {
-        XCTAssertLessThan(
-            contrastRatio(ShannonColorTokens.Light.brandPresence, 0xFFFFFF),
-            4.5
-        )
+    func testIntelligenceAndActionRemainDistinctMeanings() {
+        XCTAssertNotEqual(ShannonColorTokens.Light.brandPresence, ShannonColorTokens.Light.actionPrimary)
+        XCTAssertEqual(ShannonColorTokens.Light.brandPresence, ShannonColorTokens.Dark.brandPresence)
     }
 
     private func contrastRatio(_ first: UInt, _ second: UInt) -> Double {

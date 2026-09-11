@@ -840,14 +840,15 @@ public struct ShannonLiveVoiceView: View {
         let palette = M3Palette.resolve(colorScheme)
         ZStack {
             LinearGradient(
-                colors: [palette.surface, palette.primaryContainer.opacity(0.72), palette.surface],
+                colors: [palette.surface, palette.intelligenceSoft.opacity(0.72), palette.surface],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
 
             Circle()
-                .fill(palette.primary.opacity(phaseGlowOpacity))
+                .fill(palette.intelligenceGradient)
+                .opacity(phaseGlowOpacity)
                 .frame(width: 330, height: 330)
                 .scaleEffect(pulse && !reduceMotion ? 1.08 : 0.94)
                 .blur(radius: 36)

@@ -90,7 +90,7 @@ struct ShannonAgentTaskCapsule: View {
                     if task.status == .waitingApproval {
                         Label("許可が必要です", systemImage: "hand.raised.fill")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(Color(hex: 0xA76012))
+                            .foregroundStyle(palette.warning)
                             .lineLimit(1)
                     } else {
                         Text(task.stageDescription)
@@ -324,7 +324,7 @@ private struct AgentTaskHero: View {
         .padding(M3Spacing.large)
         .background(
             LinearGradient(
-                colors: [palette.primaryContainer.opacity(0.72), palette.surfaceContainerLow],
+                colors: [palette.intelligenceSoft.opacity(0.72), palette.surfaceContainerLow],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
@@ -400,12 +400,13 @@ private struct AgentTaskStageProgressView: View {
     private func color(for state: ShannonAgentTaskStageState) -> Color {
         switch state {
         case .pending: palette.outline
-        case .current, .completed: palette.primary
+        case .current: palette.primary
+        case .completed: palette.success
         }
     }
 
     private func connectorColor(after state: ShannonAgentTaskStageState) -> Color {
-        state == .completed ? palette.primary.opacity(0.65) : palette.outlineVariant
+        state == .completed ? palette.success.opacity(0.65) : palette.outlineVariant
     }
 }
 
@@ -465,7 +466,7 @@ private struct AgentTaskCommandActivityCard: View {
     private func color(for status: ShannonAgentTimelineActivityStatus) -> Color {
         switch status {
         case .running: palette.primary
-        case .completed: Color(hex: 0x287A5B)
+        case .completed: palette.success
         case .failed: palette.error
         }
     }
@@ -569,8 +570,8 @@ private struct AgentTaskTimelineRow: View {
         switch event.tone {
         case .neutral: palette.outline
         case .progress: palette.primary
-        case .success: Color(hex: 0x2E8B68)
-        case .warning: Color(hex: 0xB56A18)
+        case .success: palette.success
+        case .warning: palette.warning
         case .error: palette.error
         }
     }
@@ -588,7 +589,7 @@ private struct AgentTaskApprovalCard: View {
         VStack(alignment: .leading, spacing: M3Spacing.medium) {
             Label("判断が必要", systemImage: approval.kind.symbolName)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(Color(hex: 0x9A5A12))
+                .foregroundStyle(palette.warning)
             Text(approval.title).font(.headline)
             Text(approval.reason)
                 .font(.callout)
@@ -618,13 +619,10 @@ private struct AgentTaskApprovalCard: View {
             }
         }
         .padding(M3Spacing.large)
-        .background(Color(hex: 0xFFF0D6).opacity(colorSchemeOpacity), in: RoundedRectangle(cornerRadius: M3Shape.large))
-        .overlay { RoundedRectangle(cornerRadius: M3Shape.large).stroke(Color(hex: 0xC9781E).opacity(0.35)) }
+        .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .overlay { RoundedRectangle(cornerRadius: M3Shape.large).stroke(palette.warning.opacity(0.35)) }
         .accessibilityElement(children: .contain)
     }
-
-    @Environment(\.colorScheme) private var colorScheme
-    private var colorSchemeOpacity: Double { colorScheme == .dark ? 0.12 : 1 }
 }
 
 private struct AgentTaskActionErrorCard: View {
@@ -785,9 +783,10 @@ private struct AgentTaskStatusBadge: View {
 
     private var foreground: Color {
         switch task.stage {
-        case .completion: Color(hex: 0x287A5B)
-        case .failed, .cancelled: palette.error
-        case .review: Color(hex: 0xA76012)
+        case .completion: palette.success
+        case .failed: palette.error
+        case .cancelled: palette.onSurfaceVariant
+        case .review: palette.warning
         default: palette.primary
         }
     }

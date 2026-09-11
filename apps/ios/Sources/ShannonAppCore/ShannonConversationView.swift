@@ -114,6 +114,7 @@ public struct ShannonConversationView: View {
         }
         .background { palette.surface.ignoresSafeArea() }
         .foregroundStyle(palette.onSurface)
+        .tint(palette.primary)
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)
@@ -492,8 +493,9 @@ public struct ShannonConversationView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(palette.onSurface)
+                .foregroundStyle(palette.onTertiary)
                 .frame(width: 40, height: 40)
+                .background(palette.tertiary, in: Circle())
                 .contentShape(Circle())
         }
         .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
@@ -825,7 +827,7 @@ public struct ShannonConversationView: View {
                 LinearGradient(
                     colors: [
                         palette.surface,
-                        palette.primaryContainer.opacity(colorScheme == .dark ? 0.26 : 0.42),
+                        palette.intelligenceSoft.opacity(colorScheme == .dark ? 0.42 : 0.56),
                         palette.surface
                     ],
                     startPoint: .top,
@@ -834,7 +836,8 @@ public struct ShannonConversationView: View {
                 .ignoresSafeArea()
 
                 Circle()
-                    .fill(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
+                    .fill(palette.intelligenceGradient)
+                    .opacity(colorScheme == .dark ? 0.18 : 0.12)
                     .frame(width: geometry.size.width * 1.28, height: geometry.size.width * 1.28)
                     .blur(radius: 42)
                     .position(x: geometry.size.width / 2, y: geometry.size.height * 0.50)
@@ -842,7 +845,7 @@ public struct ShannonConversationView: View {
                 ShannonDialogueStagePortraitView()
                     .frame(width: portraitWidth)
                     .scaleEffect(dialoguePresenceIsBreathing && !reduceMotion ? 1.008 : 1)
-                    .shadow(color: palette.primary.opacity(0.10), radius: 28, y: 10)
+                    .shadow(color: palette.brandPresence.opacity(0.14), radius: 28, y: 10)
                     .position(
                         x: geometry.size.width / 2,
                         y: geometry.size.height * (composerIsFocused ? 0.59 : 0.62)

@@ -132,7 +132,7 @@ public struct ShannonConnectionView: View {
 
     private func statusColor(_ palette: M3Palette) -> Color {
         switch model.status {
-        case .connected: Color(hex: 0x2E7D32)
+        case .connected: palette.success
         case .failed: palette.error
         default: palette.primary
         }
@@ -140,7 +140,7 @@ public struct ShannonConnectionView: View {
 
     private func verificationColor(_ palette: M3Palette) -> Color {
         switch model.verificationStatus {
-        case .verified: Color(hex: 0x2E7D32)
+        case .verified: palette.success
         case .failed: palette.error
         default: palette.onSurfaceVariant
         }
