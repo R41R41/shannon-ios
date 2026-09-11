@@ -165,6 +165,8 @@ The same world worker creates at most one `daily_mind` focus per owner and local
 
 Initiative still decides in code whether to speak or remain quiet. When it speaks, it may use the saved daily opening line; quiet hours, recent conversation cooldown, duplicate-source protection, and the one-message-per-day limit remain authoritative. Memory shows today's background spend alongside the existing monthly budget, and sleep diaries use short first-person summaries without changing the underlying evidence report.
 
+Candidate ranking does not treat a publisher name as a quality proxy. It rewards bounded contextual metadata, then applies a seven-day signal-history check shared by Daily Mind and Initiative. Canonical URL variants and strongly overlapping titles are treated as one topic even when they arrive through different sources, while an unrelated item from the same source remains eligible. If equally relevant alternatives exist, the immediately previous source or destination host receives a small ranking penalty rather than a blanket ban. This keeps variety without hiding a uniquely relevant item, adding another scheduler, or spending another model call.
+
 ## User-directed self-improvement
 
 ```text

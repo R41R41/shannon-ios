@@ -207,6 +207,126 @@ describe('Shannon initiative loop', () => {
       state.close();
     },
   );
+
+  it('suppresses the same topic across sources and prefers a different source on the next day', () => {
+    const path = databasePath();
+    const firstDay = '2026-09-03T03:00:00.000Z';
+    const secondDay = '2026-09-04T03:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => firstDay });
+    state.snapshot('owner');
+    state.apply('owner', { type: 'interest-observed', interest: 'AI agents' });
+    state.createThread('owner', 'いつものトーク');
+    const world = new SQLiteWorldStore(path, () => firstDay);
+    const hackerNews = world.dueSources(firstDay).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(hackerNews, [{
+      externalId: 'first-agent-memory',
+      title: 'AI agents build durable memory from daily work',
+      url: 'https://news.example.com/agent-memory?utm_source=hn',
+      summary: 'A detailed report about agents learning durable memory from repeated daily work and feedback.',
+    }], firstDay);
+    const initiatives = new SQLiteInitiativeStore(path, () => firstDay);
+    expect(initiatives.runOnce(firstDay)).toMatchObject({ sent: 1 });
+
+    const arxiv = world.dueSources(firstDay).find(item => item.kind === 'arxiv')!;
+    const pubmed = world.dueSources(firstDay).find(item => item.kind === 'pubmed')!;
+    world.recordSuccess(arxiv, [{
+      externalId: 'second-agent-memory',
+      title: 'AI agents build durable memory from daily work — new study',
+      url: 'https://papers.example.net/agent-memory',
+      summary: 'A second publication describing the same durable-memory result for agents and daily work.',
+    }], secondDay);
+    world.recordSuccess(pubmed, [{
+      externalId: 'agent-planning',
+      title: 'AI agents plan safely under uncertainty',
+      url: 'https://papers.example.net/agent-planning',
+      summary: 'A substantive independent report about safe planning under uncertainty in autonomous agents.',
+    }], secondDay);
+
+    expect(initiatives.runOnce(secondDay)).toMatchObject({ sent: 1 });
+    expect(initiatives.unreadMessages('owner').map(message => message.sourceURL)).toEqual([
+      'https://news.example.com/agent-memory?utm_source=hn',
+      'https://papers.example.net/agent-planning',
+    ]);
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
+
+  it('rotates away from the immediately previous source when equally relevant alternatives exist', () => {
+    const path = databasePath();
+    const firstDay = '2026-09-03T03:00:00.000Z';
+    const secondDay = '2026-09-04T03:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => firstDay });
+    state.snapshot('owner');
+    state.apply('owner', { type: 'interest-observed', interest: 'AI agents' });
+    const world = new SQLiteWorldStore(path, () => firstDay);
+    const hackerNews = world.dueSources(firstDay).find(item => item.kind === 'hacker-news')!;
+    const arxiv = world.dueSources(firstDay).find(item => item.kind === 'arxiv')!;
+    world.recordSuccess(hackerNews, [{
+      externalId: 'day-one', title: 'AI agents learn memory', url: 'https://example.com/day-one',
+      summary: 'A sufficiently detailed explanation of memory learning in autonomous AI agent systems.',
+    }], firstDay);
+    const initiatives = new SQLiteInitiativeStore(path, () => firstDay);
+    expect(initiatives.runOnce(firstDay)).toMatchObject({ sent: 1 });
+    world.recordSuccess(hackerNews, [{
+      externalId: 'day-two-hn', title: 'AI agents coordinate tools', url: 'https://example.com/day-two-hn',
+      summary: 'A sufficiently detailed explanation of tool coordination in autonomous AI agent systems.',
+    }], secondDay);
+    world.recordSuccess(arxiv, [{
+      externalId: 'day-two-arxiv', title: 'AI agents verify plans', url: 'https://example.net/day-two-arxiv',
+      summary: 'A sufficiently detailed explanation of plan verification in autonomous AI agent systems.',
+    }], secondDay);
+
+    expect(initiatives.runOnce(secondDay)).toMatchObject({ sent: 1 });
+    expect(initiatives.unreadMessages('owner').at(-1)?.sourceTitle).toBe('arXiv・AI agents');
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
+
+  it('does not surface a context-free item merely because its publisher is on a built-in list', () => {
+    const path = databasePath();
+    const at = '2026-09-03T03:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    const world = new SQLiteWorldStore(path, () => at);
+    const hackerNews = world.dueSources(at).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(hackerNews, [{
+      externalId: 'thin-story', title: 'New project', url: 'https://example.com/thin-story',
+    }], at);
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+
+    expect(initiatives.runOnce(at)).toEqual({ considered: 1, sent: 0, stopped: 'nothing-worth-saying' });
+    expect(initiatives.unreadMessages('owner')).toEqual([]);
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
+
+  it('scores freshness from publication time rather than a late discovery time', () => {
+    const path = databasePath();
+    const at = '2026-09-03T03:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    const world = new SQLiteWorldStore(path, () => at);
+    const hackerNews = world.dueSources(at).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(hackerNews, [{
+      externalId: 'late-discovery', title: 'A substantive but almost expired report',
+      url: 'https://example.com/late-discovery',
+      summary: 'This entry has enough context to pass the content check but was published almost two days ago.',
+      publishedAt: '2026-09-01T04:00:00.000Z',
+    }], at);
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+
+    expect(initiatives.runOnce(at)).toEqual({ considered: 1, sent: 0, stopped: 'nothing-worth-saying' });
+
+    initiatives.close();
+    world.close();
+    state.close();
+  });
 });
 
 function databasePath(): string {

@@ -9,6 +9,12 @@ import {
   type LlmUsageStore,
 } from './llmUsage.js';
 import type { WorldItem } from './worldStore.js';
+import {
+  isRepeatedWorldSignal,
+  recentSignalCutoff,
+  sourceDiversityAdjustment,
+  type RecentWorldSignal,
+} from './worldSignalQuality.js';
 
 const DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 
@@ -95,7 +101,7 @@ export class SQLiteDailyMindStore implements DailyMindReader {
         continue;
       }
       const interests = parsedInterests(row.snapshot_json);
-      const candidate = selectCandidate(candidates, interests, at);
+      const candidate = selectCandidate(candidates, this.recentSignals(row.scope_key, at), interests, at);
       let generated: DailyMindModelResult | null = null;
       try {
         generated = await model.generate({ scopeKey: row.scope_key, recentInterests: interests, candidate });
@@ -169,6 +175,21 @@ export class SQLiteDailyMindStore implements DailyMindReader {
 
   private tableExists(name: string): boolean {
     return Boolean(this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
+  }
+
+  private recentSignals(scopeKey: string, at: string): RecentWorldSignal[] {
+    if (!this.tableExists('initiative_messages') || !this.tableExists('world_items')) return [];
+    return (this.database.prepare(`
+      SELECT COALESCE(wi.source_id, '') AS source_id, im.source_title,
+        COALESCE(wi.title, '') AS title, im.source_url, im.created_at
+      FROM initiative_messages im
+      LEFT JOIN world_items wi ON wi.item_id = im.source_item_id
+      WHERE im.scope_key = ? AND im.created_at >= ?
+      ORDER BY im.created_at DESC LIMIT 12
+    `).all(scopeKey, recentSignalCutoff(at)) as unknown as Array<Record<string, unknown>>).map(row => ({
+      sourceId: String(row.source_id), sourceTitle: String(row.source_title), title: String(row.title),
+      url: String(row.source_url), createdAt: String(row.created_at),
+    }));
   }
 
   private secureFiles(): void {
@@ -279,7 +300,12 @@ function parsedInterests(snapshotJson: string): string[] {
   } catch { return []; }
 }
 
-function selectCandidate(candidates: readonly WorldItem[], interests: readonly string[], at: string): WorldItem | null {
+function selectCandidate(
+  candidates: readonly WorldItem[],
+  recentSignals: readonly RecentWorldSignal[],
+  interests: readonly string[],
+  at: string,
+): WorldItem | null {
   const cutoff = Date.parse(at) - DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS;
   const maximumPublishedAt = Date.parse(at) + 24 * 60 * 60_000;
   const tokens = [...new Set(interests.flatMap(value => normalize(value).split(/[\s、,・/]+/u)).filter(value => value.length >= 2))];
@@ -288,10 +314,11 @@ function selectCandidate(candidates: readonly WorldItem[], interests: readonly s
     const publishedAt = candidate.publishedAt ? Date.parse(candidate.publishedAt) : discoveredAt;
     return Number.isFinite(discoveredAt) && discoveredAt >= cutoff
       && Number.isFinite(publishedAt) && publishedAt >= cutoff && publishedAt <= maximumPublishedAt;
-  }).slice(0, 40).map((candidate, index) => {
+  }).filter(candidate => !isRepeatedWorldSignal(candidate, recentSignals)).slice(0, 40).map((candidate, index) => {
     const text = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
     const matches = tokens.filter(token => text.includes(token)).length;
-    return { candidate, score: matches * 10 - index };
+    // Source order is only a stable tie-breaker; it must not outweigh a recent-source rotation.
+    return { candidate, score: matches * 10 - index / 100 + sourceDiversityAdjustment(candidate, recentSignals) };
   }).sort((left, right) => right.score - left.score);
   return ranked[0]?.candidate ?? null;
 }

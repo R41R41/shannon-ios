@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { DailyMindFocus } from './dailyMind.js';
+import {
+  isRepeatedWorldSignal,
+  recentSignalCutoff,
+  sourceDiversityAdjustment,
+  type RecentWorldSignal,
+} from './worldSignalQuality.js';
 
 const QUIET_START_HOUR = 23;
 const QUIET_END_HOUR = 7;
@@ -53,6 +59,7 @@ interface CompanionStateShape {
 
 interface CandidateRow {
   item_id: string;
+  source_id: string;
   source_title: string;
   title: string;
   url: string;
@@ -143,8 +150,10 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }
       const candidates = this.candidates(scope.scope_key, at);
       considered += candidates.length;
+      const recentSignals = this.recentSignals(scope.scope_key, at);
+      const distinctCandidates = candidates.filter(candidate => !isRepeatedWorldSignal(signalCandidate(candidate), recentSignals));
       const preferred = dailyFocus?.sourceItemId
-        ? candidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
+        ? distinctCandidates.find(candidate => candidate.item_id === dailyFocus.sourceItemId)
         : undefined;
       if (dailyFocus?.sourceItemId && !preferred) {
         // A weather or otherwise excluded focus must never donate its wording or
@@ -154,7 +163,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       }
       const selected = preferred
         ? { ...preferred, score: candidateScore(preferred, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at) }
-        : selectCandidate(candidates, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at);
+        : selectCandidate(distinctCandidates, recentSignals, dailyFocus?.topic ?? interest, finite(state.temperament?.initiative, 0.25), at);
       if (!selected) {
         lastStop = 'nothing-worth-saying';
         continue;
@@ -322,7 +331,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   private candidates(scopeKey: string, at: string): CandidateRow[] {
     const cutoff = new Date(Date.parse(at) - CANDIDATE_MAX_AGE_MILLISECONDS).toISOString();
     return this.database.prepare(`
-      SELECT wi.item_id, ws.title AS source_title, wi.title, wi.url, wi.summary,
+      SELECT wi.item_id, wi.source_id, ws.title AS source_title, wi.title, wi.url, wi.summary,
         wi.published_at, wi.discovered_at
       FROM world_items wi
       JOIN world_sources ws ON ws.source_id = wi.source_id
@@ -342,6 +351,23 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         )
       ORDER BY wi.discovered_at DESC LIMIT 80
     `).all(cutoff, cutoff, at, scopeKey) as unknown as CandidateRow[];
+  }
+
+  private recentSignals(scopeKey: string, at: string): RecentWorldSignal[] {
+    return (this.database.prepare(`
+      SELECT COALESCE(wi.source_id, '') AS source_id, im.source_title,
+        COALESCE(wi.title, '') AS title, im.source_url, im.created_at
+      FROM initiative_messages im
+      LEFT JOIN world_items wi ON wi.item_id = im.source_item_id
+      WHERE im.scope_key = ? AND im.created_at >= ?
+      ORDER BY im.created_at DESC LIMIT 12
+    `).all(scopeKey, recentSignalCutoff(at)) as unknown as Array<Record<string, unknown>>).map(row => ({
+      sourceId: String(row.source_id),
+      sourceTitle: String(row.source_title),
+      title: String(row.title),
+      url: String(row.source_url),
+      createdAt: String(row.created_at),
+    }));
   }
 
   private hasRecentUserMessage(scopeKey: string, at: string): boolean {
@@ -372,26 +398,43 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
 
 function selectCandidate(
   candidates: readonly CandidateRow[],
+  recentSignals: readonly RecentWorldSignal[],
   interest: string | null,
   initiative: number,
   at: string,
 ): (CandidateRow & { score: number }) | null {
   const ranked = candidates.map(candidate => ({
     ...candidate,
-    score: candidateScore(candidate, interest, initiative, at),
+    score: round(candidateScore(candidate, interest, initiative, at)
+      + sourceDiversityAdjustment(signalCandidate(candidate), recentSignals)),
   })).sort((left, right) => right.score - left.score || right.discovered_at.localeCompare(left.discovered_at));
   return (ranked[0]?.score ?? 0) >= 0.56 ? ranked[0]! : null;
 }
 
 function candidateScore(candidate: CandidateRow, interest: string | null, initiative: number, at: string): number {
-  const age = Math.max(0, Date.parse(at) - Date.parse(candidate.discovered_at));
+  const discoveredAt = Date.parse(candidate.discovered_at);
+  const publishedAt = candidate.published_at ? Date.parse(candidate.published_at) : discoveredAt;
+  // A newly discovered old feed entry is eligible near the 48-hour boundary,
+  // but it must not receive the freshness of its later ingestion time.
+  const effectiveAt = Number.isFinite(publishedAt) ? Math.min(discoveredAt, publishedAt) : discoveredAt;
+  const age = Math.max(0, Date.parse(at) - effectiveAt);
   const freshness = Math.max(0, 1 - age / CANDIDATE_MAX_AGE_MILLISECONDS);
   const searchable = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
   const tokens = interestTokens(interest);
   const matches = tokens.filter(token => searchable.includes(token)).length;
   const interestScore = tokens.length ? Math.min(1, matches / Math.min(tokens.length, 3)) : 0;
-  const sourceScore = /arxiv|pubmed|hacker news|zenn|github/iu.test(candidate.source_title) ? 0.12 : 0.05;
-  return round(0.34 + freshness * 0.12 + sourceScore + Math.min(1, Math.max(0, initiative)) * 0.08 + interestScore * 0.46);
+  const contextScore = (candidate.summary?.trim().length ?? 0) >= 80 ? 0.12
+    : (candidate.summary?.trim().length ?? 0) >= 24 ? 0.09 : 0.05;
+  return round(0.34 + freshness * 0.12 + contextScore + Math.min(1, Math.max(0, initiative)) * 0.08 + interestScore * 0.46);
+}
+
+function signalCandidate(candidate: CandidateRow) {
+  return {
+    sourceId: candidate.source_id,
+    sourceTitle: candidate.source_title,
+    title: candidate.title,
+    url: candidate.url,
+  };
 }
 
 function firstInterest(value: unknown): string | null {

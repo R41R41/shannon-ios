@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OpenAIDailyMindModel, SQLiteDailyMindStore, type DailyMindModel } from '../src/dailyMind.js';
+import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { SQLiteWorldStore } from '../src/worldStore.js';
 import type { WorldItem } from '../src/worldStore.js';
 
 const directories: string[] = [];
@@ -108,6 +110,38 @@ describe('daily Shannon mind', () => {
     await expect(model.generate({ scopeKey: 'owner', recentInterests: ['記憶'], candidate: null })).resolves.toBeNull();
     expect(calls).toBe(1);
   });
+
+  it('does not make yesterday\'s cross-source duplicate today\'s focus', async () => {
+    const path = databasePath();
+    const firstDay = '2026-09-03T03:00:00.000Z';
+    const secondDay = '2026-09-04T03:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => firstDay });
+    state.snapshot('owner');
+    state.apply('owner', { type: 'interest-observed', interest: 'AI agents' });
+    const world = new SQLiteWorldStore(path, () => firstDay);
+    const source = world.dueSources(firstDay).find(item => item.kind === 'hacker-news')!;
+    world.recordSuccess(source, [{
+      externalId: 'yesterday', title: 'AI agents build durable memory from daily work',
+      url: 'https://example.com/yesterday',
+      summary: 'A detailed report about agents learning durable memory from repeated daily work and feedback.',
+    }], firstDay);
+    const initiatives = new SQLiteInitiativeStore(path, () => firstDay);
+    expect(initiatives.runOnce(firstDay)).toMatchObject({ sent: 1 });
+
+    const daily = new SQLiteDailyMindStore(path, () => secondDay);
+    const candidates = [
+      worldItem('duplicate', 'AI agents build durable memory from daily work — new study', 'arxiv:agents'),
+      worldItem('distinct', 'AI agents verify plans under uncertainty', 'pubmed:ai'),
+    ].map(item => ({ ...item, discoveredAt: secondDay }));
+    const result = await daily.ensureForKnownScopes(candidates, { generate: async () => null }, secondDay);
+
+    expect(result.get('owner')?.sourceItemId).toBe('distinct');
+
+    daily.close();
+    initiatives.close();
+    world.close();
+    state.close();
+  });
 });
 
 class FakeDailyMindModel implements DailyMindModel {
@@ -118,8 +152,8 @@ class FakeDailyMindModel implements DailyMindModel {
   }
 }
 
-function worldItem(id: string, title: string): WorldItem {
-  return { id, sourceId: 'test', sourceTitle: 'Test Feed', title, url: `https://example.com/${id}`, discoveredAt: '2026-09-05T01:00:00.000Z' };
+function worldItem(id: string, title: string, sourceId = 'test'): WorldItem {
+  return { id, sourceId, sourceTitle: sourceId, title, url: `https://example.com/${id}`, discoveredAt: '2026-09-05T01:00:00.000Z' };
 }
 
 function databasePath(): string {
