@@ -22,6 +22,19 @@ public enum ShannonRealtimeVoicePhase: Equatable, Sendable {
         case .failed: "接続できませんでした"
         }
     }
+
+    var keepsSessionActive: Bool {
+        switch self {
+        case .requestingPermission, .connecting, .listening, .thinking, .speaking:
+            true
+        case .idle, .failed:
+            false
+        }
+    }
+}
+
+public enum ShannonRealtimeVoiceRecoveryPolicy {
+    public static let disconnectGracePeriod: Duration = .seconds(5)
 }
 
 public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
@@ -146,7 +159,9 @@ public final class ShannonRealtimeVoiceSessionModel {
     private var transport: ShannonWebRTCVoiceTransport?
     private var transcriptState = ShannonRealtimeVoiceTranscriptState()
     private var sessionLimitTask: Task<Void, Never>?
+    private var disconnectGraceTask: Task<Void, Never>?
     private var commitTurn: (@MainActor (String, String) async throws -> Void)?
+    private var sessionGeneration = 0
     private let diagnostics = ShannonVoiceDiagnostics.shared
 
     public init() {}
@@ -156,6 +171,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {
         stop()
+        sessionGeneration += 1
+        let generation = sessionGeneration
         phase = .requestingPermission
         errorMessage = nil
         userTranscript = ""
@@ -164,6 +181,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         diagnostics.record("realtime.start.requested")
 
         let granted = await AVAudioApplication.requestRecordPermission()
+        guard generation == sessionGeneration else { return }
         guard granted else {
             phase = .failed
             errorMessage = "設定でマイクを許可すると、シャノンと話せます。"
@@ -176,10 +194,16 @@ public final class ShannonRealtimeVoiceSessionModel {
         let transport = ShannonWebRTCVoiceTransport()
         self.transport = transport
         transport.onEvent = { [weak self] data in
-            Task { @MainActor in self?.receive(data) }
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.receive(data, generation: generation)
+            }
         }
         transport.onConnectionState = { [weak self] state in
-            Task { @MainActor in self?.receiveConnectionState(state) }
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.receiveConnectionState(state, generation: generation)
+            }
         }
 
         do {
@@ -190,12 +214,21 @@ public final class ShannonRealtimeVoiceSessionModel {
                 metadata: ShannonRealtimeOfferDiagnostics(sdp: offer).metadata
             )
             let call = try await createCall(offer)
+            guard generation == sessionGeneration else {
+                transport.close()
+                return
+            }
             diagnostics.record("realtime.answer.received", metadata: ["model": call.model ?? "unknown"])
             try await transport.acceptAnswer(call.answerSDP)
+            guard generation == sessionGeneration else {
+                transport.close()
+                return
+            }
             sessionStartedAt = Date()
             phase = .listening
             scheduleSessionLimit()
         } catch {
+            guard generation == sessionGeneration else { return }
             diagnostics.record("realtime.start.failed", metadata: safeErrorMetadata(error))
             fail("ライブ音声に接続できませんでした。少し待ってもう一度お試しください。")
         }
@@ -207,18 +240,23 @@ public final class ShannonRealtimeVoiceSessionModel {
     }
 
     public func stop() {
+        sessionGeneration += 1
         sessionLimitTask?.cancel()
         sessionLimitTask = nil
-        transport?.close()
+        disconnectGraceTask?.cancel()
+        disconnectGraceTask = nil
+        let activeTransport = transport
         transport = nil
         commitTurn = nil
         isMuted = false
         sessionStartedAt = nil
-        if phase != .failed { phase = .idle }
+        phase = .idle
+        errorMessage = nil
+        activeTransport?.close()
         diagnostics.record("realtime.stop")
     }
 
-    private func receive(_ data: Data) {
+    private func receive(_ data: Data, generation: Int) {
         guard let event = ShannonRealtimeVoiceEvent.decode(data) else { return }
         switch event {
         case .sessionReady:
@@ -241,32 +279,39 @@ public final class ShannonRealtimeVoiceSessionModel {
         if let completed = transcriptState.apply(event) {
             userTranscript = transcriptState.userText
             shannonTranscript = transcriptState.shannonText
-            persist(completed)
+            persist(completed, generation: generation)
         } else {
             userTranscript = transcriptState.userText
             shannonTranscript = transcriptState.shannonText
         }
     }
 
-    private func persist(_ turn: (user: String, shannon: String)) {
+    private func persist(_ turn: (user: String, shannon: String), generation: Int) {
         guard let commitTurn else { return }
         Task { @MainActor [weak self] in
             do {
                 try await commitTurn(turn.user, turn.shannon)
+                guard self?.sessionGeneration == generation else { return }
                 self?.diagnostics.record("realtime.turn.persisted")
             } catch {
+                guard self?.sessionGeneration == generation else { return }
                 self?.diagnostics.record("realtime.turn.persistence_failed", metadata: self?.safeErrorMetadata(error) ?? [:])
                 self?.errorMessage = "会話は続けられますが、この一往復を履歴に保存できませんでした。"
             }
         }
     }
 
-    private func receiveConnectionState(_ state: ShannonWebRTCConnectionState) {
+    private func receiveConnectionState(_ state: ShannonWebRTCConnectionState, generation: Int) {
         switch state {
         case .connected:
+            disconnectGraceTask?.cancel()
+            disconnectGraceTask = nil
             if phase == .connecting { phase = .listening }
+            diagnostics.record("realtime.connection.connected")
+        case .disconnected:
+            scheduleDisconnectFailure(generation: generation)
         case .failed, .closed:
-            if phase != .idle && phase != .failed {
+            if phase.keepsSessionActive {
                 fail("音声接続が切れました。もう一度つなぎ直してください。")
             }
         case .connecting:
@@ -279,17 +324,37 @@ public final class ShannonRealtimeVoiceSessionModel {
         sessionLimitTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10 * 60))
             guard !Task.isCancelled else { return }
-            self?.errorMessage = "10分経過したため、音声会話をいったん終了しました。"
-            self?.stop()
+            self?.fail("10分経過したため、音声会話をいったん終了しました。もう一度つなぐと再開できます。")
+        }
+    }
+
+    private func scheduleDisconnectFailure(generation: Int) {
+        guard phase.keepsSessionActive else { return }
+        disconnectGraceTask?.cancel()
+        phase = .connecting
+        diagnostics.record("realtime.connection.disconnected")
+        disconnectGraceTask = Task { [weak self] in
+            try? await Task.sleep(for: ShannonRealtimeVoiceRecoveryPolicy.disconnectGracePeriod)
+            guard !Task.isCancelled, self?.sessionGeneration == generation else { return }
+            self?.diagnostics.record("realtime.connection.recovery_timed_out")
+            self?.fail("音声接続が切れました。もう一度つなぎ直してください。")
         }
     }
 
     private func fail(_ message: String) {
-        transport?.close()
-        transport = nil
+        sessionGeneration += 1
         sessionLimitTask?.cancel()
+        sessionLimitTask = nil
+        disconnectGraceTask?.cancel()
+        disconnectGraceTask = nil
+        let activeTransport = transport
+        transport = nil
+        commitTurn = nil
+        isMuted = false
+        sessionStartedAt = nil
         phase = .failed
         errorMessage = message
+        activeTransport?.close()
     }
 
     private func safeErrorMetadata(_ error: Error) -> [String: String] {
@@ -301,6 +366,7 @@ public final class ShannonRealtimeVoiceSessionModel {
 private enum ShannonWebRTCConnectionState: Sendable {
     case connecting
     case connected
+    case disconnected
     case failed
     case closed
 }
@@ -481,7 +547,8 @@ extension ShannonWebRTCVoiceTransport: RTCPeerConnectionDelegate {
         switch newState {
         case .new, .checking: onConnectionState?(.connecting)
         case .connected, .completed: onConnectionState?(.connected)
-        case .failed, .disconnected: onConnectionState?(.failed)
+        case .disconnected: onConnectionState?(.disconnected)
+        case .failed: onConnectionState?(.failed)
         case .closed: onConnectionState?(.closed)
         case .count: break
         @unknown default: break
@@ -604,7 +671,9 @@ public struct ShannonLiveVoiceView: View {
                             palette: palette
                         )
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    } else if let error = model.errorMessage {
+                    }
+
+                    if let error = model.errorMessage {
                         Text(error)
                             .font(.callout)
                             .foregroundStyle(palette.error)
@@ -681,14 +750,29 @@ public struct ShannonLiveVoiceView: View {
 
     private func controls(_ palette: M3Palette) -> some View {
         HStack(spacing: M3Spacing.large) {
-            Button { model.toggleMute() } label: {
-                Image(systemName: model.isMuted ? "mic.slash.fill" : "mic.fill")
-                    .font(.title3)
-                    .frame(width: 52, height: 52)
-                    .background(.thinMaterial, in: Circle())
+            if model.phase == .failed {
+                Button {
+                    Task {
+                        await model.start(createCall: createCall, commitTurn: commitTurn)
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.title3)
+                        .frame(width: 52, height: 52)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("もう一度つなぐ")
+            } else {
+                Button { model.toggleMute() } label: {
+                    Image(systemName: model.isMuted ? "mic.slash.fill" : "mic.fill")
+                        .font(.title3)
+                        .frame(width: 52, height: 52)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(model.isMuted ? "ミュートを解除" : "ミュート")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(model.isMuted ? "ミュートを解除" : "ミュート")
 
             Button {
                 model.stop()

@@ -2,6 +2,17 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonVoiceConversationTests: XCTestCase {
+    func testRealtimeActivePhasesAllowTransientConnectionRecovery() {
+        XCTAssertFalse(ShannonRealtimeVoicePhase.idle.keepsSessionActive)
+        XCTAssertTrue(ShannonRealtimeVoicePhase.requestingPermission.keepsSessionActive)
+        XCTAssertTrue(ShannonRealtimeVoicePhase.connecting.keepsSessionActive)
+        XCTAssertTrue(ShannonRealtimeVoicePhase.listening.keepsSessionActive)
+        XCTAssertTrue(ShannonRealtimeVoicePhase.thinking.keepsSessionActive)
+        XCTAssertTrue(ShannonRealtimeVoicePhase.speaking.keepsSessionActive)
+        XCTAssertFalse(ShannonRealtimeVoicePhase.failed.keepsSessionActive)
+        XCTAssertEqual(ShannonRealtimeVoiceRecoveryPolicy.disconnectGracePeriod, .seconds(5))
+    }
+
     func testRealtimeTranscriptEventsAreVisibleAsDeltasAndPairInEitherCompletionOrder() throws {
         var state = ShannonRealtimeVoiceTranscriptState()
         let inputDelta = try XCTUnwrap(ShannonRealtimeVoiceEvent.decode(Data(
