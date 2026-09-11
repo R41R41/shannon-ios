@@ -67,6 +67,76 @@ final class ShannonConnectionTests: XCTestCase {
         _ = try await client.send(message: "こんにちは", scopeKey: "untrusted-client-scope")
     }
 
+    func testAPIClientLoadsAndUpdatesTheServerBoundVoiceIdentity() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "v", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "voice-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(
+                    request.url?.absoluteString,
+                    "https://shannon.example/companion/v1/voice/identity?scopeKey=owner-from-server"
+                )
+            } else {
+                XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/voice/identity")
+                let body = try XCTUnwrap(requestBody(request))
+                let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+                XCTAssertEqual(json["mode"] as? String, "manual")
+                XCTAssertEqual(json["selectedVoice"] as? String, "cedar")
+            }
+            return try response(url: request.url!, json: voiceIdentityResponseJSON())
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let loaded = try await client.loadVoiceIdentity(scopeKey: "untrusted-client-scope")
+        let updated = try await client.updateVoiceIdentity(
+            scopeKey: "untrusted-client-scope",
+            mode: .manual,
+            selectedVoice: "cedar"
+        )
+        XCTAssertEqual(loaded.preference.effectiveVoice, "cedar")
+        XCTAssertEqual(updated.preference.selectedVoice, "cedar")
+    }
+
+    func testAPIClientLoadsVoicePreviewAsAuthenticatedAudioOnly() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "w", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "voice-preview-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let expected = Data([0x49, 0x44, 0x33, 0x04])
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/voice/identity/preview")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            XCTAssertEqual(json["voice"], "coral")
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                headerFields: ["content-type": "audio/mpeg"]
+            ))
+            return (response, expected)
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let preview = try await client.loadVoicePreview(scopeKey: "ignored", voice: "coral")
+        XCTAssertEqual(preview, expected)
+    }
+
     func testConnectionVerificationUsesStoredCredentialWithoutExposingIt() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "k", count: 43)
@@ -528,6 +598,22 @@ private func chatResponseJSON() -> [String: Any] {
             "interests": [],
             "userFacts": [],
             "activeMemories": [],
+        ],
+    ]
+}
+
+private func voiceIdentityResponseJSON() -> [String: Any] {
+    [
+        "preference": [
+            "mode": "manual",
+            "selectedVoice": "cedar",
+            "effectiveVoice": "cedar",
+            "updatedAt": "2026-09-11T01:10:00.000Z",
+        ],
+        "candidates": [
+            ["id": "marin", "name": "Marin"],
+            ["id": "cedar", "name": "Cedar"],
+            ["id": "coral", "name": "Coral"],
         ],
     ]
 }

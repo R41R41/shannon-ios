@@ -17,6 +17,13 @@ public protocol ShannonAPIClientProtocol: Sendable {
     ) async throws -> ChatResponseDTO
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
     func createRealtimeVoiceCall(scopeKey: String, threadId: String?, offerSDP: String) async throws -> ShannonRealtimeVoiceCallDTO
+    func loadVoiceIdentity(scopeKey: String) async throws -> ShannonVoiceIdentityResponseDTO
+    func updateVoiceIdentity(
+        scopeKey: String,
+        mode: ShannonVoiceIdentityModeDTO,
+        selectedVoice: String?
+    ) async throws -> ShannonVoiceIdentityResponseDTO
+    func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data
     func commitRealtimeVoiceTurn(
         scopeKey: String,
         threadId: String?,
@@ -156,6 +163,22 @@ public extension ShannonAPIClientProtocol {
         threadId: String?,
         offerSDP: String
     ) async throws -> ShannonRealtimeVoiceCallDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadVoiceIdentity(scopeKey: String) async throws -> ShannonVoiceIdentityResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func updateVoiceIdentity(
+        scopeKey: String,
+        mode: ShannonVoiceIdentityModeDTO,
+        selectedVoice: String?
+    ) async throws -> ShannonVoiceIdentityResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data {
         throw ShannonAPIError.invalidResponse
     }
 
@@ -358,6 +381,61 @@ public struct ShannonAPIClient: ShannonAPIClientProtocol, Sendable {
             model: http.value(forHTTPHeaderField: "x-shannon-realtime-model"),
             callID: http.value(forHTTPHeaderField: "x-shannon-realtime-call-id")
         )
+    }
+
+    public func loadVoiceIdentity(scopeKey: String) async throws -> ShannonVoiceIdentityResponseDTO {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/voice/identity"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey),
+        ]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        return try JSONDecoder().decode(ShannonVoiceIdentityResponseDTO.self, from: data)
+    }
+
+    public func updateVoiceIdentity(
+        scopeKey: String,
+        mode: ShannonVoiceIdentityModeDTO,
+        selectedVoice: String?
+    ) async throws -> ShannonVoiceIdentityResponseDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/identity"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonVoiceIdentityUpdateRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            mode: mode,
+            selectedVoice: selectedVoice
+        ))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
+        return try JSONDecoder().decode(ShannonVoiceIdentityResponseDTO.self, from: data)
+    }
+
+    public func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/identity/preview"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 40
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonVoicePreviewRequestDTO(voice: voice))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode), http.mimeType == "audio/mpeg", !data.isEmpty else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        return data
     }
 
     public func commitRealtimeVoiceTurn(

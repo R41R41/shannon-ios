@@ -1,6 +1,7 @@
 export interface RealtimeVoiceCallRequest {
   sdp: string;
   instructions: string;
+  voice?: string;
 }
 
 export interface RealtimeVoiceCallResult {
@@ -42,7 +43,7 @@ export class OpenAIRealtimeVoiceGateway {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMilliseconds: number;
   private readonly transcriptionModel: string;
-  private readonly voice: string;
+  readonly defaultVoice: string;
 
   constructor(private readonly options: OpenAIRealtimeVoiceGatewayOptions) {
     if (!options.apiKey.trim()) throw new RealtimeVoiceError('VOICE_REALTIME_NOT_CONFIGURED');
@@ -51,7 +52,7 @@ export class OpenAIRealtimeVoiceGateway {
       options.transcriptionModel ?? 'gpt-live-transcribe',
       'SHANNON_VOICE_REALTIME_TRANSCRIPTION_MODEL',
     );
-    this.voice = validIdentifier(options.voice ?? 'marin', 'SHANNON_VOICE_REALTIME_VOICE');
+    this.defaultVoice = validIdentifier(options.voice ?? 'marin', 'SHANNON_VOICE_REALTIME_VOICE');
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/realtime/calls';
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMilliseconds = boundedInteger(options.timeoutMilliseconds, 5_000, 60_000, 30_000);
@@ -85,7 +86,7 @@ export class OpenAIRealtimeVoiceGateway {
           },
         },
         output: {
-          voice: this.voice,
+          voice: validIdentifier(request.voice ?? this.defaultVoice, 'voice'),
           speed: 1,
         },
       },

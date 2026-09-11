@@ -10,6 +10,7 @@ public struct ShannonConversationView: View {
     @State private var connectionModel: ShannonConnectionModel?
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
+    @State private var voiceIdentityModel: ShannonVoiceIdentityModel
     @State private var appIconModel = ShannonAppIconModel()
     @State private var voiceModel = ShannonVoiceConversationModel()
     @State private var realtimeVoiceModel = ShannonRealtimeVoiceSessionModel()
@@ -19,6 +20,7 @@ public struct ShannonConversationView: View {
     @State private var showsAppearanceSettings = false
     @State private var showsTestFlightDelivery = false
     @State private var showsVoiceDiagnostics = false
+    @State private var showsVoiceIdentity = false
     @State private var showsLiveVoice = false
     @State private var showsSettings = false
     @State private var selectedPage: ShannonWorkspacePage = .talk
@@ -41,12 +43,14 @@ public struct ShannonConversationView: View {
         model: ShannonConversationModel = ShannonConversationModel(),
         connectionModel: ShannonConnectionModel? = nil,
         memoryModel: ShannonMemoryModel = ShannonMemoryModel(),
-        testFlightDeliveryModel: ShannonTestFlightDeliveryModel = ShannonTestFlightDeliveryModel()
+        testFlightDeliveryModel: ShannonTestFlightDeliveryModel = ShannonTestFlightDeliveryModel(),
+        voiceIdentityModel: ShannonVoiceIdentityModel = ShannonVoiceIdentityModel()
     ) {
         _model = State(initialValue: model)
         _connectionModel = State(initialValue: connectionModel)
         _memoryModel = State(initialValue: memoryModel)
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
+        _voiceIdentityModel = State(initialValue: voiceIdentityModel)
     }
 
     public var body: some View {
@@ -133,6 +137,7 @@ public struct ShannonConversationView: View {
             if scenePhase != .active {
                 voiceModel.cancel()
                 realtimeVoiceModel.stop()
+                voiceIdentityModel.stopPreview()
                 showsLiveVoice = false
             }
         }
@@ -211,6 +216,7 @@ public struct ShannonConversationView: View {
                 for: model.currentExpression,
                 appearance: appIconAppearance(for: activeColorScheme)
             )
+            await voiceIdentityModel.reload()
         }
 #if DEBUG
         .onAppear {
@@ -589,6 +595,15 @@ public struct ShannonConversationView: View {
                     }
                     .buttonStyle(.plain)
 
+                    Button { showsVoiceIdentity = true } label: {
+                        ShannonSettingsRow(
+                            title: "シャノンの声",
+                            detail: voiceIdentityModel.summary,
+                            symbol: "speaker.wave.2"
+                        )
+                    }
+                    .buttonStyle(.plain)
+
                     Button { showsVoiceDiagnostics = true } label: {
                         ShannonSettingsRow(
                             title: "音声診断",
@@ -667,6 +682,9 @@ public struct ShannonConversationView: View {
         }
         .sheet(isPresented: $showsVoiceDiagnostics) {
             ShannonVoiceDiagnosticsView()
+        }
+        .sheet(isPresented: $showsVoiceIdentity) {
+            ShannonVoiceIdentityView(model: voiceIdentityModel)
         }
     }
 

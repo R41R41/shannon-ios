@@ -7,6 +7,7 @@ public struct ShannonDesktopRootView: View {
     @Bindable private var conversation: ShannonConversationModel
     private let connection: ShannonConnectionModel
     private let memory: ShannonMemoryModel
+    private let voiceIdentity: ShannonVoiceIdentityModel
 
     @SceneStorage("shannon.desktop.destination") private var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") private var restoredThreadID: String?
@@ -32,11 +33,13 @@ public struct ShannonDesktopRootView: View {
     public init(
         conversation: ShannonConversationModel,
         connection: ShannonConnectionModel,
-        memory: ShannonMemoryModel
+        memory: ShannonMemoryModel,
+        voiceIdentity: ShannonVoiceIdentityModel
     ) {
         self.conversation = conversation
         self.connection = connection
         self.memory = memory
+        self.voiceIdentity = voiceIdentity
     }
 
     public var body: some View {
@@ -73,6 +76,9 @@ public struct ShannonDesktopRootView: View {
                 await conversation.refreshInitiatives()
             }
             restoreSelectedTaskIfAvailable()
+            if !conversation.isDesignPreview {
+                await voiceIdentity.reload()
+            }
         }
         .task(id: connection.isConnected) {
             guard connection.isConnected, !conversation.isDesignPreview else { return }
@@ -833,6 +839,37 @@ public struct ShannonDesktopRootView: View {
                 }
             }
 
+            Section("シャノンの声") {
+                Picker("声", selection: voiceIdentitySelection) {
+                    Text("シャノンに任せる").tag("automatic")
+                    ForEach(voiceIdentity.response.candidates) { candidate in
+                        Text(candidate.name).tag(candidate.id)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(voiceIdentity.savingVoiceID != nil)
+
+                HStack {
+                    ForEach(voiceIdentity.response.candidates) { candidate in
+                        Button {
+                            Task { await voiceIdentity.togglePreview(candidate) }
+                        } label: {
+                            Label(
+                                candidate.name,
+                                systemImage: voiceIdentity.previewingVoiceID == candidate.id
+                                    ? "stop.fill" : "play.fill"
+                            )
+                        }
+                    }
+                }
+                Text("変更は次に始める音声会話から反映され、iPhoneと共有されます。")
+                    .foregroundStyle(.secondary)
+                if let errorMessage = voiceIdentity.errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                }
+            }
+
             Section("Shannon Desk") {
                 LabeledContent("会話と記憶", value: "iPhoneと共通")
                 LabeledContent("作業の正本", value: "Azureの永続タスク")
@@ -843,6 +880,26 @@ public struct ShannonDesktopRootView: View {
         .formStyle(.grouped)
         .padding(24)
         .navigationTitle("設定")
+        .onDisappear { voiceIdentity.stopPreview() }
+    }
+
+    private var voiceIdentitySelection: Binding<String> {
+        Binding(
+            get: {
+                voiceIdentity.response.preference.mode == .automatic
+                    ? "automatic"
+                    : voiceIdentity.response.preference.selectedVoice ?? "automatic"
+            },
+            set: { value in
+                Task {
+                    if value == "automatic" {
+                        await voiceIdentity.selectAutomatic()
+                    } else if let candidate = voiceIdentity.response.candidates.first(where: { $0.id == value }) {
+                        await voiceIdentity.select(candidate)
+                    }
+                }
+            }
+        )
     }
 
     private func selectTask(_ task: ShannonAgentTask) {

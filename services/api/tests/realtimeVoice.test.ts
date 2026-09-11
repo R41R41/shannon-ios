@@ -47,7 +47,7 @@ describe('OpenAI realtime voice gateway', () => {
                 type: 'semantic_vad', create_response: true, interrupt_response: true,
               },
             },
-            output: { voice: 'marin' },
+            output: { voice: 'cedar' },
           },
         });
         expect(session.instructions).toContain('シャノン');
@@ -58,7 +58,7 @@ describe('OpenAI realtime voice gateway', () => {
       },
     });
 
-    await expect(gateway.createCall({ sdp: offer, instructions: 'あなたはシャノン。' }))
+    await expect(gateway.createCall({ sdp: offer, instructions: 'あなたはシャノン。', voice: 'cedar' }))
       .resolves.toEqual({
         answerSdp: answer,
         callId: 'call_test_123',

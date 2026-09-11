@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-09 / Shannon × Voyager Phase 2 local vertical slice
+Revision: 2026-09-11 / Voice Identity 1 local vertical slice
 
 ## System shape
 
@@ -75,6 +75,8 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - The primary App Icon owns native light and dark appearance artwork. Returning to `デフォルト` restores the primary icon so the OS can select its matching appearance rather than treating either appearance as a separate alternate icon.
 - Settings → App Icon shows the actual bundled primary and alternate icon artwork. The mode selector offers only automatic (`シャノンに任せる`) and manual (`自分で選ぶ`). Automatic mode uses the existing time/emotion variants. Manual mode contains `デフォルト` followed only by Shannon expression icons; temporary Aether/Shannon/Voyager comparison choices are not shipped. The primary preview follows the app appearance. A stored legacy `fixed` selection, or any removed/invalid manual selection, is migrated safely to `デフォルト`.
 - The primary voice candidate is a user-initiated Realtime WebRTC session. iOS captures and plays audio through WebRTC; Azure creates the OpenAI Realtime call with the standard API key kept server-side. The iPhone never receives that key.
+- Voice Identity exposes only `marin`, `cedar`, and `coral` as a small comparison set. Settings on iPhone and Mac can keep the automatic default or save one explicit choice to Azure. The effective choice is read when a new Realtime call is created, so an active voice session never changes underneath the user.
+- Each candidate can play the same server-fixed Japanese preview sentence. The client receives only an MP3; the OpenAI key and TTS request stay on Azure. Preview text and audio are not persisted, requests are limited per device per minute and per owner to twelve per Japan-local day, and unsupported voice identifiers are rejected before any upstream request.
 - Input-transcription delta events update the visible “あなた” caption while the user is still speaking. Output-audio-transcript delta events update Shannon's caption while her audio is playing. Server VAD creates responses automatically and permits natural interruption.
 - A Realtime session receives the same bounded Shannon identity, committed shared state, today's interest, recent thread history, and live-voice behavior rules. It cannot claim that an external task was executed; visible work and approval continue in Talk.
 - When both final transcripts for one turn arrive, iOS sends only those texts to `POST /v1/voice/realtime/turns`. The API stores the pair in the existing conversation thread, fixes Shannon's expression snapshot, and schedules the normal asynchronous emotion/memory update. Partial captions are not persisted.
@@ -112,6 +114,7 @@ Background voice activation remains deliberately later work. Realtime voice star
 - macOS uses its own Keychain pairing record on the device. A credential is never copied through source code, logs, or documentation.
 - Production pairing codes are currently issued by the trusted operator through the Azure `authCli.ts issue-code` command and delivered directly to Shannon Desk as a one-time `shannon://connect` URL. The iPhone app does not yet provide device-management or pairing-link issuance UI, so user instructions must not point to a nonexistent Settings screen.
 - A restored credential is not treated as proof of current reachability. Shannon Desk performs an authenticated thread-list request on launch and after pairing, shows the result in Settings, and removes a server-revoked credential on HTTP 401. A network failure preserves the credential so the user can retry without pairing again.
+- Mac Settings reads and edits the same Azure-backed Voice Identity preference as iPhone, offers the same three fixed previews, and labels that changes begin with the next voice session.
 
 ## Explicit conversation organization and Voyager Phase 2
 
@@ -177,6 +180,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
 | Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |
 | Explicit organization | `organize_sessions`, `organize_items`, `organize_thread_cursors` |
+| Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 

@@ -37,6 +37,12 @@ import {
   createConfiguredRealtimeVoiceGateway,
   RealtimeVoiceError,
 } from './realtimeVoice.js';
+import {
+  createConfiguredVoicePreviewGateway,
+  isShannonRealtimeVoiceId,
+  SQLiteVoiceIdentityStore,
+  VoicePreviewError,
+} from './voiceIdentity.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({
@@ -52,6 +58,12 @@ const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const realtimeVoiceGateway = createConfiguredRealtimeVoiceGateway(process.env);
+const configuredRealtimeVoice = realtimeVoiceGateway?.defaultVoice;
+const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
+  ? configuredRealtimeVoice
+  : 'marin';
+const voiceIdentityStore = new SQLiteVoiceIdentityStore(configuredDatabasePath(), automaticRealtimeVoice);
+const voicePreviewGateway = createConfiguredVoicePreviewGateway(process.env);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
@@ -77,6 +89,7 @@ const kernel = createLocalApiKernel(now, {
   organizeExtractor: createConfiguredOrganizeExtractor(process.env),
   voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
+  voiceIdentity: voiceIdentityStore,
 });
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
@@ -139,6 +152,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/realtime/calls') {
       await handleRealtimeVoiceCall(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/identity/preview') {
+      await handleVoiceIdentityPreview(request, response, principal);
       return;
     }
 
@@ -210,6 +227,7 @@ function shutdown(): void {
     testFlightDeliveryStore.close();
     dailyMindStore.close();
     organizeStore.close();
+    voiceIdentityStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });
@@ -346,6 +364,7 @@ async function handleRealtimeVoiceCall(
     const result = await realtimeVoiceGateway.createCall({
       sdp: offer,
       instructions: session.instructions,
+      voice: session.voice,
     });
     response.writeHead(200, {
       'content-type': 'application/sdp; charset=utf-8',
@@ -370,6 +389,57 @@ async function handleRealtimeVoiceCall(
         error: error.code,
         message: 'ライブ音声に接続できませんでした。少し待ってもう一度お試しください。',
       });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function handleVoiceIdentityPreview(
+  request: IncomingMessage,
+  response: ServerResponse,
+  principal: ShannonDevicePrincipal | null,
+): Promise<void> {
+  if (request.method !== 'POST') {
+    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return;
+  }
+  if (!principal) {
+    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
+    return;
+  }
+  if (!voicePreviewGateway) {
+    sendJson(response, 503, { error: 'VOICE_PREVIEW_NOT_CONFIGURED', message: '声の試聴は現在利用できません。' });
+    return;
+  }
+  const body = await readJson(request, 1_024);
+  const voice = body && typeof body === 'object' && !Array.isArray(body)
+    ? (body as Record<string, unknown>).voice
+    : undefined;
+  if (!isShannonRealtimeVoiceId(voice)) {
+    sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'voice is invalid' });
+    return;
+  }
+  if (!consumeDeviceAllowance(deviceVoiceUsage, principal.deviceId, 10)) {
+    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
+    return;
+  }
+  if (!voiceIdentityStore.consumePreviewAllowance(principal.scopeKey)) {
+    sendJson(response, 429, { error: 'VOICE_PREVIEW_DAILY_LIMIT', message: '今日の声の試聴回数に達しました。' });
+    return;
+  }
+  try {
+    const preview = await voicePreviewGateway.preview(voice);
+    response.writeHead(200, {
+      'content-type': preview.contentType,
+      'content-length': preview.audio.byteLength,
+      'cache-control': 'private, max-age=3600',
+      'x-content-type-options': 'nosniff',
+    });
+    response.end(preview.audio);
+  } catch (error) {
+    if (error instanceof VoicePreviewError) {
+      sendJson(response, 502, { error: error.code, message: '声を試聴できませんでした。' });
       return;
     }
     throw error;

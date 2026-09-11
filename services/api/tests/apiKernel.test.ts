@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
+import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
 
 class RecordingChatModel implements ShannonChatModel {
   readonly mode = 'openai' as const;
@@ -26,6 +27,60 @@ class RecordingChatModel implements ShannonChatModel {
 }
 
 describe('Shannon local API kernel', () => {
+  it('shares a bounded voice choice and applies it when a new realtime session starts', async () => {
+    const voiceIdentity = new InMemoryVoiceIdentityStore('marin');
+    const api = createLocalApiKernel(
+      () => '2026-09-11T01:10:00.000Z',
+      { voiceIdentity },
+    );
+
+    expect(await api.dispatch({
+      method: 'GET', path: '/v1/voice/identity', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    })).toMatchObject({
+      status: 200,
+      body: {
+        preference: { mode: 'automatic', selectedVoice: null, effectiveVoice: 'marin', updatedAt: null },
+        candidates: [{ id: 'marin' }, { id: 'cedar' }, { id: 'coral' }],
+      },
+    });
+
+    expect(await api.dispatch({
+      method: 'POST', path: '/v1/voice/identity', body: {
+        scopeKey: 'owner-a', mode: 'manual', selectedVoice: 'cedar',
+      },
+    })).toMatchObject({
+      status: 200,
+      body: { preference: { mode: 'manual', selectedVoice: 'cedar', effectiveVoice: 'cedar' } },
+    });
+    expect(api.realtimeVoiceSession('owner-a').voice).toBe('cedar');
+    expect(api.realtimeVoiceSession('owner-b').voice).toBe('marin');
+
+    expect(await api.dispatch({
+      method: 'POST', path: '/v1/voice/identity', body: {
+        scopeKey: 'owner-a', mode: 'automatic', selectedVoice: null,
+      },
+    })).toMatchObject({
+      status: 200,
+      body: { preference: { mode: 'automatic', selectedVoice: null, effectiveVoice: 'marin' } },
+    });
+    expect(api.realtimeVoiceSession('owner-a').voice).toBe('marin');
+  });
+
+  it('rejects unsupported or incomplete voice identity choices without changing the saved choice', async () => {
+    const voiceIdentity = new InMemoryVoiceIdentityStore();
+    const api = createLocalApiKernel(() => '2026-09-11T01:10:00.000Z', { voiceIdentity });
+
+    for (const body of [
+      { scopeKey: 'owner-a', mode: 'manual' },
+      { scopeKey: 'owner-a', mode: 'manual', selectedVoice: 'unknown' },
+      { scopeKey: 'owner-a', mode: 'automatic', selectedVoice: 'cedar' },
+    ]) {
+      await expect(api.dispatch({ method: 'POST', path: '/v1/voice/identity', body }))
+        .resolves.toMatchObject({ status: 400 });
+    }
+    expect(voiceIdentity.read('owner-a')).toMatchObject({ mode: 'automatic', effectiveVoice: 'marin' });
+  });
+
   it('reports the configured LLM in health', async () => {
     const api = createLocalApiKernel(() => '2026-08-31T00:00:00.000Z');
     expect(await api.dispatch({ method: 'GET', path: '/health' })).toEqual({

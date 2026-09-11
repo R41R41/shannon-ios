@@ -10,6 +10,9 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `POST /v1/events`
 - `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`）
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
+- `GET /v1/voice/identity` / `POST /v1/voice/identity`（scopeごとの声選択を取得・保存）
+- `POST /v1/voice/identity/preview`（ペアリング済み端末だけが固定日本語文を試聴。1日12回まで）
+- `POST /v1/voice/realtime/calls`（保存済みの声を新しいRealtimeセッションへ適用）
 
 loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必須で、全endpointが`Authorization: Bearer ...`を要求する。実機用の`lan`モードは全インターフェースではなく、MacのプライベートIPv4アドレスを1つ選んで待ち受ける。
 
@@ -35,3 +38,5 @@ loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必
 OpenAIキーがある場合、睡眠分析はResponses APIのstrict JSON Schemaを1日・scopeあたり通常1ジョブ使う。一時障害では最大5回まで再試行する。キーがない場合は明示的な「僕は〜が好き」等だけを扱うローカル規則へ退避する。
 
 音声入力は会話とは別の`voice`費用レーンで記録する。1リクエストは60秒・5 MiBまで、既定の日次上限は`$0.10`。APIは音声をファイルへ保存せず、OpenAIへの文字起こし要求が終わるとメモリから破棄する。上限は`SHANNON_VOICE_DAILY_BUDGET_USD`で変更できる。
+
+Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。未選択時は`SHANNON_VOICE_REALTIME_VOICE`が候補内ならそれを使い、それ以外は`marin`へ安全に戻る。選択は`voice_identity_preferences`へscope分離して保存し、進行中の音声を差し替えず次回のRealtime call作成時に読む。試聴は既定`gpt-4o-mini-tts`へサーバー固定文だけを送り、音声・本文を永続化しない。モデルとendpointは`SHANNON_VOICE_PREVIEW_MODEL`、`SHANNON_VOICE_PREVIEW_ENDPOINT`で変更できる。

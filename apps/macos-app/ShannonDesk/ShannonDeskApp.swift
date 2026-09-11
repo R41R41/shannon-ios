@@ -7,6 +7,7 @@ struct ShannonDeskApp: App {
     @State private var conversationModel: ShannonConversationModel
     @State private var connectionModel: ShannonConnectionModel
     @State private var memoryModel: ShannonMemoryModel
+    @State private var voiceIdentityModel: ShannonVoiceIdentityModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -38,6 +39,7 @@ struct ShannonDeskApp: App {
             deviceName: { Host.current().localizedName ?? "Mac" }
         ))
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
+        _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
     }
 
     var body: some Scene {
@@ -45,7 +47,8 @@ struct ShannonDeskApp: App {
             ShannonDesktopRootView(
                 conversation: conversationModel,
                 connection: connectionModel,
-                memory: memoryModel
+                memory: memoryModel,
+                voiceIdentity: voiceIdentityModel
             )
             .preferredColorScheme(preferredColorScheme)
             .onOpenURL { url in
@@ -65,7 +68,8 @@ struct ShannonDeskApp: App {
         Settings {
             ShannonDesktopSettingsScene(
                 connection: connectionModel,
-                appearanceRawValue: $appearanceRawValue
+                appearanceRawValue: $appearanceRawValue,
+                voiceIdentity: voiceIdentityModel
             )
         }
     }
@@ -148,6 +152,7 @@ private struct ShannonDeskPreviewConnectionStore: ShannonConnectionStoreProtocol
 private struct ShannonDesktopSettingsScene: View {
     let connection: ShannonConnectionModel
     @Binding var appearanceRawValue: String
+    let voiceIdentity: ShannonVoiceIdentityModel
 
     var body: some View {
         Form {
@@ -158,6 +163,7 @@ private struct ShannonDesktopSettingsScene: View {
             }
             LabeledContent("接続", value: connection.statusLabel)
             LabeledContent("通信", value: connection.verificationLabel)
+            ShannonDesktopVoiceIdentitySettings(model: voiceIdentity)
             if connection.isConnected {
                 Button("接続を確認") {
                     Task { await connection.verifyConnection() }
@@ -167,7 +173,65 @@ private struct ShannonDesktopSettingsScene: View {
         }
         .formStyle(.grouped)
         .padding(24)
-        .frame(width: 440, height: 280)
+        .frame(width: 540, height: 420)
+        .task { await voiceIdentity.reload() }
+        .onDisappear { voiceIdentity.stopPreview() }
+    }
+}
+
+private struct ShannonDesktopVoiceIdentitySettings: View {
+    @Bindable var model: ShannonVoiceIdentityModel
+
+    var body: some View {
+        Picker("シャノンの声", selection: selection) {
+            Text("シャノンに任せる").tag("automatic")
+            ForEach(model.response.candidates) { candidate in
+                Text(candidate.name).tag(candidate.id)
+            }
+        }
+        .disabled(model.savingVoiceID != nil)
+
+        HStack {
+            Text("試聴")
+            Spacer()
+            ForEach(model.response.candidates) { candidate in
+                Button {
+                    Task { await model.togglePreview(candidate) }
+                } label: {
+                    Label(
+                        candidate.name,
+                        systemImage: model.previewingVoiceID == candidate.id ? "stop.fill" : "play.fill"
+                    )
+                }
+            }
+        }
+        Text("変更は次に始める音声会話から反映され、iPhoneと共有されます。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        if let errorMessage = model.errorMessage {
+            Text(errorMessage)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    private var selection: Binding<String> {
+        Binding(
+            get: {
+                model.response.preference.mode == .automatic
+                    ? "automatic"
+                    : model.response.preference.selectedVoice ?? "automatic"
+            },
+            set: { value in
+                Task {
+                    if value == "automatic" {
+                        await model.selectAutomatic()
+                    } else if let candidate = model.response.candidates.first(where: { $0.id == value }) {
+                        await model.select(candidate)
+                    }
+                }
+            }
+        )
     }
 }
 

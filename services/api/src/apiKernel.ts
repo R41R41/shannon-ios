@@ -52,6 +52,13 @@ import {
   type VoyagerCatalog,
   type VoyagerTaskProjection,
 } from './organize.js';
+import {
+  InMemoryVoiceIdentityStore,
+  isShannonRealtimeVoiceId,
+  type ShannonVoiceIdentityMode,
+  type ShannonVoiceIdentityStore,
+  voiceIdentityResponse,
+} from './voiceIdentity.js';
 
 function objectBody(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -171,6 +178,7 @@ export interface ShannonApiKernelOptions {
   organizeExtractor?: OrganizeExtractor;
   voyagerDestination?: VoyagerTaskDestination;
   voyagerCatalog?: VoyagerCatalog;
+  voiceIdentity?: ShannonVoiceIdentityStore;
 }
 
 export class ShannonApiKernel {
@@ -190,6 +198,7 @@ export class ShannonApiKernel {
   private readonly organizeExtractor: OrganizeExtractor;
   private readonly voyagerDestination: VoyagerTaskDestination;
   private readonly voyagerCatalog: VoyagerCatalog;
+  private readonly voiceIdentity: ShannonVoiceIdentityStore;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -216,11 +225,13 @@ export class ShannonApiKernel {
     this.organizeExtractor = options.organizeExtractor ?? new LocalOrganizeExtractor();
     this.voyagerDestination = options.voyagerDestination ?? new DisabledVoyagerTaskDestination();
     this.voyagerCatalog = options.voyagerCatalog ?? new DisabledVoyagerCatalog();
+    this.voiceIdentity = options.voiceIdentity ?? new InMemoryVoiceIdentityStore();
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
     threadId: string;
     instructions: string;
+    voice: string;
   } {
     const threadId = this.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
     const captured = this.stateStore.snapshot(scopeKey);
@@ -239,6 +250,7 @@ export class ShannonApiKernel {
     return {
       threadId,
       instructions: [basePrompt, dailyMindPrompt, history, voiceInstructions].filter(Boolean).join('\n\n'),
+      voice: this.voiceIdentity.read(scopeKey).effectiveVoice,
     };
   }
 
@@ -260,6 +272,35 @@ export class ShannonApiKernel {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: this.stateStore.snapshot(scopeKey) };
+    }
+
+    if (request.method === 'GET' && request.path === '/v1/voice/identity') {
+      const scopeKey = request.query?.get('scopeKey');
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      return { status: 200, body: voiceIdentityResponse(this.voiceIdentity.read(scopeKey)) };
+    }
+
+    if (request.method === 'POST' && request.path === '/v1/voice/identity') {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      const mode = request.body.mode;
+      const selectedVoice = request.body.selectedVoice;
+      const supportedVoice = isShannonRealtimeVoiceId(selectedVoice) ? selectedVoice : null;
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (mode !== 'automatic' && mode !== 'manual') return badRequest('mode is invalid');
+      if (mode === 'automatic' && selectedVoice !== undefined && selectedVoice !== null) {
+        return badRequest('selectedVoice must be empty in automatic mode');
+      }
+      if (mode === 'manual' && !supportedVoice) {
+        return badRequest('selectedVoice is invalid');
+      }
+      const preference = this.voiceIdentity.save(
+        scopeKey,
+        mode as ShannonVoiceIdentityMode,
+        mode === 'manual' ? supportedVoice : null,
+        this.now(),
+      );
+      return { status: 200, body: voiceIdentityResponse(preference) };
     }
 
     if (request.method === 'GET' && request.path === '/v1/conversation') {
