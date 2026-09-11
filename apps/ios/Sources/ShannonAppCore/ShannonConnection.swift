@@ -152,11 +152,25 @@ public enum ShannonConnectionVerificationStatus: Equatable, Sendable {
     case failed(message: String)
 }
 
+public struct ShannonConnectedDevice: Codable, Equatable, Identifiable, Sendable {
+    public let deviceId: String
+    public let displayName: String
+    public let expiresAt: String
+    public let lastUsedAt: String?
+    public let isCurrent: Bool
+
+    public var id: String { deviceId }
+}
+
 @MainActor
 @Observable
 public final class ShannonConnectionModel {
     public private(set) var status: ShannonConnectionStatus = .disconnected
     public private(set) var verificationStatus: ShannonConnectionVerificationStatus = .idle
+    public private(set) var connectedDevices: [ShannonConnectedDevice] = []
+    public private(set) var isLoadingDevices = false
+    public private(set) var revokingDeviceIDs: Set<String> = []
+    public private(set) var deviceManagementError: String?
 
     public let baseURL: URL
     private let store: any ShannonConnectionStoreProtocol
@@ -370,6 +384,49 @@ public final class ShannonConnectionModel {
         }
     }
 
+    public func loadConnectedDevices() async {
+        guard !isLoadingDevices else { return }
+        guard let credential = credentialForAuthenticatedRequest() else { return }
+        isLoadingDevices = true
+        deviceManagementError = nil
+        defer { isLoadingDevices = false }
+        do {
+            var request = URLRequest(url: baseURL.appending(path: "/v1/devices"))
+            request.httpMethod = "GET"
+            request.timeoutInterval = 15
+            request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
+            let (data, response) = try await session.data(for: request)
+            try handleAuthenticatedResponse(response)
+            connectedDevices = try JSONDecoder().decode(DeviceListResponse.self, from: data).devices
+        } catch {
+            deviceManagementError = userMessage(for: error)
+        }
+    }
+
+    @discardableResult
+    public func revokeConnectedDevice(_ device: ShannonConnectedDevice) async -> Bool {
+        guard !device.isCurrent, !revokingDeviceIDs.contains(device.id) else { return false }
+        guard let credential = credentialForAuthenticatedRequest() else { return false }
+        revokingDeviceIDs.insert(device.id)
+        deviceManagementError = nil
+        defer { revokingDeviceIDs.remove(device.id) }
+        do {
+            var request = URLRequest(url: baseURL.appending(path: "/v1/devices"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 15
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+            request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
+            request.httpBody = try JSONEncoder().encode(DeviceRevocationRequest(deviceId: device.id))
+            let (_, response) = try await session.data(for: request)
+            try handleAuthenticatedResponse(response)
+            connectedDevices.removeAll { $0.id == device.id }
+            return true
+        } catch {
+            deviceManagementError = userMessage(for: error)
+            return false
+        }
+    }
+
     public static func isAllowedPairingURL(_ url: URL) -> Bool {
         if url.scheme?.lowercased() == "https" { return true }
 #if DEBUG
@@ -388,6 +445,37 @@ public final class ShannonConnectionModel {
     private func userMessage(for error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? "シャノンへ接続できませんでした。"
     }
+
+    private func credentialForAuthenticatedRequest() -> ShannonConnectionCredential? {
+        do {
+            guard let credential = try store.load(), credential.baseURL == baseURL else {
+                deviceManagementError = "接続情報がありません。"
+                return nil
+            }
+            guard credential.expiresAt > Date() else {
+                try store.delete()
+                status = .failed(message: ShannonConnectionError.expiredCredential.localizedDescription)
+                deviceManagementError = ShannonConnectionError.expiredCredential.localizedDescription
+                return nil
+            }
+            return credential
+        } catch {
+            deviceManagementError = userMessage(for: error)
+            return nil
+        }
+    }
+
+    private func handleAuthenticatedResponse(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else { throw ShannonConnectionError.invalidResponse }
+        if http.statusCode == 401 {
+            try store.delete()
+            status = .failed(message: ShannonConnectionError.revokedCredential.localizedDescription)
+            throw ShannonConnectionError.revokedCredential
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonConnectionError.rejected(status: http.statusCode)
+        }
+    }
 }
 
 private struct PairingRequest: Encodable {
@@ -401,4 +489,12 @@ private struct PairingResponse: Decodable {
     let scopeKey: String
     let displayName: String
     let expiresAt: String
+}
+
+private struct DeviceListResponse: Decodable {
+    let devices: [ShannonConnectedDevice]
+}
+
+private struct DeviceRevocationRequest: Encodable {
+    let deviceId: String
 }

@@ -167,6 +167,20 @@ describe('push notification delivery', () => {
     push.close();
   });
 
+  it('stops notifications immediately when device access is revoked', () => {
+    const path = createInitiative();
+    const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
+    push.register(
+      { deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' },
+      'ce'.repeat(32),
+      'production',
+    );
+    expect(push.pending()).toHaveLength(1);
+    push.invalidateDevice('iphone-1');
+    expect(push.pending()).toEqual([]);
+    push.close();
+  });
+
   it('cancels a transient retry after that initiative thread has been read', async () => {
     const path = createInitiative();
     const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');

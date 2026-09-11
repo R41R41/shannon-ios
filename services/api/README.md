@@ -9,6 +9,8 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `GET /v1/conversation?scopeKey=...`
 - `POST /v1/events`
 - `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`）
+- `GET /v1/devices`（同じscopeの有効な接続端末だけを一覧。tokenやhashは返さない）
+- `POST /v1/devices`（同じscopeの別端末を明示確認後に失効し、push登録も停止）
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
 - `GET /v1/voice/identity` / `POST /v1/voice/identity`（scopeごとの声選択を取得・保存）
 - `POST /v1/voice/identity/preview`（ペアリング済み端末だけが固定日本語文を試聴。1日12回まで）

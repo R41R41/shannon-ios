@@ -257,6 +257,52 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertTrue(message.contains("無効"))
     }
 
+    func testConnectedDeviceManagementListsScopeBoundDevicesAndRevokesAnotherDevice() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "d", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "1111111111111111",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        var requestCount = 0
+        let session = stubSession { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/devices")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.httpMethod == "GET" {
+                return try response(url: request.url!, json: ["devices": [
+                    [
+                        "deviceId": "1111111111111111", "displayName": "Test iPhone",
+                        "expiresAt": "2027-08-31T00:00:00.000Z", "lastUsedAt": NSNull(),
+                        "isCurrent": true,
+                    ],
+                    [
+                        "deviceId": "2222222222222222", "displayName": "Test Mac",
+                        "expiresAt": "2027-08-31T00:00:00.000Z", "lastUsedAt": "2026-08-31T00:00:00.000Z",
+                        "isCurrent": false,
+                    ],
+                ]])
+            }
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requestBody(request))) as? [String: String])
+            XCTAssertEqual(json["deviceId"], "2222222222222222")
+            return try response(url: request.url!, json: ["revokedDeviceId": "2222222222222222"])
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        await model.loadConnectedDevices()
+        XCTAssertEqual(model.connectedDevices.map(\.displayName), ["Test iPhone", "Test Mac"])
+        let revokedCurrent = await model.revokeConnectedDevice(model.connectedDevices[0])
+        let revokedOther = await model.revokeConnectedDevice(model.connectedDevices[1])
+        XCTAssertFalse(revokedCurrent)
+        XCTAssertTrue(revokedOther)
+        XCTAssertEqual(model.connectedDevices.map(\.displayName), ["Test iPhone"])
+        XCTAssertEqual(requestCount, 2)
+    }
+
     func testAPIClientSendsWebSearchOnlyWhenExplicitlyEnabled() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let session = stubSession { request in

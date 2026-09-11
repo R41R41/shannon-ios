@@ -71,6 +71,29 @@ describe('paired device authentication', () => {
     expect(normalizePairingCode('not-a-code')).toBeNull();
     expect(normalizePairingCode(undefined)).toBeNull();
   });
+
+  it('lists and revokes active devices only inside the authenticated scope', () => {
+    const path = databasePath();
+    let timestamp = Date.parse('2026-08-31T00:00:00.000Z');
+    const auth = new SQLiteDeviceAuthStore({ path, pepper, now: () => timestamp });
+    const ownerA1 = auth.pair(auth.issuePairingCode('owner-a').code, 'iPhone');
+    timestamp += 1_000;
+    const ownerA2 = auth.pair(auth.issuePairingCode('owner-a').code, 'Mac');
+    const ownerB = auth.pair(auth.issuePairingCode('owner-b').code, 'Other owner');
+
+    expect(auth.listActiveDevicesForScope('owner-a').map(device => device.deviceId)).toEqual([
+      ownerA2?.deviceId,
+      ownerA1?.deviceId,
+    ]);
+    expect(auth.revokeForScope(ownerB?.deviceId ?? '', 'owner-a')).toBe(false);
+    expect(auth.revokeForScope(ownerA2?.deviceId ?? '', 'owner-a')).toBe(true);
+    expect(auth.listActiveDevicesForScope('owner-a').map(device => device.deviceId)).toEqual([
+      ownerA1?.deviceId,
+    ]);
+    expect(auth.authenticate(`Bearer ${ownerA2?.token}`)).toBeNull();
+    expect(auth.authenticate(`Bearer ${ownerB?.token}`)).not.toBeNull();
+    auth.close();
+  });
 });
 
 function databasePath(): string {

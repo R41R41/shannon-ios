@@ -167,6 +167,10 @@ const server = createServer(async (request, response) => {
     const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
+    if (url.pathname === '/v1/devices') {
+      handleDeviceManagement(request, response, body, principal);
+      return;
+    }
     if (url.pathname === '/v1/push/register') {
       handlePushRegistration(request, response, body, principal);
       return;
@@ -236,6 +240,52 @@ function shutdown(): void {
     persistentStore.close();
     process.exitCode = 0;
   });
+}
+
+function handleDeviceManagement(
+  request: IncomingMessage,
+  response: ServerResponse,
+  body: unknown,
+  principal: ShannonDevicePrincipal | null,
+): void {
+  if (!deviceAuth || !principal) {
+    sendJson(response, 404, { error: 'NOT_FOUND' });
+    return;
+  }
+  if (request.method === 'GET') {
+    const devices = deviceAuth.listActiveDevicesForScope(principal.scopeKey).map(device => ({
+      deviceId: device.deviceId,
+      displayName: device.displayName,
+      expiresAt: device.expiresAt,
+      lastUsedAt: device.lastUsedAt,
+      isCurrent: device.deviceId === principal.deviceId,
+    }));
+    sendJson(response, 200, { devices });
+    return;
+  }
+  if (request.method !== 'POST') {
+    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    sendJson(response, 400, { error: 'INVALID_REQUEST' });
+    return;
+  }
+  const deviceId = (body as Record<string, unknown>).deviceId;
+  if (typeof deviceId !== 'string' || !/^[a-f0-9]{16}$/.test(deviceId)) {
+    sendJson(response, 400, { error: 'INVALID_DEVICE_ID' });
+    return;
+  }
+  if (deviceId === principal.deviceId) {
+    sendJson(response, 409, { error: 'CURRENT_DEVICE', message: 'この端末は「接続を解除」から外してください。' });
+    return;
+  }
+  if (!deviceAuth.revokeForScope(deviceId, principal.scopeKey)) {
+    sendJson(response, 404, { error: 'DEVICE_NOT_FOUND' });
+    return;
+  }
+  pushStore.invalidateDevice(deviceId);
+  sendJson(response, 200, { revokedDeviceId: deviceId });
 }
 
 function handlePushRegistration(

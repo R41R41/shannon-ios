@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-11 / Voice Identity and Voice Reliability local vertical slices
+Revision: 2026-09-12 / Connected-device management local vertical slice
 
 ## System shape
 
@@ -70,6 +70,7 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Dialogue mode is a presence stage rather than a framed portrait: ambient depth, a subtle reduced-motion-aware breathing treatment, the current emotion, the latest user utterance, and Shannon's reply share one scene. The redundant corner avatar is not shown.
 - Running agent work is reachable from the common drawer and beside its source message. The composer-area task capsule is reserved for unacknowledged approval, completion, failure, or cancellation states that need attention.
 - The iOS cache preserves visible conversation continuity while the server remains authoritative.
+- Connection settings list only active devices bound to the authenticated owner's scope. The current device is marked but cannot revoke itself through the remote-device action; another device requires destructive confirmation, and successful revocation also invalidates its push registration. Device tokens, keyed hashes, and internal device identifiers are never displayed.
 - Agent-task cards, approvals, progress, and completion are projections of durable server task events.
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 - The primary App Icon owns native light and dark appearance artwork. Returning to `デフォルト` restores the primary icon so the OS can select its matching appearance rather than treating either appearance as a separate alternate icon.

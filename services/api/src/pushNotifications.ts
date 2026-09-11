@@ -101,6 +101,14 @@ export class SQLitePushNotificationStore {
     this.secureFiles();
   }
 
+  invalidateDevice(deviceId: string, at = this.now()): void {
+    this.database.prepare(`
+      UPDATE push_registrations SET invalidated_at = ?
+      WHERE device_id = ? AND invalidated_at IS NULL
+    `).run(at, deviceId);
+    this.secureFiles();
+  }
+
   pending(at = this.now(), limit = 20): readonly PendingPushNotification[] {
     const cutoff = new Date(Date.parse(at) - MAXIMUM_PUSH_AGE_MILLISECONDS).toISOString();
     const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
