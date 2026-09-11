@@ -10,12 +10,12 @@ public final class ShannonMemoryModel {
     public private(set) var errorMessage: String?
 
     private let scopeKey: String
-    private let client: any ShannonAPIClientProtocol
+    private let client: any ShannonMemoryServing
     private var didLoad = false
 
     public init(
         scopeKey: String = "local-owner",
-        client: any ShannonAPIClientProtocol = ShannonAPIClient()
+        client: any ShannonMemoryServing = ShannonAPIClient()
     ) {
         self.scopeKey = scopeKey
         self.client = client

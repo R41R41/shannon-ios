@@ -1,0 +1,38 @@
+import Foundation
+
+public struct ChatResponseDTO: Codable, Equatable, Sendable {
+    public let thread: ChatThreadDTO?
+    public let mode: String
+    public let reply: String
+    public let threadId: String
+    public let snapshotVersion: Int
+    public let messageEmotion: ShannonMessageEmotionDTO
+    public let systemPrompt: String
+    public let state: CompanionStateDTO
+    public let uiBlocks: [ShannonUIBlockDTO]?
+    public let artifacts: [ShannonGeneratedArtifactDTO]?
+
+    public init(
+        mode: String,
+        reply: String,
+        threadId: String,
+        snapshotVersion: Int,
+        messageEmotion: ShannonMessageEmotionDTO,
+        systemPrompt: String,
+        state: CompanionStateDTO,
+        uiBlocks: [ShannonUIBlockDTO]? = nil,
+        artifacts: [ShannonGeneratedArtifactDTO]? = nil,
+        thread: ChatThreadDTO? = nil
+    ) {
+        self.thread = thread
+        self.mode = mode
+        self.reply = reply
+        self.threadId = threadId
+        self.snapshotVersion = snapshotVersion
+        self.messageEmotion = messageEmotion
+        self.systemPrompt = systemPrompt
+        self.state = state
+        self.uiBlocks = uiBlocks
+        self.artifacts = artifacts
+    }
+}

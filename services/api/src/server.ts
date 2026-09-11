@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { networkInterfaces } from 'node:os';
+import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
+import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, scalarHeader, sendJson } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
@@ -168,15 +169,15 @@ const server = createServer(async (request, response) => {
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {
-      handleDeviceManagement(request, response, body, principal);
+      handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore });
       return;
     }
     if (url.pathname === '/v1/push/register') {
-      handlePushRegistration(request, response, body, principal);
+      handlePushRegistration(request, response, body, principal, { deviceAuth, pushStore });
       return;
     }
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
-    if (isPairedChat && !consumeDeviceChatAllowance(principal.deviceId)) {
+    if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
       return;
     }
@@ -240,91 +241,6 @@ function shutdown(): void {
     persistentStore.close();
     process.exitCode = 0;
   });
-}
-
-function handleDeviceManagement(
-  request: IncomingMessage,
-  response: ServerResponse,
-  body: unknown,
-  principal: ShannonDevicePrincipal | null,
-): void {
-  if (!deviceAuth || !principal) {
-    sendJson(response, 404, { error: 'NOT_FOUND' });
-    return;
-  }
-  if (request.method === 'GET') {
-    const devices = deviceAuth.listActiveDevicesForScope(principal.scopeKey).map(device => ({
-      deviceId: device.deviceId,
-      displayName: device.displayName,
-      expiresAt: device.expiresAt,
-      lastUsedAt: device.lastUsedAt,
-      isCurrent: device.deviceId === principal.deviceId,
-    }));
-    sendJson(response, 200, { devices });
-    return;
-  }
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    sendJson(response, 400, { error: 'INVALID_REQUEST' });
-    return;
-  }
-  const deviceId = (body as Record<string, unknown>).deviceId;
-  const revokeCurrent = (body as Record<string, unknown>).revokeCurrent === true;
-  if (typeof deviceId !== 'string' || !/^[a-f0-9]{16}$/.test(deviceId)) {
-    sendJson(response, 400, { error: 'INVALID_DEVICE_ID' });
-    return;
-  }
-  const isCurrent = deviceId === principal.deviceId;
-  if (isCurrent !== revokeCurrent) {
-    sendJson(response, 409, { error: 'DEVICE_INTENT_MISMATCH' });
-    return;
-  }
-  if (!deviceAuth.revokeForScope(deviceId, principal.scopeKey)) {
-    sendJson(response, 404, { error: 'DEVICE_NOT_FOUND' });
-    return;
-  }
-  pushStore.invalidateDevice(deviceId);
-  sendJson(response, 200, { revokedDeviceId: deviceId });
-}
-
-function handlePushRegistration(
-  request: IncomingMessage,
-  response: ServerResponse,
-  body: unknown,
-  principal: ShannonDevicePrincipal | null,
-): void {
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  if (!principal) {
-    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
-    return;
-  }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    sendJson(response, 400, { error: 'INVALID_REQUEST' });
-    return;
-  }
-  const value = body as Record<string, unknown>;
-  const deviceToken = typeof value.deviceToken === 'string' ? value.deviceToken : '';
-  const environment = value.environment;
-  if (environment !== 'sandbox' && environment !== 'production') {
-    sendJson(response, 400, { error: 'PUSH_ENVIRONMENT_INVALID' });
-    return;
-  }
-  try {
-    pushStore.register(principal, deviceToken, environment as APNsEnvironment);
-    sendJson(response, 200, { registered: true });
-  } catch (error) {
-    if (error instanceof Error && error.message === 'PUSH_DEVICE_TOKEN_INVALID') {
-      sendJson(response, 400, { error: error.message });
-      return;
-    }
-    throw error;
-  }
 }
 
 async function handleVoiceTranscription(
@@ -529,44 +445,6 @@ async function handleVoiceIdentityPreview(
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
-function parsePort(value: string | undefined): number {
-  if (!value) return 4317;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65_535) throw new Error('SHANNON_API_PORT is invalid');
-  return parsed;
-}
-
-function parseHost(value: string | undefined): string {
-  if (!value) return '127.0.0.1';
-  if (value === '127.0.0.1') return value;
-  if (value === 'lan') return privateLanAddress();
-  throw new Error('SHANNON_API_HOST must be 127.0.0.1 or lan');
-}
-
-function privateLanAddress(): string {
-  const interfaces = networkInterfaces();
-  const preferred = interfaces.en0?.find(address => address.family === 'IPv4' && !address.internal);
-  if (preferred && isPrivateIPv4(preferred.address)) return preferred.address;
-
-  for (const addresses of Object.values(interfaces)) {
-    const address = addresses?.find(candidate => (
-      candidate.family === 'IPv4' && !candidate.internal && isPrivateIPv4(candidate.address)
-    ));
-    if (address) return address.address;
-  }
-  throw new Error('No private LAN IPv4 address is available for the iPhone API');
-}
-
-function isPrivateIPv4(value: string): boolean {
-  const octets = value.split('.').map(Number);
-  if (octets.length !== 4 || octets.some(octet => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
-    return false;
-  }
-  return octets[0] === 10
-    || (octets[0] === 172 && (octets[1] ?? 0) >= 16 && (octets[1] ?? 0) <= 31)
-    || (octets[0] === 192 && octets[1] === 168);
-}
-
 async function handlePairing(request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (!deviceAuth || authMode !== 'paired') {
     sendJson(response, 404, { error: 'NOT_FOUND' });
@@ -601,62 +479,4 @@ async function handlePairing(request: IncomingMessage, response: ServerResponse)
     return;
   }
   sendJson(response, 200, result);
-}
-
-function bindScope(body: unknown, scopeKey: string): unknown {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
-  return { ...(body as Record<string, unknown>), scopeKey };
-}
-
-function consumeDeviceChatAllowance(deviceId: string): boolean {
-  return consumeDeviceAllowance(deviceUsage, deviceId, 20);
-}
-
-function consumeDeviceAllowance(
-  usage: Map<string, { startedAt: number; count: number }>,
-  deviceId: string,
-  maximumPerMinute: number,
-): boolean {
-  const timestamp = Date.now();
-  const previous = usage.get(deviceId);
-  const window = previous && timestamp - previous.startedAt < 60_000
-    ? previous
-    : { startedAt: timestamp, count: 0 };
-  window.count += 1;
-  usage.set(deviceId, window);
-  return window.count <= maximumPerMinute;
-}
-
-async function readJson(request: IncomingMessage, maximumBytes: number): Promise<unknown> {
-  const body = await readBytes(request, maximumBytes);
-  if (!body.byteLength) return undefined;
-  return JSON.parse(Buffer.from(body).toString('utf8')) as unknown;
-}
-
-async function readBytes(request: IncomingMessage, maximumBytes: number): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
-    size += bytes.byteLength;
-    if (size > maximumBytes) throw new Error('request body too large');
-    chunks.push(bytes);
-  }
-  if (!chunks.length) return new Uint8Array();
-  return Buffer.concat(chunks);
-}
-
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
-  });
-  response.end(JSON.stringify(body));
-}
-
-function scalarHeader(value: string | string[] | undefined): string | undefined {
-  const scalar = Array.isArray(value) ? value[0] : value;
-  const normalized = scalar?.trim();
-  return normalized && normalized.length <= 160 ? normalized : undefined;
 }

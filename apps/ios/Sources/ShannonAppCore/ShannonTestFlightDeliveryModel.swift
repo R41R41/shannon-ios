@@ -9,11 +9,11 @@ public final class ShannonTestFlightDeliveryModel {
     public private(set) var errorMessage: String?
 
     private let scopeKey: String
-    private let client: any ShannonAPIClientProtocol
+    private let client: any ShannonDeliveryServing
 
     public init(
         scopeKey: String = "local-owner",
-        client: any ShannonAPIClientProtocol = ShannonAPIClient()
+        client: any ShannonDeliveryServing = ShannonAPIClient()
     ) {
         self.scopeKey = scopeKey
         self.client = client

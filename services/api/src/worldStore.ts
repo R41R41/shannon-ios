@@ -9,85 +9,9 @@ const MAX_NEW_TRIALS_PER_SEVEN_DAYS = 1;
 const WORLD_RETENTION_DAYS = 90;
 const MAX_WORLD_ITEMS = 1_000;
 
-export type WorldSourceKind = 'rss' | 'weather' | 'hacker-news' | 'arxiv' | 'pubmed' | 'bluesky' | 'github';
-
-export interface WorldSource {
-  id: string;
-  kind: WorldSourceKind;
-  title: string;
-  url: string;
-  query: string | null;
-  intervalMinutes: number;
-  nextRunAt: string;
-}
-
-export interface WorldItemInput {
-  externalId: string;
-  title: string;
-  url: string;
-  summary?: string;
-  publishedAt?: string;
-  author?: string;
-}
-
-export interface WorldItem {
-  id: string;
-  sourceId: string;
-  sourceTitle: string;
-  title: string;
-  url: string;
-  summary?: string;
-  author?: string;
-  publishedAt?: string;
-  discoveredAt: string;
-}
-
-export interface WorldReader {
-  latestItems(limit?: number): readonly WorldItem[];
-}
-
-export type WorldSubscriptionApproval = 'pending' | 'approved' | 'rejected';
-export type WorldSubscriptionStatus = 'trial' | 'active' | 'paused' | 'rejected';
-
-export interface WorldSubscription {
-  id: string;
-  feedURL: string;
-  title: string;
-  status: WorldSubscriptionStatus;
-  approval: WorldSubscriptionApproval;
-  reason: string;
-  discoveredAt: string;
-  trialExpiresAt: string;
-  fetchedItemCount: number;
-  updatedAt: string;
-}
-
-export type WorldSourceOrigin = 'built-in' | 'approved-subscription';
-
-export interface WorldSourceSummary {
-  id: string;
-  kind: WorldSourceKind;
-  title: string;
-  url: string;
-  enabled: boolean;
-  intervalMinutes: number;
-  lastRunAt?: string;
-  nextRunAt: string;
-  hasError: boolean;
-  fetchedItemCount: number;
-  origin: WorldSourceOrigin;
-}
-
-export interface WorldSubscriptionReader {
-  sources(): readonly WorldSourceSummary[];
-  subscriptions(): readonly WorldSubscription[];
-  decideSubscription(
-    id: string,
-    decision: 'approve' | 'reject',
-    expectedUpdatedAt: string,
-    decidedAt?: string,
-  ): WorldSubscription;
-}
+import type { WorldItem, WorldItemInput, WorldReader, WorldSource, WorldSourceKind, WorldSourceOrigin, WorldSourceSummary, WorldSubscription, WorldSubscriptionApproval, WorldSubscriptionReader, WorldSubscriptionStatus } from './worldContracts.js';
+export type { WorldItem, WorldItemInput, WorldReader, WorldSource, WorldSourceKind, WorldSourceOrigin, WorldSourceSummary, WorldSubscription, WorldSubscriptionApproval, WorldSubscriptionReader, WorldSubscriptionStatus } from './worldContracts.js';
+export { discoverFeedLinks } from './worldDiscovery.js';
 
 export class SQLiteWorldStore {
   private readonly database: DatabaseSync;
@@ -567,16 +491,4 @@ export class SQLiteWorldStore {
       if (existsSync(candidate)) chmodSync(candidate, 0o600);
     }
   }
-}
-
-export function discoverFeedLinks(html: string, pageURL: URL): readonly URL[] {
-  const links: URL[] = [];
-  const pattern = /<link\b[^>]*>/giu;
-  for (const [tag] of html.matchAll(pattern)) {
-    if (!/rel\s*=\s*["'][^"']*alternate/iu.test(tag) || !/type\s*=\s*["']application\/(?:rss|atom)\+xml/iu.test(tag)) continue;
-    const href = tag.match(/href\s*=\s*["']([^"']+)["']/iu)?.[1];
-    if (!href) continue;
-    try { links.push(new URL(href, pageURL)); } catch { /* Ignore malformed page hints. */ }
-  }
-  return Object.freeze([...new Map(links.map(url => [url.href, url])).values()]);
 }

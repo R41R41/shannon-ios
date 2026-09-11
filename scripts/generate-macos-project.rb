@@ -6,7 +6,13 @@ require 'xcodeproj'
 
 repo = File.expand_path('..', __dir__)
 project_path = File.join(repo, 'apps/macos-app/ShannonDesk.xcodeproj')
-source_paths = Dir[File.join(repo, 'apps/macos-app/ShannonDesk/*.swift')].sort
+package_resolved_path = File.join(
+  project_path,
+  'project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+)
+package_resolved = File.binread(package_resolved_path) if File.exist?(package_resolved_path)
+source_root = File.join(repo, 'apps/macos-app/ShannonDesk')
+source_paths = Dir[File.join(source_root, '**/*.swift')].sort
 test_paths = Dir[File.join(repo, 'apps/macos-app/ShannonDeskTests/*.swift')].sort
 
 abort 'Missing Shannon Desk sources' if source_paths.empty?
@@ -26,7 +32,7 @@ app_group.new_file('Info.plist')
 app_group.new_file('ShannonDesk.entitlements')
 source_references = {}
 source_paths.each do |path|
-  source = app_group.new_file(File.basename(path))
+  source = app_group.new_file(path.delete_prefix("#{source_root}/"))
   source_references[File.basename(path)] = source
   target.source_build_phase.add_file_reference(source)
 end
@@ -97,6 +103,11 @@ test_target.build_configurations.each do |configuration|
 end
 
 project.save
+
+if package_resolved
+  FileUtils.mkdir_p(File.dirname(package_resolved_path))
+  File.binwrite(package_resolved_path, package_resolved)
+end
 
 scheme = Xcodeproj::XCScheme.new
 scheme.add_build_target(target)

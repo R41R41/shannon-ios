@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-12 / Connected-device management local vertical slice
+Revision: 2026-09-12 / Responsibility-oriented Apple client and API structure
 
 ## System shape
 
@@ -219,12 +219,22 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 
 - `apps/ios-app/**`: iPhone-only presentation, gestures, app lifecycle, entitlements, signing, icons, and device operations.
 - `apps/macos-app/**`: Mac-only presentation, attachment loading, save panels, keyboard commands, sandbox entitlements, application lifecycle, windows, and Mac tests.
-- `apps/ios/Sources/ShannonAppCore/**`: shared Apple-client models, API client, cache, connection state, Markdown parsing, artifacts, and reusable assets. Changes are integrated by the Shannon main task rather than either platform-only task.
+- `apps/ios/Sources/ShannonAppCore/Domain/**`: platform-neutral shared concepts such as appearance policy. This layer does not own network, persistence, or feature UI.
+- `apps/ios/Sources/ShannonAppCore/API/**`: HTTP DTOs, narrow feature capabilities, and the concrete API adapter. Feature models depend on the smallest capability they need; only the conversation coordinator uses the aggregate client protocol.
+- `apps/ios/Sources/ShannonAppCore/Features/**`: feature-owned models, views, projections, and actions for conversation, memory, voice, connection, agent work, organization, settings, delivery, initiatives, and Aether.
+- `apps/ios/Sources/ShannonAppCore/DesignSystem/**`: shared semantic presentation primitives. It may be used by feature UI but does not initiate network or durable writes.
+- `apps/ios/Sources/ShannonAppCore/**` outside those directories: small shared parsers, caches, assets, and compatibility surfaces that are not owned by one feature.
+- `apps/macos-app/ShannonDesk/Features/**`: Mac composition and presentation grouped by Shell, Talk, Work, and Settings. The generated Xcode project discovers nested sources recursively and preserves the pinned Swift package resolution.
+- `services/api/src/api*Routes.ts`: bounded HTTP use-case routers. `apiKernel.ts` coordinates the FCA response lane and delegates unrelated endpoint families.
+- `services/api/src/sqlite*Repository.ts`: state/knowledge, conversation, and background-job persistence sharing one `SQLiteStoreContext`; `sqliteStore.ts` is the public facade and `sqliteMigrations.ts` is the additive migration owner.
+- `services/api/src/*Support.ts`, `*Projection.ts`, and focused adapters such as `pushNotificationSender.ts`: pure normalization/projection policy or one external transport, kept outside orchestration and persistence classes.
 - `services/api/**`: contracts, authentication, persistence, chat orchestration, background workers, Agent Host protocol, Aether/world integrations. Changes are integrated by the Shannon main task.
 - `docs/architecture.md`, `scripts/verify.sh`, database schema, and Shannon progress JSON are also Shannon main-task integration surfaces.
 - `packages/cognition`: pure shared-state and prompt-projection rules.
 - `deploy/macos`: launchd configuration for the local Agent Host.
 - `deploy/azure`: production services, optional isolated cloud Agent Host, and configuration examples.
+
+Production Swift and TypeScript source files have a 500-line ceiling. `scripts/check-architecture.mjs` also keeps WebRTC inside its transport adapter, Security inside the Keychain adapter, UI frameworks out of the HTTP adapter, retired monolith files absent, and every nested Mac source included in the generated project. `scripts/verify.sh` runs this guard before API and Apple-client verification.
 
 ## Production layout
 

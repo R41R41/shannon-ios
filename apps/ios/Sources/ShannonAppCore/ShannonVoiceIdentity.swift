@@ -25,7 +25,7 @@ public final class ShannonVoiceIdentityModel {
     public private(set) var errorMessage: String?
 
     private let scopeKey: String
-    private let client: any ShannonAPIClientProtocol
+    private let client: any ShannonVoiceServing
     private var player: AVAudioPlayer?
     private var playbackToken: UUID?
     private var previewAudioByVoiceID: [String: Data] = [:]
@@ -34,7 +34,7 @@ public final class ShannonVoiceIdentityModel {
 
     public init(
         scopeKey: String = "local-owner",
-        client: any ShannonAPIClientProtocol = ShannonAPIClient()
+        client: any ShannonVoiceServing = ShannonAPIClient()
     ) {
         self.scopeKey = scopeKey
         self.client = client
