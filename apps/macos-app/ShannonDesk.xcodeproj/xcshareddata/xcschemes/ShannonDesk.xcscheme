@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C99B9B6EF941A2389E5E1889"
+               BlueprintIdentifier = "EBFEAC7F0F5A4B3FFA4947C7"
                BuildableName = "ShannonDesk.app"
                BlueprintName = "ShannonDesk"
                ReferencedContainer = "container:ShannonDesk.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "C99B9B6EF941A2389E5E1889"
+            BlueprintIdentifier = "EBFEAC7F0F5A4B3FFA4947C7"
             BuildableName = "ShannonDesk.app"
             BlueprintName = "ShannonDesk"
             ReferencedContainer = "container:ShannonDesk.xcodeproj">
@@ -41,7 +41,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6AF7E64307BE6A9D495AE363"
+               BlueprintIdentifier = "3CD313DAEC53BCF2ADE7AC30"
                BuildableName = "ShannonDeskTests.xctest"
                BlueprintName = "ShannonDeskTests"
                ReferencedContainer = "container:ShannonDesk.xcodeproj">
@@ -63,7 +63,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "C99B9B6EF941A2389E5E1889"
+            BlueprintIdentifier = "EBFEAC7F0F5A4B3FFA4947C7"
             BuildableName = "ShannonDesk.app"
             BlueprintName = "ShannonDesk"
             ReferencedContainer = "container:ShannonDesk.xcodeproj">
@@ -80,7 +80,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "C99B9B6EF941A2389E5E1889"
+            BlueprintIdentifier = "EBFEAC7F0F5A4B3FFA4947C7"
             BuildableName = "ShannonDesk.app"
             BlueprintName = "ShannonDesk"
             ReferencedContainer = "container:ShannonDesk.xcodeproj">

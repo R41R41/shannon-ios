@@ -24,6 +24,10 @@ run_api() {
   "$node_bin" node_modules/vitest/vitest.mjs run services/api/tests
 }
 
+run_architecture() {
+  "$node_bin" scripts/check-architecture.mjs
+}
+
 run_ios() {
   swift test --package-path apps/ios
 }
@@ -78,14 +82,16 @@ run_release_runner() {
 
 target="${1:-all}"
 case "$target" in
-  api) run_api ;;
-  ios) run_ios ;;
-  app) run_app ;;
-  mac) run_macos_app ;;
+  architecture) run_architecture ;;
+  api) run_architecture; run_api ;;
+  ios) run_architecture; run_ios ;;
+  app) run_architecture; run_app ;;
+  mac) run_architecture; run_macos_app ;;
   mac-release) run_release_macos_app ;;
   release) run_release_app ;;
   release-runner) run_release_runner ;;
   all)
+    run_architecture
     run_api
     run_ios
     run_app
@@ -93,7 +99,7 @@ case "$target" in
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [api|ios|app|mac|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [architecture|api|ios|app|mac|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac

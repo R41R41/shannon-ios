@@ -136,11 +136,11 @@ public final class ShannonWorldSubscriptionModel {
     public private(set) var errorMessage: String?
 
     private let scopeKey: String
-    private let client: any ShannonAPIClientProtocol
+    private let client: any ShannonWorldServing
 
     public init(
         scopeKey: String = "local-owner",
-        client: any ShannonAPIClientProtocol = ShannonAPIClient(),
+        client: any ShannonWorldServing = ShannonAPIClient(),
         sources: [ShannonWorldSourceDTO] = [],
         subscriptions: [ShannonWorldSubscriptionDTO] = []
     ) {

@@ -1,0 +1,74 @@
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, extname, join, relative, resolve } from 'node:path';
+
+const root = resolve(import.meta.dirname, '..');
+const failures = [];
+
+function filesBelow(directory, extensions) {
+  const absolute = resolve(root, directory);
+  return readdirSync(absolute, { withFileTypes: true }).flatMap(entry => {
+    const path = join(absolute, entry.name);
+    if (entry.isDirectory()) return filesBelow(relative(root, path), extensions);
+    return extensions.has(extname(entry.name)) ? [path] : [];
+  });
+}
+
+function source(path) { return readFileSync(path, 'utf8'); }
+function projectPath(path) { return relative(root, path); }
+function fail(message) { failures.push(message); }
+
+const productionSources = [
+  ...filesBelow('apps/ios/Sources', new Set(['.swift'])),
+  ...filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift'])),
+  ...filesBelow('services/api/src', new Set(['.ts'])),
+  ...filesBelow('packages/cognition/src', new Set(['.ts'])),
+];
+
+for (const path of productionSources) {
+  const lines = source(path).split(/\r?\n/u).length - 1;
+  if (lines > 500) fail(`${projectPath(path)} has ${lines} lines (maximum 500)`);
+}
+
+const legacyMonoliths = [
+  'apps/ios/Sources/ShannonAppCore/Models.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonAPIClient.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonConnection.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonConversationModel.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonConversationView.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonMemoryView.swift',
+  'apps/ios/Sources/ShannonAppCore/ShannonRealtimeVoice.swift',
+  'apps/macos-app/ShannonDesk/ShannonDesktopView.swift',
+];
+for (const path of legacyMonoliths) if (existsSync(resolve(root, path))) fail(`${path} must remain split by responsibility`);
+
+const swiftFiles = productionSources.filter(path => extname(path) === '.swift');
+for (const path of swiftFiles) {
+  const imports = source(path);
+  if (imports.includes('import WebRTC') && basename(path) !== 'WebRTCVoiceTransport.swift') {
+    fail(`${projectPath(path)} imports WebRTC outside the transport adapter`);
+  }
+  if (imports.includes('import Security') && basename(path) !== 'ShannonConnectionKeychainStore.swift') {
+    fail(`${projectPath(path)} imports Security outside the Keychain adapter`);
+  }
+}
+
+const apiDirectory = resolve(root, 'apps/ios/Sources/ShannonAppCore/API');
+for (const path of filesBelow(relative(root, apiDirectory), new Set(['.swift']))) {
+  const imports = source(path);
+  for (const framework of ['SwiftUI', 'UIKit', 'AppKit', 'WebRTC', 'Security']) {
+    if (imports.includes(`import ${framework}`)) fail(`${projectPath(path)} couples the API adapter to ${framework}`);
+  }
+}
+
+const macProject = source(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'));
+for (const path of filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift']))) {
+  if (!macProject.includes(basename(path))) fail(`${projectPath(path)} is missing from the generated Mac project`);
+}
+
+if (failures.length) {
+  console.error('Architecture guard failed:');
+  for (const failure of failures) console.error(`- ${failure}`);
+  process.exitCode = 1;
+} else {
+  console.log(`Architecture guard passed (${productionSources.length} production source files, 500-line ceiling).`);
+}

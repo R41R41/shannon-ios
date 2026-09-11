@@ -2,12 +2,23 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { DailyMindFocus } from './dailyMind.js';
+
 import {
+  candidateScore,
+  firstInterest,
   isRepeatedWorldSignal,
+  localDateParts,
+  pad,
+  parseState,
   recentSignalCutoff,
-  sourceDiversityAdjustment,
+  selectCandidate,
+  signalCandidate,
+  finite,
+  truncate,
+  type CandidateRow,
+  type CompanionStateShape,
   type RecentWorldSignal,
-} from './worldSignalQuality.js';
+} from './initiativeSelection.js';
 
 const QUIET_START_HOUR = 23;
 const QUIET_END_HOUR = 7;
@@ -52,29 +63,6 @@ export interface InitiativeEvaluationReader {
   initiativeEvaluation(windowDays?: number, at?: string): InitiativeEvaluationSummary;
 }
 
-interface CompanionStateShape {
-  version?: number;
-  interests?: unknown;
-  temperament?: { initiative?: unknown };
-  emotion?: { valence?: unknown; arousal?: unknown; openness?: unknown };
-}
-
-interface CandidateRow {
-  item_id: string;
-  source_id: string;
-  source_title: string;
-  title: string;
-  url: string;
-  summary: string | null;
-  published_at: string | null;
-  discovered_at: string;
-}
-
-/**
- * The initiative loop is deliberately code-only. It decides whether Shannon
- * should speak, persists the result in the conversation, and never invokes an
- * LLM. This keeps browsing and spontaneous behavior outside the chat budget.
- */
 export class SQLiteInitiativeStore implements InitiativeInbox {
   private readonly database: DatabaseSync;
 
@@ -431,96 +419,4 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       if (existsSync(candidate)) chmodSync(candidate, 0o600);
     }
   }
-}
-
-function selectCandidate(
-  candidates: readonly CandidateRow[],
-  recentSignals: readonly RecentWorldSignal[],
-  interest: string | null,
-  initiative: number,
-  at: string,
-): (CandidateRow & { score: number }) | null {
-  const ranked = candidates.map(candidate => ({
-    ...candidate,
-    score: round(candidateScore(candidate, interest, initiative, at)
-      + sourceDiversityAdjustment(signalCandidate(candidate), recentSignals)),
-  })).sort((left, right) => right.score - left.score || right.discovered_at.localeCompare(left.discovered_at));
-  return (ranked[0]?.score ?? 0) >= 0.56 ? ranked[0]! : null;
-}
-
-function candidateScore(candidate: CandidateRow, interest: string | null, initiative: number, at: string): number {
-  const discoveredAt = Date.parse(candidate.discovered_at);
-  const publishedAt = candidate.published_at ? Date.parse(candidate.published_at) : discoveredAt;
-  // A newly discovered old feed entry is eligible near the 48-hour boundary,
-  // but it must not receive the freshness of its later ingestion time.
-  const effectiveAt = Number.isFinite(publishedAt) ? Math.min(discoveredAt, publishedAt) : discoveredAt;
-  const age = Math.max(0, Date.parse(at) - effectiveAt);
-  const freshness = Math.max(0, 1 - age / CANDIDATE_MAX_AGE_MILLISECONDS);
-  const searchable = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
-  const tokens = interestTokens(interest);
-  const matches = tokens.filter(token => searchable.includes(token)).length;
-  const interestScore = tokens.length ? Math.min(1, matches / Math.min(tokens.length, 3)) : 0;
-  const contextScore = (candidate.summary?.trim().length ?? 0) >= 80 ? 0.12
-    : (candidate.summary?.trim().length ?? 0) >= 24 ? 0.09 : 0.05;
-  return round(0.34 + freshness * 0.12 + contextScore + Math.min(1, Math.max(0, initiative)) * 0.08 + interestScore * 0.46);
-}
-
-function signalCandidate(candidate: CandidateRow) {
-  return {
-    sourceId: candidate.source_id,
-    sourceTitle: candidate.source_title,
-    title: candidate.title,
-    url: candidate.url,
-  };
-}
-
-function firstInterest(value: unknown): string | null {
-  if (!Array.isArray(value)) return null;
-  const first = value.find(item => typeof item === 'string' && item.trim());
-  return typeof first === 'string' ? first.trim().slice(0, 80) : null;
-}
-
-function interestTokens(value: string | null): string[] {
-  if (!value) return [];
-  const normalized = normalize(value);
-  const split = normalized.split(/[\s、,・/]+/u).filter(token => token.length >= 2);
-  return [...new Set([normalized, ...split])].slice(0, 8);
-}
-
-function normalize(value: string): string {
-  return value.normalize('NFKC').toLocaleLowerCase('ja-JP');
-}
-
-function parseState(value: string): CompanionStateShape {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as CompanionStateShape : {};
-  } catch {
-    return {};
-  }
-}
-
-function localDateParts(date: Date, timeZone: string): { year: number; month: number; day: number; hour: number } {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(part => part.type === type)?.value);
-  return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour') };
-}
-
-function finite(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function round(value: number): number {
-  return Math.round(value * 1_000) / 1_000;
-}
-
-function truncate(value: string, maximum: number): string {
-  const compact = value.replace(/\s+/gu, ' ').trim();
-  return compact.length <= maximum ? compact : `${compact.slice(0, maximum - 1)}…`;
-}
-
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
 }
