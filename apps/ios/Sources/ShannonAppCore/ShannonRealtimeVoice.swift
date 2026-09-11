@@ -35,6 +35,33 @@ public enum ShannonRealtimeVoicePhase: Equatable, Sendable {
 
 public enum ShannonRealtimeVoiceRecoveryPolicy {
     public static let disconnectGracePeriod: Duration = .seconds(5)
+
+    public static func interruptionAction(
+        for event: ShannonRealtimeVoiceInterruptionEvent,
+        phase: ShannonRealtimeVoicePhase
+    ) -> ShannonRealtimeVoiceInterruptionAction {
+        guard phase.keepsSessionActive else { return .ignore }
+        switch event {
+        case .began:
+            return .wait
+        case .ended(shouldResume: true):
+            return .resume
+        case .ended(shouldResume: false):
+            return .fail
+        }
+    }
+}
+
+public enum ShannonRealtimeVoiceInterruptionEvent: Equatable, Sendable {
+    case began
+    case ended(shouldResume: Bool)
+}
+
+public enum ShannonRealtimeVoiceInterruptionAction: Equatable, Sendable {
+    case ignore
+    case wait
+    case resume
+    case fail
 }
 
 public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
@@ -205,6 +232,28 @@ public final class ShannonRealtimeVoiceSessionModel {
                 self?.receiveConnectionState(state, generation: generation)
             }
         }
+        transport.onAudioInterruption = { [weak self] event in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.receiveAudioInterruption(event)
+            }
+        }
+        transport.onAudioRouteChange = { [weak self] reason in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.diagnostics.record(
+                    "realtime.audio.route_changed",
+                    metadata: ["reason": String(reason)]
+                )
+            }
+        }
+        transport.onAudioServicesReset = { [weak self] in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.diagnostics.record("realtime.audio.services_reset")
+                self?.fail("iPhoneの音声機能が再起動されました。もう一度つなぐと再開できます。")
+            }
+        }
 
         do {
             diagnostics.record("realtime.offer.before")
@@ -328,6 +377,22 @@ public final class ShannonRealtimeVoiceSessionModel {
         }
     }
 
+    private func receiveAudioInterruption(_ event: ShannonRealtimeVoiceInterruptionEvent) {
+        switch ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(for: event, phase: phase) {
+        case .ignore:
+            break
+        case .wait:
+            phase = .connecting
+            diagnostics.record("realtime.audio.interruption_began")
+        case .resume:
+            phase = sessionStartedAt == nil ? .connecting : .listening
+            diagnostics.record("realtime.audio.interruption_resumed")
+        case .fail:
+            diagnostics.record("realtime.audio.interruption_ended_without_resume")
+            fail("ほかの音声利用が終了しました。もう一度つなぐと会話を再開できます。")
+        }
+    }
+
     private func scheduleDisconnectFailure(generation: Int) {
         guard phase.keepsSessionActive else { return }
         disconnectGraceTask?.cancel()
@@ -374,11 +439,15 @@ private enum ShannonWebRTCConnectionState: Sendable {
 private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var onEvent: (@Sendable (Data) -> Void)?
     var onConnectionState: (@Sendable (ShannonWebRTCConnectionState) -> Void)?
+    var onAudioInterruption: (@Sendable (ShannonRealtimeVoiceInterruptionEvent) -> Void)?
+    var onAudioRouteChange: (@Sendable (Int) -> Void)?
+    var onAudioServicesReset: (@Sendable () -> Void)?
 
     private let factory: RTCPeerConnectionFactory
     private var peerConnection: RTCPeerConnection?
     private var dataChannel: RTCDataChannel?
     private var audioTrack: RTCAudioTrack?
+    private var audioSessionObservers: [NSObjectProtocol] = []
     private let iceGatheringEvents: AsyncStream<Void>
     private let iceGatheringEventContinuation: AsyncStream<Void>.Continuation
 
@@ -391,6 +460,11 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         RTCInitializeSSL()
         factory = RTCPeerConnectionFactory()
         super.init()
+        installAudioSessionObservers()
+    }
+
+    deinit {
+        removeAudioSessionObservers()
     }
 
     func createOffer() async throws -> String {
@@ -456,6 +530,7 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     }
 
     func close() {
+        removeAudioSessionObservers()
         iceGatheringEventContinuation.finish()
         audioTrack?.isEnabled = false
         dataChannel?.delegate = nil
@@ -471,7 +546,7 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         let session = RTCAudioSession.sharedInstance()
         session.lockForConfiguration()
         defer { session.unlockForConfiguration() }
-        try session.setCategory(.playAndRecord, with: [.defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP])
+        try session.setCategory(.playAndRecord, with: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
         try session.setMode(.voiceChat)
         try session.setActive(true)
         session.isAudioEnabled = true
@@ -483,6 +558,49 @@ private final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         session.isAudioEnabled = false
         try? session.setActive(false)
         session.unlockForConfiguration()
+    }
+
+    private func installAudioSessionObservers() {
+        let center = NotificationCenter.default
+        audioSessionObservers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+            switch type {
+            case .began:
+                self?.onAudioInterruption?(.began)
+            case .ended:
+                let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+                let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+                self?.onAudioInterruption?(.ended(shouldResume: options.contains(.shouldResume)))
+            @unknown default:
+                break
+            }
+        })
+        audioSessionObservers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
+            self?.onAudioRouteChange?(Int(reason))
+        })
+        audioSessionObservers.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.onAudioServicesReset?()
+        })
+    }
+
+    private func removeAudioSessionObservers() {
+        let center = NotificationCenter.default
+        audioSessionObservers.forEach(center.removeObserver)
+        audioSessionObservers.removeAll()
     }
 
     private func createOffer(on peer: RTCPeerConnection, constraints: RTCMediaConstraints) async throws -> RTCSessionDescription {

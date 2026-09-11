@@ -13,6 +13,38 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertEqual(ShannonRealtimeVoiceRecoveryPolicy.disconnectGracePeriod, .seconds(5))
     }
 
+    func testRealtimeAudioInterruptionPolicyWaitsResumesOrFailsOnlyForActiveSessions() {
+        XCTAssertEqual(
+            ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(for: .began, phase: .speaking),
+            .wait
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(
+                for: .ended(shouldResume: true),
+                phase: .connecting
+            ),
+            .resume
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(
+                for: .ended(shouldResume: false),
+                phase: .listening
+            ),
+            .fail
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(for: .began, phase: .idle),
+            .ignore
+        )
+        XCTAssertEqual(
+            ShannonRealtimeVoiceRecoveryPolicy.interruptionAction(
+                for: .ended(shouldResume: false),
+                phase: .failed
+            ),
+            .ignore
+        )
+    }
+
     func testRealtimeTranscriptEventsAreVisibleAsDeltasAndPairInEitherCompletionOrder() throws {
         var state = ShannonRealtimeVoiceTranscriptState()
         let inputDelta = try XCTUnwrap(ShannonRealtimeVoiceEvent.decode(Data(
