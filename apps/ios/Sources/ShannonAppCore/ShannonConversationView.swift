@@ -1426,10 +1426,6 @@ private struct ShannonAppearanceSettingsView: View {
                 ForEach(ShannonAppearanceMode.allCases) { mode in
                     Button {
                         appearanceModeRawValue = mode.rawValue
-                        Task { @MainActor in
-                            await Task.yield()
-                            dismiss()
-                        }
                     } label: {
                         HStack(spacing: M3Spacing.medium) {
                             Image(systemName: mode.symbolName)
