@@ -8,8 +8,9 @@ For every task, use this order when sources disagree:
 
 1. The user's current request.
 2. This file.
-3. `docs/architecture.md` for the current implemented system.
-4. `docs/self-improvement-runbook.md` for verification and deployment.
+3. `README.md` for the canonical-document index and product policy.
+4. `docs/architecture.md` and `docs/DESIGN.md` for the current implemented system and UI contract.
+5. `docs/self-improvement-runbook.md` and `docs/BRANCHING.md` for verification, deployment, and worktree lifecycle.
 
 Numbered HTML files under `docs/` are design history. They are useful context, but they are not current implementation authority unless the user explicitly names one.
 
@@ -32,6 +33,8 @@ Numbered HTML files under `docs/` are design history. They are useful context, b
 - `deploy/azure`: production service templates.
 - `deploy/macos`: Mac Agent Host launch configuration.
 - `docs/architecture.md`: concise current architecture.
+- `docs/DESIGN.md`: current design authority, evidence map, and screen-contract entrypoint.
+- `docs/BRANCHING.md`: branch/worktree lifecycle and release-branch safety.
 - `docs/self-improvement-runbook.md`: definition of done and recovery steps.
 
 ## Data ownership
@@ -40,19 +43,21 @@ Numbered HTML files under `docs/` are design history. They are useful context, b
 - The iOS conversation cache is an offline/display cache and must reconcile with the server without erasing newer local entries.
 - Database changes must be additive and restart-safe. Back up the production database before a migration and verify row counts or health afterward.
 - Secrets belong in ignored `.env` files, the Azure environment file, launchd environment, or iOS Keychain. Never copy secret values into source, logs, tests, prompts, or documentation.
+- Cross-app payloads use versioned contracts and deterministic fixtures. If a change requires Aether, Voyager, or shared Syzygy ownership, do not silently edit a sibling repository: preserve compatibility, identify the owning contract, and return the decision to the coordinating task.
 
 ## Working method
 
 1. Inspect `git status` before editing. The worktree may contain valuable unfinished user changes; preserve unrelated work.
 2. Resolve the requested surface to its owning layer, then read the relevant current source and tests.
 3. Implement a coherent vertical slice. Do not report a partial UI or a compile-only result as complete.
-4. Run `scripts/verify.sh` with the narrowest useful target, then `scripts/verify.sh all` for cross-layer work.
+4. Run `scripts/verify.sh fast` during work, the narrowest useful target next, then `scripts/verify.sh all` for cross-layer work.
 5. If the user requests Azure or physical-device delivery, follow the runbook and complete that delivery. Do not uninstall the app as part of an update.
 6. If an external prerequisite is unavailable, leave the durable task state accurate and name the exact remaining step.
 
 ## Verification commands
 
 ```sh
+scripts/verify.sh fast
 scripts/verify.sh api
 scripts/verify.sh ios
 scripts/verify.sh app
