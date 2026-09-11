@@ -272,12 +272,14 @@ function handleDeviceManagement(
     return;
   }
   const deviceId = (body as Record<string, unknown>).deviceId;
+  const revokeCurrent = (body as Record<string, unknown>).revokeCurrent === true;
   if (typeof deviceId !== 'string' || !/^[a-f0-9]{16}$/.test(deviceId)) {
     sendJson(response, 400, { error: 'INVALID_DEVICE_ID' });
     return;
   }
-  if (deviceId === principal.deviceId) {
-    sendJson(response, 409, { error: 'CURRENT_DEVICE', message: 'この端末は「接続を解除」から外してください。' });
+  const isCurrent = deviceId === principal.deviceId;
+  if (isCurrent !== revokeCurrent) {
+    sendJson(response, 409, { error: 'DEVICE_INTENT_MISMATCH' });
     return;
   }
   if (!deviceAuth.revokeForScope(deviceId, principal.scopeKey)) {

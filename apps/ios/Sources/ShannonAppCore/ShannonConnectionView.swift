@@ -5,6 +5,7 @@ public struct ShannonConnectionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var devicePendingRevocation: ShannonConnectedDevice?
+    @State private var showsSelfDisconnectConfirmation = false
 
     public init(model: ShannonConnectionModel) {
         self.model = model
@@ -60,7 +61,9 @@ public struct ShannonConnectionView: View {
                                     .foregroundStyle(palette.error)
                             }
                             Divider()
-                            Button(role: .destructive) { model.disconnect() } label: {
+                            Button(role: .destructive) {
+                                showsSelfDisconnectConfirmation = true
+                            } label: {
                                 Label("この\(deviceNoun)の接続を解除", systemImage: "link.badge.minus")
                                     .frame(maxWidth: .infinity, minHeight: M3TouchTarget.minimum)
                             }
@@ -141,6 +144,18 @@ public struct ShannonConnectionView: View {
             Button("キャンセル", role: .cancel) {}
         } message: { _ in
             Text("この端末では、もう一度接続するまで会話・記憶・通知を利用できなくなります。")
+        }
+        .confirmationDialog(
+            "この\(deviceNoun)の接続を解除しますか？",
+            isPresented: $showsSelfDisconnectConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("接続を解除", role: .destructive) {
+                Task { await model.disconnect() }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("サーバー上の端末資格と通知登録も失効します。再利用するには、もう一度接続してください。")
         }
     }
 

@@ -374,13 +374,33 @@ public final class ShannonConnectionModel {
             : nil
     }
 
-    public func disconnect() {
+    @discardableResult
+    public func disconnect() async -> Bool {
+        guard let credential = credentialForAuthenticatedRequest() else { return false }
         do {
+            var request = URLRequest(url: baseURL.appending(path: "/v1/devices"))
+            request.httpMethod = "POST"
+            request.timeoutInterval = 15
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+            request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
+            request.httpBody = try JSONEncoder().encode(DeviceRevocationRequest(
+                deviceId: credential.deviceID,
+                revokeCurrent: true
+            ))
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw ShannonConnectionError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) || http.statusCode == 401 else {
+                throw ShannonConnectionError.rejected(status: http.statusCode)
+            }
             try store.delete()
             status = .disconnected
             verificationStatus = .idle
+            connectedDevices = []
+            deviceManagementError = nil
+            return true
         } catch {
-            status = .failed(message: userMessage(for: error))
+            deviceManagementError = userMessage(for: error)
+            return false
         }
     }
 
@@ -416,7 +436,10 @@ public final class ShannonConnectionModel {
             request.timeoutInterval = 15
             request.setValue("application/json", forHTTPHeaderField: "content-type")
             request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "authorization")
-            request.httpBody = try JSONEncoder().encode(DeviceRevocationRequest(deviceId: device.id))
+            request.httpBody = try JSONEncoder().encode(DeviceRevocationRequest(
+                deviceId: device.id,
+                revokeCurrent: false
+            ))
             let (_, response) = try await session.data(for: request)
             try handleAuthenticatedResponse(response)
             connectedDevices.removeAll { $0.id == device.id }
@@ -497,4 +520,5 @@ private struct DeviceListResponse: Decodable {
 
 private struct DeviceRevocationRequest: Encodable {
     let deviceId: String
+    let revokeCurrent: Bool
 }

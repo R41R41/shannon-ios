@@ -287,8 +287,9 @@ final class ShannonConnectionTests: XCTestCase {
                     ],
                 ]])
             }
-            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requestBody(request))) as? [String: String])
-            XCTAssertEqual(json["deviceId"], "2222222222222222")
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requestBody(request))) as? [String: Any])
+            XCTAssertEqual(json["deviceId"] as? String, "2222222222222222")
+            XCTAssertEqual(json["revokeCurrent"] as? Bool, false)
             return try response(url: request.url!, json: ["revokedDeviceId": "2222222222222222"])
         }
         let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
@@ -301,6 +302,60 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertTrue(revokedOther)
         XCTAssertEqual(model.connectedDevices.map(\.displayName), ["Test iPhone"])
         XCTAssertEqual(requestCount, 2)
+    }
+
+    func testDisconnectRevokesCurrentDeviceBeforeDeletingCredential() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "x", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "3333333333333333",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/devices")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requestBody(request))) as? [String: Any])
+            XCTAssertEqual(json["deviceId"] as? String, "3333333333333333")
+            XCTAssertEqual(json["revokeCurrent"] as? Bool, true)
+            return try response(url: request.url!, json: ["revokedDeviceId": "3333333333333333"])
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        let disconnected = await model.disconnect()
+
+        XCTAssertTrue(disconnected)
+        XCTAssertNil(try store.load())
+        XCTAssertEqual(model.status, .disconnected)
+    }
+
+    func testDisconnectFinishesLocallyWhenCredentialWasAlreadyRevoked() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: String(repeating: "y", count: 43),
+            deviceID: "4444444444444444",
+            scopeKey: "owner-from-server",
+            displayName: "Test Mac",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            let rejected = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 401, httpVersion: "HTTP/1.1",
+                headerFields: ["content-type": "application/json"]
+            ))
+            return (rejected, Data("{}".utf8))
+        }
+        let model = ShannonConnectionModel(baseURL: baseURL, store: store, session: session)
+
+        let disconnected = await model.disconnect()
+        XCTAssertTrue(disconnected)
+        XCTAssertNil(try store.load())
+        XCTAssertEqual(model.status, .disconnected)
     }
 
     func testAPIClientSendsWebSearchOnlyWhenExplicitlyEnabled() async throws {
