@@ -121,7 +121,10 @@ private struct ShannonDeskCommands: Commands {
             Button("設定") { actions?.showSettings() }
                 .keyboardShortcut("4")
                 .disabled(actions == nil)
-            Button("現在地インスペクタ") { actions?.toggleInspector() }
+            Button("会話の目次") { actions?.toggleOutline() }
+                .keyboardShortcut("o", modifiers: [.command, .option])
+                .disabled(actions == nil)
+            Button("現在地インスペクタ") { actions?.toggleTaskInspector() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(actions == nil)
 

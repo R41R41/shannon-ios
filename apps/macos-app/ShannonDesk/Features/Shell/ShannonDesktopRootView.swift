@@ -14,17 +14,21 @@ public struct ShannonDesktopRootView: View {
     @SceneStorage("shannon.desktop.selectedThread") var restoredThreadID: String?
     @SceneStorage("shannon.desktop.selectedTask") var restoredTaskID: String?
     @SceneStorage("shannon.desktop.showsInspector") var restoredInspectorRawValue: String?
+    @SceneStorage("shannon.desktop.auxiliaryPanel") var restoredAuxiliaryPanelRawValue: String?
     @AppStorage("shannon.desktop.lastDestination") var lastDestinationRawValue = DesktopDestination.talk.rawValue
     @AppStorage("shannon.desktop.lastSelectedThread") var lastRestoredThreadID = ""
     @AppStorage("shannon.desktop.lastSelectedTask") var lastRestoredTaskID = ""
     @AppStorage("shannon.desktop.lastShowsInspector") var lastShowsInspector = false
+    @AppStorage("shannon.desktop.lastAuxiliaryPanel") var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
     @State var searchText = ""
     @State var selectedTaskID: UUID?
     @State var showsInspector = false
+    @State var auxiliaryPanel = DesktopAuxiliaryPanel.task
     @State var requestedMessageJumpID: UUID?
+    @State var requestedConversationAnchorID: String?
     @State var messageJumpRevision = 0
     @State var steeringText = ""
-    @State var showsConversationOutline = false
+    @State var activeConversationOutlineEntryID: String?
     @State var showsConnection = false
     @State var showsWorldSubscriptions = false
     @State var renameThread: ChatThreadDTO?
@@ -56,8 +60,8 @@ public struct ShannonDesktopRootView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .inspector(isPresented: $showsInspector) {
-            taskInspector
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 390)
+            auxiliaryInspector
+                .inspectorColumnWidth(min: 230, ideal: 286, max: 390)
         }
         .sheet(isPresented: $showsConnection) {
             ShannonConnectionView(model: connection)
@@ -110,11 +114,15 @@ public struct ShannonDesktopRootView: View {
         .onChange(of: conversation.selectedThreadId) {
             restoredThreadID = conversation.selectedThreadId
             lastRestoredThreadID = conversation.selectedThreadId ?? ""
-            showsConversationOutline = false
+            activeConversationOutlineEntryID = nil
         }
         .onChange(of: showsInspector) {
             restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
             lastShowsInspector = showsInspector
+        }
+        .onChange(of: auxiliaryPanel) {
+            restoredAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
+            lastAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
         }
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)

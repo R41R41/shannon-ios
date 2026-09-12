@@ -6,7 +6,33 @@ import UniformTypeIdentifiers
 extension ShannonDesktopRootView {
     func selectTask(_ task: ShannonAgentTask) {
         selectedTaskID = task.id
+        showAuxiliaryPanel(.task)
+    }
+
+    func prepareTaskInspectorSelection() {
+        selectedTaskID = selectedTaskID
+            ?? conversation.latestActiveAgentTask?.id
+            ?? conversation.agentTasks.first?.id
+    }
+
+    func showAuxiliaryPanel(_ panel: DesktopAuxiliaryPanel) {
+        auxiliaryPanel = panel
         showsInspector = true
+    }
+
+    func toggleAuxiliaryPanel(_ panel: DesktopAuxiliaryPanel) {
+        if showsInspector, auxiliaryPanel == panel {
+            showsInspector = false
+        } else {
+            showAuxiliaryPanel(panel)
+        }
+    }
+
+    func requestConversationOutlineJump(_ entry: ShannonDesktopConversationOutlineEntry) {
+        requestedMessageJumpID = entry.messageID
+        requestedConversationAnchorID = entry.id
+        activeConversationOutlineEntryID = entry.id
+        messageJumpRevision &+= 1
     }
 
     func openTaskConversation(_ task: ShannonAgentTask) {
@@ -32,6 +58,17 @@ extension ShannonDesktopRootView {
     }
 
     func scrollConversation(using proxy: ScrollViewProxy) {
+        if let requestedConversationAnchorID,
+           let requestedMessageJumpID,
+           conversation.messages.contains(where: { $0.id == requestedMessageJumpID }) {
+            proxy.scrollTo(requestedMessageJumpID, anchor: .center)
+            withAnimation(.easeOut(duration: 0.24)) {
+                proxy.scrollTo(requestedConversationAnchorID, anchor: .top)
+            }
+            self.requestedConversationAnchorID = nil
+            self.requestedMessageJumpID = nil
+            return
+        }
         if let requestedMessageJumpID,
            conversation.messages.contains(where: { $0.id == requestedMessageJumpID }) {
             withAnimation(.easeOut(duration: 0.24)) {
@@ -100,6 +137,13 @@ extension ShannonDesktopRootView {
         )
         if restoredInspectorRawValue == nil {
             restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
+        }
+        auxiliaryPanel = ShannonDesktopWindowRestoration.auxiliaryPanel(
+            sceneRawValue: restoredAuxiliaryPanelRawValue,
+            lastRawValue: lastAuxiliaryPanelRawValue
+        )
+        if restoredAuxiliaryPanelRawValue == nil {
+            restoredAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
         }
     }
 

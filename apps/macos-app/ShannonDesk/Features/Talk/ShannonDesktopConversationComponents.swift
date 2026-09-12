@@ -16,6 +16,9 @@ struct DesktopMessageView: View {
                     .padding(.vertical, 10)
                     .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
+            .modifier(DesktopConversationOutlineAnchorModifier(
+                id: ShannonDesktopConversationOutline.requestAnchorID(messageID: message.id)
+            ))
         } else {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
@@ -35,7 +38,7 @@ struct DesktopMessageView: View {
                     .buttonStyle(.borderless)
                     .help("返答をコピー")
                 }
-                DesktopMarkdownView(source: message.text)
+                DesktopMarkdownView(source: message.text, messageID: message.id)
                 if !message.artifacts.isEmpty {
                     VStack(spacing: 8) {
                         ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in

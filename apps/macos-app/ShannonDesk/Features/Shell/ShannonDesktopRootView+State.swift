@@ -30,13 +30,42 @@ extension ShannonDesktopRootView {
             showWork: { selectDestination(.work) },
             showMemory: { selectDestination(.memory) },
             showSettings: { selectDestination(.settings) },
-            toggleInspector: {
-                selectedTaskID = selectedTaskID
-                    ?? conversation.latestActiveAgentTask?.id
-                    ?? conversation.agentTasks.first?.id
-                showsInspector.toggle()
+            toggleOutline: { toggleAuxiliaryPanel(.outline) },
+            toggleTaskInspector: {
+                prepareTaskInspectorSelection()
+                toggleAuxiliaryPanel(.task)
             }
         )
+    }
+
+    var auxiliaryInspector: some View {
+        VStack(spacing: 0) {
+            Picker("補助パネル", selection: $auxiliaryPanel) {
+                ForEach(DesktopAuxiliaryPanel.allCases, id: \.self) { panel in
+                    Label(panel.title, systemImage: panel.symbolName)
+                        .tag(panel)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(10)
+
+            Divider()
+
+            switch auxiliaryPanel {
+            case .outline:
+                DesktopConversationOutlineView(
+                    summary: conversation.selectedThread?.summary,
+                    entries: conversationOutline,
+                    activeEntryID: activeConversationOutlineEntryID,
+                    close: { showsInspector = false },
+                    select: requestConversationOutlineJump
+                )
+            case .task:
+                taskInspector
+            }
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     var selectedTask: ShannonAgentTask? {

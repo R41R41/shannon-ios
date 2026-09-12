@@ -250,6 +250,80 @@ struct DesktopInspectorSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.055), lineWidth: 0.75)
+        }
+    }
+}
+
+struct DesktopExpandableText: View {
+    let value: String
+    let collapsedLineLimit: Int
+    @State private var isExpanded = false
+
+    init(_ value: String, collapsedLineLimit: Int) {
+        self.value = value
+        self.collapsedLineLimit = collapsedLineLimit
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .lineLimit(isExpanded ? nil : collapsedLineLimit)
+                .textSelection(.enabled)
+            if value.count > 180 {
+                Button(isExpanded ? "折りたたむ" : "全文を表示") {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        isExpanded.toggle()
+                    }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+        }
+    }
+}
+
+struct DesktopTaskStageRail: View {
+    let progress: [ShannonAgentTaskStageProgress]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(progress) { item in
+                VStack(spacing: 4) {
+                    Image(systemName: symbolName(for: item))
+                        .foregroundStyle(color(for: item))
+                    Text(item.stage.japaneseName)
+                        .font(.caption2)
+                        .foregroundStyle(item.state == .current ? .primary : .secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 6)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func symbolName(for item: ShannonAgentTaskStageProgress) -> String {
+        switch item.state {
+        case .pending: "circle"
+        case .current: "circle.inset.filled"
+        case .completed: "checkmark.circle.fill"
+        }
+    }
+
+    private func color(for item: ShannonAgentTaskStageProgress) -> Color {
+        switch item.state {
+        case .pending: .secondary
+        case .current: .accentColor
+        case .completed: .shannonSuccess
+        }
     }
 }
 

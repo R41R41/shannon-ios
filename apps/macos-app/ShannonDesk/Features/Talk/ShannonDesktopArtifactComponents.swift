@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct DesktopConversationOutlineView: View {
     let summary: String?
     let entries: [ShannonDesktopConversationOutlineEntry]
+    let activeEntryID: String?
+    let close: () -> Void
     let select: (ShannonDesktopConversationOutlineEntry) -> Void
 
     var visibleSummary: String? {
@@ -16,26 +18,35 @@ struct DesktopConversationOutlineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("会話の目次")
-                    .font(.headline)
-                Text("依頼と、シャノンの返答にある見出し")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("会話の目次")
+                        .font(.headline)
+                    Text("依頼と返答の見出し")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("補助パネルを閉じる")
             }
             .padding(14)
 
             Divider()
 
             if let summary = visibleSummary {
-                VStack(alignment: .leading, spacing: 5) {
-                    Label("現在地", systemImage: "location.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                DisclosureGroup {
                     Text(summary)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                } label: {
+                    Label("会話の要約", systemImage: "text.quote")
+                        .font(.caption.weight(.semibold))
                 }
                 .padding(12)
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
@@ -44,37 +55,87 @@ struct DesktopConversationOutlineView: View {
                 Divider()
             }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(entries) { entry in
-                        Button {
-                            select(entry)
-                        } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Image(systemName: entry.kind == .request ? "person.fill" : "textformat")
-                                    .font(.caption)
-                                    .foregroundStyle(entry.kind == .request ? Color.secondary : Color.accentColor)
-                                    .frame(width: 16)
-                                Text(entry.title)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                Spacer(minLength: 0)
+            if entries.isEmpty {
+                ContentUnavailableView(
+                    "目次はまだありません",
+                    systemImage: "list.bullet.indent",
+                    description: Text("会話が進むと、依頼と返答の見出しがここに並びます。")
+                )
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(entries) { entry in
+                                Button {
+                                    select(entry)
+                                } label: {
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        Image(systemName: entry.kind == .request ? "person.fill" : "textformat")
+                                            .font(.caption)
+                                            .foregroundStyle(entry.kind == .request ? Color.secondary : Color.accentColor)
+                                            .frame(width: 16)
+                                        Text(entry.title)
+                                            .font(entry.kind == .request ? .callout.weight(.medium) : .callout)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(.leading, entry.kind == .heading ? CGFloat(max(0, entry.level - 1)) * 12 : 0)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .contentShape(Rectangle())
+                                    .background(
+                                        activeEntryID == entry.id ? Color.accentColor.opacity(0.12) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .id(entry.id)
+                                .accessibilityHint("会話内の該当位置へ移動")
                             }
-                            .padding(.leading, entry.kind == .heading ? CGFloat(max(0, entry.level - 1)) * 12 : 0)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .padding(6)
+                    }
+                    .onChange(of: activeEntryID) {
+                        guard let activeEntryID else { return }
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(activeEntryID, anchor: .center)
+                        }
                     }
                 }
-                .padding(6)
             }
         }
-        .frame(
-            width: 340,
-            height: min(CGFloat(entries.count) * 45 + (visibleSummary == nil ? 84 : 170), 500)
-        )
+    }
+}
+
+struct DesktopConversationOutlinePositionPreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
+struct DesktopConversationOutlineAnchorModifier: ViewModifier {
+    static let coordinateSpaceName = "shannon.desktop.conversation.timeline"
+    let id: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let id {
+            content
+                .id(id)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: DesktopConversationOutlinePositionPreferenceKey.self,
+                            value: [id: geometry.frame(in: .named(Self.coordinateSpaceName)).minY]
+                        )
+                    }
+                }
+        } else {
+            content
+        }
     }
 }
 
@@ -198,15 +259,27 @@ struct DesktopArtifactPreview: View {
 
 struct DesktopMarkdownView: View {
     let source: String
+    var messageID: UUID?
+
+    init(source: String, messageID: UUID? = nil) {
+        self.source = source
+        self.messageID = messageID
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(ShannonMessageMarkdown.blocks(from: source).enumerated()), id: \.offset) { _, block in
+            ForEach(Array(ShannonMessageMarkdown.blocks(from: source).enumerated()), id: \.offset) { index, block in
                 blockView(block)
+                    .modifier(DesktopConversationOutlineAnchorModifier(id: anchorID(for: block, index: index)))
             }
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    func anchorID(for block: ShannonMessageMarkdown.Block, index: Int) -> String? {
+        guard case .heading = block, let messageID else { return nil }
+        return ShannonDesktopConversationOutline.headingAnchorID(messageID: messageID, blockIndex: index)
     }
 
     @ViewBuilder

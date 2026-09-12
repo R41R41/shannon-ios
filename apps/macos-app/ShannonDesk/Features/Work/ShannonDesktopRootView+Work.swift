@@ -60,8 +60,8 @@ extension ShannonDesktopRootView {
                 Label("更新", systemImage: "arrow.clockwise")
             }
             Button {
-                selectedTaskID = selectedTaskID ?? conversation.latestActiveAgentTask?.id ?? conversation.agentTasks.first?.id
-                showsInspector.toggle()
+                prepareTaskInspectorSelection()
+                toggleAuxiliaryPanel(.task)
             } label: {
                 Label("現在地", systemImage: "sidebar.trailing")
             }
@@ -82,13 +82,31 @@ extension ShannonDesktopRootView {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
+                            Spacer()
+                            Button {
+                                showsInspector = false
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("補助パネルを閉じる")
+                        }
+
+                        DesktopTaskStageRail(progress: task.stageProgress)
+
+                        if let project = task.projectHint, !project.isEmpty {
+                            Label(project, systemImage: "folder")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .help(project)
                         }
 
                         DesktopInspectorSection(title: "目的") {
-                            Text(task.goal)
+                            DesktopExpandableText(task.goal, collapsedLineLimit: 6)
                         }
                         DesktopInspectorSection(title: "いま") {
-                            Text(task.currentAction ?? task.summary)
+                            DesktopExpandableText(task.currentAction ?? task.summary, collapsedLineLimit: 5)
                             if let progress = task.progressFraction {
                                 ProgressView(value: progress)
                                 Text("全\(task.plan.count)工程中 \(task.completedPlanCount)工程完了")
@@ -97,7 +115,10 @@ extension ShannonDesktopRootView {
                             }
                         }
                         DesktopInspectorSection(title: "次") {
-                            Text(ShannonDesktopWorkProjection.nextAction(for: task))
+                            DesktopExpandableText(
+                                ShannonDesktopWorkProjection.nextAction(for: task),
+                                collapsedLineLimit: 4
+                            )
                         }
                         DesktopInspectorSection(title: "シャノンの様子") {
                             Label(
@@ -186,6 +207,8 @@ extension ShannonDesktopRootView {
                                             Text(detail)
                                                 .font(.callout)
                                                 .foregroundStyle(.secondary)
+                                                .lineLimit(4)
+                                                .help(detail)
                                                 .padding(.leading, 22)
                                         }
                                     }
@@ -201,6 +224,8 @@ extension ShannonDesktopRootView {
                                         Text(change.summary)
                                             .font(.callout)
                                             .foregroundStyle(.secondary)
+                                            .lineLimit(3)
+                                            .help(change.summary)
                                         if change.additions > 0 || change.deletions > 0 {
                                             Text("+\(change.additions)  −\(change.deletions)")
                                                 .font(.caption.monospacedDigit())

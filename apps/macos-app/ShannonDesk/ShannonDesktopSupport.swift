@@ -9,6 +9,25 @@ enum DesktopDestination: String, CaseIterable, Hashable {
     case settings
 }
 
+enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
+    case outline
+    case task
+
+    var title: String {
+        switch self {
+        case .outline: "目次"
+        case .task: "現在地"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .outline: "list.bullet.indent"
+        case .task: "location"
+        }
+    }
+}
+
 enum ShannonDesktopFocusedControl: Hashable {
     case threadSearch
 }
@@ -33,6 +52,13 @@ enum ShannonDesktopWindowRestoration {
         default: lastValue
         }
     }
+
+    static func auxiliaryPanel(sceneRawValue: String?, lastRawValue: String) -> DesktopAuxiliaryPanel {
+        if let sceneRawValue, let panel = DesktopAuxiliaryPanel(rawValue: sceneRawValue) {
+            return panel
+        }
+        return DesktopAuxiliaryPanel(rawValue: lastRawValue) ?? .task
+    }
 }
 
 struct ShannonDesktopCommandActions {
@@ -41,7 +67,8 @@ struct ShannonDesktopCommandActions {
     let showWork: () -> Void
     let showMemory: () -> Void
     let showSettings: () -> Void
-    let toggleInspector: () -> Void
+    let toggleOutline: () -> Void
+    let toggleTaskInspector: () -> Void
 }
 
 private struct ShannonDesktopCommandActionsKey: FocusedValueKey {
@@ -192,6 +219,14 @@ struct ShannonDesktopConversationOutlineEntry: Equatable, Identifiable {
 }
 
 enum ShannonDesktopConversationOutline {
+    static func requestAnchorID(messageID: UUID) -> String {
+        "\(messageID.uuidString)-request"
+    }
+
+    static func headingAnchorID(messageID: UUID, blockIndex: Int) -> String {
+        "\(messageID.uuidString)-heading-\(blockIndex)"
+    }
+
     static func entries(from messages: [ConversationMessage]) -> [ShannonDesktopConversationOutlineEntry] {
         var result: [ShannonDesktopConversationOutlineEntry] = []
         for message in messages {
@@ -199,7 +234,7 @@ enum ShannonDesktopConversationOutline {
             case .user:
                 guard let title = excerpt(from: message.text) else { continue }
                 result.append(ShannonDesktopConversationOutlineEntry(
-                    id: "\(message.id.uuidString)-request",
+                    id: requestAnchorID(messageID: message.id),
                     messageID: message.id,
                     title: title,
                     level: 0,
@@ -211,7 +246,7 @@ enum ShannonDesktopConversationOutline {
                     let title = text.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !title.isEmpty else { continue }
                     result.append(ShannonDesktopConversationOutlineEntry(
-                        id: "\(message.id.uuidString)-heading-\(index)",
+                        id: headingAnchorID(messageID: message.id, blockIndex: index),
                         messageID: message.id,
                         title: title,
                         level: level,
@@ -221,6 +256,25 @@ enum ShannonDesktopConversationOutline {
             }
         }
         return result
+    }
+
+    static func activeEntryID(
+        entries: [ShannonDesktopConversationOutlineEntry],
+        verticalPositions: [String: CGFloat],
+        activationLine: CGFloat
+    ) -> String? {
+        let positioned = entries.compactMap { entry -> (String, CGFloat)? in
+            guard let position = verticalPositions[entry.id] else { return nil }
+            return (entry.id, position)
+        }
+        guard !positioned.isEmpty else { return nil }
+
+        if let passed = positioned
+            .filter({ $0.1 <= activationLine })
+            .max(by: { $0.1 < $1.1 }) {
+            return passed.0
+        }
+        return positioned.min(by: { $0.1 < $1.1 })?.0
     }
 
     static func searchTargetMessageID(in messages: [ConversationMessage], query: String) -> UUID? {

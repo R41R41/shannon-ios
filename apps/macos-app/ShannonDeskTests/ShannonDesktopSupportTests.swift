@@ -188,6 +188,19 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         XCTAssertTrue(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: "visible", lastValue: false))
         XCTAssertFalse(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: "hidden", lastValue: true))
         XCTAssertTrue(ShannonDesktopWindowRestoration.inspectorVisible(sceneRawValue: nil, lastValue: true))
+
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "outline", lastRawValue: "task"),
+            .outline
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: nil, lastRawValue: "outline"),
+            .outline
+        )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "unknown", lastRawValue: "unknown"),
+            .task
+        )
     }
 
     func testNextActionPrefersApprovalThenPendingPlanItem() {
@@ -274,6 +287,50 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         ])
         XCTAssertEqual(entries.map(\.level), [0, 1, 2])
         XCTAssertEqual(entries.map(\.kind), [.request, .heading, .heading])
+        XCTAssertEqual(entries.map(\.id), [
+            ShannonDesktopConversationOutline.requestAnchorID(messageID: requestID),
+            ShannonDesktopConversationOutline.headingAnchorID(messageID: answerID, blockIndex: 0),
+            ShannonDesktopConversationOutline.headingAnchorID(messageID: answerID, blockIndex: 2),
+        ])
+    }
+
+    func testConversationOutlineTracksNearestSectionAtReadingLine() {
+        let firstID = UUID()
+        let secondID = UUID()
+        let messages = [
+            ConversationMessage(id: firstID, role: .user, text: "最初の依頼"),
+            ConversationMessage(id: secondID, role: .shannon, text: "# 方針\n本文\n## 検証\n結果"),
+        ]
+        let entries = ShannonDesktopConversationOutline.entries(from: messages)
+        let positions: [String: CGFloat] = [
+            entries[0].id: -180.0,
+            entries[1].id: 54.0,
+            entries[2].id: 260.0,
+        ]
+
+        XCTAssertEqual(
+            ShannonDesktopConversationOutline.activeEntryID(
+                entries: entries,
+                verticalPositions: positions,
+                activationLine: 92
+            ),
+            entries[1].id
+        )
+        XCTAssertEqual(
+            ShannonDesktopConversationOutline.activeEntryID(
+                entries: entries,
+                verticalPositions: [entries[2].id: 140],
+                activationLine: 92
+            ),
+            entries[2].id
+        )
+        XCTAssertNil(
+            ShannonDesktopConversationOutline.activeEntryID(
+                entries: entries,
+                verticalPositions: [:],
+                activationLine: 92
+            )
+        )
     }
 
     func testConversationSearchTargetPrefersSectionThenFallsBackToMessageBody() {

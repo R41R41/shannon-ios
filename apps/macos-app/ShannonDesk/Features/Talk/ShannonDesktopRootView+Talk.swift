@@ -24,7 +24,7 @@ extension ShannonDesktopRootView {
             if let task = conversation.latestActiveAgentTask {
                 DesktopWorkStrip(task: task) {
                     selectedTaskID = task.id
-                    showsInspector = true
+                    showAuxiliaryPanel(.task)
                 }
             }
             Divider()
@@ -95,6 +95,14 @@ extension ShannonDesktopRootView {
                     .padding(.top, 28)
                     .padding(.bottom, 150)
                     .frame(maxWidth: .infinity)
+                }
+                .coordinateSpace(name: DesktopConversationOutlineAnchorModifier.coordinateSpaceName)
+                .onPreferenceChange(DesktopConversationOutlinePositionPreferenceKey.self) { positions in
+                    activeConversationOutlineEntryID = ShannonDesktopConversationOutline.activeEntryID(
+                        entries: conversationOutline,
+                        verticalPositions: positions,
+                        activationLine: 92
+                    )
                 }
                 .onChange(of: conversation.messages.count) {
                     scrollConversation(using: proxy)
@@ -177,28 +185,20 @@ extension ShannonDesktopRootView {
                     .foregroundStyle(.secondary)
             }
             Button {
-                showsConversationOutline.toggle()
+                toggleAuxiliaryPanel(.outline)
             } label: {
                 Image(systemName: "list.bullet.indent")
+                    .symbolVariant(showsInspector && auxiliaryPanel == .outline ? .fill : .none)
             }
             .buttonStyle(.borderless)
             .disabled(conversationOutline.isEmpty && conversation.selectedThread?.summary == nil)
             .help("会話の目次")
-            .popover(isPresented: $showsConversationOutline, arrowEdge: .bottom) {
-                DesktopConversationOutlineView(
-                    summary: conversation.selectedThread?.summary,
-                    entries: conversationOutline
-                ) { entry in
-                    showsConversationOutline = false
-                    requestedMessageJumpID = entry.messageID
-                    messageJumpRevision &+= 1
-                }
-            }
             Button {
-                selectedTaskID = conversation.latestActiveAgentTask?.id ?? conversation.agentTasks.first?.id
-                showsInspector.toggle()
+                prepareTaskInspectorSelection()
+                toggleAuxiliaryPanel(.task)
             } label: {
                 Image(systemName: "sidebar.trailing")
+                    .symbolVariant(showsInspector && auxiliaryPanel == .task ? .fill : .none)
             }
             .buttonStyle(.borderless)
             .help("現在地を表示")
