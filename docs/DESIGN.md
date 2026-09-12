@@ -13,6 +13,19 @@ This document is the entrypoint for the currently implemented Shannon design. It
 
 Platform-specific navigation and controls stay native. Shared state, DTOs, Markdown behavior, and semantic meaning may be reused; an iPhone or Mac layout is not treated as the other platform's template.
 
+## Semantic design grammar
+
+Shannon uses the same role-based grammar as Aether and Voyager. UI code selects a role instead of a literal color or a generic Material slot:
+
+- `action`: interactive controls and current selection
+- `creation`: user-created or pending creation work
+- `brandPresence` / `intelligence*`: Shannon presence and AI activity, never a generic action color
+- `attention`, `success`, `danger`: state and consequence
+- `canvas`, `readingSurface`, `subtleSurface`, `elevatedSurface`: content hierarchy
+- `textPrimary`, `textSecondary`, `borderStrong`, `divider`: legibility and separation
+
+The shared vocabulary does not make the three products visually identical. Shannon retains its own token values, intelligence gradient, native platform controls, spacing, shapes, and screen composition. Light and Dark values are resolved centrally by `ShannonDesignSystem.swift`; feature views must not introduce direct red, orange, or green status colors.
+
 ## Preserve
 
 - Talk remains the primary surface, with Shannon messages visually distinct from the user's quieter bubbles.

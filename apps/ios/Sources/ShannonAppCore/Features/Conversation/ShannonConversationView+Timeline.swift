@@ -5,14 +5,14 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
-    func messageList(_ palette: M3Palette) -> some View {
+    func messageList(_ palette: ShannonPalette) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: M3Spacing.medium) {
+                LazyVStack(spacing: ShannonSpacing.medium) {
                     if model.isLoadingHistory {
                         ProgressView("これまでの会話を思い出している…")
-                            .tint(palette.primary)
-                            .foregroundStyle(palette.onSurfaceVariant)
+                            .tint(palette.action)
+                            .foregroundStyle(palette.textSecondary)
                             .padding(.top, 72)
                     } else if model.messages.isEmpty {
                         ShannonEmptyConversation()
@@ -91,7 +91,7 @@ extension ShannonConversationView {
 
                     Color.clear.frame(height: 1).id("conversation-bottom")
                 }
-                .padding(.horizontal, M3Spacing.large)
+                .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset)
                 .padding(.bottom, ShannonWorkspaceChrome.contentBottomInset)
             }

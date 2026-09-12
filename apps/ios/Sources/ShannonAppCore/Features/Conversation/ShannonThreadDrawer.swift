@@ -21,7 +21,7 @@ struct ShannonThreadDrawer: View {
     @State var editingThread: ChatThreadDTO?
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         VStack(spacing: 0) {
             HStack {
@@ -37,7 +37,7 @@ struct ShannonThreadDrawer: View {
                     }
                 } label: {
                     Image(systemName: isCreating ? "ellipsis" : "square.and.pencil")
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                 }
                 .buttonStyle(.plain)
                 .disabled(isCreating)
@@ -45,17 +45,17 @@ struct ShannonThreadDrawer: View {
 
                 Button(action: close) {
                     Image(systemName: "xmark")
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("閉じる")
             }
             .padding(.top, 58)
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.bottom, M3Spacing.medium)
+            .padding(.horizontal, ShannonSpacing.large)
+            .padding(.bottom, ShannonSpacing.medium)
 
             ScrollView {
-                LazyVStack(spacing: M3Spacing.extraSmall) {
+                LazyVStack(spacing: ShannonSpacing.extraSmall) {
                     ForEach(model.threads, id: \.threadId) { thread in
                         HStack(spacing: 0) {
                             Button {
@@ -64,11 +64,11 @@ struct ShannonThreadDrawer: View {
                                     openTalk()
                                 }
                             } label: {
-                                HStack(spacing: M3Spacing.medium) {
+                                HStack(spacing: ShannonSpacing.medium) {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(thread.title)
                                             .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
-                                            .foregroundStyle(palette.onSurface)
+                                            .foregroundStyle(palette.textPrimary)
                                             .lineLimit(2)
                                         HStack(spacing: 6) {
                                             Text(threadUpdatedLabel(thread.updatedAt))
@@ -76,22 +76,22 @@ struct ShannonThreadDrawer: View {
                                             Text("\(thread.messageCount)件")
                                         }
                                         .font(.caption)
-                                        .foregroundStyle(palette.onSurfaceVariant)
+                                        .foregroundStyle(palette.textSecondary)
                                     }
                                     Spacer()
                                     if model.initiativeThreadIDs.contains(thread.threadId) {
                                         Circle()
-                                            .fill(palette.primary)
+                                            .fill(palette.action)
                                             .frame(width: 9, height: 9)
                                             .accessibilityLabel("シャノンからの新しい話")
                                     }
                                     if thread.threadId == selectedThreadId {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(palette.primary)
+                                            .foregroundStyle(palette.action)
                                     }
                                 }
-                                .padding(.leading, M3Spacing.medium)
-                                .padding(.vertical, M3Spacing.extraSmall)
+                                .padding(.leading, ShannonSpacing.medium)
+                                .padding(.vertical, ShannonSpacing.extraSmall)
                                 .frame(minHeight: 58)
                                 .contentShape(Rectangle())
                             }
@@ -106,35 +106,35 @@ struct ShannonThreadDrawer: View {
                             } label: {
                                 Image(systemName: "ellipsis")
                                     .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(palette.onSurfaceVariant)
-                                    .frame(width: M3TouchTarget.minimum, height: 58)
+                                    .foregroundStyle(palette.textSecondary)
+                                    .frame(width: ShannonTouchTarget.minimum, height: 58)
                                     .contentShape(Rectangle())
                             }
                             .accessibilityLabel("\(thread.title)の操作")
                         }
                         .background(
                             thread.threadId == selectedThreadId
-                                ? palette.secondaryContainer.opacity(0.72)
+                                ? palette.subtleSurface.opacity(0.72)
                                 : Color.clear,
-                            in: RoundedRectangle(cornerRadius: M3Shape.medium)
+                            in: RoundedRectangle(cornerRadius: ShannonShape.medium)
                         )
                     }
                 }
-                .padding(.horizontal, M3Spacing.small)
+                .padding(.horizontal, ShannonSpacing.small)
             }
             .scrollIndicators(.hidden)
 
             if let creatingError {
                 Text(creatingError)
                     .font(.caption)
-                    .foregroundStyle(palette.error)
-                    .padding(M3Spacing.medium)
+                    .foregroundStyle(palette.danger)
+                    .padding(ShannonSpacing.medium)
             }
 
             Divider()
-                .overlay(palette.outlineVariant.opacity(0.6))
+                .overlay(palette.divider.opacity(0.6))
 
-            VStack(spacing: M3Spacing.extraSmall) {
+            VStack(spacing: ShannonSpacing.extraSmall) {
                 Button(action: openMemory) {
                     ShannonDrawerDestinationRow(
                         title: "頭の中",
@@ -181,8 +181,8 @@ struct ShannonThreadDrawer: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, M3Spacing.small)
-            .padding(.top, M3Spacing.small)
+            .padding(.horizontal, ShannonSpacing.small)
+            .padding(.top, ShannonSpacing.small)
             .padding(.bottom, 28)
         }
         .frame(maxHeight: .infinity)
@@ -192,7 +192,7 @@ struct ShannonThreadDrawer: View {
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
         .overlay(alignment: .trailing) {
-            Rectangle().fill(palette.outlineVariant.opacity(0.45)).frame(width: 0.7)
+            Rectangle().fill(palette.divider.opacity(0.45)).frame(width: 0.7)
         }
         .shadow(color: .black.opacity(0.16), radius: 20, x: 8)
         .sheet(isPresented: Binding(
@@ -233,10 +233,10 @@ struct ShannonDrawerDestinationRow: View {
     let detail: String?
     let symbol: String
     let badge: Int?
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        HStack(spacing: M3Spacing.medium) {
+        HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(palette.brandPresence)
@@ -245,11 +245,11 @@ struct ShannonDrawerDestinationRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.body.weight(.medium))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 if let detail {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -259,17 +259,17 @@ struct ShannonDrawerDestinationRow: View {
             if let badge, badge > 0 {
                 Text(badge > 9 ? "9+" : "\(badge)")
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(palette.onPrimary)
+                    .foregroundStyle(palette.onAction)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
-                    .background(palette.primary, in: Capsule())
+                    .background(palette.action, in: Capsule())
             }
 
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
         }
-        .padding(.horizontal, M3Spacing.medium)
+        .padding(.horizontal, ShannonSpacing.medium)
         .frame(minHeight: 52)
         .contentShape(Rectangle())
     }
@@ -297,27 +297,27 @@ struct ShannonThreadTitleEditor: View {
     }
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         NavigationStack {
-            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Text("トーク一覧に表示する名前を入力してください。")
                     .font(.body)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
 
                 TextField("タイトル", text: $title, axis: .vertical)
                     .lineLimit(1...3)
                     .focused($isTitleFieldFocused)
-                    .padding(M3Spacing.medium)
-                    .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+                    .padding(ShannonSpacing.medium)
+                    .background(palette.elevatedSurface, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
                     .accessibilityLabel("トークのタイトル")
 
                 Text("\(title.count)/80文字")
                     .font(.caption)
-                    .foregroundStyle(title.count > 80 ? palette.error : palette.onSurfaceVariant)
+                    .foregroundStyle(title.count > 80 ? palette.danger : palette.textSecondary)
 
                 Spacer()
             }
-            .padding(M3Spacing.large)
+            .padding(ShannonSpacing.large)
             .navigationTitle("タイトルを編集")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -358,34 +358,34 @@ struct ShannonSettingsRow: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
-        HStack(spacing: M3Spacing.medium) {
+        HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: symbol)
                 .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(palette.primary)
+                .foregroundStyle(palette.action)
                 .frame(width: 44, height: 44)
-                .background(palette.secondaryContainer, in: Circle())
+                .background(palette.subtleSurface, in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
 
             Spacer()
             Image(systemName: "chevron.right")
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
         }
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large)
-                .stroke(palette.outlineVariant.opacity(0.7), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
         }
     }
 }

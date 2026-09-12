@@ -225,7 +225,7 @@ private struct ShannonDesktopVoiceIdentitySettings: View {
         if let errorMessage = model.errorMessage {
             Text(errorMessage)
                 .font(.caption)
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.shannonDanger)
         }
     }
 

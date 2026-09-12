@@ -76,7 +76,7 @@ public struct ShannonOrganizeSessionCard: View {
             if let error {
                 Label(error, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.shannonAttention)
             }
 
             if session.state != .applied {
@@ -201,13 +201,13 @@ private struct ShannonOrganizeItemRow: View {
             if let result = item.result {
                 Label("Voyagerに\(item.operation == .update ? "更新" : "作成")：\(result.title)", systemImage: "checkmark.circle.fill")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.shannonSuccess)
                 Text("Task Reference: \(result.resourceId)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             } else if item.destinationStatus == .failed {
-                Text(failureMessage).font(.caption).foregroundStyle(.orange)
+                Text(failureMessage).font(.caption).foregroundStyle(Color.shannonAttention)
             }
 
             if item.destinationStatus == .pending && !isConfiguring {
@@ -250,7 +250,7 @@ private struct ShannonOrganizeItemRow: View {
                     .disabled(taskQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoadingCatalog)
                 }
 
-                if let catalogError { Text(catalogError).font(.caption2).foregroundStyle(.orange) }
+                if let catalogError { Text(catalogError).font(.caption2).foregroundStyle(Color.shannonAttention) }
 
                 ForEach(candidates) { candidate in
                     Button {
@@ -324,7 +324,7 @@ private struct ShannonOrganizeItemRow: View {
                 }
                 if projectSelectionRequired && selectedProjectIDs.isEmpty {
                     Text("この依頼ではProjectを1件以上選んでください。未選択では反映できません。")
-                        .font(.caption2).foregroundStyle(.orange)
+                        .font(.caption2).foregroundStyle(Color.shannonAttention)
                 }
             } else if let target {
                 Label(selectedProjectNames(for: target.projectIds) ?? "Projectなし（変更しません）", systemImage: "lock")
@@ -415,11 +415,11 @@ private struct ShannonOrganizeItemRow: View {
     }
 
     private var decisionColor: Color {
-        if item.destinationStatus == .applied { return .green }
+        if item.destinationStatus == .applied { return Color.shannonSuccess }
         return switch item.decision {
         case .accepted: Color.accentColor
         case .rejected: Color.secondary
-        case .deferred: Color.orange
+        case .deferred: Color.shannonAttention
         case .proposed: Color.secondary
         }
     }

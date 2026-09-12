@@ -59,7 +59,7 @@ public struct ShannonConversationView: View {
 
     public var body: some View {
         let activeColorScheme = resolvedColorScheme
-        let palette = M3Palette.resolve(activeColorScheme)
+        let palette = ShannonPalette.resolve(activeColorScheme)
 
         GeometryReader { geometry in
             ZStack(alignment: .top) {
@@ -82,7 +82,7 @@ public struct ShannonConversationView: View {
                     openThreadDrawer: openThreadDrawer,
                     createThread: createThreadFromHeader
                 )
-                .padding(.top, M3Spacing.extraSmall)
+                .padding(.top, ShannonSpacing.extraSmall)
 
                 Color.black.opacity(0.22 * drawerProgress)
                     .ignoresSafeArea()
@@ -112,9 +112,9 @@ public struct ShannonConversationView: View {
             }
             .simultaneousGesture(threadDrawerGesture(viewWidth: geometry.size.width))
         }
-        .background { palette.surface.ignoresSafeArea() }
-        .foregroundStyle(palette.onSurface)
-        .tint(palette.primary)
+        .background { palette.canvas.ignoresSafeArea() }
+        .foregroundStyle(palette.textPrimary)
+        .tint(palette.action)
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)

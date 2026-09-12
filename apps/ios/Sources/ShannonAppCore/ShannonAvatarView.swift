@@ -17,7 +17,7 @@ public struct ShannonAvatarView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         ZStack {
             Circle().fill(Color.white)
@@ -30,7 +30,7 @@ public struct ShannonAvatarView: View {
             .clipShape(Circle())
             .overlay {
                 Circle()
-                    .stroke(palette.outlineVariant.opacity(0.75), lineWidth: max(1, size / 48))
+                    .stroke(palette.divider.opacity(0.75), lineWidth: max(1, size / 48))
             }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.10), radius: size / 18, y: size / 36)
             .accessibilityElement(children: .ignore)

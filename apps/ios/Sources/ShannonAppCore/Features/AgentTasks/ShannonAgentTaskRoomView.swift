@@ -19,12 +19,12 @@ struct ShannonAgentTaskRoomView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         ZStack {
-            palette.surface.ignoresSafeArea()
+            palette.canvas.ignoresSafeArea()
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: M3Spacing.extraLarge) {
+                LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                     AgentTaskHero(task: task, palette: palette)
 
                     if let actionError {
@@ -45,7 +45,7 @@ struct ShannonAgentTaskRoomView: View {
 
                     if !task.plan.isEmpty || !task.timeline.isEmpty {
                         DisclosureGroup(isExpanded: $showsDetailedProgress) {
-                            VStack(alignment: .leading, spacing: M3Spacing.large) {
+                            VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                                 if !task.plan.isEmpty {
                                     AgentTaskSection(title: "計画の詳細", symbol: "list.bullet.clipboard", palette: palette) {
                                         VStack(spacing: 0) {
@@ -71,13 +71,13 @@ struct ShannonAgentTaskRoomView: View {
                                     }
                                 }
                             }
-                            .padding(.top, M3Spacing.medium)
+                            .padding(.top, ShannonSpacing.medium)
                         } label: {
                             Label("細かな作業記録を表示", systemImage: "list.bullet")
                                 .font(.callout.weight(.semibold))
-                                .foregroundStyle(palette.onSurfaceVariant)
+                                .foregroundStyle(palette.textSecondary)
                         }
-                        .tint(palette.primary)
+                        .tint(palette.action)
                     }
 
                     if let approval = task.pendingApproval {
@@ -95,9 +95,9 @@ struct ShannonAgentTaskRoomView: View {
                         AgentTaskResultSection(task: task, palette: palette)
                     }
                 }
-                .padding(.horizontal, M3Spacing.large)
-                .padding(.top, M3Spacing.medium)
-                .padding(.bottom, task.status.isActive ? 122 : M3Spacing.huge)
+                .padding(.horizontal, ShannonSpacing.large)
+                .padding(.top, ShannonSpacing.medium)
+                .padding(.bottom, task.status.isActive ? 122 : ShannonSpacing.huge)
             }
             .scrollIndicators(.hidden)
         }
@@ -144,16 +144,16 @@ struct ShannonAgentTaskRoomView: View {
 
 struct AgentTaskRoomHeader: View {
     let task: ShannonAgentTask
-    let palette: M3Palette
+    let palette: ShannonPalette
     let dismiss: () -> Void
     let advancePreview: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: M3Spacing.small) {
+        HStack(spacing: ShannonSpacing.small) {
             Button(action: dismiss) {
                 Image(systemName: "chevron.left")
                     .font(.body.weight(.semibold))
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("トークへ戻る")
@@ -164,51 +164,51 @@ struct AgentTaskRoomHeader: View {
                     .lineLimit(1)
                 Text(task.stage.japaneseName)
                     .font(.caption2)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             Spacer()
 
             if let advancePreview {
                 Button(action: advancePreview) {
                     Image(systemName: "forward.frame.fill")
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("開発プレビューを次の状態へ進める")
             }
         }
-        .padding(.horizontal, M3Spacing.small)
+        .padding(.horizontal, ShannonSpacing.small)
         .background(.ultraThinMaterial)
     }
 }
 
 struct AgentTaskHero: View {
     let task: ShannonAgentTask
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        HStack(alignment: .center, spacing: M3Spacing.large) {
+        HStack(alignment: .center, spacing: ShannonSpacing.large) {
             ShannonAvatarView(expression: task.expression, size: 68)
-            VStack(alignment: .leading, spacing: M3Spacing.small) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                 Text(task.stageDescription)
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 Text(task.summary)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                     .lineLimit(3)
                 AgentTaskStatusBadge(task: task, palette: palette)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .background(
             LinearGradient(
-                colors: [palette.intelligenceSoft.opacity(0.72), palette.surfaceContainerLow],
+                colors: [palette.intelligenceSoft.opacity(0.72), palette.readingSurface],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: M3Shape.extraLarge, style: .continuous)
+            in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge, style: .continuous)
         )
     }
 }
@@ -216,10 +216,10 @@ struct AgentTaskHero: View {
 struct AgentTaskSection<Content: View>: View {
     let title: String
     let symbol: String
-    let palette: M3Palette
+    let palette: ShannonPalette
     let content: Content
 
-    init(title: String, symbol: String, palette: M3Palette, @ViewBuilder content: () -> Content) {
+    init(title: String, symbol: String, palette: ShannonPalette, @ViewBuilder content: () -> Content) {
         self.title = title
         self.symbol = symbol
         self.palette = palette
@@ -227,10 +227,10 @@ struct AgentTaskSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label(title, systemImage: symbol)
                 .font(.headline)
-                .foregroundStyle(palette.onSurface)
+                .foregroundStyle(palette.textPrimary)
             content
         }
     }

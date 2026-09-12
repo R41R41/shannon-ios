@@ -3,19 +3,19 @@ import SwiftUI
 struct AgentTaskControlBar: View {
     let task: ShannonAgentTask
     @Binding var text: String
-    let palette: M3Palette
+    let palette: ShannonPalette
     let isBusy: Bool
     let send: () -> Void
     let togglePause: () -> Void
     let cancel: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: M3Spacing.small) {
+        HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
             TextField("シャノンへの追加の指示", text: $text, axis: .vertical)
                 .lineLimit(1...3)
-                .padding(.horizontal, M3Spacing.medium)
+                .padding(.horizontal, ShannonSpacing.medium)
                 .frame(minHeight: 44)
-                .background(palette.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+                .background(palette.elevatedSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
                 .onSubmit(send)
                 .submitLabel(.send)
                 .disabled(isBusy)
@@ -24,7 +24,7 @@ struct AgentTaskControlBar: View {
                 Button(action: togglePause) {
                     Image(systemName: task.status == .paused ? "play.fill" : "pause.fill")
                         .frame(width: 44, height: 44)
-                        .background(palette.surfaceContainerHigh, in: Circle())
+                        .background(palette.elevatedSurface, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(isBusy || !task.status.isActive || task.status == .waitingApproval)
@@ -32,9 +32,9 @@ struct AgentTaskControlBar: View {
 
                 Button(action: cancel) {
                     Image(systemName: "stop.fill")
-                        .foregroundStyle(palette.error)
+                        .foregroundStyle(palette.danger)
                         .frame(width: 44, height: 44)
-                        .background(palette.errorContainer.opacity(0.5), in: Circle())
+                        .background(palette.dangerTint.opacity(0.5), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(isBusy)
@@ -43,30 +43,30 @@ struct AgentTaskControlBar: View {
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.bold))
-                        .foregroundStyle(palette.onPrimary)
+                        .foregroundStyle(palette.onAction)
                         .frame(width: 44, height: 44)
-                        .background(palette.primary, in: Circle())
+                        .background(palette.action, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(isBusy)
                 .accessibilityLabel("シャノンへ追加の指示を送る")
             }
         }
-        .padding(.horizontal, M3Spacing.medium)
-        .padding(.vertical, M3Spacing.small)
+        .padding(.horizontal, ShannonSpacing.medium)
+        .padding(.vertical, ShannonSpacing.small)
         .background(.ultraThinMaterial)
     }
 }
 
 struct AgentTaskStatusBadge: View {
     let task: ShannonAgentTask
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         Label(task.stage.japaneseName, systemImage: task.stage.symbolName)
             .font(.caption2.weight(.bold))
             .foregroundStyle(foreground)
-            .padding(.horizontal, M3Spacing.small)
+            .padding(.horizontal, ShannonSpacing.small)
             .frame(minHeight: 25)
             .background(foreground.opacity(0.12), in: Capsule())
     }
@@ -74,35 +74,35 @@ struct AgentTaskStatusBadge: View {
     var foreground: Color {
         switch task.stage {
         case .completion: palette.success
-        case .failed: palette.error
-        case .cancelled: palette.onSurfaceVariant
-        case .review: palette.warning
-        default: palette.primary
+        case .failed: palette.danger
+        case .cancelled: palette.textSecondary
+        case .review: palette.attention
+        default: palette.action
         }
     }
 }
 
 struct AgentTaskProminentButtonStyle: ButtonStyle {
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.callout.weight(.semibold))
-            .foregroundStyle(palette.onPrimary)
+            .foregroundStyle(palette.onAction)
             .frame(maxWidth: .infinity, minHeight: 42)
-            .background(palette.primary.opacity(configuration.isPressed ? 0.74 : 1), in: Capsule())
+            .background(palette.action.opacity(configuration.isPressed ? 0.74 : 1), in: Capsule())
     }
 }
 
 struct AgentTaskQuietButtonStyle: ButtonStyle {
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.callout.weight(.semibold))
-            .foregroundStyle(palette.onSurface)
+            .foregroundStyle(palette.textPrimary)
             .frame(maxWidth: .infinity, minHeight: 42)
-            .background(palette.surface.opacity(configuration.isPressed ? 0.64 : 1), in: Capsule())
-            .overlay { Capsule().stroke(palette.outlineVariant, lineWidth: 0.8) }
+            .background(palette.canvas.opacity(configuration.isPressed ? 0.64 : 1), in: Capsule())
+            .overlay { Capsule().stroke(palette.divider, lineWidth: 0.8) }
     }
 }

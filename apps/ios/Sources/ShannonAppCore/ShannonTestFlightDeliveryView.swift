@@ -11,10 +11,10 @@ public struct ShannonTestFlightDeliveryView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: M3Spacing.large) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                     if let dashboard = model.dashboard {
                         currentCard(dashboard, palette: palette)
                         if dashboard.history.isEmpty {
@@ -22,8 +22,8 @@ public struct ShannonTestFlightDeliveryView: View {
                         } else {
                             Text("履歴")
                                 .font(.headline)
-                                .padding(.top, M3Spacing.small)
-                            LazyVStack(spacing: M3Spacing.small) {
+                                .padding(.top, ShannonSpacing.small)
+                            LazyVStack(spacing: ShannonSpacing.small) {
                                 ForEach(dashboard.history) { item in
                                     historyRow(item, palette: palette)
                                 }
@@ -38,10 +38,10 @@ public struct ShannonTestFlightDeliveryView: View {
                     }
 
                     if let errorMessage = model.errorMessage {
-                        HStack(spacing: M3Spacing.medium) {
+                        HStack(spacing: ShannonSpacing.medium) {
                             Text(errorMessage)
                                 .font(.subheadline)
-                                .foregroundStyle(palette.onErrorContainer)
+                                .foregroundStyle(palette.onDangerTint)
                             Spacer(minLength: 0)
                             Button("再試行") { Task { await model.reload() } }
                                 .font(.subheadline.weight(.semibold))
@@ -50,14 +50,14 @@ public struct ShannonTestFlightDeliveryView: View {
                             }
                             .accessibilityLabel("閉じる")
                         }
-                        .padding(M3Spacing.medium)
-                        .background(palette.errorContainer, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+                        .padding(ShannonSpacing.medium)
+                        .background(palette.dangerTint, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
                     }
                 }
-                .padding(M3Spacing.large)
+                .padding(ShannonSpacing.large)
             }
             .refreshable { await model.reload() }
-            .background(palette.surfaceContainerLow)
+            .background(palette.readingSurface)
             .navigationTitle("アプリの更新")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -71,8 +71,8 @@ public struct ShannonTestFlightDeliveryView: View {
         .task { await model.reload() }
     }
 
-    private func currentCard(_ dashboard: ShannonTestFlightDeliveryDashboardDTO, palette: M3Palette) -> some View {
-        HStack(alignment: .top, spacing: M3Spacing.medium) {
+    private func currentCard(_ dashboard: ShannonTestFlightDeliveryDashboardDTO, palette: ShannonPalette) -> some View {
+        HStack(alignment: .top, spacing: ShannonSpacing.medium) {
             Image(systemName: conditionSymbol(dashboard.condition))
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(conditionColor(dashboard.condition, palette: palette))
@@ -81,62 +81,62 @@ public struct ShannonTestFlightDeliveryView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(conditionTitle(dashboard.condition))
                     .font(.title3.bold())
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 Text(conditionDetail(dashboard))
                     .font(.subheadline)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                 if let checkedAt = dashboard.lastCheckedAt {
                     Text("最終確認  \(formattedDate(checkedAt))")
                         .font(.caption)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                         .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large)
-                .stroke(palette.outlineVariant.opacity(0.7), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
         }
     }
 
-    private func historyRow(_ item: ShannonTestFlightDeliveryHistoryItemDTO, palette: M3Palette) -> some View {
-        HStack(alignment: .top, spacing: M3Spacing.medium) {
+    private func historyRow(_ item: ShannonTestFlightDeliveryHistoryItemDTO, palette: ShannonPalette) -> some View {
+        HStack(alignment: .top, spacing: ShannonSpacing.medium) {
             Image(systemName: historySymbol(item.status))
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(item.status == .failed ? palette.error : palette.primary)
+                .foregroundStyle(item.status == .failed ? palette.danger : palette.action)
                 .frame(width: 34, height: 34)
                 .background(
-                    (item.status == .failed ? palette.errorContainer : palette.primaryContainer),
+                    (item.status == .failed ? palette.dangerTint : palette.userMessage),
                     in: Circle()
                 )
             VStack(alignment: .leading, spacing: 3) {
                 Text(historyTitle(item))
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 Text(formattedDate(item.checkedAt))
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                 if item.status == .failed, item.notificationStatus == .sent {
                     Text("通知済み")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(palette.primary)
+                        .foregroundStyle(palette.action)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(M3Spacing.medium)
+        .padding(ShannonSpacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
     }
 
-    private func emptyHistory(_ palette: M3Palette) -> some View {
+    private func emptyHistory(_ palette: ShannonPalette) -> some View {
         Text("まだ配信履歴はありません。")
             .font(.body)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 120)
     }
 
@@ -187,8 +187,8 @@ public struct ShannonTestFlightDeliveryView: View {
         }
     }
 
-    private func conditionColor(_ condition: ShannonTestFlightConditionDTO, palette: M3Palette) -> Color {
-        condition == .attention ? palette.error : palette.primary
+    private func conditionColor(_ condition: ShannonTestFlightConditionDTO, palette: ShannonPalette) -> Color {
+        condition == .attention ? palette.danger : palette.action
     }
 
     private func historySymbol(_ status: ShannonTestFlightDeliveryStatusDTO) -> String {

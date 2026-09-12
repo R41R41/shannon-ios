@@ -14,30 +14,30 @@ struct ShannonSnackbar: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
-        HStack(spacing: M3Spacing.small) {
+        HStack(spacing: ShannonSpacing.small) {
             Image(systemName: "wifi.exclamationmark")
             Text(message)
                 .font(.callout)
                 .lineLimit(2)
-            Spacer(minLength: M3Spacing.small)
+            Spacer(minLength: ShannonSpacing.small)
             if showsRetry {
                 Button("再送", action: retry)
                     .font(.labelStyle)
-                    .foregroundStyle(palette.primaryContainer)
-                    .frame(minHeight: M3TouchTarget.minimum)
+                    .foregroundStyle(palette.userMessage)
+                    .frame(minHeight: ShannonTouchTarget.minimum)
             }
             Button(action: dismiss) {
                 Image(systemName: "xmark")
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
             }
             .accessibilityLabel("閉じる")
         }
-        .foregroundStyle(palette.surface)
-        .padding(.leading, M3Spacing.large)
-        .padding(.trailing, M3Spacing.extraSmall)
-        .background(palette.onSurface, in: RoundedRectangle(cornerRadius: M3Shape.small, style: .continuous))
+        .foregroundStyle(palette.canvas)
+        .padding(.leading, ShannonSpacing.large)
+        .padding(.trailing, ShannonSpacing.extraSmall)
+        .background(palette.textPrimary, in: RoundedRectangle(cornerRadius: ShannonShape.small, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
     }
 }
@@ -50,30 +50,30 @@ struct ShannonVoiceStatusBar: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
-        HStack(spacing: M3Spacing.small) {
+        let palette = ShannonPalette.resolve(colorScheme)
+        HStack(spacing: ShannonSpacing.small) {
             Image(systemName: model.phase.symbolName)
                 .symbolEffect(.variableColor.iterative, isActive: model.phase == .listening || model.phase == .speaking)
-                .foregroundStyle(palette.primary)
+                .foregroundStyle(palette.action)
                 .frame(width: 30)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.phase.japaneseLabel)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 if model.phase == .listening {
                     Text(String(format: "%.1f 秒 · 最大60秒", model.recordingDuration))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 } else if !model.transcript.isEmpty {
                     Text(model.transcript)
                         .font(.caption)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                 } else if let errorMessage = model.errorMessage {
                     Text(errorMessage)
                         .font(.caption)
-                        .foregroundStyle(palette.error)
+                        .foregroundStyle(palette.danger)
                         .lineLimit(2)
                 }
             }
@@ -83,9 +83,9 @@ struct ShannonVoiceStatusBar: View {
                 Button(action: primaryAction) {
                     Image(systemName: model.primaryAction == .send ? "arrow.up" : model.phase.symbolName)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(palette.onPrimary)
+                        .foregroundStyle(palette.onAction)
                         .frame(width: 36, height: 36)
-                        .background(palette.primary, in: Circle())
+                        .background(palette.action, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(model.phase.japaneseLabel)
@@ -96,15 +96,15 @@ struct ShannonVoiceStatusBar: View {
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
             .accessibilityLabel("音声会話を閉じる")
         }
-        .padding(.horizontal, M3Spacing.medium)
-        .padding(.vertical, M3Spacing.small)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous))
+        .padding(.horizontal, ShannonSpacing.medium)
+        .padding(.vertical, ShannonSpacing.small)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
-                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
+                .stroke(palette.divider.opacity(0.65), lineWidth: 0.7)
         }
         .accessibilityElement(children: .contain)
     }
@@ -118,34 +118,34 @@ struct ShannonStateSheet: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: M3Spacing.extraLarge) {
-                    HStack(spacing: M3Spacing.large) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
+                    HStack(spacing: ShannonSpacing.large) {
                         ShannonAvatarView(expression: expression, size: 72)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(expression.japaneseName)
                                 .font(.title2.weight(.semibold))
                             Text("シャノンのいま")
                                 .font(.body)
-                                .foregroundStyle(palette.onSurfaceVariant)
+                                .foregroundStyle(palette.textSecondary)
                         }
                     }
 
                     if let state {
-                        VStack(spacing: M3Spacing.medium) {
+                        VStack(spacing: ShannonSpacing.medium) {
                             StateMeter(label: "好奇心", value: state.temperament.curiosity, palette: palette)
                             StateMeter(label: "親密さ", value: state.temperament.closeness, palette: palette)
                             StateMeter(label: "活性", value: state.emotion.arousal, palette: palette)
                             StateMeter(label: "心の開き", value: state.emotion.openness, palette: palette)
                         }
-                        .padding(M3Spacing.large)
-                        .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+                        .padding(ShannonSpacing.large)
+                        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
 
                         if !state.interests.isEmpty {
-                            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                            VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                                 Text("いま興味があること")
                                     .font(.title3.weight(.semibold))
                                 FlowLikeChips(values: state.interests, palette: palette)
@@ -154,15 +154,15 @@ struct ShannonStateSheet: View {
                     } else {
                         Text("最初の会話のあとに、シャノンの状態がここに現れます。")
                             .font(.body)
-                            .foregroundStyle(palette.onSurfaceVariant)
-                            .padding(M3Spacing.large)
+                            .foregroundStyle(palette.textSecondary)
+                            .padding(ShannonSpacing.large)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+                            .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
                     }
                 }
-                .padding(M3Spacing.extraLarge)
+                .padding(ShannonSpacing.extraLarge)
             }
-            .background(palette.surface)
+            .background(palette.canvas)
             .navigationTitle("シャノンの状態")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -177,7 +177,7 @@ struct ShannonStateSheet: View {
 struct StateMeter: View {
     let label: String
     let value: Double
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         VStack(spacing: 6) {
@@ -186,28 +186,28 @@ struct StateMeter: View {
                 Spacer()
                 Text(value.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             ProgressView(value: value)
-                .tint(palette.primary)
+                .tint(palette.action)
         }
     }
 }
 
 struct FlowLikeChips: View {
     let values: [String]
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: M3Spacing.small) {
+            HStack(spacing: ShannonSpacing.small) {
                 ForEach(values, id: \.self) { value in
                     Text(value)
                         .font(.labelStyle)
-                        .foregroundStyle(palette.onSecondaryContainer)
-                        .padding(.horizontal, M3Spacing.medium)
+                        .foregroundStyle(palette.textPrimary)
+                        .padding(.horizontal, ShannonSpacing.medium)
                         .frame(minHeight: 40)
-                        .background(palette.secondaryContainer, in: Capsule())
+                        .background(palette.subtleSurface, in: Capsule())
                 }
             }
         }

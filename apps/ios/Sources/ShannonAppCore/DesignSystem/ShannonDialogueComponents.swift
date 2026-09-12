@@ -7,16 +7,16 @@ import AppKit
 
 struct ShannonRichMarkdownText: View {
     let source: String
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             ForEach(Array(ShannonMessageMarkdown.blocks(from: source).enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
-        .foregroundStyle(palette.onSurface)
+        .foregroundStyle(palette.textPrimary)
     }
 
     @ViewBuilder
@@ -25,11 +25,11 @@ struct ShannonRichMarkdownText: View {
         case .heading(let level, let text):
             Text(ShannonMessageMarkdown.render(text))
                 .font(headingFont(level))
-                .padding(.top, level <= 2 ? M3Spacing.extraSmall : 0)
+                .padding(.top, level <= 2 ? ShannonSpacing.extraSmall : 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .bullet(let text):
-            HStack(alignment: .firstTextBaseline, spacing: M3Spacing.small) {
+            HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text("•")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(palette.brandPresence)
@@ -39,23 +39,23 @@ struct ShannonRichMarkdownText: View {
             }
 
         case .numbered(let marker, let text):
-            HStack(alignment: .firstTextBaseline, spacing: M3Spacing.small) {
+            HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(marker)
                     .font(.body.monospacedDigit())
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                 Text(ShannonMessageMarkdown.render(text))
                     .font(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
         case .quote(let text):
-            HStack(alignment: .top, spacing: M3Spacing.medium) {
+            HStack(alignment: .top, spacing: ShannonSpacing.medium) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(palette.brandPresence)
                     .frame(width: 3)
                 Text(ShannonMessageMarkdown.render(text))
                     .font(.body)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, 2)
@@ -64,19 +64,19 @@ struct ShannonRichMarkdownText: View {
             ScrollView(.horizontal) {
                 Text(text)
                     .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(palette.onSurface)
-                    .padding(M3Spacing.medium)
+                    .foregroundStyle(palette.textPrimary)
+                    .padding(ShannonSpacing.medium)
                     .textSelection(.enabled)
             }
             .scrollIndicators(.hidden)
             .background(
-                palette.surfaceContainer,
-                in: RoundedRectangle(cornerRadius: M3Shape.medium, style: .continuous)
+                palette.subtleSurface,
+                in: RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous)
             )
 
         case .divider:
             Divider()
-                .overlay(palette.outlineVariant)
+                .overlay(palette.divider)
 
         case .paragraph(let text):
             Text(ShannonMessageMarkdown.render(text))
@@ -101,21 +101,21 @@ struct ShannonTypingIndicator: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
-        HStack(alignment: .bottom, spacing: M3Spacing.small) {
+        HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
             ShannonAvatarView(expression: expression, size: 54)
-            HStack(spacing: M3Spacing.small) {
+            HStack(spacing: ShannonSpacing.small) {
                 ProgressView()
                     .controlSize(.small)
-                    .tint(palette.primary)
+                    .tint(palette.action)
                 Text("考えている…")
                     .font(.callout)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
-            .padding(.horizontal, M3Spacing.large)
-            .frame(minHeight: M3TouchTarget.minimum)
-            .background(palette.surfaceContainerHigh, in: Capsule())
+            .padding(.horizontal, ShannonSpacing.large)
+            .frame(minHeight: ShannonTouchTarget.minimum)
+            .background(palette.elevatedSurface, in: Capsule())
             Spacer()
         }
         .accessibilityElement(children: .combine)
@@ -124,28 +124,28 @@ struct ShannonTypingIndicator: View {
 }
 
 struct ShannonDialogueBubble<Content: View>: View {
-    let palette: M3Palette
+    let palette: ShannonPalette
     let isExpanded: Bool
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.vertical, M3Spacing.medium)
+            .padding(.horizontal, ShannonSpacing.large)
+            .padding(.vertical, ShannonSpacing.medium)
             .frame(maxWidth: 350, minHeight: 54, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(palette.outlineVariant.opacity(0.62), lineWidth: 0.7)
+                    .stroke(palette.divider.opacity(0.62), lineWidth: 0.7)
             }
             .overlay(alignment: .bottom) {
                 ShannonSpeechTail()
-                    .fill(palette.surface.opacity(0.94))
+                    .fill(palette.canvas.opacity(0.94))
                     .frame(width: 24, height: 16)
                     .offset(x: 74, y: 14)
             }
             .shadow(color: .black.opacity(0.11), radius: isExpanded ? 18 : 12, y: 5)
-            .padding(.horizontal, M3Spacing.large)
+            .padding(.horizontal, ShannonSpacing.large)
             .accessibilityElement(children: .contain)
     }
 }

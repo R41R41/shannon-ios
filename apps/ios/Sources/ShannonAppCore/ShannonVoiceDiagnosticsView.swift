@@ -12,22 +12,22 @@ struct ShannonVoiceDiagnosticsView: View {
     @State private var copied = false
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: M3Spacing.large) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                     Text("会話内容や音声は記録せず、音声入力を開始した時の処理段階だけを端末内に保存します。")
                         .font(.callout)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
 
                     Text(report.isEmpty ? "まだ診断ログはありません。" : report)
                         .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(palette.onSurface)
+                        .foregroundStyle(palette.textPrimary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(M3Spacing.medium)
-                        .background(palette.surfaceContainer, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+                        .padding(ShannonSpacing.medium)
+                        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
 
                     Button {
                         copyReport()
@@ -45,9 +45,9 @@ struct ShannonVoiceDiagnosticsView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .padding(M3Spacing.large)
+                .padding(ShannonSpacing.large)
             }
-            .background(palette.surface)
+            .background(palette.canvas)
             .navigationTitle("音声診断")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

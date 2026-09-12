@@ -5,7 +5,7 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
-    func dialogueStage(_ palette: M3Palette) -> some View {
+    func dialogueStage(_ palette: ShannonPalette) -> some View {
         GeometryReader { geometry in
             let keyboardScale: CGFloat = composerIsFocused ? 0.84 : 1
             let portraitWidth = min(geometry.size.width * 1.04, 430) * keyboardScale
@@ -13,9 +13,9 @@ extension ShannonConversationView {
             ZStack(alignment: .top) {
                 LinearGradient(
                     colors: [
-                        palette.surface,
+                        palette.canvas,
                         palette.intelligenceSoft.opacity(colorScheme == .dark ? 0.42 : 0.56),
-                        palette.surface
+                        palette.canvas
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -43,15 +43,15 @@ extension ShannonConversationView {
                         value: dialoguePresenceIsBreathing
                     )
 
-                VStack(spacing: M3Spacing.small) {
+                VStack(spacing: ShannonSpacing.small) {
                     HStack(spacing: 6) {
                         Text("シャノン")
                             .font(.callout.weight(.semibold))
                         Text("·")
                         Text(model.currentExpression.japaneseName)
                     }
-                    .foregroundStyle(palette.onSurfaceVariant)
-                    .padding(.horizontal, M3Spacing.medium)
+                    .foregroundStyle(palette.textSecondary)
+                    .padding(.horizontal, ShannonSpacing.medium)
                     .frame(minHeight: 32)
                     .background(.thinMaterial, in: Capsule())
                     .accessibilityElement(children: .combine)
@@ -60,13 +60,13 @@ extension ShannonConversationView {
                     if let userMessage = latestUserMessage {
                         Text("あなた：\(userMessage.text)")
                             .font(.caption)
-                            .foregroundStyle(palette.onSurfaceVariant)
+                            .foregroundStyle(palette.textSecondary)
                             .lineLimit(1)
-                            .padding(.horizontal, M3Spacing.medium)
+                            .padding(.horizontal, ShannonSpacing.medium)
                             .frame(maxWidth: 330, minHeight: 30, alignment: .trailing)
                             .background(.ultraThinMaterial, in: Capsule())
                             .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.horizontal, M3Spacing.large)
+                            .padding(.horizontal, ShannonSpacing.large)
                     }
 
                     if model.isSending {
@@ -76,19 +76,19 @@ extension ShannonConversationView {
                         .transition(.opacity)
                     } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
                         ShannonDialogueBubble(palette: palette, isExpanded: dialogueIsExpanded) {
-                            VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
+                            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                                 ScrollView(dialogueIsExpanded ? .vertical : []) {
                                     Text(reply.text)
                                         .font(.body)
                                         .lineSpacing(2)
-                                        .foregroundStyle(palette.onSurface)
+                                        .foregroundStyle(palette.textPrimary)
                                         .textSelection(.enabled)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(maxHeight: dialogueIsExpanded ? min(250, geometry.size.height * 0.34) : 104)
 
-                                HStack(spacing: M3Spacing.extraSmall) {
+                                HStack(spacing: ShannonSpacing.extraSmall) {
                                     if reply.text.count > 120 {
                                         Button {
                                             withAnimation(reduceMotion ? nil : .snappy(duration: 0.24)) {
@@ -102,7 +102,7 @@ extension ShannonConversationView {
                                             .font(.caption2.weight(.medium))
                                         }
                                         .buttonStyle(.plain)
-                                        .foregroundStyle(palette.onSurfaceVariant)
+                                        .foregroundStyle(palette.textSecondary)
                                     }
                                     Spacer(minLength: 0)
                                     Button {
@@ -116,7 +116,7 @@ extension ShannonConversationView {
                                         .frame(minHeight: 30)
                                     }
                                     .buttonStyle(.plain)
-                                    .foregroundStyle(palette.onSurfaceVariant)
+                                    .foregroundStyle(palette.textSecondary)
                                     .accessibilityLabel(dialogueDidCopy ? "コピーしました" : "シャノンの回答をコピー")
                                 }
                             }
@@ -127,7 +127,7 @@ extension ShannonConversationView {
                     Spacer(minLength: 0)
                 }
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset + 48)
-                .padding(.bottom, M3Spacing.large)
+                .padding(.bottom, ShannonSpacing.large)
             }
         }
         .contentShape(Rectangle())

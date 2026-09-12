@@ -13,12 +13,12 @@ struct ShannonAppIconSettingsView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: M3Spacing.large) {
-                    HStack(spacing: M3Spacing.large) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                    HStack(spacing: ShannonSpacing.large) {
                         ShannonAppIconPreview(
                             assetName: previewAssetName(for: model.activeChoice ?? appearanceChoice),
                             size: 76,
@@ -27,28 +27,28 @@ struct ShannonAppIconSettingsView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("現在のアイコン")
                                 .font(.caption)
-                                .foregroundStyle(palette.onSurfaceVariant)
+                                .foregroundStyle(palette.textSecondary)
                             Text(model.activeTitle)
                                 .font(.title3.weight(.semibold))
-                                .foregroundStyle(palette.onSurface)
+                                .foregroundStyle(palette.textPrimary)
                             Text(model.mode.japaneseName)
                                 .font(.subheadline)
-                                .foregroundStyle(palette.onSurfaceVariant)
+                                .foregroundStyle(palette.textSecondary)
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(M3Spacing.large)
-                    .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+                    .padding(ShannonSpacing.large)
+                    .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
                     .overlay {
-                        RoundedRectangle(cornerRadius: M3Shape.large)
-                            .stroke(palette.outlineVariant, lineWidth: 0.7)
+                        RoundedRectangle(cornerRadius: ShannonShape.large)
+                            .stroke(palette.divider, lineWidth: 0.7)
                     }
 
                     Text("変更方法")
                         .font(.headline)
-                        .foregroundStyle(palette.onSurface)
+                        .foregroundStyle(palette.textPrimary)
 
-                    VStack(spacing: M3Spacing.small) {
+                    VStack(spacing: ShannonSpacing.small) {
                         ForEach(ShannonAppIconMode.allCases) { mode in
                             Button {
                                 Task {
@@ -59,7 +59,7 @@ struct ShannonAppIconSettingsView: View {
                                     )
                                 }
                             } label: {
-                                HStack(spacing: M3Spacing.medium) {
+                                HStack(spacing: ShannonSpacing.medium) {
                                     modePreview(for: mode)
 
                                     VStack(alignment: .leading, spacing: 3) {
@@ -67,36 +67,36 @@ struct ShannonAppIconSettingsView: View {
                                             .font(.body.weight(.semibold))
                                         Text(modeDetail(for: mode))
                                             .font(.caption)
-                                            .foregroundStyle(palette.onSurfaceVariant)
+                                            .foregroundStyle(palette.textSecondary)
                                             .multilineTextAlignment(.leading)
                                     }
-                                    .foregroundStyle(palette.onSurface)
+                                    .foregroundStyle(palette.textPrimary)
 
-                                    Spacer(minLength: M3Spacing.small)
+                                    Spacer(minLength: ShannonSpacing.small)
 
                                     Image(systemName: model.mode == mode ? "checkmark.circle.fill" : "circle")
                                         .font(.title3)
                                         .foregroundStyle(
                                             model.mode == mode
-                                                ? palette.primary
-                                                : palette.outlineVariant
+                                                ? palette.action
+                                                : palette.divider
                                         )
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-                                .padding(.horizontal, M3Spacing.medium)
-                                .padding(.vertical, M3Spacing.small)
+                                .padding(.horizontal, ShannonSpacing.medium)
+                                .padding(.vertical, ShannonSpacing.small)
                                 .background(
                                     model.mode == mode
-                                        ? palette.primaryContainer
-                                        : palette.surface,
-                                    in: RoundedRectangle(cornerRadius: M3Shape.large)
+                                        ? palette.userMessage
+                                        : palette.canvas,
+                                    in: RoundedRectangle(cornerRadius: ShannonShape.large)
                                 )
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: M3Shape.large)
+                                    RoundedRectangle(cornerRadius: ShannonShape.large)
                                         .stroke(
                                             model.mode == mode
-                                                ? palette.primary
-                                                : palette.outlineVariant,
+                                                ? palette.action
+                                                : palette.divider,
                                             lineWidth: model.mode == mode ? 2 : 0.7
                                         )
                                 }
@@ -128,9 +128,9 @@ struct ShannonAppIconSettingsView: View {
                         )
                     }
                 }
-                .padding(M3Spacing.large)
+                .padding(ShannonSpacing.large)
             }
-            .background(palette.surfaceContainerLow)
+            .background(palette.readingSurface)
             .navigationTitle("アプリアイコン")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -213,24 +213,24 @@ struct ShannonAppIconSettingsView: View {
     func iconChoiceGrid(
         title: String,
         choices: [ShannonAppIconChoice],
-        palette: M3Palette
+        palette: ShannonPalette
     ) -> some View {
         Text(title)
             .font(.headline)
-            .foregroundStyle(palette.onSurface)
+            .foregroundStyle(palette.textPrimary)
 
         LazyVGrid(
             columns: [
-                GridItem(.flexible(), spacing: M3Spacing.small),
-                GridItem(.flexible(), spacing: M3Spacing.small),
+                GridItem(.flexible(), spacing: ShannonSpacing.small),
+                GridItem(.flexible(), spacing: ShannonSpacing.small),
             ],
-            spacing: M3Spacing.small
+            spacing: ShannonSpacing.small
         ) {
             ForEach(choices) { choice in
                 Button {
                     Task { await model.selectManualChoice(choice) }
                 } label: {
-                    VStack(spacing: M3Spacing.small) {
+                    VStack(spacing: ShannonSpacing.small) {
                         ShannonAppIconPreview(
                             assetName: previewAssetName(for: choice),
                             size: 72,
@@ -243,22 +243,22 @@ struct ShannonAppIconSettingsView: View {
                     }
                     .foregroundStyle(
                         model.manualChoice == choice
-                            ? palette.onPrimaryContainer
-                            : palette.onSurface
+                            ? palette.onUserMessage
+                            : palette.textPrimary
                     )
                     .frame(maxWidth: .infinity, minHeight: 122)
                     .background(
                         model.manualChoice == choice
-                            ? palette.primaryContainer
-                            : palette.surface,
-                        in: RoundedRectangle(cornerRadius: M3Shape.large)
+                            ? palette.userMessage
+                            : palette.canvas,
+                        in: RoundedRectangle(cornerRadius: ShannonShape.large)
                     )
                     .overlay {
-                        RoundedRectangle(cornerRadius: M3Shape.large)
+                        RoundedRectangle(cornerRadius: ShannonShape.large)
                             .stroke(
                                 model.manualChoice == choice
-                                    ? palette.primary
-                                    : palette.outlineVariant,
+                                    ? palette.action
+                                    : palette.divider,
                                 lineWidth: model.manualChoice == choice ? 2 : 0.7
                             )
                     }
@@ -320,13 +320,13 @@ struct ShannonAppIconPreview: View {
 
 struct ShannonEnvironmentPaletteReader<Content: View>: View {
     @Environment(\.colorScheme) var colorScheme
-    let content: (M3Palette) -> Content
+    let content: (ShannonPalette) -> Content
 
-    init(@ViewBuilder content: @escaping (M3Palette) -> Content) {
+    init(@ViewBuilder content: @escaping (ShannonPalette) -> Content) {
         self.content = content
     }
 
     var body: some View {
-        content(M3Palette.resolve(colorScheme))
+        content(ShannonPalette.resolve(colorScheme))
     }
 }

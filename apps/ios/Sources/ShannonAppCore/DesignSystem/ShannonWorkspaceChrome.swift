@@ -141,29 +141,29 @@ struct ShannonAppHeader: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         HStack(spacing: 0) {
             Button(action: openThreadDrawer) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "sidebar.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(palette.onSurface)
-                        .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                        .foregroundStyle(palette.textPrimary)
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     if unreadInitiativeCount > 0 {
                         Text(unreadInitiativeCount > 9 ? "9+" : "\(unreadInitiativeCount)")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, unreadInitiativeCount > 9 ? 4 : 3)
                             .frame(minWidth: 15, minHeight: 15)
-                            .background(palette.error, in: Capsule())
+                            .background(palette.danger, in: Capsule())
                             .offset(x: 1, y: 1)
                     }
                 }
                 .frame(width: 48, height: 48)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay {
-                    Circle().stroke(palette.outlineVariant.opacity(0.6), lineWidth: 0.7)
+                    Circle().stroke(palette.divider.opacity(0.6), lineWidth: 0.7)
                 }
                 .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
             }
@@ -175,12 +175,12 @@ struct ShannonAppHeader: View {
             Button(action: createThread) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(palette.onSurface)
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .foregroundStyle(palette.textPrimary)
+                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     .frame(width: 48, height: 48)
                     .background(.ultraThinMaterial, in: Circle())
                     .overlay {
-                        Circle().stroke(palette.outlineVariant.opacity(0.6), lineWidth: 0.7)
+                        Circle().stroke(palette.divider.opacity(0.6), lineWidth: 0.7)
                     }
                     .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
             }
@@ -190,20 +190,20 @@ struct ShannonAppHeader: View {
             .accessibilityHidden(selection != .talk)
             .accessibilityLabel("新しいトーク")
         }
-        .padding(.horizontal, M3Spacing.large)
+        .padding(.horizontal, ShannonSpacing.large)
         .frame(maxWidth: .infinity)
     }
 }
 
 struct ShannonTopReadabilityGradient: View {
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: palette.surface.opacity(0.82), location: 0),
-                .init(color: palette.surface.opacity(0.50), location: 0.34),
-                .init(color: palette.surface.opacity(0.16), location: 0.72),
+                .init(color: palette.canvas.opacity(0.82), location: 0),
+                .init(color: palette.canvas.opacity(0.50), location: 0.34),
+                .init(color: palette.canvas.opacity(0.16), location: 0.72),
                 .init(color: .clear, location: 1),
             ],
             startPoint: .top,
@@ -217,15 +217,15 @@ struct ShannonTopReadabilityGradient: View {
 }
 
 struct ShannonBottomReadabilityGradient: View {
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
-                .init(color: palette.surface.opacity(0.16), location: 0.30),
-                .init(color: palette.surface.opacity(0.52), location: 0.72),
-                .init(color: palette.surface.opacity(0.84), location: 1),
+                .init(color: palette.canvas.opacity(0.16), location: 0.30),
+                .init(color: palette.canvas.opacity(0.52), location: 0.72),
+                .init(color: palette.canvas.opacity(0.84), location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom

@@ -112,7 +112,7 @@ extension ShannonDesktopRootView {
             if let error = conversation.errorMessage {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.shannonAttention)
                     Text(error).font(.callout)
                     Spacer()
                     Button("閉じる") { conversation.dismissError() }

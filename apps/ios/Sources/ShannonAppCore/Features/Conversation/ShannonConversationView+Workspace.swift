@@ -5,7 +5,7 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
-    func workspaceContent(_ palette: M3Palette) -> some View {
+    func workspaceContent(_ palette: ShannonPalette) -> some View {
         ZStack {
             talkPage(palette)
                 .opacity(selectedPage == .talk ? 1 : 0)
@@ -24,7 +24,7 @@ extension ShannonConversationView {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedPage)
     }
 
-    func talkPage(_ palette: M3Palette) -> some View {
+    func talkPage(_ palette: ShannonPalette) -> some View {
         ZStack {
             Group {
                 switch displayMode {
@@ -41,15 +41,15 @@ extension ShannonConversationView {
                     Button(action: toggleDisplayMode) {
                         Label(displayMode.switchActionTitle, systemImage: displayMode.switchActionSymbolName)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.onSurfaceVariant)
-                            .padding(.horizontal, M3Spacing.medium)
+                            .foregroundStyle(palette.textSecondary)
+                            .padding(.horizontal, ShannonSpacing.medium)
                             .frame(minHeight: 38)
                             .background(.thinMaterial, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
                 }
-                .padding(.horizontal, M3Spacing.large)
+                .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset)
                 Spacer()
             }
@@ -60,7 +60,7 @@ extension ShannonConversationView {
                     .ignoresSafeArea(.container, edges: .bottom)
                     .allowsHitTesting(false)
 
-                VStack(spacing: M3Spacing.small) {
+                VStack(spacing: ShannonSpacing.small) {
                     if let statusMessage = model.statusMessage {
                         ShannonSnackbar(
                             message: statusMessage,
@@ -68,7 +68,7 @@ extension ShannonConversationView {
                             retry: {},
                             dismiss: model.dismissStatus
                         )
-                        .padding(.horizontal, M3Spacing.large)
+                        .padding(.horizontal, ShannonSpacing.large)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if let errorMessage = model.errorMessage {
@@ -78,7 +78,7 @@ extension ShannonConversationView {
                             retry: { Task { await model.retryLastFailed() } },
                             dismiss: model.dismissError
                         )
-                        .padding(.horizontal, M3Spacing.large)
+                        .padding(.horizontal, ShannonSpacing.large)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if let task = model.latestAgentTaskNotice {
@@ -93,14 +93,14 @@ extension ShannonConversationView {
                             primaryAction: performTranscriptionPrimaryAction,
                             cancel: voiceModel.cancel
                         )
-                        .padding(.horizontal, M3Spacing.medium)
+                        .padding(.horizontal, ShannonSpacing.medium)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     composer(palette)
                 }
             }
         }
-        .background(palette.surface)
+        .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
     }
 }
