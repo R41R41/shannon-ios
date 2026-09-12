@@ -12,7 +12,7 @@ For every task, use this order when sources disagree:
 4. `docs/architecture.md` and `docs/DESIGN.md` for the current implemented system and UI contract.
 5. `docs/self-improvement-runbook.md` and `docs/BRANCHING.md` for verification, deployment, and worktree lifecycle.
 
-Numbered HTML files under `docs/` are design history. They are useful context, but they are not current implementation authority unless the user explicitly names one.
+HTML files under `docs/archive/` are design history and operational evidence. They are useful context, but they are not current implementation authority unless the user explicitly names one.
 
 ## Product invariants
 

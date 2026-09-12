@@ -37,6 +37,7 @@ The shared vocabulary does not make the three products visually identical. Shann
 
 Machine-readable contracts live in `docs/design/screens/<platform>/`. They describe the current user job, interaction invariants, non-happy states, accessibility requirements, and safe evidence. A UI change updates the affected contract and evidence in the same task.
 
-Current safe screenshots live in `docs/screenshots/`. Concept art under `design/character-concepts/` is visual source material, not proof of a shipped screen. Numbered HTML documents under `docs/` are historical decision records and are non-authoritative unless explicitly selected by the user.
+Current safe screenshots live in `docs/screenshots/`. Concept art under `design/character-concepts/` is visual source material, not proof of a shipped screen. HTML documents under `docs/archive/` are historical decision records or operational evidence and are non-authoritative unless explicitly selected by the user.
 
 The initial representative contract is [`docs/design/screens/macos/talk.yaml`](design/screens/macos/talk.yaml).
+The app-owned shared-role mapping is [`docs/design/semantic-role-map.v1.json`](design/semantic-role-map.v1.json) and is checked deterministically by `scripts/check-semantic-role-map.mjs`.

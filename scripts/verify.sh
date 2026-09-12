@@ -30,6 +30,7 @@ run_architecture() {
 
 run_fast() {
   "$node_bin" scripts/check-harness.mjs
+  "$node_bin" scripts/check-semantic-role-map.mjs
   run_architecture
 }
 

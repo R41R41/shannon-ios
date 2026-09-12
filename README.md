@@ -13,7 +13,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | Branching | [`docs/BRANCHING.md`](docs/BRANCHING.md) |
 | Verification | [`scripts/verify.sh`](scripts/verify.sh)（`fast` / `all`） |
 
-`docs/shannon-*.html` は意思決定と配布の履歴であり、明示的に指定されない限り現在仕様の正本ではない。実装に着手する時はこの表から読み始める。
+実装に着手する時はこの表から読み始める。文書全体の入口は [`docs/README.md`](docs/README.md)、過去の意思決定・配布証跡は [`docs/archive/index.md`](docs/archive/index.md) に分離している。`docs/archive/**/*.html` は明示的に指定されない限り現在仕様の正本ではない。
 
 ## 方針
 
@@ -96,12 +96,4 @@ pnpm dev:api:device
 
 Aether本番版と同様の一時接続情報、端末固有トークン、iOS Keychain保存を実装済み。通常は専用リンクを一度開くだけで接続し、信頼済みMacからの実機配備では起動時に自動適用する。以後のアップデートではKeychainを引き継ぐため再設定しない。
 
-ブラウザで確認できる実機手順は [`docs/shannon-ios-device-runbook.html`](docs/shannon-ios-device-runbook.html) にまとめている。
-
-FCA・感情・記憶がどう分離して動くかは [`docs/shannon-fca-v1-runtime.html`](docs/shannon-fca-v1-runtime.html) で視覚的に確認できる。
-
-Azure接続とペアリングの安全境界は [`docs/shannon-azure-pairing.html`](docs/shannon-azure-pairing.html) にまとめている。
-
-独立workerと睡眠バッチは [`docs/shannon-background-sleep.html`](docs/shannon-background-sleep.html) で視覚的に確認できる。
-
-現在の正本と履歴資料の区別は冒頭の「現在の正本」に集約している。
+実機・配布・復旧の現行手順は [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md)、FCA・感情・記憶・worker・接続の現行境界は [`docs/architecture.md`](docs/architecture.md) を正本とする。旧ブラウザ資料は必要な場合だけ [`docs/archive/index.md`](docs/archive/index.md) から参照する。

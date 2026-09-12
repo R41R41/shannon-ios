@@ -1,0 +1,36 @@
+{
+  "contract": "syzygy.semantic-role-map.v1",
+  "appId": "shannon",
+  "ownership": {
+    "exactValues": "app-owned",
+    "components": "app-owned"
+  },
+  "roles": {
+    "action": "ShannonPalette.action",
+    "creation": "ShannonPalette.creation",
+    "intelligence": "ShannonPalette.brandPresence",
+    "attention": "ShannonPalette.attention",
+    "success": "ShannonPalette.success",
+    "danger": "ShannonPalette.danger",
+    "canvas": "ShannonPalette.canvas",
+    "readingSurface": "ShannonPalette.readingSurface",
+    "textPrimary": "ShannonPalette.textPrimary",
+    "textSecondary": "ShannonPalette.textSecondary",
+    "border": "ShannonPalette.borderStrong",
+    "divider": "ShannonPalette.divider",
+    "subtleSurface": "ShannonPalette.subtleSurface",
+    "elevatedSurface": "ShannonPalette.elevatedSurface",
+    "intelligenceSoft": "ShannonPalette.intelligenceSoft"
+  },
+  "accessibility": {
+    "colorIndependent": true,
+    "contrastValidated": true
+  },
+  "evidence": {
+    "designAuthority": "docs/DESIGN.md",
+    "validator": "scripts/check-semantic-role-map.mjs",
+    "screenContracts": [
+      "docs/design/screens/macos/talk.yaml"
+    ]
+  }
+}
