@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon接続復旧 — Azure VM起動</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#0a84ff; --green:#28a861; --orange:#d97706; --line:color-mix(in srgb,CanvasText 15%,transparent); --panel:color-mix(in srgb,Canvas 94%,CanvasText 6%); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:Canvas; color:CanvasText; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.68; }
+    main { width:min(860px,100%); margin:auto; padding:46px 22px 88px; }
+    h1 { font-size:clamp(2rem,6vw,3.45rem); line-height:1.08; letter-spacing:-.035em; }
+    h2 { margin-top:42px; }
+    .eyebrow { color:var(--blue); font-weight:750; font-size:.82rem; letter-spacing:.05em; }
+    .hero,.card { padding:20px; border:1px solid var(--line); border-radius:22px; background:var(--panel); }
+    .hero { border-left:5px solid var(--orange); }
+    .ok { color:var(--green); font-weight:750; }
+    .button { display:inline-block; padding:5px 12px; border-radius:999px; color:white; background:var(--blue); font-weight:750; }
+    li { margin:.55rem 0; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON · CONNECTION RECOVERY · 2026-09-09</div>
+  <h1>サーバーを起動して、<br>接続を戻す。</h1>
+
+  <section class="hero">
+    <p><b>原因はアプリではなく、Azure VMの停止です。</b> 公開API、SSH、HTTP/HTTPSの全経路が同時に到達不能となり、Azure Portalでも<code>vm-constant</code>が「停止済み（割り当て解除済み）」と確認できました。</p>
+    <p>時刻が22時直後なので、設定済みの自動シャットダウンが作動した可能性が高い状態です。VoyagerのTask更新処理には到達しておらず、対象Taskは変更されていません。</p>
+  </section>
+
+  <h2>今回行う操作</h2>
+  <section class="card">
+    <ol>
+      <li>Azure Portalで<code>vm-constant</code>だけを選択します。</li>
+      <li><span class="button">開始</span>を1回だけ押します。</li>
+      <li>「実行中」になるまで待ちます。</li>
+    </ol>
+    <p>VMを削除、再作成、サイズ変更、設定変更する操作は行いません。自動シャットダウン設定も今回は変更しません。</p>
+  </section>
+
+  <h2>費用への影響</h2>
+  <p>割り当て解除中はコンピュート課金が停止しています。VMを開始すると、次の停止または次回の自動シャットダウンまで通常のコンピュート料金が再開します。既存ディスク等の料金体系は今回変更しません。</p>
+
+  <h2>起動後にこちらで確認すること</h2>
+  <ul>
+    <li>SSHと公開HTTPSが再び到達できる</li>
+    <li>Shannon API、worker、world、Voyager APIがすべて稼働</li>
+    <li>Shannonのhealth endpointが成功</li>
+    <li>DB整合性と既存件数が維持されている</li>
+    <li>iPhoneから通常会話が送れる</li>
+  </ul>
+
+  <h2>失敗した場合の安全な戻し方</h2>
+  <section class="card">
+    <ul>
+      <li>開始が失敗した場合は連打せず、Azure Portalの表示を記録して停止します。</li>
+      <li>VMは起動したのにAPIが戻らない場合、対象サービスの状態とログを読み、必要なサービスだけを再起動します。</li>
+      <li>DB異常があれば書き込みを止め、Phase 2配備前バックアップを保持します。</li>
+      <li>復旧後もiPhoneで接続できなければ、アプリを削除せず接続資格と公開経路を確認します。</li>
+    </ul>
+  </section>
+
+  <h2>成功の目印</h2>
+  <p class="ok">公開healthが応答し、Shannon・Voyagerの各サービスがactive、iPhoneの通常会話が成功すること。</p>
+</main></body>
+</html>

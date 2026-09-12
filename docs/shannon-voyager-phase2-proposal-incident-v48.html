@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager Phase 2 提案誤変換の調査結果</title>
+  <style>
+    :root { color-scheme:light dark; --blue:#0a84ff; --green:#28a861; --orange:#d97706; --red:#dc3b45; --line:color-mix(in srgb,CanvasText 15%,transparent); --panel:color-mix(in srgb,Canvas 94%,CanvasText 6%); --soft:color-mix(in srgb,Canvas 91%,var(--blue) 9%); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:Canvas; color:CanvasText; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif; line-height:1.68; }
+    main { width:min(940px,100%); margin:auto; padding:46px 22px 90px; }
+    h1 { font-size:clamp(2rem,6vw,3.5rem); line-height:1.08; letter-spacing:-.04em; }
+    h2 { margin-top:44px; }
+    h3 { margin:.1rem 0 .55rem; }
+    .eyebrow { color:var(--blue); font-weight:750; font-size:.82rem; letter-spacing:.05em; }
+    .hero,.card,.state { padding:20px; border:1px solid var(--line); border-radius:22px; background:var(--panel); }
+    .hero { border-left:5px solid var(--red); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:14px; }
+    .before { border-top:4px solid var(--green); }
+    .after { border-top:4px solid var(--red); }
+    .cause { border-left:5px solid var(--orange); }
+    .ok { color:var(--green); font-weight:750; }
+    .bad { color:var(--red); font-weight:750; }
+    .label { color:color-mix(in srgb,CanvasText 62%,transparent); font-size:.86rem; font-weight:700; }
+    .value { margin:.25rem 0 1rem; padding:12px 14px; border-radius:13px; background:var(--soft); }
+    li { margin:.55rem 0; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SHANNON × VOYAGER · PHASE 2 · INCIDENT REVIEW · 2026-09-09</div>
+  <h1>安全に1回だけ更新した。<br>しかし、内容が違った。</h1>
+
+  <section class="hero">
+    <p><b>提案がおかしかったという指摘は正しいです。</b> ログと両DBを照合した結果、Shannonは更新内容ではなく「VoyagerのTaskを更新するという作業」自体をTask本文として提案し、その内容を対象Taskへ反映していました。</p>
+    <p>重複作成や別Taskへの誤反映はありません。対象は1件、更新は1回だけです。ただし対象Taskのタイトルと詳細は意図しない内容へ変わっています。</p>
+  </section>
+
+  <h2>記録された変更</h2>
+  <div class="grid">
+    <section class="state before">
+      <h3 class="ok">変更前 · revision 1</h3>
+      <div class="label">タイトル</div>
+      <div class="value">シャノンとVoyagerの実機連携を確認する</div>
+      <div class="label">詳細</div>
+      <div class="value">明日、シャノンとVoyagerの連携結果を確認する。データが正しく反映されているか、未反映やエラーがないかを確認する。</div>
+      <div class="label">Project</div>
+      <div class="value">なし</div>
+    </section>
+    <section class="state after">
+      <h3 class="bad">現在 · revision 2</h3>
+      <div class="label">タイトル</div>
+      <div class="value">Voyagerの既存タスクを更新する</div>
+      <div class="label">詳細</div>
+      <div class="value">Voyagerで「シャノンとVoyagerの実機連携を確認する」を検索し、詳細を「Shannon Phase 2の実機確認に成功」へ更新する。内容に最も合うプロジェクトを選択して保存する。</div>
+      <div class="label">Project</div>
+      <div class="value">なし</div>
+    </section>
+  </div>
+
+  <h2>なぜ起きたか</h2>
+  <section class="card cause">
+    <ol>
+      <li>整理AIの出力形式が<code>title</code>と<code>details</code>だけで、<b>新規作成か更新か、対象名、変更する項目</b>を分離していません。</li>
+      <li>整理AIへの指示も「行動をVoyager Task案へ変換する」という新規Task向けのままで、更新依頼を「更新作業」というTaskに言い換えました。</li>
+      <li>確認画面で既存Taskを選んでも、編集欄を対象Taskの現在値へ戻さず、整理AIが作った汎用タイトルと操作手順を保持しました。</li>
+      <li>最終送信は編集欄のタイトルを常に変更値として扱うため、対象Taskのタイトルまで書き換えました。</li>
+      <li>「合うProjectを選びたい」という意図があるのに、Project未選択のまま反映できました。</li>
+    </ol>
+  </section>
+
+  <h2>正常に働いた安全機構</h2>
+  <ul>
+    <li>対象Task IDは正しく、別Taskは変更していません。</li>
+    <li>期待revision 1からrevision 2への1回だけの更新です。</li>
+    <li>同一要求の重複防止記録が残り、二重更新はありません。</li>
+    <li>変更前スナップショットがShannon DBに残っており、正確な復元が可能です。</li>
+  </ul>
+
+  <h2>推奨する復旧順</h2>
+  <section class="card">
+    <ol>
+      <li><b>対象Taskを変更前へ復元：</b>タイトル、詳細、Projectなしをrevision 2に対する安全な更新で戻す。</li>
+      <li><b>Phase 2の本番利用を一時停止：</b>修正版が入るまで、既存Task更新を再試行しない。</li>
+      <li><b>構造を修正：</b>整理結果を<code>operation / targetQuery / changes</code>へ分離し、変更しない項目は送信しない。</li>
+      <li><b>確認画面を修正：</b>対象選択時に現在値を基準へ置き、項目別の変更前後を表示。意図しないタイトル変更を警告する。</li>
+      <li><b>Project選択を必須化：</b>Project選択を依頼した整理案は、Projectか「今回はProjectなし」を明示するまで反映不可にする。</li>
+      <li><b>同じ文章を回帰試験：</b>今回の実文をfixture化し、タイトル維持、詳細だけ変更、承認前無変更、1回だけ反映を検証してから再配備する。</li>
+    </ol>
+  </section>
+
+  <h2>復元に失敗した場合</h2>
+  <p>revisionが2から変わっていれば自動上書きせず停止します。現在のVoyager値を再取得し、ユーザーへ新しい差分を見せてから判断します。DBを直接編集したり、別Taskを作って帳尻を合わせたりはしません。</p>
+</main></body>
+</html>

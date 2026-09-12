@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shannon × Voyager 重複カード修正 実機確認 v51</title>
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; }
+    body { margin: 0; background: #f4f6f7; color: #17212a; }
+    main { max-width: 760px; margin: auto; padding: 44px 22px 72px; }
+    h1 { margin: 0 0 10px; font-size: 30px; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    p, li { line-height: 1.75; }
+    section, .result { margin-top: 20px; padding: 20px 24px; border: 1px solid #dbe2e7; border-radius: 18px; background: white; }
+    .result { border-left: 5px solid #197eac; }
+    .good { color: #087a50; font-weight: 700; }
+    .bad { color: #b33b32; font-weight: 700; }
+    code { word-break: break-word; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0e1215; color: #edf2f5; }
+      section, .result { background: #191e22; border-color: #30383e; }
+      .good { color: #70d7a9; } .bad { color: #ff9188; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>重複カードが消えたことを確認する</h1>
+  <p>Voyager更新の相談ではShannon自身の「作業を始める」カードを出さず、明示的な「整理して」の後にVoyager Task案だけを表示する修正の実機確認です。アプリ更新は不要です。</p>
+
+  <section>
+    <h2>手順</h2>
+    <ol>
+      <li>iPhoneのShannonで新しいトークを作ります。</li>
+      <li>次を送ります。<br><code>Voyagerにある「シャノンとVoyagerの実機連携を確認する」の詳細を「Shannon Phase 2の実機確認に成功」に更新して、合うProjectを選びたい。</code></li>
+      <li>Shannonの通常返信の直後を確認します。</li>
+      <li>続けて <code>整理して</code> と送ります。</li>
+      <li>Voyager Task案が1件表示されたところで止めます。今回は「整理を完了」や最終反映は不要です。</li>
+    </ol>
+  </section>
+
+  <div class="result">
+    <h2>成功</h2>
+    <p class="good">最初の依頼後に「作業を始める／今はやめる」カードが出ない。</p>
+    <p class="good">「整理して」の後には、確認・採用するためのVoyager Task案だけが出る。</p>
+    <p>メッセージに付く「対話」表示は通常の会話種別なので、そのままで正常です。</p>
+  </div>
+
+  <section>
+    <h2>失敗時の安全な戻り方</h2>
+    <p class="bad">上段の「作業を始める」カードが再び出た場合は、押さずに画面を共有してください。</p>
+    <p>Voyager Task案の最終反映もしないでください。サーバー変更前のソースとDBはバックアップ済みで、必要なら安全に戻せます。</p>
+  </section>
+</main>
+</body>
+</html>
