@@ -134,6 +134,7 @@ enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
 enum ShannonWorkspaceChrome {
     static let contentTopInset: CGFloat = 72
     static let contentBottomInset: CGFloat = 112
+    static let bottomReadabilityHeight: CGFloat = contentBottomInset + 80
 }
 
 struct ShannonAppHeader: View {
@@ -221,19 +222,22 @@ struct ShannonTopReadabilityGradient: View {
 
 struct ShannonBottomReadabilityGradient: View {
     let palette: ShannonPalette
+    var bottomSafeAreaInset: CGFloat = 0
 
     var body: some View {
         LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
-                .init(color: palette.canvas.opacity(0.16), location: 0.30),
-                .init(color: palette.canvas.opacity(0.52), location: 0.72),
+                .init(color: palette.canvas.opacity(0.16), location: 0.24),
+                .init(color: palette.canvas.opacity(0.58), location: 0.64),
                 .init(color: palette.canvas.opacity(0.84), location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom
         )
-        .frame(height: 146)
+        .frame(
+            height: ShannonWorkspaceChrome.bottomReadabilityHeight + bottomSafeAreaInset
+        )
         .accessibilityHidden(true)
     }
 }

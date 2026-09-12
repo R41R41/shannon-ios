@@ -67,7 +67,10 @@ public struct ShannonConversationView: View {
 
         GeometryReader { geometry in
             ZStack(alignment: .top) {
-                workspaceContent(palette)
+                workspaceContent(
+                    palette,
+                    bottomSafeAreaInset: geometry.safeAreaInsets.bottom
+                )
 
                 if selectedPage == .memory {
                     VStack(spacing: 0) {

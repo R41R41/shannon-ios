@@ -5,9 +5,12 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
-    func workspaceContent(_ palette: ShannonPalette) -> some View {
+    func workspaceContent(
+        _ palette: ShannonPalette,
+        bottomSafeAreaInset: CGFloat
+    ) -> some View {
         ZStack {
-            talkPage(palette)
+            talkPage(palette, bottomSafeAreaInset: bottomSafeAreaInset)
                 .opacity(selectedPage == .talk ? 1 : 0)
                 .allowsHitTesting(selectedPage == .talk)
                 .accessibilityHidden(selectedPage != .talk)
@@ -28,7 +31,10 @@ extension ShannonConversationView {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedPage)
     }
 
-    func talkPage(_ palette: ShannonPalette) -> some View {
+    func talkPage(
+        _ palette: ShannonPalette,
+        bottomSafeAreaInset: CGFloat
+    ) -> some View {
         ZStack {
             Group {
                 switch displayMode {
@@ -60,10 +66,12 @@ extension ShannonConversationView {
         }
         .overlay(alignment: .bottom) {
             ZStack(alignment: .bottom) {
-                ShannonBottomReadabilityGradient(palette: palette)
-                    .ignoresSafeArea(.container, edges: .bottom)
+                ShannonBottomReadabilityGradient(
+                    palette: palette,
+                    bottomSafeAreaInset: bottomSafeAreaInset
+                )
+                    .offset(y: bottomSafeAreaInset)
                     .allowsHitTesting(false)
-
                 VStack(spacing: ShannonSpacing.small) {
                     if let statusMessage = model.statusMessage {
                         ShannonSnackbar(
