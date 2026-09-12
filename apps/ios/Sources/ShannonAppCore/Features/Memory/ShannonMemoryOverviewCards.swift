@@ -8,22 +8,22 @@ struct ShannonActivityGroup: Identifiable {
 
 struct ShannonCostCard: View {
     let usage: ShannonLlmUsageSummaryDTO
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("今月のAI使用量", systemImage: "gauge.with.dots.needle.50percent")
                     .font(.title3.weight(.semibold))
                 Spacer()
-                Text(usage.monthKey).font(.caption.monospacedDigit()).foregroundStyle(palette.onSurfaceVariant)
+                Text(usage.monthKey).font(.caption.monospacedDigit()).foregroundStyle(palette.textSecondary)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(usage.estimatedCostUsd, format: .currency(code: "USD"))
-                    .font(.title2.bold()).foregroundStyle(palette.primary)
+                    .font(.title2.bold()).foregroundStyle(palette.action)
                 Spacer()
                 Text("バックグラウンド残り \(usage.backgroundRemainingUsd, format: .currency(code: "USD"))")
-                    .font(.caption).foregroundStyle(palette.onSurfaceVariant)
+                    .font(.caption).foregroundStyle(palette.textSecondary)
             }
             if let today = usage.todayBackgroundCostUsd {
                 HStack {
@@ -33,14 +33,14 @@ struct ShannonCostCard: View {
                         .monospacedDigit()
                 }
                 .font(.caption)
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
             }
             ProgressView(
                 value: usage.backgroundBudgetUsd > 0
                     ? min(1, usage.backgroundCostUsd / usage.backgroundBudgetUsd)
                     : 1
             )
-            .tint(usage.backgroundRemainingUsd > 0 ? palette.primary : palette.error)
+            .tint(usage.backgroundRemainingUsd > 0 ? palette.action : palette.danger)
             HStack {
                 Text("会話 \(calls(for: "chat"))回")
                 Spacer()
@@ -49,13 +49,13 @@ struct ShannonCostCard: View {
                 Text("バックグラウンド \(calls(for: "sleep"))回")
             }
             .font(.caption)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
         }
-        .padding(M3Spacing.large)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+        .padding(ShannonSpacing.large)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
-                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.extraLarge)
+                .stroke(palette.divider.opacity(0.65), lineWidth: 0.7)
         }
     }
 
@@ -66,55 +66,55 @@ struct ShannonCostCard: View {
 
 struct ShannonInitiativeEvaluationCard: View {
     let evaluation: ShannonInitiativeEvaluationDTO
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
                 Label("最近の自発性", systemImage: "bubble.left.and.sparkles")
                     .font(.title3.weight(.semibold))
                 Spacer()
                 Text("\(evaluation.windowDays)日")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(evaluation.deliveryRate, format: .percent.precision(.fractionLength(0)))
                     .font(.title2.bold())
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
                 Text("話しかけた割合")
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                 Spacer()
                 Text("\(evaluation.delivered)件")
                     .font(.body.weight(.semibold))
             }
             ProgressView(value: min(1, evaluation.deliveryRate))
-                .tint(palette.primary)
+                .tint(palette.action)
             HStack {
                 Text("候補 \(evaluation.candidatesConsidered)件")
                 Spacer()
                 Text("静かにした \(silentRuns)回")
             }
             .font(.caption)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
             if let suppressed = evaluation.repeatedCandidatesSuppressed, suppressed > 0 {
                 Label("重複候補を\(suppressed)件、静かに除外", systemImage: "line.3.horizontal.decrease.circle")
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             if !sourceSummary.isEmpty {
                 Text("配信元: \(sourceSummary)")
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
             }
         }
-        .padding(M3Spacing.large)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+        .padding(ShannonSpacing.large)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
-                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.extraLarge)
+                .stroke(palette.divider.opacity(0.65), lineWidth: 0.7)
         }
     }
 
@@ -131,29 +131,29 @@ struct ShannonInitiativeEvaluationCard: View {
 
 struct WorldItemCard: View {
     let item: ShannonWorldItemDTO
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        HStack(alignment: .top, spacing: M3Spacing.medium) {
+        HStack(alignment: .top, spacing: ShannonSpacing.medium) {
             Image(systemName: "globe.asia.australia.fill")
-                .foregroundStyle(palette.primary)
+                .foregroundStyle(palette.action)
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.body.weight(.medium))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                     .lineLimit(3)
                 Text(item.sourceTitle)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "arrow.up.right")
                 .font(.caption)
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
         }
-        .padding(M3Spacing.medium)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+        .padding(ShannonSpacing.medium)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
     }
 }
 

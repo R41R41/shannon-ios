@@ -3,36 +3,36 @@ import SwiftUI
 struct ShannonCurrentStateCard: View {
     let state: CompanionStateDTO
     let dailyMind: ShannonDailyMindDTO?
-    let palette: M3Palette
+    let palette: ShannonPalette
     @State var showsDetails = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.large) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.large) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Label("いまのシャノン", systemImage: "brain.head.profile.fill")
                         .font(.title3.weight(.semibold))
                     Text("更新 \(displayDate(state.updatedAt))")
                         .font(.caption)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
                 Spacer()
                 Text("v\(state.version)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
             }
-            HStack(spacing: M3Spacing.medium) {
+            HStack(spacing: ShannonSpacing.medium) {
                 Image(systemName: dominantState.symbol)
                     .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(palette.onPrimaryContainer)
+                    .foregroundStyle(palette.onUserMessage)
                     .frame(width: 52, height: 52)
-                    .background(palette.primaryContainer, in: Circle())
+                    .background(palette.userMessage, in: Circle())
                 VStack(alignment: .leading, spacing: 3) {
                     Text(dominantState.label)
                         .font(.title2.weight(.semibold))
                     Text(dominantState.value.formatted(.percent.precision(.fractionLength(0))))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
             }
 
@@ -40,13 +40,13 @@ struct ShannonCurrentStateCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("今日の関心")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(palette.primary)
+                        .foregroundStyle(palette.action)
                     Text(focus.topic)
                         .font(.title3.weight(.medium))
-                        .foregroundStyle(palette.onSurface)
+                        .foregroundStyle(palette.textPrimary)
                     Text(focus.reason)
                         .font(.caption)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                     if let title = focus.sourceTitle, let url = focus.sourceURL, let sourceURL = URL(string: url) {
                         Link(destination: sourceURL) {
                             Label(title, systemImage: "arrow.up.right")
@@ -55,22 +55,22 @@ struct ShannonCurrentStateCard: View {
                         }
                     }
                 }
-                .padding(M3Spacing.medium)
+                .padding(ShannonSpacing.medium)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(palette.primaryContainer.opacity(0.56), in: RoundedRectangle(cornerRadius: M3Shape.large))
+                .background(palette.userMessage.opacity(0.56), in: RoundedRectangle(cornerRadius: ShannonShape.large))
             }
 
             if !state.activeMemories.isEmpty {
-                VStack(alignment: .leading, spacing: M3Spacing.small) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     Text("頭に浮かんでいること")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                     ForEach(state.activeMemories.prefix(2)) { memory in
-                        HStack(alignment: .top, spacing: M3Spacing.small) {
-                            Circle().fill(palette.primary).frame(width: 6, height: 6).padding(.top, 6)
+                        HStack(alignment: .top, spacing: ShannonSpacing.small) {
+                            Circle().fill(palette.action).frame(width: 6, height: 6).padding(.top, 6)
                             Text(memory.summary)
                                 .font(.callout)
-                                .foregroundStyle(palette.onSurface)
+                                .foregroundStyle(palette.textPrimary)
                                 .lineLimit(2)
                         }
                     }
@@ -78,33 +78,33 @@ struct ShannonCurrentStateCard: View {
             }
 
             DisclosureGroup(isExpanded: $showsDetails) {
-                VStack(spacing: M3Spacing.medium) {
+                VStack(spacing: ShannonSpacing.medium) {
                     stateMeter("気分", value: (state.emotion.valence + 1) / 2)
                     stateMeter("活性", value: state.emotion.arousal)
                     stateMeter("心の開き", value: state.emotion.openness)
                     stateMeter("好奇心", value: state.temperament.curiosity)
                     stateMeter("親密さ", value: state.temperament.closeness)
                 }
-                .padding(.top, M3Spacing.medium)
+                .padding(.top, ShannonSpacing.medium)
             } label: {
                 Text("状態の詳細")
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
-            .tint(palette.primary)
+            .tint(palette.action)
         }
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .background(
             LinearGradient(
-                colors: [palette.surface, palette.intelligenceSoft.opacity(0.28)],
+                colors: [palette.canvas, palette.intelligenceSoft.opacity(0.28)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            in: RoundedRectangle(cornerRadius: M3Shape.extraLarge)
+            in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.extraLarge)
-                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.extraLarge)
+                .stroke(palette.divider.opacity(0.65), lineWidth: 0.7)
         }
     }
 
@@ -115,9 +115,9 @@ struct ShannonCurrentStateCard: View {
                 Spacer()
                 Text(value.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
-            ProgressView(value: min(1, max(0, value))).tint(palette.primary)
+            ProgressView(value: min(1, max(0, value))).tint(palette.action)
         }
     }
 
@@ -137,16 +137,16 @@ struct MemorySimpleSection: View {
     let title: String
     let symbol: String
     let values: [String]
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label(title, systemImage: symbol).font(.title3.weight(.semibold))
             ForEach(values, id: \.self) { value in
                 Text(value)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(M3Spacing.medium)
-                    .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.medium))
+                    .padding(ShannonSpacing.medium)
+                    .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
             }
         }
     }
@@ -154,24 +154,24 @@ struct MemorySimpleSection: View {
 
 struct KnowledgeAnswerCard: View {
     let answer: ShannonKnowledgeAnswerDTO
-    let palette: M3Palette
+    let palette: ShannonPalette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(answer.question)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
                 Spacer()
                 if answer.confirmed {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.caption)
-                        .foregroundStyle(palette.primary)
+                        .foregroundStyle(palette.action)
                 }
             }
             Text(answer.answer)
                 .font(.body)
-                .foregroundStyle(palette.onSurface)
+                .foregroundStyle(palette.textPrimary)
                 .multilineTextAlignment(.leading)
             HStack {
                 Text(answer.source == "user" ? "手動編集" : answer.source == "conversation" ? "会話" : "AI推測")
@@ -179,17 +179,17 @@ struct KnowledgeAnswerCard: View {
                 Text(answer.confidence.formatted(.percent.precision(.fractionLength(0))))
             }
             .font(.caption)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
             Text("更新 \(displayDate(answer.updatedAt))")
                 .font(.caption2)
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
         }
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large)
-                .stroke(palette.outlineVariant.opacity(0.65), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider.opacity(0.65), lineWidth: 0.7)
         }
     }
 }

@@ -11,44 +11,44 @@ struct ShannonAppearanceSettingsView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
-            VStack(spacing: M3Spacing.small) {
+            VStack(spacing: ShannonSpacing.small) {
                 ForEach(ShannonAppearanceMode.allCases) { mode in
                     Button {
                         appearanceModeRawValue = mode.rawValue
                     } label: {
-                        HStack(spacing: M3Spacing.medium) {
+                        HStack(spacing: ShannonSpacing.medium) {
                             Image(systemName: mode.symbolName)
                                 .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(palette.primary)
+                                .foregroundStyle(palette.action)
                                 .frame(width: 44, height: 44)
-                                .background(palette.secondaryContainer, in: Circle())
+                                .background(palette.subtleSurface, in: Circle())
                             Text(mode.japaneseName)
                                 .font(.body.weight(.medium))
-                                .foregroundStyle(palette.onSurface)
+                                .foregroundStyle(palette.textPrimary)
                             Spacer()
                             if appearanceModeRawValue == mode.rawValue {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(palette.primary)
+                                    .foregroundStyle(palette.action)
                             }
                         }
-                        .padding(.horizontal, M3Spacing.large)
+                        .padding(.horizontal, ShannonSpacing.large)
                         .frame(minHeight: 64)
                         .background(
                             appearanceModeRawValue == mode.rawValue
-                                ? palette.primaryContainer.opacity(0.55)
+                                ? palette.userMessage.opacity(0.55)
                                 : Color.clear,
-                            in: RoundedRectangle(cornerRadius: M3Shape.large)
+                            in: RoundedRectangle(cornerRadius: ShannonShape.large)
                         )
                     }
                     .buttonStyle(.plain)
                 }
                 Spacer()
             }
-            .padding(M3Spacing.large)
-            .background(palette.surface)
+            .padding(ShannonSpacing.large)
+            .background(palette.canvas)
             .navigationTitle("外観")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

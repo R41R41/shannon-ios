@@ -22,7 +22,7 @@ public struct ShannonMemoryView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         NavigationStack {
             if showsDismissButton {
                 memoryContent(palette)
@@ -78,9 +78,9 @@ public struct ShannonMemoryView: View {
         }
     }
 
-    func memoryContent(_ palette: M3Palette) -> some View {
+    func memoryContent(_ palette: ShannonPalette) -> some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: M3Spacing.large) {
+            LazyVStack(alignment: .leading, spacing: ShannonSpacing.large) {
                 if let report = model.latestSleepReport {
                     Button {
                         selectedSleepReport = report
@@ -117,9 +117,9 @@ public struct ShannonMemoryView: View {
                     }
                 }
             }
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.top, max(M3Spacing.large, workspaceTopInset))
-            .padding(.bottom, M3Spacing.large)
+            .padding(.horizontal, ShannonSpacing.large)
+            .padding(.top, max(ShannonSpacing.large, workspaceTopInset))
+            .padding(.bottom, ShannonSpacing.large)
         }
         .background(Color.clear)
         .task { await model.loadIfNeeded() }
@@ -127,7 +127,7 @@ public struct ShannonMemoryView: View {
     }
 
     @ViewBuilder
-    func currentStateContent(_ palette: M3Palette) -> some View {
+    func currentStateContent(_ palette: ShannonPalette) -> some View {
         if let state = model.dashboard?.currentState {
             ShannonCurrentStateCard(state: state, dailyMind: model.dashboard?.dailyMind, palette: palette)
             if let usage = model.dashboard?.usage {
@@ -137,21 +137,21 @@ public struct ShannonMemoryView: View {
                 ShannonInitiativeEvaluationCard(evaluation: evaluation, palette: palette)
             }
             if let profile = model.dashboard?.personalityProfile {
-                VStack(alignment: .leading, spacing: M3Spacing.small) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     HStack {
                         Text("性格分析").font(.title3.weight(.semibold))
                         Spacer()
                         Text("v\(profile.version)")
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(palette.primary)
+                            .foregroundStyle(palette.action)
                     }
                     Text(profile.analysis)
                         .font(.body)
                         .lineSpacing(4)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
-                .padding(M3Spacing.large)
-                .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+                .padding(ShannonSpacing.large)
+                .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
             }
             if !state.interests.isEmpty {
                 MemorySimpleSection(title: "興味", symbol: "sparkles", values: state.interests, palette: palette)
@@ -169,7 +169,7 @@ public struct ShannonMemoryView: View {
     }
 
     @ViewBuilder
-    func knowledgeContent(_ palette: M3Palette) -> some View {
+    func knowledgeContent(_ palette: ShannonPalette) -> some View {
         let answers = model.dashboard?.knowledge ?? []
         if answers.isEmpty {
             let facts = model.activeItems.filter { $0.kind == .userFact }
@@ -180,20 +180,20 @@ public struct ShannonMemoryView: View {
             }
         } else {
             ForEach(knowledgeCategories(answers), id: \.category) { group in
-                VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                     Text(group.category).font(.title3.weight(.semibold))
                     ForEach(group.answers) { answer in
-                        HStack(alignment: .center, spacing: M3Spacing.small) {
+                        HStack(alignment: .center, spacing: ShannonSpacing.small) {
                             KnowledgeAnswerCard(answer: answer, palette: palette)
                             Button {
                                 editingText = answer.answer
                                 editingAnswer = answer
                             } label: {
                                 Image(systemName: "pencil")
-                                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(palette.primary)
+                            .foregroundStyle(palette.action)
                             .accessibilityLabel("\(answer.question)を編集")
                         }
                     }
@@ -203,14 +203,14 @@ public struct ShannonMemoryView: View {
     }
 
     @ViewBuilder
-    func activityContent(_ palette: M3Palette) -> some View {
+    func activityContent(_ palette: ShannonPalette) -> some View {
         let reports = model.dashboard?.sleepReports ?? []
         if !reports.isEmpty {
-            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Label("シャノンの日記", systemImage: "book.closed.fill")
                     .font(.title3.weight(.semibold))
                 ScrollView(.horizontal) {
-                    LazyHStack(spacing: M3Spacing.medium) {
+                    LazyHStack(spacing: ShannonSpacing.medium) {
                         ForEach(reports.prefix(14)) { report in
                             Button {
                                 selectedSleepReport = report
@@ -227,7 +227,7 @@ public struct ShannonMemoryView: View {
 
         let world = model.dashboard?.world ?? []
         if !world.isEmpty {
-            VStack(alignment: .leading, spacing: M3Spacing.medium) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                 Text("見つけたもの").font(.title3.weight(.semibold))
                 ForEach(world.prefix(12)) { item in
                     if let url = URL(string: item.url) {
@@ -251,7 +251,7 @@ public struct ShannonMemoryView: View {
             }
         } else {
             ForEach(activityGroups(activity)) { group in
-                VStack(alignment: .leading, spacing: M3Spacing.medium) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                     Text(group.title)
                         .font(.title3.weight(.semibold))
                     ForEach(group.items) { item in
@@ -265,13 +265,13 @@ public struct ShannonMemoryView: View {
     func memorySection(
         _ title: String?,
         items: [ShannonMemoryItemDTO],
-        palette: M3Palette
+        palette: ShannonPalette
     ) -> some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             if let title {
                 Text(title)
                     .font(.title3.weight(.semibold))
-                    .padding(.horizontal, M3Spacing.extraSmall)
+                    .padding(.horizontal, ShannonSpacing.extraSmall)
             }
             ForEach(items) { item in
                 NavigationLink {
@@ -284,12 +284,12 @@ public struct ShannonMemoryView: View {
         }
     }
 
-    func emptyState(_ title: String, symbol: String, palette: M3Palette) -> some View {
+    func emptyState(_ title: String, symbol: String, palette: ShannonPalette) -> some View {
         ContentUnavailableView {
             Label(title, systemImage: symbol)
         }
-        .foregroundStyle(palette.onSurfaceVariant)
-        .padding(.vertical, M3Spacing.huge)
+        .foregroundStyle(palette.textSecondary)
+        .padding(.vertical, ShannonSpacing.huge)
     }
 
     func knowledgeCategories(_ answers: [ShannonKnowledgeAnswerDTO]) -> [(category: String, answers: [ShannonKnowledgeAnswerDTO])] {

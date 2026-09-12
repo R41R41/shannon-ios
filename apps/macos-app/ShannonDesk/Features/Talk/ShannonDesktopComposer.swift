@@ -66,7 +66,7 @@ struct DesktopComposer: View {
             if let attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.shannonAttention)
             }
 
             if usesWebSearch {
@@ -188,7 +188,7 @@ struct DesktopTaskSection: View {
                         Button { select(task) } label: {
                             HStack(spacing: 14) {
                                 Image(systemName: task.status.symbolName)
-                                    .foregroundStyle(task.status == .waitingApproval ? .orange : .secondary)
+                                    .foregroundStyle(task.status == .waitingApproval ? Color.shannonAttention : .secondary)
                                     .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
@@ -268,9 +268,9 @@ extension ShannonAgentEventTone {
         switch self {
         case .neutral: .secondary
         case .progress: .accentColor
-        case .success: .green
-        case .warning: .orange
-        case .error: .red
+        case .success: Color.shannonSuccess
+        case .warning: Color.shannonAttention
+        case .error: Color.shannonDanger
         }
     }
 }
@@ -287,8 +287,8 @@ extension ShannonAgentTestStatus {
     var desktopColor: Color {
         switch self {
         case .pending: .secondary
-        case .passed: .green
-        case .failed: .red
+        case .passed: Color.shannonSuccess
+        case .failed: Color.shannonDanger
         }
     }
 }

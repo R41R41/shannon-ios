@@ -6,26 +6,26 @@ struct ShannonSleepReportView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         ScrollView {
-            VStack(alignment: .leading, spacing: M3Spacing.extraLarge) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("\(report.dayKey) の睡眠", systemImage: "moon.stars.fill")
                         .font(.title2.weight(.semibold))
                     Text("会話を振り返り、急いで結論にせず整理した結果です。")
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
-                .padding(M3Spacing.extraLarge)
+                .padding(ShannonSpacing.extraLarge)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(palette.primaryContainer, in: RoundedRectangle(cornerRadius: M3Shape.extraLarge))
+                .background(palette.userMessage, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
                 reportSection("新しく覚えたこと", symbol: "plus.circle.fill", changes: report.learned, palette: palette)
                 reportSection("理解が深まったこと", symbol: "arrow.triangle.2.circlepath", changes: report.updated, palette: palette)
                 reportSection("興味の変化", symbol: "sparkles", changes: report.interestChanges, palette: palette)
                 contradictionSection(palette)
             }
-            .padding(M3Spacing.large)
+            .padding(ShannonSpacing.large)
         }
-        .background(palette.surfaceContainerLow)
+        .background(palette.readingSurface)
         .navigationTitle("睡眠後の変化")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -38,44 +38,44 @@ struct ShannonSleepReportView: View {
     }
 
     func reportSection(
-        _ title: String, symbol: String, changes: [ShannonSleepChangeDTO], palette: M3Palette
+        _ title: String, symbol: String, changes: [ShannonSleepChangeDTO], palette: ShannonPalette
     ) -> some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label(title, systemImage: symbol).font(.title3.weight(.semibold))
             if changes.isEmpty {
-                Text("今回はありません").foregroundStyle(palette.onSurfaceVariant)
+                Text("今回はありません").foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(changes) { change in
                     VStack(alignment: .leading, spacing: 5) {
                         Text(change.text).font(.body.weight(.medium))
-                        Text(change.reason).font(.caption).foregroundStyle(palette.onSurfaceVariant)
+                        Text(change.reason).font(.caption).foregroundStyle(palette.textSecondary)
                     }
-                    .padding(M3Spacing.large)
+                    .padding(ShannonSpacing.large)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(palette.surface, in: RoundedRectangle(cornerRadius: M3Shape.large))
+                    .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
                 }
             }
         }
     }
 
-    func contradictionSection(_ palette: M3Palette) -> some View {
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
+    func contradictionSection(_ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label("矛盾として保留したこと", systemImage: "arrow.left.arrow.right.circle.fill")
                 .font(.title3.weight(.semibold))
             if report.contradictions.isEmpty {
-                Text("今回はありません").foregroundStyle(palette.onSurfaceVariant)
+                Text("今回はありません").foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(report.contradictions) { conflict in
-                    VStack(alignment: .leading, spacing: M3Spacing.small) {
-                        Text("いまの理解").font(.caption.weight(.semibold)).foregroundStyle(palette.primary)
+                    VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                        Text("いまの理解").font(.caption.weight(.semibold)).foregroundStyle(palette.action)
                         Text(conflict.currentText)
                         Divider()
-                        Text("新しく見つけた表現").font(.caption.weight(.semibold)).foregroundStyle(palette.onSurface)
+                        Text("新しく見つけた表現").font(.caption.weight(.semibold)).foregroundStyle(palette.textPrimary)
                         Text(conflict.candidateText)
-                        Text(conflict.reason).font(.caption).foregroundStyle(palette.onSurfaceVariant)
+                        Text(conflict.reason).font(.caption).foregroundStyle(palette.textSecondary)
                     }
-                    .padding(M3Spacing.large)
-                    .background(palette.tertiaryContainer, in: RoundedRectangle(cornerRadius: M3Shape.large))
+                    .padding(ShannonSpacing.large)
+                    .background(palette.creationTint, in: RoundedRectangle(cornerRadius: ShannonShape.large))
                 }
             }
         }
@@ -84,17 +84,17 @@ struct ShannonSleepReportView: View {
 
 struct MemoryErrorCard: View {
     let message: String
-    let palette: M3Palette
+    let palette: ShannonPalette
     let action: () -> Void
     var body: some View {
-        HStack(spacing: M3Spacing.medium) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(palette.error)
+        HStack(spacing: ShannonSpacing.medium) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(palette.danger)
             Text(message).font(.callout)
             Spacer()
-            Button("再試行", action: action).font(.callout.weight(.semibold)).foregroundStyle(palette.primary)
+            Button("再試行", action: action).font(.callout.weight(.semibold)).foregroundStyle(palette.action)
         }
-        .padding(M3Spacing.large)
-        .background(palette.errorContainer, in: RoundedRectangle(cornerRadius: M3Shape.large))
+        .padding(ShannonSpacing.large)
+        .background(palette.dangerTint, in: RoundedRectangle(cornerRadius: ShannonShape.large))
     }
 }
 

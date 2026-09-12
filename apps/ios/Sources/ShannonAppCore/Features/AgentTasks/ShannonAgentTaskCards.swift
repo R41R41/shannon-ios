@@ -9,33 +9,33 @@ struct ShannonAgentTaskCardView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
-        VStack(alignment: .leading, spacing: M3Spacing.medium) {
-            HStack(alignment: .firstTextBaseline, spacing: M3Spacing.small) {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(task.title)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                     .lineLimit(2)
-                Spacer(minLength: M3Spacing.small)
+                Spacer(minLength: ShannonSpacing.small)
                 AgentTaskStatusBadge(task: task, palette: palette)
             }
 
             Text(task.summary)
                 .font(.caption)
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
                 .lineLimit(3)
 
             if let progress = task.progressFraction, !task.status.isTerminal {
                 ProgressView(value: progress)
-                    .tint(palette.primary)
+                    .tint(palette.action)
                     .accessibilityLabel("作業の進み具合")
                     .accessibilityValue("全\(task.plan.count)工程中\(task.completedPlanCount)工程完了")
             }
 
             switch task.status {
             case .proposed:
-                HStack(spacing: M3Spacing.small) {
+                HStack(spacing: ShannonSpacing.small) {
                     Button("始める", action: start)
                         .buttonStyle(AgentTaskProminentButtonStyle(palette: palette))
                     Button("今はやめる", action: cancel)
@@ -53,20 +53,20 @@ struct ShannonAgentTaskCardView: View {
                         Image(systemName: "arrow.right")
                     }
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
                     .frame(minHeight: 34)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(M3Spacing.large)
+        .padding(ShannonSpacing.large)
         .background(
-            palette.primaryContainer.opacity(colorScheme == .dark ? 0.34 : 0.48),
-            in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
+            palette.userMessage.opacity(colorScheme == .dark ? 0.34 : 0.48),
+            in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
-                .stroke(palette.primary.opacity(0.26), lineWidth: 0.8)
+            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
+                .stroke(palette.action.opacity(0.26), lineWidth: 0.8)
         }
         .padding(.leading, 62)
         .accessibilityElement(children: .contain)
@@ -81,41 +81,41 @@ struct ShannonAgentTaskCapsule: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         Button(action: open) {
-            HStack(spacing: M3Spacing.medium) {
+            HStack(spacing: ShannonSpacing.medium) {
                 ShannonAvatarView(expression: task.expression, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     if task.status == .waitingApproval {
                         Label("許可が必要です", systemImage: "hand.raised.fill")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(palette.warning)
+                            .foregroundStyle(palette.attention)
                             .lineLimit(1)
                     } else {
                         Text(task.stageDescription)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.onSurface)
+                            .foregroundStyle(palette.textPrimary)
                             .lineLimit(1)
                     }
                     Text(task.status == .waitingApproval
                         ? "タップして内容を確認"
                         : "\(task.stage.japaneseName) · シャノンの作業を見る")
                         .font(.caption2)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.up")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
             }
-            .padding(.horizontal, M3Spacing.medium)
+            .padding(.horizontal, ShannonSpacing.medium)
             .frame(minHeight: 50)
             .background(.ultraThinMaterial, in: Capsule())
-            .overlay { Capsule().stroke(palette.primary.opacity(0.28), lineWidth: 0.8) }
+            .overlay { Capsule().stroke(palette.action.opacity(0.28), lineWidth: 0.8) }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, M3Spacing.large)
+        .padding(.horizontal, ShannonSpacing.large)
         .accessibilityLabel("シャノンの作業、\(task.title)、\(task.stage.japaneseName)。作業画面を開く")
     }
 }

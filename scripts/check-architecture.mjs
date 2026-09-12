@@ -38,12 +38,21 @@ const legacyMonoliths = [
   'apps/ios/Sources/ShannonAppCore/ShannonMemoryView.swift',
   'apps/ios/Sources/ShannonAppCore/ShannonRealtimeVoice.swift',
   'apps/macos-app/ShannonDesk/ShannonDesktopView.swift',
+  'apps/ios/Sources/ShannonAppCore/Material3Theme.swift',
 ];
 for (const path of legacyMonoliths) if (existsSync(resolve(root, path))) fail(`${path} must remain split by responsibility`);
 
 const swiftFiles = productionSources.filter(path => extname(path) === '.swift');
 for (const path of swiftFiles) {
   const imports = source(path);
+  for (const legacyToken of ['M3Palette', 'M3Spacing', 'M3Shape', 'M3TouchTarget']) {
+    if (imports.includes(legacyToken)) fail(`${projectPath(path)} uses legacy design token ${legacyToken}`);
+  }
+  if (/\bColor\.(?:red|orange|green)\b/u.test(imports)
+      || /\.(?:foregroundStyle|tint|background|fill|stroke)\(\.(?:red|orange|green)\b/u.test(imports)
+      || /\breturn \.(?:red|orange|green)\b/u.test(imports)) {
+    fail(`${projectPath(path)} bypasses Shannon semantic status colors`);
+  }
   if (imports.includes('import WebRTC') && basename(path) !== 'WebRTCVoiceTransport.swift') {
     fail(`${projectPath(path)} imports WebRTC outside the transport adapter`);
   }

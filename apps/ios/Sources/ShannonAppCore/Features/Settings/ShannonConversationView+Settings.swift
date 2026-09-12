@@ -12,16 +12,16 @@ extension ShannonConversationView {
         .environment(\.colorScheme, resolvedColorScheme)
     }
 
-    func settingsSheetContent(_ palette: M3Palette) -> some View {
+    func settingsSheetContent(_ palette: ShannonPalette) -> some View {
         ZStack(alignment: .top) {
-            palette.surface
+            palette.canvas
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: M3Spacing.large) {
+                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                     Text("設定")
                         .font(.largeTitle.bold())
-                        .padding(.bottom, M3Spacing.small)
+                        .padding(.bottom, ShannonSpacing.small)
 
                     Button { showsStateDetails = true } label: {
                         ShannonSettingsRow(
@@ -99,7 +99,7 @@ extension ShannonConversationView {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, M3Spacing.large)
+                .padding(.horizontal, ShannonSpacing.large)
                 .padding(.top, ShannonWorkspaceChrome.contentTopInset + 64)
                 .padding(.bottom, 88)
             }
@@ -119,11 +119,11 @@ extension ShannonConversationView {
                 Button { showsSettings = false } label: {
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(palette.onSurface)
+                        .foregroundStyle(palette.textPrimary)
                         .frame(width: 48, height: 48)
                         .background(.ultraThinMaterial, in: Circle())
                         .overlay {
-                            Circle().stroke(palette.outlineVariant.opacity(0.6), lineWidth: 0.7)
+                            Circle().stroke(palette.divider.opacity(0.6), lineWidth: 0.7)
                         }
                         .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
                 }
@@ -131,10 +131,10 @@ extension ShannonConversationView {
                 .accessibilityLabel("設定を閉じる")
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, M3Spacing.large)
-            .padding(.top, M3Spacing.extraSmall)
+            .padding(.horizontal, ShannonSpacing.large)
+            .padding(.top, ShannonSpacing.extraSmall)
         }
-        .foregroundStyle(palette.onSurface)
+        .foregroundStyle(palette.textPrimary)
         .sheet(isPresented: $showsStateDetails) {
             ShannonStateSheet(state: model.state, expression: model.currentExpression)
         }

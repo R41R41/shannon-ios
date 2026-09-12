@@ -287,7 +287,7 @@ public struct ShannonWorldSubscriptionView: View {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.shannonDanger)
                     }
                 }
             }
@@ -325,7 +325,7 @@ public struct ShannonWorldSubscriptionView: View {
             }
             Label(sourceStatus(source), systemImage: sourceSymbol(source))
                 .font(.caption)
-                .foregroundStyle(source.enabled && source.hasError ? .orange : .secondary)
+                .foregroundStyle(source.enabled && source.hasError ? Color.shannonAttention : .secondary)
             if source.fetchedItemCount > 0 || source.enabled {
                 HStack(spacing: 8) {
                     if source.fetchedItemCount > 0 {

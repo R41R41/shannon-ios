@@ -118,7 +118,7 @@ extension ShannonDesktopRootView {
                         if let error = conversation.agentTaskActionError(task.id) {
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(Color.shannonAttention)
                                 Text(error)
                                     .font(.callout)
                                 Spacer(minLength: 8)
@@ -126,7 +126,7 @@ extension ShannonDesktopRootView {
                                     .buttonStyle(.borderless)
                             }
                             .padding(12)
-                            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
                         }
 
                         let policy = ShannonDesktopTaskActionPolicy(status: task.status)
@@ -157,7 +157,7 @@ extension ShannonDesktopRootView {
                                 }
                             }
                             .padding(14)
-                            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                            .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                         }
 
                         if !task.plan.isEmpty {

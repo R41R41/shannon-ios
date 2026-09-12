@@ -155,7 +155,7 @@ struct DesktopArtifactPreview: View {
                 if let exportMessage {
                     Text(exportMessage)
                         .font(.caption)
-                        .foregroundStyle(exportMessage == "保存しました" ? Color.secondary : Color.orange)
+                        .foregroundStyle(exportMessage == "保存しました" ? Color.secondary : Color.shannonAttention)
                 }
                 Button("閉じる") { dismiss() }
                 Button("保存…") { isExporting = true }

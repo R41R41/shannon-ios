@@ -160,7 +160,7 @@ public struct ShannonVoiceIdentityView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         NavigationStack {
             List {
                 Section {
@@ -180,7 +180,7 @@ public struct ShannonVoiceIdentityView: View {
 
                 Section("声を選ぶ") {
                     ForEach(model.response.candidates) { candidate in
-                        HStack(spacing: M3Spacing.medium) {
+                        HStack(spacing: ShannonSpacing.medium) {
                             Button {
                                 Task { await model.select(candidate) }
                             } label: {
@@ -202,7 +202,7 @@ public struct ShannonVoiceIdentityView: View {
                                       ? "stop.fill" : "play.fill")
                                     .font(.system(size: 15, weight: .semibold))
                                     .frame(width: 42, height: 42)
-                                    .background(palette.surfaceContainerHigh, in: Circle())
+                                    .background(palette.elevatedSurface, in: Circle())
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(model.previewingVoiceID == candidate.id
@@ -215,19 +215,19 @@ public struct ShannonVoiceIdentityView: View {
                 Section {
                     Text("声の変更は、接続中の会話を急に変えず、次に始める音声会話から反映されます。選択はiPhoneとMacで共有されます。")
                         .font(.footnote)
-                        .foregroundStyle(palette.onSurfaceVariant)
+                        .foregroundStyle(palette.textSecondary)
                 }
 
                 if let errorMessage = model.errorMessage {
                     Section {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.shannonDanger)
                     }
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(palette.surface)
+            .background(palette.canvas)
             .navigationTitle("シャノンの声")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -243,21 +243,21 @@ public struct ShannonVoiceIdentityView: View {
         title: String,
         detail: String,
         selected: Bool,
-        palette: M3Palette
+        palette: ShannonPalette
     ) -> some View {
-        HStack(spacing: M3Spacing.medium) {
-            VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
+        HStack(spacing: ShannonSpacing.medium) {
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text(title)
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
-            Spacer(minLength: M3Spacing.small)
+            Spacer(minLength: ShannonSpacing.small)
             if selected {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
             }
         }
         .contentShape(Rectangle())

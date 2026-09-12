@@ -9,7 +9,7 @@ struct ShannonEmptyConversation: View {
     var body: some View {
         ShannonAvatarView(expression: .curious, size: 96)
             .frame(maxWidth: .infinity)
-            .padding(M3Spacing.extraLarge)
+            .padding(ShannonSpacing.extraLarge)
             .accessibilityLabel("シャノン")
     }
 }
@@ -19,16 +19,16 @@ struct ShannonConversationDayDivider: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
-        HStack(spacing: M3Spacing.medium) {
-            Rectangle().fill(palette.outlineVariant.opacity(0.52)).frame(height: 0.5)
+        let palette = ShannonPalette.resolve(colorScheme)
+        HStack(spacing: ShannonSpacing.medium) {
+            Rectangle().fill(palette.divider.opacity(0.52)).frame(height: 0.5)
             Text(label)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
                 .fixedSize()
-            Rectangle().fill(palette.outlineVariant.opacity(0.52)).frame(height: 0.5)
+            Rectangle().fill(palette.divider.opacity(0.52)).frame(height: 0.5)
         }
-        .padding(.vertical, M3Spacing.small)
+        .padding(.vertical, ShannonSpacing.small)
         .accessibilityLabel(label)
     }
 
@@ -45,8 +45,8 @@ struct ShannonContextReferenceCard: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
-        HStack(alignment: .top, spacing: M3Spacing.small) {
+        let palette = ShannonPalette.resolve(colorScheme)
+        HStack(alignment: .top, spacing: ShannonSpacing.small) {
             Image(systemName: "arrow.uturn.backward.circle.fill")
                 .foregroundStyle(palette.brandPresence)
             VStack(alignment: .leading, spacing: 3) {
@@ -55,14 +55,14 @@ struct ShannonContextReferenceCard: View {
                     .foregroundStyle(palette.brandPresence)
                 Text(memory.summary)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, M3Spacing.medium)
-        .padding(.vertical, M3Spacing.small)
-        .background(palette.primaryContainer.opacity(0.42), in: RoundedRectangle(cornerRadius: M3Shape.medium))
+        .padding(.horizontal, ShannonSpacing.medium)
+        .padding(.vertical, ShannonSpacing.small)
+        .background(palette.userMessage.opacity(0.42), in: RoundedRectangle(cornerRadius: ShannonShape.medium))
         .padding(.leading, 62)
         .accessibilityElement(children: .combine)
     }
@@ -78,7 +78,7 @@ struct ShannonMessageRow: View {
     @State var didCopy = false
 
     var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
 
         Group {
             if message.role == .shannon {
@@ -106,9 +106,9 @@ struct ShannonMessageRow: View {
         }
     }
 
-    func shannonReply(_ palette: M3Palette) -> some View {
-        VStack(alignment: .leading, spacing: M3Spacing.extraSmall) {
-            HStack(alignment: .center, spacing: M3Spacing.extraSmall) {
+    func shannonReply(_ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+            HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
                 ShannonAvatarView(
                     expression: message.emotionSnapshot?.expression ?? .neutral,
                     size: 42
@@ -116,7 +116,7 @@ struct ShannonMessageRow: View {
 
                 Text("シャノン")
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(palette.onSurface)
+                    .foregroundStyle(palette.textPrimary)
 
                 if let expression = message.emotionSnapshot?.expression {
                     Text("· \(expression.japaneseName)")
@@ -133,43 +133,43 @@ struct ShannonMessageRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
                 .accessibilityLabel(didCopy ? "コピーしました" : "シャノンの回答をコピー")
             }
             .font(.caption2)
-            .foregroundStyle(palette.onSurfaceVariant)
+            .foregroundStyle(palette.textSecondary)
 
             ShannonRichMarkdownText(source: message.text, palette: palette)
                 .textSelection(.enabled)
-                .tint(palette.primary)
+                .tint(palette.action)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let attribution = message.sourceAttribution,
                let sourceURL = safeSourceURL(attribution.url) {
                 Link(destination: sourceURL) {
-                    HStack(alignment: .top, spacing: M3Spacing.small) {
+                    HStack(alignment: .top, spacing: ShannonSpacing.small) {
                         Image(systemName: "link")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.primary)
+                            .foregroundStyle(palette.action)
                             .frame(width: 22, height: 22)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("出典 · \(attribution.title)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(palette.onSurface)
+                                .foregroundStyle(palette.textPrimary)
                             Text("選んだ理由: \(attribution.reason)")
                                 .font(.caption2)
-                                .foregroundStyle(palette.onSurfaceVariant)
+                                .foregroundStyle(palette.textSecondary)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(palette.onSurfaceVariant)
+                            .foregroundStyle(palette.textSecondary)
                     }
-                    .padding(.horizontal, M3Spacing.medium)
-                    .padding(.vertical, M3Spacing.small)
+                    .padding(.horizontal, ShannonSpacing.medium)
+                    .padding(.vertical, ShannonSpacing.small)
                     .background(
-                        palette.surfaceContainer,
-                        in: RoundedRectangle(cornerRadius: M3Shape.medium, style: .continuous)
+                        palette.subtleSurface,
+                        in: RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous)
                     )
                 }
                 .buttonStyle(.plain)
@@ -184,8 +184,8 @@ struct ShannonMessageRow: View {
         return url
     }
 
-    func userMessage(_ palette: M3Palette) -> some View {
-        HStack(alignment: .bottom, spacing: M3Spacing.small) {
+    func userMessage(_ palette: ShannonPalette) -> some View {
+        HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
             Spacer(minLength: 64)
 
             VStack(alignment: .trailing, spacing: 5) {
@@ -193,13 +193,13 @@ struct ShannonMessageRow: View {
                     .font(.body)
                     .lineSpacing(3)
                     .textSelection(.enabled)
-                    .foregroundStyle(palette.onPrimaryContainer)
-                    .tint(palette.primary)
-                    .padding(.horizontal, M3Spacing.large)
-                    .padding(.vertical, M3Spacing.small + 2)
+                    .foregroundStyle(palette.onUserMessage)
+                    .tint(palette.action)
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .padding(.vertical, ShannonSpacing.small + 2)
                     .background(
-                        palette.primaryContainer,
-                        in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
+                        palette.userMessage,
+                        in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
                     )
 
                 HStack(spacing: 5) {
@@ -207,8 +207,8 @@ struct ShannonMessageRow: View {
                     deliveryIcon(palette)
                 }
                 .font(.caption2)
-                .foregroundStyle(message.deliveryState == .failed ? palette.error : palette.onSurfaceVariant)
-                .padding(.horizontal, M3Spacing.extraSmall)
+                .foregroundStyle(message.deliveryState == .failed ? palette.danger : palette.textSecondary)
+                .padding(.horizontal, ShannonSpacing.extraSmall)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -229,7 +229,7 @@ struct ShannonMessageRow: View {
     }
 
     @ViewBuilder
-    func deliveryIcon(_ palette: M3Palette) -> some View {
+    func deliveryIcon(_ palette: ShannonPalette) -> some View {
         switch message.deliveryState {
         case .sending:
             Image(systemName: "clock")
@@ -237,7 +237,7 @@ struct ShannonMessageRow: View {
             Image(systemName: "checkmark")
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(palette.error)
+                .foregroundStyle(palette.danger)
         }
     }
 

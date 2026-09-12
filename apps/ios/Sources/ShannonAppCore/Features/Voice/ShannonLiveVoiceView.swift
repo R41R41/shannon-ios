@@ -27,10 +27,10 @@ public struct ShannonLiveVoiceView: View {
     }
 
     public var body: some View {
-        let palette = M3Palette.resolve(colorScheme)
+        let palette = ShannonPalette.resolve(colorScheme)
         ZStack {
             LinearGradient(
-                colors: [palette.surface, palette.intelligenceSoft.opacity(0.72), palette.surface],
+                colors: [palette.canvas, palette.intelligenceSoft.opacity(0.72), palette.canvas],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -63,14 +63,14 @@ public struct ShannonLiveVoiceView: View {
                             alignment: .leading,
                             palette: palette
                         )
-                        .padding(.horizontal, M3Spacing.large)
-                        .padding(.bottom, M3Spacing.large)
+                        .padding(.horizontal, ShannonSpacing.large)
+                        .padding(.bottom, ShannonSpacing.large)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
                 .frame(maxHeight: .infinity)
 
-                VStack(spacing: M3Spacing.medium) {
+                VStack(spacing: ShannonSpacing.medium) {
                     if !model.userTranscript.isEmpty {
                         transcriptCard(
                             speaker: "あなた",
@@ -84,15 +84,15 @@ public struct ShannonLiveVoiceView: View {
                     if let error = model.errorMessage {
                         Text(error)
                             .font(.callout)
-                            .foregroundStyle(palette.error)
+                            .foregroundStyle(palette.danger)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, M3Spacing.large)
+                            .padding(.horizontal, ShannonSpacing.large)
                     }
 
                     if let startedAt = model.sessionStartedAt {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             ViewThatFits(in: .horizontal) {
-                                HStack(spacing: M3Spacing.medium) {
+                                HStack(spacing: ShannonSpacing.medium) {
                                     sessionMetricLabels(startedAt: startedAt, now: context.date)
                                 }
                                 VStack(alignment: .leading, spacing: 4) {
@@ -100,18 +100,18 @@ public struct ShannonLiveVoiceView: View {
                                 }
                             }
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(palette.onSurfaceVariant)
+                            .foregroundStyle(palette.textSecondary)
                             .accessibilityElement(children: .combine)
                         }
                     }
 
                     controls(palette)
                 }
-                .padding(.horizontal, M3Spacing.large)
-                .padding(.bottom, M3Spacing.large)
+                .padding(.horizontal, ShannonSpacing.large)
+                .padding(.bottom, ShannonSpacing.large)
             }
         }
-        .foregroundStyle(palette.onSurface)
+        .foregroundStyle(palette.textPrimary)
         .task {
             guard !didStart else { return }
             didStart = true
@@ -141,14 +141,14 @@ public struct ShannonLiveVoiceView: View {
         }
     }
 
-    private func topBar(_ palette: M3Palette) -> some View {
+    private func topBar(_ palette: ShannonPalette) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("シャノン")
                     .font(.headline)
                 Text(model.phase.japaneseLabel)
                     .font(.caption)
-                    .foregroundStyle(palette.onSurfaceVariant)
+                    .foregroundStyle(palette.textSecondary)
             }
             Spacer()
             Button {
@@ -157,43 +157,43 @@ public struct ShannonLiveVoiceView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.body.weight(.semibold))
-                    .frame(width: M3TouchTarget.minimum, height: M3TouchTarget.minimum)
+                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     .background(.thinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("音声会話を閉じる")
         }
-        .padding(.horizontal, M3Spacing.large)
-        .padding(.top, M3Spacing.small)
+        .padding(.horizontal, ShannonSpacing.large)
+        .padding(.top, ShannonSpacing.small)
     }
 
     private func transcriptCard(
         speaker: String,
         text: String,
         alignment: Alignment,
-        palette: M3Palette
+        palette: ShannonPalette
     ) -> some View {
         VStack(alignment: alignment == .leading ? .leading : .trailing, spacing: 4) {
             Text(speaker)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(palette.onSurfaceVariant)
+                .foregroundStyle(palette.textSecondary)
             Text(text)
                 .font(.body)
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: alignment)
         }
-        .padding(.horizontal, M3Spacing.medium)
-        .padding(.vertical, M3Spacing.small)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous))
+        .padding(.horizontal, ShannonSpacing.medium)
+        .padding(.vertical, ShannonSpacing.small)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: M3Shape.large, style: .continuous)
-                .stroke(palette.outlineVariant.opacity(0.7), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
         }
     }
 
-    private func controls(_ palette: M3Palette) -> some View {
-        HStack(spacing: M3Spacing.large) {
+    private func controls(_ palette: ShannonPalette) -> some View {
+        HStack(spacing: ShannonSpacing.large) {
             if model.phase == .failed {
                 Button {
                     Task {
@@ -226,7 +226,7 @@ public struct ShannonLiveVoiceView: View {
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 64, height: 64)
-                    .background(Color.red.opacity(0.88), in: Circle())
+                    .background(Color.shannonDanger.opacity(0.88), in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("音声会話を終了")
@@ -235,7 +235,7 @@ public struct ShannonLiveVoiceView: View {
                 Circle().fill(.thinMaterial)
                 Image(systemName: phaseSymbol)
                     .font(.title3)
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(palette.action)
             }
             .frame(width: 52, height: 52)
             .accessibilityHidden(true)

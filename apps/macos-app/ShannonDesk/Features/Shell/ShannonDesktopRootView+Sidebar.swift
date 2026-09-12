@@ -118,7 +118,7 @@ extension ShannonDesktopRootView {
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: connection.isConnected ? "checkmark.circle.fill" : "link.badge.plus")
-                            .foregroundStyle(connection.isConnected ? Color.green : Color.secondary)
+                            .foregroundStyle(connection.isConnected ? Color.shannonSuccess : Color.secondary)
                         Text(connection.statusLabel)
                             .lineLimit(1)
                         Spacer()

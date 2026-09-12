@@ -51,7 +51,7 @@ extension ShannonDesktopRootView {
                     .foregroundStyle(.secondary)
                 if let errorMessage = voiceIdentity.errorMessage {
                     Text(errorMessage)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.shannonDanger)
                 }
             }
 
@@ -62,7 +62,7 @@ extension ShannonDesktopRootView {
                 }
                 if let errorMessage = worldSubscriptions.errorMessage {
                     Text(errorMessage)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.shannonDanger)
                 }
             }
 
