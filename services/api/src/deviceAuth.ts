@@ -201,20 +201,33 @@ export class SQLiteDeviceAuthStore {
     return Number(result.changes) > 0;
   }
 
+  revokeForScope(deviceId: string, scopeKey: string): boolean {
+    const result = this.database.prepare(`
+      UPDATE device_tokens SET revoked_at = ?
+      WHERE device_id = ? AND scope_key = ? AND revoked_at IS NULL
+    `).run(this.now(), deviceId, scopeKey);
+    secureDatabaseFiles(this.options.path);
+    return Number(result.changes) > 0;
+  }
+
   listDevices(): readonly ShannonDeviceRecord[] {
     const rows = this.database.prepare(`
       SELECT device_id, scope_key, display_name, expires_at, last_used_at, revoked_at
       FROM device_tokens
       ORDER BY created_at ASC
     `).all() as unknown as DeviceRow[];
-    return Object.freeze(rows.map(row => Object.freeze({
-      deviceId: row.device_id,
-      scopeKey: row.scope_key,
-      displayName: row.display_name,
-      expiresAt: new Date(row.expires_at).toISOString(),
-      lastUsedAt: row.last_used_at === null ? null : new Date(row.last_used_at).toISOString(),
-      revokedAt: row.revoked_at === null ? null : new Date(row.revoked_at).toISOString(),
-    })));
+    return Object.freeze(rows.map(deviceRecord));
+  }
+
+  listActiveDevicesForScope(scopeKey: string): readonly ShannonDeviceRecord[] {
+    const timestamp = this.now();
+    const rows = this.database.prepare(`
+      SELECT device_id, scope_key, display_name, expires_at, last_used_at, revoked_at
+      FROM device_tokens
+      WHERE scope_key = ? AND expires_at > ? AND revoked_at IS NULL
+      ORDER BY COALESCE(last_used_at, created_at) DESC, created_at DESC
+    `).all(scopeKey, timestamp) as unknown as DeviceRow[];
+    return Object.freeze(rows.map(deviceRecord));
   }
 
   close(): void {
@@ -238,6 +251,17 @@ export class SQLiteDeviceAuthStore {
       throw error;
     }
   }
+}
+
+function deviceRecord(row: DeviceRow): Readonly<ShannonDeviceRecord> {
+  return Object.freeze({
+    deviceId: row.device_id,
+    scopeKey: row.scope_key,
+    displayName: row.display_name,
+    expiresAt: new Date(row.expires_at).toISOString(),
+    lastUsedAt: row.last_used_at === null ? null : new Date(row.last_used_at).toISOString(),
+    revokedAt: row.revoked_at === null ? null : new Date(row.revoked_at).toISOString(),
+  });
 }
 
 export function configuredAuthPepper(
