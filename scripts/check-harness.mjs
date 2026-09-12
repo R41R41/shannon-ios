@@ -31,6 +31,8 @@ const requiredFiles = [
   'docs/archive/index.md',
   'docs/design/semantic-role-map.v1.json',
   'docs/design/screens/macos/talk.yaml',
+  'docs/design/screens/ios/talk.yaml',
+  'docs/design/screens/ios/work.yaml',
   'scripts/check-semantic-role-map.mjs',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.request.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.result.json',
@@ -78,15 +80,22 @@ for (const phrase of ['codex/shannon/<work-id>', 'active', 'waiting', 'integrate
   requireText(branching, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `branching guide is missing: ${phrase}`);
 }
 
-const screen = await text('docs/design/screens/macos/talk.yaml');
-for (const key of ['user_job', 'primary_action', 'preserve', 'improve', 'do_not_change', 'states', 'accessibility', 'evidence', 'baseline_commit', 'last_verified_at']) {
-  requireText(screen, new RegExp(`^${key}:`, 'm'), `screen contract is missing top-level key: ${key}`);
-}
-for (const state of ['loading', 'empty', 'error', 'offline', 'conflict', 'selection']) {
-  requireText(screen, new RegExp(`^  ${state}:`, 'm'), `screen contract is missing state: ${state}`);
-}
-for (const field of ['dynamic_type', 'voiceover', 'target_size', 'focus', 'reduce_motion']) {
-  requireText(screen, new RegExp(`^  ${field}:`, 'm'), `screen contract is missing accessibility field: ${field}`);
+const screenContracts = [
+  'docs/design/screens/macos/talk.yaml',
+  'docs/design/screens/ios/talk.yaml',
+  'docs/design/screens/ios/work.yaml',
+];
+for (const path of screenContracts) {
+  const screen = await text(path);
+  for (const key of ['user_job', 'primary_action', 'preserve', 'improve', 'do_not_change', 'states', 'accessibility', 'evidence', 'baseline_commit', 'last_verified_at']) {
+    requireText(screen, new RegExp(`^${key}:`, 'm'), `${path} is missing top-level key: ${key}`);
+  }
+  for (const state of ['loading', 'empty', 'error', 'offline', 'conflict', 'selection']) {
+    requireText(screen, new RegExp(`^  ${state}:`, 'm'), `${path} is missing state: ${state}`);
+  }
+  for (const field of ['dynamic_type', 'voiceover', 'target_size', 'focus', 'reduce_motion']) {
+    requireText(screen, new RegExp(`^  ${field}:`, 'm'), `${path} is missing accessibility field: ${field}`);
+  }
 }
 
 for (const [path, expectedVersion] of [
@@ -111,4 +120,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Shannon harness check passed (${requiredFiles.length} required files, ${archivedHtml.length} archived HTML files, 1 screen contract, 5 cross-app fixtures).`);
+console.log(`Shannon harness check passed (${requiredFiles.length} required files, ${archivedHtml.length} archived HTML files, ${screenContracts.length} screen contracts, 5 cross-app fixtures).`);

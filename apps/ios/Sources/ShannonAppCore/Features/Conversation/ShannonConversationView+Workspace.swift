@@ -11,6 +11,10 @@ extension ShannonConversationView {
                 .opacity(selectedPage == .talk ? 1 : 0)
                 .allowsHitTesting(selectedPage == .talk)
                 .accessibilityHidden(selectedPage != .talk)
+            ShannonAgentTaskOverviewView(model: model, openTask: openAgentTask)
+                .opacity(selectedPage == .work ? 1 : 0)
+                .allowsHitTesting(selectedPage == .work)
+                .accessibilityHidden(selectedPage != .work)
             ShannonMemoryView(
                 model: memoryModel,
                 showsDismissButton: false,

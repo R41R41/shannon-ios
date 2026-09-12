@@ -39,5 +39,7 @@ Machine-readable contracts live in `docs/design/screens/<platform>/`. They descr
 
 Current safe screenshots live in `docs/screenshots/`. Concept art under `design/character-concepts/` is visual source material, not proof of a shipped screen. HTML documents under `docs/archive/` are historical decision records or operational evidence and are non-authoritative unless explicitly selected by the user.
 
-The initial representative contract is [`docs/design/screens/macos/talk.yaml`](design/screens/macos/talk.yaml).
+Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/screens/macos/talk.yaml),
+[`docs/design/screens/ios/talk.yaml`](design/screens/ios/talk.yaml), and
+[`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml).
 The app-owned shared-role mapping is [`docs/design/semantic-role-map.v1.json`](design/semantic-role-map.v1.json) and is checked deterministically by `scripts/check-semantic-role-map.mjs`.

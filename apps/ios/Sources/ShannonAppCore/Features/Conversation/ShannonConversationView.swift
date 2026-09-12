@@ -34,6 +34,10 @@ public struct ShannonConversationView: View {
     @State var dialogueDidCopy = false
     @State var dialoguePresenceIsBreathing = false
     @State var selectedAgentTaskID: UUID?
+    @State var composerAttachments: [ShannonChatAttachmentDTO] = []
+    @State var composerUsesWebSearch = false
+    @State var composerIsImporting = false
+    @State var composerAttachmentError: String?
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @FocusState var composerIsFocused: Bool
 
@@ -95,6 +99,7 @@ public struct ShannonConversationView: View {
                         model: model,
                         selectedThreadId: model.selectedThreadId,
                         openTalk: openTalkFromDrawer,
+                        openWork: openWorkFromDrawer,
                         openMemory: openMemoryFromDrawer,
                         openSettings: openSettingsFromDrawer,
                         openAgentTask: openAgentTaskFromDrawer,
@@ -131,12 +136,10 @@ public struct ShannonConversationView: View {
             openAgentTask(taskID)
         }
         .onChange(of: selectedPage) {
-            composerIsFocused = false
-            voiceModel.cancel()
-            realtimeVoiceModel.stop()
-            showsLiveVoice = false
-            guard selectedPage == .memory else { return }
-            Task { await memoryModel.reload() }
+            handleSelectedPageChange()
+        }
+        .onChange(of: model.selectedThreadId) {
+            resetComposerTools()
         }
         .onChange(of: scenePhase) {
             if scenePhase != .active {
@@ -186,16 +189,7 @@ public struct ShannonConversationView: View {
         }
 #endif
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
-            guard scenePhase == .active, !model.agentTaskPollingKey.isEmpty else { return }
-            while !Task.isCancelled {
-                await model.synchronizeAgentTasks()
-                guard !model.agentTaskPollingKey.isEmpty else { return }
-                do {
-                    try await Task.sleep(for: .seconds(2))
-                } catch {
-                    return
-                }
-            }
+            await pollAgentTasksWhileActive()
         }
         .onChange(of: model.currentExpression) {
             Task { await appIconModel.updateAutomatically(for: model.currentExpression) }
@@ -206,31 +200,14 @@ public struct ShannonConversationView: View {
             }
         }
         .task(id: appIconModel.nextRefreshAt) {
-            guard let refreshAt = appIconModel.nextRefreshAt else { return }
-            let delay = max(0, refreshAt.timeIntervalSinceNow)
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            await appIconModel.updateAutomatically(for: model.currentExpression)
+            await refreshAppIconAtNextDeadline()
         }
         .task {
-            guard !model.isDesignPreview else { return }
-            connectionModel?.refreshFromKeychain()
-            await model.loadConversationIfNeeded()
-            await model.refreshInitiatives()
-            await appIconModel.activate(
-                for: model.currentExpression,
-                appearance: appIconAppearance(for: activeColorScheme)
-            )
-            await voiceIdentityModel.reload()
+            await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
 #if DEBUG
         .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewSettings") {
-                showsSettings = true
-            }
-            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
-                drawerProgress = 1
-            }
+            applyDesignPreviewLaunchState()
         }
 #endif
     }

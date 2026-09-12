@@ -305,6 +305,67 @@ final class ShannonConversationModelTests: XCTestCase {
         )
     }
 
+    func testSharedAttachmentLoaderReadsSupportedUTF8Text() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shannon-shared-attachment-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("notes.md")
+        try Data("# 設計メモ\n本文".utf8).write(to: url)
+
+        XCTAssertEqual(
+            try ShannonChatAttachmentLoader.load(urls: [url]),
+            [ShannonChatAttachmentDTO(name: "notes.md", mimeType: "text/markdown", text: "# 設計メモ\n本文")]
+        )
+    }
+
+    func testSharedAttachmentLoaderRejectsDuplicateAndOversizedFiles() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shannon-shared-attachment-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let duplicate = folder.appendingPathComponent("notes.txt")
+        try Data("本文".utf8).write(to: duplicate)
+        let large = folder.appendingPathComponent("large.txt")
+        try Data(repeating: 65, count: ShannonChatAttachmentLimits.maximumBytesPerFile + 1).write(to: large)
+
+        XCTAssertThrowsError(try ShannonChatAttachmentLoader.load(
+            urls: [duplicate],
+            existing: [.init(name: "notes.txt", mimeType: "text/plain", text: "既存")]
+        )) { error in
+            XCTAssertEqual(error as? ShannonChatAttachmentError, .duplicateName("notes.txt"))
+        }
+        XCTAssertThrowsError(try ShannonChatAttachmentLoader.load(urls: [large])) { error in
+            XCTAssertEqual(error as? ShannonChatAttachmentError, .fileTooLarge("large.txt"))
+        }
+    }
+
+    func testThreadSearchIncludesTitleSummaryAndSections() {
+        let threads = [
+            ChatThreadDTO(
+                threadId: "design",
+                title: "Clear Signal",
+                createdAt: "2026-09-12T00:00:00Z",
+                updatedAt: "2026-09-12T00:00:00Z",
+                messageCount: 4,
+                summary: "入力欄の余白を整理",
+                sections: ["生成物の保存"]
+            ),
+            ChatThreadDTO(
+                threadId: "other",
+                title: "買い物",
+                createdAt: "2026-09-12T00:00:00Z",
+                updatedAt: "2026-09-12T00:00:00Z",
+                messageCount: 1
+            ),
+        ]
+
+        XCTAssertEqual(ShannonThreadSearch.matches(threads, query: "ＣＬＥＡＲ").map(\.threadId), ["design"])
+        XCTAssertEqual(ShannonThreadSearch.matches(threads, query: "余白").map(\.threadId), ["design"])
+        XCTAssertEqual(ShannonThreadSearch.matches(threads, query: "生成物").map(\.threadId), ["design"])
+        XCTAssertEqual(ShannonThreadSearch.matchContext(for: threads[0], query: "生成物"), "生成物の保存")
+    }
+
     func testEachReplyKeepsItsExpressionSnapshot() async {
         let client = SequenceClient(results: [
             .success(TestFixtures.chatResponse(version: 1, reply: "それは嬉しい", expression: .joyful)),

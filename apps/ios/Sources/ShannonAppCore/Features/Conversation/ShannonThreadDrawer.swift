@@ -9,6 +9,7 @@ struct ShannonThreadDrawer: View {
     let model: ShannonConversationModel
     let selectedThreadId: String?
     let openTalk: () -> Void
+    let openWork: () -> Void
     let openMemory: () -> Void
     let openSettings: () -> Void
     let openAgentTask: (UUID) -> Void
@@ -19,6 +20,25 @@ struct ShannonThreadDrawer: View {
     @State var isCreating = false
     @State var creatingError: String?
     @State var editingThread: ChatThreadDTO?
+    @State var searchText = ""
+
+    var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var visibleThreads: [ChatThreadDTO] {
+        ShannonThreadSearch.matches(model.threads, query: searchText)
+    }
+
+    var initiativeThreads: [ChatThreadDTO] {
+        guard !isSearching else { return [] }
+        return visibleThreads.filter { model.initiativeThreadIDs.contains($0.threadId) }
+    }
+
+    var conversationThreads: [ChatThreadDTO] {
+        guard !isSearching else { return visibleThreads }
+        return visibleThreads.filter { !model.initiativeThreadIDs.contains($0.threadId) }
+    }
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -54,70 +74,49 @@ struct ShannonThreadDrawer: View {
             .padding(.horizontal, ShannonSpacing.large)
             .padding(.bottom, ShannonSpacing.medium)
 
-            ScrollView {
-                LazyVStack(spacing: ShannonSpacing.extraSmall) {
-                    ForEach(model.threads, id: \.threadId) { thread in
-                        HStack(spacing: 0) {
-                            Button {
-                                Task {
-                                    await model.selectThread(thread.threadId)
-                                    openTalk()
-                                }
-                            } label: {
-                                HStack(spacing: ShannonSpacing.medium) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(thread.title)
-                                            .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
-                                            .foregroundStyle(palette.textPrimary)
-                                            .lineLimit(2)
-                                        HStack(spacing: 6) {
-                                            Text(threadUpdatedLabel(thread.updatedAt))
-                                            Text("·")
-                                            Text("\(thread.messageCount)件")
-                                        }
-                                        .font(.caption)
-                                        .foregroundStyle(palette.textSecondary)
-                                    }
-                                    Spacer()
-                                    if model.initiativeThreadIDs.contains(thread.threadId) {
-                                        Circle()
-                                            .fill(palette.action)
-                                            .frame(width: 9, height: 9)
-                                            .accessibilityLabel("シャノンからの新しい話")
-                                    }
-                                    if thread.threadId == selectedThreadId {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(palette.action)
-                                    }
-                                }
-                                .padding(.leading, ShannonSpacing.medium)
-                                .padding(.vertical, ShannonSpacing.extraSmall)
-                                .frame(minHeight: 58)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(thread.threadId == selectedThreadId ? .isSelected : [])
-                            .contextMenu {
-                                threadActions(for: thread)
-                            }
+            HStack(spacing: ShannonSpacing.small) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(palette.textSecondary)
+                TextField("トークを検索", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .submitLabel(.search)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(palette.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("検索を消去")
+                }
+            }
+            .padding(.horizontal, ShannonSpacing.medium)
+            .frame(height: 42)
+            .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
+            .padding(.horizontal, ShannonSpacing.medium)
+            .padding(.bottom, ShannonSpacing.small)
 
-                            Menu {
-                                threadActions(for: thread)
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(palette.textSecondary)
-                                    .frame(width: ShannonTouchTarget.minimum, height: 58)
-                                    .contentShape(Rectangle())
-                            }
-                            .accessibilityLabel("\(thread.title)の操作")
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                    if !initiativeThreads.isEmpty {
+                        drawerSectionTitle("シャノンから", symbol: "sparkles", palette: palette)
+                        ForEach(initiativeThreads, id: \.threadId) { thread in
+                            threadRow(thread, palette: palette)
                         }
-                        .background(
-                            thread.threadId == selectedThreadId
-                                ? palette.subtleSurface.opacity(0.72)
-                                : Color.clear,
-                            in: RoundedRectangle(cornerRadius: ShannonShape.medium)
-                        )
+                    }
+
+                    if !conversationThreads.isEmpty {
+                        drawerSectionTitle(isSearching ? "検索結果" : "トーク", symbol: nil, palette: palette)
+                        ForEach(conversationThreads, id: \.threadId) { thread in
+                            threadRow(thread, palette: palette)
+                        }
+                    }
+
+                    if visibleThreads.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, ShannonSpacing.extraLarge)
                     }
                 }
                 .padding(.horizontal, ShannonSpacing.small)
@@ -135,6 +134,17 @@ struct ShannonThreadDrawer: View {
                 .overlay(palette.divider.opacity(0.6))
 
             VStack(spacing: ShannonSpacing.extraSmall) {
+                Button(action: openWork) {
+                    ShannonDrawerDestinationRow(
+                        title: "作業全体",
+                        detail: model.agentTasks.isEmpty ? "進行中の作業はありません" : "いま・これから・完了",
+                        symbol: "point.3.connected.trianglepath.dotted",
+                        badge: model.unreadAgentTaskCount,
+                        palette: palette
+                    )
+                }
+                .buttonStyle(.plain)
+
                 Button(action: openMemory) {
                     ShannonDrawerDestinationRow(
                         title: "頭の中",
@@ -145,30 +155,6 @@ struct ShannonThreadDrawer: View {
                     )
                 }
                 .buttonStyle(.plain)
-
-                if let task = model.agentTaskNotices.first {
-                    Button {
-                        openAgentTask(task.id)
-                    } label: {
-                        ShannonDrawerDestinationRow(
-                            title: "作業",
-                            detail: task.status.japaneseName,
-                            symbol: task.status == .waitingApproval ? "hand.raised" : "hammer",
-                            badge: model.agentTaskNotices.count,
-                            palette: palette
-                        )
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    ShannonDrawerDestinationRow(
-                        title: "作業",
-                        detail: "進行中の作業はありません",
-                        symbol: "hammer",
-                        badge: nil,
-                        palette: palette
-                    )
-                    .opacity(0.72)
-                }
 
                 Button(action: openSettings) {
                     ShannonDrawerDestinationRow(
@@ -209,6 +195,89 @@ struct ShannonThreadDrawer: View {
                 )
             }
         }
+    }
+
+    func drawerSectionTitle(_ title: String, symbol: String?, palette: ShannonPalette) -> some View {
+        Group {
+            if let symbol {
+                Label(title, systemImage: symbol)
+            } else {
+                Text(title)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(symbol == nil ? palette.textSecondary : palette.brandPresence)
+        .padding(.horizontal, ShannonSpacing.medium)
+        .padding(.top, ShannonSpacing.small)
+    }
+
+    func threadRow(_ thread: ChatThreadDTO, palette: ShannonPalette) -> some View {
+        HStack(spacing: 0) {
+            Button {
+                Task {
+                    await model.selectThread(thread.threadId)
+                    openTalk()
+                }
+            } label: {
+                HStack(spacing: ShannonSpacing.medium) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(thread.title)
+                            .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
+                            .foregroundStyle(palette.textPrimary)
+                            .lineLimit(2)
+                        if let context = ShannonThreadSearch.matchContext(for: thread, query: searchText) {
+                            Text(context)
+                                .font(.caption)
+                                .foregroundStyle(palette.textSecondary)
+                                .lineLimit(2)
+                        } else {
+                            HStack(spacing: 6) {
+                                Text(threadUpdatedLabel(thread.updatedAt))
+                                Text("·")
+                                Text("\(thread.messageCount)件")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(palette.textSecondary)
+                        }
+                    }
+                    Spacer()
+                    if model.initiativeThreadIDs.contains(thread.threadId) {
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(palette.brandPresence)
+                            .accessibilityLabel("シャノンからの新しい話")
+                    }
+                    if thread.threadId == selectedThreadId {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(palette.action)
+                    }
+                }
+                .padding(.leading, ShannonSpacing.medium)
+                .padding(.vertical, ShannonSpacing.extraSmall)
+                .frame(minHeight: 58)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(thread.threadId == selectedThreadId ? .isSelected : [])
+            .contextMenu { threadActions(for: thread) }
+
+            Menu {
+                threadActions(for: thread)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(width: ShannonTouchTarget.minimum, height: 58)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("\(thread.title)の操作")
+        }
+        .background(
+            thread.threadId == selectedThreadId
+                ? palette.subtleSurface.opacity(0.72)
+                : Color.clear,
+            in: RoundedRectangle(cornerRadius: ShannonShape.medium)
+        )
     }
 
     @ViewBuilder

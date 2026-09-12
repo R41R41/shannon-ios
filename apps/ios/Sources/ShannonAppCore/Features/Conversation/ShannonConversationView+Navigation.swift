@@ -5,6 +5,21 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
+    func handleSelectedPageChange() {
+        composerIsFocused = false
+        voiceModel.cancel()
+        realtimeVoiceModel.stop()
+        showsLiveVoice = false
+        guard selectedPage == .memory else { return }
+        Task { await memoryModel.reload() }
+    }
+
+    func resetComposerTools() {
+        composerAttachments = []
+        composerUsesWebSearch = false
+        composerAttachmentError = nil
+    }
+
     func threadDrawerGesture(viewWidth: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 10, coordinateSpace: .local)
             .onChanged { value in
@@ -75,6 +90,12 @@ extension ShannonConversationView {
         closeThreadDrawer()
     }
 
+    func openWorkFromDrawer() {
+        settleWorkspace(on: .work)
+        closeThreadDrawer()
+        Task { await model.synchronizeAgentTasks() }
+    }
+
     func openSettingsFromDrawer() {
         closeThreadDrawer()
         openSettings()
@@ -103,6 +124,14 @@ extension ShannonConversationView {
         let clamped = min(max(0, count), 99)
         UIApplication.shared.applicationIconBadgeNumber = clamped
 #endif
+    }
+
+    func refreshAppIconAtNextDeadline() async {
+        guard let refreshAt = appIconModel.nextRefreshAt else { return }
+        let delay = max(0, refreshAt.timeIntervalSinceNow)
+        try? await Task.sleep(for: .seconds(delay))
+        guard !Task.isCancelled else { return }
+        await appIconModel.updateAutomatically(for: model.currentExpression)
     }
 
     func settleDrawer(open: Bool) {

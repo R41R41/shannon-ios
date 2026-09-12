@@ -5,6 +5,42 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
+    func loadInitialExperience(activeColorScheme: ColorScheme) async {
+        guard !model.isDesignPreview else { return }
+        connectionModel?.refreshFromKeychain()
+        await model.loadConversationIfNeeded()
+        await model.refreshInitiatives()
+        await appIconModel.activate(
+            for: model.currentExpression,
+            appearance: appIconAppearance(for: activeColorScheme)
+        )
+        await voiceIdentityModel.reload()
+    }
+
+#if DEBUG
+    func applyDesignPreviewLaunchState() {
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewSettings") {
+            showsSettings = true
+        }
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
+            drawerProgress = 1
+        }
+    }
+#endif
+
+    func pollAgentTasksWhileActive() async {
+        guard scenePhase == .active, !model.agentTaskPollingKey.isEmpty else { return }
+        while !Task.isCancelled {
+            await model.synchronizeAgentTasks()
+            guard !model.agentTaskPollingKey.isEmpty else { return }
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+        }
+    }
+
     func toggleDisplayMode() {
         guard !composerIsFocused else {
             composerIsFocused = false
@@ -98,34 +134,44 @@ extension ShannonConversationView {
 
     func sendDraft() {
         voiceModel.stopSpeaking()
-        guard model.canSendDraft else { return }
-        Task { await model.sendDraft() }
+        guard model.canSendDraft(attachmentCount: composerAttachments.count) else { return }
+        let attachments = composerAttachments
+        let usesWebSearch = composerUsesWebSearch
+        composerAttachments = []
+        composerUsesWebSearch = false
+        composerAttachmentError = nil
+        Task {
+            await model.sendDraft(attachments: attachments, webSearch: usesWebSearch)
+        }
     }
 
     var composerIsExpanded: Bool {
-        composerIsFocused || !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        composerIsFocused
+            || !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !composerAttachments.isEmpty
+            || composerUsesWebSearch
     }
 
     var composerActionIsEnabled: Bool {
-        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return model.canSendDraft
+        if composerHasSendableContent {
+            return model.canSendDraft(attachmentCount: composerAttachments.count)
         }
         return !model.isSending
     }
 
     var composerActionSymbol: String {
-        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "arrow.up" }
+        if composerHasSendableContent { return "arrow.up" }
         return "waveform"
     }
 
     var composerActionLabel: String {
         if model.isSending { return "送信中" }
-        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "送信" }
+        if composerHasSendableContent { return "送信" }
         return "シャノンと音声で話す"
     }
 
     func composerPrimaryAction() {
-        if !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if composerHasSendableContent {
             sendDraft()
             return
         }
@@ -136,6 +182,24 @@ extension ShannonConversationView {
         composerIsFocused = false
         voiceModel.cancel()
         showsLiveVoice = true
+    }
+
+    var composerHasSendableContent: Bool {
+        !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !composerAttachments.isEmpty
+    }
+
+    func importComposerAttachments(_ result: Result<[URL], Error>) {
+        do {
+            composerAttachments = try ShannonChatAttachmentLoader.load(
+                urls: result.get(),
+                existing: composerAttachments
+            )
+            composerAttachmentError = nil
+        } catch {
+            composerAttachmentError = (error as? LocalizedError)?.errorDescription
+                ?? "ファイルを追加できませんでした。"
+        }
     }
 
     func performTranscriptionPrimaryAction() {

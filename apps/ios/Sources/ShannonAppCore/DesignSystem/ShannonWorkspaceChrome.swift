@@ -111,18 +111,21 @@ struct ShannonAdaptiveComposerLayout: Layout {
 
 enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     case talk
+    case work
     case memory
 
     var id: Int { rawValue }
     var title: String {
         switch self {
         case .talk: "トーク"
+        case .work: "作業全体"
         case .memory: "頭の中"
         }
     }
     var symbol: String {
         switch self {
         case .talk: "bubble.left.and.bubble.right.fill"
+        case .work: "point.3.connected.trianglepath.dotted"
         case .memory: "brain.head.profile.fill"
         }
     }

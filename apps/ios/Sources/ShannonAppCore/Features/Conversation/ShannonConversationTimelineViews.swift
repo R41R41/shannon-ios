@@ -87,7 +87,7 @@ struct ShannonMessageRow: View {
                 userMessage(palette)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: message.artifacts.isEmpty ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
         .sensoryFeedback(.success, trigger: didCopy)
         .contextMenu {
@@ -143,6 +143,10 @@ struct ShannonMessageRow: View {
                 .textSelection(.enabled)
                 .tint(palette.action)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in
+                ShannonGeneratedArtifactCard(artifact: artifact, palette: palette)
+            }
 
             if let attribution = message.sourceAttribution,
                let sourceURL = safeSourceURL(attribution.url) {

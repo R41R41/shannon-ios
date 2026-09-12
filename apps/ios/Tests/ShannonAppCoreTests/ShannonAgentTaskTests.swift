@@ -26,6 +26,22 @@ final class ShannonAgentTaskTests: XCTestCase {
         XCTAssertEqual(task.progressFraction, 0.5)
     }
 
+    func testMobileOverviewSeparatesActiveProposedAndFinishedByRecency() {
+        var active = ShannonAgentTaskFixtures.running()
+        active.updatedAt = Date(timeIntervalSince1970: 30)
+        var proposed = ShannonAgentTaskFixtures.proposed()
+        proposed.updatedAt = Date(timeIntervalSince1970: 20)
+        var finished = ShannonAgentTaskFixtures.running()
+        finished.status = .completed
+        finished.updatedAt = Date(timeIntervalSince1970: 10)
+
+        let projection = ShannonAgentTaskOverviewProjection(tasks: [finished, proposed, active])
+
+        XCTAssertEqual(projection.active.map(\.id), [active.id])
+        XCTAssertEqual(projection.proposed.map(\.id), [proposed.id])
+        XCTAssertEqual(projection.finished.map(\.id), [finished.id])
+    }
+
     func testUserFacingStagesCollapseIntermediateTaskStatuses() {
         var task = ShannonAgentTaskFixtures.proposed()
         XCTAssertEqual(task.stage, .proposal)
