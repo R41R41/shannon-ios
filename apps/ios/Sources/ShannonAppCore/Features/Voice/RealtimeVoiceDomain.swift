@@ -147,6 +147,11 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
     case outputTranscriptDone(String)
     case responseStarted
     case responseFinished(ShannonRealtimeVoiceUsage?)
+    case liveInputTranscriptDelta(String, startMilliseconds: Int, endMilliseconds: Int)
+    case liveOutputTranscriptDelta(String, startMilliseconds: Int, endMilliseconds: Int)
+    case liveDelegationRequested(id: String, offsetMilliseconds: Int)
+    case liveUsageUpdated(seconds: Double)
+    case liveSessionClosed(reason: String?)
     case failed(String?)
 
     public static func decode(_ data: Data) -> Self? {
@@ -154,7 +159,7 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
               let object = value as? [String: Any],
               let type = object["type"] as? String else { return nil }
         switch type {
-        case "session.created", "session.updated": return .sessionReady
+        case "session.created", "session.updated", "session.started": return .sessionReady
         case "input_audio_buffer.speech_started": return .speechStarted
         case "input_audio_buffer.speech_stopped": return .speechStopped
         case "conversation.item.input_audio_transcription.delta":
@@ -169,12 +174,50 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
         case "response.done":
             let response = object["response"] as? [String: Any]
             return .responseFinished(decodeUsage(response?["usage"]))
+        case "session.input_transcript.delta":
+            return .liveInputTranscriptDelta(
+                object["delta"] as? String ?? "",
+                startMilliseconds: integer(object["start_ms"]),
+                endMilliseconds: integer(object["end_ms"])
+            )
+        case "session.output_transcript.delta":
+            return .liveOutputTranscriptDelta(
+                object["delta"] as? String ?? "",
+                startMilliseconds: integer(object["start_ms"]),
+                endMilliseconds: integer(object["end_ms"])
+            )
+        case "session.delegation.created":
+            let delegation = object["delegation"] as? [String: Any]
+            guard delegation?["target"] as? String == "client",
+                  let id = delegation?["id"] as? String,
+                  !id.isEmpty else { return nil }
+            return .liveDelegationRequested(
+                id: id,
+                offsetMilliseconds: integer(object["offset_ms"])
+            )
+        case "session.usage.updated":
+            let usage = object["usage"] as? [String: Any]
+            return .liveUsageUpdated(seconds: number(usage?["seconds"]))
+        case "session.closed":
+            return .liveSessionClosed(reason: object["reason"] as? String)
         case "error":
             let error = object["error"] as? [String: Any]
             let code = error?["code"] as? String ?? error?["type"] as? String
             return .failed(code)
         default: return nil
         }
+    }
+
+    private static func integer(_ value: Any?) -> Int {
+        if let value = value as? Int { return value }
+        if let value = value as? NSNumber { return value.intValue }
+        return 0
+    }
+
+    private static func number(_ value: Any?) -> Double {
+        if let value = value as? Double { return value }
+        if let value = value as? NSNumber { return value.doubleValue }
+        return 0
     }
 
     private static func decodeUsage(_ value: Any?) -> ShannonRealtimeVoiceUsage? {
@@ -197,6 +240,12 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
     public private(set) var shannonText = ""
     private var completedUserText = ""
     private var completedShannonText = ""
+    private var liveSpeaker: LiveSpeaker?
+
+    private enum LiveSpeaker: Equatable, Sendable {
+        case user
+        case shannon
+    }
 
     public init() {}
 
@@ -217,6 +266,18 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
         case .outputTranscriptDone(let transcript):
             completedShannonText = normalized(transcript, fallback: shannonText)
             shannonText = completedShannonText
+        case .liveInputTranscriptDelta(let delta, _, _):
+            let completed = liveSpeaker == .shannon ? pendingLiveTurn() : nil
+            if liveSpeaker == .shannon {
+                userText = ""
+                shannonText = ""
+            }
+            liveSpeaker = .user
+            userText += delta
+            if let completed { return completed }
+        case .liveOutputTranscriptDelta(let delta, _, _):
+            liveSpeaker = .shannon
+            shannonText += delta
         default:
             break
         }
@@ -227,9 +288,46 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
         return turn
     }
 
+    public mutating func flushPendingLiveTurn() -> (user: String, shannon: String)? {
+        guard let turn = pendingLiveTurn() else { return nil }
+        userText = ""
+        shannonText = ""
+        liveSpeaker = nil
+        return turn
+    }
+
+    public var delegationTranscript: String {
+        userText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func pendingLiveTurn() -> (user: String, shannon: String)? {
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shannon = shannonText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return user.isEmpty || shannon.isEmpty ? nil : (user, shannon)
+    }
+
     private func normalized(_ value: String, fallback: String) -> String {
         let preferred = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return preferred.isEmpty ? fallback.trimmingCharacters(in: .whitespacesAndNewlines) : preferred
+    }
+}
+
+enum ShannonLiveVoiceClientEvent {
+    static func commentary(delegationID: String?, content: String) throws -> Data {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard delegationID?.isEmpty != true, !normalized.isEmpty else { throw EncodingError.invalidValue(
+            content,
+            .init(codingPath: [], debugDescription: "Live commentary requires content")
+        ) }
+        let payload: [String: Any] = [
+            "type": "session.commentary.append",
+            "event_id": "shannon-result-\(UUID().uuidString.lowercased())",
+            "delegation_id": delegationID ?? NSNull(),
+            // Stay comfortably below the API's 500-token append ceiling even for
+            // mixed Japanese and URLs. The full result remains on Shannon's backend.
+            "content": String(normalized.prefix(800)),
+        ]
+        return try JSONSerialization.data(withJSONObject: payload)
     }
 }
 

@@ -84,6 +84,79 @@ final class ShannonVoiceConversationTests: XCTestCase {
         )
     }
 
+    func testLiveEventsDecodeTimelineTranscriptsDelegationAndUsage() {
+        XCTAssertEqual(event(#"{"type":"session.started","session":{"id":"live_1"}}"#), .sessionReady)
+        XCTAssertEqual(
+            event(#"{"type":"session.input_transcript.delta","delta":"浜松の","start_ms":100,"end_ms":300}"#),
+            .liveInputTranscriptDelta("浜松の", startMilliseconds: 100, endMilliseconds: 300)
+        )
+        XCTAssertEqual(
+            event(#"{"type":"session.output_transcript.delta","delta":"調べるね","start_ms":500,"end_ms":800}"#),
+            .liveOutputTranscriptDelta("調べるね", startMilliseconds: 500, endMilliseconds: 800)
+        )
+        XCTAssertEqual(
+            event(#"{"type":"session.delegation.created","offset_ms":900,"delegation":{"id":"item_live_1","type":"delegation","target":"client"}}"#),
+            .liveDelegationRequested(id: "item_live_1", offsetMilliseconds: 900)
+        )
+        XCTAssertEqual(
+            event(#"{"type":"session.usage.updated","usage":{"seconds":12.5}}"#),
+            .liveUsageUpdated(seconds: 12.5)
+        )
+        XCTAssertEqual(
+            event(#"{"type":"session.closed","reason":"close_requested"}"#),
+            .liveSessionClosed(reason: "close_requested")
+        )
+    }
+
+    func testLiveTranscriptPairsOnSpeakerTurnAndFlushesTheLastTurn() throws {
+        var state = ShannonRealtimeVoiceTranscriptState()
+        XCTAssertNil(state.apply(.liveInputTranscriptDelta(
+            "浜松の天気は？", startMilliseconds: 100, endMilliseconds: 900
+        )))
+        XCTAssertEqual(state.delegationTranscript, "浜松の天気は？")
+        XCTAssertNil(state.apply(.liveOutputTranscriptDelta(
+            "午後は雨かも。", startMilliseconds: 1_000, endMilliseconds: 1_800
+        )))
+
+        let first = try XCTUnwrap(state.apply(.liveInputTranscriptDelta(
+            "傘は必要？", startMilliseconds: 2_100, endMilliseconds: 2_600
+        )))
+        XCTAssertEqual(first.user, "浜松の天気は？")
+        XCTAssertEqual(first.shannon, "午後は雨かも。")
+        XCTAssertEqual(state.userText, "傘は必要？")
+        XCTAssertEqual(state.shannonText, "")
+
+        XCTAssertNil(state.apply(.liveOutputTranscriptDelta(
+            "折り畳み傘が安心。", startMilliseconds: 2_800, endMilliseconds: 3_500
+        )))
+        let last = try XCTUnwrap(state.flushPendingLiveTurn())
+        XCTAssertEqual(last.user, "傘は必要？")
+        XCTAssertEqual(last.shannon, "折り畳み傘が安心。")
+    }
+
+    func testLiveCommentaryEventIsBoundedAndKeepsTheOpaqueDelegationID() throws {
+        let data = try ShannonLiveVoiceClientEvent.commentary(
+            delegationID: "item_opaque_123",
+            content: String(repeating: "あ", count: 1_000)
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "session.commentary.append")
+        XCTAssertEqual(json["delegation_id"] as? String, "item_opaque_123")
+        XCTAssertEqual((json["content"] as? String)?.count, 800)
+        XCTAssertTrue((json["event_id"] as? String)?.hasPrefix("shannon-result-") == true)
+    }
+
+    func testCameraObservationCommentaryHasAnExplicitNullDelegationID() throws {
+        let data = try ShannonLiveVoiceClientEvent.commentary(
+            delegationID: nil,
+            content: "青い案内板が見えます。"
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["type"] as? String, "session.commentary.append")
+        XCTAssertTrue(json["delegation_id"] is NSNull)
+        XCTAssertEqual(json["content"] as? String, "青い案内板が見えます。")
+    }
+
     func testRealtimeResponseUsageDecodesAndAccumulatesWithoutRawResponseContent() throws {
         let decoded = try XCTUnwrap(event(#"{"type":"response.done","response":{"usage":{"total_tokens":31,"input_tokens":20,"output_tokens":11,"input_token_details":{"cached_tokens":4,"audio_tokens":8},"output_token_details":{"audio_tokens":7}}}}"#))
         guard case .responseFinished(let sample) = decoded else {

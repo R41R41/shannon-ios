@@ -95,12 +95,73 @@ extension ShannonAPIClient {
         return ShannonRealtimeVoiceCallDTO(
             answerSDP: answerSDP,
             threadID: resolvedThreadID,
+            engine: http.value(forHTTPHeaderField: "x-shannon-voice-engine")
+                .flatMap(ShannonVoiceEngine.init(rawValue:)) ?? .realtime,
             model: http.value(forHTTPHeaderField: "x-shannon-realtime-model"),
             callID: http.value(forHTTPHeaderField: "x-shannon-realtime-call-id"),
             dailyRemainingSeconds: http.value(
                 forHTTPHeaderField: "x-shannon-realtime-daily-remaining-seconds"
             ).flatMap(Int.init)
         )
+    }
+
+    public func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/live/delegations"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 45
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonLiveVoiceDelegationRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            threadId: threadId,
+            transcript: transcript
+        ))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        let result = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self, from: data)
+        guard !result.threadId.isEmpty, !result.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ShannonAPIError.invalidResponse
+        }
+        return result
+    }
+
+    public func analyzeVoiceCameraSnapshot(
+        scopeKey: String,
+        threadId: String?,
+        jpegData: Data
+    ) async throws -> ShannonVoiceVisionResponseDTO {
+        guard jpegData.count >= 64, jpegData.count <= 3 * 1_024 * 1_024 else {
+            throw ShannonAPIError.invalidResponse
+        }
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/vision/snapshots"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 45
+        request.setValue("image/jpeg", forHTTPHeaderField: "content-type")
+        if let threadId, !threadId.isEmpty {
+            request.setValue(threadId, forHTTPHeaderField: "x-shannon-thread-id")
+        }
+        authorize(&request, connection: connection)
+        request.httpBody = jpegData
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        let result = try JSONDecoder().decode(ShannonVoiceVisionResponseDTO.self, from: data)
+        guard !result.threadId.isEmpty,
+              !result.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ShannonAPIError.invalidResponse
+        }
+        return result
     }
 
     public func loadVoiceIdentity(scopeKey: String) async throws -> ShannonVoiceIdentityResponseDTO {

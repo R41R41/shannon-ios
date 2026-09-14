@@ -12,6 +12,7 @@ export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
+import { dispatchLiveVoiceRequest, voiceConversationInstructions } from './apiLiveVoice.js';
 import {
   appendWebSources,
   badRequest,
@@ -33,7 +34,6 @@ import {
   LocalStubChatModel,
   type ShannonChatAttachment,
   type ShannonChatModel,
-  type ShannonWebSource,
 } from './chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
@@ -153,7 +153,7 @@ export class ShannonApiKernel {
     this.worldSubscriptions = options.worldSubscriptions ?? null;
   }
 
-  realtimeVoiceSession(scopeKey: string, requestedThreadId?: string): {
+  realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: { clientDelegation?: boolean } = {}): {
     threadId: string;
     instructions: string;
     voice: string;
@@ -164,14 +164,7 @@ export class ShannonApiKernel {
       ?? assembleShannonSystemPrompt(captured);
     const dailyMindPrompt = this.dailyMind?.promptFor(scopeKey, this.now()) ?? '';
     const history = voiceHistoryProjection(this.conversationStore.history(scopeKey, threadId));
-    const voiceInstructions = [
-      '[Live voice conversation]',
-      '- Speak naturally in Japanese as Shannon. Keep most turns concise enough for a live conversation.',
-      '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
-      '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
-      '- Never claim that an external action or code change was completed during this voice session.',
-      '- When an external task is requested, acknowledge it briefly and ask the user to continue in Talk for visible execution and approval.',
-    ].join('\n');
+    const voiceInstructions = voiceConversationInstructions(options.clientDelegation === true);
     return {
       threadId,
       instructions: [basePrompt, dailyMindPrompt, history, voiceInstructions].filter(Boolean).join('\n\n'),
@@ -318,6 +311,17 @@ export class ShannonApiKernel {
       now: this.now,
     });
     if (dataResponse) return dataResponse;
+
+    const liveVoiceResponse = dispatchLiveVoiceRequest(request, {
+      chatModel: this.chatModel,
+      stateStore: this.stateStore,
+      conversationStore: this.conversationStore,
+      knowledgeStore: this.knowledgeStore,
+      dailyMind: this.dailyMind,
+      agentTasks: this.agentTasks,
+      now: this.now,
+    });
+    if (liveVoiceResponse) return await liveVoiceResponse;
 
     if (request.method === 'POST' && request.path === '/v1/voice/realtime/turns') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');

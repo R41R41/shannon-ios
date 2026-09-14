@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
 import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, scalarHeader, sendJson } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
+import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
+import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
@@ -61,6 +63,7 @@ const testFlightDeliveryStore = new SQLiteTestFlightDeliveryStore(configuredData
 const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
+const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
 const realtimeVoiceGateway = createConfiguredRealtimeVoiceGateway(process.env);
 const realtimeVoiceDailyAllowanceSeconds = configuredRealtimeDailyAllowanceSeconds(process.env);
 const configuredRealtimeVoice = realtimeVoiceGateway?.defaultVoice;
@@ -158,6 +161,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/realtime/calls') {
       await handleRealtimeVoiceCall(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/vision/snapshots') {
+      await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
       return;
     }
     if (url.pathname === '/v1/voice/identity/preview') {
@@ -335,7 +342,9 @@ async function handleRealtimeVoiceCall(
     }
     const offer = Buffer.from(await readBytes(request, 128 * 1024)).toString('utf8');
     const requestedThreadId = scalarHeader(request.headers['x-shannon-thread-id']);
-    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId);
+    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
+      clientDelegation: realtimeVoiceGateway.engine === 'live',
+    });
     const createdAt = now();
     const reservation = persistentStore.reserveRealtimeVoiceSession({
       scopeKey: principal.scopeKey,
@@ -363,6 +372,7 @@ async function handleRealtimeVoiceCall(
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'x-shannon-thread-id': session.threadId,
+      'x-shannon-voice-engine': result.engine,
       'x-shannon-realtime-model': result.model,
       'x-shannon-realtime-daily-remaining-seconds': String(reservation.remainingSeconds),
       ...(result.callId ? { 'x-shannon-realtime-call-id': result.callId } : {}),

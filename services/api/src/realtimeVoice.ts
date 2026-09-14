@@ -8,6 +8,16 @@ export interface RealtimeVoiceCallResult {
   answerSdp: string;
   callId?: string;
   model: string;
+  engine: ShannonVoiceEngine;
+}
+
+export type ShannonVoiceEngine = 'realtime' | 'live';
+
+export interface ShannonVoiceSessionGateway {
+  readonly engine: ShannonVoiceEngine;
+  readonly model: string;
+  readonly defaultVoice: string;
+  createCall(request: RealtimeVoiceCallRequest): Promise<RealtimeVoiceCallResult>;
 }
 
 export interface RealtimeVoiceSessionReservationRequest {
@@ -61,6 +71,7 @@ interface OpenAIRealtimeVoiceGatewayOptions {
 }
 
 export class OpenAIRealtimeVoiceGateway {
+  readonly engine = 'realtime' as const;
   readonly model: string;
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
@@ -154,6 +165,7 @@ export class OpenAIRealtimeVoiceGateway {
     return {
       answerSdp,
       model: this.model,
+      engine: this.engine,
       ...(callIdFromLocation(response.headers.get('location')) ? {
         callId: callIdFromLocation(response.headers.get('location')),
       } : {}),
@@ -161,11 +173,140 @@ export class OpenAIRealtimeVoiceGateway {
   }
 }
 
+interface OpenAILiveVoiceGatewayOptions {
+  apiKey: string;
+  model?: string;
+  endpoint?: string;
+  fetcher?: typeof fetch;
+  timeoutMilliseconds?: number;
+  voice?: string;
+}
+
+/**
+ * Server-side broker for GPT-Live WebRTC sessions.
+ *
+ * The iPhone receives only the SDP answer and a restricted data channel. The
+ * standard OpenAI key and the Live session policy remain on the server.
+ */
+export class OpenAILiveVoiceGateway implements ShannonVoiceSessionGateway {
+  readonly engine = 'live' as const;
+  readonly model: string;
+  readonly defaultVoice: string;
+  private readonly endpoint: string;
+  private readonly fetcher: typeof fetch;
+  private readonly timeoutMilliseconds: number;
+
+  constructor(private readonly options: OpenAILiveVoiceGatewayOptions) {
+    if (!options.apiKey.trim()) throw new RealtimeVoiceError('VOICE_REALTIME_NOT_CONFIGURED');
+    this.model = validIdentifier(options.model ?? 'gpt-live-1', 'SHANNON_VOICE_LIVE_MODEL');
+    this.defaultVoice = validIdentifier(options.voice ?? 'marin', 'SHANNON_VOICE_LIVE_VOICE');
+    this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/live/sessions';
+    this.fetcher = options.fetcher ?? fetch;
+    this.timeoutMilliseconds = boundedInteger(options.timeoutMilliseconds, 5_000, 60_000, 30_000);
+  }
+
+  async createCall(request: RealtimeVoiceCallRequest): Promise<RealtimeVoiceCallResult> {
+    const sdp = request.sdp;
+    if (!validSdp(sdp)) throw new RealtimeVoiceError('VOICE_REALTIME_INVALID_SDP');
+
+    const body = {
+      session: {
+        model: this.model,
+        instructions: boundedInstructions(request.instructions),
+        delegation: { type: 'client' },
+        audio: {
+          output: {
+            voice: validIdentifier(request.voice ?? this.defaultVoice, 'voice'),
+          },
+        },
+        client: {
+          data_channel: {
+            allowed_client_events: [
+              'session.commentary.append',
+              'session.thinking.append',
+              'session.instructions.append',
+              'session.close',
+            ],
+            allowed_server_events: [
+              { type: 'session.started' },
+              { type: 'session.input_transcript.delta' },
+              { type: 'session.output_transcript.delta' },
+              { type: 'session.delegation.created' },
+              { type: 'session.usage.updated' },
+              { type: 'session.commentary.appended' },
+              { type: 'session.thinking.appended' },
+              { type: 'session.instructions.appended' },
+              { type: 'session.closed' },
+              { type: 'error' },
+              { type: 'info' },
+            ],
+          },
+        },
+        store: false,
+      },
+      transport: { type: 'webrtc', sdp },
+    };
+
+    let response: Response;
+    try {
+      response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      });
+    } catch {
+      throw new RealtimeVoiceError('VOICE_REALTIME_UPSTREAM_FAILED');
+    }
+
+    const raw = await response.text();
+    if (!response.ok) {
+      throw new RealtimeVoiceError(
+        'VOICE_REALTIME_UPSTREAM_FAILED',
+        response.status,
+        safeUpstreamCode(raw),
+        safeRequestId(response.headers.get('x-request-id')),
+        safeUpstreamDetail(raw),
+      );
+    }
+    const parsed = safeObject(raw);
+    const session = objectValue(parsed?.session);
+    const transport = objectValue(parsed?.transport);
+    const answerSdp = typeof transport?.sdp === 'string' ? transport.sdp : '';
+    if (!validSdp(answerSdp)) {
+      throw new RealtimeVoiceError('VOICE_REALTIME_UPSTREAM_FAILED', response.status, 'INVALID_ANSWER_SDP');
+    }
+    const sessionId = typeof session?.id === 'string' ? safeSessionId(session.id) : undefined;
+    return {
+      answerSdp,
+      model: this.model,
+      engine: this.engine,
+      ...(sessionId ? { callId: sessionId } : {}),
+    };
+  }
+}
+
 export function createConfiguredRealtimeVoiceGateway(
   environment: Readonly<Record<string, string | undefined>>,
-): OpenAIRealtimeVoiceGateway | null {
+): ShannonVoiceSessionGateway | null {
   const apiKey = environment.OPENAI_API_KEY?.trim();
   if (!apiKey) return null;
+  const engine = configuredVoiceEngine(environment);
+  if (engine === 'live') {
+    return new OpenAILiveVoiceGateway({
+      apiKey,
+      model: environment.SHANNON_VOICE_LIVE_MODEL,
+      endpoint: environment.SHANNON_VOICE_LIVE_ENDPOINT,
+      voice: environment.SHANNON_VOICE_LIVE_VOICE ?? environment.SHANNON_VOICE_REALTIME_VOICE,
+      timeoutMilliseconds: optionalInteger(
+        environment.SHANNON_VOICE_LIVE_TIMEOUT_MS ?? environment.SHANNON_VOICE_REALTIME_TIMEOUT_MS,
+      ),
+    });
+  }
   return new OpenAIRealtimeVoiceGateway({
     apiKey,
     model: environment.SHANNON_VOICE_REALTIME_MODEL,
@@ -174,6 +315,12 @@ export function createConfiguredRealtimeVoiceGateway(
     voice: environment.SHANNON_VOICE_REALTIME_VOICE,
     timeoutMilliseconds: optionalInteger(environment.SHANNON_VOICE_REALTIME_TIMEOUT_MS),
   });
+}
+
+export function configuredVoiceEngine(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): ShannonVoiceEngine {
+  return environment.SHANNON_VOICE_ENGINE?.trim().toLowerCase() === 'live' ? 'live' : 'realtime';
 }
 
 export function configuredRealtimeDailyAllowanceSeconds(
@@ -257,4 +404,22 @@ function safeUpstreamDetail(body: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function safeObject(value: string): Record<string, unknown> | undefined {
+  try {
+    return objectValue(JSON.parse(value) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function safeSessionId(value: string): string | undefined {
+  return /^[A-Za-z0-9_-]{1,160}$/u.test(value) ? value : undefined;
 }

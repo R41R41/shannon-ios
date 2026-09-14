@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-12 / Responsibility-oriented Apple client and API structure
+Revision: 2026-09-15 / GPT-Live travel slice on the existing voice boundary
 
 ## System shape
 
@@ -75,7 +75,9 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 - Alternate icons are selected from time and committed Shannon state; iOS applies changes only when the OS permits execution.
 - The primary App Icon owns native light and dark appearance artwork. Returning to `デフォルト` restores the primary icon so the OS can select its matching appearance rather than treating either appearance as a separate alternate icon.
 - Settings → App Icon shows the actual bundled primary and alternate icon artwork. The mode selector offers only automatic (`シャノンに任せる`) and manual (`自分で選ぶ`). Automatic mode uses the existing time/emotion variants. Manual mode contains `デフォルト` followed only by Shannon expression icons; temporary Aether/Shannon/Voyager comparison choices are not shipped. The primary preview follows the app appearance. A stored legacy `fixed` selection, or any removed/invalid manual selection, is migrated safely to `デフォルト`.
-- The primary voice candidate is a user-initiated Realtime WebRTC session. iOS captures and plays audio through WebRTC; Azure creates the OpenAI Realtime call with the standard API key kept server-side. The iPhone never receives that key.
+- Voice remains a user-initiated WebRTC session. Azure selects the configured `realtime` or `live` engine, creates the upstream call with the standard API key kept server-side, and returns only the SDP answer plus a non-secret engine label. An absent or unknown engine setting falls back to the existing Realtime path, so the iPhone never receives the OpenAI key and rollback does not require a client rebuild.
+- GPT-Live is the staged travel candidate. Its client delegation channel allows only the explicitly listed Live events. Requests needing current web facts or longer reasoning go through Shannon's authenticated, read-only delegation endpoint and return as bounded commentary; purchase, booking, deployment, file writes, and other external mutations remain outside this lane.
+- During an active Live session, the iPhone can open the system camera from an explicit button, capture one still image, locally normalize its longest side to about 1280 pixels and its size to at most 2.8 MB, and require a visible preview confirmation before upload. Azure validates its declared format, limits snapshots per paired device and to one in flight per owner, sends the image to the fixed vision model with `store: false`, and returns only a bounded observation to the Live commentary channel. There is no continuous capture, background camera access, unknown-person identification, or sensitive-trait inference.
 - Voice Identity exposes only `marin`, `cedar`, and `coral` as a small comparison set. Settings on iPhone and Mac can keep the automatic default or save one explicit choice to Azure. The effective choice is read when a new Realtime call is created, so an active voice session never changes underneath the user.
 - Each candidate can play the same server-fixed Japanese preview sentence. The client receives only an MP3; the OpenAI key and TTS request stay on Azure. Preview text and audio are not persisted, requests are limited per device per minute and per owner to twelve per Japan-local day, and unsupported voice identifiers are rejected before any upstream request.
 - Input-transcription delta events update the visible “あなた” caption while the user is still speaking. Output-audio-transcript delta events update Shannon's caption while her audio is playing. Server VAD creates responses automatically and permits natural interruption.
@@ -90,7 +92,7 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 Live2D and animated widgets remain future work. Current dialogue mode and Realtime voice use a static character-stage asset with state-driven ambient motion.
 
-Background voice activation remains deliberately later work. Realtime voice starts only from an explicit user tap and ends when dismissed, when the app leaves the active scene, or when the session ceiling is reached.
+Background voice activation remains deliberately later work. Live or Realtime voice starts only from an explicit user tap and ends when dismissed, when the app leaves the active scene, or when the session ceiling is reached.
 
 ## macOS experience
 

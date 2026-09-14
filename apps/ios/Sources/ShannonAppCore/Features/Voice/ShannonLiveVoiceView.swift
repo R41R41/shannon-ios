@@ -1,9 +1,14 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 public struct ShannonLiveVoiceView: View {
     @Bindable private var model: ShannonRealtimeVoiceSessionModel
     private let expression: ShannonExpressionDTO
     private let createCall: @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO
+    private let performLiveDelegation: @MainActor (String) async throws -> String
+    private let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let commitTurn: @MainActor (String, String) async throws -> Void
     private let dismiss: () -> Void
 
@@ -11,17 +16,28 @@ public struct ShannonLiveVoiceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var didStart = false
     @State private var pulse = false
+#if os(iOS)
+    @State private var showsCamera = false
+    @State private var pendingCameraImage: UIImage?
+    @State private var pendingCameraData: Data?
+    @State private var cameraErrorMessage: String?
+    @State private var isSharingCameraSnapshot = false
+#endif
 
     public init(
         model: ShannonRealtimeVoiceSessionModel,
         expression: ShannonExpressionDTO,
         createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
+        analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         dismiss: @escaping () -> Void
     ) {
         self.model = model
         self.expression = expression
         self.createCall = createCall
+        self.performLiveDelegation = performLiveDelegation
+        self.analyzeCameraSnapshot = analyzeCameraSnapshot
         self.commitTurn = commitTurn
         self.dismiss = dismiss
     }
@@ -105,6 +121,23 @@ public struct ShannonLiveVoiceView: View {
                         }
                     }
 
+#if os(iOS)
+                    if let pendingCameraImage, let pendingCameraData {
+                        cameraPreview(
+                            image: pendingCameraImage,
+                            data: pendingCameraData,
+                            palette: palette
+                        )
+                    }
+
+                    if let cameraErrorMessage {
+                        Text(cameraErrorMessage)
+                            .font(.callout)
+                            .foregroundStyle(palette.danger)
+                            .multilineTextAlignment(.center)
+                    }
+#endif
+
                     controls(palette)
                 }
                 .padding(.horizontal, ShannonSpacing.large)
@@ -112,11 +145,24 @@ public struct ShannonLiveVoiceView: View {
             }
         }
         .foregroundStyle(palette.textPrimary)
+#if os(iOS)
+        .fullScreenCover(isPresented: $showsCamera) {
+            ShannonVoiceCameraPicker(
+                onCapture: receiveCameraImage,
+                onCancel: { showsCamera = false }
+            )
+            .ignoresSafeArea()
+        }
+#endif
         .task {
             guard !didStart else { return }
             didStart = true
             pulse = true
-            await model.start(createCall: createCall, commitTurn: commitTurn)
+            await model.start(
+                createCall: createCall,
+                performLiveDelegation: performLiveDelegation,
+                commitTurn: commitTurn
+            )
         }
         .onDisappear { model.stop() }
     }
@@ -197,7 +243,11 @@ public struct ShannonLiveVoiceView: View {
             if model.phase == .failed {
                 Button {
                     Task {
-                        await model.start(createCall: createCall, commitTurn: commitTurn)
+                        await model.start(
+                            createCall: createCall,
+                            performLiveDelegation: performLiveDelegation,
+                            commitTurn: commitTurn
+                        )
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
@@ -231,6 +281,23 @@ public struct ShannonLiveVoiceView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("音声会話を終了")
 
+#if os(iOS)
+            if model.engine == .live {
+                Button {
+                    presentCamera()
+                } label: {
+                    Image(systemName: "camera.fill")
+                        .font(.title3)
+                        .frame(width: 52, height: 52)
+                        .background(.thinMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!model.phase.keepsSessionActive || isSharingCameraSnapshot)
+                .accessibilityLabel("写真を撮ってシャノンに見せる")
+                .accessibilityHint("撮影後に写真を確認してから共有できます")
+            }
+#endif
+
             ZStack {
                 Circle().fill(.thinMaterial)
                 Image(systemName: phaseSymbol)
@@ -241,6 +308,99 @@ public struct ShannonLiveVoiceView: View {
             .accessibilityHidden(true)
         }
     }
+
+#if os(iOS)
+    private func cameraPreview(image: UIImage, data: Data, palette: ShannonPalette) -> some View {
+        HStack(spacing: ShannonSpacing.medium) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous))
+                .accessibilityLabel("共有前の撮影写真")
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("この1枚だけを共有します")
+                    .font(.callout.weight(.semibold))
+                Text("シャノンが見た内容を音声会話へ戻します")
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                HStack(spacing: ShannonSpacing.small) {
+                    Button("撮り直す") {
+                        pendingCameraImage = nil
+                        pendingCameraData = nil
+                        presentCamera()
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+
+                    Button {
+                        shareCameraSnapshot(data)
+                    } label: {
+                        if isSharingCameraSnapshot {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("共有")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(palette.action)
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+                    .disabled(isSharingCameraSnapshot)
+                }
+                .controlSize(.regular)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(ShannonSpacing.small)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
+        }
+    }
+
+    @MainActor
+    private func receiveCameraImage(_ image: UIImage) {
+        showsCamera = false
+        guard let snapshot = image.shannonCameraSnapshot() else {
+            pendingCameraImage = nil
+            pendingCameraData = nil
+            cameraErrorMessage = "写真を共有用に準備できませんでした。撮り直してください。"
+            return
+        }
+        pendingCameraImage = snapshot.preview
+        pendingCameraData = snapshot.data
+        cameraErrorMessage = nil
+    }
+
+    @MainActor
+    private func presentCamera() {
+        cameraErrorMessage = nil
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            cameraErrorMessage = "この端末ではカメラを利用できません。実機でお試しください。"
+            return
+        }
+        showsCamera = true
+    }
+
+    private func shareCameraSnapshot(_ data: Data) {
+        guard !isSharingCameraSnapshot else { return }
+        isSharingCameraSnapshot = true
+        cameraErrorMessage = nil
+        Task { @MainActor in
+            defer { isSharingCameraSnapshot = false }
+            do {
+                try await model.shareCameraSnapshot(jpegData: data, analyze: analyzeCameraSnapshot)
+                pendingCameraImage = nil
+                pendingCameraData = nil
+            } catch {
+                cameraErrorMessage = "写真をシャノンへ共有できませんでした。もう一度お試しください。"
+            }
+        }
+    }
+#endif
 
     private var phaseSymbol: String {
         switch model.phase {

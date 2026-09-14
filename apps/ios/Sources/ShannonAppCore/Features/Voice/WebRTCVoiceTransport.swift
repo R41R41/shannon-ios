@@ -104,6 +104,13 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         audioTrack?.isEnabled = !muted
     }
 
+    func send(_ data: Data) throws {
+        guard let dataChannel, dataChannel.readyState == .open,
+              dataChannel.sendData(RTCDataBuffer(data: data, isBinary: false)) else {
+            throw TransportError.eventSendFailed
+        }
+    }
+
     func close() {
         removeAudioSessionObservers()
         iceGatheringEventContinuation.finish()
@@ -228,6 +235,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         case offerFailed
         case iceGatheringCancelled
         case iceGatheringTimedOut
+        case eventSendFailed
     }
 }
 

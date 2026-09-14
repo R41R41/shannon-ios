@@ -1,8 +1,14 @@
 import Foundation
 
+public enum ShannonVoiceEngine: String, Equatable, Sendable {
+    case realtime
+    case live
+}
+
 public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     public let answerSDP: String
     public let threadID: String
+    public let engine: ShannonVoiceEngine
     public let model: String?
     public let callID: String?
     public let dailyRemainingSeconds: Int?
@@ -10,15 +16,53 @@ public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     public init(
         answerSDP: String,
         threadID: String,
+        engine: ShannonVoiceEngine = .realtime,
         model: String? = nil,
         callID: String? = nil,
         dailyRemainingSeconds: Int? = nil
     ) {
         self.answerSDP = answerSDP
         self.threadID = threadID
+        self.engine = engine
         self.model = model
         self.callID = callID
         self.dailyRemainingSeconds = dailyRemainingSeconds
+    }
+}
+
+public struct ShannonLiveVoiceDelegationRequestDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let threadId: String?
+    public let transcript: String
+
+    public init(scopeKey: String, threadId: String?, transcript: String) {
+        self.scopeKey = scopeKey
+        self.threadId = threadId
+        self.transcript = transcript
+    }
+}
+
+public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendable {
+    public let threadId: String
+    public let model: String
+    public let reply: String
+
+    public init(threadId: String, model: String, reply: String) {
+        self.threadId = threadId
+        self.model = model
+        self.reply = reply
+    }
+}
+
+public struct ShannonVoiceVisionResponseDTO: Codable, Equatable, Sendable {
+    public let threadId: String
+    public let model: String
+    public let description: String
+
+    public init(threadId: String, model: String, description: String) {
+        self.threadId = threadId
+        self.model = model
+        self.description = description
     }
 }
 

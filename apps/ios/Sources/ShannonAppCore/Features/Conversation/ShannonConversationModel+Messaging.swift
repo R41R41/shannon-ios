@@ -44,6 +44,26 @@ extension ShannonConversationModel {
         return call
     }
 
+    public func performLiveVoiceDelegation(transcript: String) async throws -> String {
+        let result = try await client.performLiveVoiceDelegation(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            transcript: transcript
+        )
+        selectedThreadId = result.threadId
+        return result.reply
+    }
+
+    public func analyzeVoiceCameraSnapshot(jpegData: Data) async throws -> String {
+        let result = try await client.analyzeVoiceCameraSnapshot(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            jpegData: jpegData
+        )
+        selectedThreadId = result.threadId
+        return result.description
+    }
+
     public func commitRealtimeVoiceTurn(
         userTranscript: String,
         shannonTranscript: String

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  configuredVoiceEngine,
+  createConfiguredRealtimeVoiceGateway,
+  OpenAILiveVoiceGateway,
   configuredRealtimeDailyAllowanceSeconds,
   OpenAIRealtimeVoiceGateway,
   realtimeVoiceJapanDayKey,
@@ -81,6 +84,7 @@ describe('OpenAI realtime voice gateway', () => {
       .resolves.toEqual({
         answerSdp: answer,
         callId: 'call_test_123',
+        engine: 'realtime',
         model: 'gpt-realtime-2.1-mini',
       });
   });
@@ -97,8 +101,76 @@ describe('OpenAI realtime voice gateway', () => {
 
     await expect(gateway.createCall({ sdp: offer, instructions: 'test' })).resolves.toEqual({
       answerSdp: answer,
+      engine: 'realtime',
       model: 'gpt-realtime-2.1-mini',
     });
+  });
+
+  it('creates a restricted GPT-Live WebRTC session without exposing the API key', async () => {
+    const gateway = new OpenAILiveVoiceGateway({
+      apiKey: 'server-key-only',
+      model: 'gpt-live-1',
+      voice: 'marin',
+      fetcher: async (input, init) => {
+        expect(String(input)).toBe('https://api.openai.com/v1/live/sessions');
+        expect(init?.method).toBe('POST');
+        const headers = new Headers(init?.headers);
+        expect(headers.get('authorization')).toBe('Bearer server-key-only');
+        expect(headers.get('content-type')).toBe('application/json');
+        const payload = JSON.parse(String(init?.body)) as Record<string, any>;
+        expect(payload).toMatchObject({
+          session: {
+            model: 'gpt-live-1',
+            delegation: { type: 'client' },
+            audio: { output: { voice: 'cedar' } },
+            client: {
+              data_channel: {
+                allowed_client_events: expect.arrayContaining([
+                  'session.commentary.append',
+                  'session.close',
+                ]),
+                allowed_server_events: expect.arrayContaining([
+                  { type: 'session.started' },
+                  { type: 'session.delegation.created' },
+                  { type: 'session.input_transcript.delta' },
+                  { type: 'session.output_transcript.delta' },
+                ]),
+              },
+            },
+            store: false,
+          },
+          transport: { type: 'webrtc', sdp: offer },
+        });
+        return new Response(JSON.stringify({
+          session: { id: 'live_test_123' },
+          transport: { type: 'webrtc', sdp: answer },
+        }), { status: 201 });
+      },
+    });
+
+    await expect(gateway.createCall({ sdp: offer, instructions: 'あなたはシャノン。', voice: 'cedar' }))
+      .resolves.toEqual({
+        answerSdp: answer,
+        callId: 'live_test_123',
+        engine: 'live',
+        model: 'gpt-live-1',
+      });
+  });
+
+  it('selects Live explicitly and otherwise keeps Realtime as the safe fallback', () => {
+    expect(configuredVoiceEngine({ SHANNON_VOICE_ENGINE: 'live' })).toBe('live');
+    expect(configuredVoiceEngine({ SHANNON_VOICE_ENGINE: 'LIVE' })).toBe('live');
+    expect(configuredVoiceEngine({ SHANNON_VOICE_ENGINE: 'unexpected' })).toBe('realtime');
+    expect(configuredVoiceEngine({})).toBe('realtime');
+
+    expect(createConfiguredRealtimeVoiceGateway({
+      OPENAI_API_KEY: 'server-key-only',
+      SHANNON_VOICE_ENGINE: 'live',
+    })).toBeInstanceOf(OpenAILiveVoiceGateway);
+    expect(createConfiguredRealtimeVoiceGateway({
+      OPENAI_API_KEY: 'server-key-only',
+      SHANNON_VOICE_ENGINE: 'realtime',
+    })).toBeInstanceOf(OpenAIRealtimeVoiceGateway);
   });
 
   it('rejects malformed SDP without contacting OpenAI', async () => {

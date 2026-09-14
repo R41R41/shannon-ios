@@ -341,7 +341,8 @@ final class ShannonConnectionTests: XCTestCase {
                     headerFields: [
                         "content-type": "application/sdp",
                         "x-shannon-thread-id": "thread-voice",
-                        "x-shannon-realtime-model": "gpt-realtime-2.1-mini",
+                        "x-shannon-voice-engine": "live",
+                        "x-shannon-realtime-model": "gpt-live-1",
                         "x-shannon-realtime-daily-remaining-seconds": "3000",
                     ]
                 ))
@@ -363,7 +364,8 @@ final class ShannonConnectionTests: XCTestCase {
             offerSDP: "v=0\r\ns=offer with enough bytes\r\n"
         )
         XCTAssertEqual(call.threadID, "thread-voice")
-        XCTAssertEqual(call.model, "gpt-realtime-2.1-mini")
+        XCTAssertEqual(call.engine, .live)
+        XCTAssertEqual(call.model, "gpt-live-1")
         XCTAssertEqual(call.dailyRemainingSeconds, 3_000)
 
         let turn = try await client.commitRealtimeVoiceTurn(
@@ -372,6 +374,82 @@ final class ShannonConnectionTests: XCTestCase {
         )
         XCTAssertEqual(turn.threadId, "thread-voice")
         XCTAssertEqual(requestCount, 2)
+    }
+
+    func testAPIClientReturnsLiveDelegationResultToTheCurrentVoiceThread() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "l", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-live",
+            scopeKey: "owner-from-server",
+            displayName: "Travel iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let session = stubSession { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/live/delegations") == true)
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+            XCTAssertEqual(json["threadId"] as? String, "thread-travel")
+            XCTAssertEqual(json["transcript"] as? String, "浜松の天気を調べて")
+            return try response(url: request.url!, json: [
+                "threadId": "thread-travel",
+                "model": "gpt-5.6-luna",
+                "reply": "午後は雨の可能性があります。",
+                "webSources": [],
+            ])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let result = try await client.performLiveVoiceDelegation(
+            scopeKey: "untrusted-client-scope",
+            threadId: "thread-travel",
+            transcript: "浜松の天気を調べて"
+        )
+
+        XCTAssertEqual(result.threadId, "thread-travel")
+        XCTAssertEqual(result.reply, "午後は雨の可能性があります。")
+    }
+
+    func testAPIClientSharesOneCameraSnapshotWithTheCurrentLiveVoiceThread() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "v", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-camera",
+            scopeKey: "owner-from-server",
+            displayName: "Travel iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let jpegData = Data(repeating: 0x7A, count: 256)
+        let session = stubSession { request in
+            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/vision/snapshots") == true)
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "image/jpeg")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-thread-id"), "thread-travel")
+            XCTAssertEqual(requestBody(request), jpegData)
+            return try response(url: request.url!, json: [
+                "threadId": "thread-travel",
+                "model": "gpt-5.6-luna",
+                "description": "青い案内板と歩道が見えます。",
+            ])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let result = try await client.analyzeVoiceCameraSnapshot(
+            scopeKey: "untrusted-client-scope",
+            threadId: "thread-travel",
+            jpegData: jpegData
+        )
+
+        XCTAssertEqual(result.threadId, "thread-travel")
+        XCTAssertEqual(result.description, "青い案内板と歩道が見えます。")
     }
 
     func testAPIClientPreservesRealtimeAllowanceRejectionCode() async throws {

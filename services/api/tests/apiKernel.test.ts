@@ -28,6 +28,53 @@ class RecordingChatModel implements ShannonChatModel {
 }
 
 describe('Shannon local API kernel', () => {
+  it('routes a GPT-Live client delegation through the read-only web backend', async () => {
+    const model = new RecordingChatModel();
+    model.webSources = [{ title: 'Weather source', url: 'https://example.com/weather' }];
+    const api = createLocalApiKernel(
+      () => '2026-09-15T00:00:00.000Z',
+      { chatModel: model },
+    );
+
+    const result = await api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a',
+        threadId: 'thread-travel',
+        transcript: '浜松の今日の天気を調べて',
+      },
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      body: {
+        threadId: 'thread-travel',
+        model: 'test-model',
+        reply: '返答1',
+        webSources: [{ title: 'Weather source', url: 'https://example.com/weather' }],
+      },
+    });
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]).toMatchObject({
+      scopeKey: 'owner-a',
+      message: '浜松の今日の天気を調べて',
+      useWebSearch: true,
+      generateThreadTitle: false,
+    });
+    expect(model.requests[0]?.systemPrompt).toContain('This lane is read-only');
+  });
+
+  it('rejects an empty GPT-Live client delegation before calling the model', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(() => '2026-09-15T00:00:00.000Z', { chatModel: model });
+
+    await expect(api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a', transcript: '   ',
+      },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(model.requests).toHaveLength(0);
+  });
+
   it('shares a bounded voice choice and applies it when a new realtime session starts', async () => {
     const voiceIdentity = new InMemoryVoiceIdentityStore('marin');
     const api = createLocalApiKernel(

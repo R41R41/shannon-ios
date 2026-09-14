@@ -15,12 +15,16 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var sessionStartedAt: Date?
     public private(set) var usage = ShannonRealtimeVoiceUsage.zero
     public private(set) var dailyRemainingSeconds: Int?
+    public private(set) var engine: ShannonVoiceEngine = .realtime
+    public private(set) var liveAudioSeconds: Double = 0
 
     var transport: ShannonWebRTCVoiceTransport?
     var transcriptState = ShannonRealtimeVoiceTranscriptState()
     var sessionLimitTask: Task<Void, Never>?
     var disconnectGraceTask: Task<Void, Never>?
     var commitTurn: (@MainActor (String, String) async throws -> Void)?
+    var performLiveDelegation: (@MainActor (String) async throws -> String)?
+    var liveDelegationTasks: [String: Task<Void, Never>] = [:]
     var sessionGeneration = 0
     let diagnostics = ShannonVoiceDiagnostics.shared
 
@@ -28,6 +32,7 @@ public final class ShannonRealtimeVoiceSessionModel {
 
     public func start(
         createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {
         stop()
@@ -39,6 +44,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         shannonTranscript = ""
         transcriptState = ShannonRealtimeVoiceTranscriptState()
         usage = .zero
+        engine = .realtime
+        liveAudioSeconds = 0
         dailyRemainingSeconds = nil
         diagnostics.record("realtime.start.requested")
 
@@ -53,6 +60,7 @@ public final class ShannonRealtimeVoiceSessionModel {
 
         phase = .connecting
         self.commitTurn = commitTurn
+        self.performLiveDelegation = performLiveDelegation
         let transport = ShannonWebRTCVoiceTransport()
         self.transport = transport
         transport.onEvent = { [weak self] data in
@@ -102,16 +110,20 @@ public final class ShannonRealtimeVoiceSessionModel {
                 transport.close()
                 return
             }
-            diagnostics.record("realtime.answer.received", metadata: ["model": call.model ?? "unknown"])
+            engine = call.engine
+            diagnostics.record("realtime.answer.received", metadata: [
+                "model": call.model ?? "unknown",
+                "engine": call.engine.rawValue,
+            ])
             dailyRemainingSeconds = call.dailyRemainingSeconds
             try await transport.acceptAnswer(call.answerSDP)
             guard generation == sessionGeneration else {
                 transport.close()
                 return
             }
-            sessionStartedAt = Date()
-            phase = .listening
-            scheduleSessionLimit()
+            if call.engine == .realtime {
+                markSessionReady()
+            }
         } catch {
             guard generation == sessionGeneration else { return }
             diagnostics.record("realtime.start.failed", metadata: safeErrorMetadata(error))
@@ -124,15 +136,45 @@ public final class ShannonRealtimeVoiceSessionModel {
         transport?.setMuted(isMuted)
     }
 
+    public func shareCameraSnapshot(
+        jpegData: Data,
+        analyze: @escaping @MainActor (Data) async throws -> String
+    ) async throws {
+        guard engine == .live, phase.keepsSessionActive, let transport else {
+            throw ShannonRealtimeVoiceCameraError.liveSessionRequired
+        }
+        let generation = sessionGeneration
+        phase = .thinking
+        do {
+            let description = try await analyze(jpegData)
+            guard generation == sessionGeneration, self.transport === transport else {
+                throw ShannonRealtimeVoiceCameraError.sessionEnded
+            }
+            try transport.send(ShannonLiveVoiceClientEvent.commentary(
+                delegationID: nil,
+                content: "ユーザーが確認して共有した現在のカメラ写真についての観察です。\n\(description)"
+            ))
+            diagnostics.record("live.camera_snapshot.returned")
+        } catch {
+            diagnostics.record("live.camera_snapshot.failed", metadata: safeErrorMetadata(error))
+            if phase == .thinking { phase = .listening }
+            throw error
+        }
+    }
+
     public func stop() {
+        flushPendingLiveTurn(generation: sessionGeneration)
         sessionGeneration += 1
         sessionLimitTask?.cancel()
         sessionLimitTask = nil
         disconnectGraceTask?.cancel()
         disconnectGraceTask = nil
+        liveDelegationTasks.values.forEach { $0.cancel() }
+        liveDelegationTasks.removeAll()
         let activeTransport = transport
         transport = nil
         commitTurn = nil
+        performLiveDelegation = nil
         isMuted = false
         sessionStartedAt = nil
         phase = .idle
@@ -145,13 +187,28 @@ public final class ShannonRealtimeVoiceSessionModel {
         guard let event = ShannonRealtimeVoiceEvent.decode(data) else { return }
         switch event {
         case .sessionReady:
-            if phase == .connecting { phase = .listening }
+            markSessionReady()
         case .speechStarted:
             phase = .listening
         case .speechStopped, .responseStarted:
             phase = .thinking
         case .outputTranscriptDelta:
             phase = .speaking
+        case .liveInputTranscriptDelta:
+            phase = .listening
+        case .liveOutputTranscriptDelta:
+            phase = .speaking
+        case .liveDelegationRequested(let id, _):
+            phase = .thinking
+            beginLiveDelegation(id: id, generation: generation)
+        case .liveUsageUpdated(let seconds):
+            liveAudioSeconds = max(liveAudioSeconds, seconds)
+        case .liveSessionClosed(let reason):
+            flushPendingLiveTurn(generation: generation)
+            if reason != "close_requested", phase.keepsSessionActive {
+                diagnostics.record("live.session.closed", metadata: ["reason": reason ?? "unknown"])
+                fail("音声接続が終了しました。もう一度つなぐと会話を再開できます。")
+            }
         case .responseFinished(let responseUsage):
             if let responseUsage { usage.append(responseUsage) }
             if phase != .failed { phase = .listening }
@@ -170,6 +227,57 @@ public final class ShannonRealtimeVoiceSessionModel {
             userTranscript = transcriptState.userText
             shannonTranscript = transcriptState.shannonText
         }
+    }
+
+    func markSessionReady() {
+        if sessionStartedAt == nil {
+            sessionStartedAt = Date()
+            scheduleSessionLimit()
+        }
+        if phase == .connecting { phase = .listening }
+    }
+
+    func beginLiveDelegation(id: String, generation: Int) {
+        guard engine == .live,
+              liveDelegationTasks[id] == nil,
+              let performLiveDelegation,
+              let transport else { return }
+        let transcript = transcriptState.delegationTranscript
+        guard !transcript.isEmpty else {
+            diagnostics.record("live.delegation.missing_transcript")
+            return
+        }
+        diagnostics.record("live.delegation.started")
+        liveDelegationTasks[id] = Task { @MainActor [weak self] in
+            defer { self?.liveDelegationTasks[id] = nil }
+            do {
+                let reply = try await performLiveDelegation(transcript)
+                guard !Task.isCancelled, self?.sessionGeneration == generation else { return }
+                try transport.send(ShannonLiveVoiceClientEvent.commentary(
+                    delegationID: id,
+                    content: reply
+                ))
+                self?.diagnostics.record("live.delegation.returned")
+            } catch {
+                guard !Task.isCancelled, self?.sessionGeneration == generation else { return }
+                self?.diagnostics.record(
+                    "live.delegation.failed",
+                    metadata: self?.safeErrorMetadata(error) ?? [:]
+                )
+                self?.errorMessage = "調べものの結果を音声へ戻せませんでした。会話はそのまま続けられます。"
+                if let fallback = try? ShannonLiveVoiceClientEvent.commentary(
+                    delegationID: id,
+                    content: "調べものを完了できませんでした。必要なら、もう一度聞いてください。"
+                ) {
+                    try? transport.send(fallback)
+                }
+            }
+        }
+    }
+
+    func flushPendingLiveTurn(generation: Int) {
+        guard engine == .live, let turn = transcriptState.flushPendingLiveTurn() else { return }
+        persist(turn, generation: generation)
     }
 
     func persist(_ turn: (user: String, shannon: String), generation: Int) {
@@ -192,7 +300,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         case .connected:
             disconnectGraceTask?.cancel()
             disconnectGraceTask = nil
-            if phase == .connecting { phase = .listening }
+            if phase == .connecting, engine == .realtime { phase = .listening }
             diagnostics.record("realtime.connection.connected")
         case .disconnected:
             scheduleDisconnectFailure(generation: generation)
@@ -244,14 +352,18 @@ public final class ShannonRealtimeVoiceSessionModel {
     }
 
     func fail(_ message: String) {
+        flushPendingLiveTurn(generation: sessionGeneration)
         sessionGeneration += 1
         sessionLimitTask?.cancel()
         sessionLimitTask = nil
         disconnectGraceTask?.cancel()
         disconnectGraceTask = nil
+        liveDelegationTasks.values.forEach { $0.cancel() }
+        liveDelegationTasks.removeAll()
         let activeTransport = transport
         transport = nil
         commitTurn = nil
+        performLiveDelegation = nil
         isMuted = false
         sessionStartedAt = nil
         phase = .failed
@@ -263,6 +375,11 @@ public final class ShannonRealtimeVoiceSessionModel {
         let value = error as NSError
         return ["domain": value.domain, "code": String(value.code)]
     }
+}
+
+public enum ShannonRealtimeVoiceCameraError: Error, Equatable, Sendable {
+    case liveSessionRequired
+    case sessionEnded
 }
 #else
 @MainActor
@@ -276,9 +393,12 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var sessionStartedAt: Date?
     public private(set) var usage = ShannonRealtimeVoiceUsage.zero
     public private(set) var dailyRemainingSeconds: Int?
+    public private(set) var engine: ShannonVoiceEngine = .realtime
+    public private(set) var liveAudioSeconds: Double = 0
     public init() {}
     public func start(
         createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {}
     public func toggleMute() {}

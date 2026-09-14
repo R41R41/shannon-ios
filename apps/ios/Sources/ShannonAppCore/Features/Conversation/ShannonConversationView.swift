@@ -173,6 +173,12 @@ public struct ShannonConversationView: View {
                 createCall: { offer in
                     try await model.createRealtimeVoiceCall(offerSDP: offer)
                 },
+                performLiveDelegation: { transcript in
+                    try await model.performLiveVoiceDelegation(transcript: transcript)
+                },
+                analyzeCameraSnapshot: { jpegData in
+                    try await model.analyzeVoiceCameraSnapshot(jpegData: jpegData)
+                },
                 commitTurn: { user, shannon in
                     try await model.commitRealtimeVoiceTurn(
                         userTranscript: user,
