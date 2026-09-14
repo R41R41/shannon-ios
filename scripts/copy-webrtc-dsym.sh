@@ -33,7 +33,9 @@ uuid_set() {
 framework_uuids="$(uuid_set "$framework_binary")"
 destination_dsym="$output_directory/WebRTC.framework.dSYM"
 destination_dwarf="$destination_dsym/Contents/Resources/DWARF/WebRTC"
-if [ -f "$destination_dwarf" ]; then
+destination_info="$destination_dsym/Contents/Info.plist"
+destination_relocations="$destination_dsym/Contents/Resources/Relocations/aarch64/WebRTC.yml"
+if [ -f "$destination_dwarf" ] && [ -f "$destination_info" ] && [ -f "$destination_relocations" ]; then
   existing_uuids="$(uuid_set "$destination_dwarf")"
   if [ -n "$framework_uuids" ] && [ "$framework_uuids" = "$existing_uuids" ]; then
     echo "Reusing WebRTC.framework.dSYM for UUIDs: $framework_uuids"
@@ -82,7 +84,9 @@ extraction_directory="$work_directory/extracted"
 
 source_dsym="$extraction_directory/WebRTC-ios-arm64.dSYM"
 source_dwarf="$source_dsym/Contents/Resources/DWARF/WebRTC"
-if [ ! -f "$source_dwarf" ]; then
+source_info="$source_dsym/Contents/Info.plist"
+source_relocations="$source_dsym/Contents/Resources/Relocations/aarch64/WebRTC.yml"
+if [ ! -f "$source_dwarf" ] || [ ! -f "$source_info" ] || [ ! -f "$source_relocations" ]; then
   echo "error: WebRTC device dSYM was not found in the verified symbols archive" >&2
   exit 1
 fi
@@ -95,9 +99,13 @@ if [ -z "$framework_uuids" ] || [ "$framework_uuids" != "$symbol_uuids" ]; then
   exit 1
 fi
 
-staged_dsym="$work_directory/WebRTC.framework.dSYM"
-/usr/bin/ditto "$source_dsym" "$staged_dsym"
-/bin/mkdir -p "$output_directory"
-/bin/mv "$staged_dsym" "$destination_dsym"
+# Xcode's user-script sandbox permits only the declared output files. Copy each
+# dSYM payload directly instead of using ditto/mv, both of which create
+# undeclared temporary or nested paths when Xcode pre-creates directory outputs.
+/bin/mkdir -p "$(/usr/bin/dirname "$destination_dwarf")"
+/bin/mkdir -p "$(/usr/bin/dirname "$destination_relocations")"
+/bin/cp "$source_dwarf" "$destination_dwarf"
+/bin/cp "$source_info" "$destination_info"
+/bin/cp "$source_relocations" "$destination_relocations"
 
 echo "Included WebRTC.framework.dSYM for UUIDs: $framework_uuids"

@@ -60,4 +60,9 @@ test('pins the first WebRTC release with official dSYMs and includes them in arc
   assert.match(symbolScript, /WebRTC-M152-dSYM\.zip/u);
   assert.match(symbolScript, /7c99e7cc12b59e4db357581271b412e9ce031ce21a23590a909f7ae1f0b20f87/u);
   assert.match(symbolScript, /dwarfdump --uuid/u);
+  assert.match(symbolScript, /cp "\$source_dwarf" "\$destination_dwarf"/u);
+  assert.match(symbolScript, /cp "\$source_info" "\$destination_info"/u);
+  assert.match(symbolScript, /cp "\$source_relocations" "\$destination_relocations"/u);
+  assert.doesNotMatch(symbolScript, /ditto "\$source_dsym" "\$destination_dsym"/u);
+  assert.doesNotMatch(symbolScript, /mv "\$staged_dsym" "\$destination_dsym"/u);
 });
