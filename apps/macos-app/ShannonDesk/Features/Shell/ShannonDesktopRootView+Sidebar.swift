@@ -77,6 +77,18 @@ extension ShannonDesktopRootView {
                         badge: 0,
                         selected: destination == .memory
                     ) { selectDestination(.memory) }
+                    DesktopSidebarButton(
+                        title: "開発",
+                        symbol: "chevron.left.forwardslash.chevron.right",
+                        badge: workProjection.active.count,
+                        selected: destination == .development
+                    ) { selectDestination(.development) }
+                    DesktopSidebarButton(
+                        title: "Release Center",
+                        symbol: "shippingbox",
+                        badge: 0,
+                        selected: destination == .release
+                    ) { selectDestination(.release) }
                 }
 
                 if !threadProjection.initiative.isEmpty {

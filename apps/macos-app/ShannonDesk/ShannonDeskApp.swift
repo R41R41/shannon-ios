@@ -9,19 +9,19 @@ struct ShannonDeskApp: App {
     @State private var memoryModel: ShannonMemoryModel
     @State private var voiceIdentityModel: ShannonVoiceIdentityModel
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
+    @State private var releaseModel: ShannonTestFlightDeliveryModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
-        let usesDesignPreview: Bool
 #if DEBUG
-        usesDesignPreview = ProcessInfo.processInfo.arguments.contains("-ShannonDesignPreview")
+        let usesDesignPreview = ProcessInfo.processInfo.arguments.contains("-ShannonDesignPreview")
             || (Bundle.main.object(forInfoDictionaryKey: "ShannonDesignPreview") as? Bool == true)
-#else
-        usesDesignPreview = false
-#endif
         let connectionStore: any ShannonConnectionStoreProtocol = usesDesignPreview
             ? ShannonDeskPreviewConnectionStore()
             : ShannonKeychainConnectionStore()
+#else
+        let connectionStore: any ShannonConnectionStoreProtocol = ShannonKeychainConnectionStore()
+#endif
         let client = ShannonAPIClient(
             baseURL: ShannonDeskRuntimeConfiguration.apiBaseURL,
             apiToken: ShannonDeskRuntimeConfiguration.apiToken,
@@ -42,6 +42,7 @@ struct ShannonDeskApp: App {
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
         _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
+        _releaseModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
     }
 
     var body: some Scene {
@@ -51,7 +52,8 @@ struct ShannonDeskApp: App {
                 connection: connectionModel,
                 memory: memoryModel,
                 voiceIdentity: voiceIdentityModel,
-                worldSubscriptions: worldSubscriptionModel
+                worldSubscriptions: worldSubscriptionModel,
+                release: releaseModel
             )
             .preferredColorScheme(preferredColorScheme)
             .onOpenURL { url in
@@ -118,8 +120,14 @@ private struct ShannonDeskCommands: Commands {
             Button("頭の中") { actions?.showMemory() }
                 .keyboardShortcut("3")
                 .disabled(actions == nil)
-            Button("設定") { actions?.showSettings() }
+            Button("開発") { actions?.showDevelopment() }
                 .keyboardShortcut("4")
+                .disabled(actions == nil)
+            Button("Release Center") { actions?.showRelease() }
+                .keyboardShortcut("5")
+                .disabled(actions == nil)
+            Button("設定") { actions?.showSettings() }
+                .keyboardShortcut("6")
                 .disabled(actions == nil)
             Button("会話の目次") { actions?.toggleOutline() }
                 .keyboardShortcut("o", modifiers: [.command, .option])

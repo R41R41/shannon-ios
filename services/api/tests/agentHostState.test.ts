@@ -19,12 +19,20 @@ describe('AgentHostStateStore', () => {
       title: '進行中', occurredAt: '2026-09-04T00:00:01.000Z',
     };
     store.enqueueEvents([event, event]);
+    store.saveProject({
+      key: 'new-app', path: '/workspace/new-app',
+      repositoryURL: 'https://github.com/example/new-app.git', updatedAt: '2026-09-04T00:00:02.000Z',
+    });
 
     const restored = new AgentHostStateStore(path);
     expect(restored.resumableSessions()).toHaveLength(1);
     expect(restored.session('task-1')?.pendingApprovalExternalRequestID).toBe('approval-1');
     expect(restored.session('task-1')?.goal).toBe('Recover a title edit');
     expect(restored.pendingEvents()).toEqual([event]);
+    expect(restored.registeredProjects()).toEqual([{
+      key: 'new-app', path: '/workspace/new-app',
+      repositoryURL: 'https://github.com/example/new-app.git', updatedAt: '2026-09-04T00:00:02.000Z',
+    }]);
     restored.acknowledgeEvents(['event-1']);
     expect(restored.pendingEvents()).toEqual([]);
     expect(statSync(path).mode & 0o777).toBe(0o600);

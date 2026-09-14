@@ -23,9 +23,11 @@ public struct ShannonAgentApprovalDTO: Codable, Equatable, Sendable {
 public struct ShannonAgentChangeSummaryDTO: Codable, Equatable, Sendable {
     public let id: String
     public let displayName: String
+    public let path: String?
     public let summary: String
     public let additions: Int
     public let deletions: Int
+    public let diffPreview: String?
 }
 
 public struct ShannonAgentTestResultDTO: Codable, Equatable, Sendable {
@@ -41,6 +43,10 @@ public struct ShannonAgentTaskRemoteDTO: Codable, Equatable, Sendable {
     public let sourceMessageID: String?
     public let title: String
     public let goal: String
+    public let assignedHostID: String?
+    public let projectHint: String?
+    public let model: String?
+    public let reasoningEffort: ShannonAgentReasoningEffort?
     public let status: ShannonAgentTaskStatus
     public let summary: String
     public let currentAction: String?
@@ -49,6 +55,8 @@ public struct ShannonAgentTaskRemoteDTO: Codable, Equatable, Sendable {
     public let pendingApproval: ShannonAgentApprovalDTO?
     public let changes: [ShannonAgentChangeSummaryDTO]
     public let tests: [ShannonAgentTestResultDTO]
+    public let isPinned: Bool?
+    public let isArchived: Bool?
     public let createdAt: String
     public let updatedAt: String
     public let latestSequence: Int
@@ -75,6 +83,8 @@ public struct ShannonAgentTaskCreateRequestDTO: Codable, Equatable, Sendable {
     public let plan: [ShannonAgentPlanItem]
     public let hostHint: String?
     public let projectHint: String?
+    public let model: String?
+    public let reasoningEffort: ShannonAgentReasoningEffort?
 }
 
 public struct ShannonAgentTaskCommandRequestDTO: Codable, Equatable, Sendable {
@@ -82,4 +92,10 @@ public struct ShannonAgentTaskCommandRequestDTO: Codable, Equatable, Sendable {
     public let idempotencyKey: String
     public let type: String
     public let payload: [String: String]
+}
+
+public struct ShannonAgentTaskMetadataRequestDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let isPinned: Bool?
+    public let isArchived: Bool?
 }

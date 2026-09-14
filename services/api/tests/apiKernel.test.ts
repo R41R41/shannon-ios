@@ -103,6 +103,7 @@ describe('Shannon local API kernel', () => {
       lastCheckedAt: '2026-09-05T04:00:00.000Z',
       activeFailureCode: null,
       history: [],
+      release: { platform: 'ios' as const, buildVersion: '17', gates: [] },
     };
     const api = createLocalApiKernel(
       () => '2026-09-05T04:00:00.000Z',
@@ -503,6 +504,34 @@ describe('Shannon local API kernel', () => {
     });
   });
 
+  it('exposes an allowlisted workspace snapshot without exposing host paths', async () => {
+    const api = createLocalApiKernel(() => '2026-09-05T03:45:00.000Z');
+    await api.dispatch({ method: 'POST', path: '/v1/agent/host/heartbeat', body: {
+      hostId: 'shannon-mac', displayName: 'このMac', kind: 'local',
+      capabilities: ['workspace-files', 'workspace-diff', 'workspace-git'],
+      projects: ['shannon-ios'], models: [], workspaces: [{
+        key: 'shannon-ios', isGitRepository: true, currentBranch: 'feature/workspace',
+        files: ['apps/macos-app/ShannonDeskApp.swift', 'services/api/src/agentHost.ts'],
+        changes: [{ path: 'services/api/src/agentHost.ts', status: 'M', additions: 4, deletions: 1 }],
+      }],
+    } });
+
+    const response = await api.dispatch({
+      method: 'GET', path: '/v1/agent/workspace',
+      query: new URLSearchParams({ scopeKey: 'owner-a', project: 'shannon-ios' }),
+    });
+
+    expect(response).toMatchObject({ status: 200, body: {
+      routing: { resolvedHostId: 'shannon-mac' },
+      projects: [{
+        key: 'shannon-ios', isGitRepository: true, currentBranch: 'feature/workspace',
+        files: ['apps/macos-app/ShannonDeskApp.swift', 'services/api/src/agentHost.ts'],
+        changes: [{ path: 'services/api/src/agentHost.ts', status: 'M', additions: 4, deletions: 1 }],
+      }],
+    } });
+    expect(JSON.stringify(response.body)).not.toContain('/Users/');
+  });
+
   it('queues an explicit Aether proposal without calling the chat model', async () => {
     const model = new RecordingChatModel();
     const created: unknown[] = [];
@@ -722,6 +751,12 @@ describe('Shannon local API kernel', () => {
     expect(completed).toMatchObject({
       status: 200,
       body: { task: { status: 'completed', changes: [{ displayName: 'SessionStore.swift' }], tests: [{ status: 'passed' }] } },
+    });
+    expect(await api.dispatch({
+      method: 'POST', path: `/v1/agent/tasks/${taskId}/metadata`,
+      body: { scopeKey: 'owner-a', isPinned: true, isArchived: true },
+    })).toMatchObject({
+      status: 200, body: { task: { isPinned: true, isArchived: true } },
     });
     const sequence = (completed.body as { task: { latestSequence: number } }).task.latestSequence;
     expect(await api.dispatch({

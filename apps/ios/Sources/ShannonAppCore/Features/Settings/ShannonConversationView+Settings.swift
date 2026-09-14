@@ -153,7 +153,13 @@ extension ShannonConversationView {
             ShannonAppearanceSettingsView(appearanceModeRawValue: $appearanceModeRawValue)
         }
         .sheet(isPresented: $showsTestFlightDelivery) {
-            ShannonTestFlightDeliveryView(model: testFlightDeliveryModel)
+            ShannonTestFlightDeliveryView(model: testFlightDeliveryModel) { target in
+                let taskID = model.proposeAppleRelease(target)
+                showsTestFlightDelivery = false
+                showsSettings = false
+                selectedPage = .work
+                openAgentTask(taskID)
+            }
         }
         .sheet(isPresented: $showsVoiceDiagnostics) {
             ShannonVoiceDiagnosticsView()

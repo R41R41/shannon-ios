@@ -1,6 +1,70 @@
 import Foundation
 
 extension ShannonAPIClient {
+    public func loadAgentProjectProvisioning(
+        scopeKey: String
+    ) async throws -> [ShannonAgentProjectProvisioningDTO] {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/agent/projects"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey)]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        let envelope: ShannonAgentProjectProvisioningListDTO = try await response(
+            ShannonAgentProjectProvisioningListDTO.self,
+            for: request
+        )
+        return envelope.requests
+    }
+
+    public func createAgentProjectProvisioning(
+        scopeKey: String,
+        repositoryURL: String,
+        projectKey: String,
+        hostPreference: ShannonAgentRoutingPreference,
+        idempotencyKey: String
+    ) async throws -> [ShannonAgentProjectProvisioningDTO] {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/agent/projects"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonAgentProjectProvisioningCreateDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            idempotencyKey: idempotencyKey,
+            repositoryURL: repositoryURL,
+            projectKey: projectKey,
+            hostPreference: hostPreference
+        ))
+        let envelope: ShannonAgentProjectProvisioningEnvelopeDTO = try await response(
+            ShannonAgentProjectProvisioningEnvelopeDTO.self,
+            for: request
+        )
+        return envelope.requests ?? [envelope.request]
+    }
+
+    public func loadAgentWorkspace(
+        scopeKey: String,
+        projectHint: String? = nil
+    ) async throws -> ShannonAgentWorkspaceCatalogDTO {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/agent/workspace"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey)]
+        if let projectHint, !projectHint.isEmpty {
+            components?.queryItems?.append(URLQueryItem(name: "project", value: projectHint))
+        }
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonAgentWorkspaceCatalogDTO.self, for: request)
+    }
+
     public func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO {
         let connection = currentConnection()
         var components = URLComponents(
@@ -11,6 +75,24 @@ extension ShannonAPIClient {
         guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
         var request = URLRequest(url: url)
         authorize(&request, connection: connection)
+        return try await response(ShannonTestFlightDeliveryDashboardDTO.self, for: request)
+    }
+
+    public func confirmTestFlightReleaseGate(
+        scopeKey: String,
+        buildVersion: String,
+        gate: ShannonReleaseGateKeyDTO
+    ) async throws -> ShannonTestFlightDeliveryDashboardDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/testflight/delivery/confirm"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonReleaseGateConfirmationDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            buildVersion: buildVersion,
+            gate: gate
+        ))
         return try await response(ShannonTestFlightDeliveryDashboardDTO.self, for: request)
     }
 
@@ -50,7 +132,9 @@ extension ShannonAPIClient {
             summary: task.summary,
             plan: task.plan,
             hostHint: task.hostHint,
-            projectHint: task.projectHint
+            projectHint: task.projectHint,
+            model: task.model,
+            reasoningEffort: task.reasoningEffort
         ))
         let envelope: ShannonAgentTaskEnvelopeDTO = try await response(ShannonAgentTaskEnvelopeDTO.self, for: request)
         return try ShannonAgentTask(remote: envelope.task)
@@ -109,6 +193,26 @@ extension ShannonAPIClient {
             idempotencyKey: idempotencyKey,
             type: type,
             payload: payload
+        ))
+        let envelope: ShannonAgentTaskEnvelopeDTO = try await response(ShannonAgentTaskEnvelopeDTO.self, for: request)
+        return try ShannonAgentTask(remote: envelope.task)
+    }
+
+    public func updateAgentTaskMetadata(
+        scopeKey: String,
+        taskID: UUID,
+        isPinned: Bool? = nil,
+        isArchived: Bool? = nil
+    ) async throws -> ShannonAgentTask {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/agent/tasks/\(taskID.uuidString)/metadata"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonAgentTaskMetadataRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            isPinned: isPinned,
+            isArchived: isArchived
         ))
         let envelope: ShannonAgentTaskEnvelopeDTO = try await response(ShannonAgentTaskEnvelopeDTO.self, for: request)
         return try ShannonAgentTask(remote: envelope.task)

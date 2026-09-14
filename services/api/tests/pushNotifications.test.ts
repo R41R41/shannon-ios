@@ -308,7 +308,9 @@ function createAgentTask(): { path: string; taskId: string } {
     idempotencyKey: 'push-task', conversationThreadID: 'talk-1', title: 'リンク表示を直す',
     goal: 'シャノン側のリンクをタップ可能にする', summary: '作業を開始する',
   }, '2026-09-04T04:00:00.000Z');
-  tasks.heartbeat('mac-1', 'Mac', ['codex'], '2026-09-04T04:00:01.000Z');
+  tasks.heartbeat({
+    hostId: 'mac-1', displayName: 'Mac', kind: 'local', capabilities: ['codex'], projects: [], models: [],
+  }, '2026-09-04T04:00:01.000Z');
   tasks.claim('mac-1', '2026-09-04T04:00:02.000Z');
   tasks.recordHostEvents('mac-1', [{
     eventId: 'completed-event', taskId: created.task.id, type: 'completed', title: '完了',

@@ -69,6 +69,7 @@
 				A0000000000000000000000C /* Sources */,
 				A0000000000000000000000E /* Frameworks */,
 				A0000000000000000000000D /* Resources */,
+				A00000000000000000000019 /* Include WebRTC dSYM */,
 			);
 			buildRules = (
 			);
@@ -128,6 +129,32 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A00000000000000000000019 /* Include WebRTC dSYM */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../scripts/copy-webrtc-dsym.sh",
+				"$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/WebRTC.framework/WebRTC",
+			);
+			name = "Include WebRTC dSYM";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DWARF_DSYM_FOLDER_PATH)/WebRTC.framework.dSYM",
+				"$(DWARF_DSYM_FOLDER_PATH)/WebRTC.framework.dSYM/Contents/Resources/DWARF/WebRTC",
+				"$(CACHE_ROOT)/Shannon-WebRTC-M152-dSYM.zip",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"${SRCROOT}/../../scripts/copy-webrtc-dsym.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A0000000000000000000000C /* Sources */ = {
@@ -253,11 +280,11 @@
 			buildSettings = {
 				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ShannonApp/ShannonApp.entitlements;
-				CURRENT_PROJECT_VERSION = 46;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 47;
 				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -286,11 +313,11 @@
 			buildSettings = {
 				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ShannonApp/ShannonApp.entitlements;
-				CURRENT_PROJECT_VERSION = 46;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 47;
 				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShannonApp/Info.plist;

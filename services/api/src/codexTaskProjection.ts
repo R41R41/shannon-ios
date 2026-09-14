@@ -3,20 +3,26 @@ import { basename } from 'node:path';
 import type { AgentHostConfig, AgentHostProject } from './agentHostConfig.js';
 import type {
   AgentChangeSummary,
+  AgentReasoningEffort,
   AgentTestResult,
   ClaimedAgentCommand,
 } from './agentTaskStore.js';
 import type { CodexRequestID } from './codexAppServerClient.js';
 import type { ShannonTaskResult } from './codexTaskBridge.js';
 
-export function codexThreadParams(project: AgentHostProject, config: AgentHostConfig): Record<string, unknown> {
+export function codexThreadParams(
+  project: AgentHostProject,
+  config: AgentHostConfig,
+  selection: { model?: string; reasoningEffort?: AgentReasoningEffort } = {},
+): Record<string, unknown> {
+  const model = selection.model ?? config.codexModel;
   return {
     cwd: project.path,
     approvalPolicy: 'on-request',
     approvalsReviewer: 'user',
     sandbox: 'workspace-write',
     serviceName: 'shannon_agent_host',
-    ...(config.codexModel ? { model: config.codexModel } : {}),
+    ...(model ? { model } : {}),
   };
 }
 
@@ -218,9 +224,11 @@ export function changeFromItem(value: unknown, namespace: string): AgentChangeSu
   return {
     id: stableID(namespace, path),
     displayName: basename(path),
+    path,
     summary: object?.kind === 'add' ? '追加' : object?.kind === 'delete' ? '削除' : '変更',
     additions: counts.additions,
     deletions: counts.deletions,
+    ...(diff ? { diffPreview: boundedDiff(diff) } : {}),
   };
 }
 
@@ -234,11 +242,18 @@ export function changesFromUnifiedDiff(diff: string): AgentChangeSummary[] {
     return [{
       id: stableID('diff', path),
       displayName: basename(path),
+      path,
       summary: '変更',
       additions: counts.additions,
       deletions: counts.deletions,
+      diffPreview: boundedDiff(`diff --git ${chunk}`),
     }];
   });
+}
+
+function boundedDiff(diff: string, limit = 16_000): string {
+  if (diff.length <= limit) return diff;
+  return `${diff.slice(0, limit)}\n…差分の続きはAgent Host上で保持されています。`;
 }
 
 export function lineCounts(diff: string): { additions: number; deletions: number } {

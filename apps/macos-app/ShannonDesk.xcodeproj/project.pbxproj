@@ -3,182 +3,166 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		A1C4A810A6B44940B77A0001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1C4A810A6B44940B77A0002 /* Assets.xcassets */; };
-		0A9211C09418188482D7169E /* ShannonDesktopComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF41A11413B5ABF78319FA39 /* ShannonDesktopComposer.swift */; };
-		11EFE26E4F3118D4EEC0117B /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BDF9A5BA10F369FA173DB8D /* ShannonDesktopAttachment.swift */; };
-		142F4E8D6B56085E17E5C2A7 /* ShannonDesktopRootView+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12294631F89E6F3020998FAB /* ShannonDesktopRootView+Actions.swift */; };
-		2100F6CC27DDEB64803DB937 /* ShannonDesktopRootView+Work.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BA583ECB3CF837AAEFF577F /* ShannonDesktopRootView+Work.swift */; };
-		27CB0C88382DECE9B49E5A95 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6983CEF2A957A07ABB9999C5 /* ShannonAppCore */; };
-		2CD54B3F5D1EA35B328BDEA3 /* ShannonDesktopRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 274D578DFB5F1BA3A7CFDA31 /* ShannonDesktopRootView.swift */; };
-		2E818132248C017D5E56F03A /* ShannonDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4FE0601E91B29E57BD4D0F /* ShannonDeskApp.swift */; };
-		3356244F8731E3D0361A8438 /* ShannonDesktopRootView+Talk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501F9494910521FEDB61D59 /* ShannonDesktopRootView+Talk.swift */; };
-		64B593A0942153119087C6F7 /* ShannonDesktopSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB5CA1719CF6D34C9249B3ED /* ShannonDesktopSidebarComponents.swift */; };
-		6A5DC2138B517670BF04ACC0 /* ShannonDesktopRootView+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D773D828D58CA03185A090A /* ShannonDesktopRootView+State.swift */; };
-		6D8A3821835FBC4396B29A2E /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF1F368A6BB6A4DCD3B7CA54 /* Cocoa.framework */; };
-		6DDB223C733581F5E0D795A7 /* ShannonDesktopConversationComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FC14B6792421AD556F0603 /* ShannonDesktopConversationComponents.swift */; };
-		73205485FBF60BE8F50FB8FD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF1F368A6BB6A4DCD3B7CA54 /* Cocoa.framework */; };
-		75500C6116ECD6B200F9F55C /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7C8A57F943D3B8131A4AAEA2 /* ShannonAppCore */; };
-		8132B10EA84D8E8FF74C2575 /* ShannonDesktopSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B5F19C9040C3B421CBF0430 /* ShannonDesktopSupportTests.swift */; };
-		8768349074A33E2474D6CBCA /* ShannonDesktopRootView+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BCAF51273AF713ACE6508BB /* ShannonDesktopRootView+Settings.swift */; };
-		8BE83F195E2FE0BEE61C0480 /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BDF9A5BA10F369FA173DB8D /* ShannonDesktopAttachment.swift */; };
-		B4D575ADF2BADD1976EA753E /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273190866542484BBE46C670 /* ShannonDesktopSupport.swift */; };
-		C19B1DAB7902BF4B3B75A437 /* ShannonDesktopRootView+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E43606C849454A678A8DF6D /* ShannonDesktopRootView+Sidebar.swift */; };
-		C63F6AD27D9339B24B68D6A1 /* ShannonDesktopArtifactDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF60492F6A44A316D01698 /* ShannonDesktopArtifactDocument.swift */; };
-		CCC946630AB369593762E4E9 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273190866542484BBE46C670 /* ShannonDesktopSupport.swift */; };
-		D9817C19B4ECE17946E39BC2 /* ShannonDesktopArtifactComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D10AED1183DBF60248DA87 /* ShannonDesktopArtifactComponents.swift */; };
+		024C7F5D8A8068A2D5A5D8AA /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */; };
+		228ED4FCC876256A4FDCD0E2 /* ShannonDesktopRootView+Talk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2DB369E5DAF0D4F67FB256 /* ShannonDesktopRootView+Talk.swift */; };
+		22EAB936AFA885824742B151 /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090F0E687E9F502694CB1E2 /* ShannonDesktopAttachment.swift */; };
+		24A6CD08E6D985D07E9B6637 /* ShannonDesktopRootView+State.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB230F54147D2584D080DBA /* ShannonDesktopRootView+State.swift */; };
+		2C390791CD34D65587DDD38F /* ShannonDesktopArtifactDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */; };
+		3A0979B12C9FAC0F94265C48 /* ShannonDeskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EFFCB1663D217B936089C46 /* ShannonDeskApp.swift */; };
+		44E2C8B6C592092143C6EDF6 /* ShannonDesktopComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A167CAD846A4163546BC87 /* ShannonDesktopComposer.swift */; };
+		4ACA8111DF7117D876DE8C3B /* ShannonDesktopRootView+Development.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1542C942B1A49A56581AE58F /* ShannonDesktopRootView+Development.swift */; };
+		717A9E6F1DFB85609D58E6A5 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
+		745025F044B02F6FFA05DA9B /* ShannonDesktopRootView+Work.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C8367D77846D952AA2DDCD /* ShannonDesktopRootView+Work.swift */; };
+		75CF76A3CB2229BFEF49972C /* ShannonDesktopRootView+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */; };
+		7915FA063913332EA095C390 /* ShannonDesktopRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9778609D1C5371205FD03E71 /* ShannonDesktopRootView.swift */; };
+		87E922C4AA6D4E7C7DA2E335 /* ShannonDesktopConversationComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7081EA2EDACFB28D8A1D7E /* ShannonDesktopConversationComponents.swift */; };
+		89CAEF1B96A0EF5A592AD3D6 /* ShannonDesktopDevelopmentComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E31EA42B1CBB9DA5B051279 /* ShannonDesktopDevelopmentComponents.swift */; };
+		8C739CEFD0CB3C02CD2F77AB /* ShannonDesktopRootView+Sidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */; };
+		966666784C9BCE4AD1C4E145 /* ShannonDesktopArtifactComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58B326D72A3623822545B48 /* ShannonDesktopArtifactComponents.swift */; };
+		A038423C76CA62A66216D51C /* ShannonDesktopSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F73FD49591755A8E84E48DBB /* ShannonDesktopSidebarComponents.swift */; };
+		B079C814A92DC804942DA28D /* ShannonDesktopSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6025CCD046AB52ADD2906A94 /* ShannonDesktopSupportTests.swift */; };
+		B3C09C6AE00C5C46F827C1B5 /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090F0E687E9F502694CB1E2 /* ShannonDesktopAttachment.swift */; };
+		D166573296293401302198D7 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F0437F3D7E201CDA5082E14 /* ShannonAppCore */; };
+		E4432533E3AF6B533CF3BAC2 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */; };
+		EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
+		F0697C99B854C13BBA1968CA /* ShannonDesktopRootView+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */; };
+		FA59363C190450A3EC0BD509 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 598014EF4B051226F258DC23 /* ShannonAppCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A1C4A810A6B44940B77A0002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		0BA583ECB3CF837AAEFF577F /* ShannonDesktopRootView+Work.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Work.swift"; path = "Features/Work/ShannonDesktopRootView+Work.swift"; sourceTree = "<group>"; };
-		12294631F89E6F3020998FAB /* ShannonDesktopRootView+Actions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Actions.swift"; path = "Features/Shell/ShannonDesktopRootView+Actions.swift"; sourceTree = "<group>"; };
-		1BCAF51273AF713ACE6508BB /* ShannonDesktopRootView+Settings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Settings.swift"; path = "Features/Settings/ShannonDesktopRootView+Settings.swift"; sourceTree = "<group>"; };
-		273190866542484BBE46C670 /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
-		274D578DFB5F1BA3A7CFDA31 /* ShannonDesktopRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopRootView.swift; path = Features/Shell/ShannonDesktopRootView.swift; sourceTree = "<group>"; };
-		64EAA3A110759EE905C66BFA /* ShannonDesk.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShannonDesk.entitlements; sourceTree = "<group>"; };
-		6B5F19C9040C3B421CBF0430 /* ShannonDesktopSupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupportTests.swift; sourceTree = "<group>"; };
-		6E43606C849454A678A8DF6D /* ShannonDesktopRootView+Sidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Sidebar.swift"; path = "Features/Shell/ShannonDesktopRootView+Sidebar.swift"; sourceTree = "<group>"; };
-		7501F9494910521FEDB61D59 /* ShannonDesktopRootView+Talk.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Talk.swift"; path = "Features/Talk/ShannonDesktopRootView+Talk.swift"; sourceTree = "<group>"; };
-		7D773D828D58CA03185A090A /* ShannonDesktopRootView+State.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+State.swift"; path = "Features/Shell/ShannonDesktopRootView+State.swift"; sourceTree = "<group>"; };
-		91674BF7241D8BE1C65EF8F6 /* ShannonDeskTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShannonDeskTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		9BDF9A5BA10F369FA173DB8D /* ShannonDesktopAttachment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopAttachment.swift; sourceTree = "<group>"; };
-		A5C8A21D6F394EF5A44F9993 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		BB5CA1719CF6D34C9249B3ED /* ShannonDesktopSidebarComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopSidebarComponents.swift; path = Features/Shell/ShannonDesktopSidebarComponents.swift; sourceTree = "<group>"; };
-		CF41A11413B5ABF78319FA39 /* ShannonDesktopComposer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopComposer.swift; path = Features/Talk/ShannonDesktopComposer.swift; sourceTree = "<group>"; };
-		D1D10AED1183DBF60248DA87 /* ShannonDesktopArtifactComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopArtifactComponents.swift; path = Features/Talk/ShannonDesktopArtifactComponents.swift; sourceTree = "<group>"; };
-		D9EF60492F6A44A316D01698 /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
-		E3A67B311232506B4733710E /* ShannonDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShannonDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E6FC14B6792421AD556F0603 /* ShannonDesktopConversationComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopConversationComponents.swift; path = Features/Talk/ShannonDesktopConversationComponents.swift; sourceTree = "<group>"; };
-		EB4FE0601E91B29E57BD4D0F /* ShannonDeskApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDeskApp.swift; sourceTree = "<group>"; };
-		FF1F368A6BB6A4DCD3B7CA54 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		0BB230F54147D2584D080DBA /* ShannonDesktopRootView+State.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+State.swift"; path = "Features/Shell/ShannonDesktopRootView+State.swift"; sourceTree = "<group>"; };
+		1542C942B1A49A56581AE58F /* ShannonDesktopRootView+Development.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Development.swift"; path = "Features/Development/ShannonDesktopRootView+Development.swift"; sourceTree = "<group>"; };
+		1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Settings.swift"; path = "Features/Settings/ShannonDesktopRootView+Settings.swift"; sourceTree = "<group>"; };
+		1EFFCB1663D217B936089C46 /* ShannonDeskApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDeskApp.swift; sourceTree = "<group>"; };
+		2E31EA42B1CBB9DA5B051279 /* ShannonDesktopDevelopmentComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentComponents.swift; path = Features/Development/ShannonDesktopDevelopmentComponents.swift; sourceTree = "<group>"; };
+		3DEE1A9FE30AD8095D6B33ED /* ShannonDeskTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShannonDeskTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		45A167CAD846A4163546BC87 /* ShannonDesktopComposer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopComposer.swift; path = Features/Talk/ShannonDesktopComposer.swift; sourceTree = "<group>"; };
+		45FA810B4EAFA84493D5E773 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		512189FA117614C2D367FE1F /* ShannonDesk.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ShannonDesk.entitlements; sourceTree = "<group>"; };
+		6025CCD046AB52ADD2906A94 /* ShannonDesktopSupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupportTests.swift; sourceTree = "<group>"; };
+		8C2DB369E5DAF0D4F67FB256 /* ShannonDesktopRootView+Talk.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Talk.swift"; path = "Features/Talk/ShannonDesktopRootView+Talk.swift"; sourceTree = "<group>"; };
+		9778609D1C5371205FD03E71 /* ShannonDesktopRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopRootView.swift; path = Features/Shell/ShannonDesktopRootView.swift; sourceTree = "<group>"; };
+		A090F0E687E9F502694CB1E2 /* ShannonDesktopAttachment.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopAttachment.swift; sourceTree = "<group>"; };
+		A1CF9E9F3838C4963F03A6A9 /* ShannonDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShannonDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A58B326D72A3623822545B48 /* ShannonDesktopArtifactComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopArtifactComponents.swift; path = Features/Talk/ShannonDesktopArtifactComponents.swift; sourceTree = "<group>"; };
+		A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Sidebar.swift"; path = "Features/Shell/ShannonDesktopRootView+Sidebar.swift"; sourceTree = "<group>"; };
+		AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		CA7081EA2EDACFB28D8A1D7E /* ShannonDesktopConversationComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopConversationComponents.swift; path = Features/Talk/ShannonDesktopConversationComponents.swift; sourceTree = "<group>"; };
+		DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
+		E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Actions.swift"; path = "Features/Shell/ShannonDesktopRootView+Actions.swift"; sourceTree = "<group>"; };
+		ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
+		F1C8367D77846D952AA2DDCD /* ShannonDesktopRootView+Work.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Work.swift"; path = "Features/Work/ShannonDesktopRootView+Work.swift"; sourceTree = "<group>"; };
+		F73FD49591755A8E84E48DBB /* ShannonDesktopSidebarComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopSidebarComponents.swift; path = Features/Shell/ShannonDesktopSidebarComponents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		72A83D870FE737D228BABC4D /* Frameworks */ = {
+		4763D86B32E6D8D3FDC124E1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6D8A3821835FBC4396B29A2E /* Cocoa.framework in Frameworks */,
-				75500C6116ECD6B200F9F55C /* ShannonAppCore in Frameworks */,
+				024C7F5D8A8068A2D5A5D8AA /* Cocoa.framework in Frameworks */,
+				FA59363C190450A3EC0BD509 /* ShannonAppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A5F00C4A2B487A09AE5DC278 /* Frameworks */ = {
+		979F36FB356A735A711C5A3C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				73205485FBF60BE8F50FB8FD /* Cocoa.framework in Frameworks */,
-				27CB0C88382DECE9B49E5A95 /* ShannonAppCore in Frameworks */,
+				E4432533E3AF6B533CF3BAC2 /* Cocoa.framework in Frameworks */,
+				D166573296293401302198D7 /* ShannonAppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		5F6A8F219CB9866C90FED16F = {
+		1DB2E49FA7BF98F139FE1AD4 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8BDCF68A7B23100E568EA93D /* Products */,
-				DB80476F25271334DA8C528E /* Frameworks */,
-				6E9F53A1D4ADEB2631C209A6 /* ShannonDesk */,
-				6CB986B772BE089EDB76C41A /* ShannonDeskTests */,
-			);
-			sourceTree = "<group>";
-		};
-		6946D7AEC996A2EEC5FC7B4A /* OS X */ = {
-			isa = PBXGroup;
-			children = (
-				FF1F368A6BB6A4DCD3B7CA54 /* Cocoa.framework */,
-			);
-			name = "OS X";
-			sourceTree = "<group>";
-		};
-		6CB986B772BE089EDB76C41A /* ShannonDeskTests */ = {
-			isa = PBXGroup;
-			children = (
-				6B5F19C9040C3B421CBF0430 /* ShannonDesktopSupportTests.swift */,
-			);
-			name = ShannonDeskTests;
-			path = ShannonDeskTests;
-			sourceTree = "<group>";
-		};
-		6E9F53A1D4ADEB2631C209A6 /* ShannonDesk */ = {
-			isa = PBXGroup;
-			children = (
-				A1C4A810A6B44940B77A0002 /* Assets.xcassets */,
-				A5C8A21D6F394EF5A44F9993 /* Info.plist */,
-				64EAA3A110759EE905C66BFA /* ShannonDesk.entitlements */,
-				1BCAF51273AF713ACE6508BB /* ShannonDesktopRootView+Settings.swift */,
-				12294631F89E6F3020998FAB /* ShannonDesktopRootView+Actions.swift */,
-				6E43606C849454A678A8DF6D /* ShannonDesktopRootView+Sidebar.swift */,
-				7D773D828D58CA03185A090A /* ShannonDesktopRootView+State.swift */,
-				274D578DFB5F1BA3A7CFDA31 /* ShannonDesktopRootView.swift */,
-				BB5CA1719CF6D34C9249B3ED /* ShannonDesktopSidebarComponents.swift */,
-				D1D10AED1183DBF60248DA87 /* ShannonDesktopArtifactComponents.swift */,
-				CF41A11413B5ABF78319FA39 /* ShannonDesktopComposer.swift */,
-				E6FC14B6792421AD556F0603 /* ShannonDesktopConversationComponents.swift */,
-				7501F9494910521FEDB61D59 /* ShannonDesktopRootView+Talk.swift */,
-				0BA583ECB3CF837AAEFF577F /* ShannonDesktopRootView+Work.swift */,
-				EB4FE0601E91B29E57BD4D0F /* ShannonDeskApp.swift */,
-				D9EF60492F6A44A316D01698 /* ShannonDesktopArtifactDocument.swift */,
-				9BDF9A5BA10F369FA173DB8D /* ShannonDesktopAttachment.swift */,
-				273190866542484BBE46C670 /* ShannonDesktopSupport.swift */,
-			);
-			name = ShannonDesk;
-			path = ShannonDesk;
-			sourceTree = "<group>";
-		};
-		8BDCF68A7B23100E568EA93D /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				E3A67B311232506B4733710E /* ShannonDesk.app */,
-				91674BF7241D8BE1C65EF8F6 /* ShannonDeskTests.xctest */,
+				A1CF9E9F3838C4963F03A6A9 /* ShannonDesk.app */,
+				3DEE1A9FE30AD8095D6B33ED /* ShannonDeskTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		DB80476F25271334DA8C528E /* Frameworks */ = {
+		5D3EFF4C1B92189DC93F825C /* ShannonDesk */ = {
 			isa = PBXGroup;
 			children = (
-				6946D7AEC996A2EEC5FC7B4A /* OS X */,
+				A1C4A810A6B44940B77A0002 /* Assets.xcassets */,
+				45FA810B4EAFA84493D5E773 /* Info.plist */,
+				512189FA117614C2D367FE1F /* ShannonDesk.entitlements */,
+				2E31EA42B1CBB9DA5B051279 /* ShannonDesktopDevelopmentComponents.swift */,
+				1542C942B1A49A56581AE58F /* ShannonDesktopRootView+Development.swift */,
+				1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */,
+				E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */,
+				A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */,
+				0BB230F54147D2584D080DBA /* ShannonDesktopRootView+State.swift */,
+				9778609D1C5371205FD03E71 /* ShannonDesktopRootView.swift */,
+				F73FD49591755A8E84E48DBB /* ShannonDesktopSidebarComponents.swift */,
+				A58B326D72A3623822545B48 /* ShannonDesktopArtifactComponents.swift */,
+				45A167CAD846A4163546BC87 /* ShannonDesktopComposer.swift */,
+				CA7081EA2EDACFB28D8A1D7E /* ShannonDesktopConversationComponents.swift */,
+				8C2DB369E5DAF0D4F67FB256 /* ShannonDesktopRootView+Talk.swift */,
+				F1C8367D77846D952AA2DDCD /* ShannonDesktopRootView+Work.swift */,
+				1EFFCB1663D217B936089C46 /* ShannonDeskApp.swift */,
+				DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */,
+				A090F0E687E9F502694CB1E2 /* ShannonDesktopAttachment.swift */,
+				ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */,
+			);
+			path = ShannonDesk;
+			sourceTree = "<group>";
+		};
+		784B86BAB64C0BEC9D8119A7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E541DC6D2AC583AF43011EF6 /* OS X */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		95191B2FBEE8437228270508 /* ShannonDeskTests */ = {
+			isa = PBXGroup;
+			children = (
+				6025CCD046AB52ADD2906A94 /* ShannonDesktopSupportTests.swift */,
+			);
+			path = ShannonDeskTests;
+			sourceTree = "<group>";
+		};
+		CEA7CD377254E3B157C15171 = {
+			isa = PBXGroup;
+			children = (
+				1DB2E49FA7BF98F139FE1AD4 /* Products */,
+				784B86BAB64C0BEC9D8119A7 /* Frameworks */,
+				5D3EFF4C1B92189DC93F825C /* ShannonDesk */,
+				95191B2FBEE8437228270508 /* ShannonDeskTests */,
+			);
+			sourceTree = "<group>";
+		};
+		E541DC6D2AC583AF43011EF6 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */,
+			);
+			name = "OS X";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3CD313DAEC53BCF2ADE7AC30 /* ShannonDeskTests */ = {
+		3C729F7D0230DE1ECB8D763A /* ShannonDesk */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2C0642689FCE055FA395C724 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */;
+			buildConfigurationList = 6A997DE29D99EA1AD791915F /* Build configuration list for PBXNativeTarget "ShannonDesk" */;
 			buildPhases = (
-				23189FDD69F01C8B1FBEE0E2 /* Sources */,
-				72A83D870FE737D228BABC4D /* Frameworks */,
-				9F993B5C4328AEE94C2BDCAD /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = ShannonDeskTests;
-			packageProductDependencies = (
-				7C8A57F943D3B8131A4AAEA2 /* ShannonAppCore */,
-			);
-			productName = ShannonDeskTests;
-			productReference = 91674BF7241D8BE1C65EF8F6 /* ShannonDeskTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		EBFEAC7F0F5A4B3FFA4947C7 /* ShannonDesk */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 002E2E74FC76C5D9167E6178 /* Build configuration list for PBXNativeTarget "ShannonDesk" */;
-			buildPhases = (
-				16914AAFEE913E82E82D500A /* Sources */,
-				A5F00C4A2B487A09AE5DC278 /* Frameworks */,
-				581E02CBF660E048CB2AF431 /* Resources */,
+				ADF44A20A463EA227E0C17D7 /* Sources */,
+				4763D86B32E6D8D3FDC124E1 /* Frameworks */,
+				8ACF0AC95A16CD4E34A9314A /* Resources */,
 			);
 			buildRules = (
 			);
@@ -186,47 +170,66 @@
 			);
 			name = ShannonDesk;
 			packageProductDependencies = (
-				6983CEF2A957A07ABB9999C5 /* ShannonAppCore */,
+				598014EF4B051226F258DC23 /* ShannonAppCore */,
 			);
 			productName = ShannonDesk;
-			productReference = E3A67B311232506B4733710E /* ShannonDesk.app */;
+			productReference = A1CF9E9F3838C4963F03A6A9 /* ShannonDesk.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A3C57218A9F5A490A4FBC62C /* ShannonDeskTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FC4E2DCAE515D8A1C71E8028 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */;
+			buildPhases = (
+				1EDC7F64F4AE81E3399D10EF /* Sources */,
+				979F36FB356A735A711C5A3C /* Frameworks */,
+				D4EF73F155337351940FB3F4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShannonDeskTests;
+			packageProductDependencies = (
+				9F0437F3D7E201CDA5082E14 /* ShannonAppCore */,
+			);
+			productName = ShannonDeskTests;
+			productReference = 3DEE1A9FE30AD8095D6B33ED /* ShannonDeskTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		C3BF0C5ADD4A2FE108A6F03C /* Project object */ = {
+		FE2BA264CB35EEE672C1AE41 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 			};
-			buildConfigurationList = A6619070286F53EAC1EC4C26 /* Build configuration list for PBXProject "ShannonDesk" */;
+			buildConfigurationList = 9E44ECA9A1AFA50ECC9D1FE4 /* Build configuration list for PBXProject "ShannonDesk" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ja,
 				en,
 				Base,
 			);
-			mainGroup = 5F6A8F219CB9866C90FED16F;
-			minimizedProjectReferenceProxies = 0;
+			mainGroup = CEA7CD377254E3B157C15171;
 			packageReferences = (
-				C756B215D0AE0D5B6433D8ED /* XCLocalSwiftPackageReference "ios" */,
+				E2CC4B5D29C4909A7EE4F044 /* XCLocalSwiftPackageReference "../ios" */,
 			);
-			preferredProjectObjectVersion = 100;
-			productRefGroup = 8BDCF68A7B23100E568EA93D /* Products */;
+			productRefGroup = 1DB2E49FA7BF98F139FE1AD4 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				EBFEAC7F0F5A4B3FFA4947C7 /* ShannonDesk */,
-				3CD313DAEC53BCF2ADE7AC30 /* ShannonDeskTests */,
+				3C729F7D0230DE1ECB8D763A /* ShannonDesk */,
+				A3C57218A9F5A490A4FBC62C /* ShannonDeskTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		581E02CBF660E048CB2AF431 /* Resources */ = {
+		8ACF0AC95A16CD4E34A9314A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -234,7 +237,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9F993B5C4328AEE94C2BDCAD /* Resources */ = {
+		D4EF73F155337351940FB3F4 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -244,56 +247,44 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		16914AAFEE913E82E82D500A /* Sources */ = {
+		1EDC7F64F4AE81E3399D10EF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8768349074A33E2474D6CBCA /* ShannonDesktopRootView+Settings.swift in Sources */,
-				142F4E8D6B56085E17E5C2A7 /* ShannonDesktopRootView+Actions.swift in Sources */,
-				C19B1DAB7902BF4B3B75A437 /* ShannonDesktopRootView+Sidebar.swift in Sources */,
-				6A5DC2138B517670BF04ACC0 /* ShannonDesktopRootView+State.swift in Sources */,
-				2CD54B3F5D1EA35B328BDEA3 /* ShannonDesktopRootView.swift in Sources */,
-				64B593A0942153119087C6F7 /* ShannonDesktopSidebarComponents.swift in Sources */,
-				D9817C19B4ECE17946E39BC2 /* ShannonDesktopArtifactComponents.swift in Sources */,
-				0A9211C09418188482D7169E /* ShannonDesktopComposer.swift in Sources */,
-				6DDB223C733581F5E0D795A7 /* ShannonDesktopConversationComponents.swift in Sources */,
-				3356244F8731E3D0361A8438 /* ShannonDesktopRootView+Talk.swift in Sources */,
-				2100F6CC27DDEB64803DB937 /* ShannonDesktopRootView+Work.swift in Sources */,
-				2E818132248C017D5E56F03A /* ShannonDeskApp.swift in Sources */,
-				C63F6AD27D9339B24B68D6A1 /* ShannonDesktopArtifactDocument.swift in Sources */,
-				11EFE26E4F3118D4EEC0117B /* ShannonDesktopAttachment.swift in Sources */,
-				B4D575ADF2BADD1976EA753E /* ShannonDesktopSupport.swift in Sources */,
+				B079C814A92DC804942DA28D /* ShannonDesktopSupportTests.swift in Sources */,
+				B3C09C6AE00C5C46F827C1B5 /* ShannonDesktopAttachment.swift in Sources */,
+				EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		23189FDD69F01C8B1FBEE0E2 /* Sources */ = {
+		ADF44A20A463EA227E0C17D7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8132B10EA84D8E8FF74C2575 /* ShannonDesktopSupportTests.swift in Sources */,
-				8BE83F195E2FE0BEE61C0480 /* ShannonDesktopAttachment.swift in Sources */,
-				CCC946630AB369593762E4E9 /* ShannonDesktopSupport.swift in Sources */,
+				89CAEF1B96A0EF5A592AD3D6 /* ShannonDesktopDevelopmentComponents.swift in Sources */,
+				4ACA8111DF7117D876DE8C3B /* ShannonDesktopRootView+Development.swift in Sources */,
+				75CF76A3CB2229BFEF49972C /* ShannonDesktopRootView+Settings.swift in Sources */,
+				F0697C99B854C13BBA1968CA /* ShannonDesktopRootView+Actions.swift in Sources */,
+				8C739CEFD0CB3C02CD2F77AB /* ShannonDesktopRootView+Sidebar.swift in Sources */,
+				24A6CD08E6D985D07E9B6637 /* ShannonDesktopRootView+State.swift in Sources */,
+				7915FA063913332EA095C390 /* ShannonDesktopRootView.swift in Sources */,
+				A038423C76CA62A66216D51C /* ShannonDesktopSidebarComponents.swift in Sources */,
+				966666784C9BCE4AD1C4E145 /* ShannonDesktopArtifactComponents.swift in Sources */,
+				44E2C8B6C592092143C6EDF6 /* ShannonDesktopComposer.swift in Sources */,
+				87E922C4AA6D4E7C7DA2E335 /* ShannonDesktopConversationComponents.swift in Sources */,
+				228ED4FCC876256A4FDCD0E2 /* ShannonDesktopRootView+Talk.swift in Sources */,
+				745025F044B02F6FFA05DA9B /* ShannonDesktopRootView+Work.swift in Sources */,
+				3A0979B12C9FAC0F94265C48 /* ShannonDeskApp.swift in Sources */,
+				2C390791CD34D65587DDD38F /* ShannonDesktopArtifactDocument.swift in Sources */,
+				22EAB936AFA885824742B151 /* ShannonDesktopAttachment.swift in Sources */,
+				717A9E6F1DFB85609D58E6A5 /* ShannonDesktopSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		1547D8B6E209577D8C103AD6 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon.macos.tests;
-				SDKROOT = macosx;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		1756D41726D5BEA6D128E6EE /* Release */ = {
+		0A919E67BF11657AC4F9DA3F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -307,7 +298,7 @@
 			};
 			name = Release;
 		};
-		42EA80FBD41453E81EF66DD8 /* Debug */ = {
+		0C0B5AC347B75DF8CC7CE1D5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -316,13 +307,16 @@
 				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShannonDesk/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
@@ -336,7 +330,39 @@
 			};
 			name = Debug;
 		};
-		84962D0D60181B23FE3CB3B0 /* Release */ = {
+		45F04C6A665C96DDFCA35660 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR = all;
+				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ShannonDesk/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SHANNON_API_BASE_URL = "https://sh4nnon.com/companion";
+				SHANNON_API_TOKEN = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		88B896A5AA4F0683B5AFDBE1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -390,7 +416,21 @@
 			};
 			name = Release;
 		};
-		B9F740302B5A088AFD0C803C /* Debug */ = {
+		A85FC1EC1F59110710E6267A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon.macos.tests;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		D6D6BD9402D9F20F02A436E5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -451,61 +491,32 @@
 			};
 			name = Debug;
 		};
-		C44B8401496030378F0C0069 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR = all;
-				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
-				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = ShannonDesk/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SHANNON_API_BASE_URL = "https://sh4nnon.com/companion";
-				SHANNON_API_TOKEN = "";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		002E2E74FC76C5D9167E6178 /* Build configuration list for PBXNativeTarget "ShannonDesk" */ = {
+		6A997DE29D99EA1AD791915F /* Build configuration list for PBXNativeTarget "ShannonDesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C44B8401496030378F0C0069 /* Release */,
-				42EA80FBD41453E81EF66DD8 /* Debug */,
+				45F04C6A665C96DDFCA35660 /* Release */,
+				0C0B5AC347B75DF8CC7CE1D5 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2C0642689FCE055FA395C724 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */ = {
+		9E44ECA9A1AFA50ECC9D1FE4 /* Build configuration list for PBXProject "ShannonDesk" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				1756D41726D5BEA6D128E6EE /* Release */,
-				1547D8B6E209577D8C103AD6 /* Debug */,
+				D6D6BD9402D9F20F02A436E5 /* Debug */,
+				88B896A5AA4F0683B5AFDBE1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A6619070286F53EAC1EC4C26 /* Build configuration list for PBXProject "ShannonDesk" */ = {
+		FC4E2DCAE515D8A1C71E8028 /* Build configuration list for PBXNativeTarget "ShannonDeskTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B9F740302B5A088AFD0C803C /* Debug */,
-				84962D0D60181B23FE3CB3B0 /* Release */,
+				0A919E67BF11657AC4F9DA3F /* Release */,
+				A85FC1EC1F59110710E6267A /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -513,24 +524,24 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C756B215D0AE0D5B6433D8ED /* XCLocalSwiftPackageReference "ios" */ = {
+		E2CC4B5D29C4909A7EE4F044 /* XCLocalSwiftPackageReference "../ios" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../ios;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		6983CEF2A957A07ABB9999C5 /* ShannonAppCore */ = {
+		598014EF4B051226F258DC23 /* ShannonAppCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C756B215D0AE0D5B6433D8ED /* XCLocalSwiftPackageReference "ios" */;
+			package = E2CC4B5D29C4909A7EE4F044 /* XCLocalSwiftPackageReference "../ios" */;
 			productName = ShannonAppCore;
 		};
-		7C8A57F943D3B8131A4AAEA2 /* ShannonAppCore */ = {
+		9F0437F3D7E201CDA5082E14 /* ShannonAppCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C756B215D0AE0D5B6433D8ED /* XCLocalSwiftPackageReference "ios" */;
+			package = E2CC4B5D29C4909A7EE4F044 /* XCLocalSwiftPackageReference "../ios" */;
 			productName = ShannonAppCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = C3BF0C5ADD4A2FE108A6F03C /* Project object */;
+	rootObject = FE2BA264CB35EEE672C1AE41 /* Project object */;
 }

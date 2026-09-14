@@ -12,6 +12,52 @@ import type {
   AgentTimelineActivity,
   HostAgentEvent,
 } from './agentTaskStore.js';
+import { migrateAgentProjectProvisioning } from './agentProjectProvisioning.js';
+
+export interface AgentTaskRow {
+  task_id: string;
+  conversation_thread_id: string;
+  source_message_id: string | null;
+  title: string;
+  goal: string;
+  assigned_host_id: string | null;
+  project_hint: string | null;
+  model_id: string | null;
+  reasoning_effort: string | null;
+  status: AgentTaskStatus;
+  summary: string;
+  current_action: string | null;
+  plan_json: string;
+  pending_approval_json: string | null;
+  changes_json: string;
+  tests_json: string;
+  is_pinned: number;
+  is_archived: number;
+  created_at: string;
+  updated_at: string;
+  latest_sequence: number;
+}
+
+export interface AgentEventRow {
+  event_id: string;
+  sequence: number;
+  title: string;
+  detail: string | null;
+  occurred_at: string;
+  tone: AgentEventTone;
+  payload_json: string;
+}
+
+export interface AgentCommandRow {
+  command_id: string;
+  task_id: string;
+  scope_key: string;
+  command_type: AgentCommandType;
+  payload_json: string;
+  attempts: number;
+  created_at: string;
+  lease_until: string | null;
+}
 
 export function migrateAgentTasks(database: DatabaseSync): void {
   database.exec(`
@@ -77,7 +123,11 @@ export function migrateAgentTasks(database: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS agent_hosts (
       host_id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
+      host_kind TEXT NOT NULL DEFAULT 'local',
       capabilities_json TEXT NOT NULL DEFAULT '[]',
+      projects_json TEXT NOT NULL DEFAULT '[]',
+      models_json TEXT NOT NULL DEFAULT '[]',
+      workspaces_json TEXT NOT NULL DEFAULT '[]',
       last_seen_at TEXT NOT NULL
     );
   `);
@@ -85,6 +135,35 @@ export function migrateAgentTasks(database: DatabaseSync): void {
   if (!taskColumns.some(column => column.name === 'assigned_host_id')) {
     database.exec('ALTER TABLE agent_tasks ADD COLUMN assigned_host_id TEXT;');
   }
+  if (!taskColumns.some(column => column.name === 'project_hint')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN project_hint TEXT;');
+  }
+  if (!taskColumns.some(column => column.name === 'model_id')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN model_id TEXT;');
+  }
+  if (!taskColumns.some(column => column.name === 'reasoning_effort')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN reasoning_effort TEXT;');
+  }
+  if (!taskColumns.some(column => column.name === 'is_pinned')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0 CHECK (is_pinned IN (0, 1));');
+  }
+  if (!taskColumns.some(column => column.name === 'is_archived')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1));');
+  }
+  const hostColumns = database.prepare("PRAGMA table_info('agent_hosts')").all() as unknown as Array<{ name: string }>;
+  if (!hostColumns.some(column => column.name === 'host_kind')) {
+    database.exec("ALTER TABLE agent_hosts ADD COLUMN host_kind TEXT NOT NULL DEFAULT 'local';");
+  }
+  if (!hostColumns.some(column => column.name === 'projects_json')) {
+    database.exec("ALTER TABLE agent_hosts ADD COLUMN projects_json TEXT NOT NULL DEFAULT '[]';");
+  }
+  if (!hostColumns.some(column => column.name === 'models_json')) {
+    database.exec("ALTER TABLE agent_hosts ADD COLUMN models_json TEXT NOT NULL DEFAULT '[]';");
+  }
+  if (!hostColumns.some(column => column.name === 'workspaces_json')) {
+    database.exec("ALTER TABLE agent_hosts ADD COLUMN workspaces_json TEXT NOT NULL DEFAULT '[]';");
+  }
+  migrateAgentProjectProvisioning(database);
 }
 
 export function validateCommandTransition(task: AgentTask, type: AgentCommandType, payload: Record<string, unknown>): void {

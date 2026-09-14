@@ -37,7 +37,6 @@ extension ShannonConversationView {
                             if let task = model.agentTask(sourceMessageID: message.id) {
                                 ShannonAgentTaskCardView(
                                     task: task,
-                                    start: { Task { await model.startAgentTask(task.id) } },
                                     cancel: { Task { await model.cancelAgentTask(task.id) } },
                                     open: { openAgentTask(task.id) }
                                 )
@@ -77,7 +76,6 @@ extension ShannonConversationView {
                     ForEach(model.unattachedSelectedThreadAgentTasks) { task in
                         ShannonAgentTaskCardView(
                             task: task,
-                            start: { Task { await model.startAgentTask(task.id) } },
                             cancel: { Task { await model.cancelAgentTask(task.id) } },
                             open: { openAgentTask(task.id) }
                         )

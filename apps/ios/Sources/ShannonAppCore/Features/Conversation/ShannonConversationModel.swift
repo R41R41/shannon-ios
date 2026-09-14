@@ -25,6 +25,12 @@ public final class ShannonConversationModel {
     public internal(set) var agentTasks: [ShannonAgentTask]
     public internal(set) var pendingAgentTaskActionIDs: Set<UUID> = []
     public internal(set) var agentTaskActionErrors: [UUID: String] = [:]
+    public internal(set) var agentWorkspace: ShannonAgentWorkspaceCatalogDTO = .unavailable
+    public internal(set) var isLoadingAgentWorkspace = false
+    public internal(set) var agentWorkspaceError: String?
+    public internal(set) var agentProjectProvisioning: [ShannonAgentProjectProvisioningDTO] = []
+    public internal(set) var isProvisioningAgentProject = false
+    public internal(set) var agentProjectProvisioningError: String?
     public internal(set) var organizeSessions: [ShannonOrganizeSessionDTO] = []
     public internal(set) var pendingOrganizeSessionIDs: Set<String> = []
     public internal(set) var organizeActionErrors: [String: String] = [:]
@@ -184,6 +190,65 @@ public final class ShannonConversationModel {
         completedTask.goal = "入力欄と外観切替がクラッシュせず動くことを確認する"
         completedTask.summary = "入力・複数行・ライト／ダーク／システム切替を確認済み。"
         model.agentTasks = [runningTask, proposedTask, completedTask]
+        model.agentWorkspace = ShannonAgentWorkspaceCatalogDTO(
+            routing: .init(
+                defaultPreference: .auto,
+                resolvedHostId: "shannon-mac",
+                explanation: "このMacが利用できるため、ローカルで実行します。"
+            ),
+            hosts: [
+                .init(
+                    hostId: "shannon-mac",
+                    displayName: "このMac",
+                    kind: .local,
+                    capabilities: ["workspace-files", "workspace-diff", "workspace-git", "workspace-build"],
+                    projects: ["aether", "shannon-ios", "voyager"],
+                    models: [],
+                    status: .available,
+                    lastSeenAt: stamp
+                ),
+                .init(
+                    hostId: "shannon-cloud",
+                    displayName: "Cloud Agent Host",
+                    kind: .cloud,
+                    capabilities: ["workspace-files", "workspace-diff", "workspace-git", "workspace-build"],
+                    projects: ["shannon-ios"],
+                    models: [],
+                    status: .available,
+                    lastSeenAt: stamp
+                ),
+            ],
+            projects: [
+                .init(key: "aether", availableHostIds: ["shannon-mac"]),
+                .init(
+                    key: "shannon-ios",
+                    availableHostIds: ["shannon-mac", "shannon-cloud"],
+                    isGitRepository: true,
+                    currentBranch: "feature/macos-development-workspace",
+                    files: [
+                        "apps/macos-app/ShannonDesk/ShannonDeskApp.swift",
+                        "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift",
+                        "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTask.swift",
+                        "services/api/src/agentHost.ts",
+                        "services/api/src/agentTaskStore.ts",
+                    ],
+                    changes: [
+                        .init(path: "services/api/src/agentHost.ts", status: "M", additions: 18, deletions: 2),
+                        .init(path: "apps/macos-app/ShannonDesk/ShannonDeskApp.swift", status: "M", additions: 12, deletions: 1),
+                    ]
+                ),
+                .init(key: "voyager", availableHostIds: ["shannon-mac"]),
+            ],
+            models: [
+                .init(
+                    id: "gpt-5.6-sol",
+                    displayName: "GPT-5.6 Sol",
+                    description: "日常の開発作業向け",
+                    supportedReasoningEfforts: [.low, .medium, .high, .xhigh, .max, .ultra],
+                    defaultReasoningEffort: .high
+                ),
+            ]
+        )
         model.didAttemptInitialLoad = true
         model.didAttemptThreadsLoad = true
         model.isDesignPreview = true

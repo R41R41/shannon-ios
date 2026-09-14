@@ -31,8 +31,11 @@ const requiredFiles = [
   'docs/archive/index.md',
   'docs/design/semantic-role-map.v1.json',
   'docs/design/screens/macos/talk.yaml',
+  'docs/design/screens/macos/development.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
+  'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/Contents.json',
+  'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png',
   'scripts/check-semantic-role-map.mjs',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.request.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.result.json',
@@ -52,6 +55,29 @@ for (const concern of ['Product', 'Architecture', 'Design', 'Release', 'Branchin
 }
 requireText(readme, /docs\/archive\/\*\*\/\*\.html[^\n]*(?:履歴|non-authoritative|正本ではない)/, 'README must mark archived HTML documents as non-authoritative');
 if (/\]\([^)]*\.html\)/.test(readme)) failures.push('README must not link directly to archived HTML');
+
+const designAuthority = await text('docs/DESIGN.md');
+requireText(designAuthority, /^## Native by default, custom by purpose$/m, 'Shannon design authority must preserve the native-by-default policy');
+requireText(designAuthority, /An iPhone screen must not be stretched into a Mac layout\./, 'Shannon design authority must preserve platform-specific iPhone and Mac composition');
+requireText(designAuthority, /never replaces the standard semantic communication of success, attention, warning, danger/, 'Shannon character expression must not replace standard status semantics');
+
+const macProject = await text('apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj');
+requireText(macProject, /Assets\.xcassets in Resources/, 'ShannonDesk project must compile Assets.xcassets into the app Resources');
+requireText(macProject, /ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR = all;/, 'ShannonDesk project must generate a standalone macOS app icon');
+
+const macIconContents = await text('apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/Contents.json');
+requireText(macIconContents, /"size"\s*:\s*"512x512"[\s\S]*?"scale"\s*:\s*"2x"/, 'ShannonDesk AppIcon must declare the 512pt @2x macOS slot');
+try {
+  const macIcon = await readFile(resolve(root, 'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png'));
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (macIcon.length < 24 || !macIcon.subarray(0, 8).equals(pngSignature)) {
+    failures.push('ShannonDesk 512pt @2x app icon must be a valid PNG');
+  } else if (macIcon.readUInt32BE(16) !== 1024 || macIcon.readUInt32BE(20) !== 1024) {
+    failures.push('ShannonDesk 512pt @2x app icon must be exactly 1024x1024 pixels');
+  }
+} catch {
+  failures.push('missing required file: apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png');
+}
 
 const docsEntries = await readdir(resolve(root, 'docs'), { withFileTypes: true });
 for (const entry of docsEntries) {
@@ -82,6 +108,7 @@ for (const phrase of ['codex/shannon/<work-id>', 'active', 'waiting', 'integrate
 
 const screenContracts = [
   'docs/design/screens/macos/talk.yaml',
+  'docs/design/screens/macos/development.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
 ];

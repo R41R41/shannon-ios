@@ -254,14 +254,40 @@ export class ShannonApiKernel {
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return {
         status: 200,
-        body: this.testFlightDelivery?.dashboard() ?? {
+        body: this.testFlightDelivery?.dashboard(30, scopeKey) ?? {
           condition: 'waiting',
           latestBuildVersion: null,
           lastCheckedAt: null,
           activeFailureCode: null,
           history: [],
+          release: {
+            platform: 'ios', buildVersion: null,
+            gates: ['build', 'archive', 'upload', 'processing', 'assignment', 'install', 'smoke']
+              .map(key => ({ key, status: 'pending', completedAt: null })),
+          },
         },
       };
+    }
+
+    if (request.method === 'POST' && request.path === '/v1/testflight/delivery/confirm') {
+      if (!objectBody(request.body)) return badRequest('JSON object body is required');
+      const scopeKey = request.body.scopeKey;
+      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+      if (!validBoundedString(request.body.buildVersion, 80)) return badRequest('buildVersion is invalid');
+      if (request.body.gate !== 'install' && request.body.gate !== 'smoke') return badRequest('gate is invalid');
+      if (!this.testFlightDelivery?.confirmGate) return { status: 503, body: { error: 'TESTFLIGHT_DELIVERY_UNAVAILABLE' } };
+      try {
+        return {
+          status: 200,
+          body: this.testFlightDelivery.confirmGate(scopeKey, request.body.buildVersion, request.body.gate, this.now()),
+        };
+      } catch (error) {
+        if (error instanceof Error && (error.message === 'TESTFLIGHT_BUILD_NOT_DISTRIBUTED'
+          || error.message === 'TESTFLIGHT_INSTALL_REQUIRED')) {
+          return { status: 409, body: { error: error.message } };
+        }
+        throw error;
+      }
     }
 
     if (request.path.startsWith('/v1/organize/') || request.path.startsWith('/v1/integrations/voyager/')) {

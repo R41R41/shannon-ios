@@ -10,17 +10,97 @@ struct ShannonAgentTaskRoomView: View {
     let togglePause: () -> Void
     let cancel: () -> Void
     let resolveApproval: (Bool, Bool) -> Void
+    let workspace: ShannonAgentWorkspaceCatalogDTO
+    let workspaceError: String?
+    let refreshWorkspace: (String?) async -> Void
+    let configureAndStart: (
+        ShannonAgentRoutingPreference,
+        String?,
+        String?,
+        ShannonAgentReasoningEffort?
+    ) -> Void
     let advancePreview: (() -> Void)?
 
     @State var steerText = ""
     @State var showsCancelConfirmation = false
     @State var showsDetailedProgress = false
+    @State var configurationProject = ""
+    @State var configurationHost = ShannonAgentRoutingPreference.auto
+    @State var configurationModel = ""
+    @State var configurationReasoning = ShannonAgentReasoningEffort.high
+    @State var didPrepareConfiguration = false
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
+        NavigationStack {
+            Group {
+                if task.status == .proposed {
+                    configurationForm(palette)
+                } else {
+                    progressView(palette)
+                }
+            }
+            .navigationTitle(task.title)
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる", systemImage: "xmark", action: dismiss)
+                        .labelStyle(.iconOnly)
+                }
+                if task.status.isActive {
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Button(task.status == .paused ? "作業を再開" : "作業を一時停止",
+                                   systemImage: task.status == .paused ? "play.fill" : "pause.fill",
+                                   action: togglePause)
+                                .disabled(actionIsInFlight || task.status == .waitingApproval)
+                            Button("作業を中止", systemImage: "stop.fill", role: .destructive) {
+                                showsCancelConfirmation = true
+                            }
+                            .disabled(actionIsInFlight)
+                            if let advancePreview {
+                                Divider()
+                                Button("プレビューを次へ", systemImage: "forward.frame.fill", action: advancePreview)
+                            }
+                        } label: {
+                            Label("作業操作", systemImage: "ellipsis.circle")
+                        }
+                    }
+                }
+            }
+        }
+        .confirmationDialog("シャノンの作業を中止しますか？", isPresented: $showsCancelConfirmation, titleVisibility: .visible) {
+            Button("シャノンの作業を中止", role: .destructive) {
+                cancel()
+                dismiss()
+            }
+            Button("戻る", role: .cancel) {}
+        } message: {
+            Text("シャノンが完了した工程は残りますが、自動では再開しません。")
+        }
+        .task {
+            prepareConfigurationIfNeeded()
+            if task.status == .proposed {
+                await refreshWorkspace(configurationProject.nilIfEmpty)
+                normalizeConfiguration()
+            }
+        }
+        .onChange(of: workspace) { normalizeConfiguration() }
+        .onChange(of: configurationProject) { _, project in
+            guard didPrepareConfiguration else { return }
+            Task { await refreshWorkspace(project.nilIfEmpty) }
+        }
+        .onChange(of: configurationHost) { normalizeConfiguration() }
+        .onChange(of: configurationModel) { normalizeConfiguration() }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: task.status)
+    }
+
+    func progressView(_ palette: ShannonPalette) -> some View {
         ZStack {
             palette.canvas.ignoresSafeArea()
             ScrollView {
@@ -101,37 +181,88 @@ struct ShannonAgentTaskRoomView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            AgentTaskRoomHeader(
-                task: task,
-                palette: palette,
-                dismiss: dismiss,
-                advancePreview: advancePreview
-            )
-        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if task.status.isActive {
                 AgentTaskControlBar(
-                    task: task,
                     text: $steerText,
                     palette: palette,
                     isBusy: actionIsInFlight,
-                    send: sendSteer,
-                    togglePause: togglePause,
-                    cancel: { showsCancelConfirmation = true }
+                    send: sendSteer
                 )
             }
         }
-        .confirmationDialog("シャノンの作業を中止しますか？", isPresented: $showsCancelConfirmation, titleVisibility: .visible) {
-            Button("シャノンの作業を中止", role: .destructive) {
-                cancel()
-                dismiss()
+    }
+
+    func configurationForm(_ palette: ShannonPalette) -> some View {
+        Form {
+            Section {
+                AgentTaskHero(task: task, palette: palette)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
-            Button("戻る", role: .cancel) {}
-        } message: {
-            Text("シャノンが完了した工程は残りますが、自動では再開しません。")
+
+            Section {
+                Picker("プロジェクト", selection: $configurationProject) {
+                    Text("ホストの既定").tag("")
+                    ForEach(configurationProjectKeys, id: \.self) { project in
+                        Text(project).tag(project)
+                    }
+                }
+                Picker("実行先", selection: $configurationHost) {
+                    ForEach(ShannonAgentRoutingPreference.allCases) { preference in
+                        Text(preference.japaneseName).tag(preference)
+                    }
+                }
+                Picker("モデル", selection: $configurationModel) {
+                    Text("ホストの既定").tag("")
+                    ForEach(configurationModels) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+                Picker("思考", selection: $configurationReasoning) {
+                    ForEach(configurationReasoningOptions) { effort in
+                        Text(effort.japaneseName).tag(effort)
+                    }
+                }
+            } header: {
+                Text("作業環境")
+            } footer: {
+                Text(configurationRoutingExplanation)
+            }
+
+            if let workspaceError {
+                Section {
+                    Label(workspaceError, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(palette.danger)
+                }
+            }
+
+            Section {
+                Button {
+                    configureAndStart(
+                        configurationHost,
+                        configurationProject.nilIfEmpty,
+                        configurationModel.nilIfEmpty,
+                        configurationReasoning
+                    )
+                } label: {
+                    HStack {
+                        Spacer()
+                        if actionIsInFlight { ProgressView().controlSize(.small) }
+                        Text(actionIsInFlight ? "開始しています…" : "この設定で始める")
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(actionIsInFlight || !configurationCanStart)
+            } footer: {
+                Text("ファイル変更やコマンド実行で許可が必要になった場合は、実行前に確認します。")
+            }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: task.status)
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(palette.canvas)
     }
 
     func sendSteer() {
@@ -140,45 +271,87 @@ struct ShannonAgentTaskRoomView: View {
         steer(value)
         steerText = ""
     }
+
+    var configurationProjectKeys: [String] {
+        let keys = workspace.projects.map(\.key)
+        if keys.isEmpty, let project = task.projectHint?.nilIfEmpty { return [project] }
+        return keys
+    }
+
+    var configurationHosts: [ShannonAgentHostDTO] {
+        workspace.hosts.filter { host in
+            configurationProject.isEmpty || host.projects.contains(configurationProject)
+        }
+    }
+
+    var selectedConfigurationHost: ShannonAgentHostDTO? {
+        ShannonAgentDevelopmentOptions.selectedHost(
+            from: configurationHosts,
+            preference: configurationHost,
+            resolvedHostID: workspace.routing.resolvedHostId
+        )
+    }
+
+    var configurationModels: [ShannonAgentModelDTO] {
+        guard let host = selectedConfigurationHost, !host.models.isEmpty else { return workspace.models }
+        return host.models
+    }
+
+    var configurationReasoningOptions: [ShannonAgentReasoningEffort] {
+        guard let model = configurationModels.first(where: { $0.id == configurationModel }),
+              !model.supportedReasoningEfforts.isEmpty else {
+            return ShannonAgentReasoningEffort.allCases
+        }
+        return model.supportedReasoningEfforts
+    }
+
+    var configurationRoutingExplanation: String {
+        if configurationHost == .auto {
+            return workspace.routing.explanation
+        }
+        guard let host = selectedConfigurationHost else {
+            return "選択した実行先では、このプロジェクトを利用できません。"
+        }
+        return "\(host.displayName)へ固定して実行します。"
+    }
+
+    var configurationCanStart: Bool {
+        workspace.hosts.isEmpty || selectedConfigurationHost?.status != .offline
+    }
+
+    func prepareConfigurationIfNeeded() {
+        guard !didPrepareConfiguration else { return }
+        configurationProject = task.projectHint?.nilIfEmpty ?? workspace.projects.first?.key ?? ""
+        configurationHost = task.hostHint.flatMap(ShannonAgentRoutingPreference.init(rawValue:))
+            ?? workspace.routing.defaultPreference
+        configurationModel = task.model?.nilIfEmpty ?? ""
+        configurationReasoning = task.reasoningEffort ?? .high
+        didPrepareConfiguration = true
+        normalizeConfiguration()
+    }
+
+    func normalizeConfiguration() {
+        if !configurationProject.isEmpty,
+           !configurationProjectKeys.contains(configurationProject) {
+            configurationProject = configurationProjectKeys.first ?? ""
+            return
+        }
+        configurationModel = ShannonAgentDevelopmentOptions.normalizedModelID(
+            configurationModel,
+            models: configurationModels
+        )
+        configurationReasoning = ShannonAgentDevelopmentOptions.normalizedReasoningEffort(
+            configurationReasoning,
+            modelID: configurationModel,
+            models: configurationModels
+        )
+    }
 }
 
-struct AgentTaskRoomHeader: View {
-    let task: ShannonAgentTask
-    let palette: ShannonPalette
-    let dismiss: () -> Void
-    let advancePreview: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: ShannonSpacing.small) {
-            Button(action: dismiss) {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
-                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("トークへ戻る")
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(1)
-                Text(task.stage.japaneseName)
-                    .font(.caption2)
-                    .foregroundStyle(palette.textSecondary)
-            }
-            Spacer()
-
-            if let advancePreview {
-                Button(action: advancePreview) {
-                    Image(systemName: "forward.frame.fill")
-                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("開発プレビューを次の状態へ進める")
-            }
-        }
-        .padding(.horizontal, ShannonSpacing.small)
-        .background(.ultraThinMaterial)
+private extension String {
+    var nilIfEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }
 

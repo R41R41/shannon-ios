@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   AgentActivityStatus,
@@ -8,7 +6,9 @@ import type {
   AgentChangeSummary,
   AgentCommandType,
   AgentEventTone,
+  AgentHostHeartbeat,
   AgentPlanItem,
+  AgentReasoningEffort,
   AgentTask,
   AgentTaskStatus,
   AgentTaskStore,
@@ -18,7 +18,14 @@ import type {
   CreateAgentCommandInput,
   CreateAgentTaskInput,
   HostAgentEvent,
+  AgentWorkspaceCatalog,
 } from './agentTaskStore.js';
+import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
+import {
+  AgentProjectProvisioningPersistence,
+  type AgentProjectProvisioningEvent,
+  type CreateAgentProjectProvisioningInput,
+} from './agentProjectProvisioning.js';
 
 import {
   arrayValue,
@@ -35,47 +42,11 @@ import {
   timelineActivity,
   toneForHostEvent,
   validateCommandTransition,
+  type AgentCommandRow,
+  type AgentEventRow,
+  type AgentTaskRow,
 } from './agentTaskPersistenceSupport.js';
 export { migrateAgentTasks } from './agentTaskPersistenceSupport.js';
-
-interface TaskRow {
-  task_id: string;
-  conversation_thread_id: string;
-  source_message_id: string | null;
-  title: string;
-  goal: string;
-  status: AgentTaskStatus;
-  summary: string;
-  current_action: string | null;
-  plan_json: string;
-  pending_approval_json: string | null;
-  changes_json: string;
-  tests_json: string;
-  created_at: string;
-  updated_at: string;
-  latest_sequence: number;
-}
-
-interface EventRow {
-  event_id: string;
-  sequence: number;
-  title: string;
-  detail: string | null;
-  occurred_at: string;
-  tone: AgentEventTone;
-  payload_json: string;
-}
-
-interface CommandRow {
-  command_id: string;
-  task_id: string;
-  scope_key: string;
-  command_type: AgentCommandType;
-  payload_json: string;
-  attempts: number;
-  created_at: string;
-  lease_until: string | null;
-}
 
 export class SQLiteAgentTaskStore implements AgentTaskStore {
   private readonly database: DatabaseSync;
@@ -111,18 +82,22 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         INSERT INTO agent_tasks
           (task_id, scope_key, conversation_thread_id, source_message_id, start_idempotency_key,
            title, goal, status, summary, current_action, plan_json, pending_approval_json,
-           changes_json, tests_json, created_at, updated_at, latest_sequence, assigned_host_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?)
+           changes_json, tests_json, created_at, updated_at, latest_sequence, assigned_host_id,
+           project_hint, model_id, reasoning_effort)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?, ?, ?, ?)
       `).run(
         taskId, scopeKey, input.conversationThreadID, input.sourceMessageID ?? null,
         input.idempotencyKey, input.title, input.goal, input.summary,
         JSON.stringify(input.plan ?? []), now, now, input.hostHint?.trim() || null,
+        input.projectHint?.trim() || null, input.model?.trim() || null, input.reasoningEffort ?? null,
       );
       this.appendEvent(taskId, 'queued', '作業を受け付けた', input.summary, 'neutral', now, {});
       this.insertCommand(taskId, scopeKey, `${input.idempotencyKey}:start`, 'start', {
         goal: input.goal,
         hostHint: input.hostHint,
         projectHint: input.projectHint,
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
       }, now);
       created = true;
     });
@@ -132,15 +107,36 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   list(scopeKey: string): readonly AgentTask[] {
     const rows = this.database.prepare(`
       SELECT * FROM agent_tasks WHERE scope_key = ? ORDER BY updated_at DESC LIMIT 100
-    `).all(scopeKey) as unknown as TaskRow[];
+    `).all(scopeKey) as unknown as AgentTaskRow[];
     return Object.freeze(rows.map(row => this.inflate(row)));
   }
 
   get(scopeKey: string, taskId: string): AgentTask | null {
     const row = this.database.prepare(`
       SELECT * FROM agent_tasks WHERE scope_key = ? AND task_id = ?
-    `).get(scopeKey, taskId) as unknown as TaskRow | undefined;
+    `).get(scopeKey, taskId) as unknown as AgentTaskRow | undefined;
     return row ? this.inflate(row) : null;
+  }
+
+  updateMetadata(
+    scopeKey: string,
+    taskId: string,
+    metadata: { isPinned?: boolean; isArchived?: boolean },
+    now: string,
+  ): AgentTask {
+    const task = this.requiredTask(scopeKey, taskId);
+    const archivableStatuses = new Set(['completed', 'failed', 'cancelled', 'proposed']);
+    if (metadata.isArchived === true && !archivableStatuses.has(task.status)) {
+      throw new Error('AGENT_TASK_ARCHIVE_ACTIVE');
+    }
+    const isPinned = metadata.isPinned ?? task.isPinned;
+    const isArchived = metadata.isArchived ?? task.isArchived;
+    this.database.prepare(`
+      UPDATE agent_tasks SET is_pinned = ?, is_archived = ?, updated_at = ?
+      WHERE task_id = ? AND scope_key = ?
+    `).run(isPinned ? 1 : 0, isArchived ? 1 : 0, now, taskId, scopeKey);
+    secureDatabaseFiles(this.path);
+    return this.requiredTask(scopeKey, taskId);
   }
 
   enqueue(scopeKey: string, taskId: string, input: CreateAgentCommandInput, now: string): {
@@ -273,15 +269,40 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     return Object.freeze([...changed].map(taskId => this.taskById(taskId)).filter((task): task is AgentTask => task !== null));
   }
 
-  heartbeat(hostId: string, displayName: string, capabilities: readonly string[], now: string): void {
-    this.database.prepare(`
-      INSERT INTO agent_hosts (host_id, display_name, capabilities_json, last_seen_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(host_id) DO UPDATE SET display_name = excluded.display_name,
-        capabilities_json = excluded.capabilities_json, last_seen_at = excluded.last_seen_at
-    `).run(hostId, displayName, JSON.stringify(capabilities), now);
+  heartbeat(heartbeat: AgentHostHeartbeat, now: string): void {
+    new AgentHostRegistry(this.database).heartbeat(heartbeat, now);
+  }
+  resolveHost(
+    projectHint: string | undefined,
+    preference: string | undefined,
+    now: string,
+    fallbackHost: string | null,
+  ): string | null {
+    return new AgentHostRegistry(this.database).resolveHost(projectHint, preference, now, fallbackHost);
   }
 
+  workspaceCatalog(projectHint: string | undefined, now: string, fallbackHost: string | null): AgentWorkspaceCatalog {
+    return new AgentHostRegistry(this.database).catalog(projectHint, now, fallbackHost);
+  }
+  resolveProvisioningHost(preference: string | undefined, now: string): string | null {
+    return new AgentHostRegistry(this.database).resolveProvisioningHost(preference, now);
+  }
+  resolveProvisioningHosts(preference: string | undefined, now: string): readonly string[] {
+    return new AgentHostRegistry(this.database).resolveProvisioningHosts(preference, now);
+  }
+
+  createProjectProvisioning(scopeKey: string, input: CreateAgentProjectProvisioningInput, now: string) {
+    return new AgentProjectProvisioningPersistence(this.database).create(scopeKey, input, now);
+  }
+  listProjectProvisioning(scopeKey: string) {
+    return new AgentProjectProvisioningPersistence(this.database).list(scopeKey);
+  }
+  claimProjectProvisioning(hostId: string, now: string) {
+    return new AgentProjectProvisioningPersistence(this.database).claim(hostId, now);
+  }
+  recordProjectProvisioning(hostId: string, event: AgentProjectProvisioningEvent) {
+    return new AgentProjectProvisioningPersistence(this.database).record(hostId, event);
+  }
   close(): void {
     if (!this.database.isOpen) return;
     this.database.exec('PRAGMA wal_checkpoint(PASSIVE)');
@@ -289,17 +310,21 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     this.database.close();
   }
 
-  private inflate(row: TaskRow): AgentTask {
+  private inflate(row: AgentTaskRow): AgentTask {
     const eventRows = this.database.prepare(`
       SELECT event_id, sequence, title, detail, occurred_at, tone, payload_json
       FROM agent_task_events WHERE task_id = ? ORDER BY sequence ASC
-    `).all(row.task_id) as unknown as EventRow[];
+    `).all(row.task_id) as unknown as AgentEventRow[];
     return Object.freeze({
       id: row.task_id,
       conversationThreadID: row.conversation_thread_id,
       ...(row.source_message_id ? { sourceMessageID: row.source_message_id } : {}),
       title: row.title,
       goal: row.goal,
+      ...(row.assigned_host_id ? { assignedHostID: row.assigned_host_id } : {}),
+      ...(row.project_hint ? { projectHint: row.project_hint } : {}),
+      ...(row.model_id ? { model: row.model_id } : {}),
+      ...(isReasoningEffort(row.reasoning_effort) ? { reasoningEffort: row.reasoning_effort } : {}),
       status: row.status,
       summary: row.summary,
       ...(row.current_action ? { currentAction: row.current_action } : {}),
@@ -319,6 +344,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       ...(row.pending_approval_json ? { pendingApproval: parseObject<AgentApproval>(row.pending_approval_json) } : {}),
       changes: parseArray<AgentChangeSummary>(row.changes_json),
       tests: parseArray<AgentTestResult>(row.tests_json),
+      isPinned: row.is_pinned === 1,
+      isArchived: row.is_archived === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       latestSequence: Number(row.latest_sequence),
@@ -333,10 +360,9 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
 
   private taskById(taskId: string): AgentTask | null {
     const row = this.database.prepare('SELECT * FROM agent_tasks WHERE task_id = ?')
-      .get(taskId) as unknown as TaskRow | undefined;
+      .get(taskId) as unknown as AgentTaskRow | undefined;
     return row ? this.inflate(row) : null;
   }
-
   private insertCommand(
     taskId: string,
     scopeKey: string,
@@ -357,7 +383,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
 
   private command(commandId: string, fallbackLeaseUntil?: string): ClaimedAgentCommand | null {
     const row = this.database.prepare(`SELECT * FROM agent_task_commands WHERE command_id = ?`)
-      .get(commandId) as unknown as CommandRow | undefined;
+      .get(commandId) as unknown as AgentCommandRow | undefined;
     if (!row) return null;
     return Object.freeze({
       id: row.command_id,

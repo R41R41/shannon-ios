@@ -80,6 +80,11 @@ public protocol ShannonPushServing: Sendable {
 
 public protocol ShannonDeliveryServing: Sendable {
     func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO
+    func confirmTestFlightReleaseGate(
+        scopeKey: String,
+        buildVersion: String,
+        gate: ShannonReleaseGateKeyDTO
+    ) async throws -> ShannonTestFlightDeliveryDashboardDTO
 }
 
 public protocol ShannonAetherServing: Sendable {
@@ -87,6 +92,7 @@ public protocol ShannonAetherServing: Sendable {
 }
 
 public protocol ShannonAgentTaskServing: Sendable {
+    func loadAgentWorkspace(scopeKey: String, projectHint: String?) async throws -> ShannonAgentWorkspaceCatalogDTO
     func createAgentTask(scopeKey: String, task: ShannonAgentTask, idempotencyKey: String) async throws -> ShannonAgentTask
     func loadAgentTasks(scopeKey: String) async throws -> [ShannonAgentTask]
     func loadAgentTask(scopeKey: String, taskID: UUID, afterSequence: Int?) async throws -> ShannonAgentTask?
@@ -97,6 +103,20 @@ public protocol ShannonAgentTaskServing: Sendable {
         payload: [String: String],
         idempotencyKey: String
     ) async throws -> ShannonAgentTask
+    func updateAgentTaskMetadata(
+        scopeKey: String,
+        taskID: UUID,
+        isPinned: Bool?,
+        isArchived: Bool?
+    ) async throws -> ShannonAgentTask
+    func loadAgentProjectProvisioning(scopeKey: String) async throws -> [ShannonAgentProjectProvisioningDTO]
+    func createAgentProjectProvisioning(
+        scopeKey: String,
+        repositoryURL: String,
+        projectKey: String,
+        hostPreference: ShannonAgentRoutingPreference,
+        idempotencyKey: String
+    ) async throws -> [ShannonAgentProjectProvisioningDTO]
 }
 
 public protocol ShannonOrganizeServing: Sendable {
@@ -309,12 +329,24 @@ public extension ShannonAPIClientProtocol {
         throw ShannonAPIError.invalidResponse
     }
 
+    func confirmTestFlightReleaseGate(
+        scopeKey: String,
+        buildVersion: String,
+        gate: ShannonReleaseGateKeyDTO
+    ) async throws -> ShannonTestFlightDeliveryDashboardDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
     func createAetherProposal(scopeKey: String, title: String, content: String, reason: String) async throws -> AetherProposalResponseDTO {
         throw ShannonAPIError.invalidResponse
     }
 
     func createAgentTask(scopeKey: String, task: ShannonAgentTask, idempotencyKey: String) async throws -> ShannonAgentTask {
         throw ShannonAPIError.invalidResponse
+    }
+
+    func loadAgentWorkspace(scopeKey: String, projectHint: String? = nil) async throws -> ShannonAgentWorkspaceCatalogDTO {
+        .unavailable
     }
 
     func loadAgentTasks(scopeKey: String) async throws -> [ShannonAgentTask] { [] }
@@ -328,6 +360,27 @@ public extension ShannonAPIClientProtocol {
         payload: [String: String] = [:],
         idempotencyKey: String
     ) async throws -> ShannonAgentTask {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func updateAgentTaskMetadata(
+        scopeKey: String,
+        taskID: UUID,
+        isPinned: Bool? = nil,
+        isArchived: Bool? = nil
+    ) async throws -> ShannonAgentTask {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadAgentProjectProvisioning(scopeKey: String) async throws -> [ShannonAgentProjectProvisioningDTO] { [] }
+
+    func createAgentProjectProvisioning(
+        scopeKey: String,
+        repositoryURL: String,
+        projectKey: String,
+        hostPreference: ShannonAgentRoutingPreference,
+        idempotencyKey: String
+    ) async throws -> [ShannonAgentProjectProvisioningDTO] {
         throw ShannonAPIError.invalidResponse
     }
 }

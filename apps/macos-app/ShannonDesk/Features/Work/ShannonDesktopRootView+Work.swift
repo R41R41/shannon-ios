@@ -101,6 +101,21 @@ extension ShannonDesktopRootView {
                                 .lineLimit(1)
                                 .help(project)
                         }
+                        if task.status != .proposed {
+                            VStack(alignment: .leading, spacing: 6) {
+                                if let host = task.assignedHostID {
+                                    Label(host, systemImage: "server.rack")
+                                }
+                                if let model = task.model {
+                                    Label(
+                                        task.reasoningEffort.map { "\(model) · 思考 \($0.japaneseName)" } ?? model,
+                                        systemImage: "cpu"
+                                    )
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
 
                         DesktopInspectorSection(title: "目的") {
                             DesktopExpandableText(task.goal, collapsedLineLimit: 6)
@@ -152,11 +167,23 @@ extension ShannonDesktopRootView {
 
                         let policy = ShannonDesktopTaskActionPolicy(status: task.status)
                         if policy.canStart {
+                            DesktopInspectorSection(title: "開発環境") {
+                                developmentProjectPicker
+                                developmentHostPicker
+                                developmentModelPicker
+                                developmentReasoningPicker
+                                Text(developmentRoutingExplanation)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                             Button("この作業を始める") {
-                                Task { await conversation.startAgentTask(task.id) }
+                                configureAndStartDevelopmentTask(task)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(conversation.isAgentTaskActionInFlight(task.id))
+                            .disabled(
+                                conversation.isAgentTaskActionInFlight(task.id)
+                                    || !developmentCanStart
+                            )
                         }
 
                         if let approval = task.pendingApproval {

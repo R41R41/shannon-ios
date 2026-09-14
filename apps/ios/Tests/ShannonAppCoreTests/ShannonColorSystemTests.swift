@@ -7,6 +7,7 @@ final class ShannonColorSystemTests: XCTestCase {
         XCTAssertEqual(ShannonColorTokens.Intelligence.sky, 0x78D9FF)
         XCTAssertEqual(ShannonColorTokens.Intelligence.core, 0x5865F2)
         XCTAssertEqual(ShannonColorTokens.Intelligence.depth, 0x3039A8)
+        XCTAssertEqual(ShannonColorTokens.Intelligence.ink, 0x090A0F)
         XCTAssertEqual(ShannonColorTokens.Light.action, 0x0088FF)
         XCTAssertEqual(ShannonColorTokens.Light.canvas, 0xFFFFFF)
         XCTAssertEqual(ShannonColorTokens.Light.subtleSurface, 0xF2F2F7)
@@ -14,6 +15,7 @@ final class ShannonColorSystemTests: XCTestCase {
         XCTAssertEqual(ShannonColorTokens.Light.attention, 0xFF8D28)
         XCTAssertEqual(ShannonColorTokens.Light.success, 0x34C759)
         XCTAssertEqual(ShannonColorTokens.Light.danger, 0xFF383C)
+        XCTAssertEqual(ShannonColorTokens.Light.characterBlush, 0xF2A6B8)
         XCTAssertEqual(ShannonColorTokens.Dark.action, 0x0091FF)
         XCTAssertEqual(ShannonColorTokens.Dark.canvas, 0x000000)
         XCTAssertEqual(ShannonColorTokens.Dark.subtleSurface, 0x1C1C1E)
@@ -22,6 +24,7 @@ final class ShannonColorSystemTests: XCTestCase {
         XCTAssertEqual(ShannonColorTokens.Dark.attention, 0xFF9230)
         XCTAssertEqual(ShannonColorTokens.Dark.success, 0x30D158)
         XCTAssertEqual(ShannonColorTokens.Dark.danger, 0xFF4245)
+        XCTAssertEqual(ShannonColorTokens.Dark.characterBlush, 0xF5A3B6)
     }
 
     func testActionControlsAndReadingTextMeetTheirContrastThresholds() {

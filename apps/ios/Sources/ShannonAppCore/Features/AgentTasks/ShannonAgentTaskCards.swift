@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ShannonAgentTaskCardView: View {
     let task: ShannonAgentTask
-    let start: () -> Void
     let cancel: () -> Void
     let open: () -> Void
 
@@ -36,10 +35,14 @@ struct ShannonAgentTaskCardView: View {
             switch task.status {
             case .proposed:
                 HStack(spacing: ShannonSpacing.small) {
-                    Button("始める", action: start)
-                        .buttonStyle(AgentTaskProminentButtonStyle(palette: palette))
+                    Button("設定して始める", action: open)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
                     Button("今はやめる", action: cancel)
-                        .buttonStyle(AgentTaskQuietButtonStyle(palette: palette))
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
                 }
             case .cancelled:
                 EmptyView()

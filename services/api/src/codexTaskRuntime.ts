@@ -1,4 +1,4 @@
-import type { AgentChangeSummary, AgentTestResult } from './agentTaskStore.js';
+import type { AgentChangeSummary, AgentReasoningEffort, AgentTestResult } from './agentTaskStore.js';
 import type { AgentHostConfig, AgentHostProject } from './agentHostConfig.js';
 import type { AgentHostStateStore, PersistedAgentSession } from './agentHostState.js';
 import { stringValue } from './codexTaskProjection.js';
@@ -23,6 +23,8 @@ export interface RuntimeTask {
   approvals: Map<string, PendingCodexApproval>;
   pendingApprovalExternalRequestID?: string;
   goal?: string;
+  model?: string;
+  reasoningEffort?: AgentReasoningEffort;
   suppressTerminalEvent: boolean;
 }
 
@@ -50,6 +52,8 @@ export class CodexTaskRuntimeRegistry {
       approvals: new Map(),
       ...(session.pendingApprovalExternalRequestID ? { pendingApprovalExternalRequestID: session.pendingApprovalExternalRequestID } : {}),
       ...(session.goal ? { goal: session.goal } : {}),
+      ...(session.model ? { model: session.model } : {}),
+      ...(session.reasoningEffort ? { reasoningEffort: session.reasoningEffort } : {}),
       suppressTerminalEvent: false,
     };
     this.runtimes.set(runtime.taskId, runtime);
@@ -71,6 +75,8 @@ export class CodexTaskRuntimeRegistry {
       ...(runtime.turnId ? { turnId: runtime.turnId } : {}),
       ...(runtime.pendingApprovalExternalRequestID ? { pendingApprovalExternalRequestID: runtime.pendingApprovalExternalRequestID } : {}),
       ...(runtime.goal ? { goal: runtime.goal } : {}),
+      ...(runtime.model ? { model: runtime.model } : {}),
+      ...(runtime.reasoningEffort ? { reasoningEffort: runtime.reasoningEffort } : {}),
       projectKey: runtime.project.key,
       cwd: runtime.project.path,
       updatedAt: this.now(),

@@ -9,6 +9,7 @@ public struct ShannonDesktopRootView: View {
     let memory: ShannonMemoryModel
     let voiceIdentity: ShannonVoiceIdentityModel
     let worldSubscriptions: ShannonWorldSubscriptionModel
+    let release: ShannonTestFlightDeliveryModel
 
     @SceneStorage("shannon.desktop.destination") var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") var restoredThreadID: String?
@@ -33,6 +34,18 @@ public struct ShannonDesktopRootView: View {
     @State var showsWorldSubscriptions = false
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
+    @State var selectedDevelopmentTool = DesktopDevelopmentTool.changes
+    @State var developmentTaskSearchText = ""
+    @State var developmentTaskFilter = ShannonDesktopTaskFilter.all
+    @State var showsArchivedDevelopmentTasks = false
+    @State var developmentInstruction = ""
+    @State var showsAddAgentProject = false
+    @State var agentRepositoryURL = ""
+    @State var agentRepositoryKey = ""
+    @AppStorage("shannon.desktop.agent.project") var selectedAgentProject = "shannon-ios"
+    @AppStorage("shannon.desktop.agent.hostPreference") var agentHostPreferenceRawValue = ShannonAgentRoutingPreference.auto.rawValue
+    @AppStorage("shannon.desktop.agent.model") var selectedAgentModel = ""
+    @AppStorage("shannon.desktop.agent.reasoning") var agentReasoningRawValue = ShannonAgentReasoningEffort.high.rawValue
     @FocusState var focusedControl: ShannonDesktopFocusedControl?
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.colorScheme) var colorScheme
@@ -42,13 +55,15 @@ public struct ShannonDesktopRootView: View {
         connection: ShannonConnectionModel,
         memory: ShannonMemoryModel,
         voiceIdentity: ShannonVoiceIdentityModel,
-        worldSubscriptions: ShannonWorldSubscriptionModel
+        worldSubscriptions: ShannonWorldSubscriptionModel,
+        release: ShannonTestFlightDeliveryModel
     ) {
         self.conversation = conversation
         self.connection = connection
         self.memory = memory
         self.voiceIdentity = voiceIdentity
         self.worldSubscriptions = worldSubscriptions
+        self.release = release
     }
 
     public var body: some View {
@@ -71,6 +86,17 @@ public struct ShannonDesktopRootView: View {
             ShannonWorldSubscriptionView(model: worldSubscriptions)
                 .frame(minWidth: 560, minHeight: 560)
         }
+        .sheet(isPresented: $showsAddAgentProject) {
+            DevelopmentAddRepositorySheet(
+                repositoryURL: $agentRepositoryURL,
+                projectKey: $agentRepositoryKey,
+                hostPreference: agentHostPreference,
+                isAdding: conversation.isProvisioningAgentProject,
+                errorMessage: conversation.agentProjectProvisioningError,
+                cancel: { showsAddAgentProject = false },
+                add: addAgentRepository
+            )
+        }
         .alert("トークタイトルを変更", isPresented: renameAlertBinding) {
             TextField("タイトル", text: $renameText)
             Button("キャンセル", role: .cancel) { renameThread = nil }
@@ -86,6 +112,8 @@ public struct ShannonDesktopRootView: View {
             await restoreSelectedThreadIfAvailable()
             if !conversation.isDesignPreview {
                 await conversation.synchronizeAgentTasks()
+                await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject)
+                await conversation.refreshAgentProjectProvisioning()
                 await conversation.refreshInitiatives()
             }
             restoreSelectedTaskIfAvailable()
@@ -123,6 +151,16 @@ public struct ShannonDesktopRootView: View {
         .onChange(of: auxiliaryPanel) {
             restoredAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
             lastAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
+        }
+        .onChange(of: selectedAgentProject) {
+            guard !conversation.isDesignPreview else { return }
+            Task { await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject) }
+        }
+        .onChange(of: agentHostPreferenceRawValue) {
+            normalizeDevelopmentSelection()
+        }
+        .onChange(of: conversation.agentWorkspace) {
+            normalizeDevelopmentSelection()
         }
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)

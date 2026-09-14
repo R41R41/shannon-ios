@@ -2,7 +2,7 @@ schema_version: 1
 screen_id: shannon-macos-talk
 platform: macos
 baseline_commit: e21033582dca6254d213040440ad50536b05de19
-last_verified_at: 2026-09-12
+last_verified_at: 2026-09-13
 user_job: "シャノンとの会話を読み、入力し、添付やWeb調査を伴う返答を同じトークで継続する"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -14,10 +14,11 @@ preserve:
 improve:
   - "長い会話でも常設目次から依頼と回答内見出しへ移動でき、読み位置と入力状態を失わない"
   - "補助操作と状態表示の視覚ノイズを抑える"
+  - "現在のShannonはWaterlight Eyeの視線・瞬き・表情変化で静かに存在を示す"
 do_not_change:
   - "会話、記憶、作業の正本と同期規則"
   - "ユーザー確認前にVoyagerやAetherへ書き込まない境界"
-  - "既存の情報階層、意味色、キャラクター表現"
+  - "既存の情報階層、意味色、全身ポートレート"
 states:
   loading: "履歴取得中であることを示し、入力済み内容を破棄しない"
   empty: "最初の会話を始められる入力欄と静かな案内を示す"
@@ -33,7 +34,7 @@ accessibility:
   reduce_motion: "意味をアニメーションだけに依存させず、Reduce Motionで不要な移動を抑える"
 evidence:
   current:
-    - "docs/screenshots/shannon-macos-talk-dark-v32.png"
+    - "docs/screenshots/shannon-macos-talk-waterlight-v1-final.png"
     - "docs/screenshots/shannon-macos-talk-light-v32.png"
     - "docs/screenshots/shannon-macos-talk-system-v32.png"
   approved: []

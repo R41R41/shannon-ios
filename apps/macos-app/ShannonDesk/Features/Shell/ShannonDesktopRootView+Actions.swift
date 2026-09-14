@@ -87,6 +87,11 @@ extension ShannonDesktopRootView {
         lastDestinationRawValue = destination.rawValue
     }
 
+    func requestAppleRelease(_ target: ShannonAppleReleaseTarget) {
+        selectedTaskID = conversation.proposeAppleRelease(target)
+        selectDestination(.development)
+    }
+
     func focusThreadSearch() {
         selectDestination(.talk)
         focusedControl = .threadSearch
@@ -128,6 +133,15 @@ extension ShannonDesktopRootView {
     }
 
     func restoreWindowChromeIfAvailable() {
+#if DEBUG
+        if conversation.isDesignPreview {
+            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewRelease") {
+                restoredDestinationRawValue = DesktopDestination.release.rawValue
+            } else if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDevelopment") {
+                restoredDestinationRawValue = DesktopDestination.development.rawValue
+            }
+        }
+#endif
         if restoredDestinationRawValue == nil {
             restoredDestinationRawValue = destination.rawValue
         }

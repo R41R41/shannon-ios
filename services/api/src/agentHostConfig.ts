@@ -13,11 +13,12 @@ export interface AgentHostConfig {
   hostId: string;
   displayName: string;
   stateFile: string;
+  workspaceRoot: string;
   codexExecutable: string;
   codexModel?: string;
-  codexEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  codexEffort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
   deliveryMode: 'local-device' | 'cloud-testflight';
-  projects: ReadonlyMap<string, AgentHostProject>;
+  projects: Map<string, AgentHostProject>;
   defaultProjectKey: string;
   pollIntervalMs: number;
   heartbeatIntervalMs: number;
@@ -47,6 +48,9 @@ export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = process.env
     hostId: environment.SHANNON_AGENT_HOST_ID?.trim() || 'shannon-mac',
     displayName: environment.SHANNON_AGENT_HOST_NAME?.trim() || 'Shannon Mac',
     stateFile: environment.SHANNON_AGENT_STATE_FILE?.trim() || join(homedir(), '.shannon', 'agent-host-state.json'),
+    workspaceRoot: validatedWorkspaceRoot(
+      environment.SHANNON_AGENT_WORKSPACE_ROOT?.trim() || join(homedir(), '.shannon', 'workspaces'),
+    ),
     codexExecutable,
     ...(environment.SHANNON_CODEX_MODEL?.trim() ? { codexModel: environment.SHANNON_CODEX_MODEL.trim() } : {}),
     ...(codexEffort ? { codexEffort } : {}),
@@ -56,6 +60,11 @@ export function loadAgentHostConfig(environment: NodeJS.ProcessEnv = process.env
     pollIntervalMs: boundedInteger(environment.SHANNON_AGENT_POLL_INTERVAL_MS, 1_500, 250, 30_000),
     heartbeatIntervalMs: boundedInteger(environment.SHANNON_AGENT_HEARTBEAT_INTERVAL_MS, 15_000, 5_000, 120_000),
   });
+}
+
+function validatedWorkspaceRoot(value: string): string {
+  if (!isAbsolute(value)) throw new Error('SHANNON_AGENT_WORKSPACE_ROOT must be an absolute path');
+  return value;
 }
 
 function parseDeliveryMode(raw: string | undefined): AgentHostConfig['deliveryMode'] {
@@ -73,7 +82,7 @@ export function resolveAgentProject(config: AgentHostConfig, hint: unknown): Age
   return project;
 }
 
-function parseProjects(raw: string | undefined): ReadonlyMap<string, AgentHostProject> {
+function parseProjects(raw: string | undefined): Map<string, AgentHostProject> {
   if (!raw?.trim()) throw new Error('SHANNON_AGENT_PROJECTS_JSON is required');
   let value: unknown;
   try {
@@ -111,8 +120,9 @@ function normalizeBaseURL(raw: string): string {
 function parseEffort(raw: string | undefined): AgentHostConfig['codexEffort'] | undefined {
   if (!raw?.trim()) return undefined;
   const value = raw.trim();
-  if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') return value;
-  throw new Error('SHANNON_CODEX_REASONING_EFFORT must be low, medium, high, or xhigh');
+  if (value === 'low' || value === 'medium' || value === 'high'
+    || value === 'xhigh' || value === 'max' || value === 'ultra') return value;
+  throw new Error('SHANNON_CODEX_REASONING_EFFORT must be low, medium, high, xhigh, max, or ultra');
 }
 
 function boundedInteger(raw: string | undefined, fallback: number, minimum: number, maximum: number): number {

@@ -19,6 +19,14 @@ extension ShannonConversationView {
 
 #if DEBUG
     func applyDesignPreviewLaunchState() {
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewWork") {
+            selectedPage = .work
+        }
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewAgentTask"),
+           let task = model.agentTasks.first(where: { $0.status == .proposed }) {
+            selectedPage = .work
+            selectedAgentTaskID = task.id
+        }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewSettings") {
             showsSettings = true
         }
@@ -126,6 +134,21 @@ extension ShannonConversationView {
                     Task {
                         await model.resolveAgentApproval(task.id, accepted: accepted, forSession: forSession)
                     }
+                },
+                workspace: model.agentWorkspace,
+                workspaceError: model.agentWorkspaceError,
+                refreshWorkspace: { project in
+                    await model.refreshAgentWorkspace(projectHint: project)
+                },
+                configureAndStart: { host, project, agentModel, reasoning in
+                    model.configureAgentTask(
+                        task.id,
+                        hostPreference: host,
+                        projectHint: project,
+                        model: agentModel,
+                        reasoningEffort: reasoning
+                    )
+                    Task { await model.startAgentTask(task.id) }
                 },
                 advancePreview: nil
             )

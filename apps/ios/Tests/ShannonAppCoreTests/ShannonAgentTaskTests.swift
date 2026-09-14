@@ -3,6 +3,21 @@ import XCTest
 
 @MainActor
 final class ShannonAgentTaskTests: XCTestCase {
+    func testAppleReleaseTaskStartsAsSevenGateProposal() {
+        let task = ShannonAppleReleaseTaskFactory.make(target: .iOS, threadID: "release-thread")
+
+        XCTAssertEqual(task.status, .proposed)
+        XCTAssertEqual(task.conversationThreadID, "release-thread")
+        XCTAssertEqual(task.projectHint, "shannon-ios")
+        XCTAssertEqual(task.hostHint, ShannonAgentRoutingPreference.auto.rawValue)
+        XCTAssertEqual(task.plan.map(\.title), [
+            "Build", "Archive", "Upload", "Processing", "Assignment", "Install", "Smoke"
+        ])
+        XCTAssertTrue(task.plan.allSatisfy { $0.status == .pending })
+        XCTAssertTrue(task.goal.contains("未確認を完了扱いにしない"))
+        XCTAssertTrue(task.goal.contains("実機確認を待って"))
+    }
+
     func testStateMachineAllowsExpectedPathAndLocksTerminalState() {
         var task = ShannonAgentTaskFixtures.proposed()
 
@@ -40,6 +55,29 @@ final class ShannonAgentTaskTests: XCTestCase {
         XCTAssertEqual(projection.active.map(\.id), [active.id])
         XCTAssertEqual(projection.proposed.map(\.id), [proposed.id])
         XCTAssertEqual(projection.finished.map(\.id), [finished.id])
+    }
+
+    func testMobileOverviewSearchFilterPinAndArchiveStayMutuallyExclusive() {
+        var pinned = ShannonAgentTaskFixtures.running()
+        pinned.title = "Shannonの配信"
+        pinned.updateManagement(isPinned: true)
+        var archived = ShannonAgentTaskFixtures.completed()
+        archived.title = "Aetherの監査"
+        archived.updateManagement(isArchived: true)
+        var approval = ShannonAgentTaskFixtures.waitingApproval()
+        approval.title = "Voyagerの承認"
+
+        let all = ShannonAgentTaskOverviewProjection(tasks: [archived, approval, pinned])
+        XCTAssertEqual(all.pinned.map(\.id), [pinned.id])
+        XCTAssertEqual(all.active.map(\.id), [approval.id])
+        XCTAssertEqual(all.archived.map(\.id), [archived.id])
+
+        let attention = ShannonAgentTaskOverviewProjection(
+            tasks: [archived, approval, pinned], query: "Voyager", filter: .attention
+        )
+        XCTAssertEqual(attention.active.map(\.id), [approval.id])
+        XCTAssertTrue(attention.pinned.isEmpty)
+        XCTAssertTrue(attention.archived.isEmpty)
     }
 
     func testUserFacingStagesCollapseIntermediateTaskStatuses() {
@@ -137,6 +175,69 @@ final class ShannonAgentTaskTests: XCTestCase {
         XCTAssertEqual(task.changes.first?.id.uuidString, "19FB986E-C36D-5DE2-F30F-49E3F13E4BA1")
         XCTAssertEqual(task.tests.first?.id.uuidString, "DC4D012E-B1B6-FC84-4ED8-6D0291AA7ECB")
         XCTAssertEqual(task.latestCommandActivity?.activity?.status, .completed)
+    }
+
+    func testWorkspaceProjectDecodesOlderCatalogAndDefaultsSnapshotFields() throws {
+        let data = try XCTUnwrap(#"{"key":"shannon-ios","availableHostIds":["shannon-mac"]}"#.data(using: .utf8))
+
+        let project = try JSONDecoder().decode(ShannonAgentProjectDTO.self, from: data)
+
+        XCTAssertEqual(project.key, "shannon-ios")
+        XCTAssertEqual(project.availableHostIds, ["shannon-mac"])
+        XCTAssertFalse(project.isGitRepository)
+        XCTAssertNil(project.currentBranch)
+        XCTAssertTrue(project.files.isEmpty)
+        XCTAssertTrue(project.changes.isEmpty)
+    }
+
+    func testDevelopmentOptionsPreferResolvedHostAndNormalizeUnsupportedModelSettings() {
+        let local = ShannonAgentHostDTO(
+            hostId: "local",
+            displayName: "このMac",
+            kind: .local,
+            capabilities: [],
+            projects: ["aether"],
+            models: [],
+            status: .available,
+            lastSeenAt: "2026-09-14T00:00:00Z"
+        )
+        let cloud = ShannonAgentHostDTO(
+            hostId: "cloud",
+            displayName: "Cloud Agent Host",
+            kind: .cloud,
+            capabilities: [],
+            projects: ["aether"],
+            models: [],
+            status: .available,
+            lastSeenAt: "2026-09-14T00:00:00Z"
+        )
+        let model = ShannonAgentModelDTO(
+            id: "codex-main",
+            displayName: "Codex Main",
+            supportedReasoningEfforts: [.medium, .high],
+            defaultReasoningEffort: .high
+        )
+
+        XCTAssertEqual(
+            ShannonAgentDevelopmentOptions.selectedHost(
+                from: [cloud, local],
+                preference: .auto,
+                resolvedHostID: "local"
+            )?.id,
+            "local"
+        )
+        XCTAssertEqual(
+            ShannonAgentDevelopmentOptions.normalizedModelID("retired", models: [model]),
+            ""
+        )
+        XCTAssertEqual(
+            ShannonAgentDevelopmentOptions.normalizedReasoningEffort(
+                .ultra,
+                modelID: model.id,
+                models: [model]
+            ),
+            .high
+        )
     }
 
     func testCompletedTaskRemainsVisibleUntilAcknowledged() {

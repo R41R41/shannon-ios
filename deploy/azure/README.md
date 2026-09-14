@@ -17,12 +17,19 @@ explicit release operation.
 
 - a dedicated writable checkout at `/home/azureuser/shannon-agent-workspace/shannon-ios`
 - durable host/Codex state under `/home/azureuser/shannon-agent-data`
+- dynamically added GitHub repositories under `/home/azureuser/shannon-agent-workspace`
 - a dedicated Codex executable under `/home/azureuser/shannon-agent-runtime`
 - secrets in `/home/azureuser/.config/shannon-agent-host/agent-host.env` (`0600`)
 
 Do not point the Agent Host at `/home/azureuser/shannon-ios`, because that tree is
 the running API deployment. The worktree and production deployment must remain
 separate so an unfinished edit cannot change the live service.
+
+The Development screen accepts only an HTTPS `github.com/<owner>/<repository>`
+coordinate and a bounded alias. The API assigns the request to one available
+host; the host supplies its own GitHub credential, clones into the dedicated
+workspace root, and advertises the alias only after clone completion. Do not put
+GitHub tokens in the request or in Shannon's database.
 
 The API setting `SHANNON_AGENT_DEFAULT_HOST=shannon-cloud` should be enabled only
 after the cloud host heartbeat and a harmless end-to-end task succeed. Until then,

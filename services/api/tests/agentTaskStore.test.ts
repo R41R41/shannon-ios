@@ -102,6 +102,109 @@ describe('SQLite Agent Task Store', () => {
     store.close();
   });
 
+  it('prefers an available local host and falls back to cloud when local is busy', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const models = [{
+      id: 'gpt-5.6-sol', displayName: 'GPT-5.6 Sol',
+      supportedReasoningEfforts: ['low', 'medium', 'high'] as const,
+      defaultReasoningEffort: 'high' as const,
+    }];
+    store.heartbeat({
+      hostId: 'local-mac', displayName: 'このMac', kind: 'local',
+      capabilities: ['workspace-files', 'diff', 'git', 'build'],
+      projects: ['shannon-ios', 'aether'], models,
+    }, '2026-09-04T00:00:00.000Z');
+    store.heartbeat({
+      hostId: 'cloud-agent', displayName: 'Cloud Agent', kind: 'cloud',
+      capabilities: ['workspace-files', 'diff', 'git', 'build'],
+      projects: ['shannon-ios', 'aether', 'voyager'], models,
+    }, '2026-09-04T00:00:00.000Z');
+
+    expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:00:10.000Z', 'legacy-cloud'))
+      .toBe('local-mac');
+    const task = store.create('owner-a', {
+      idempotencyKey: 'local-first', conversationThreadID: 'thread-a', title: 'Shannonを改善',
+      goal: '開発画面を作る', summary: 'このMacで開始する。', hostHint: 'local-mac',
+      projectHint: 'shannon-ios', model: 'gpt-5.6-sol', reasoningEffort: 'high',
+    }, '2026-09-04T00:00:11.000Z');
+    expect(task.task).toMatchObject({
+      assignedHostID: 'local-mac', projectHint: 'shannon-ios',
+      model: 'gpt-5.6-sol', reasoningEffort: 'high',
+    });
+    expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:00:12.000Z', 'legacy-cloud'))
+      .toBe('cloud-agent');
+    const catalog = store.workspaceCatalog('shannon-ios', '2026-09-04T00:00:12.000Z', 'legacy-cloud');
+    expect(catalog.routing).toMatchObject({ resolvedHostId: 'cloud-agent' });
+    expect(catalog.hosts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ hostId: 'local-mac', status: 'busy' }),
+      expect.objectContaining({ hostId: 'cloud-agent', status: 'available' }),
+    ]));
+    expect(catalog.projects).toContainEqual(expect.objectContaining({
+      key: 'shannon-ios', availableHostIds: ['local-mac', 'cloud-agent'],
+    }));
+    store.close();
+  });
+
+  it('does not silently route an explicit local request to cloud', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    store.heartbeat({
+      hostId: 'cloud-agent', displayName: 'Cloud Agent', kind: 'cloud',
+      capabilities: [], projects: ['voyager'], models: [],
+    }, '2026-09-04T00:00:00.000Z');
+
+    expect(store.resolveHost('voyager', 'local', '2026-09-04T00:00:10.000Z', 'cloud-agent')).toBeNull();
+    expect(store.resolveHost('voyager', 'cloud', '2026-09-04T00:00:10.000Z', 'cloud-agent'))
+      .toBe('cloud-agent');
+    store.close();
+  });
+
+  it('does not queue an explicit host preference while that host is busy', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    store.heartbeat({
+      hostId: 'local-mac', displayName: 'このMac', kind: 'local',
+      capabilities: [], projects: ['shannon-ios'], models: [],
+    }, '2026-09-04T00:00:00.000Z');
+    const task = store.create('owner-a', {
+      idempotencyKey: 'busy-local', conversationThreadID: 'thread-a', title: '進行中',
+      goal: 'ローカルを使用中にする', summary: '作業中', hostHint: 'local-mac', projectHint: 'shannon-ios',
+    }, '2026-09-04T00:00:01.000Z');
+
+    expect(task.task.assignedHostID).toBe('local-mac');
+    expect(store.resolveHost('shannon-ios', 'local', '2026-09-04T00:00:02.000Z', 'cloud-agent'))
+      .toBeNull();
+    expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:00:02.000Z', null))
+      .toBeNull();
+    store.close();
+  });
+
+  it('uses the resolved host workspace snapshot in the project catalog', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    store.heartbeat({
+      hostId: 'local-mac', displayName: 'このMac', kind: 'local', capabilities: [],
+      projects: ['shannon-ios'], models: [], workspaces: [{
+        key: 'shannon-ios', isGitRepository: true, currentBranch: 'local-branch',
+        files: ['local.swift'], changes: [],
+      }],
+    }, '2026-09-04T00:00:00.000Z');
+    store.heartbeat({
+      hostId: 'cloud-agent', displayName: 'Cloud', kind: 'cloud', capabilities: [],
+      projects: ['shannon-ios'], models: [], workspaces: [{
+        key: 'shannon-ios', isGitRepository: true, currentBranch: 'cloud-branch',
+        files: ['cloud.swift'], changes: [],
+      }],
+    }, '2026-09-04T00:00:00.000Z');
+
+    expect(store.workspaceCatalog('shannon-ios', '2026-09-04T00:00:10.000Z', null).projects[0])
+      .toMatchObject({ currentBranch: 'local-branch', files: ['local.swift'] });
+    store.create('owner-a', {
+      idempotencyKey: 'make-local-busy', conversationThreadID: 'thread-a', title: '進行中',
+      goal: 'ローカルを使用中にする', summary: '作業中', hostHint: 'local-mac', projectHint: 'shannon-ios',
+    }, '2026-09-04T00:00:11.000Z');
+    expect(store.workspaceCatalog('shannon-ios', '2026-09-04T00:00:12.000Z', null).projects[0])
+      .toMatchObject({ currentBranch: 'cloud-branch', files: ['cloud.swift'] });
+    store.close();
+  });
+
   it('queues one idempotent approval command and rejects an old-state command', () => {
     const store = new SQLiteAgentTaskStore(databasePath());
     const created = store.create('owner-a', {
@@ -195,6 +298,33 @@ describe('SQLite Agent Task Store', () => {
       status: 'paused', summary: 'ビルド前の承認を待っています。', currentAction: 'GitHubへの反映を承認',
     });
     store.close();
+  });
+
+  it('persists pin and archive metadata without allowing an active task to disappear', () => {
+    const path = databasePath();
+    const store = new SQLiteAgentTaskStore(path);
+    const created = store.create('owner-a', {
+      idempotencyKey: 'managed-task', conversationThreadID: 'thread-a', title: '配信準備',
+      goal: '配信できる状態にする', summary: '準備を始める。', hostHint: 'mac-a',
+    }, '2026-09-04T00:00:00.000Z');
+
+    expect(store.updateMetadata('owner-a', created.task.id, { isPinned: true }, '2026-09-04T00:00:01.000Z'))
+      .toMatchObject({ isPinned: true, isArchived: false });
+    expect(() => store.updateMetadata(
+      'owner-a', created.task.id, { isArchived: true }, '2026-09-04T00:00:02.000Z',
+    )).toThrow('AGENT_TASK_ARCHIVE_ACTIVE');
+
+    store.claim('mac-a', '2026-09-04T00:00:03.000Z');
+    store.recordHostEvents('mac-a', [{
+      eventId: 'managed-complete', taskId: created.task.id, type: 'completed', title: '完了',
+      detail: '配信準備が完了した。', occurredAt: '2026-09-04T00:00:04.000Z',
+    }], '2026-09-04T00:00:04.000Z');
+    store.updateMetadata('owner-a', created.task.id, { isArchived: true }, '2026-09-04T00:00:05.000Z');
+    store.close();
+
+    const reopened = new SQLiteAgentTaskStore(path);
+    expect(reopened.get('owner-a', created.task.id)).toMatchObject({ isPinned: true, isArchived: true });
+    reopened.close();
   });
 });
 

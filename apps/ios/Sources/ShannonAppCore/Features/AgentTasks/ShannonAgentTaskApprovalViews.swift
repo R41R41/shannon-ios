@@ -28,15 +28,21 @@ struct AgentTaskApprovalCard: View {
                         if isSubmitting { ProgressView().controlSize(.small).tint(palette.onAction) }
                         Text(isSubmitting ? "送信中…" : "今回だけ許可")
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                    .buttonStyle(AgentTaskProminentButtonStyle(palette: palette))
-                    .disabled(isSubmitting)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isSubmitting)
                 HStack(spacing: ShannonSpacing.small) {
                     Button("この作業中", action: acceptForSession)
-                        .buttonStyle(AgentTaskQuietButtonStyle(palette: palette))
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
                         .disabled(isSubmitting)
                     Button("許可しない", action: decline)
-                        .buttonStyle(AgentTaskQuietButtonStyle(palette: palette))
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity)
                         .disabled(isSubmitting)
                 }
             }
@@ -90,7 +96,26 @@ struct AgentTaskResultSection: View {
                                     .foregroundStyle(palette.action)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(change.displayName).font(.callout.weight(.semibold))
+                                    if let path = change.path, path != change.displayName {
+                                        Text(path)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(palette.textSecondary)
+                                            .textSelection(.enabled)
+                                    }
                                     Text(change.summary).font(.caption).foregroundStyle(palette.textSecondary)
+                                    if let diff = change.diffPreview, !diff.isEmpty {
+                                        DisclosureGroup("差分を表示") {
+                                            ScrollView(.horizontal) {
+                                                Text(diff)
+                                                    .font(.caption2.monospaced())
+                                                    .textSelection(.enabled)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .padding(.top, ShannonSpacing.small)
+                                            }
+                                        }
+                                        .font(.caption)
+                                        .tint(palette.action)
+                                    }
                                 }
                                 Spacer()
                                 Text("+\(change.additions) −\(change.deletions)")

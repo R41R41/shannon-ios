@@ -174,6 +174,10 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             ShannonDesktopWindowRestoration.destination(sceneRawValue: "unknown", lastRawValue: "unknown"),
             .talk
         )
+        XCTAssertEqual(
+            ShannonDesktopWindowRestoration.destination(sceneRawValue: "development", lastRawValue: "talk"),
+            .development
+        )
 
         XCTAssertEqual(
             ShannonDesktopWindowRestoration.identifier(sceneValue: "scene-thread", lastValue: "last-thread"),
@@ -201,6 +205,45 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "unknown", lastRawValue: "unknown"),
             .task
         )
+    }
+
+    func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {
+        let model = ShannonAgentModelDTO(
+            id: "codex-main",
+            displayName: "Codex Main",
+            description: nil,
+            supportedReasoningEfforts: [.medium, .high],
+            defaultReasoningEffort: .high
+        )
+
+        XCTAssertEqual(
+            ShannonDesktopDevelopmentOptions.normalizedModelID("retired-model", models: [model]),
+            ""
+        )
+        XCTAssertEqual(
+            ShannonDesktopDevelopmentOptions.normalizedModelID("codex-main", models: [model]),
+            "codex-main"
+        )
+        XCTAssertEqual(
+            ShannonDesktopDevelopmentOptions.normalizedReasoningEffort(
+                .ultra,
+                modelID: "codex-main",
+                models: [model]
+            ),
+            .high
+        )
+    }
+
+    func testDevelopmentFileTreeBuildsStableNestedPaths() {
+        let roots = DevelopmentFileNode.roots(paths: [
+            "apps/ios/App.swift",
+            "apps/macos/App.swift",
+            "README.md",
+        ])
+
+        XCTAssertEqual(roots.map(\.path), ["README.md", "apps"])
+        XCTAssertEqual(roots[1].children?.map(\.path), ["apps/ios", "apps/macos"])
+        XCTAssertEqual(roots[1].children?.first?.children?.map(\.path), ["apps/ios/App.swift"])
     }
 
     func testNextActionPrefersApprovalThenPendingPlanItem() {
@@ -352,6 +395,29 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             latestAnswerID
         )
         XCTAssertNil(ShannonDesktopConversationOutline.searchTargetMessageID(in: messages, query: ""))
+    }
+
+    func testRepositoryInputAcceptsOnlyBoundedGitHubCoordinates() {
+        XCTAssertTrue(ShannonDesktopRepositoryInput(
+            repositoryURL: "https://github.com/example/new-app.git",
+            projectKey: "new-app"
+        ).isValid)
+        XCTAssertFalse(ShannonDesktopRepositoryInput(
+            repositoryURL: "file:///tmp/new-app",
+            projectKey: "new-app"
+        ).isValid)
+        XCTAssertFalse(ShannonDesktopRepositoryInput(
+            repositoryURL: "https://github.com/example/new%2Fapp",
+            projectKey: "new-app"
+        ).isValid)
+        XCTAssertFalse(ShannonDesktopRepositoryInput(
+            repositoryURL: "https://github.com/example/new-app",
+            projectKey: "../escape"
+        ).isValid)
+        XCTAssertEqual(
+            ShannonDesktopRepositoryInput.suggestedKey(from: "https://github.com/example/New-App.git"),
+            "new-app"
+        )
     }
 
     private func makeTask(

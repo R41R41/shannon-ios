@@ -11,6 +11,7 @@ WorkingDirectory=/home/azureuser/shannon-ios
 EnvironmentFile=/home/azureuser/.config/shannon-agent-host/agent-host.env
 Environment=HOME=/home/azureuser
 Environment=CODEX_HOME=/home/azureuser/shannon-agent-data/codex
+Environment=SHANNON_AGENT_WORKSPACE_ROOT=/home/azureuser/shannon-agent-workspace
 Environment=PATH=/home/azureuser/shannon-agent-runtime/bin:/home/azureuser/shannon-ios-runtime/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/agentHost.ts
 Restart=always

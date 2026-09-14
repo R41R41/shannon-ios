@@ -1,5 +1,9 @@
-import type { ClaimedAgentCommand, HostAgentEvent } from './agentTaskStore.js';
+import type { AgentHostHeartbeat, ClaimedAgentCommand, HostAgentEvent } from './agentTaskStore.js';
 import type { AgentHostStateStore } from './agentHostState.js';
+import type {
+  AgentProjectProvisioningEvent,
+  ClaimedAgentProjectProvisioning,
+} from './agentProjectProvisioning.js';
 
 export class AgentHostBrokerClient {
   constructor(
@@ -9,8 +13,8 @@ export class AgentHostBrokerClient {
     private readonly state: AgentHostStateStore,
   ) {}
 
-  async heartbeat(displayName: string, capabilities: readonly string[]): Promise<void> {
-    await this.post('/v1/agent/host/heartbeat', { hostId: this.hostId, displayName, capabilities });
+  async heartbeat(registration: Omit<AgentHostHeartbeat, 'hostId'>): Promise<void> {
+    await this.post('/v1/agent/host/heartbeat', { hostId: this.hostId, ...registration });
   }
 
   async claim(): Promise<ClaimedAgentCommand | null> {
@@ -18,6 +22,17 @@ export class AgentHostBrokerClient {
       '/v1/agent/host/commands/claim', { hostId: this.hostId },
     );
     return response.command;
+  }
+
+  async claimProject(): Promise<ClaimedAgentProjectProvisioning | null> {
+    const response = await this.post<{ provisioning: ClaimedAgentProjectProvisioning | null }>(
+      '/v1/agent/host/projects/claim', { hostId: this.hostId },
+    );
+    return response.provisioning;
+  }
+
+  async publishProject(event: AgentProjectProvisioningEvent): Promise<void> {
+    await this.post('/v1/agent/host/projects/events', { hostId: this.hostId, event });
   }
 
   async publish(events: readonly HostAgentEvent[]): Promise<void> {

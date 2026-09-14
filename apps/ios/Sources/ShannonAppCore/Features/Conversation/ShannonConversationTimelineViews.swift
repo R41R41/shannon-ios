@@ -6,12 +6,43 @@ import AppKit
 #endif
 
 struct ShannonEmptyConversation: View {
+    @State private var waterlightReaction = 0
+
+    @ViewBuilder
     var body: some View {
+#if os(iOS)
+        if ShannonConversationFeatureFlags.waterlightHero {
+            Button {
+                waterlightReaction &+= 1
+            } label: {
+                ShannonWaterlightEyeView(
+                    expression: .curious,
+                    size: 96,
+                    reactionTrigger: waterlightReaction
+                )
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(ShannonSpacing.extraLarge)
+            .accessibilityLabel("シャノン")
+            .accessibilityHint("触れると表情が変わります")
+        } else {
+            ShannonAvatarView(expression: .curious, size: 96)
+                .frame(maxWidth: .infinity)
+                .padding(ShannonSpacing.extraLarge)
+                .accessibilityLabel("シャノン")
+        }
+#else
         ShannonAvatarView(expression: .curious, size: 96)
             .frame(maxWidth: .infinity)
             .padding(ShannonSpacing.extraLarge)
             .accessibilityLabel("シャノン")
+#endif
     }
+}
+
+private enum ShannonConversationFeatureFlags {
+    static let waterlightHero = true
 }
 
 struct ShannonConversationDayDivider: View {

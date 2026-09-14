@@ -5,6 +5,74 @@ export type AgentCommandStatus = 'pending' | 'leased' | 'completed' | 'failed';
 export type AgentEventTone = 'neutral' | 'progress' | 'success' | 'warning' | 'error';
 export type AgentActivityKind = 'command';
 export type AgentActivityStatus = 'running' | 'completed' | 'failed';
+export type AgentHostKind = 'local' | 'cloud';
+export type AgentRoutingPreference = 'auto' | 'local' | 'cloud';
+export type AgentReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+
+import type {
+  AgentProjectProvisioningEvent,
+  AgentProjectProvisioningRequest,
+  ClaimedAgentProjectProvisioning,
+  CreateAgentProjectProvisioningInput,
+} from './agentProjectProvisioning.js';
+
+export interface AgentModelDescriptor {
+  id: string;
+  displayName: string;
+  description?: string;
+  supportedReasoningEfforts: readonly AgentReasoningEffort[];
+  defaultReasoningEffort?: AgentReasoningEffort;
+}
+
+export interface AgentHostHeartbeat {
+  hostId: string;
+  displayName: string;
+  kind: AgentHostKind;
+  capabilities: readonly string[];
+  projects: readonly string[];
+  models: readonly AgentModelDescriptor[];
+  workspaces?: readonly AgentWorkspaceProjectState[];
+}
+
+export interface AgentWorkspaceChangeDescriptor {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface AgentWorkspaceProjectState {
+  key: string;
+  isGitRepository: boolean;
+  currentBranch?: string;
+  files: readonly string[];
+  changes: readonly AgentWorkspaceChangeDescriptor[];
+}
+
+export interface AgentHostDescriptor extends AgentHostHeartbeat {
+  status: 'available' | 'busy' | 'offline';
+  lastSeenAt: string;
+}
+
+export interface AgentProjectDescriptor {
+  key: string;
+  availableHostIds: readonly string[];
+  isGitRepository: boolean;
+  currentBranch?: string;
+  files: readonly string[];
+  changes: readonly AgentWorkspaceChangeDescriptor[];
+}
+
+export interface AgentWorkspaceCatalog {
+  routing: {
+    defaultPreference: AgentRoutingPreference;
+    resolvedHostId: string | null;
+    explanation: string;
+  };
+  hosts: readonly AgentHostDescriptor[];
+  projects: readonly AgentProjectDescriptor[];
+  models: readonly AgentModelDescriptor[];
+}
 
 export interface AgentTimelineActivity {
   kind: AgentActivityKind;
@@ -40,9 +108,11 @@ export interface AgentApproval {
 export interface AgentChangeSummary {
   id: string;
   displayName: string;
+  path?: string;
   summary: string;
   additions: number;
   deletions: number;
+  diffPreview?: string;
 }
 
 export interface AgentTestResult {
@@ -58,6 +128,10 @@ export interface AgentTask {
   sourceMessageID?: string;
   title: string;
   goal: string;
+  assignedHostID?: string;
+  projectHint?: string;
+  model?: string;
+  reasoningEffort?: AgentReasoningEffort;
   status: AgentTaskStatus;
   summary: string;
   currentAction?: string;
@@ -66,6 +140,8 @@ export interface AgentTask {
   pendingApproval?: AgentApproval;
   changes: AgentChangeSummary[];
   tests: AgentTestResult[];
+  isPinned: boolean;
+  isArchived: boolean;
   createdAt: string;
   updatedAt: string;
   latestSequence: number;
@@ -82,6 +158,8 @@ export interface CreateAgentTaskInput {
   plan?: AgentPlanItem[];
   hostHint?: string;
   projectHint?: string;
+  model?: string;
+  reasoningEffort?: AgentReasoningEffort;
 }
 
 export interface CreateAgentCommandInput {
@@ -116,6 +194,12 @@ export interface AgentTaskStore {
   create(scopeKey: string, input: CreateAgentTaskInput, now: string): { task: AgentTask; created: boolean };
   list(scopeKey: string): readonly AgentTask[];
   get(scopeKey: string, taskId: string): AgentTask | null;
+  updateMetadata(
+    scopeKey: string,
+    taskId: string,
+    metadata: { isPinned?: boolean; isArchived?: boolean },
+    now: string,
+  ): AgentTask;
   enqueue(scopeKey: string, taskId: string, input: CreateAgentCommandInput, now: string): {
     task: AgentTask;
     command: ClaimedAgentCommand | null;
@@ -123,7 +207,26 @@ export interface AgentTaskStore {
   };
   claim(hostId: string, now: string, leaseSeconds?: number): ClaimedAgentCommand | null;
   recordHostEvents(hostId: string, events: readonly HostAgentEvent[], now: string): readonly AgentTask[];
-  heartbeat(hostId: string, displayName: string, capabilities: readonly string[], now: string): void;
+  heartbeat(heartbeat: AgentHostHeartbeat, now: string): void;
+  resolveHost(
+    projectHint: string | undefined,
+    preference: string | undefined,
+    now: string,
+    fallbackHost: string | null,
+  ): string | null;
+  workspaceCatalog(projectHint: string | undefined, now: string, fallbackHost: string | null): AgentWorkspaceCatalog;
+  resolveProvisioningHost(preference: string | undefined, now: string): string | null;
+  resolveProvisioningHosts(preference: string | undefined, now: string): readonly string[];
+  createProjectProvisioning(scopeKey: string, input: CreateAgentProjectProvisioningInput, now: string): {
+    request: AgentProjectProvisioningRequest;
+    created: boolean;
+  };
+  listProjectProvisioning(scopeKey: string): readonly AgentProjectProvisioningRequest[];
+  claimProjectProvisioning(hostId: string, now: string): ClaimedAgentProjectProvisioning | null;
+  recordProjectProvisioning(
+    hostId: string,
+    event: AgentProjectProvisioningEvent,
+  ): AgentProjectProvisioningRequest;
 }
 
 import { SQLiteAgentTaskStore } from './agentTaskPersistence.js';
@@ -134,6 +237,9 @@ export class InMemoryAgentTaskStore implements AgentTaskStore {
   create(scopeKey: string, input: CreateAgentTaskInput, now: string) { return this.delegate.create(scopeKey, input, now); }
   list(scopeKey: string) { return this.delegate.list(scopeKey); }
   get(scopeKey: string, taskId: string) { return this.delegate.get(scopeKey, taskId); }
+  updateMetadata(scopeKey: string, taskId: string, metadata: { isPinned?: boolean; isArchived?: boolean }, now: string) {
+    return this.delegate.updateMetadata(scopeKey, taskId, metadata, now);
+  }
   enqueue(scopeKey: string, taskId: string, input: CreateAgentCommandInput, now: string) {
     return this.delegate.enqueue(scopeKey, taskId, input, now);
   }
@@ -141,7 +247,29 @@ export class InMemoryAgentTaskStore implements AgentTaskStore {
   recordHostEvents(hostId: string, events: readonly HostAgentEvent[], now: string) {
     return this.delegate.recordHostEvents(hostId, events, now);
   }
-  heartbeat(hostId: string, displayName: string, capabilities: readonly string[], now: string) {
-    this.delegate.heartbeat(hostId, displayName, capabilities, now);
+  heartbeat(heartbeat: AgentHostHeartbeat, now: string) {
+    this.delegate.heartbeat(heartbeat, now);
+  }
+  resolveHost(projectHint: string | undefined, preference: string | undefined, now: string, fallbackHost: string | null) {
+    return this.delegate.resolveHost(projectHint, preference, now, fallbackHost);
+  }
+  workspaceCatalog(projectHint: string | undefined, now: string, fallbackHost: string | null) {
+    return this.delegate.workspaceCatalog(projectHint, now, fallbackHost);
+  }
+  resolveProvisioningHost(preference: string | undefined, now: string) {
+    return this.delegate.resolveProvisioningHost(preference, now);
+  }
+  resolveProvisioningHosts(preference: string | undefined, now: string) {
+    return this.delegate.resolveProvisioningHosts(preference, now);
+  }
+  createProjectProvisioning(scopeKey: string, input: CreateAgentProjectProvisioningInput, now: string) {
+    return this.delegate.createProjectProvisioning(scopeKey, input, now);
+  }
+  listProjectProvisioning(scopeKey: string) { return this.delegate.listProjectProvisioning(scopeKey); }
+  claimProjectProvisioning(hostId: string, now: string) {
+    return this.delegate.claimProjectProvisioning(hostId, now);
+  }
+  recordProjectProvisioning(hostId: string, event: AgentProjectProvisioningEvent) {
+    return this.delegate.recordProjectProvisioning(hostId, event);
   }
 }

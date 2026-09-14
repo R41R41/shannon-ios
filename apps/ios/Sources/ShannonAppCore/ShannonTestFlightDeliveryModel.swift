@@ -34,6 +34,24 @@ public final class ShannonTestFlightDeliveryModel {
     public func dismissError() {
         errorMessage = nil
     }
+
+    public func confirm(_ gate: ShannonReleaseGateKeyDTO) async {
+        guard gate == .install || gate == .smoke,
+              let buildVersion = dashboard?.release?.buildVersion,
+              !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            dashboard = try await client.confirmTestFlightReleaseGate(
+                scopeKey: scopeKey, buildVersion: buildVersion, gate: gate
+            )
+        } catch {
+            errorMessage = gate == .install
+                ? "インストール確認を保存できませんでした。"
+                : "実機確認を保存できませんでした。Installの完了も確認してください。"
+        }
+    }
 }
 
 public extension Notification.Name {

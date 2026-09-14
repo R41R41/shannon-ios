@@ -13,6 +13,7 @@ enum ShannonColorTokens {
         static let sky: UInt = 0x78D9FF
         static let core: UInt = 0x5865F2
         static let depth: UInt = 0x3039A8
+        static let ink: UInt = 0x090A0F
     }
 
     enum Light {
@@ -37,6 +38,7 @@ enum ShannonColorTokens {
         static let danger: UInt = 0xFF383C
         static let dangerTint: UInt = 0xFFE5E6
         static let dangerTintText: UInt = 0x5F0004
+        static let characterBlush: UInt = 0xF2A6B8
     }
 
     enum Dark {
@@ -61,6 +63,7 @@ enum ShannonColorTokens {
         static let danger: UInt = 0xFF4245
         static let dangerTint: UInt = 0x4A1517
         static let dangerTintText: UInt = 0xFFE5E6
+        static let characterBlush: UInt = 0xF5A3B6
     }
 }
 
@@ -68,6 +71,7 @@ struct ShannonPalette {
     let brandPresence: Color
     let intelligenceSky: Color
     let intelligenceDepth: Color
+    let intelligenceInk: Color
     let intelligenceSoft: Color
     let action: Color
     let onAction: Color
@@ -89,6 +93,7 @@ struct ShannonPalette {
     let onDangerTint: Color
     let success: Color
     let attention: Color
+    let characterBlush: Color
 
     var intelligenceGradient: LinearGradient {
         LinearGradient(
@@ -102,6 +107,7 @@ struct ShannonPalette {
         brandPresence: Color(hex: ShannonColorTokens.Light.brandPresence),
         intelligenceSky: Color(hex: ShannonColorTokens.Intelligence.sky),
         intelligenceDepth: Color(hex: ShannonColorTokens.Intelligence.depth),
+        intelligenceInk: Color(hex: ShannonColorTokens.Intelligence.ink),
         intelligenceSoft: Color(hex: ShannonColorTokens.Light.intelligenceSoft),
         action: Color(hex: ShannonColorTokens.Light.action),
         onAction: Color(hex: ShannonColorTokens.Light.onAction),
@@ -122,13 +128,15 @@ struct ShannonPalette {
         dangerTint: Color(hex: ShannonColorTokens.Light.dangerTint),
         onDangerTint: Color(hex: ShannonColorTokens.Light.dangerTintText),
         success: Color(hex: ShannonColorTokens.Light.success),
-        attention: Color(hex: ShannonColorTokens.Light.attention)
+        attention: Color(hex: ShannonColorTokens.Light.attention),
+        characterBlush: Color(hex: ShannonColorTokens.Light.characterBlush)
     )
 
     static let dark = ShannonPalette(
         brandPresence: Color(hex: ShannonColorTokens.Dark.brandPresence),
         intelligenceSky: Color(hex: ShannonColorTokens.Intelligence.sky),
         intelligenceDepth: Color(hex: ShannonColorTokens.Intelligence.depth),
+        intelligenceInk: Color(hex: ShannonColorTokens.Intelligence.ink),
         intelligenceSoft: Color(hex: ShannonColorTokens.Dark.intelligenceSoft),
         action: Color(hex: ShannonColorTokens.Dark.action),
         onAction: Color(hex: ShannonColorTokens.Dark.onAction),
@@ -149,7 +157,8 @@ struct ShannonPalette {
         dangerTint: Color(hex: ShannonColorTokens.Dark.dangerTint),
         onDangerTint: Color(hex: ShannonColorTokens.Dark.dangerTintText),
         success: Color(hex: ShannonColorTokens.Dark.success),
-        attention: Color(hex: ShannonColorTokens.Dark.attention)
+        attention: Color(hex: ShannonColorTokens.Dark.attention),
+        characterBlush: Color(hex: ShannonColorTokens.Dark.characterBlush)
     )
 
     static func resolve(_ colorScheme: ColorScheme) -> ShannonPalette {

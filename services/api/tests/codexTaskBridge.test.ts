@@ -344,7 +344,8 @@ function makeFixture() {
   const projects = new Map([['fixture', { key: 'fixture', path: project }]]);
   const config: AgentHostConfig = {
     apiBaseURL: 'https://sh4nnon.com/companion', token: 'x'.repeat(32), hostId: 'test-mac', displayName: 'Test Mac',
-    stateFile: join(root, 'state.json'), codexExecutable: 'codex', projects, defaultProjectKey: 'fixture',
+    stateFile: join(root, 'state.json'), workspaceRoot: join(root, 'workspaces'),
+    codexExecutable: 'codex', projects, defaultProjectKey: 'fixture',
     deliveryMode: 'local-device',
     pollIntervalMs: 250, heartbeatIntervalMs: 5_000,
   };

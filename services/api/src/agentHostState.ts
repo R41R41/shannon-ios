@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { HostAgentEvent } from './agentTaskStore.js';
+import type { AgentReasoningEffort } from './agentTaskStore.js';
 
 export interface PersistedAgentSession {
   taskId: string;
@@ -11,6 +12,15 @@ export interface PersistedAgentSession {
   goal?: string;
   projectKey: string;
   cwd: string;
+  model?: string;
+  reasoningEffort?: AgentReasoningEffort;
+  updatedAt: string;
+}
+
+export interface PersistedAgentProject {
+  key: string;
+  path: string;
+  repositoryURL: string;
   updatedAt: string;
 }
 
@@ -18,9 +28,10 @@ interface AgentHostStateDocument {
   version: 1;
   sessions: Record<string, PersistedAgentSession>;
   outbox: HostAgentEvent[];
+  projects: Record<string, PersistedAgentProject>;
 }
 
-const emptyState = (): AgentHostStateDocument => ({ version: 1, sessions: {}, outbox: [] });
+const emptyState = (): AgentHostStateDocument => ({ version: 1, sessions: {}, outbox: [], projects: {} });
 
 export class AgentHostStateStore {
   private state: AgentHostStateDocument;
@@ -78,6 +89,15 @@ export class AgentHostStateStore {
     this.persist();
   }
 
+  registeredProjects(): readonly PersistedAgentProject[] {
+    return Object.freeze(Object.values(this.state.projects).map(project => Object.freeze({ ...project })));
+  }
+
+  saveProject(project: PersistedAgentProject): void {
+    this.state.projects[project.key] = { ...project };
+    this.persist();
+  }
+
   private read(): AgentHostStateDocument {
     if (!existsSync(this.path)) return emptyState();
     try {
@@ -89,6 +109,8 @@ export class AgentHostStateStore {
         sessions: object.sessions && typeof object.sessions === 'object' && !Array.isArray(object.sessions)
           ? object.sessions : {},
         outbox: Array.isArray(object.outbox) ? object.outbox : [],
+        projects: object.projects && typeof object.projects === 'object' && !Array.isArray(object.projects)
+          ? object.projects : {},
       };
     } catch {
       return emptyState();

@@ -29,6 +29,8 @@ extension ShannonDesktopRootView {
             showTalk: { selectDestination(.talk) },
             showWork: { selectDestination(.work) },
             showMemory: { selectDestination(.memory) },
+            showDevelopment: { selectDestination(.development) },
+            showRelease: { selectDestination(.release) },
             showSettings: { selectDestination(.settings) },
             toggleOutline: { toggleAuxiliaryPanel(.outline) },
             toggleTaskInspector: {
@@ -77,7 +79,21 @@ extension ShannonDesktopRootView {
     }
 
     var workProjection: ShannonDesktopWorkProjection {
-        ShannonDesktopWorkProjection(tasks: conversation.agentTasks)
+        ShannonDesktopWorkProjection(
+            tasks: conversation.agentTasks,
+            query: developmentTaskSearchText,
+            filter: developmentTaskFilter
+        )
+    }
+
+    var agentHostPreference: ShannonAgentRoutingPreference {
+        get { ShannonAgentRoutingPreference(rawValue: agentHostPreferenceRawValue) ?? .auto }
+        nonmutating set { agentHostPreferenceRawValue = newValue.rawValue }
+    }
+
+    var agentReasoningEffort: ShannonAgentReasoningEffort {
+        get { ShannonAgentReasoningEffort(rawValue: agentReasoningRawValue) ?? .high }
+        nonmutating set { agentReasoningRawValue = newValue.rawValue }
     }
 
     var conversationOutline: [ShannonDesktopConversationOutlineEntry] {

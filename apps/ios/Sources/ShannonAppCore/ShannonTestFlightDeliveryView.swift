@@ -2,12 +2,20 @@ import SwiftUI
 
 public struct ShannonTestFlightDeliveryView: View {
     let model: ShannonTestFlightDeliveryModel
+    let showsDismissButton: Bool
+    let requestRelease: ((ShannonAppleReleaseTarget) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(model: ShannonTestFlightDeliveryModel) {
+    public init(
+        model: ShannonTestFlightDeliveryModel,
+        showsDismissButton: Bool = true,
+        requestRelease: ((ShannonAppleReleaseTarget) -> Void)? = nil
+    ) {
         self.model = model
+        self.showsDismissButton = showsDismissButton
+        self.requestRelease = requestRelease
     }
 
     public var body: some View {
@@ -15,8 +23,14 @@ public struct ShannonTestFlightDeliveryView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                    if requestRelease != nil {
+                        releaseRequestCard(palette: palette)
+                    }
                     if let dashboard = model.dashboard {
                         currentCard(dashboard, palette: palette)
+                        if let release = dashboard.release {
+                            releaseProgress(release, palette: palette)
+                        }
                         if dashboard.history.isEmpty {
                             emptyHistory(palette)
                         } else {
@@ -58,17 +72,138 @@ public struct ShannonTestFlightDeliveryView: View {
             }
             .refreshable { await model.reload() }
             .background(palette.readingSurface)
-            .navigationTitle("アプリの更新")
+            .navigationTitle("Release Center")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完了") { dismiss() }
+                if showsDismissButton {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完了") { dismiss() }
+                    }
                 }
             }
         }
         .task { await model.reload() }
+    }
+
+    private func releaseRequestCard(palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            Label("新しい配信", systemImage: "paperplane.fill")
+                .font(.headline)
+            Text("Shannonに配信作業を依頼し、承認・結果・実機確認まで作業画面で追跡します。")
+                .font(.subheadline)
+                .foregroundStyle(palette.textSecondary)
+            Menu {
+                ForEach(ShannonAppleReleaseTarget.allCases, id: \.self) { target in
+                    Button("\(target.displayName)を配信") { requestRelease?(target) }
+                }
+            } label: {
+                Label("配信作業を依頼", systemImage: "shippingbox")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(ShannonSpacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
+        }
+    }
+
+    private func releaseProgress(_ release: ShannonReleaseProgressDTO, palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            HStack {
+                Label("Release Center", systemImage: "shippingbox")
+                    .font(.headline)
+                Spacer()
+                if let version = release.buildVersion {
+                    Text("Build \(version)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(palette.textSecondary)
+                }
+            }
+            Text("配信の7段階を、確認できた事実だけで表示します。")
+                .font(.caption)
+                .foregroundStyle(palette.textSecondary)
+            Text("自動取得はiOS Internal。Mac版は作業画面の結果で確認します。")
+                .font(.caption)
+                .foregroundStyle(palette.textSecondary)
+
+            VStack(spacing: 0) {
+                ForEach(Array(release.gates.enumerated()), id: \.element.id) { index, gate in
+                    HStack(spacing: ShannonSpacing.medium) {
+                        Image(systemName: gateSymbol(gate.status))
+                            .foregroundStyle(gateColor(gate.status, palette: palette))
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(index + 1). \(gate.key.title)")
+                                .font(.callout.weight(.semibold))
+                            Text(gateDetail(gate))
+                                .font(.caption)
+                                .foregroundStyle(palette.textSecondary)
+                        }
+                        Spacer()
+                        if gate.status == .pending && (gate.key == .install || gate.key == .smoke) {
+                            Button(gate.key == .install ? "インストール済み" : "実機確認済み") {
+                                Task { await model.confirm(gate.key) }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(model.isLoading || !canConfirm(gate.key, in: release))
+                        }
+                    }
+                    .padding(.vertical, ShannonSpacing.small)
+                    if index < release.gates.count - 1 { Divider() }
+                }
+            }
+        }
+        .padding(ShannonSpacing.large)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
+        }
+    }
+
+    private func canConfirm(_ gate: ShannonReleaseGateKeyDTO, in release: ShannonReleaseProgressDTO) -> Bool {
+        guard release.buildVersion != nil else { return false }
+        let completed = Set(release.gates.filter { $0.status == .complete }.map(\.key))
+        if gate == .install { return completed.contains(.assignment) }
+        if gate == .smoke { return completed.contains(.install) }
+        return false
+    }
+
+    private func gateDetail(_ gate: ShannonReleaseGateDTO) -> String {
+        switch gate.status {
+        case .complete: "確認済み"
+        case .attention: "確認が必要"
+        case .pending:
+            switch gate.key {
+            case .install: "TestFlightから実機へインストール"
+            case .smoke: "既存データと主要導線を実機確認"
+            default: "未確認"
+            }
+        }
+    }
+
+    private func gateSymbol(_ status: ShannonReleaseGateStatusDTO) -> String {
+        switch status {
+        case .complete: "checkmark.circle.fill"
+        case .attention: "exclamationmark.triangle.fill"
+        case .pending: "circle"
+        }
+    }
+
+    private func gateColor(_ status: ShannonReleaseGateStatusDTO, palette: ShannonPalette) -> Color {
+        switch status {
+        case .complete: palette.success
+        case .attention: palette.danger
+        case .pending: palette.textSecondary
+        }
     }
 
     private func currentCard(_ dashboard: ShannonTestFlightDeliveryDashboardDTO, palette: ShannonPalette) -> some View {

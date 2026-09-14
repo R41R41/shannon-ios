@@ -20,7 +20,8 @@
     "divider": "ShannonPalette.divider",
     "subtleSurface": "ShannonPalette.subtleSurface",
     "elevatedSurface": "ShannonPalette.elevatedSurface",
-    "intelligenceSoft": "ShannonPalette.intelligenceSoft"
+    "intelligenceSoft": "ShannonPalette.intelligenceSoft",
+    "characterBlush": "ShannonPalette.characterBlush"
   },
   "accessibility": {
     "colorIndependent": true,
@@ -30,7 +31,8 @@
     "designAuthority": "docs/DESIGN.md",
     "validator": "scripts/check-semantic-role-map.mjs",
     "screenContracts": [
-      "docs/design/screens/macos/talk.yaml"
+      "docs/design/screens/macos/talk.yaml",
+      "docs/design/screens/macos/development.yaml"
     ]
   }
 }

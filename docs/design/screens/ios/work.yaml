@@ -2,28 +2,32 @@ schema_version: 1
 screen_id: shannon-ios-work
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
-last_verified_at: 2026-09-12
-user_job: "複数の作業を、いま・これから・完了に分けて短時間で把握する"
-primary_action: "作業を選び、詳細・確認・追加指示を開く"
+last_verified_at: 2026-09-14
+user_job: "複数の作業を把握し、対象プロジェクト・実行先・モデルを選んで安全にCodexへ依頼する"
+primary_action: "開始前の作業環境を確認し、この設定で作業を始める"
 preserve:
   - "agent_tasksとイベント列を作業状態の正本とする"
   - "個別作業画面の承認、指示、一時停止、再開、中止"
 improve:
   - "作業がない時もドロワーから作業全体へ移動できる"
   - "Macと同じ意味分類を、片手で読める一列構成へ変換する"
+  - "一覧はApple標準のListとSection、開始設定はFormとPicker、作業操作はtoolbarのMenuを使う"
+  - "開始前にAether・Shannon・Voyagerを含むプロジェクト、Local優先の実行先、対応モデルと思考レベルを選ぶ"
+  - "自動実行は利用できるLocal Hostを優先し、選択した固定ホストを黙って切り替えない"
 do_not_change:
   - "ユーザー承認の境界"
   - "完了・失敗・中止を履歴から黙って削除しない"
+  - "専用の配信ゲートなしにTestFlight、ASC、実機インストールが完了したと表示しない"
 states:
   loading: "前回表示を保ったまま更新する"
   empty: "作業の開始方法を案内する"
   error: "最後に取得できた一覧を保ち、個別画面で再試行可能にする"
   offline: "キャッシュされた作業を表示し、最新とは断定しない"
   conflict: "サーバーの新しいイベント列を優先する"
-  selection: "状態名、シンボル、位置を併用する"
+  selection: "状態名、シンボル、位置を併用し、プロジェクト・実行先・モデル・思考をラベル付きPickerで示す"
 accessibility:
   dynamic_type: "タイトルと現在地を二行まで表示し、行全体をタップ可能にする"
-  voiceover: "作業名、状態、現在地、進捗、開く操作をまとめて伝える"
+  voiceover: "作業名、状態、現在地、進捗、実行先、課金経路、開く操作をまとめて伝える"
   target_size: "作業行を44ポイント以上にする"
   focus: "一覧から個別画面、戻るの順序を維持する"
   reduce_motion: "状態変化をアニメーションだけで伝えない"

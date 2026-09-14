@@ -1,5 +1,15 @@
 import Foundation
 
+public struct ShannonAgentTaskManagement: Codable, Equatable, Sendable {
+    public var isPinned: Bool
+    public var isArchived: Bool
+
+    public init(isPinned: Bool = false, isArchived: Bool = false) {
+        self.isPinned = isPinned
+        self.isArchived = isArchived
+    }
+}
+
 public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var conversationThreadID: String
@@ -8,6 +18,9 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public var goal: String
     public var hostHint: String?
     public var projectHint: String?
+    public var assignedHostID: String?
+    public var model: String?
+    public var reasoningEffort: ShannonAgentReasoningEffort?
     public var status: ShannonAgentTaskStatus
     public var summary: String
     public var currentAction: String?
@@ -16,6 +29,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public var pendingApproval: ShannonAgentApproval?
     public var changes: [ShannonAgentChangeSummary]
     public var tests: [ShannonAgentTestResult]
+    public var management: ShannonAgentTaskManagement?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -27,6 +41,9 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         goal: String,
         hostHint: String? = nil,
         projectHint: String? = nil,
+        assignedHostID: String? = nil,
+        model: String? = nil,
+        reasoningEffort: ShannonAgentReasoningEffort? = nil,
         status: ShannonAgentTaskStatus,
         summary: String,
         currentAction: String? = nil,
@@ -35,6 +52,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         pendingApproval: ShannonAgentApproval? = nil,
         changes: [ShannonAgentChangeSummary] = [],
         tests: [ShannonAgentTestResult] = [],
+        management: ShannonAgentTaskManagement? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -45,6 +63,9 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         self.goal = goal
         self.hostHint = hostHint
         self.projectHint = projectHint
+        self.assignedHostID = assignedHostID
+        self.model = model
+        self.reasoningEffort = reasoningEffort
         self.status = status
         self.summary = summary
         self.currentAction = currentAction
@@ -53,12 +74,23 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         self.pendingApproval = pendingApproval
         self.changes = changes
         self.tests = tests
+        self.management = management
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     public var completedPlanCount: Int {
         plan.filter { $0.status == .completed }.count
+    }
+
+    public var isPinned: Bool { management?.isPinned ?? false }
+    public var isArchived: Bool { management?.isArchived ?? false }
+
+    public mutating func updateManagement(isPinned: Bool? = nil, isArchived: Bool? = nil) {
+        var value = management ?? .init()
+        if let isPinned { value.isPinned = isPinned }
+        if let isArchived { value.isArchived = isArchived }
+        management = value
     }
 
     public var progressFraction: Double? {
@@ -151,6 +183,10 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
             sourceMessageID: remote.sourceMessageID.flatMap(UUID.init(uuidString:)),
             title: remote.title,
             goal: remote.goal,
+            projectHint: remote.projectHint,
+            assignedHostID: remote.assignedHostID,
+            model: remote.model,
+            reasoningEffort: remote.reasoningEffort,
             status: remote.status,
             summary: remote.summary,
             currentAction: remote.currentAction,
@@ -181,9 +217,11 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
                 ShannonAgentChangeSummary(
                     id: Self.remoteIdentifier(change.id),
                     displayName: change.displayName,
+                    path: change.path,
                     summary: change.summary,
                     additions: change.additions,
-                    deletions: change.deletions
+                    deletions: change.deletions,
+                    diffPreview: change.diffPreview
                 )
             },
             tests: remote.tests.map { test in
@@ -194,6 +232,10 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
                     detail: test.detail
                 )
             },
+            management: .init(
+                isPinned: remote.isPinned ?? false,
+                isArchived: remote.isArchived ?? false
+            ),
             createdAt: Self.remoteDate(remote.createdAt),
             updatedAt: Self.remoteDate(remote.updatedAt)
         )

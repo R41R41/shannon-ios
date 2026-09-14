@@ -10,6 +10,20 @@ export type RecordedTestFlightDistributionResult =
 export type TestFlightDeliveryStatus = RecordedTestFlightDistributionResult['status'] | 'failed';
 export type TestFlightDeliveryCondition = 'healthy' | 'waiting' | 'attention';
 export type TestFlightNotificationStatus = 'not-needed' | 'pending' | 'sent' | 'suppressed';
+export type TestFlightReleaseGateKey = 'build' | 'archive' | 'upload' | 'processing' | 'assignment' | 'install' | 'smoke';
+export type TestFlightReleaseGateStatus = 'pending' | 'complete' | 'attention';
+
+export interface TestFlightReleaseGate {
+  readonly key: TestFlightReleaseGateKey;
+  readonly status: TestFlightReleaseGateStatus;
+  readonly completedAt: string | null;
+}
+
+export interface TestFlightReleaseProgress {
+  readonly platform: 'ios';
+  readonly buildVersion: string | null;
+  readonly gates: readonly TestFlightReleaseGate[];
+}
 
 export interface TestFlightDeliveryHistoryItem {
   readonly id: string;
@@ -26,10 +40,17 @@ export interface TestFlightDeliveryDashboard {
   readonly lastCheckedAt: string | null;
   readonly activeFailureCode: string | null;
   readonly history: readonly TestFlightDeliveryHistoryItem[];
+  readonly release: TestFlightReleaseProgress;
 }
 
 export interface TestFlightDeliveryReader {
-  dashboard(limit?: number): TestFlightDeliveryDashboard;
+  dashboard(limit?: number, scopeKey?: string): TestFlightDeliveryDashboard;
+  confirmGate?(
+    scopeKey: string,
+    buildVersion: string,
+    gate: 'install' | 'smoke',
+    at?: string,
+  ): TestFlightDeliveryDashboard;
 }
 
 interface RunRow {
@@ -82,6 +103,14 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
       );
       CREATE INDEX IF NOT EXISTS testflight_failure_episodes_active
         ON testflight_failure_episodes (closed_at, last_seen_at DESC);
+
+      CREATE TABLE IF NOT EXISTS testflight_release_confirmations (
+        scope_key TEXT NOT NULL,
+        build_version TEXT NOT NULL,
+        installed_at TEXT,
+        smoke_at TEXT,
+        PRIMARY KEY (scope_key, build_version)
+      );
     `);
     this.secureFiles();
   }
@@ -150,7 +179,7 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
     return { notificationQueued, failureCode };
   }
 
-  dashboard(limit = 30): TestFlightDeliveryDashboard {
+  dashboard(limit = 30, scopeKey = 'local-owner'): TestFlightDeliveryDashboard {
     const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
     const rows = this.database.prepare(`
       SELECT run_id, status, build_version, failure_code, checked_at, notification_key
@@ -185,13 +214,62 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
     const condition: TestFlightDeliveryCondition = active
       ? 'attention'
       : !latest || latest.status === 'no-valid-build' ? 'waiting' : 'healthy';
+    const buildVersion = latestBuild?.build_version ?? null;
+    const confirmation = buildVersion ? this.database.prepare(`
+      SELECT installed_at, smoke_at FROM testflight_release_confirmations
+      WHERE scope_key = ? AND build_version = ?
+    `).get(scopeKey, buildVersion) as unknown as { installed_at: string | null; smoke_at: string | null } | undefined : undefined;
+    const distribution = buildVersion ? rows.find(row => row.build_version === buildVersion
+      && (row.status === 'distributed' || row.status === 'already-current')) : undefined;
+    const releaseCompletedAt = distribution?.checked_at ?? null;
+    const release = Object.freeze({
+      platform: 'ios' as const,
+      buildVersion,
+      gates: Object.freeze([
+        releaseGate('build', Boolean(buildVersion), releaseCompletedAt),
+        releaseGate('archive', Boolean(buildVersion), releaseCompletedAt),
+        releaseGate('upload', Boolean(buildVersion), releaseCompletedAt),
+        releaseGate('processing', Boolean(buildVersion), releaseCompletedAt),
+        releaseGate('assignment', Boolean(distribution), releaseCompletedAt, active ? 'attention' : 'pending'),
+        releaseGate('install', Boolean(confirmation?.installed_at), confirmation?.installed_at ?? null),
+        releaseGate('smoke', Boolean(confirmation?.smoke_at), confirmation?.smoke_at ?? null),
+      ]),
+    });
     return Object.freeze({
       condition,
       latestBuildVersion: latestBuild?.build_version ?? null,
       lastCheckedAt: latest?.checked_at ?? null,
       activeFailureCode: active?.failure_code ?? null,
       history: Object.freeze(history),
+      release,
     });
+  }
+
+  confirmGate(
+    scopeKey: string,
+    buildVersion: string,
+    gate: 'install' | 'smoke',
+    at = new Date().toISOString(),
+  ): TestFlightDeliveryDashboard {
+    const build = this.database.prepare(`
+      SELECT 1 AS found FROM testflight_delivery_runs
+      WHERE build_version = ? AND status IN ('distributed','already-current') LIMIT 1
+    `).get(buildVersion);
+    if (!build) throw new Error('TESTFLIGHT_BUILD_NOT_DISTRIBUTED');
+    const previous = this.database.prepare(`
+      SELECT installed_at FROM testflight_release_confirmations
+      WHERE scope_key = ? AND build_version = ?
+    `).get(scopeKey, buildVersion) as unknown as { installed_at: string | null } | undefined;
+    if (gate === 'smoke' && !previous?.installed_at) throw new Error('TESTFLIGHT_INSTALL_REQUIRED');
+    this.database.prepare(`
+      INSERT INTO testflight_release_confirmations (scope_key, build_version, installed_at, smoke_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(scope_key, build_version) DO UPDATE SET
+        installed_at = COALESCE(excluded.installed_at, installed_at),
+        smoke_at = COALESCE(excluded.smoke_at, smoke_at)
+    `).run(scopeKey, buildVersion, gate === 'install' ? at : previous?.installed_at ?? null, gate === 'smoke' ? at : null);
+    this.secureFiles();
+    return this.dashboard(30, scopeKey);
   }
 
   close(): void {
@@ -246,6 +324,15 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
       if (existsSync(candidate)) chmodSync(candidate, 0o600);
     }
   }
+}
+
+function releaseGate(
+  key: TestFlightReleaseGateKey,
+  completed: boolean,
+  completedAt: string | null,
+  incompleteStatus: TestFlightReleaseGateStatus = 'pending',
+): TestFlightReleaseGate {
+  return Object.freeze({ key, status: completed ? 'complete' : incompleteStatus, completedAt: completed ? completedAt : null });
 }
 
 export function classifyTestFlightFailure(error: unknown): string {

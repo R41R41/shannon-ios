@@ -56,22 +56,28 @@ public struct ShannonAgentApproval: Codable, Equatable, Identifiable, Sendable {
 public struct ShannonAgentChangeSummary: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var displayName: String
+    public var path: String?
     public var summary: String
     public var additions: Int
     public var deletions: Int
+    public var diffPreview: String?
 
     public init(
         id: UUID = UUID(),
         displayName: String,
+        path: String? = nil,
         summary: String,
         additions: Int = 0,
-        deletions: Int = 0
+        deletions: Int = 0,
+        diffPreview: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
+        self.path = path
         self.summary = summary
         self.additions = additions
         self.deletions = deletions
+        self.diffPreview = diffPreview
     }
 }
 

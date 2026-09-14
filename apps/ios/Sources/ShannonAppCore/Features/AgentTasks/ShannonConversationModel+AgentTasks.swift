@@ -3,6 +3,110 @@ import Observation
 
 extension ShannonConversationModel {
     @discardableResult
+    public func proposeAppleRelease(_ target: ShannonAppleReleaseTarget) -> UUID {
+        let task = ShannonAppleReleaseTaskFactory.make(
+            target: target,
+            threadID: selectedThreadId ?? "local-release",
+            sourceMessageID: messages.last(where: { $0.role == .shannon })?.id
+        )
+        upsertAgentTask(task)
+        return task.id
+    }
+
+    public func provisionAgentProject(
+        repositoryURL: String,
+        projectKey: String,
+        hostPreference: ShannonAgentRoutingPreference
+    ) async -> Bool {
+        guard !isDesignPreview, !isProvisioningAgentProject else { return false }
+        isProvisioningAgentProject = true
+        agentProjectProvisioningError = nil
+        defer { isProvisioningAgentProject = false }
+        do {
+            let createdRequests = try await client.createAgentProjectProvisioning(
+                scopeKey: scopeKey,
+                repositoryURL: repositoryURL,
+                projectKey: projectKey,
+                hostPreference: hostPreference,
+                idempotencyKey: "project-\(UUID().uuidString.lowercased())"
+            )
+            for request in createdRequests { upsertProjectProvisioning(request) }
+            let requestIDs = Set(createdRequests.map(\.id))
+            for _ in 0..<200 {
+                if Task.isCancelled { return false }
+                let currentRequests = agentProjectProvisioning.filter { requestIDs.contains($0.id) }
+                if currentRequests.contains(where: { $0.status == .ready }) {
+                    await refreshAgentWorkspace(projectHint: projectKey)
+                    return true
+                }
+                if currentRequests.count == requestIDs.count,
+                   currentRequests.allSatisfy(\.status.isTerminal) {
+                    agentProjectProvisioningError = currentRequests
+                        .compactMap(\.errorMessage)
+                        .first ?? "リポジトリを追加できませんでした。"
+                    return false
+                }
+                try await Task.sleep(for: .seconds(1.5))
+                let requests = try await client.loadAgentProjectProvisioning(scopeKey: scopeKey)
+                agentProjectProvisioning = requests
+            }
+            if agentProjectProvisioning.contains(where: {
+                requestIDs.contains($0.id) && $0.status == .ready
+            }) {
+                await refreshAgentWorkspace(projectHint: projectKey)
+                return true
+            }
+            agentProjectProvisioningError = "リポジトリの取得が続いています。更新ボタンで状態を確認できます。"
+            return false
+        } catch {
+            agentProjectProvisioningError = "リポジトリを追加できませんでした。URL、実行先、GitHub権限を確認してください。"
+            return false
+        }
+    }
+
+    public func refreshAgentProjectProvisioning() async {
+        guard !isDesignPreview else { return }
+        do {
+            agentProjectProvisioning = try await client.loadAgentProjectProvisioning(scopeKey: scopeKey)
+        } catch {
+            // Workspace remains usable while provisioning status is temporarily unavailable.
+        }
+    }
+
+    private func upsertProjectProvisioning(_ request: ShannonAgentProjectProvisioningDTO) {
+        agentProjectProvisioning.removeAll { $0.id == request.id }
+        agentProjectProvisioning.insert(request, at: 0)
+    }
+
+    public func refreshAgentWorkspace(projectHint: String? = nil) async {
+        guard !isDesignPreview else { return }
+        isLoadingAgentWorkspace = true
+        defer { isLoadingAgentWorkspace = false }
+        do {
+            agentWorkspace = try await client.loadAgentWorkspace(scopeKey: scopeKey, projectHint: projectHint)
+            agentWorkspaceError = nil
+        } catch {
+            agentWorkspaceError = "作業環境の状態を取得できませんでした。"
+        }
+    }
+
+    public func configureAgentTask(
+        _ id: UUID,
+        hostPreference: ShannonAgentRoutingPreference,
+        projectHint: String?,
+        model: String?,
+        reasoningEffort: ShannonAgentReasoningEffort?
+    ) {
+        guard var task = agentTask(id: id), task.status == .proposed else { return }
+        task.hostHint = hostPreference.rawValue
+        task.projectHint = projectHint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        task.model = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        task.reasoningEffort = reasoningEffort
+        task.updatedAt = Date()
+        upsertAgentTask(task)
+    }
+
+    @discardableResult
     public func installAgentTaskFixture(status: ShannonAgentTaskStatus = .proposed) -> UUID {
         let threadID = selectedThreadId ?? "local-preview"
         let sourceMessageID = messages.last(where: { $0.role == .shannon })?.id
@@ -215,6 +319,49 @@ extension ShannonConversationModel {
         agentTaskStore?.saveAcknowledgedTaskIDs(acknowledgedAgentTaskIDs, scopeKey: scopeKey)
     }
 
+    public func toggleAgentTaskPinned(_ id: UUID) async {
+        guard var task = agentTask(id: id), !pendingAgentTaskActionIDs.contains(id) else { return }
+        let previous = task
+        let target = !task.isPinned
+        task.updateManagement(isPinned: target)
+        task.updatedAt = Date()
+        upsertAgentTask(task)
+        guard !previewAgentTaskIDs.contains(id) && task.status != .proposed else { return }
+        pendingAgentTaskActionIDs.insert(id)
+        defer { pendingAgentTaskActionIDs.remove(id) }
+        do {
+            upsertAgentTask(try await client.updateAgentTaskMetadata(
+                scopeKey: scopeKey, taskID: id, isPinned: target, isArchived: nil
+            ))
+        } catch {
+            upsertAgentTask(previous)
+            errorMessage = "ピン留めを変更できませんでした。"
+        }
+    }
+
+    public func setAgentTaskArchived(_ id: UUID, archived: Bool) async {
+        guard var task = agentTask(id: id), !pendingAgentTaskActionIDs.contains(id) else { return }
+        guard !archived || task.status == .proposed || task.status.isTerminal else {
+            errorMessage = "進行中の作業は、完了または中止してからアーカイブできます。"
+            return
+        }
+        let previous = task
+        task.updateManagement(isArchived: archived)
+        task.updatedAt = Date()
+        upsertAgentTask(task)
+        guard !previewAgentTaskIDs.contains(id) && task.status != .proposed else { return }
+        pendingAgentTaskActionIDs.insert(id)
+        defer { pendingAgentTaskActionIDs.remove(id) }
+        do {
+            upsertAgentTask(try await client.updateAgentTaskMetadata(
+                scopeKey: scopeKey, taskID: id, isPinned: nil, isArchived: archived
+            ))
+        } catch {
+            upsertAgentTask(previous)
+            errorMessage = archived ? "作業をアーカイブできませんでした。" : "作業を戻せませんでした。"
+        }
+    }
+
     public func openAgentTaskNotification(_ id: UUID) async {
         await synchronizeAgentTasks()
         guard agentTask(id: id) != nil else { return }
@@ -265,6 +412,7 @@ extension ShannonConversationModel {
             pendingApproval: next.pendingApproval,
             changes: next.changes,
             tests: next.tests,
+            management: task.management,
             createdAt: task.createdAt,
             updatedAt: Date()
         )

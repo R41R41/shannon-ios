@@ -44,3 +44,20 @@ test('declares privacy purpose strings required by realtime voice dependencies',
   assert.match(plist, /<key>NSMicrophoneUsageDescription<\/key>/u);
   assert.match(plist, /<key>NSCameraUsageDescription<\/key>/u);
 });
+
+test('pins the first WebRTC release with official dSYMs and includes them in archives', async () => {
+  const manifest = await readFile(new URL('../apps/ios/Package.swift', import.meta.url), 'utf8');
+  const project = await readFile(
+    new URL('../apps/ios-app/ShannonApp.xcodeproj/project.pbxproj', import.meta.url),
+    'utf8',
+  );
+  const symbolScript = await readFile(new URL('./copy-webrtc-dsym.sh', import.meta.url), 'utf8');
+
+  assert.match(manifest, /WebRTC\.git", exact: "152\.0\.0"/u);
+  assert.match(project, /Include WebRTC dSYM/u);
+  assert.match(project, /copy-webrtc-dsym\.sh/u);
+  assert.match(project, /Shannon-WebRTC-M152-dSYM\.zip/u);
+  assert.match(symbolScript, /WebRTC-M152-dSYM\.zip/u);
+  assert.match(symbolScript, /7c99e7cc12b59e4db357581271b412e9ce031ce21a23590a909f7ae1f0b20f87/u);
+  assert.match(symbolScript, /dwarfdump --uuid/u);
+});

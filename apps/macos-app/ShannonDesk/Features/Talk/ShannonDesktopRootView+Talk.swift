@@ -13,6 +13,14 @@ extension ShannonDesktopRootView {
             workOverview
         case .memory:
             ShannonMemoryView(model: memory, showsDismissButton: false)
+        case .development:
+            developmentView
+        case .release:
+            ShannonTestFlightDeliveryView(
+                model: release,
+                showsDismissButton: false,
+                requestRelease: requestAppleRelease
+            )
         case .settings:
             settingsView
         }

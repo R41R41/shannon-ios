@@ -1,6 +1,7 @@
 import type { PersistedAgentSession } from './agentHostState.js';
 import { resolveAgentProject } from './agentHostConfig.js';
 import type { ClaimedAgentCommand } from './agentTaskStore.js';
+import type { AgentReasoningEffort } from './agentTaskStore.js';
 import type { CodexTaskBridgeOptions } from './codexTaskBridge.js';
 import { CodexTaskEventPublisher } from './codexTaskEvents.js';
 import { CodexTaskRuntimeRegistry, type RuntimeTask } from './codexTaskRuntime.js';
@@ -57,7 +58,9 @@ export class CodexTaskCommandController {
     }
 
     const project = resolveAgentProject(this.options.config, command.payload.projectHint);
-    const threadParams = codexThreadParams(project, this.options.config);
+    const model = stringValue(command.payload.model);
+    const reasoningEffort = parsedEffort(command.payload.reasoningEffort);
+    const threadParams = codexThreadParams(project, this.options.config, { model, reasoningEffort });
     const threadResult = await this.options.client.request<CodexThreadResult>('thread/start', threadParams);
     const threadId = stringValue(threadResult.thread?.id);
     if (!threadId) throw new Error('Codexが作業スレッドを作成できませんでした。');
@@ -69,6 +72,8 @@ export class CodexTaskCommandController {
       goal: stringValue(command.payload.goal),
       projectKey: project.key,
       cwd: project.path,
+      ...(model ? { model } : {}),
+      ...(reasoningEffort ? { reasoningEffort } : {}),
       updatedAt: this.now(),
     };
     this.options.state.saveSession(session);
@@ -179,7 +184,11 @@ export class CodexTaskCommandController {
       // A Codex approval is tied to the live app-server request. Reusing a thread whose
       // approval request disappeared can leave an unmatched tool call in its history,
       // so recover the durable Shannon task in a clean Codex thread instead.
-      const replacement = await this.options.client.request<CodexThreadResult>('thread/start', codexThreadParams(project, this.options.config));
+      const replacement = await this.options.client.request<CodexThreadResult>('thread/start', codexThreadParams(
+        project,
+        this.options.config,
+        { model: session.model, reasoningEffort: session.reasoningEffort },
+      ));
       const replacementThreadID = stringValue(replacement.thread?.id);
       if (!replacementThreadID) throw new Error('Codexが復旧用スレッドを作成できませんでした。');
       const recoverySession: PersistedAgentSession = {
@@ -203,7 +212,10 @@ export class CodexTaskCommandController {
     }
     const result = await this.options.client.request<CodexThreadResult>('thread/resume', {
       threadId: session.threadId,
-      ...codexThreadParams(project, this.options.config),
+      ...codexThreadParams(project, this.options.config, {
+        model: session.model,
+        reasoningEffort: session.reasoningEffort,
+      }),
       excludeTurns: false,
     });
     const runtime = this.runtimes.register(session, project);
@@ -238,10 +250,18 @@ export class CodexTaskCommandController {
       threadId: runtime.threadId,
       input: [{ type: 'text', text }],
       turnTrigger: 'shannon_ios',
-      ...(this.options.config.codexEffort ? { effort: this.options.config.codexEffort } : {}),
+      ...(runtime.reasoningEffort ?? this.options.config.codexEffort
+        ? { effort: runtime.reasoningEffort ?? this.options.config.codexEffort }
+        : {}),
     });
     const turnId = stringValue(result.turn?.id);
     if (!turnId) throw new Error('Codexが作業ターンを開始できませんでした。');
     return turnId;
   }
+}
+
+function parsedEffort(value: unknown): AgentReasoningEffort | undefined {
+  return value === 'low' || value === 'medium' || value === 'high'
+    || value === 'xhigh' || value === 'max' || value === 'ultra'
+    ? value : undefined;
 }
