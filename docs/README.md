@@ -5,6 +5,7 @@
 - Product policy and canonical index: [`../README.md`](../README.md)
 - Architecture: [`architecture.md`](architecture.md)
 - Design and evidence: [`DESIGN.md`](DESIGN.md)
+- Current implementation plan and acceptance progress: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 - Release and recovery: [`self-improvement-runbook.md`](self-improvement-runbook.md)
 - Branch and worktree lifecycle: [`BRANCHING.md`](BRANCHING.md)
 - Verification entrypoint: [`../scripts/verify.sh`](../scripts/verify.sh)

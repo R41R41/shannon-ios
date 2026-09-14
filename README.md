@@ -9,6 +9,7 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 | Product | このREADMEの[方針](#方針) |
 | Architecture | [`docs/architecture.md`](docs/architecture.md) |
 | Design | [`docs/DESIGN.md`](docs/DESIGN.md) |
+| Implementation plan | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) |
 | Release | [`docs/self-improvement-runbook.md`](docs/self-improvement-runbook.md) |
 | Branching | [`docs/BRANCHING.md`](docs/BRANCHING.md) |
 | Verification | [`scripts/verify.sh`](scripts/verify.sh)（`fast` / `all`） |

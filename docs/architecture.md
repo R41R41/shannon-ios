@@ -210,7 +210,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | World and initiative | `world_sources`, `subscriptions`, `world_items`, `observations`, `daily_mind`, `initiative_messages`, `initiative_loop_runs` |
 | Notifications | `push_registrations`, `push_delivery_state` |
 | TestFlight operations | `testflight_delivery_runs`, `testflight_failure_episodes` |
-| Agent work | `agent_tasks`, `agent_task_events`, `agent_commands`, `agent_hosts` |
+| Agent work | `agent_tasks`, `agent_task_events`, `agent_task_commands`, `agent_hosts`, `agent_project_requests` |
 | Explicit organization | `organize_sessions`, `organize_items`, `organize_thread_cursors` |
 | Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Realtime voice allowance | `realtime_voice_session_reservations` |
