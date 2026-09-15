@@ -30,6 +30,8 @@ run_architecture() {
 
 run_fast() {
   "$node_bin" scripts/check-harness.mjs
+  "$node_bin" --test scripts/check-xcode-workspace.test.mjs
+  "$node_bin" scripts/check-xcode-workspace.mjs
   "$node_bin" scripts/check-semantic-role-map.mjs
   run_architecture
 }
@@ -39,47 +41,19 @@ run_ios() {
 }
 
 run_app() {
-  xcodebuild \
-    -workspace Shannon.xcworkspace \
-    -scheme ShannonApp \
-    -configuration Debug \
-    -destination 'generic/platform=iOS' \
-    -derivedDataPath .build/SelfImprovementDerivedData \
-    CODE_SIGNING_ALLOWED=NO \
-    build
+  scripts/xcode.sh ios-debug
 }
 
 run_release_app() {
-  xcodebuild \
-    -workspace Shannon.xcworkspace \
-    -scheme ShannonApp \
-    -configuration Release \
-    -destination 'generic/platform=iOS' \
-    -derivedDataPath .build/ReleaseRunnerDerivedData \
-    CODE_SIGNING_ALLOWED=NO \
-    build
+  scripts/xcode.sh ios-release
 }
 
 run_macos_app() {
-  xcodebuild \
-    -workspace Shannon.xcworkspace \
-    -scheme ShannonDesk \
-    -configuration Debug \
-    -destination 'platform=macOS' \
-    -derivedDataPath .build/ShannonDeskDerivedData \
-    CODE_SIGNING_ALLOWED=NO \
-    test
+  scripts/xcode.sh mac-debug
 }
 
 run_release_macos_app() {
-  xcodebuild \
-    -workspace Shannon.xcworkspace \
-    -scheme ShannonDesk \
-    -configuration Release \
-    -destination 'generic/platform=macOS' \
-    -derivedDataPath .build/ShannonDeskReleaseDerivedData \
-    CODE_SIGNING_ALLOWED=NO \
-    build
+  scripts/xcode.sh mac-release
 }
 
 run_release_runner() {

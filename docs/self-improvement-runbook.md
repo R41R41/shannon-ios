@@ -33,12 +33,13 @@ If an older project window is already open, close it before opening the workspac
 Package resolution should be performed against the workspace:
 
 ```sh
-xcodebuild -workspace Shannon.xcworkspace -resolvePackageDependencies -scheme ShannonApp
-xcodebuild -workspace Shannon.xcworkspace -resolvePackageDependencies -scheme ShannonDesk
+scripts/xcode.sh resolve-ios
+scripts/xcode.sh resolve-mac
 ```
 
 Do not delete package caches as a routine fix. The repository verifier builds both
-apps through the canonical workspace and the fast harness fails if that invariant is
+apps through the canonical workspace. `scripts/xcode.sh` owns all Xcode command-line
+profiles, while the focused workspace guard and its tests fail if that invariant is
 removed.
 
 Use the single repository entry point:
