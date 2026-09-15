@@ -64,6 +64,29 @@ final class ShannonAppIconTests: XCTestCase {
         }
     }
 
+#if canImport(AppKit)
+    func testEveryMacApplicationIconHasTransparentCorners() throws {
+        for choice in ShannonAppIconChoice.selectableChoices {
+            let image = try XCTUnwrap(ShannonAppIconAssets.macApplicationIcon(for: choice.previewAssetName))
+            let representation = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            XCTAssertEqual(
+                try XCTUnwrap(representation.colorAt(x: 0, y: 0)).alphaComponent,
+                0,
+                accuracy: 0.01,
+                "\(choice.levelName) must keep its Dock-icon corners transparent"
+            )
+            XCTAssertGreaterThan(
+                try XCTUnwrap(representation.colorAt(
+                    x: representation.pixelsWide / 2,
+                    y: representation.pixelsHigh / 2
+                )).alphaComponent,
+                0.99,
+                "\(choice.levelName) must keep its visible center opaque"
+            )
+        }
+    }
+#endif
+
     private func assertPreviewCanBeDecoded(
         _ assetName: String,
         file: StaticString = #filePath,

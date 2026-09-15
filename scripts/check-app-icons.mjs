@@ -39,6 +39,10 @@ function pngSize(buffer) {
   return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
+function pngHasAlpha(buffer) {
+  return buffer.length >= 26 && [4, 6].includes(buffer[25]);
+}
+
 async function validateCatalog(directory, expectedTree, expectedIdiom) {
   const failures = [];
   const contents = JSON.parse(await readFile(resolve(directory, 'Contents.json'), 'utf8'));
@@ -53,6 +57,9 @@ async function validateCatalog(directory, expectedTree, expectedIdiom) {
       failures.push(`${directory}/${image.filename} must be ${expectedPixels}x${expectedPixels}`);
     }
     if (image.idiom !== expectedIdiom) failures.push(`${directory}/${image.filename} has the wrong idiom`);
+    if (expectedIdiom === 'mac' && !pngHasAlpha(buffer)) {
+      failures.push(`${directory}/${image.filename} must preserve transparent macOS icon corners`);
+    }
   }
   const actualTree = await treeDigest(directory);
   if (actualTree !== expectedTree) failures.push(`${directory} differs from the approved source package`);
@@ -65,6 +72,10 @@ async function main() {
   const levels = Object.keys(manifest.variants);
   if (levels.join(',') !== 'L02,L06,L10' || manifest.defaultVariant !== 'L06') {
     failures.push('icon manifest must expose only L02, L06, and L10 with L06 as default');
+  }
+  if (manifest.macosRendering?.alphaMask !== 'roundedRectangle'
+      || manifest.macosRendering?.cornerRadiusRatio !== 0.223) {
+    failures.push('macOS icons must use the reproducible rounded-rectangle alpha mask');
   }
 
   for (const [platform, directory] of [['iOS', iosAssets], ['macOS', macAssets]]) {

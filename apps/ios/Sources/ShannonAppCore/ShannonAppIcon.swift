@@ -79,6 +79,37 @@ enum ShannonAppIconAssets {
         guard let url = url(for: assetName) else { return nil }
         return NSImage(contentsOf: url)
     }
+
+    static func macApplicationIcon(for assetName: String) -> NSImage? {
+        guard
+            let source = nsImage(for: assetName),
+            let sourceImage = source.cgImage(forProposedRect: nil, context: nil, hints: nil),
+            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+            let context = CGContext(
+                data: nil,
+                width: sourceImage.width,
+                height: sourceImage.height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
+
+        let bounds = CGRect(x: 0, y: 0, width: sourceImage.width, height: sourceImage.height)
+        let radius = CGFloat(sourceImage.width) * 0.223
+        context.addPath(CGPath(
+            roundedRect: bounds,
+            cornerWidth: radius,
+            cornerHeight: radius,
+            transform: nil
+        ))
+        context.clip()
+        context.interpolationQuality = .high
+        context.draw(sourceImage, in: bounds)
+        guard let maskedImage = context.makeImage() else { return nil }
+        return NSImage(cgImage: maskedImage, size: NSSize(width: sourceImage.width, height: sourceImage.height))
+    }
 #endif
 }
 
@@ -177,6 +208,13 @@ public final class ShannonAppIconModel {
 #endif
     }
 
+#if canImport(AppKit)
+    public func restoreMacApplicationIconBeforeWindowCreation() {
+        guard selectedChoice != .defaultChoice else { return }
+        applyMacApplicationIcon(selectedChoice)
+    }
+#endif
+
     private func apply(choice: ShannonAppIconChoice) async {
 #if canImport(UIKit)
         guard UIApplication.shared.supportsAlternateIcons else {
@@ -204,14 +242,20 @@ public final class ShannonAppIconModel {
         }
         activeChoice = choice
 #elseif canImport(AppKit)
-        guard let image = ShannonAppIconAssets.nsImage(for: choice.previewAssetName) else {
+        applyMacApplicationIcon(choice)
+#else
+        activeChoice = choice
+#endif
+    }
+
+#if canImport(AppKit)
+    private func applyMacApplicationIcon(_ choice: ShannonAppIconChoice) {
+        guard let image = ShannonAppIconAssets.macApplicationIcon(for: choice.previewAssetName) else {
             errorMessage = "アイコン画像を読み込めませんでした。"
             return
         }
         NSApplication.shared.applicationIconImage = image
         activeChoice = choice
-#else
-        activeChoice = choice
-#endif
     }
+#endif
 }

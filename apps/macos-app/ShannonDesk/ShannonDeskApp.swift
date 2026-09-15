@@ -44,7 +44,9 @@ struct ShannonDeskApp: App {
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
         _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
         _releaseModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
-        _appIconModel = State(initialValue: ShannonAppIconModel())
+        let appIconModel = ShannonAppIconModel()
+        appIconModel.restoreMacApplicationIconBeforeWindowCreation()
+        _appIconModel = State(initialValue: appIconModel)
     }
 
     var body: some Scene {
@@ -65,12 +67,6 @@ struct ShannonDeskApp: App {
                         await connectionModel.verifyConnection()
                     }
                 }
-            }
-            .task {
-                await appIconModel.activate(
-                    for: conversationModel.currentExpression,
-                    appearance: appearanceRawValue == ShannonAppearanceMode.dark.rawValue ? .dark : .light
-                )
             }
         }
         .defaultSize(width: previewWindowSize.width, height: previewWindowSize.height)

@@ -39,6 +39,7 @@ const requiredFiles = [
   'scripts/xcode.sh',
   'config/shannon-app-icons.json',
   'scripts/check-app-icons.mjs',
+  'scripts/apply-macos-icon-mask.swift',
   'scripts/check-semantic-role-map.mjs',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.request.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.result.json',
