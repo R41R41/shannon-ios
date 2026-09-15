@@ -5,117 +5,41 @@ import UIKit
 import AppKit
 #endif
 
-struct ShannonAppIconSettingsView: View {
+public struct ShannonAppIconSettingsView: View {
     let model: ShannonAppIconModel
-    let expression: ShannonExpressionDTO
 
-    @Environment(\.dismiss) var dismiss
-    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
+    public init(model: ShannonAppIconModel) {
+        self.model = model
+    }
+
+    public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                    HStack(spacing: ShannonSpacing.large) {
-                        ShannonAppIconPreview(
-                            assetName: previewAssetName(for: model.activeChoice ?? appearanceChoice),
-                            size: 76,
-                            accessibilityLabel: "現在のアイコン"
-                        )
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("現在のアイコン")
-                                .font(.caption)
-                                .foregroundStyle(palette.textSecondary)
-                            Text(model.activeTitle)
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(palette.textPrimary)
-                            Text(model.mode.japaneseName)
-                                .font(.subheadline)
-                                .foregroundStyle(palette.textSecondary)
+                    currentSelection(palette)
+
+                    VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                        Text("アイコンを選ぶ")
+                            .font(.headline)
+                            .foregroundStyle(palette.textPrimary)
+                        Text("L06が標準です。選択はこの端末に保存されます。")
+                            .font(.subheadline)
+                            .foregroundStyle(palette.textSecondary)
+                    }
+
+                    LazyVGrid(columns: columns, spacing: ShannonSpacing.medium) {
+                        ForEach(ShannonAppIconChoice.selectableChoices) { choice in
+                            choiceButton(choice, palette: palette)
                         }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(ShannonSpacing.large)
-                    .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: ShannonShape.large)
-                            .stroke(palette.divider, lineWidth: 0.7)
-                    }
-
-                    Text("変更方法")
-                        .font(.headline)
-                        .foregroundStyle(palette.textPrimary)
-
-                    VStack(spacing: ShannonSpacing.small) {
-                        ForEach(ShannonAppIconMode.allCases) { mode in
-                            Button {
-                                Task {
-                                    await model.selectMode(
-                                        mode,
-                                        expression: expression,
-                                        appearance: iconAppearance
-                                    )
-                                }
-                            } label: {
-                                HStack(spacing: ShannonSpacing.medium) {
-                                    modePreview(for: mode)
-
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(mode.japaneseName)
-                                            .font(.body.weight(.semibold))
-                                        Text(modeDetail(for: mode))
-                                            .font(.caption)
-                                            .foregroundStyle(palette.textSecondary)
-                                            .multilineTextAlignment(.leading)
-                                    }
-                                    .foregroundStyle(palette.textPrimary)
-
-                                    Spacer(minLength: ShannonSpacing.small)
-
-                                    Image(systemName: model.mode == mode ? "checkmark.circle.fill" : "circle")
-                                        .font(.title3)
-                                        .foregroundStyle(
-                                            model.mode == mode
-                                                ? palette.action
-                                                : palette.divider
-                                        )
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-                                .padding(.horizontal, ShannonSpacing.medium)
-                                .padding(.vertical, ShannonSpacing.small)
-                                .background(
-                                    model.mode == mode
-                                        ? palette.userMessage
-                                        : palette.canvas,
-                                    in: RoundedRectangle(cornerRadius: ShannonShape.large)
-                                )
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: ShannonShape.large)
-                                        .stroke(
-                                            model.mode == mode
-                                                ? palette.action
-                                                : palette.divider,
-                                            lineWidth: model.mode == mode ? 2 : 0.7
-                                        )
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model.isUpdating)
-                        }
-                    }
-
-                    if model.mode == .manual {
-                        iconChoiceGrid(
-                            title: "アイコン",
-                            choices: ShannonAppIconChoice.manualChoices,
-                            palette: palette
-                        )
                     }
 
                     if model.isUpdating {
-                        ProgressView()
+                        ProgressView("アイコンを変更中")
                             .frame(maxWidth: .infinity)
                     }
 
@@ -141,144 +65,93 @@ struct ShannonAppIconSettingsView: View {
                 }
             }
         }
+        .frame(minWidth: 360, idealWidth: 560, minHeight: 420, idealHeight: 560)
     }
 
-    @ViewBuilder
-    func modePreview(for mode: ShannonAppIconMode) -> some View {
-        switch mode {
-        case .automatic:
-            ZStack(alignment: .leading) {
-                ForEach(Array(automaticPreviewChoices.enumerated()), id: \.element.id) { index, choice in
+    private func currentSelection(_ palette: ShannonPalette) -> some View {
+        HStack(spacing: ShannonSpacing.large) {
+            ShannonAppIconPreview(
+                assetName: model.activeChoice.previewAssetName,
+                size: 76,
+                accessibilityLabel: "現在のアプリアイコン"
+            )
+            VStack(alignment: .leading, spacing: 3) {
+                Text("現在のアイコン")
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                Text(model.activeTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                if model.activeChoice == .defaultChoice {
+                    Text("標準・おすすめ")
+                        .font(.subheadline)
+                        .foregroundStyle(palette.action)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(ShannonSpacing.large)
+        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
+        .overlay {
+            RoundedRectangle(cornerRadius: ShannonShape.large)
+                .stroke(palette.divider, lineWidth: 0.7)
+        }
+    }
+
+    private func choiceButton(_ choice: ShannonAppIconChoice, palette: ShannonPalette) -> some View {
+        let isSelected = model.selectedChoice == choice
+
+        return Button {
+            Task { await model.select(choice) }
+        } label: {
+            VStack(spacing: ShannonSpacing.small) {
+                ZStack(alignment: .topTrailing) {
                     ShannonAppIconPreview(
                         assetName: choice.previewAssetName,
-                        size: 42,
-                        accessibilityLabel: "\(choice.japaneseName)のアイコン"
+                        size: 84,
+                        accessibilityLabel: "\(choice.levelName) \(choice.japaneseName)のアイコン"
                     )
-                    .offset(x: CGFloat(index) * 11)
-                    .zIndex(Double(automaticPreviewChoices.count - index))
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(palette.action)
+                            .background(.background, in: Circle())
+                            .offset(x: 5, y: -5)
+                    }
                 }
+                Text(choice.levelName)
+                    .font(.headline.monospaced())
+                Text(choice.japaneseName)
+                    .font(.callout.weight(.semibold))
+                Text(choice.detail)
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
-            .frame(width: 66, height: 56, alignment: .leading)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("時刻と感情で変わるアイコン")
-        case .appearance:
-            ZStack(alignment: .leading) {
-                ShannonAppIconPreview(
-                    assetName: ShannonAppIconChoice.light.previewAssetName,
-                    size: 48,
-                    accessibilityLabel: "ライトアイコン"
-                )
-                ShannonAppIconPreview(
-                    assetName: ShannonAppIconChoice.dark.previewAssetName,
-                    size: 48,
-                    accessibilityLabel: "ダークアイコン"
-                )
-                .offset(x: 18)
-            }
-            .frame(width: 66, height: 56, alignment: .leading)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("アプリのライト・ダークモードに連動するアイコン")
-        case .manual:
-            ShannonAppIconPreview(
-                assetName: previewAssetName(for: model.manualChoice),
-                size: 56,
-                accessibilityLabel: "選択中の\(model.manualChoice.japaneseName)アイコン"
-            )
-        }
-    }
-
-    var automaticPreviewChoices: [ShannonAppIconChoice] {
-        let preferred = model.mode == .automatic
-            ? model.activeChoice ?? ShannonAppIconChoice.matching(expression)
-            : ShannonAppIconChoice.matching(expression)
-        return [preferred, .sleepy, .sleeping].reduce(into: []) { choices, choice in
-            if !choices.contains(choice) {
-                choices.append(choice)
-            }
-        }
-    }
-
-    func modeDetail(for mode: ShannonAppIconMode) -> String {
-        switch mode {
-        case .automatic:
-            "時刻とシャノンの感情で変化"
-        case .appearance:
-            "アプリ内のライト・ダーク表示と一緒に切替"
-        case .manual:
-            "\(model.manualChoice.japaneseName)を使用"
-        }
-    }
-
-    @ViewBuilder
-    func iconChoiceGrid(
-        title: String,
-        choices: [ShannonAppIconChoice],
-        palette: ShannonPalette
-    ) -> some View {
-        Text(title)
-            .font(.headline)
             .foregroundStyle(palette.textPrimary)
-
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: ShannonSpacing.small),
-                GridItem(.flexible(), spacing: ShannonSpacing.small),
-            ],
-            spacing: ShannonSpacing.small
-        ) {
-            ForEach(choices) { choice in
-                Button {
-                    Task { await model.selectManualChoice(choice) }
-                } label: {
-                    VStack(spacing: ShannonSpacing.small) {
-                        ShannonAppIconPreview(
-                            assetName: previewAssetName(for: choice),
-                            size: 72,
-                            accessibilityLabel: "\(choice.japaneseName)のアイコン"
-                        )
-                        Text(choice.japaneseName)
-                            .font(.callout.weight(.semibold))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                    }
-                    .foregroundStyle(
-                        model.manualChoice == choice
-                            ? palette.onUserMessage
-                            : palette.textPrimary
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 122)
-                    .background(
-                        model.manualChoice == choice
-                            ? palette.userMessage
-                            : palette.canvas,
-                        in: RoundedRectangle(cornerRadius: ShannonShape.large)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: ShannonShape.large)
-                            .stroke(
-                                model.manualChoice == choice
-                                    ? palette.action
-                                    : palette.divider,
-                                lineWidth: model.manualChoice == choice ? 2 : 0.7
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(model.isUpdating)
+            .frame(maxWidth: .infinity, minHeight: 168)
+            .padding(ShannonSpacing.small)
+            .background(
+                isSelected ? palette.userMessage : palette.canvas,
+                in: RoundedRectangle(cornerRadius: ShannonShape.large)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: ShannonShape.large)
+                    .stroke(isSelected ? palette.action : palette.divider, lineWidth: isSelected ? 2 : 0.7)
             }
         }
+        .buttonStyle(.plain)
+        .disabled(model.isUpdating)
+        .accessibilityValue(isSelected ? "選択中" : "未選択")
     }
 
-    func previewAssetName(for choice: ShannonAppIconChoice) -> String {
-        choice.previewAssetName
-    }
-
-    var iconAppearance: ShannonAppIconAppearance {
-        colorScheme == .dark ? .dark : .light
-    }
-
-    var appearanceChoice: ShannonAppIconChoice {
-        iconAppearance.choice
+    private var columns: [GridItem] {
+#if os(macOS)
+        Array(repeating: GridItem(.flexible(), spacing: ShannonSpacing.medium), count: 3)
+#else
+        [GridItem(.flexible(), spacing: ShannonSpacing.small), GridItem(.flexible(), spacing: ShannonSpacing.small)]
+#endif
     }
 }
 
@@ -301,7 +174,7 @@ struct ShannonAppIconPreview: View {
             .accessibilityLabel(accessibilityLabel)
     }
 
-    var previewImage: Image {
+    private var previewImage: Image {
 #if canImport(UIKit)
         if let image = ShannonAppIconAssets.uiImage(for: assetName) {
             return Image(uiImage: image)

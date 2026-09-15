@@ -61,4 +61,7 @@ Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/
 [`docs/design/screens/ios/talk.yaml`](design/screens/ios/talk.yaml), and
 [`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml). The Mac development workspace is governed by
 [`docs/design/screens/macos/development.yaml`](design/screens/macos/development.yaml).
+App naming and the three-level icon selector are governed by
+[`docs/design/screens/ios/settings.yaml`](design/screens/ios/settings.yaml) and
+[`docs/design/screens/macos/settings.yaml`](design/screens/macos/settings.yaml).
 The app-owned shared-role mapping is [`docs/design/semantic-role-map.v1.json`](design/semantic-role-map.v1.json) and is checked deterministically by `scripts/check-semantic-role-map.mjs`.

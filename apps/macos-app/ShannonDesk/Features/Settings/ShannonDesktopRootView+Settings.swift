@@ -14,6 +14,11 @@ extension ShannonDesktopRootView {
                     }
                 }
                 .pickerStyle(.segmented)
+
+                LabeledContent("アプリアイコン", value: appIcon.activeTitle)
+                Button("アプリアイコンを選ぶ") {
+                    showsAppIconSettings = true
+                }
             }
 
             Section("接続") {

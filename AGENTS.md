@@ -16,7 +16,7 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 
 ## Product invariants
 
-- The app name is `Shannon`; the character's Japanese display name is `シャノン`.
+- Keep the internal product, target, and scheme names as `ShannonApp` / `ShannonDesk`; the user-facing app and character display name is `シャノン`.
 - Ordinary chat must not wait for emotion updates, memory extraction, sleep consolidation, web exploration, push delivery, or self-improvement work.
 - v1 uses a fixed LLM. Personality, emotion, interests, user knowledge, recalled memories, and current task state are prompt/shared-state inputs. Do not introduce per-user fine-tuning or prediction-error training.
 - Aether data enters Shannon only through the bounded projection. Shannon writes suggestions to Aether's proposal inbox; it does not silently rewrite Aether.

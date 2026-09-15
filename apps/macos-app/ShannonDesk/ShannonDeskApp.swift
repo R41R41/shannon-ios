@@ -10,6 +10,7 @@ struct ShannonDeskApp: App {
     @State private var voiceIdentityModel: ShannonVoiceIdentityModel
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var releaseModel: ShannonTestFlightDeliveryModel
+    @State private var appIconModel: ShannonAppIconModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -43,6 +44,7 @@ struct ShannonDeskApp: App {
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
         _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
         _releaseModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
+        _appIconModel = State(initialValue: ShannonAppIconModel())
     }
 
     var body: some Scene {
@@ -53,7 +55,8 @@ struct ShannonDeskApp: App {
                 memory: memoryModel,
                 voiceIdentity: voiceIdentityModel,
                 worldSubscriptions: worldSubscriptionModel,
-                release: releaseModel
+                release: releaseModel,
+                appIcon: appIconModel
             )
             .preferredColorScheme(preferredColorScheme)
             .onOpenURL { url in
@@ -62,6 +65,12 @@ struct ShannonDeskApp: App {
                         await connectionModel.verifyConnection()
                     }
                 }
+            }
+            .task {
+                await appIconModel.activate(
+                    for: conversationModel.currentExpression,
+                    appearance: appearanceRawValue == ShannonAppearanceMode.dark.rawValue ? .dark : .light
+                )
             }
         }
         .defaultSize(width: 1220, height: 790)
@@ -75,7 +84,8 @@ struct ShannonDeskApp: App {
                 connection: connectionModel,
                 appearanceRawValue: $appearanceRawValue,
                 voiceIdentity: voiceIdentityModel,
-                worldSubscriptions: worldSubscriptionModel
+                worldSubscriptions: worldSubscriptionModel,
+                appIcon: appIconModel
             )
         }
     }
@@ -169,7 +179,9 @@ private struct ShannonDesktopSettingsScene: View {
     @Binding var appearanceRawValue: String
     let voiceIdentity: ShannonVoiceIdentityModel
     let worldSubscriptions: ShannonWorldSubscriptionModel
+    let appIcon: ShannonAppIconModel
     @State private var showsWorldSubscriptions = false
+    @State private var showsAppIconSettings = false
 
     var body: some View {
         Form {
@@ -183,6 +195,9 @@ private struct ShannonDesktopSettingsScene: View {
             ShannonDesktopVoiceIdentitySettings(model: voiceIdentity)
             Button("情報源（\(worldSubscriptions.summary)）") {
                 showsWorldSubscriptions = true
+            }
+            Button("アプリアイコン（\(appIcon.activeTitle)）") {
+                showsAppIconSettings = true
             }
             if connection.isConnected {
                 Button("接続を確認") {
@@ -200,6 +215,9 @@ private struct ShannonDesktopSettingsScene: View {
         .sheet(isPresented: $showsWorldSubscriptions) {
             ShannonWorldSubscriptionView(model: worldSubscriptions)
                 .frame(minWidth: 560, minHeight: 560)
+        }
+        .sheet(isPresented: $showsAppIconSettings) {
+            ShannonAppIconSettingsView(model: appIcon)
         }
     }
 }

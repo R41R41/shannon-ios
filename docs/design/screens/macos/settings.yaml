@@ -1,0 +1,32 @@
+schema_version: 1
+screen_id: shannon-macos-settings
+platform: macos
+baseline_commit: a392bc582ce9644889296297a42073e2bdd1ca67
+last_verified_at: 2026-09-15
+user_job: "Macの設定からシャノンの表示とDockアイコンを選ぶ"
+primary_action: "L02、L06、L10から実行中のDockアイコンを選ぶ"
+preserve:
+  - "外観、接続、音声、情報源の既存設定"
+  - "L06をインストール直後とFinder表示の標準アイコンにする"
+improve:
+  - "アプリ内設定と標準Settings Sceneの両方から同じ選択画面を開く"
+  - "実際の3候補を画像、レベル、説明と選択状態で示す"
+do_not_change:
+  - "Bundle ID、署名、URL scheme、CloudKit、保存データの識別子"
+states:
+  loading: "切替中は進行表示を出し、重複操作を防ぐ"
+  empty: "該当なし。3候補を常に表示する"
+  error: "現在の選択を保ち、画像読込失敗を示す"
+  offline: "アイコン切替は端末内で完結する"
+  conflict: "保存済みレベルを正として起動時にDockへ再適用する"
+  selection: "選択中をチェック、枠、読み上げで示す"
+accessibility:
+  dynamic_type: "説明が切れないよう設定シートをスクロール可能にする"
+  voiceover: "候補名、レベル、選択状態を読み上げる"
+  target_size: "候補カード全体を十分な操作領域にする"
+  focus: "シートを閉じると呼び出し元の設定へ戻る"
+  reduce_motion: "Dock変更の完了を動きだけで表現しない"
+evidence:
+  current: []
+  approved: []
+  privacy: "設定画面の証跡には実会話や認証情報を含めない"

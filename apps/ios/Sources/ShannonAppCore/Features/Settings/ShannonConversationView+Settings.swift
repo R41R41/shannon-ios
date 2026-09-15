@@ -28,7 +28,7 @@ extension ShannonConversationView {
                 Section("表示") {
                     settingsButton(
                         title: "アプリアイコン",
-                        detail: "\(appIconModel.mode.japaneseName)・\(appIconModel.activeTitle)",
+                        detail: appIconModel.activeTitle,
                         symbol: "app.dashed"
                     ) { showsAppIconSettings = true }
                     settingsButton(
@@ -96,10 +96,7 @@ extension ShannonConversationView {
             }
         }
         .sheet(isPresented: $showsAppIconSettings) {
-            ShannonAppIconSettingsView(
-                model: appIconModel,
-                expression: model.currentExpression
-            )
+            ShannonAppIconSettingsView(model: appIconModel)
         }
         .sheet(isPresented: $showsAppearanceSettings) {
             ShannonAppearanceSettingsView(appearanceModeRawValue: $appearanceModeRawValue)

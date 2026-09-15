@@ -10,6 +10,7 @@ public struct ShannonDesktopRootView: View {
     let voiceIdentity: ShannonVoiceIdentityModel
     let worldSubscriptions: ShannonWorldSubscriptionModel
     let release: ShannonTestFlightDeliveryModel
+    let appIcon: ShannonAppIconModel
 
     @SceneStorage("shannon.desktop.destination") var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") var restoredThreadID: String?
@@ -32,6 +33,7 @@ public struct ShannonDesktopRootView: View {
     @State var activeConversationOutlineEntryID: String?
     @State var showsConnection = false
     @State var showsWorldSubscriptions = false
+    @State var showsAppIconSettings = false
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
     @State var selectedDevelopmentTool = DesktopDevelopmentTool.changes
@@ -57,7 +59,8 @@ public struct ShannonDesktopRootView: View {
         memory: ShannonMemoryModel,
         voiceIdentity: ShannonVoiceIdentityModel,
         worldSubscriptions: ShannonWorldSubscriptionModel,
-        release: ShannonTestFlightDeliveryModel
+        release: ShannonTestFlightDeliveryModel,
+        appIcon: ShannonAppIconModel
     ) {
         self.conversation = conversation
         self.connection = connection
@@ -65,6 +68,7 @@ public struct ShannonDesktopRootView: View {
         self.voiceIdentity = voiceIdentity
         self.worldSubscriptions = worldSubscriptions
         self.release = release
+        self.appIcon = appIcon
     }
 
     public var body: some View {
@@ -86,6 +90,9 @@ public struct ShannonDesktopRootView: View {
         .sheet(isPresented: $showsWorldSubscriptions) {
             ShannonWorldSubscriptionView(model: worldSubscriptions)
                 .frame(minWidth: 560, minHeight: 560)
+        }
+        .sheet(isPresented: $showsAppIconSettings) {
+            ShannonAppIconSettingsView(model: appIcon)
         }
         .sheet(isPresented: $showsAddAgentProject) {
             DevelopmentAddRepositorySheet(
