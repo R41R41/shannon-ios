@@ -40,6 +40,15 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 
 ## 開発
 
+Xcodeの正規入口はリポジトリ直下の `Shannon.xcworkspace`。iPhone版とMac版は同じ
+`ShannonAppCore` ローカルPackageを利用するため、2つの `.xcodeproj` を別々のXcodeウインドウで
+同時に開かない。GUIでのビルド、Archive、実機実行は必ずWorkspaceを一度だけ開き、
+`ShannonApp` または `ShannonDesk` Schemeを切り替えて行う。
+
+```sh
+open Shannon.xcworkspace
+```
+
 ```sh
 pnpm install
 pnpm check
@@ -87,7 +96,7 @@ MacとiPhoneを同じネットワークへ接続し、実機用にAPIをMacの�
 pnpm dev:api:device
 ```
 
-次に`apps/ios-app/ShannonApp.xcodeproj`をXcodeで開き、接続したiPhoneを実行先にして`ShannonApp`を起動する。
+次にリポジトリ直下の `Shannon.xcworkspace` をXcodeで開き、接続したiPhoneを実行先にして `ShannonApp` Schemeを起動する。
 
 - Bundle ID: `com.r41r41.shannon`
 - Team: `66TZ23L7ZJ`

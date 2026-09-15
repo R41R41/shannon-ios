@@ -21,6 +21,26 @@ The Agent Host must distinguish a finished Codex turn from a finished Shannon ta
 
 ## Local verification
 
+### Xcode entry point
+
+Open only the repository-root `Shannon.xcworkspace` in Xcode. `ShannonApp` and
+`ShannonDesk` both depend on the same local `apps/ios` package, so opening their
+`.xcodeproj` files in separate Xcode windows creates competing package graphs and
+can surface `Missing package product 'ShannonAppCore'`. Select the required scheme
+inside the single workspace for development, device runs, Archive, and distribution.
+
+If an older project window is already open, close it before opening the workspace.
+Package resolution should be performed against the workspace:
+
+```sh
+xcodebuild -workspace Shannon.xcworkspace -resolvePackageDependencies -scheme ShannonApp
+xcodebuild -workspace Shannon.xcworkspace -resolvePackageDependencies -scheme ShannonDesk
+```
+
+Do not delete package caches as a routine fix. The repository verifier builds both
+apps through the canonical workspace and the fast harness fails if that invariant is
+removed.
+
 Use the single repository entry point:
 
 ```sh

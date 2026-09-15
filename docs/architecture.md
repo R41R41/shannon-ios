@@ -221,6 +221,12 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 
 ## Code ownership
 
+`Shannon.xcworkspace` is the sole interactive Xcode entry point. It owns the shared
+package-resolution context for the iPhone and Mac projects, which both consume the
+local `apps/ios` package and its `ShannonAppCore` product. The individual projects
+remain buildable artifacts, but must not be opened concurrently as independent Xcode
+workspaces.
+
 - `apps/ios-app/**`: iPhone-only presentation, gestures, app lifecycle, entitlements, signing, icons, and device operations.
 - `apps/macos-app/**`: Mac-only presentation, attachment loading, save panels, keyboard commands, sandbox entitlements, application lifecycle, windows, and Mac tests.
 - `apps/ios/Sources/ShannonAppCore/Domain/**`: platform-neutral shared concepts such as appearance policy. This layer does not own network, persistence, or feature UI.

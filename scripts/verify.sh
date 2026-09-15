@@ -40,7 +40,7 @@ run_ios() {
 
 run_app() {
   xcodebuild \
-    -project apps/ios-app/ShannonApp.xcodeproj \
+    -workspace Shannon.xcworkspace \
     -scheme ShannonApp \
     -configuration Debug \
     -destination 'generic/platform=iOS' \
@@ -51,7 +51,7 @@ run_app() {
 
 run_release_app() {
   xcodebuild \
-    -project apps/ios-app/ShannonApp.xcodeproj \
+    -workspace Shannon.xcworkspace \
     -scheme ShannonApp \
     -configuration Release \
     -destination 'generic/platform=iOS' \
@@ -62,7 +62,7 @@ run_release_app() {
 
 run_macos_app() {
   xcodebuild \
-    -project apps/macos-app/ShannonDesk.xcodeproj \
+    -workspace Shannon.xcworkspace \
     -scheme ShannonDesk \
     -configuration Debug \
     -destination 'platform=macOS' \
@@ -73,7 +73,7 @@ run_macos_app() {
 
 run_release_macos_app() {
   xcodebuild \
-    -project apps/macos-app/ShannonDesk.xcodeproj \
+    -workspace Shannon.xcworkspace \
     -scheme ShannonDesk \
     -configuration Release \
     -destination 'generic/platform=macOS' \

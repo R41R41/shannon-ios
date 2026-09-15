@@ -26,6 +26,7 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 
 ## Repository map
 
+- `Shannon.xcworkspace`: sole interactive Xcode entry point for both Apple apps and their shared local package graph.
 - `apps/ios`: Swift package containing Shannon's SwiftUI screens, models, local cache, and tests.
 - `apps/ios-app`: signed iOS application shell and Xcode project.
 - `services/api`: HTTPS API, SQLite persistence, workers, Agent Host bridge, Aether projection, and tests.
@@ -51,8 +52,9 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 2. Resolve the requested surface to its owning layer, then read the relevant current source and tests.
 3. Implement a coherent vertical slice. Do not report a partial UI or a compile-only result as complete.
 4. Run `scripts/verify.sh fast` during work, the narrowest useful target next, then `scripts/verify.sh all` for cross-layer work.
-5. If the user requests Azure or physical-device delivery, follow the runbook and complete that delivery. Do not uninstall the app as part of an update.
-6. If an external prerequisite is unavailable, leave the durable task state accurate and name the exact remaining step.
+5. Open only `Shannon.xcworkspace` in Xcode. Never open the iOS and Mac `.xcodeproj` files in separate Xcode windows; both consume the same local `ShannonAppCore` package.
+6. If the user requests Azure or physical-device delivery, follow the runbook and complete that delivery. Do not uninstall the app as part of an update.
+7. If an external prerequisite is unavailable, leave the durable task state accurate and name the exact remaining step.
 
 ## Verification commands
 

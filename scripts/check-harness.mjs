@@ -34,6 +34,8 @@ const requiredFiles = [
   'docs/design/screens/macos/development.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
+  'Shannon.xcworkspace/contents.xcworkspacedata',
+  'Shannon.xcworkspace/xcshareddata/swiftpm/Package.resolved',
   'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/Contents.json',
   'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png',
   'scripts/check-semantic-role-map.mjs',
@@ -55,6 +57,35 @@ for (const concern of ['Product', 'Architecture', 'Design', 'Release', 'Branchin
 }
 requireText(readme, /docs\/archive\/\*\*\/\*\.html[^\n]*(?:履歴|non-authoritative|正本ではない)/, 'README must mark archived HTML documents as non-authoritative');
 if (/\]\([^)]*\.html\)/.test(readme)) failures.push('README must not link directly to archived HTML');
+requireText(readme, /Shannon\.xcworkspace/, 'README must identify Shannon.xcworkspace as the canonical Xcode entry point');
+
+const agentInstructions = await text('AGENTS.md');
+requireText(agentInstructions, /Open only `Shannon\.xcworkspace` in Xcode/, 'Agent instructions must require the canonical Xcode workspace');
+
+const workspace = await text('Shannon.xcworkspace/contents.xcworkspacedata');
+requireText(workspace, /group:apps\/ios-app\/ShannonApp\.xcodeproj/, 'Canonical Xcode workspace must include ShannonApp');
+requireText(workspace, /group:apps\/macos-app\/ShannonDesk\.xcodeproj/, 'Canonical Xcode workspace must include ShannonDesk');
+
+const verifier = await text('scripts/verify.sh');
+for (const scheme of ['ShannonApp', 'ShannonDesk']) {
+  requireText(
+    verifier,
+    new RegExp(`-workspace Shannon\\.xcworkspace \\\\[\\s\\S]{0,180}-scheme ${scheme}`),
+    `Repository verification must build ${scheme} through Shannon.xcworkspace`,
+  );
+}
+if (/xcodebuild[\s\\]*\\\n[\s\\]*-project (?:apps\/ios-app\/ShannonApp|apps\/macos-app\/ShannonDesk)\.xcodeproj/.test(verifier)) {
+  failures.push('Apple app verification must not open the iOS and Mac projects as separate package graphs');
+}
+
+const workspaceResolution = await text('Shannon.xcworkspace/xcshareddata/swiftpm/Package.resolved');
+try {
+  const parsed = JSON.parse(workspaceResolution);
+  const webRTC = parsed.pins?.find(pin => pin.identity === 'webrtc');
+  if (webRTC?.state?.version !== '152.0.0') failures.push('Canonical workspace must pin WebRTC 152.0.0');
+} catch {
+  failures.push('Canonical workspace Package.resolved must contain valid JSON');
+}
 
 const designAuthority = await text('docs/DESIGN.md');
 requireText(designAuthority, /^## Native by default, custom by purpose$/m, 'Shannon design authority must preserve the native-by-default policy');
