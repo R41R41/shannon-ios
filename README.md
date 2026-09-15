@@ -43,10 +43,12 @@ iPhoneとMacで一人のシャノンへつながる、ネイティブクライ�
 Xcodeの正規入口はリポジトリ直下の `Shannon.xcworkspace`。iPhone版とMac版は同じ
 `ShannonAppCore` ローカルPackageを利用するため、2つの `.xcodeproj` を別々のXcodeウインドウで
 同時に開かない。GUIでのビルド、Archive、実機実行は必ずWorkspaceを一度だけ開き、
-`ShannonApp` または `ShannonDesk` Schemeを切り替えて行う。
+`ShannonApp` または `ShannonDesk` Schemeを切り替えて行う。Finderでは
+`Open Shannon in Xcode.command` をダブルクリックすると、両SchemeのPackage解決を
+事前検査してから正しいWorkspaceだけが開く。
 
 ```sh
-open Shannon.xcworkspace
+scripts/xcode.sh open
 ```
 
 ```sh

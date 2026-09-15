@@ -15,8 +15,24 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
     public static let selectableChoices: [Self] = [.level02, .level06, .level10]
 
     public var id: String { rawValue }
-    public var previewAssetName: String { "shannon-app-icon-preview-\(rawValue)" }
-    public var alternateIconName: String? { self == .level06 ? nil : rawValue }
+    public var assetCatalogName: String {
+        switch self {
+        case .level02: "ShannonL02"
+        case .level06: "ShannonL06"
+        case .level10: "ShannonL10"
+        }
+    }
+    public var previewAssetName: String { "\(assetCatalogName)-1024" }
+    public var alternateIconName: String? { self == .level06 ? nil : assetCatalogName }
+
+    static func resolvingAlternateIconName(_ name: String?) -> Self {
+        switch name {
+        case nil, "ShannonL06", Self.level06.rawValue: .level06
+        case "ShannonL02", Self.level02.rawValue: .level02
+        case "ShannonL10", Self.level10.rawValue: .level10
+        default: .defaultChoice
+        }
+    }
 
     public var japaneseName: String {
         switch self {
@@ -74,22 +90,31 @@ public final class ShannonAppIconModel {
     public private(set) var isUpdating = false
     public private(set) var errorMessage: String?
     public private(set) var nextRefreshAt: Date?
+    private let defaults: UserDefaults
 
-    private enum Keys {
+    enum Keys {
         static let selectedChoice = "shannon.app-icon.level-choice"
         static let legacyManualChoice = "shannon.app-icon.manual-choice"
         static let legacyMode = "shannon.app-icon.mode"
     }
 
-    public init() {
-        let defaults = UserDefaults.standard
+    public convenience init() {
+#if canImport(UIKit)
+        self.init(defaults: .standard, activeAlternateIconName: UIApplication.shared.alternateIconName)
+#else
+        self.init(defaults: .standard, activeAlternateIconName: nil)
+#endif
+    }
+
+    init(defaults: UserDefaults, activeAlternateIconName: String?) {
+        self.defaults = defaults
         let storedChoice = defaults.string(forKey: Keys.selectedChoice)
             .flatMap(ShannonAppIconChoice.init(rawValue:))
         let initialChoice = storedChoice ?? ShannonAppIconChoice.defaultChoice
         selectedChoice = initialChoice
 
 #if canImport(UIKit)
-        activeChoice = Self.choice(forAlternateIconName: UIApplication.shared.alternateIconName)
+        activeChoice = ShannonAppIconChoice.resolvingAlternateIconName(activeAlternateIconName)
 #else
         activeChoice = initialChoice
 #endif
@@ -120,7 +145,7 @@ public final class ShannonAppIconModel {
 
     public func select(_ choice: ShannonAppIconChoice) async {
         selectedChoice = choice
-        UserDefaults.standard.set(choice.rawValue, forKey: Keys.selectedChoice)
+        defaults.set(choice.rawValue, forKey: Keys.selectedChoice)
         await apply(choice: choice)
     }
 
@@ -146,15 +171,10 @@ public final class ShannonAppIconModel {
 
     public func refresh() {
 #if canImport(UIKit)
-        activeChoice = Self.choice(forAlternateIconName: UIApplication.shared.alternateIconName)
+        activeChoice = ShannonAppIconChoice.resolvingAlternateIconName(UIApplication.shared.alternateIconName)
 #else
         activeChoice = selectedChoice
 #endif
-    }
-
-    private static func choice(forAlternateIconName name: String?) -> ShannonAppIconChoice {
-        guard let name else { return .defaultChoice }
-        return ShannonAppIconChoice(rawValue: name) ?? .defaultChoice
     }
 
     private func apply(choice: ShannonAppIconChoice) async {

@@ -15,14 +15,14 @@
         <key>CFBundlePrimaryIcon</key>
         <dict>
             <key>CFBundleIconName</key>
-            <string>AppIcon</string>
+            <string>ShannonL06</string>
         </dict>
         <key>CFBundleAlternateIcons</key>
         <dict>
-            <key>ShannonIconL02</key>
-            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconL02</string></array></dict>
-            <key>ShannonIconL10</key>
-            <dict><key>CFBundleIconFiles</key><array><string>ShannonIconL10</string></array></dict>
+            <key>ShannonL02</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonL02</string></array></dict>
+            <key>ShannonL10</key>
+            <dict><key>CFBundleIconFiles</key><array><string>ShannonL10</string></array></dict>
         </dict>
     </dict>
     <key>CFBundleExecutable</key>

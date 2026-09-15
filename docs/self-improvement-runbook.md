@@ -30,12 +30,16 @@ can surface `Missing package product 'ShannonAppCore'`. Select the required sche
 inside the single workspace for development, device runs, Archive, and distribution.
 
 If an older project window is already open, close it before opening the workspace.
-Package resolution should be performed against the workspace:
+Use the guarded launcher (`Open Shannon in Xcode.command` in Finder) so both package
+consumers are resolved and checked before Xcode opens:
 
 ```sh
-scripts/xcode.sh resolve-ios
-scripts/xcode.sh resolve-mac
+scripts/xcode.sh open
 ```
+
+For a non-GUI check, run `scripts/xcode.sh preflight`. The focused workspace guard
+also checks the workspace and both project-level lockfiles against the exact WebRTC
+version, the exported `ShannonAppCore` product, and both project product links.
 
 Do not delete package caches as a routine fix. The repository verifier builds both
 apps through the canonical workspace. `scripts/xcode.sh` owns all Xcode command-line

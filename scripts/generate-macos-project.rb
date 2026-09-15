@@ -73,12 +73,12 @@ test_target.frameworks_build_phase.files << test_framework
 
 target.build_configurations.each do |configuration|
   settings = configuration.build_settings
-  settings['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'AppIcon'
+  settings['ASSETCATALOG_COMPILER_APPICON_NAME'] = 'ShannonL06'
   settings['ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME'] = 'AccentColor'
   settings['ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR'] = 'all'
   settings['CODE_SIGN_ENTITLEMENTS'] = 'ShannonDesk/ShannonDesk.entitlements'
   settings['CODE_SIGN_STYLE'] = 'Automatic'
-  settings['CURRENT_PROJECT_VERSION'] = '6'
+  settings['CURRENT_PROJECT_VERSION'] = '9'
   settings['DEVELOPMENT_TEAM'] = '66TZ23L7ZJ'
   settings['ENABLE_APP_SANDBOX'] = 'YES'
   settings['ENABLE_HARDENED_RUNTIME'] = 'YES'

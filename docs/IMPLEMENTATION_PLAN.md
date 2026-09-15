@@ -41,7 +41,7 @@ These terms are not interchangeable.
 | Aether/Voyager organization | Existing bounded Shannon proxy and explicit review flow remain implemented | Existing production flow preserved | Re-run adjacent Smoke after Build 50 |
 | Cross-app acceptance scenarios | Requirements are known | Not yet stored in Aether's current documentation | Aether-owned scenario document and links from its document index |
 | State-based UI audit | High-priority iPhone Talk/Work and Mac Talk/Development remediations are implemented; screen contracts were reconciled on 2026-09-15 | Existing safe Mac evidence retained; source guards, iOS 132 tests, Mac 19 tests, and both app builds pass | Current-release visual evidence for empty/loading/error/offline/permission, Light/Dark, larger text and Reduce Motion |
-| Shannon app icon | The approved L02/L06/L10 set is available on iPhone and Mac, with L06 as the primary/default/fallback and the display name `シャノン` | Asset catalog compilation, icon-selection tests, and platform builds pass | Select all three on device and verify Home Screen/Dock, Settings, notification, and Spotlight rendering |
+| Shannon app icon | The audited 2026-09-16 L02/L06/L10 package is integrated byte-for-byte on iPhone and Mac, with L06 as the primary/default/fallback and the display name `シャノン` | Prepared as iOS 0.1.0 (54) and macOS 0.1.0 (9); checksum guard, selection compatibility tests, and unsigned builds are required before handoff | Select all three on device and verify Home Screen/Dock, Settings, notification, Spotlight, persistence, and L10's Waterlight eyes/full border |
 
 ## Priority 0 — finish the current release
 

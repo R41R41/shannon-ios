@@ -10,6 +10,9 @@ import { validateXcodeWorkspace, workspaceProjectLocations } from './check-xcode
 const xcodeEntrypoint = fileURLToPath(new URL('./xcode.sh', import.meta.url));
 
 function validSources() {
+  const resolution = JSON.stringify({
+    pins: [{ identity: 'webrtc', state: { version: '152.0.0' } }],
+  });
   return {
     workspace: `
       <Workspace version="1.0">
@@ -17,15 +20,18 @@ function validSources() {
         <FileRef location="group:apps/macos-app/ShannonDesk.xcodeproj"></FileRef>
       </Workspace>
     `,
-    resolution: JSON.stringify({
-      pins: [{ identity: 'webrtc', state: { version: '152.0.0' } }],
-    }),
-    manifest: '.package(url: "https://github.com/stasel/WebRTC.git", exact: "152.0.0")',
+    resolutions: {
+      workspace: resolution,
+      ShannonApp: resolution,
+      ShannonDesk: resolution,
+    },
+    manifest: '.library(name: "ShannonAppCore", targets: ["ShannonAppCore"]), .package(url: "https://github.com/stasel/WebRTC.git", exact: "152.0.0")',
     projects: {
       ShannonApp: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore;',
       ShannonDesk: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore;',
     },
-    xcodeEntrypoint: 'workspace="Shannon.xcworkspace"',
+    xcodeEntrypoint: 'workspace="Shannon.xcworkspace"\npreflight)\nopen)',
+    launcher: 'exec "$repository_root/scripts/xcode.sh" open',
     verifier: [
       'scripts/xcode.sh ios-debug',
       'scripts/xcode.sh ios-release',
@@ -51,7 +57,7 @@ test('accepts the canonical shared package graph', () => {
 test('reports structural drift in one pass', () => {
   const sources = validSources();
   sources.workspace = '<Workspace><FileRef location="group:apps/ios-app/ShannonApp.xcodeproj"></FileRef></Workspace>';
-  sources.resolution = JSON.stringify({ pins: [{ identity: 'webrtc', state: { version: '151.0.0' } }] });
+  sources.resolutions.workspace = JSON.stringify({ pins: [{ identity: 'webrtc', state: { version: '151.0.0' } }] });
   sources.projects.ShannonDesk = 'productName = OtherCore;';
   sources.xcodeEntrypoint += '\nxcodebuild -project apps/ios-app/ShannonApp.xcodeproj';
   sources.verifier += '\nxcodebuild -project apps/macos-app/ShannonDesk.xcodeproj';
@@ -119,6 +125,36 @@ test('inspection and package resolution profiles stay in the canonical workspace
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual((await readFile(capture, 'utf8')).trim().split('\n'), expectedArguments);
   }
+});
+
+test('guarded open preflights both package consumers before opening the workspace', async t => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'shannon-xcode-open-'));
+  t.after(() => rm(temporaryDirectory, { recursive: true, force: true }));
+  const xcodebuildStub = join(temporaryDirectory, 'xcodebuild-stub.sh');
+  const openStub = join(temporaryDirectory, 'open-stub.sh');
+  const capture = join(temporaryDirectory, 'calls.txt');
+  await writeFile(xcodebuildStub, '#!/bin/sh\nprintf "xcodebuild" >> "$SHANNON_XCODE_CAPTURE"\nprintf " <%s>" "$@" >> "$SHANNON_XCODE_CAPTURE"\nprintf "\\n" >> "$SHANNON_XCODE_CAPTURE"\n');
+  await writeFile(openStub, '#!/bin/sh\nprintf "open" >> "$SHANNON_XCODE_CAPTURE"\nprintf " <%s>" "$@" >> "$SHANNON_XCODE_CAPTURE"\nprintf "\\n" >> "$SHANNON_XCODE_CAPTURE"\n');
+  await chmod(xcodebuildStub, 0o755);
+  await chmod(openStub, 0o755);
+
+  const result = spawnSync(xcodeEntrypoint, ['open'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SHANNON_XCODEBUILD_BIN: xcodebuildStub,
+      SHANNON_OPEN_BIN: openStub,
+      SHANNON_XCODE_CAPTURE: capture,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const calls = (await readFile(capture, 'utf8')).trim().split('\n');
+  assert.deepEqual(calls.slice(0, 3), [
+    'xcodebuild <-workspace> <Shannon.xcworkspace> <-list>',
+    'xcodebuild <-workspace> <Shannon.xcworkspace> <-scheme> <ShannonApp> <-resolvePackageDependencies>',
+    'xcodebuild <-workspace> <Shannon.xcworkspace> <-scheme> <ShannonDesk> <-resolvePackageDependencies>',
+  ]);
+  assert.match(calls[3], /^open <-a> <Xcode> <.*\/Shannon\.xcworkspace>$/u);
 });
 
 test('unknown build profiles fail before invoking Xcode', () => {

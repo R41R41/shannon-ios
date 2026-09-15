@@ -32,6 +32,7 @@ run_fast() {
   "$node_bin" scripts/check-harness.mjs
   "$node_bin" --test scripts/check-xcode-workspace.test.mjs
   "$node_bin" scripts/check-xcode-workspace.mjs
+  "$node_bin" scripts/check-app-icons.mjs
   "$node_bin" scripts/check-semantic-role-map.mjs
   run_architecture
 }

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourcePackage": "delivery-2026-09-16/Shannon",
+  "displayName": "シャノン",
+  "defaultVariant": "L06",
+  "release": {
+    "marketingVersion": "0.1.0",
+    "iosBuild": "54",
+    "macosBuild": "9"
+  },
+  "variants": {
+    "L02": {
+      "assetName": "ShannonL02",
+      "masterSha256": "ef9f07790714915d65976df14555e05c786d09162d91f9d78c221c08495d3fc1",
+      "iosTreeSha256": "6e8cdf05b164f02d0b9227cb60705f20f7af5bb574518316b4024cc079229d13",
+      "macosTreeSha256": "54d23acd26de922ba86b15aee561e9acf61268d28b7968871b111f3ee20e6501"
+    },
+    "L06": {
+      "assetName": "ShannonL06",
+      "masterSha256": "6b205b021aa1920959267c69670827463fb73e2531433c171401e7a7e376bc96",
+      "iosTreeSha256": "059016131fcae849f67f59f2174440d4b14a44e81288f20d79d066fd8131abf4",
+      "macosTreeSha256": "711e873d47652d969e60fe8fb658db8d1f8928a8b57b147b6e62b2539d2aee94"
+    },
+    "L10": {
+      "assetName": "ShannonL10",
+      "masterSha256": "7dc0c48fa577d425aa87869131c0a877648c10c4254f7ae2c1238581f9bb5cc2",
+      "iosTreeSha256": "c4d63e132207df13407076e985273c44acb3c442527ca836dc5947ebe384446c",
+      "macosTreeSha256": "ea5f295570c44a0ae2425bfd7f8192d027beea8531b70a47952635975d67c156"
+    }
+  }
+}

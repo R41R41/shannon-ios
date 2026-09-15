@@ -15,6 +15,11 @@ export function exactWebRTCVersion(manifest) {
   return manifest.match(/WebRTC\.git",\s*exact:\s*"([^"]+)"/u)?.[1] ?? null;
 }
 
+function resolvedWebRTCVersion(source) {
+  const resolution = JSON.parse(source);
+  return resolution.pins?.find(pin => pin.identity === 'webrtc')?.state?.version ?? null;
+}
+
 export function validateXcodeWorkspace(sources) {
   const failures = [];
   const expectedProjects = [
@@ -37,14 +42,18 @@ export function validateXcodeWorkspace(sources) {
 
   const expectedWebRTCVersion = exactWebRTCVersion(sources.manifest);
   if (!expectedWebRTCVersion) failures.push('Package.swift must pin WebRTC with an exact version');
-  try {
-    const resolution = JSON.parse(sources.resolution);
-    const webRTC = resolution.pins?.find(pin => pin.identity === 'webrtc');
-    if (expectedWebRTCVersion && webRTC?.state?.version !== expectedWebRTCVersion) {
-      failures.push(`workspace resolves WebRTC ${webRTC?.state?.version ?? '(missing)'} instead of ${expectedWebRTCVersion}`);
+  if (!/\.library\(name:\s*"ShannonAppCore",\s*targets:\s*\["ShannonAppCore"\]\)/u.test(sources.manifest)) {
+    failures.push('Package.swift must expose the ShannonAppCore library product');
+  }
+  for (const [scope, source] of Object.entries(sources.resolutions)) {
+    try {
+      const version = resolvedWebRTCVersion(source);
+      if (expectedWebRTCVersion && version !== expectedWebRTCVersion) {
+        failures.push(`${scope} resolves WebRTC ${version ?? '(missing)'} instead of ${expectedWebRTCVersion}`);
+      }
+    } catch {
+      failures.push(`${scope} Package.resolved must contain valid JSON`);
     }
-  } catch {
-    failures.push('workspace Package.resolved must contain valid JSON');
   }
 
   if (!/workspace="Shannon\.xcworkspace"/u.test(sources.xcodeEntrypoint)) {
@@ -52,6 +61,12 @@ export function validateXcodeWorkspace(sources) {
   }
   if (/(?:^|\s)-project(?:\s|$)/mu.test(sources.xcodeEntrypoint)) {
     failures.push('Xcode entry point must not create a separate project package graph');
+  }
+  if (!/preflight\)/u.test(sources.xcodeEntrypoint) || !/open\)/u.test(sources.xcodeEntrypoint)) {
+    failures.push('Xcode entry point must provide preflight and guarded workspace opening');
+  }
+  if (!sources.launcher.includes('scripts/xcode.sh" open')) {
+    failures.push('Finder launcher must delegate to the guarded Xcode workspace entry point');
   }
 
   for (const profile of ['ios-debug', 'ios-release', 'mac-debug', 'mac-release']) {
@@ -75,9 +90,9 @@ export function validateXcodeWorkspace(sources) {
 async function loadSources(root) {
   const paths = {
     workspace: 'Shannon.xcworkspace/contents.xcworkspacedata',
-    resolution: 'Shannon.xcworkspace/xcshareddata/swiftpm/Package.resolved',
     manifest: 'apps/ios/Package.swift',
     xcodeEntrypoint: 'scripts/xcode.sh',
+    launcher: 'Open Shannon in Xcode.command',
     verifier: 'scripts/verify.sh',
     readme: 'README.md',
     agentInstructions: 'AGENTS.md',
@@ -88,6 +103,11 @@ async function loadSources(root) {
   ]));
   return {
     ...Object.fromEntries(entries),
+    resolutions: {
+      workspace: await readFile(resolve(root, 'Shannon.xcworkspace/xcshareddata/swiftpm/Package.resolved'), 'utf8'),
+      ShannonApp: await readFile(resolve(root, 'apps/ios-app/ShannonApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'), 'utf8'),
+      ShannonDesk: await readFile(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'), 'utf8'),
+    },
     projects: {
       ShannonApp: await readFile(resolve(root, 'apps/ios-app/ShannonApp.xcodeproj/project.pbxproj'), 'utf8'),
       ShannonDesk: await readFile(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'), 'utf8'),
@@ -108,7 +128,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log('Xcode workspace guard passed (2 projects, 1 shared package graph, 4 build profiles).');
+  console.log('Xcode workspace guard passed (2 projects, 1 shared package graph, 3 locked resolutions, guarded launcher).');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

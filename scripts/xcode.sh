@@ -5,8 +5,24 @@ repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repository_root"
 
 xcodebuild_bin="${SHANNON_XCODEBUILD_BIN:-xcodebuild}"
+open_bin="${SHANNON_OPEN_BIN:-open}"
 workspace="Shannon.xcworkspace"
 profile="${1:-}"
+
+resolve_scheme() {
+  local scheme="$1"
+
+  "$xcodebuild_bin" \
+    -workspace "$workspace" \
+    -scheme "$scheme" \
+    -resolvePackageDependencies
+}
+
+preflight_workspace() {
+  "$xcodebuild_bin" -workspace "$workspace" -list
+  resolve_scheme ShannonApp
+  resolve_scheme ShannonDesk
+}
 
 run_scheme() {
   local scheme="$1"
@@ -39,16 +55,23 @@ case "$profile" in
     run_scheme ShannonDesk Release 'generic/platform=macOS' .build/ShannonDeskReleaseDerivedData build
     ;;
   resolve-ios)
-    "$xcodebuild_bin" -workspace "$workspace" -scheme ShannonApp -resolvePackageDependencies
+    resolve_scheme ShannonApp
     ;;
   resolve-mac)
-    "$xcodebuild_bin" -workspace "$workspace" -scheme ShannonDesk -resolvePackageDependencies
+    resolve_scheme ShannonDesk
+    ;;
+  preflight)
+    preflight_workspace
+    ;;
+  open)
+    preflight_workspace
+    "$open_bin" -a Xcode "$repository_root/$workspace"
     ;;
   list)
     "$xcodebuild_bin" -workspace "$workspace" -list
     ;;
   *)
-    echo "Usage: scripts/xcode.sh ios-debug|ios-release|mac-debug|mac-release|resolve-ios|resolve-mac|list" >&2
+    echo "Usage: scripts/xcode.sh ios-debug|ios-release|mac-debug|mac-release|resolve-ios|resolve-mac|preflight|open|list" >&2
     exit 2
     ;;
 esac

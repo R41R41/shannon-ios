@@ -227,7 +227,9 @@ local `apps/ios` package and its `ShannonAppCore` product. The individual projec
 remain buildable artifacts, but must not be opened concurrently as independent Xcode
 workspaces. `scripts/xcode.sh` is the sole command-line entry point for Apple app
 build profiles, and `scripts/check-xcode-workspace.mjs` owns the focused structural
-guard instead of coupling Xcode rules to the general repository harness.
+guard instead of coupling Xcode rules to the general repository harness. Its guarded
+`open` profile validates the workspace, resolves both schemes, and only then opens
+Xcode; the Finder launcher delegates to that same path.
 
 - `apps/ios-app/**`: iPhone-only presentation, gestures, app lifecycle, entitlements, signing, icons, and device operations.
 - `apps/macos-app/**`: Mac-only presentation, attachment loading, save panels, keyboard commands, sandbox entitlements, application lifecycle, windows, and Mac tests.

@@ -37,8 +37,8 @@ const requiredFiles = [
   'scripts/check-xcode-workspace.mjs',
   'scripts/check-xcode-workspace.test.mjs',
   'scripts/xcode.sh',
-  'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/Contents.json',
-  'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png',
+  'config/shannon-app-icons.json',
+  'scripts/check-app-icons.mjs',
   'scripts/check-semantic-role-map.mjs',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.request.json',
   'services/api/tests/fixtures/voyager-phase1/minimal-create.result.json',
@@ -66,20 +66,6 @@ requireText(designAuthority, /never replaces the standard semantic communication
 const macProject = await text('apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj');
 requireText(macProject, /Assets\.xcassets in Resources/, 'ShannonDesk project must compile Assets.xcassets into the app Resources');
 requireText(macProject, /ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR = all;/, 'ShannonDesk project must generate a standalone macOS app icon');
-
-const macIconContents = await text('apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/Contents.json');
-requireText(macIconContents, /"size"\s*:\s*"512x512"[\s\S]*?"scale"\s*:\s*"2x"/, 'ShannonDesk AppIcon must declare the 512pt @2x macOS slot');
-try {
-  const macIcon = await readFile(resolve(root, 'apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png'));
-  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  if (macIcon.length < 24 || !macIcon.subarray(0, 8).equals(pngSignature)) {
-    failures.push('ShannonDesk 512pt @2x app icon must be a valid PNG');
-  } else if (macIcon.readUInt32BE(16) !== 1024 || macIcon.readUInt32BE(20) !== 1024) {
-    failures.push('ShannonDesk 512pt @2x app icon must be exactly 1024x1024 pixels');
-  }
-} catch {
-  failures.push('missing required file: apps/macos-app/ShannonDesk/Assets.xcassets/AppIcon.appiconset/ShannonMacIcon-512x512@2x.png');
-}
 
 const docsEntries = await readdir(resolve(root, 'docs'), { withFileTypes: true });
 for (const entry of docsEntries) {
