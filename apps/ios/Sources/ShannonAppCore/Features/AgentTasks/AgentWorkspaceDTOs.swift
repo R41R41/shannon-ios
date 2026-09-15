@@ -176,6 +176,49 @@ public struct ShannonAgentWorkspaceCatalogDTO: Codable, Equatable, Sendable {
     )
 }
 
+public enum ShannonAgentWorkspaceResourceKind: String, Codable, Sendable {
+    case file
+    case diff
+}
+
+public enum ShannonAgentWorkspaceResourceStatus: String, Codable, Sendable {
+    case queued
+    case reading
+    case ready
+    case failed
+
+    public var isTerminal: Bool { self == .ready || self == .failed }
+}
+
+public struct ShannonAgentWorkspaceResourceDTO: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let projectKey: String
+    public let path: String
+    public let kind: ShannonAgentWorkspaceResourceKind
+    public let assignedHostID: String
+    public let status: ShannonAgentWorkspaceResourceStatus
+    public let content: String?
+    public let truncated: Bool
+    public let errorCode: String?
+    public let errorMessage: String?
+    public let createdAt: String
+    public let updatedAt: String
+}
+
+public struct ShannonAgentWorkspaceResourceEnvelopeDTO: Codable, Equatable, Sendable {
+    public let request: ShannonAgentWorkspaceResourceDTO
+    public let created: Bool?
+}
+
+public struct ShannonAgentWorkspaceResourceCreateDTO: Codable, Equatable, Sendable {
+    public let scopeKey: String
+    public let idempotencyKey: String
+    public let projectKey: String
+    public let path: String
+    public let kind: ShannonAgentWorkspaceResourceKind
+    public let hostPreference: ShannonAgentRoutingPreference
+}
+
 public enum ShannonAgentWorkspaceAvailability {
     public static func canStart(
         workspace: ShannonAgentWorkspaceCatalogDTO,

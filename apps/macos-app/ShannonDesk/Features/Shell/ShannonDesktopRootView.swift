@@ -36,11 +36,13 @@ public struct ShannonDesktopRootView: View {
     @State var showsAppIconSettings = false
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
-    @State var selectedDevelopmentTool = DesktopDevelopmentTool.changes
+    @State var selectedDevelopmentTool = DesktopDevelopmentTool.initialValue
     @State var developmentTaskSearchText = ""
     @State var developmentTaskFilter = ShannonDesktopTaskFilter.all
     @State var showsArchivedDevelopmentTasks = false
     @State var developmentInstruction = ""
+    @State var selectedDevelopmentFilePath: String?
+    @State var developmentWorkspaceResource = ShannonDesktopWorkspaceResourceState.idle
     @State var showsAddAgentProject = false
     @State var agentRepositoryURL = ""
     @State var agentRepositoryKey = ""
@@ -161,6 +163,8 @@ public struct ShannonDesktopRootView: View {
             lastAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
         }
         .onChange(of: selectedAgentProject) {
+            selectedDevelopmentFilePath = nil
+            developmentWorkspaceResource = .idle
             guard !conversation.isDesignPreview else { return }
             Task { await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject) }
         }
@@ -169,6 +173,9 @@ public struct ShannonDesktopRootView: View {
         }
         .onChange(of: conversation.agentWorkspace) {
             normalizeDevelopmentSelection()
+        }
+        .onChange(of: selectedDevelopmentTool) {
+            developmentWorkspaceResource = .idle
         }
         .focusedSceneValue(\.shannonDesktopCommandActions, desktopCommandActions)
         .toolbarBackground(Color(nsColor: .textBackgroundColor), for: .windowToolbar)

@@ -5,209 +5,154 @@ import SwiftUI
 extension ShannonDesktopRootView {
     var developmentView: some View {
         VStack(spacing: 0) {
-            developmentHeader
+            developmentStatusBar
             Divider()
-
-            HSplitView {
-                developmentTaskList
-                    .frame(minWidth: 220, idealWidth: 250, maxWidth: 320)
-                VStack(spacing: 0) {
-                    developmentToolPicker
-                    Divider()
-                    developmentToolContent
+            GeometryReader { proxy in
+                if ShannonDesktopDevelopmentLayout.showsTaskNavigator(availableWidth: proxy.size.width) {
+                    HSplitView {
+                        developmentTaskList
+                            .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+                        developmentWorkspace
+                            .frame(minWidth: 360)
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else {
+                    VStack(spacing: 0) {
+                        developmentCompactTaskBar
+                        Divider()
+                        developmentWorkspace
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 }
-                .frame(minWidth: 440)
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .navigationTitle("開発")
         .toolbar {
-            Button {
-                Task {
-                    await conversation.synchronizeAgentTasks()
-                    await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject)
-                    await conversation.refreshAgentProjectProvisioning()
+            ToolbarItemGroup(placement: .automatic) {
+                developmentProjectMenu
+                developmentExecutionMenu
+                developmentModelMenu
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: refreshDevelopmentWorkspace) {
+                    Label("作業環境を更新", systemImage: "arrow.clockwise")
                 }
-            } label: {
-                Label("作業環境を更新", systemImage: "arrow.clockwise")
+                .help("タスクと作業環境を更新")
             }
         }
     }
 
-    var developmentHeader: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("開発")
-                        .font(.title2.weight(.semibold))
-                    Text("Codexを、安全なプロジェクト境界の中で動かします。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                DevelopmentRouteBadge(host: selectedDevelopmentHost)
+    var developmentCompactTaskBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                developmentTaskMenu
+                TextField("作業を検索", text: $developmentTaskSearchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 240)
+                developmentTaskFilterMenu
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    developmentProjectPicker
-                    developmentHostPicker
-                    developmentModelPicker
-                    developmentReasoningPicker
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    developmentTaskMenu
+                    Spacer()
+                    developmentTaskFilterMenu
                 }
-
-                VStack(spacing: 10) {
-                    HStack(spacing: 12) {
-                        developmentProjectPicker
-                        developmentHostPicker
-                    }
-                    HStack(spacing: 12) {
-                        developmentModelPicker
-                        developmentReasoningPicker
-                    }
-                }
-            }
-
-            HStack(spacing: 7) {
-                Image(systemName: selectedDevelopmentHost?.kind == .cloud ? "cloud" : "desktopcomputer")
-                    .foregroundStyle(.secondary)
-                Text(developmentRoutingExplanation)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(selectedDevelopmentHost?.kind == .cloud ? "Codex API 従量課金" : "ChatGPT Codex 利用枠")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(selectedDevelopmentHost?.kind == .cloud ? Color.shannonAttention : .secondary)
-            }
-
-            if let provisioning = conversation.agentProjectProvisioning.first,
-               provisioning.status != .ready {
-                Label(
-                    provisioning.errorMessage
-                        ?? "\(provisioning.projectKey) · \(provisioning.status.japaneseName)",
-                    systemImage: provisioning.status == .failed ? "exclamationmark.triangle" : "arrow.down.circle"
-                )
-                .font(.caption)
-                .foregroundStyle(provisioning.status == .failed ? Color.shannonDanger : .secondary)
+                TextField("作業を検索", text: $developmentTaskSearchText)
+                    .textFieldStyle(.roundedBorder)
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 16)
+        .padding(10)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    var developmentProjectPicker: some View {
-        HStack(spacing: 6) {
-            Picker("プロジェクト", selection: $selectedAgentProject) {
-                ForEach(developmentProjectKeys, id: \.self) { project in
-                    Text(project).tag(project)
+    var developmentTaskMenu: some View {
+        Menu {
+            Picker("作業", selection: $selectedTaskID) {
+                ForEach(visibleDevelopmentTasks) { task in
+                    Label(task.title, systemImage: task.status.symbolName)
+                        .tag(Optional(task.id))
                 }
             }
-            .frame(minWidth: 150)
-            .help("Agent Hostへ渡すプロジェクト")
-
-            Button {
-                showsAddAgentProject = true
-            } label: {
-                Label("GitHubリポジトリを追加", systemImage: "plus")
-            }
-            .labelStyle(.iconOnly)
-            .help("GitHubリポジトリを安全な作業領域へ追加")
+        } label: {
+            Label(selectedTask?.title ?? "作業を選択", systemImage: selectedTask?.status.symbolName ?? "list.bullet")
+                .lineLimit(1)
         }
+        .disabled(visibleDevelopmentTasks.isEmpty)
+        .help("開発作業を選択")
     }
 
-    var developmentHostPicker: some View {
-        Picker("実行先", selection: Binding(
-            get: { agentHostPreference },
-            set: { agentHostPreference = $0 }
-        )) {
-            ForEach(ShannonAgentRoutingPreference.allCases) { preference in
-                Text(preference.japaneseName).tag(preference)
+    var developmentTaskFilterMenu: some View {
+        Menu {
+            Picker("表示", selection: $developmentTaskFilter) {
+                ForEach(ShannonDesktopTaskFilter.allCases) { filter in
+                    Text(filter.title).tag(filter)
+                }
             }
+            Divider()
+            Toggle("アーカイブを表示", isOn: $showsArchivedDevelopmentTasks)
+        } label: {
+            Label("絞り込み", systemImage: "line.3.horizontal.decrease.circle")
         }
-        .frame(minWidth: 130)
-        .help("自動はこのMacを優先し、利用できない場合だけクラウドへ切り替えます")
-    }
-
-    var developmentModelPicker: some View {
-        Picker("モデル", selection: $selectedAgentModel) {
-            Text("ホストの既定").tag("")
-            ForEach(developmentModels) { model in
-                Text(model.displayName).tag(model.id)
-            }
-        }
-        .frame(minWidth: 180)
-    }
-
-    var developmentReasoningPicker: some View {
-        Picker("思考", selection: Binding(
-            get: { agentReasoningEffort },
-            set: { agentReasoningEffort = $0 }
-        )) {
-            ForEach(availableReasoningEfforts) { effort in
-                Text(effort.japaneseName).tag(effort)
-            }
-        }
-        .frame(minWidth: 100)
+        .labelStyle(.iconOnly)
+        .help("\(developmentTaskFilter.title)・アーカイブ\(showsArchivedDevelopmentTasks ? "表示" : "非表示")")
     }
 
     var developmentTaskList: some View {
         VStack(spacing: 0) {
+            HStack {
+                Label("作業", systemImage: "list.bullet")
+                    .font(.headline)
+                Spacer()
+                developmentTaskFilterMenu
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+
             HStack(spacing: 8) {
                 TextField("作業を検索", text: $developmentTaskSearchText)
                     .textFieldStyle(.roundedBorder)
-                Menu {
-                    Picker("表示", selection: $developmentTaskFilter) {
-                        ForEach(ShannonDesktopTaskFilter.allCases) { filter in
-                            Text(filter.title).tag(filter)
-                        }
-                    }
-                    Divider()
-                    Toggle("アーカイブを表示", isOn: $showsArchivedDevelopmentTasks)
-                } label: {
-                    Label("絞り込み", systemImage: "line.3.horizontal.decrease.circle")
-                }
-                .labelStyle(.iconOnly)
-                .help("\(developmentTaskFilter.title)・アーカイブ\(showsArchivedDevelopmentTasks ? "表示" : "非表示")")
             }
             .padding(10)
 
             Divider()
 
             List(selection: $selectedTaskID) {
-            if workProjection.pinned.isEmpty && workProjection.active.isEmpty
-                && workProjection.proposed.isEmpty && workProjection.finished.isEmpty {
-                Text("会話から開発を依頼すると、ここに作業が表示されます。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            }
-            if !workProjection.pinned.isEmpty {
-                Section("ピン留め") {
-                    ForEach(workProjection.pinned) { task in developmentTaskRow(task) }
+                if workProjection.pinned.isEmpty && workProjection.active.isEmpty
+                    && workProjection.proposed.isEmpty && workProjection.finished.isEmpty {
+                    Text("会話から開発を依頼すると、ここに作業が表示されます。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                }
+                if !workProjection.pinned.isEmpty {
+                    Section("ピン留め") {
+                        ForEach(workProjection.pinned) { task in developmentTaskRow(task) }
+                    }
+                }
+                if !workProjection.active.isEmpty {
+                    Section("進行中") {
+                        ForEach(workProjection.active) { task in developmentTaskRow(task) }
+                    }
+                }
+                if !workProjection.proposed.isEmpty {
+                    Section("開始前") {
+                        ForEach(workProjection.proposed) { task in developmentTaskRow(task) }
+                    }
+                }
+                if !workProjection.finished.isEmpty {
+                    Section("終了") {
+                        ForEach(workProjection.finished) { task in developmentTaskRow(task) }
+                    }
+                }
+                if showsArchivedDevelopmentTasks && !workProjection.archived.isEmpty {
+                    Section("アーカイブ") {
+                        ForEach(workProjection.archived) { task in developmentTaskRow(task) }
+                    }
                 }
             }
-            if !workProjection.active.isEmpty {
-                Section("進行中") {
-                    ForEach(workProjection.active) { task in developmentTaskRow(task) }
-                }
-            }
-            if !workProjection.proposed.isEmpty {
-                Section("開始前") {
-                    ForEach(workProjection.proposed) { task in developmentTaskRow(task) }
-                }
-            }
-            if !workProjection.finished.isEmpty {
-                Section("終了") {
-                    ForEach(workProjection.finished) { task in developmentTaskRow(task) }
-                }
-            }
-            if showsArchivedDevelopmentTasks && !workProjection.archived.isEmpty {
-                Section("アーカイブ") {
-                    ForEach(workProjection.archived) { task in developmentTaskRow(task) }
-                }
-            }
-            }
-            .listStyle(.sidebar)
+            .listStyle(.inset)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -243,35 +188,78 @@ extension ShannonDesktopRootView {
         }
     }
 
+    var developmentWorkspace: some View {
+        VStack(spacing: 0) {
+            developmentToolPicker
+            Divider()
+            developmentToolContent
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
     var developmentToolPicker: some View {
-        Picker("開発ツール", selection: $selectedDevelopmentTool) {
-            ForEach(DesktopDevelopmentTool.allCases) { tool in
-                Label(tool.title, systemImage: tool.symbolName).tag(tool)
+        HStack(spacing: 12) {
+            Picker("開発ツール", selection: $selectedDevelopmentTool) {
+                ForEach(DesktopDevelopmentTool.allCases) { tool in
+                    Label(tool.title, systemImage: tool.symbolName).tag(tool)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 520)
+            Spacer(minLength: 0)
+            if let task = selectedTask {
+                Label(task.status.japaneseName, systemImage: task.status.symbolName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("作業状態、\(task.status.japaneseName)")
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
     var developmentToolContent: some View {
         if let task = selectedTask {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    developmentTaskSummary(task)
-                    switch selectedDevelopmentTool {
-                    case .files: DevelopmentFilesPane(project: selectedDevelopmentProject, task: task)
-                    case .terminal:
+            VStack(spacing: 0) {
+                developmentTaskSummary(task)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                Divider()
+
+                switch selectedDevelopmentTool {
+                case .files:
+                    DevelopmentFilesPane(
+                        project: selectedDevelopmentProject,
+                        task: task,
+                        selectedPath: $selectedDevelopmentFilePath,
+                        resource: developmentWorkspaceResource,
+                        load: loadDevelopmentWorkspaceResource
+                    )
+                case .changes:
+                    DevelopmentChangesPane(
+                        project: selectedDevelopmentProject,
+                        task: task,
+                        selectedPath: $selectedDevelopmentFilePath,
+                        resource: developmentWorkspaceResource,
+                        load: loadDevelopmentWorkspaceResource
+                    )
+                case .terminal:
+                    ScrollView {
                         DevelopmentTerminalPane(
                             task: task,
                             instruction: $developmentInstruction,
                             canSend: canSteerDevelopmentTask(task),
                             send: { sendDevelopmentInstruction(task) }
                         )
-                    case .changes: DevelopmentChangesPane(project: selectedDevelopmentProject, task: task)
-                    case .git:
+                        .frame(maxWidth: 880, alignment: .leading)
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                case .git:
+                    ScrollView {
                         DevelopmentGitPane(
                             project: selectedDevelopmentProject,
                             task: task,
@@ -284,7 +272,12 @@ extension ShannonDesktopRootView {
                                 )
                             }
                         )
-                    case .build:
+                        .frame(maxWidth: 880, alignment: .leading)
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                case .build:
+                    ScrollView {
                         DevelopmentBuildPane(
                             task: task,
                             canRequest: canSteerDevelopmentTask(task),
@@ -295,11 +288,11 @@ extension ShannonDesktopRootView {
                                 )
                             }
                         )
+                        .frame(maxWidth: 880, alignment: .leading)
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .top)
                     }
                 }
-                .frame(maxWidth: 880, alignment: .leading)
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .top)
             }
         } else {
             ContentUnavailableView(
@@ -311,11 +304,15 @@ extension ShannonDesktopRootView {
     }
 
     func developmentTaskSummary(_ task: ShannonAgentTask) -> some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(task.currentAction ?? task.summary).foregroundStyle(.secondary)
+                    Label(task.title, systemImage: task.status.symbolName)
+                        .font(.headline)
+                    Text(task.currentAction ?? task.summary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
                 Spacer()
                 if task.status == .proposed {
@@ -328,12 +325,54 @@ extension ShannonDesktopRootView {
             }
             if let progress = task.progressFraction {
                 ProgressView(value: progress)
+                    .accessibilityLabel("作業進捗")
+                    .accessibilityValue("\(Int(progress * 100))パーセント")
             }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
-            Label(task.title, systemImage: task.status.symbolName)
-                .font(.headline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    var visibleDevelopmentTasks: [ShannonAgentTask] {
+        workProjection.pinned
+            + workProjection.active
+            + workProjection.proposed
+            + workProjection.finished
+            + (showsArchivedDevelopmentTasks ? workProjection.archived : [])
+    }
+
+    var developmentModelLabel: String {
+        guard !selectedAgentModel.isEmpty,
+              let model = developmentModels.first(where: { $0.id == selectedAgentModel }) else {
+            return "モデル"
+        }
+        return model.displayName
+    }
+
+    var developmentHostSymbol: String {
+        switch agentHostPreference {
+        case .auto: "point.3.connected.trianglepath.dotted"
+        case .local: "desktopcomputer"
+        case .cloud: "cloud"
+        }
+    }
+
+    var developmentBillingLabel: String {
+        selectedDevelopmentHost?.kind == .cloud ? "API従量課金" : "Codex利用枠"
+    }
+
+    var developmentBillingSymbol: String {
+        selectedDevelopmentHost?.kind == .cloud ? "creditcard" : "checkmark.circle"
+    }
+
+    var developmentBillingColor: Color {
+        selectedDevelopmentHost?.kind == .cloud ? .shannonAttention : .secondary
+    }
+
+    func refreshDevelopmentWorkspace() {
+        Task {
+            await conversation.synchronizeAgentTasks()
+            await conversation.refreshAgentWorkspace(projectHint: selectedAgentProject)
+            await conversation.refreshAgentProjectProvisioning()
         }
     }
 

@@ -94,7 +94,6 @@ export class CodexAppServerClient implements CodexAppServerConnection {
             'item/reasoning/textDelta',
             'item/reasoning/summaryTextDelta',
             'item/reasoning/summaryPartAdded',
-            'item/commandExecution/outputDelta',
           ],
         },
       });

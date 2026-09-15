@@ -73,7 +73,7 @@ struct ShannonDeskApp: App {
                 )
             }
         }
-        .defaultSize(width: 1220, height: 790)
+        .defaultSize(width: previewWindowSize.width, height: previewWindowSize.height)
         .windowResizability(.contentMinSize)
         .commands {
             ShannonDeskCommands(conversation: conversationModel)
@@ -96,6 +96,15 @@ struct ShannonDeskApp: App {
         case .light: .light
         case .dark: .dark
         }
+    }
+
+    private var previewWindowSize: CGSize {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewCompact") {
+            return CGSize(width: 860, height: 600)
+        }
+#endif
+        return CGSize(width: 1220, height: 790)
     }
 }
 

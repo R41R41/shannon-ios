@@ -57,6 +57,14 @@ interface CodexThreadResult {
   };
 }
 
+function safeCommandOutput(value: string): string {
+  return value
+    .replace(/\u001B\[[0-?]*[ -\/]*[@-~]/gu, '')
+    .replace(/([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY)\s*[=:]\s*)\S+/giu, '$1[REDACTED]')
+    .replace(/(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{12,}/gu, '[REDACTED]')
+    .replace(/[^\n\t\x20-\x7E\u00A0-\u{10FFFF}]/gu, '');
+}
+
 interface CodexTurnResult {
   turn?: Record<string, unknown>;
 }
@@ -83,6 +91,7 @@ export class CodexTaskBridge {
   private readonly now: () => string;
   private notificationQueue: Promise<void> = Promise.resolve();
   private started = false;
+  private readonly outputBuffers = new Map<string, { runtime: RuntimeTask; text: string; timer: NodeJS.Timeout }>();
 
   constructor(private readonly options: CodexTaskBridgeOptions) {
     this.now = options.now ?? (() => new Date().toISOString());
@@ -116,6 +125,7 @@ export class CodexTaskBridge {
   }
 
   async stop(): Promise<void> {
+    for (const taskId of [...this.outputBuffers.keys()]) await this.flushCommandOutput(taskId);
     await this.notificationQueue;
     await this.options.client.stop();
     this.started = false;
@@ -197,6 +207,11 @@ export class CodexTaskBridge {
       case 'item/completed':
         await this.handleItem(runtime, objectValue(params.item), true);
         break;
+      case 'item/commandExecution/outputDelta': {
+        const delta = typeof params.delta === 'string' ? params.delta : undefined;
+        if (delta) this.bufferCommandOutput(runtime, delta);
+        break;
+      }
       case 'turn/diff/updated': {
         const diff = stringValue(params.diff);
         if (diff) for (const change of changesFromUnifiedDiff(diff)) runtime.changes.set(change.id, change);
@@ -237,6 +252,7 @@ export class CodexTaskBridge {
       return;
     }
     if (type === 'commandExecution') {
+      if (completed) await this.flushCommandOutput(runtime.taskId);
       const command = stringValue(item.command) ?? '';
       if (completed) {
         const test = testFromCommand(item, command);
@@ -267,6 +283,34 @@ export class CodexTaskBridge {
     if (type === 'webSearch' && !completed) {
       await this.events.emit(runtime.taskId, 'progress', '必要な情報を確認', undefined, { currentAction: '関連情報を調査中' });
     }
+  }
+
+  private bufferCommandOutput(runtime: RuntimeTask, delta: string): void {
+    const sanitized = safeCommandOutput(delta);
+    if (!sanitized) return;
+    const existing = this.outputBuffers.get(runtime.taskId);
+    if (existing) {
+      existing.text = `${existing.text}${sanitized}`.slice(-4_000);
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.notificationQueue = this.notificationQueue
+        .then(() => this.flushCommandOutput(runtime.taskId))
+        .catch(error => this.diagnostic(error));
+    }, 750);
+    this.outputBuffers.set(runtime.taskId, { runtime, text: sanitized.slice(-4_000), timer });
+  }
+
+  private async flushCommandOutput(taskId: string): Promise<void> {
+    const buffered = this.outputBuffers.get(taskId);
+    if (!buffered) return;
+    clearTimeout(buffered.timer);
+    this.outputBuffers.delete(taskId);
+    const detail = buffered.text.trimEnd();
+    if (!detail) return;
+    await this.events.emit(buffered.runtime.taskId, 'output', '実行出力', detail, {
+      activity: { kind: 'command', status: 'running' },
+    });
   }
 
   private async completeTurn(runtime: RuntimeTask, turn: Record<string, unknown> | undefined): Promise<void> {
@@ -317,43 +361,6 @@ export class CodexTaskBridge {
         return;
       }
       await this.events.emit(runtime.taskId, 'completed', '作業が完了', result.summary, payload);
-    }
-  }
-
-  private async emit(
-    taskId: string,
-    type: HostAgentEvent['type'],
-    title: string,
-    detail?: string,
-    payload?: Record<string, unknown>,
-    tone?: HostAgentEvent['tone'],
-  ): Promise<void> {
-    await this.events.publish([this.events.event(taskId, type, title, detail, payload, undefined, tone)]);
-  }
-
-  private event(
-    taskId: string,
-    type: HostAgentEvent['type'],
-    title: string,
-    detail?: string,
-    payload?: Record<string, unknown>,
-    eventId: string = randomUUID(),
-    tone?: HostAgentEvent['tone'],
-  ): HostAgentEvent {
-    return {
-      eventId, taskId, type, title,
-      ...(detail ? { detail } : {}),
-      ...(payload ? { payload } : {}),
-      ...(tone ? { tone } : {}),
-      occurredAt: this.now(),
-    };
-  }
-
-  private async publish(events: readonly HostAgentEvent[]): Promise<void> {
-    try {
-      await this.options.publish(events);
-    } catch (error) {
-      this.diagnostic(error);
     }
   }
 

@@ -14,27 +14,22 @@ struct DevelopmentAddRepositorySheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("GitHubリポジトリを追加")
-                    .font(.title2.weight(.semibold))
+                Text("GitHubリポジトリを追加").font(.title2.weight(.semibold))
                 Text("Agent Host専用の作業領域へ取得します。元のリポジトリや既存チェックアウトは変更しません。")
                     .foregroundStyle(.secondary)
             }
-
             Form {
                 TextField("https://github.com/owner/repository", text: $repositoryURL)
                     .onChange(of: repositoryURL) { oldValue, newValue in
-                        guard projectKey.isEmpty || projectKey == ShannonDesktopRepositoryInput.suggestedKey(from: oldValue)
+                        guard projectKey.isEmpty
+                            || projectKey == ShannonDesktopRepositoryInput.suggestedKey(from: oldValue)
                         else { return }
                         projectKey = ShannonDesktopRepositoryInput.suggestedKey(from: newValue)
                     }
                 TextField("プロジェクト名", text: $projectKey)
-                LabeledContent(
-                    "追加先",
-                    value: hostPreference == .auto ? "このMac＋クラウド" : hostPreference.japaneseName
-                )
+                LabeledContent("追加先", value: hostPreference == .auto ? "このMac＋クラウド" : hostPreference.japaneseName)
             }
             .formStyle(.grouped)
-
             Label(
                 hostPreference == .auto
                     ? "HTTPSのGitHub URLだけを受け付け、LocalとCloudへ別々に取得します。非公開リポジトリは各HostのGitHub権限を使います。"
@@ -43,17 +38,14 @@ struct DevelopmentAddRepositorySheet: View {
             )
             .font(.caption)
             .foregroundStyle(.secondary)
-
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(Color.shannonDanger)
             }
-
             HStack {
                 Spacer()
-                Button("キャンセル", action: cancel)
-                    .disabled(isAdding)
+                Button("キャンセル", action: cancel).disabled(isAdding)
                 Button("追加", action: add)
                     .buttonStyle(.borderedProminent)
                     .disabled(isAdding || !input.isValid)
@@ -78,9 +70,8 @@ struct DevelopmentRouteBadge: View {
             Text(host.map { "\($0.displayName) · \($0.status.japaneseName)" } ?? "実行先なし")
         }
         .font(.caption.weight(.medium))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(.thinMaterial, in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(host.map { "実行先、\($0.displayName)、\($0.status.japaneseName)" } ?? "実行先なし")
     }
 
     private var statusColor: Color {
@@ -88,123 +79,6 @@ struct DevelopmentRouteBadge: View {
         case .available: .shannonSuccess
         case .busy: .shannonAttention
         case .offline, nil: .secondary
-        }
-    }
-}
-
-struct DevelopmentFilesPane: View {
-    let project: ShannonAgentProjectDTO?
-    let task: ShannonAgentTask
-
-    var body: some View {
-        DevelopmentPane(title: "ファイルツリー", symbol: "folder") {
-            if project?.files.isEmpty != false {
-                Text(task.changes.isEmpty
-                     ? "Agent Hostへ接続すると、プロジェクトのファイルがここに表示されます。"
-                     : "現在の作業で変更したファイルを表示しています。")
-                    .foregroundStyle(.secondary)
-                ForEach(task.changes) { change in
-                    Label(change.displayName, systemImage: "doc")
-                }
-            } else if let project {
-                OutlineGroup(DevelopmentFileNode.roots(paths: project.files), children: \.children) { node in
-                    Label(node.name, systemImage: node.children == nil ? "doc" : "folder").help(node.path)
-                }
-            }
-        }
-    }
-}
-
-struct DevelopmentTerminalPane: View {
-    let task: ShannonAgentTask
-    @Binding var instruction: String
-    let canSend: Bool
-    let send: () -> Void
-
-    var body: some View {
-        DevelopmentPane(title: "コマンド履歴", symbol: "terminal") {
-            HStack {
-                TextField("Codexへ実行内容を指示", text: $instruction)
-                    .onSubmit(send)
-                Button("実行を依頼", action: send)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSend || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            Label("コマンドはCodexが内容と権限を確認し、必要な操作だけを実行します。", systemImage: "checkmark.shield")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            let commands = task.timeline.filter { $0.activity?.kind == .command }
-            if commands.isEmpty {
-                Text("実行したコマンドの状態は、作業開始後にここへ表示されます。")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(commands) { event in
-                    HStack(alignment: .firstTextBaseline) {
-                        Image(systemName: event.activity?.status == .failed ? "xmark.circle.fill" : "terminal")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(event.title)
-                            if let detail = event.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                        }
-                        Spacer()
-                        Text(event.occurredAt, style: .time).font(.caption).foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct DevelopmentChangesPane: View {
-    let project: ShannonAgentProjectDTO?
-    let task: ShannonAgentTask
-
-    var body: some View {
-        DevelopmentPane(title: "差分レビュー", symbol: "doc.text.magnifyingglass") {
-            if !task.changes.isEmpty {
-                ForEach(task.changes) { change in
-                    DevelopmentTaskChangeRow(change: change)
-                    Divider()
-                }
-            } else if project?.changes.isEmpty == false, let project {
-                ForEach(project.changes) { change in
-                    DevelopmentWorkspaceChangeRow(change: change)
-                    Divider()
-                }
-            } else {
-                Text("レビューできる差分はまだありません。").foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-struct DevelopmentTaskChangeRow: View {
-    let change: ShannonAgentChangeSummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(change.displayName).fontWeight(.medium)
-                    if let path = change.path, path != change.displayName {
-                        Text(path).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                }
-                Spacer()
-                Text("+\(change.additions)  −\(change.deletions)")
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            }
-            Text(change.summary).font(.callout).foregroundStyle(.secondary)
-            if let diff = change.diffPreview, !diff.isEmpty {
-                DisclosureGroup("行単位の差分") {
-                    ScrollView(.horizontal) {
-                        Text(diff)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 6)
-                    }
-                }
-            }
         }
     }
 }
@@ -224,24 +98,7 @@ struct DevelopmentGitPane: View {
             LabeledContent("実行ホスト", value: host?.displayName ?? task.assignedHostID ?? "未割り当て")
             Label("ブランチとworktreeは、選択したAgent Hostの安全境界内で管理します。", systemImage: "checkmark.shield")
                 .font(.callout).foregroundStyle(.secondary)
-            Button("作業ブランチを用意", action: requestBranch)
-                .disabled(!canRequest)
-        }
-    }
-}
-
-struct DevelopmentWorkspaceChangeRow: View {
-    let change: ShannonAgentWorkspaceChangeDTO
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(change.path).fontWeight(.medium)
-                Spacer()
-                Text("+\(change.additions)  −\(change.deletions)")
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            }
-            Text(change.status).font(.caption.monospaced()).foregroundStyle(.secondary)
+            Button("作業ブランチを用意", action: requestBranch).disabled(!canRequest)
         }
     }
 }
@@ -261,16 +118,29 @@ struct DevelopmentBuildPane: View {
             } else {
                 ForEach(task.tests) { DevelopmentBuildResultRow(test: $0) }
             }
+            DevelopmentCommandOutput(task: task, title: "ビルド出力")
         }
+    }
+}
+
+struct DevelopmentPaneHeader: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        Label(title, systemImage: symbol)
+            .font(.headline)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
 struct DevelopmentBuildResultRow: View {
     let test: ShannonAgentTestResult
 
-    var body: some View {
-        Label(test.name, systemImage: symbolName).foregroundStyle(foregroundColor)
-    }
+    var body: some View { Label(test.name, systemImage: symbolName).foregroundStyle(foregroundColor) }
 
     private var symbolName: String {
         switch test.status {
@@ -280,9 +150,7 @@ struct DevelopmentBuildResultRow: View {
         }
     }
 
-    private var foregroundColor: Color {
-        test.status == .failed ? .shannonDanger : .primary
-    }
+    private var foregroundColor: Color { test.status == .failed ? .shannonDanger : .primary }
 }
 
 struct DevelopmentPane<Content: View>: View {
@@ -298,13 +166,10 @@ struct DevelopmentPane<Content: View>: View {
 
     var body: some View {
         GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 14) { content }
+                .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label(title, systemImage: symbol)
-                .font(.headline)
+            Label(title, systemImage: symbol).font(.headline)
         }
     }
 }

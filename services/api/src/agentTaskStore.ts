@@ -15,6 +15,12 @@ import type {
   ClaimedAgentProjectProvisioning,
   CreateAgentProjectProvisioningInput,
 } from './agentProjectProvisioning.js';
+import type {
+  AgentWorkspaceResourceEvent,
+  AgentWorkspaceResourceRequest,
+  ClaimedAgentWorkspaceResource,
+  CreateAgentWorkspaceResourceInput,
+} from './agentWorkspaceResources.js';
 
 export interface AgentModelDescriptor {
   id: string;
@@ -182,7 +188,7 @@ export interface ClaimedAgentCommand {
 export interface HostAgentEvent {
   eventId: string;
   taskId: string;
-  type: 'started' | 'progress' | 'approval_requested' | 'paused' | 'completed' | 'failed' | 'command_completed';
+  type: 'started' | 'progress' | 'output' | 'approval_requested' | 'paused' | 'completed' | 'failed' | 'command_completed';
   title: string;
   detail?: string;
   tone?: AgentEventTone;
@@ -227,6 +233,13 @@ export interface AgentTaskStore {
     hostId: string,
     event: AgentProjectProvisioningEvent,
   ): AgentProjectProvisioningRequest;
+  createWorkspaceResource(scopeKey: string, input: CreateAgentWorkspaceResourceInput, now: string): {
+    request: AgentWorkspaceResourceRequest;
+    created: boolean;
+  };
+  getWorkspaceResource(scopeKey: string, requestId: string): AgentWorkspaceResourceRequest | null;
+  claimWorkspaceResource(hostId: string, now: string): ClaimedAgentWorkspaceResource | null;
+  recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent): AgentWorkspaceResourceRequest;
 }
 
 import { SQLiteAgentTaskStore } from './agentTaskPersistence.js';
@@ -271,5 +284,17 @@ export class InMemoryAgentTaskStore implements AgentTaskStore {
   }
   recordProjectProvisioning(hostId: string, event: AgentProjectProvisioningEvent) {
     return this.delegate.recordProjectProvisioning(hostId, event);
+  }
+  createWorkspaceResource(scopeKey: string, input: CreateAgentWorkspaceResourceInput, now: string) {
+    return this.delegate.createWorkspaceResource(scopeKey, input, now);
+  }
+  getWorkspaceResource(scopeKey: string, requestId: string) {
+    return this.delegate.getWorkspaceResource(scopeKey, requestId);
+  }
+  claimWorkspaceResource(hostId: string, now: string) {
+    return this.delegate.claimWorkspaceResource(hostId, now);
+  }
+  recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent) {
+    return this.delegate.recordWorkspaceResource(hostId, event);
   }
 }

@@ -26,6 +26,11 @@ import {
   type AgentProjectProvisioningEvent,
   type CreateAgentProjectProvisioningInput,
 } from './agentProjectProvisioning.js';
+import {
+  AgentWorkspaceResourcePersistence,
+  type AgentWorkspaceResourceEvent,
+  type CreateAgentWorkspaceResourceInput,
+} from './agentWorkspaceResources.js';
 
 import {
   arrayValue,
@@ -257,6 +262,15 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
           event.taskId, `host.${event.type}`, event.title, event.detail,
           event.tone ?? toneForHostEvent(event.type), event.occurredAt, { ...(event.payload ?? {}), hostId }, event.eventId,
         );
+        if (event.type === 'output') {
+          this.database.prepare(`
+            DELETE FROM agent_task_events WHERE event_id IN (
+              SELECT event_id FROM agent_task_events
+              WHERE task_id = ? AND event_type = 'host.output'
+              ORDER BY sequence DESC LIMIT -1 OFFSET 120
+            )
+          `).run(event.taskId);
+        }
         if (event.type === 'command_completed' && typeof event.payload?.commandId === 'string') {
           this.database.prepare(`
             UPDATE agent_task_commands SET status = 'completed', completed_at = ?, lease_owner = NULL, lease_until = NULL
@@ -294,15 +308,17 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
   createProjectProvisioning(scopeKey: string, input: CreateAgentProjectProvisioningInput, now: string) {
     return new AgentProjectProvisioningPersistence(this.database).create(scopeKey, input, now);
   }
-  listProjectProvisioning(scopeKey: string) {
-    return new AgentProjectProvisioningPersistence(this.database).list(scopeKey);
-  }
-  claimProjectProvisioning(hostId: string, now: string) {
-    return new AgentProjectProvisioningPersistence(this.database).claim(hostId, now);
-  }
+  listProjectProvisioning(scopeKey: string) { return new AgentProjectProvisioningPersistence(this.database).list(scopeKey); }
+  claimProjectProvisioning(hostId: string, now: string) { return new AgentProjectProvisioningPersistence(this.database).claim(hostId, now); }
   recordProjectProvisioning(hostId: string, event: AgentProjectProvisioningEvent) {
     return new AgentProjectProvisioningPersistence(this.database).record(hostId, event);
   }
+  createWorkspaceResource(scopeKey: string, input: CreateAgentWorkspaceResourceInput, now: string) {
+    return new AgentWorkspaceResourcePersistence(this.database).create(scopeKey, input, now);
+  }
+  getWorkspaceResource(scopeKey: string, requestId: string) { return new AgentWorkspaceResourcePersistence(this.database).get(scopeKey, requestId); }
+  claimWorkspaceResource(hostId: string, now: string) { return new AgentWorkspaceResourcePersistence(this.database).claim(hostId, now); }
+  recordWorkspaceResource(hostId: string, event: AgentWorkspaceResourceEvent) { return new AgentWorkspaceResourcePersistence(this.database).record(hostId, event); }
   close(): void {
     if (!this.database.isOpen) return;
     this.database.exec('PRAGMA wal_checkpoint(PASSIVE)');
@@ -440,6 +456,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         update('running', event.detail ?? event.title, stringValue(payload.currentAction));
         if (Array.isArray(payload.plan)) this.database.prepare('UPDATE agent_tasks SET plan_json = ? WHERE task_id = ?')
           .run(JSON.stringify(payload.plan), event.taskId);
+        break;
+      case 'output':
         break;
       case 'approval_requested': {
         const approval = normalizeApproval(payload.approval, event.occurredAt);

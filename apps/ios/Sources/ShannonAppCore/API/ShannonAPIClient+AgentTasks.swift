@@ -65,6 +65,48 @@ extension ShannonAPIClient {
         return try await response(ShannonAgentWorkspaceCatalogDTO.self, for: request)
     }
 
+    public func loadAgentWorkspaceResource(
+        scopeKey: String,
+        projectKey: String,
+        path: String,
+        kind: ShannonAgentWorkspaceResourceKind,
+        hostPreference: ShannonAgentRoutingPreference
+    ) async throws -> ShannonAgentWorkspaceResourceDTO {
+        let connection = currentConnection()
+        let effectiveScopeKey = connection?.scopeKey ?? scopeKey
+        var request = URLRequest(url: baseURL.appending(path: "/v1/agent/workspace/resources"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonAgentWorkspaceResourceCreateDTO(
+            scopeKey: effectiveScopeKey,
+            idempotencyKey: "resource-\(UUID().uuidString.lowercased())",
+            projectKey: projectKey,
+            path: path,
+            kind: kind,
+            hostPreference: hostPreference
+        ))
+        var envelope: ShannonAgentWorkspaceResourceEnvelopeDTO = try await response(
+            ShannonAgentWorkspaceResourceEnvelopeDTO.self,
+            for: request
+        )
+        for _ in 0..<40 where !envelope.request.status.isTerminal {
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(250))
+            var components = URLComponents(
+                url: baseURL.appending(path: "/v1/agent/workspace/resources/\(envelope.request.id)"),
+                resolvingAgainstBaseURL: false
+            )
+            components?.queryItems = [URLQueryItem(name: "scopeKey", value: effectiveScopeKey)]
+            guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+            var pollRequest = URLRequest(url: url)
+            authorize(&pollRequest, connection: connection)
+            envelope = try await response(ShannonAgentWorkspaceResourceEnvelopeDTO.self, for: pollRequest)
+        }
+        guard envelope.request.status.isTerminal else { throw ShannonAPIError.invalidResponse }
+        return envelope.request
+    }
+
     public func loadTestFlightDelivery(scopeKey: String) async throws -> ShannonTestFlightDeliveryDashboardDTO {
         let connection = currentConnection()
         var components = URLComponents(

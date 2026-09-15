@@ -1,4 +1,5 @@
 import ShannonAppCore
+import Testing
 import XCTest
 
 final class ShannonDesktopWorkProjectionTests: XCTestCase {
@@ -455,5 +456,55 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             summary: summary,
             sections: sections
         )
+    }
+}
+
+@Suite("Mac development workspace")
+struct ShannonDesktopDevelopmentWorkspaceTests {
+    @Test(arguments: [719.0, 640.0, 480.0])
+    func compactTaskLayoutFitsNarrowWidths(_ width: CGFloat) {
+        #expect(!ShannonDesktopDevelopmentLayout.showsTaskNavigator(availableWidth: width))
+    }
+
+    @Test(arguments: [720.0, 900.0, 1_200.0])
+    func taskNavigatorAppearsWhenWorkspaceCanSupportIt(_ width: CGFloat) {
+        #expect(ShannonDesktopDevelopmentLayout.showsTaskNavigator(availableWidth: width))
+    }
+
+    @Test
+    func reviewChangesKeepLatestEntryPerFile() throws {
+        var task = ShannonAgentTaskFixtures.completed()
+        task.changes = [
+            .init(
+                displayName: "Store.swift",
+                path: "Sources/Store.swift",
+                summary: "最初の変更",
+                additions: 2,
+                deletions: 0
+            ),
+            .init(
+                displayName: "Store.swift",
+                path: "Sources/Store.swift",
+                summary: "検証後の変更",
+                additions: 4,
+                deletions: 1,
+                diffPreview: "+let verified = true"
+            ),
+            .init(
+                displayName: "StoreTests.swift",
+                path: "Tests/StoreTests.swift",
+                summary: "回帰試験",
+                additions: 8,
+                deletions: 0
+            ),
+        ]
+
+        let changes = ShannonDesktopReviewChange.items(project: nil, task: task)
+
+        #expect(changes.map(\.id) == ["Sources/Store.swift", "Tests/StoreTests.swift"])
+        let store = try #require(changes.first)
+        #expect(store.summary == "検証後の変更")
+        #expect(store.additions == 4)
+        #expect(store.deletions == 1)
     }
 }

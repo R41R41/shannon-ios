@@ -6,6 +6,7 @@ import { codexModelCatalog } from './codexModelCatalog.js';
 import { CodexTaskBridge } from './codexTaskBridge.js';
 import { AgentWorkspaceSnapshotReader } from './agentWorkspaceSnapshot.js';
 import { AgentProjectProvisioner } from './agentProjectProvisioner.js';
+import { readWorkspaceResource } from './agentWorkspaceResources.js';
 
 const config = loadAgentHostConfig();
 const state = new AgentHostStateStore(config.stateFile);
@@ -60,8 +61,17 @@ try {
         continue;
       }
       const command = await broker.claim();
-      if (command) await bridge.handle(command);
-      await delay(command ? 150 : config.pollIntervalMs);
+      if (command) {
+        await bridge.handle(command);
+        await delay(150);
+        continue;
+      }
+      const resource = await broker.claimWorkspaceResource();
+      if (resource) {
+        await broker.publishWorkspaceResource(readWorkspaceResource(config.projects, resource));
+        continue;
+      }
+      await delay(config.pollIntervalMs);
     } catch (error) {
       console.error(`[agent-host] ${error instanceof Error ? error.message : String(error)}`);
       await delay(Math.max(config.pollIntervalMs, 2_000));

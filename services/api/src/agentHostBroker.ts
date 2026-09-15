@@ -4,6 +4,10 @@ import type {
   AgentProjectProvisioningEvent,
   ClaimedAgentProjectProvisioning,
 } from './agentProjectProvisioning.js';
+import type {
+  AgentWorkspaceResourceEvent,
+  ClaimedAgentWorkspaceResource,
+} from './agentWorkspaceResources.js';
 
 export class AgentHostBrokerClient {
   constructor(
@@ -33,6 +37,17 @@ export class AgentHostBrokerClient {
 
   async publishProject(event: AgentProjectProvisioningEvent): Promise<void> {
     await this.post('/v1/agent/host/projects/events', { hostId: this.hostId, event });
+  }
+
+  async claimWorkspaceResource(): Promise<ClaimedAgentWorkspaceResource | null> {
+    const response = await this.post<{ request: ClaimedAgentWorkspaceResource | null }>(
+      '/v1/agent/host/workspace/resources/claim', { hostId: this.hostId },
+    );
+    return response.request;
+  }
+
+  async publishWorkspaceResource(event: AgentWorkspaceResourceEvent): Promise<void> {
+    await this.post('/v1/agent/host/workspace/resources/events', { hostId: this.hostId, event });
   }
 
   async publish(events: readonly HostAgentEvent[]): Promise<void> {

@@ -162,7 +162,7 @@ export function validAgentCommandType(value: unknown): value is AgentCommandType
 }
 
 export function validHostEvents(value: unknown): value is HostAgentEvent[] {
-  const types = ['started', 'progress', 'approval_requested', 'paused', 'completed', 'failed', 'command_completed'];
+  const types = ['started', 'progress', 'output', 'approval_requested', 'paused', 'completed', 'failed', 'command_completed'];
   return Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every(event => objectBody(event)
     && validBoundedString(event.eventId, 160)
     && validBoundedString(event.taskId, 160)

@@ -90,6 +90,37 @@ extension ShannonConversationModel {
         }
     }
 
+    public func loadAgentWorkspaceResource(
+        projectKey: String,
+        path: String,
+        kind: ShannonAgentWorkspaceResourceKind,
+        hostPreference: ShannonAgentRoutingPreference
+    ) async throws -> ShannonAgentWorkspaceResourceDTO {
+        if isDesignPreview {
+            return ShannonAgentWorkspaceResourceDTO(
+                id: "preview-resource",
+                projectKey: projectKey,
+                path: path,
+                kind: kind,
+                assignedHostID: "preview-local",
+                status: .ready,
+                content: kind == .diff ? "+let preview = true" : "import SwiftUI\n\nstruct PreviewView: View {}",
+                truncated: false,
+                errorCode: nil,
+                errorMessage: nil,
+                createdAt: "2026-09-15T12:00:00Z",
+                updatedAt: "2026-09-15T12:00:00Z"
+            )
+        }
+        return try await client.loadAgentWorkspaceResource(
+            scopeKey: scopeKey,
+            projectKey: projectKey,
+            path: path,
+            kind: kind,
+            hostPreference: hostPreference
+        )
+    }
+
     public func configureAgentTask(
         _ id: UUID,
         hostPreference: ShannonAgentRoutingPreference,

@@ -30,7 +30,7 @@ These terms are not interchangeable.
 | --- | --- | --- | --- |
 | Responsibility-oriented architecture | Complete; Swift and TypeScript production files are bounded and feature-owned | Accepted baseline before Build 50 was `a68bdf4`; Azure API and both Agent Hosts use that revision | Integrate the verified Build 50 candidate and keep architecture guards green |
 | iPhone work management | Project/host/model/reasoning selection, safe start gating, visible recent progress, steering, pause/resume/cancel, approval, changes, tests, pin/archive/search | iOS 0.1.0 (49) is VALID, INTERNAL_ONLY, and assigned to Shannon Internal; the post-audit source/tests/build are green as Build 51 | Build 51 TestFlight distribution and physical-device Smoke |
-| Mac development workspace | Native files, command history, change review, Git/branch, build panes, repository provisioning, responsive execution selectors, and truthful finished states | Post-audit local build and 19 tests pass as Mac Build 6 | Build 6 signed Archive, Upload, Processing, Assignment, Install, Smoke |
+| Mac development workspace | Native files, safe selected-file preview, full per-file diff, bounded streaming command/build output, Git/branch, build panes, repository provisioning, responsive execution selectors, and truthful finished states | Post-audit local build and 19 tests pass; the resource/output additions are prepared as Mac 0.1.0 (8) but not deployed | Deploy the compatible API and Agent Host, then complete Build 8 Archive, Upload, Processing, Assignment, Install, and Smoke |
 | Agent execution | Durable task/event/command state, restart recovery, local-first routing, explicit fixed-host behavior | Local and Cloud heartbeat; Aether, Shannon, and Voyager registered on both hosts | Harmless E2E on each host; background/restart recovery; approval E2E |
 | Arbitrary GitHub repository | HTTPS repository validation, host-owned clone, idempotent provisioning, no credential in request | API and both hosts deployed | UI E2E using a disposable or explicitly selected repository |
 | Release Center | Seven truthful gates and iPhone release request targets | Build 49 proves Xcode Cloud Archive through internal assignment | Build 50 Install/Smoke confirmation; Mac release path remains user-operated |
@@ -88,14 +88,18 @@ normal Codex workflow for this user's development style.
 The first development UI is usable but does not yet expose all of Codex's review
 depth. Implement only the parts that improve a non-coding user's confidence:
 
-1. Selected-file read-only preview with safe size and binary boundaries.
-2. Full per-file diff navigation, not only bounded event previews.
-3. Streaming command/build output with clear running, stopped, failed, and passed
-   states; do not turn it into an unrestricted local shell.
-4. Explicit branch, commit, push, pull-request, and integration proposals with
+Completed locally on 2026-09-15:
+
+- Selected-file read-only preview with workspace, symlink, secret, binary, and size boundaries.
+- Full per-file diff navigation backed by a durable Agent Host request instead of the event preview.
+- Bounded streaming command/build output with explicit running, completed, and failed states; it remains a Codex instruction surface, not an unrestricted local shell.
+
+Next:
+
+1. Explicit branch, commit, push, pull-request, and integration proposals with
    operation-time approval and exact target identity.
-5. Build artifacts, logs, and release evidence linked to the durable task.
-6. Better task comparison and retrieval across project, host, branch, state, and
+2. Build artifacts, logs, and release evidence linked to the durable task.
+3. Better task comparison and retrieval across project, host, branch, state, and
    date while preserving one authoritative event stream.
 
 ## Priority 3 — complete cross-app and experiential validation
@@ -128,7 +132,7 @@ decisions before implementation.
 
 Shannon reaches the current goal when:
 
-- Build 50 and Mac Build 5 pass all seven Apple release gates;
+- the next accepted iOS candidate and Mac Build 8 pass all seven Apple release gates;
 - Priority 1 passes on physical iPhone and Mac with both Local and Cloud hosts;
 - the user can understand changes, commands, tests, approvals, Git target, and
   release result without reading source code;

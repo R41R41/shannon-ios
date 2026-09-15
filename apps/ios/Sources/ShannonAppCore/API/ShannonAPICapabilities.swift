@@ -103,6 +103,13 @@ public protocol ShannonAetherServing: Sendable {
 
 public protocol ShannonAgentTaskServing: Sendable {
     func loadAgentWorkspace(scopeKey: String, projectHint: String?) async throws -> ShannonAgentWorkspaceCatalogDTO
+    func loadAgentWorkspaceResource(
+        scopeKey: String,
+        projectKey: String,
+        path: String,
+        kind: ShannonAgentWorkspaceResourceKind,
+        hostPreference: ShannonAgentRoutingPreference
+    ) async throws -> ShannonAgentWorkspaceResourceDTO
     func createAgentTask(scopeKey: String, task: ShannonAgentTask, idempotencyKey: String) async throws -> ShannonAgentTask
     func loadAgentTasks(scopeKey: String) async throws -> [ShannonAgentTask]
     func loadAgentTask(scopeKey: String, taskID: UUID, afterSequence: Int?) async throws -> ShannonAgentTask?
@@ -373,6 +380,16 @@ public extension ShannonAPIClientProtocol {
 
     func loadAgentWorkspace(scopeKey: String, projectHint: String? = nil) async throws -> ShannonAgentWorkspaceCatalogDTO {
         .unavailable
+    }
+
+    func loadAgentWorkspaceResource(
+        scopeKey: String,
+        projectKey: String,
+        path: String,
+        kind: ShannonAgentWorkspaceResourceKind,
+        hostPreference: ShannonAgentRoutingPreference
+    ) async throws -> ShannonAgentWorkspaceResourceDTO {
+        throw ShannonAPIError.invalidResponse
     }
 
     func loadAgentTasks(scopeKey: String) async throws -> [ShannonAgentTask] { [] }

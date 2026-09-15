@@ -13,6 +13,7 @@ import type {
   HostAgentEvent,
 } from './agentTaskStore.js';
 import { migrateAgentProjectProvisioning } from './agentProjectProvisioning.js';
+import { migrateAgentWorkspaceResources } from './agentWorkspaceResources.js';
 
 export interface AgentTaskRow {
   task_id: string;
@@ -164,6 +165,7 @@ export function migrateAgentTasks(database: DatabaseSync): void {
     database.exec("ALTER TABLE agent_hosts ADD COLUMN workspaces_json TEXT NOT NULL DEFAULT '[]';");
   }
   migrateAgentProjectProvisioning(database);
+  migrateAgentWorkspaceResources(database);
 }
 
 export function validateCommandTransition(task: AgentTask, type: AgentCommandType, payload: Record<string, unknown>): void {

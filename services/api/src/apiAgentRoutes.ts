@@ -14,6 +14,10 @@ import {
   normalizedGitHubRepositoryURL,
   type AgentProjectProvisioningEvent,
 } from './agentProjectProvisioning.js';
+import {
+  normalizedResourcePath,
+  type AgentWorkspaceResourceEvent,
+} from './agentWorkspaceResources.js';
 
 export interface ApiAgentRouteDependencies {
   agentTasks: AgentTaskStore;
@@ -70,6 +74,45 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
       status: 200,
       body: dependencies.agentTasks.workspaceCatalog(projectHint, dependencies.now(), dependencies.defaultAgentHost),
     };
+  }
+
+  if (request.method === 'POST' && request.path === '/v1/agent/workspace/resources') {
+    if (!objectBody(request.body)) return badRequest('JSON object body is required');
+    const scopeKey = request.body.scopeKey;
+    if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    if (!validBoundedString(request.body.idempotencyKey, 160)) return badRequest('idempotencyKey is invalid');
+    if (!validBoundedString(request.body.projectKey, 160)) return badRequest('projectKey is invalid');
+    if (!validBoundedString(request.body.path, 1_024) || !normalizedResourcePath(request.body.path)) {
+      return badRequest('path is invalid');
+    }
+    if (request.body.kind !== 'file' && request.body.kind !== 'diff') return badRequest('kind is invalid');
+    const hostPreference = validBoundedString(request.body.hostPreference, 160)
+      ? request.body.hostPreference : 'auto';
+    if (!['auto', 'local', 'cloud'].includes(hostPreference)) return badRequest('hostPreference is invalid');
+    const hostId = dependencies.agentTasks.resolveHost(
+      request.body.projectKey, hostPreference, dependencies.now(), dependencies.defaultAgentHost,
+    );
+    if (!hostId) return { status: 409, body: { error: 'AGENT_HOST_UNAVAILABLE' } };
+    const result = dependencies.agentTasks.createWorkspaceResource(scopeKey, {
+      idempotencyKey: request.body.idempotencyKey,
+      projectKey: request.body.projectKey.toLocaleLowerCase('en-US'),
+      path: normalizedResourcePath(request.body.path)!,
+      kind: request.body.kind,
+      assignedHostID: hostId,
+    }, dependencies.now());
+    return { status: result.created ? 202 : 200, body: result };
+  }
+
+  const workspaceResourceMatch = request.path.match(/^\/v1\/agent\/workspace\/resources\/([^/]+)$/);
+  if (request.method === 'GET' && workspaceResourceMatch) {
+    const scopeKey = request.query?.get('scopeKey');
+    if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    const resource = dependencies.agentTasks.getWorkspaceResource(
+      scopeKey, decodeURIComponent(workspaceResourceMatch[1] ?? ''),
+    );
+    return resource
+      ? { status: 200, body: { request: resource } }
+      : { status: 404, body: { error: 'AGENT_WORKSPACE_RESOURCE_NOT_FOUND' } };
   }
 
   const agentTaskMatch = request.path.match(/^\/v1\/agent\/tasks\/([^/]+)$/);
@@ -246,6 +289,42 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
     if (!validBoundedString(request.body.hostId, 160)) return badRequest('hostId is invalid');
     const provisioning = dependencies.agentTasks.claimProjectProvisioning(request.body.hostId, dependencies.now());
     return { status: 200, body: { provisioning } };
+  }
+
+  if (request.method === 'POST' && request.path === '/v1/agent/host/workspace/resources/claim') {
+    if (!objectBody(request.body)) return badRequest('JSON object body is required');
+    if (!validBoundedString(request.body.hostId, 160)) return badRequest('hostId is invalid');
+    const claimed = dependencies.agentTasks.claimWorkspaceResource(request.body.hostId, dependencies.now());
+    return { status: 200, body: { request: claimed } };
+  }
+
+  if (request.method === 'POST' && request.path === '/v1/agent/host/workspace/resources/events') {
+    if (!objectBody(request.body)) return badRequest('JSON object body is required');
+    if (!validBoundedString(request.body.hostId, 160)) return badRequest('hostId is invalid');
+    if (!objectBody(request.body.event)) return badRequest('event is invalid');
+    const event = request.body.event;
+    if (!validBoundedString(event.requestId, 160)
+      || (event.status !== 'ready' && event.status !== 'failed')
+      || !validBoundedString(event.occurredAt, 80)
+      || (event.content !== undefined && (typeof event.content !== 'string' || event.content.length > 600_000))
+      || (event.errorCode !== undefined && !validBoundedString(event.errorCode, 80))
+      || (event.errorMessage !== undefined && !validBoundedString(event.errorMessage, 500))) {
+      return badRequest('event is invalid');
+    }
+    try {
+      const accepted = dependencies.agentTasks.recordWorkspaceResource(
+        request.body.hostId, event as unknown as AgentWorkspaceResourceEvent,
+      );
+      return { status: 200, body: { request: accepted } };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'AGENT_WORKSPACE_RESOURCE_NOT_FOUND') {
+        return { status: 404, body: { error: error.message } };
+      }
+      if (error instanceof Error && error.message === 'AGENT_HOST_RESOURCE_MISMATCH') {
+        return { status: 409, body: { error: error.message } };
+      }
+      throw error;
+    }
   }
 
   if (request.method === 'POST' && request.path === '/v1/agent/host/projects/events') {

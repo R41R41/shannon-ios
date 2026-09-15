@@ -27,6 +27,12 @@
 		A038423C76CA62A66216D51C /* ShannonDesktopSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F73FD49591755A8E84E48DBB /* ShannonDesktopSidebarComponents.swift */; };
 		B079C814A92DC804942DA28D /* ShannonDesktopSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6025CCD046AB52ADD2906A94 /* ShannonDesktopSupportTests.swift */; };
 		B3C09C6AE00C5C46F827C1B5 /* ShannonDesktopAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090F0E687E9F502694CB1E2 /* ShannonDesktopAttachment.swift */; };
+		C0D3C0010000000000000011 /* ShannonDesktopDevelopmentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000001 /* ShannonDesktopDevelopmentModels.swift */; };
+		C0D3C0010000000000000012 /* ShannonDesktopDevelopmentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000001 /* ShannonDesktopDevelopmentModels.swift */; };
+		C0D3C0010000000000000013 /* ShannonDesktopRootView+DevelopmentToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000002 /* ShannonDesktopRootView+DevelopmentToolbar.swift */; };
+		C0D3C0010000000000000014 /* ShannonDesktopDevelopmentResourceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000003 /* ShannonDesktopDevelopmentResourceViews.swift */; };
+		C0D3C0010000000000000015 /* ShannonDesktopDevelopmentExecutionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */; };
+		C0D3C0010000000000000016 /* ShannonDesktopRootView+DevelopmentResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */; };
 		D166573296293401302198D7 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F0437F3D7E201CDA5082E14 /* ShannonAppCore */; };
 		E4432533E3AF6B533CF3BAC2 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */; };
 		EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
@@ -54,6 +60,11 @@
 		A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Sidebar.swift"; path = "Features/Shell/ShannonDesktopRootView+Sidebar.swift"; sourceTree = "<group>"; };
 		AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		CA7081EA2EDACFB28D8A1D7E /* ShannonDesktopConversationComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopConversationComponents.swift; path = Features/Talk/ShannonDesktopConversationComponents.swift; sourceTree = "<group>"; };
+		C0D3C0010000000000000001 /* ShannonDesktopDevelopmentModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentModels.swift; path = Features/Development/ShannonDesktopDevelopmentModels.swift; sourceTree = "<group>"; };
+		C0D3C0010000000000000002 /* ShannonDesktopRootView+DevelopmentToolbar.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+DevelopmentToolbar.swift"; path = "Features/Development/ShannonDesktopRootView+DevelopmentToolbar.swift"; sourceTree = "<group>"; };
+		C0D3C0010000000000000003 /* ShannonDesktopDevelopmentResourceViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentResourceViews.swift; path = Features/Development/ShannonDesktopDevelopmentResourceViews.swift; sourceTree = "<group>"; };
+		C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentExecutionViews.swift; path = Features/Development/ShannonDesktopDevelopmentExecutionViews.swift; sourceTree = "<group>"; };
+		C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+DevelopmentResources.swift"; path = "Features/Development/ShannonDesktopRootView+DevelopmentResources.swift"; sourceTree = "<group>"; };
 		DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
 		E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Actions.swift"; path = "Features/Shell/ShannonDesktopRootView+Actions.swift"; sourceTree = "<group>"; };
 		ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
@@ -98,8 +109,13 @@
 				A1C4A810A6B44940B77A0002 /* Assets.xcassets */,
 				45FA810B4EAFA84493D5E773 /* Info.plist */,
 				512189FA117614C2D367FE1F /* ShannonDesk.entitlements */,
+				C0D3C0010000000000000001 /* ShannonDesktopDevelopmentModels.swift */,
 				2E31EA42B1CBB9DA5B051279 /* ShannonDesktopDevelopmentComponents.swift */,
+				C0D3C0010000000000000003 /* ShannonDesktopDevelopmentResourceViews.swift */,
+				C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */,
+				C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */,
 				1542C942B1A49A56581AE58F /* ShannonDesktopRootView+Development.swift */,
+				C0D3C0010000000000000002 /* ShannonDesktopRootView+DevelopmentToolbar.swift */,
 				1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */,
 				E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */,
 				A5EC8A187EA1E022F83C6B2F /* ShannonDesktopRootView+Sidebar.swift */,
@@ -254,6 +270,7 @@
 				B079C814A92DC804942DA28D /* ShannonDesktopSupportTests.swift in Sources */,
 				B3C09C6AE00C5C46F827C1B5 /* ShannonDesktopAttachment.swift in Sources */,
 				EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */,
+				C0D3C0010000000000000012 /* ShannonDesktopDevelopmentModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -261,8 +278,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0D3C0010000000000000011 /* ShannonDesktopDevelopmentModels.swift in Sources */,
 				89CAEF1B96A0EF5A592AD3D6 /* ShannonDesktopDevelopmentComponents.swift in Sources */,
+				C0D3C0010000000000000014 /* ShannonDesktopDevelopmentResourceViews.swift in Sources */,
+				C0D3C0010000000000000015 /* ShannonDesktopDevelopmentExecutionViews.swift in Sources */,
+				C0D3C0010000000000000016 /* ShannonDesktopRootView+DevelopmentResources.swift in Sources */,
 				4ACA8111DF7117D876DE8C3B /* ShannonDesktopRootView+Development.swift in Sources */,
+				C0D3C0010000000000000013 /* ShannonDesktopRootView+DevelopmentToolbar.swift in Sources */,
 				75CF76A3CB2229BFEF49972C /* ShannonDesktopRootView+Settings.swift in Sources */,
 				F0697C99B854C13BBA1968CA /* ShannonDesktopRootView+Actions.swift in Sources */,
 				8C739CEFD0CB3C02CD2F77AB /* ShannonDesktopRootView+Sidebar.swift in Sources */,
@@ -307,7 +329,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -339,7 +361,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShannonDesk/ShannonDesk.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 66TZ23L7ZJ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

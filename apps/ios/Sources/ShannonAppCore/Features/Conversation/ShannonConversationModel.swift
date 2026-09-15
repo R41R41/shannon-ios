@@ -181,6 +181,53 @@ public final class ShannonConversationModel {
             .init(id: "artifact", title: "生成物の保存とプレビューを接続", status: .completed),
             .init(id: "pairing", title: "Mac実接続と配布準備へ進む", status: .pending),
         ]
+        runningTask.changes = [
+            .init(
+                displayName: "ShannonDesktopRootView+Development.swift",
+                path: "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift",
+                summary: "固定幅の操作列を、ウィンドウ幅に応じて切り替わる開発画面へ変更",
+                additions: 84,
+                deletions: 61,
+                diffPreview: """
+                @@ -42,3 +42,7 @@
+                -developmentHeader
+                -developmentTaskList
+                +GeometryReader { proxy in
+                +    if layout.showsTaskNavigator {
+                +        developmentSplitWorkspace
+                +    } else {
+                +        developmentCompactWorkspace
+                +    }
+                """
+            ),
+            .init(
+                displayName: "ShannonDesktopDevelopmentComponents.swift",
+                path: "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopDevelopmentComponents.swift",
+                summary: "ファイル一覧と差分レビューをMac標準の選択UIへ整理",
+                additions: 126,
+                deletions: 38,
+                diffPreview: """
+                @@ -150,2 +150,5 @@
+                -DevelopmentTaskChangeRow(change: change)
+                +List(changes, selection: $selection) { change in
+                +    DevelopmentReviewChangeRow(change: change)
+                +}
+                +DevelopmentReviewDetail(change: selectedChange)
+                """
+            ),
+        ]
+        runningTask.tests = [
+            .init(name: "Mac開発画面", status: .passed, detail: "19件 + レイアウト3件"),
+            .init(name: "狭幅レイアウト", status: .passed, detail: "480 / 640 / 719 pt"),
+        ]
+        runningTask.timeline.append(.init(
+            sequence: (runningTask.timeline.last?.sequence ?? 0) + 1,
+            title: "実行出力",
+            detail: "Building ShannonDesk…\nTest Suite 'ShannonDeskTests' passed.\n** TEST SUCCEEDED **\n",
+            occurredAt: now.addingTimeInterval(-8),
+            tone: .progress,
+            activity: .init(kind: .command, status: .completed)
+        ))
         var proposedTask = ShannonAgentTaskFixtures.proposed(threadID: "design-preview", now: now.addingTimeInterval(-20))
         proposedTask.title = "Mac実接続と配布準備"
         proposedTask.goal = "同じShannonへ安全に接続し、Macへ導入できる完成単位へ進める"

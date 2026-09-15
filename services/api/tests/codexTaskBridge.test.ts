@@ -51,6 +51,10 @@ describe('CodexTaskBridge', () => {
         type: 'commandExecution', id: 'command-item', command: 'npm test -- --run', status: 'inProgress',
       },
     } });
+    fixture.client.notify({ method: 'item/commandExecution/outputDelta', params: {
+      threadId: 'thread-1', turnId: 'turn-1', itemId: 'command-item',
+      delta: 'SHANNON_API_TOKEN=super-secret\nTest Suite started\n',
+    } });
     await bridge.whenIdle();
     expect(events).toContainEqual(expect.objectContaining({
       type: 'progress', title: '自動テストを実行中', payload: expect.objectContaining({
@@ -106,6 +110,10 @@ describe('CodexTaskBridge', () => {
         activity: { kind: 'command', status: 'completed' },
       }),
     }));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'output', title: '実行出力', detail: expect.stringContaining('Test Suite started'),
+    }));
+    expect(JSON.stringify(events)).not.toContain('super-secret');
 
     const completed = events.find(event => event.type === 'completed');
     expect(completed).toMatchObject({
