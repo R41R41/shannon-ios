@@ -65,86 +65,92 @@ public struct ShannonLiveVoiceView: View {
 
             VStack(spacing: 0) {
                 topBar(palette)
-                Spacer(minLength: 12)
+                ScrollView {
+                    VStack(spacing: ShannonSpacing.medium) {
+                        ZStack(alignment: .bottom) {
+                            ShannonDialogueStagePortraitView()
+                                .frame(maxWidth: 440)
+                                .scaleEffect(pulse && model.phase == .speaking && !reduceMotion ? 1.015 : 1)
 
-                ZStack(alignment: .bottom) {
-                    ShannonDialogueStagePortraitView()
-                        .frame(maxWidth: 440)
-                        .scaleEffect(pulse && model.phase == .speaking && !reduceMotion ? 1.015 : 1)
-
-                    if !model.shannonTranscript.isEmpty {
-                        transcriptCard(
-                            speaker: "シャノン",
-                            text: model.shannonTranscript,
-                            alignment: .leading,
-                            palette: palette
-                        )
-                        .padding(.horizontal, ShannonSpacing.large)
-                        .padding(.bottom, ShannonSpacing.large)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-                }
-                .frame(maxHeight: .infinity)
-
-                VStack(spacing: ShannonSpacing.medium) {
-                    if !model.userTranscript.isEmpty {
-                        transcriptCard(
-                            speaker: "あなた",
-                            text: model.userTranscript,
-                            alignment: .trailing,
-                            palette: palette
-                        )
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-
-                    if let error = model.errorMessage {
-                        Text(error)
-                            .font(.callout)
-                            .foregroundStyle(palette.danger)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, ShannonSpacing.large)
-                    }
-
-                    if let startedAt = model.sessionStartedAt {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            ViewThatFits(in: .horizontal) {
-                                HStack(spacing: ShannonSpacing.medium) {
-                                    sessionMetricLabels(startedAt: startedAt, now: context.date)
-                                }
-                                VStack(alignment: .leading, spacing: 4) {
-                                    sessionMetricLabels(startedAt: startedAt, now: context.date)
-                                }
+                            if !model.shannonTranscript.isEmpty {
+                                transcriptCard(
+                                    speaker: "シャノン",
+                                    text: model.shannonTranscript,
+                                    alignment: .leading,
+                                    palette: palette
+                                )
+                                .padding(.horizontal, ShannonSpacing.large)
+                                .padding(.bottom, ShannonSpacing.large)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(palette.textSecondary)
-                            .accessibilityElement(children: .combine)
                         }
-                    }
+                        .frame(minHeight: 260)
+
+                        if !model.userTranscript.isEmpty {
+                            transcriptCard(
+                                speaker: "あなた",
+                                text: model.userTranscript,
+                                alignment: .trailing,
+                                palette: palette
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
+                        if let error = model.errorMessage {
+                            Text(error)
+                                .font(.callout)
+                                .foregroundStyle(palette.danger)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, ShannonSpacing.large)
+                        }
+
+                        if let startedAt = model.sessionStartedAt {
+                            TimelineView(.periodic(from: .now, by: 1)) { context in
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(spacing: ShannonSpacing.medium) {
+                                        sessionMetricLabels(startedAt: startedAt, now: context.date)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        sessionMetricLabels(startedAt: startedAt, now: context.date)
+                                    }
+                                }
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(palette.textSecondary)
+                                .accessibilityElement(children: .combine)
+                            }
+                        }
 
 #if os(iOS)
-                    if let pendingCameraImage, let pendingCameraData {
-                        cameraPreview(
-                            image: pendingCameraImage,
-                            data: pendingCameraData,
-                            palette: palette
-                        )
-                    }
+                        if let pendingCameraImage, let pendingCameraData {
+                            cameraPreview(
+                                image: pendingCameraImage,
+                                data: pendingCameraData,
+                                palette: palette
+                            )
+                        }
 
-                    if let cameraErrorMessage {
-                        Text(cameraErrorMessage)
-                            .font(.callout)
-                            .foregroundStyle(palette.danger)
-                            .multilineTextAlignment(.center)
-                    }
+                        if let cameraErrorMessage {
+                            Text(cameraErrorMessage)
+                                .font(.callout)
+                                .foregroundStyle(palette.danger)
+                                .multilineTextAlignment(.center)
+                        }
 #endif
-
-                    controls(palette)
+                    }
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .padding(.bottom, ShannonSpacing.medium)
                 }
-                .padding(.horizontal, ShannonSpacing.large)
-                .padding(.bottom, ShannonSpacing.large)
+                .scrollIndicators(.hidden)
             }
         }
         .foregroundStyle(palette.textPrimary)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            controls(palette)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, ShannonSpacing.large)
+                .padding(.vertical, ShannonSpacing.small)
+                .background(.ultraThinMaterial)
+        }
 #if os(iOS)
         .fullScreenCover(isPresented: $showsCamera) {
             ShannonVoiceCameraPicker(
@@ -311,15 +317,36 @@ public struct ShannonLiveVoiceView: View {
 
 #if os(iOS)
     private func cameraPreview(image: UIImage, data: Data, palette: ShannonPalette) -> some View {
-        HStack(spacing: ShannonSpacing.medium) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous))
-                .accessibilityLabel("共有前の撮影写真")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ShannonSpacing.medium) {
+                cameraPreviewImage(image)
+                cameraPreviewActions(data: data, palette: palette)
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                cameraPreviewImage(image)
+                cameraPreviewActions(data: data, palette: palette)
+            }
+        }
+        .padding(ShannonSpacing.small)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
+                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 4) {
+    private func cameraPreviewImage(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous))
+            .accessibilityLabel("共有前の撮影写真")
+    }
+
+    private func cameraPreviewActions(data: Data, palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
                 Text("この1枚だけを共有します")
                     .font(.callout.weight(.semibold))
                 Text("シャノンが見た内容を音声会話へ戻します")
@@ -350,14 +377,6 @@ public struct ShannonLiveVoiceView: View {
                     .disabled(isSharingCameraSnapshot)
                 }
                 .controlSize(.regular)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(ShannonSpacing.small)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
-                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
         }
     }
 

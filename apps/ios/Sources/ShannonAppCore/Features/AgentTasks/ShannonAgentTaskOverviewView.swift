@@ -262,6 +262,10 @@ struct ShannonAgentTaskOverviewView: View {
                 }
             }
         }
+#if os(macOS)
         .frame(minWidth: 420, minHeight: 420)
+#else
+        .presentationDetents([.medium, .large])
+#endif
     }
 }

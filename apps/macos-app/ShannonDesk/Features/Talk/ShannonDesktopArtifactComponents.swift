@@ -9,6 +9,7 @@ struct DesktopConversationOutlineView: View {
     let activeEntryID: String?
     let close: () -> Void
     let select: (ShannonDesktopConversationOutlineEntry) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var visibleSummary: String? {
         guard let summary else { return nil }
@@ -98,7 +99,7 @@ struct DesktopConversationOutlineView: View {
                     }
                     .onChange(of: activeEntryID) {
                         guard let activeEntryID else { return }
-                        withAnimation(.easeOut(duration: 0.18)) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                             proxy.scrollTo(activeEntryID, anchor: .center)
                         }
                     }

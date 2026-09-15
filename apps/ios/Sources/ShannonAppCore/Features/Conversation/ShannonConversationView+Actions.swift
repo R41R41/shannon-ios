@@ -50,13 +50,9 @@ extension ShannonConversationView {
     }
 
     func toggleDisplayMode() {
-        guard !composerIsFocused else {
-            composerIsFocused = false
-            return
-        }
+        composerIsFocused = false
         displayMode = displayMode == .scroll ? .dialogue : .scroll
         UserDefaults.standard.set(displayMode.rawValue, forKey: Self.displayModeKey)
-        composerIsFocused = false
         ShannonHaptics.page()
     }
 

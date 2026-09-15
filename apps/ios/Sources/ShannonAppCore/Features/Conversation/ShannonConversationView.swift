@@ -38,6 +38,7 @@ public struct ShannonConversationView: View {
     @State var composerUsesWebSearch = false
     @State var composerIsImporting = false
     @State var composerAttachmentError: String?
+    @State var conversationBottomOverlayHeight: CGFloat = ShannonWorkspaceChrome.contentBottomInset
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @FocusState var composerIsFocused: Bool
 
@@ -143,6 +144,10 @@ public struct ShannonConversationView: View {
         }
         .onChange(of: model.selectedThreadId) {
             resetComposerTools()
+        }
+        .onPreferenceChange(ShannonConversationBottomOverlayHeightKey.self) { height in
+            guard height > 0 else { return }
+            conversationBottomOverlayHeight = height
         }
         .onChange(of: scenePhase) {
             if scenePhase != .active {

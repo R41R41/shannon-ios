@@ -21,10 +21,20 @@ extension ShannonDesktopRootView {
     }
 
     func toggleAuxiliaryPanel(_ panel: DesktopAuxiliaryPanel) {
+        let visibleEntry = activeConversationOutlineEntryID.flatMap { id in
+            conversationOutline.first { $0.id == id }
+        }
         if showsInspector, auxiliaryPanel == panel {
             showsInspector = false
         } else {
             showAuxiliaryPanel(panel)
+        }
+        guard destination == .talk, let visibleEntry else { return }
+        Task { @MainActor in
+            await Task.yield()
+            requestedMessageJumpID = visibleEntry.messageID
+            requestedConversationAnchorID = visibleEntry.id
+            messageJumpRevision &+= 1
         }
     }
 
@@ -61,9 +71,9 @@ extension ShannonDesktopRootView {
         if let requestedConversationAnchorID,
            let requestedMessageJumpID,
            conversation.messages.contains(where: { $0.id == requestedMessageJumpID }) {
-            proxy.scrollTo(requestedMessageJumpID, anchor: .center)
-            withAnimation(.easeOut(duration: 0.24)) {
-                proxy.scrollTo(requestedConversationAnchorID, anchor: .top)
+            activeConversationOutlineEntryID = requestedConversationAnchorID
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
+                proxy.scrollTo(requestedMessageJumpID, anchor: .center)
             }
             self.requestedConversationAnchorID = nil
             self.requestedMessageJumpID = nil
@@ -71,18 +81,21 @@ extension ShannonDesktopRootView {
         }
         if let requestedMessageJumpID,
            conversation.messages.contains(where: { $0.id == requestedMessageJumpID }) {
-            withAnimation(.easeOut(duration: 0.24)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
                 proxy.scrollTo(requestedMessageJumpID, anchor: .center)
             }
             self.requestedMessageJumpID = nil
         } else if requestedMessageJumpID == nil, let id = conversation.messages.last?.id {
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                 proxy.scrollTo(id, anchor: .bottom)
             }
         }
     }
 
     func selectDestination(_ destination: DesktopDestination) {
+        if destination == .work || destination == .development || destination == .release {
+            auxiliaryPanel = .task
+        }
         restoredDestinationRawValue = destination.rawValue
         lastDestinationRawValue = destination.rawValue
     }

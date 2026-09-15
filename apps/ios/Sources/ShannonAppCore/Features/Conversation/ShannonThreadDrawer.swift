@@ -431,10 +431,9 @@ struct ShannonSettingsRow: View {
 
         HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: symbol)
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(palette.action)
-                .frame(width: 44, height: 44)
-                .background(palette.subtleSurface, in: Circle())
+                .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -447,15 +446,12 @@ struct ShannonSettingsRow: View {
 
             Spacer()
             Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
         }
-        .padding(ShannonSpacing.large)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
-        .overlay {
-            RoundedRectangle(cornerRadius: ShannonShape.large)
-                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
-        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
 

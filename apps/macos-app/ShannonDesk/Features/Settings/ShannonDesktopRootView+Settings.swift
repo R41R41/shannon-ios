@@ -67,6 +67,7 @@ extension ShannonDesktopRootView {
             }
 
             Section("Shannon Desk") {
+                LabeledContent("バージョン", value: appVersionDescription)
                 LabeledContent("会話と記憶", value: "iPhoneと共通")
                 LabeledContent("作業の正本", value: "Azureの永続タスク")
                 Text("水色は操作面を染めず、シャノンの存在・感情・注意が必要な場所にだけ使います。")
@@ -78,6 +79,12 @@ extension ShannonDesktopRootView {
         .navigationTitle("設定")
         .task { await worldSubscriptions.reload() }
         .onDisappear { voiceIdentity.stopPreview() }
+    }
+
+    var appVersionDescription: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "\(version) (\(build))"
     }
 
     var voiceIdentitySelection: Binding<String> {

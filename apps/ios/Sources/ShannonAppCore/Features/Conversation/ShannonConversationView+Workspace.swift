@@ -68,7 +68,8 @@ extension ShannonConversationView {
             ZStack(alignment: .bottom) {
                 ShannonBottomReadabilityGradient(
                     palette: palette,
-                    bottomSafeAreaInset: bottomSafeAreaInset
+                    bottomSafeAreaInset: bottomSafeAreaInset,
+                    contentHeight: conversationBottomOverlayHeight
                 )
                     .offset(y: bottomSafeAreaInset)
                     .allowsHitTesting(false)
@@ -110,9 +111,25 @@ extension ShannonConversationView {
                     }
                     composer(palette)
                 }
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ShannonConversationBottomOverlayHeightKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                }
             }
         }
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
+    }
+}
+
+struct ShannonConversationBottomOverlayHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

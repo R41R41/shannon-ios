@@ -240,6 +240,70 @@ final class ShannonAgentTaskTests: XCTestCase {
         )
     }
 
+    func testWorkspaceAvailabilityFailsClosedUntilProjectAndHostAreKnown() {
+        let host = ShannonAgentHostDTO(
+            hostId: "local",
+            displayName: "このMac",
+            kind: .local,
+            capabilities: [],
+            projects: ["shannon-ios"],
+            models: [],
+            status: .available,
+            lastSeenAt: "2026-09-15T00:00:00Z"
+        )
+        let project = ShannonAgentProjectDTO(
+            key: "shannon-ios",
+            availableHostIds: [host.id]
+        )
+
+        XCTAssertFalse(ShannonAgentWorkspaceAvailability.canStart(
+            workspace: .unavailable,
+            selectedHost: nil
+        ))
+        XCTAssertFalse(ShannonAgentWorkspaceAvailability.canStart(
+            workspace: .init(
+                routing: .init(defaultPreference: .auto, resolvedHostId: host.id, explanation: ""),
+                hosts: [host],
+                projects: [],
+                models: []
+            ),
+            selectedHost: host
+        ))
+        XCTAssertTrue(ShannonAgentWorkspaceAvailability.canStart(
+            workspace: .init(
+                routing: .init(defaultPreference: .auto, resolvedHostId: host.id, explanation: ""),
+                hosts: [host],
+                projects: [project],
+                models: []
+            ),
+            selectedHost: host
+        ))
+    }
+
+    func testWorkspaceAvailabilityRejectsOfflineHost() {
+        let host = ShannonAgentHostDTO(
+            hostId: "local",
+            displayName: "このMac",
+            kind: .local,
+            capabilities: [],
+            projects: ["shannon-ios"],
+            models: [],
+            status: .offline,
+            lastSeenAt: "2026-09-15T00:00:00Z"
+        )
+        let workspace = ShannonAgentWorkspaceCatalogDTO(
+            routing: .init(defaultPreference: .local, resolvedHostId: host.id, explanation: ""),
+            hosts: [host],
+            projects: [.init(key: "shannon-ios", availableHostIds: [host.id])],
+            models: []
+        )
+
+        XCTAssertFalse(ShannonAgentWorkspaceAvailability.canStart(
+            workspace: workspace,
+            selectedHost: host
+        ))
+    }
+
     func testCompletedTaskRemainsVisibleUntilAcknowledged() {
         let model = ShannonConversationModel(usesDisplayCache: false)
         let taskID = model.installAgentTaskFixture(status: .completed)

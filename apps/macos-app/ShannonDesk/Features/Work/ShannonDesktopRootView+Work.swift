@@ -39,8 +39,8 @@ extension ShannonDesktopRootView {
                         select: selectTask
                     )
                     DesktopTaskSection(
-                        title: "完了",
-                        subtitle: "検証結果と変更内容を残します",
+                        title: "終了",
+                        subtitle: "完了・中止・失敗の結果と変更内容を残します",
                         tasks: workProjection.finished,
                         threads: conversation.threads,
                         selectedTaskID: selectedTaskID,

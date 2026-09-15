@@ -123,6 +123,25 @@ struct ShannonAgentTaskRoomView: View {
                         AgentTaskCommandActivityCard(event: command, palette: palette)
                     }
 
+                    if !task.timeline.isEmpty {
+                        let recentEvents = Array(
+                            task.timeline
+                                .sorted(by: { $0.sequence < $1.sequence })
+                                .suffix(3)
+                        )
+                        AgentTaskSection(title: "最新の動き", symbol: "clock", palette: palette) {
+                            VStack(spacing: 0) {
+                                ForEach(recentEvents) { event in
+                                    AgentTaskTimelineRow(
+                                        event: event,
+                                        showsConnector: event.id != recentEvents.last?.id,
+                                        palette: palette
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     if !task.plan.isEmpty || !task.timeline.isEmpty {
                         DisclosureGroup(isExpanded: $showsDetailedProgress) {
                             VStack(alignment: .leading, spacing: ShannonSpacing.large) {
@@ -153,7 +172,7 @@ struct ShannonAgentTaskRoomView: View {
                             }
                             .padding(.top, ShannonSpacing.medium)
                         } label: {
-                            Label("細かな作業記録を表示", systemImage: "list.bullet")
+                            Label("計画と全作業記録を表示", systemImage: "list.bullet")
                                 .font(.callout.weight(.semibold))
                                 .foregroundStyle(palette.textSecondary)
                         }
@@ -316,7 +335,10 @@ struct ShannonAgentTaskRoomView: View {
     }
 
     var configurationCanStart: Bool {
-        workspace.hosts.isEmpty || selectedConfigurationHost?.status != .offline
+        ShannonAgentWorkspaceAvailability.canStart(
+            workspace: workspace,
+            selectedHost: selectedConfigurationHost
+        )
     }
 
     func prepareConfigurationIfNeeded() {

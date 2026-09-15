@@ -59,7 +59,16 @@ extension ShannonDesktopRootView {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         ForEach(conversation.messages) { message in
-                            DesktopMessageView(message: message)
+                            let canRetry = message.deliveryState == .failed
+                                && message.id == conversation.messages.last(where: {
+                                    $0.role == .user && $0.deliveryState == .failed
+                                })?.id
+                            DesktopMessageView(
+                                message: message,
+                                retry: canRetry ? {
+                                    Task { await conversation.retryLastFailed() }
+                                } : nil
+                            )
                                 .id(message.id)
                             if let session = conversation.organizeSession(sourceMessageID: message.id) {
                                 ShannonOrganizeSessionCard(

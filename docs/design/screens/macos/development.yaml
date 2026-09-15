@@ -2,7 +2,7 @@ schema_version: 1
 screen_id: shannon-macos-development
 platform: macos
 baseline_commit: 603a88c9d0e1202bdc71a109a4a4b2caa0e5a29b
-last_verified_at: 2026-09-14
+last_verified_at: 2026-09-15
 user_job: "安全なCodex作業環境を選び、コード変更・コマンド・Git・ビルドの現在状態を一か所で確認する"
 primary_action: "プロジェクトと実行条件を選び、提案された開発作業を開始する"
 preserve:
@@ -17,6 +17,8 @@ improve:
   - "ファイルツリー、コマンド履歴、差分要約、ブランチ、ビルド結果を同じ作業に結びつける"
   - "HTTPSのGitHub URLからAgent Host専用の作業領域へリポジトリを追加する。自動ではLocalとCloudの双方へ複製し、片方の完了後すぐ選択できる"
   - "作業要約と各開発面はApple標準のGroupBoxで階層化し、List、Form、Picker、toolbarと一貫したキーボード操作を保つ"
+  - "プロジェクト、実行先、モデル、思考の選択は横幅に応じて一段または二段へ再配置し、値を切り捨てない"
+  - "作業一覧は状態シンボルと文言を併用し、完了・中止・失敗を『終了』として正確にまとめる"
 do_not_change:
   - "Agent Hostの設定済み領域または検証済み専用workspace外のディレクトリを開発対象にしない"
   - "Shannonの会話モデルに直接Git操作やシェル実行を任せない"
@@ -30,7 +32,7 @@ states:
   permission: "非公開リポジトリを取得できない場合はGitHub権限の不足として安全な文言で失敗し、認証情報を画面やログへ返さない"
   selection: "プロジェクト、実行先、モデル、思考、ツール、作業の選択を色以外でも判別できる"
 accessibility:
-  dynamic_type: "ヘッダーの選択UIは横幅不足時にもラベルと値を失わない"
+  dynamic_type: "ヘッダーの選択UIは横幅不足時に二段へ再配置し、ラベルと値を失わない"
   voiceover: "実行先の種別・状態・課金区分、Git状態、差分件数を読み上げる"
   target_size: "開始、更新、実行依頼、ブランチ、ビルドの操作領域を44ポイント以上にする"
   focus: "サイドバー、作業一覧、ツール、入力欄の順でキーボード移動できる"

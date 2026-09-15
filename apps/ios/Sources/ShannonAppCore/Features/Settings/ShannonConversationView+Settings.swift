@@ -13,126 +13,78 @@ extension ShannonConversationView {
     }
 
     func settingsSheetContent(_ palette: ShannonPalette) -> some View {
-        ZStack(alignment: .top) {
-            palette.canvas
-                .ignoresSafeArea()
+        NavigationStack {
+            List {
+                Section("Shannon") {
+                    settingsButton(
+                        title: "シャノンの状態",
+                        detail: model.state == nil
+                            ? model.currentExpression.japaneseName
+                            : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
+                        symbol: "waveform.path.ecg"
+                    ) { showsStateDetails = true }
+                }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                    Text("設定")
-                        .font(.largeTitle.bold())
-                        .padding(.bottom, ShannonSpacing.small)
+                Section("表示") {
+                    settingsButton(
+                        title: "アプリアイコン",
+                        detail: "\(appIconModel.mode.japaneseName)・\(appIconModel.activeTitle)",
+                        symbol: "app.dashed"
+                    ) { showsAppIconSettings = true }
+                    settingsButton(
+                        title: "外観",
+                        detail: savedAppearanceMode.japaneseName,
+                        symbol: savedAppearanceMode.symbolName
+                    ) { showsAppearanceSettings = true }
+                }
 
-                    Button { showsStateDetails = true } label: {
-                        ShannonSettingsRow(
-                            title: "シャノンの状態",
-                            detail: model.state == nil
-                                ? model.currentExpression.japaneseName
-                                : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
-                            symbol: "waveform.path.ecg"
-                        )
-                    }
-                    .buttonStyle(.plain)
+                Section("音声と情報") {
+                    settingsButton(
+                        title: "シャノンの声",
+                        detail: voiceIdentityModel.summary,
+                        symbol: "speaker.wave.2"
+                    ) { showsVoiceIdentity = true }
+                    settingsButton(
+                        title: "情報源",
+                        detail: worldSubscriptionModel.summary,
+                        symbol: "newspaper"
+                    ) { showsWorldSubscriptions = true }
+                }
 
-                    Button { showsAppIconSettings = true } label: {
-                        ShannonSettingsRow(
-                            title: "アプリアイコン",
-                            detail: "\(appIconModel.mode.japaneseName)・\(appIconModel.activeTitle)",
-                            symbol: "app.dashed"
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showsAppearanceSettings = true } label: {
-                        ShannonSettingsRow(
-                            title: "外観",
-                            detail: savedAppearanceMode.japaneseName,
-                            symbol: savedAppearanceMode.symbolName
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showsTestFlightDelivery = true } label: {
-                        ShannonSettingsRow(
-                            title: "アプリの更新",
-                            detail: "TestFlightの配信状況と履歴",
-                            symbol: "arrow.down.app"
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showsVoiceIdentity = true } label: {
-                        ShannonSettingsRow(
-                            title: "シャノンの声",
-                            detail: voiceIdentityModel.summary,
-                            symbol: "speaker.wave.2"
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showsWorldSubscriptions = true } label: {
-                        ShannonSettingsRow(
-                            title: "情報源",
-                            detail: worldSubscriptionModel.summary,
-                            symbol: "newspaper"
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { showsVoiceDiagnostics = true } label: {
-                        ShannonSettingsRow(
-                            title: "音声診断",
-                            detail: "クラッシュ直前の処理を確認・コピー",
-                            symbol: "waveform.badge.magnifyingglass"
-                        )
-                    }
-                    .buttonStyle(.plain)
-
+                Section("接続と配信") {
                     if let connectionModel {
-                        Button { showsConnectionDetails = true } label: {
-                            ShannonSettingsRow(
-                                title: "接続",
-                                detail: connectionModel.statusLabel,
-                                symbol: "link"
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        settingsButton(
+                            title: "接続",
+                            detail: connectionModel.statusLabel,
+                            symbol: "link"
+                        ) { showsConnectionDetails = true }
                     }
+                    settingsButton(
+                        title: "アプリの更新",
+                        detail: "TestFlightの配信状況と履歴",
+                        symbol: "arrow.down.app"
+                    ) { showsTestFlightDelivery = true }
                 }
-                .padding(.horizontal, ShannonSpacing.large)
-                .padding(.top, ShannonWorkspaceChrome.contentTopInset + 64)
-                .padding(.bottom, 88)
-            }
-            .scrollIndicators(.hidden)
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
 
-            ShannonTopReadabilityGradient(palette: palette)
-
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ShannonBottomReadabilityGradient(palette: palette)
-                    .ignoresSafeArea(.container, edges: .bottom)
-            }
-            .allowsHitTesting(false)
-
-            HStack {
-                Button { showsSettings = false } label: {
-                    Image(systemName: "chevron.backward")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(palette.textPrimary)
-                        .frame(width: 48, height: 48)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay {
-                            Circle().stroke(palette.divider.opacity(0.6), lineWidth: 0.7)
-                        }
-                        .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10), radius: 9, y: 3)
+                Section("詳細") {
+                    settingsButton(
+                        title: "音声診断",
+                        detail: "クラッシュ直前の処理を確認・コピー",
+                        symbol: "waveform.badge.magnifyingglass"
+                    ) { showsVoiceDiagnostics = true }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("設定を閉じる")
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, ShannonSpacing.large)
-            .padding(.top, ShannonSpacing.extraSmall)
+            .scrollContentBackground(.hidden)
+            .background(palette.canvas)
+            .navigationTitle("設定")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる") { showsSettings = false }
+                }
+            }
         }
         .foregroundStyle(palette.textPrimary)
         .sheet(isPresented: $showsStateDetails) {
@@ -170,5 +122,17 @@ extension ShannonConversationView {
         .sheet(isPresented: $showsWorldSubscriptions) {
             ShannonWorldSubscriptionView(model: worldSubscriptionModel)
         }
+    }
+
+    func settingsButton(
+        title: String,
+        detail: String,
+        symbol: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ShannonSettingsRow(title: title, detail: detail, symbol: symbol)
+        }
+        .buttonStyle(.plain)
     }
 }

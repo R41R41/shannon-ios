@@ -176,6 +176,18 @@ public struct ShannonAgentWorkspaceCatalogDTO: Codable, Equatable, Sendable {
     )
 }
 
+public enum ShannonAgentWorkspaceAvailability {
+    public static func canStart(
+        workspace: ShannonAgentWorkspaceCatalogDTO,
+        selectedHost: ShannonAgentHostDTO?
+    ) -> Bool {
+        guard !workspace.hosts.isEmpty,
+              !workspace.projects.isEmpty,
+              let selectedHost else { return false }
+        return selectedHost.status != .offline
+    }
+}
+
 public enum ShannonAgentProjectProvisioningStatus: String, Codable, Sendable {
     case queued
     case provisioning

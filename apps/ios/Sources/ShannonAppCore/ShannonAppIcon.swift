@@ -25,6 +25,7 @@ public enum ShannonAppIconMode: String, CaseIterable, Identifiable, Sendable {
 public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
     case light = "ShannonIconLight"
     case dark = "ShannonIconDark"
+    case shannon = "ShannonIconWaterlight"
     case calm = "ShannonIconCalm"
     case joyful = "ShannonIconJoyful"
     case curious = "ShannonIconCurious"
@@ -42,7 +43,7 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         .laughing, .tender, .bashful, .determined, .sleeping,
     ]
 
-    public static let manualChoices: [Self] = [.light, .dark] + emotionChoices
+    public static let manualChoices: [Self] = [.light, .dark, .shannon] + emotionChoices
 
     public var id: String { rawValue }
 
@@ -60,6 +61,7 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .light: "ライト"
         case .dark: "ダーク"
+        case .shannon: "シャノン"
         case .calm: "穏やか"
         case .joyful: "うれしい"
         case .curious: "興味津々"
@@ -78,6 +80,7 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .light: "sun.max.fill"
         case .dark: "moon.fill"
+        case .shannon: "eyes"
         case .calm: "cup.and.saucer.fill"
         case .joyful: "hands.sparkles.fill"
         case .curious: "magnifyingglass"

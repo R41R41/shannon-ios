@@ -2,7 +2,7 @@ schema_version: 1
 screen_id: shannon-ios-work
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
-last_verified_at: 2026-09-14
+last_verified_at: 2026-09-15
 user_job: "複数の作業を把握し、対象プロジェクト・実行先・モデルを選んで安全にCodexへ依頼する"
 primary_action: "開始前の作業環境を確認し、この設定で作業を始める"
 preserve:
@@ -14,6 +14,9 @@ improve:
   - "一覧はApple標準のListとSection、開始設定はFormとPicker、作業操作はtoolbarのMenuを使う"
   - "開始前にAether・Shannon・Voyagerを含むプロジェクト、Local優先の実行先、対応モデルと思考レベルを選ぶ"
   - "自動実行は利用できるLocal Hostを優先し、選択した固定ホストを黙って切り替えない"
+  - "開始条件を満たさないプロジェクトまたは実行先では開始操作を無効化し、安全側に倒す"
+  - "個別作業では直近の動きを常に表示し、完全な履歴は必要な時だけ展開する"
+  - "アーカイブ済み作業はiPhoneで中・大の標準シートとして表示する"
 do_not_change:
   - "ユーザー承認の境界"
   - "完了・失敗・中止を履歴から黙って削除しない"

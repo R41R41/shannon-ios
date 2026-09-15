@@ -63,18 +63,12 @@ extension ShannonConversationView {
     }
 
     func openThreadDrawer() {
-        guard !composerIsFocused else {
-            composerIsFocused = false
-            return
-        }
+        composerIsFocused = false
         settleDrawer(open: true)
     }
 
     func createThreadFromHeader() {
-        guard !composerIsFocused else {
-            composerIsFocused = false
-            return
-        }
+        composerIsFocused = false
         settleWorkspace(on: .talk)
         Task { await model.createThread(title: nil) }
     }
@@ -107,10 +101,7 @@ extension ShannonConversationView {
     }
 
     func openSettings() {
-        guard !composerIsFocused else {
-            composerIsFocused = false
-            return
-        }
+        composerIsFocused = false
         showsSettings = true
         ShannonHaptics.page()
     }

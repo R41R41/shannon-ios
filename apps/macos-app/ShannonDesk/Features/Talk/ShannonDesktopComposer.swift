@@ -109,10 +109,10 @@ struct DesktopComposer: View {
                     Text("テキスト・Markdown・コードを4件まで")
                     Text("Web検索は明示的に選んだ送信だけで使用")
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "paperclip")
                 }
                 .menuStyle(.borderlessButton)
-                .help("ツール")
+                .help("添付とツール")
 
                 Spacer()
                 Text("⌘↩︎で送信")

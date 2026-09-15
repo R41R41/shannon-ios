@@ -37,11 +37,13 @@ final class ShannonAppIconTests: XCTestCase {
         XCTAssertEqual(ShannonAppIconMode.allCases, [.automatic, .appearance, .manual])
     }
 
-    func testManualChoicesContainLightDarkThenShannonExpressions() {
-        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.prefix(2)), [.light, .dark])
-        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.dropFirst(2)), ShannonAppIconChoice.emotionChoices)
+    func testManualChoicesContainAppearanceWaterlightThenShannonExpressions() {
+        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.prefix(3)), [.light, .dark, .shannon])
+        XCTAssertEqual(Array(ShannonAppIconChoice.manualChoices.dropFirst(3)), ShannonAppIconChoice.emotionChoices)
         XCTAssertEqual(ShannonAppIconChoice.light.alternateIconName, "ShannonIconLight")
         XCTAssertEqual(ShannonAppIconChoice.dark.alternateIconName, "ShannonIconDark")
+        XCTAssertEqual(ShannonAppIconChoice.shannon.alternateIconName, "ShannonIconWaterlight")
+        XCTAssertFalse(ShannonAppIconChoice.emotionChoices.contains(.shannon))
         XCTAssertFalse(ShannonAppIconChoice.allCases.contains { $0.rawValue.contains("Compare") })
     }
 

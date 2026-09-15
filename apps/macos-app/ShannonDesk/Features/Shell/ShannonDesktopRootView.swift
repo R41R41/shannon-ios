@@ -49,6 +49,7 @@ public struct ShannonDesktopRootView: View {
     @FocusState var focusedControl: ShannonDesktopFocusedControl?
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     public init(
         conversation: ShannonConversationModel,

@@ -47,11 +47,24 @@ extension ShannonDesktopRootView {
                 DevelopmentRouteBadge(host: selectedDevelopmentHost)
             }
 
-            HStack(spacing: 12) {
-                developmentProjectPicker
-                developmentHostPicker
-                developmentModelPicker
-                developmentReasoningPicker
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    developmentProjectPicker
+                    developmentHostPicker
+                    developmentModelPicker
+                    developmentReasoningPicker
+                }
+
+                VStack(spacing: 10) {
+                    HStack(spacing: 12) {
+                        developmentProjectPicker
+                        developmentHostPicker
+                    }
+                    HStack(spacing: 12) {
+                        developmentModelPicker
+                        developmentReasoningPicker
+                    }
+                }
             }
 
             HStack(spacing: 7) {
@@ -184,7 +197,7 @@ extension ShannonDesktopRootView {
                 }
             }
             if !workProjection.finished.isEmpty {
-                Section("完了") {
+                Section("終了") {
                     ForEach(workProjection.finished) { task in developmentTaskRow(task) }
                 }
             }
@@ -200,13 +213,12 @@ extension ShannonDesktopRootView {
     }
 
     func developmentTaskRow(_ task: ShannonAgentTask) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(task.title)
                 .lineLimit(2)
             HStack(spacing: 5) {
-                Circle()
-                    .fill(task.status.isTerminal ? Color.secondary : shannonActionColor)
-                    .frame(width: 5, height: 5)
+                Image(systemName: task.status.symbolName)
+                    .foregroundStyle(task.status.isTerminal ? Color.secondary : shannonActionColor)
                 Text(task.status.japaneseName)
                 if let project = task.projectHint, !project.isEmpty {
                     Text("· \(project)")
@@ -216,7 +228,10 @@ extension ShannonDesktopRootView {
             .foregroundStyle(.secondary)
         }
         .tag(task.id)
-        .padding(.vertical, 3)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(task.title)
+        .accessibilityValue([task.status.japaneseName, task.projectHint].compactMap { $0 }.joined(separator: "、"))
         .contextMenu {
             Button(task.isPinned ? "ピン留めを外す" : "ピン留め") {
                 Task { await conversation.toggleAgentTaskPinned(task.id) }
@@ -369,7 +384,10 @@ extension ShannonDesktopRootView {
     }
 
     var developmentCanStart: Bool {
-        conversation.agentWorkspace.hosts.isEmpty || selectedDevelopmentHost != nil
+        ShannonAgentWorkspaceAvailability.canStart(
+            workspace: conversation.agentWorkspace,
+            selectedHost: selectedDevelopmentHost
+        )
     }
 
     func configureAndStartDevelopmentTask(_ task: ShannonAgentTask) {

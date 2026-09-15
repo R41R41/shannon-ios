@@ -29,8 +29,8 @@ These terms are not interchangeable.
 | Area | Implemented | Deployed / distributed | Still required |
 | --- | --- | --- | --- |
 | Responsibility-oriented architecture | Complete; Swift and TypeScript production files are bounded and feature-owned | Accepted baseline before Build 50 was `a68bdf4`; Azure API and both Agent Hosts use that revision | Integrate the verified Build 50 candidate and keep architecture guards green |
-| iPhone work management | Project/host/model/reasoning selection, progress, steering, pause/resume/cancel, approval, changes, tests, pin/archive/search | iOS 0.1.0 (49) is VALID, INTERNAL_ONLY, and assigned to Shannon Internal; Build 50 is the next candidate | Build 50 TestFlight distribution and physical-device Smoke |
-| Mac development workspace | Native files, command history, change review, Git/branch, build panes and repository provisioning | Local build/tests complete; Mac 0.1.0 (5) build gate complete | Signed Archive, Upload, Processing, Assignment, Install, Smoke |
+| iPhone work management | Project/host/model/reasoning selection, safe start gating, visible recent progress, steering, pause/resume/cancel, approval, changes, tests, pin/archive/search | iOS 0.1.0 (49) is VALID, INTERNAL_ONLY, and assigned to Shannon Internal; the post-audit source/tests/build are green as Build 51 | Build 51 TestFlight distribution and physical-device Smoke |
+| Mac development workspace | Native files, command history, change review, Git/branch, build panes, repository provisioning, responsive execution selectors, and truthful finished states | Post-audit local build and 19 tests pass as Mac Build 6 | Build 6 signed Archive, Upload, Processing, Assignment, Install, Smoke |
 | Agent execution | Durable task/event/command state, restart recovery, local-first routing, explicit fixed-host behavior | Local and Cloud heartbeat; Aether, Shannon, and Voyager registered on both hosts | Harmless E2E on each host; background/restart recovery; approval E2E |
 | Arbitrary GitHub repository | HTTPS repository validation, host-owned clone, idempotent provisioning, no credential in request | API and both hosts deployed | UI E2E using a disposable or explicitly selected repository |
 | Release Center | Seven truthful gates and iPhone release request targets | Build 49 proves Xcode Cloud Archive through internal assignment | Build 50 Install/Smoke confirmation; Mac release path remains user-operated |
@@ -40,16 +40,17 @@ These terms are not interchangeable.
 | GPT-Live travel voice | Staged Live WebRTC engine, bounded read-only delegation, confirmed single camera snapshot, and Realtime rollback | Real Vision and Live session API smoke passed; production remains on Realtime during rollout | Deploy compatible server code, distribute Build 50, then enable Live and run physical-device audio/camera Smoke |
 | Aether/Voyager organization | Existing bounded Shannon proxy and explicit review flow remain implemented | Existing production flow preserved | Re-run adjacent Smoke after Build 50 |
 | Cross-app acceptance scenarios | Requirements are known | Not yet stored in Aether's current documentation | Aether-owned scenario document and links from its document index |
-| State-based UI audit | Screen contracts exist for iPhone Talk/Work and Mac Talk/Development | Existing safe Mac evidence retained | Current Build 50/5 evidence for empty/loading/error/offline/permission, Light/Dark, larger text and Reduce Motion |
+| State-based UI audit | High-priority iPhone Talk/Work and Mac Talk/Development remediations are implemented; screen contracts were reconciled on 2026-09-15 | Existing safe Mac evidence retained; source guards, iOS 132 tests, Mac 19 tests, and both app builds pass | Current-release visual evidence for empty/loading/error/offline/permission, Light/Dark, larger text and Reduce Motion |
+| Shannon app icon | The finished Waterlight Shannon candidate is available as the manual `シャノン` alternate icon without changing automatic emotion selection | Asset catalog compilation and icon-selection tests pass | Select it on device in Light/Dark and verify Home Screen, Settings, notification, and Spotlight rendering |
 
 ## Priority 0 — finish the current release
 
-1. Distribute and install iOS 0.1.0 (50) from Shannon Internal without removing the existing app.
+1. Distribute iOS 0.1.0 (51) from Shannon Internal without removing the existing app, and select the new `シャノン` icon once.
 2. Verify pairing, stored conversations, ordinary Talk, Realtime voice, Work,
    Release Center, Waterlight Eye, appearance, and one Voyager organization flow.
    After that baseline passes, enable Live on the server and verify natural audio,
    interruption, read-only delegation, one confirmed camera snapshot, and rollback.
-3. Archive Mac 0.1.0 (5) with `ShannonDesk` and `Any Mac` / `Any Mac Device`.
+3. Archive Mac 0.1.0 (6) with `ShannonDesk` and `Any Mac` / `Any Mac Device`.
 4. Validate, upload to App Store Connect, wait for Processing, and assign to
    Shannon Internal.
 5. Install from TestFlight and verify existing state plus Talk, Work, Development,

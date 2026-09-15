@@ -230,7 +230,7 @@ enum ShannonDesktopTaskFilter: String, CaseIterable, Identifiable {
         case .attention: "要確認"
         case .active: "進行中"
         case .proposed: "未開始"
-        case .finished: "完了"
+        case .finished: "終了"
         }
     }
 }

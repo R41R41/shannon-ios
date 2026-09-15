@@ -223,20 +223,29 @@ struct ShannonTopReadabilityGradient: View {
 struct ShannonBottomReadabilityGradient: View {
     let palette: ShannonPalette
     var bottomSafeAreaInset: CGFloat = 0
+    var contentHeight: CGFloat = ShannonWorkspaceChrome.contentBottomInset
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .clear, location: 0),
-                .init(color: palette.canvas.opacity(0.16), location: 0.24),
-                .init(color: palette.canvas.opacity(0.58), location: 0.64),
-                .init(color: palette.canvas.opacity(0.84), location: 1),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        Group {
+            if reduceTransparency {
+                palette.canvas.opacity(0.98)
+            } else {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: palette.canvas.opacity(0.16), location: 0.24),
+                        .init(color: palette.canvas.opacity(0.58), location: 0.64),
+                        .init(color: palette.canvas.opacity(0.84), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
         .frame(
-            height: ShannonWorkspaceChrome.bottomReadabilityHeight + bottomSafeAreaInset
+            height: max(0, contentHeight) + 80 + bottomSafeAreaInset
         )
         .accessibilityHidden(true)
     }
