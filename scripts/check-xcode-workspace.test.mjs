@@ -27,8 +27,8 @@ function validSources() {
     },
     manifest: '.library(name: "ShannonAppCore", targets: ["ShannonAppCore"]), .package(url: "https://github.com/stasel/WebRTC.git", exact: "152.0.0")',
     projects: {
-      ShannonApp: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore;',
-      ShannonDesk: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore;',
+      ShannonApp: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore; DEVELOPMENT_TEAM = 66TZ23L7ZJ; PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon; CODE_SIGN_STYLE = Automatic;',
+      ShannonDesk: 'isa = XCLocalSwiftPackageReference; relativePath = ../ios; productName = ShannonAppCore; DEVELOPMENT_TEAM = 66TZ23L7ZJ; PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon; CODE_SIGN_STYLE = Automatic;',
     },
     xcodeEntrypoint: 'workspace="Shannon.xcworkspace"\npreflight)\nopen)',
     launcher: 'exec "$repository_root/scripts/xcode.sh" open',
@@ -66,9 +66,26 @@ test('reports structural drift in one pass', () => {
     'canonical workspace is missing group:apps/macos-app/ShannonDesk.xcodeproj',
     'ShannonDesk must reference the shared ../ios local package',
     'ShannonDesk must link the ShannonAppCore package product',
+    'ShannonDesk must use Apple development team 66TZ23L7ZJ',
+    'ShannonDesk must use the Shannon App Store bundle identifier com.r41r41.shannon',
+    'ShannonDesk must use automatic code signing',
     'workspace resolves WebRTC 151.0.0 instead of 152.0.0',
     'Xcode entry point must not create a separate project package graph',
     'repository verifier must delegate Xcode details to scripts/xcode.sh',
+  ]);
+});
+
+test('rejects App Store signing identity drift', () => {
+  const sources = validSources();
+  sources.projects.ShannonApp = sources.projects.ShannonApp
+    .replace('DEVELOPMENT_TEAM = 66TZ23L7ZJ;', 'DEVELOPMENT_TEAM = WRONGTEAM;')
+    .replace('PRODUCT_BUNDLE_IDENTIFIER = com.r41r41.shannon;', 'PRODUCT_BUNDLE_IDENTIFIER = example.invalid;')
+    .replace('CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;');
+
+  assert.deepEqual(validateXcodeWorkspace(sources), [
+    'ShannonApp must use Apple development team 66TZ23L7ZJ',
+    'ShannonApp must use the Shannon App Store bundle identifier com.r41r41.shannon',
+    'ShannonApp must use automatic code signing',
   ]);
 });
 

@@ -65,6 +65,8 @@ case "$profile" in
     ;;
   open)
     preflight_workspace
+    echo "Workspace and package preflight passed."
+    echo "Before Archive distribution, confirm Xcode Settings > Accounts has App Store Connect access for team 66TZ23L7ZJ."
     "$open_bin" -a Xcode "$repository_root/$workspace"
     ;;
   list)

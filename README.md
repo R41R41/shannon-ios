@@ -45,7 +45,10 @@ Xcodeの正規入口はリポジトリ直下の `Shannon.xcworkspace`。iPhone�
 同時に開かない。GUIでのビルド、Archive、実機実行は必ずWorkspaceを一度だけ開き、
 `ShannonApp` または `ShannonDesk` Schemeを切り替えて行う。Finderでは
 `Open Shannon in Xcode.command` をダブルクリックすると、両SchemeのPackage解決を
-事前検査してから正しいWorkspaceだけが開く。
+事前検査してから正しいWorkspaceだけが開く。検査は共有Packageに加えて、配信用の
+Team `66TZ23L7ZJ`、Bundle ID `com.r41r41.shannon`、自動署名の設定ずれも検出する。
+App Store Connectのログイン状態だけはXcodeの秘密情報なので、Archive配信前に
+**Xcode > Settings > Accounts**で同Teamへのアクセスを確認する。
 
 ```sh
 scripts/xcode.sh open

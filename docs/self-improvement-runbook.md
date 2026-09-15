@@ -46,6 +46,17 @@ apps through the canonical workspace. `scripts/xcode.sh` owns all Xcode command-
 profiles, while the focused workspace guard and its tests fail if that invariant is
 removed.
 
+### App Store Connect account preflight
+
+The repository guard fixes the release identity to automatic signing, Team
+`66TZ23L7ZJ`, and bundle identifier `com.r41r41.shannon`. It intentionally cannot
+read or repair the private App Store Connect session stored by Xcode. Before starting
+an Archive distribution, open **Xcode > Settings > Accounts** and confirm that the
+signed-in Apple account can access Team `66TZ23L7ZJ`. If Xcode shows “Unable to
+authenticate” or “No App Store Connect access for the team”, stop before retrying
+Upload, refresh that account in Xcode, and confirm the team again. Never place Apple
+credentials, app-specific passwords, or API keys in this repository or its scripts.
+
 Use the single repository entry point:
 
 ```sh

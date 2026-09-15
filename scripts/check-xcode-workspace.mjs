@@ -22,6 +22,8 @@ function resolvedWebRTCVersion(source) {
 
 export function validateXcodeWorkspace(sources) {
   const failures = [];
+  const expectedTeam = '66TZ23L7ZJ';
+  const expectedBundleIdentifier = 'com.r41r41.shannon';
   const expectedProjects = [
     'group:apps/ios-app/ShannonApp.xcodeproj',
     'group:apps/macos-app/ShannonDesk.xcodeproj',
@@ -37,6 +39,15 @@ export function validateXcodeWorkspace(sources) {
     }
     if (!/productName = ShannonAppCore;/u.test(project)) {
       failures.push(`${name} must link the ShannonAppCore package product`);
+    }
+    if (!project.includes(`DEVELOPMENT_TEAM = ${expectedTeam};`)) {
+      failures.push(`${name} must use Apple development team ${expectedTeam}`);
+    }
+    if (!project.includes(`PRODUCT_BUNDLE_IDENTIFIER = ${expectedBundleIdentifier};`)) {
+      failures.push(`${name} must use the Shannon App Store bundle identifier ${expectedBundleIdentifier}`);
+    }
+    if (!/CODE_SIGN_STYLE = Automatic;/u.test(project)) {
+      failures.push(`${name} must use automatic code signing`);
     }
   }
 
@@ -128,7 +139,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log('Xcode workspace guard passed (2 projects, 1 shared package graph, 3 locked resolutions, guarded launcher).');
+  console.log('Xcode workspace guard passed (2 projects, 1 shared package graph, 3 locked resolutions, signing identity, guarded launcher).');
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
