@@ -6,30 +6,31 @@
   "release": {
     "marketingVersion": "0.1.0",
     "iosBuild": "54",
-    "macosBuild": "10"
+    "macosBuild": "11"
   },
   "macosRendering": {
     "alphaMask": "roundedRectangle",
-    "cornerRadiusRatio": 0.223
+    "cornerRadiusRatio": 0.223,
+    "bodyScale": 0.84375
   },
   "variants": {
     "L02": {
       "assetName": "ShannonL02",
       "masterSha256": "ef9f07790714915d65976df14555e05c786d09162d91f9d78c221c08495d3fc1",
       "iosTreeSha256": "6e8cdf05b164f02d0b9227cb60705f20f7af5bb574518316b4024cc079229d13",
-      "macosTreeSha256": "19dbf2359280de71905e21c0c9841467c8deb583c33296fc39d20ed6d08c3c85"
+      "macosTreeSha256": "96472b8a2ba721ad014d07e68aae52cd253d97946c0ee50b689ab9b2ebf98f9d"
     },
     "L06": {
       "assetName": "ShannonL06",
       "masterSha256": "6b205b021aa1920959267c69670827463fb73e2531433c171401e7a7e376bc96",
       "iosTreeSha256": "059016131fcae849f67f59f2174440d4b14a44e81288f20d79d066fd8131abf4",
-      "macosTreeSha256": "572b4de0658447c193abc31bb988aaf6b0948e5fefe2e4d48c56a0436e63e9c7"
+      "macosTreeSha256": "2dd2af29c9c487a7b319ae52738fcd0dbad212ef7c1c642eb604bec6df0c7e69"
     },
     "L10": {
       "assetName": "ShannonL10",
       "masterSha256": "7dc0c48fa577d425aa87869131c0a877648c10c4254f7ae2c1238581f9bb5cc2",
       "iosTreeSha256": "c4d63e132207df13407076e985273c44acb3c442527ca836dc5947ebe384446c",
-      "macosTreeSha256": "ac9836c597c161ff2dddbc0c6b29ef1b4843af510b08f732ee65494c1290fbc4"
+      "macosTreeSha256": "53a54befedf9ad452915efa9404315452f86b9528121330610712363dfd8d5f8"
     }
   }
 }

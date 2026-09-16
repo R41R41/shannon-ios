@@ -65,6 +65,11 @@ public enum ShannonAppIconAppearance: String, Equatable, Sendable {
 }
 
 enum ShannonAppIconAssets {
+#if canImport(AppKit)
+    static let macApplicationIconBodyScale = 0.84375
+    static let macApplicationIconCornerRadiusRatio = 0.223
+#endif
+
     static func url(for assetName: String) -> URL? {
         Bundle.module.url(forResource: assetName, withExtension: "png")
     }
@@ -96,8 +101,16 @@ enum ShannonAppIconAssets {
             )
         else { return nil }
 
-        let bounds = CGRect(x: 0, y: 0, width: sourceImage.width, height: sourceImage.height)
-        let radius = CGFloat(sourceImage.width) * 0.223
+        let bodyPixelSize = Int(
+            (Double(min(sourceImage.width, sourceImage.height)) * macApplicationIconBodyScale).rounded()
+        )
+        let bounds = CGRect(
+            x: (sourceImage.width - bodyPixelSize) / 2,
+            y: (sourceImage.height - bodyPixelSize) / 2,
+            width: bodyPixelSize,
+            height: bodyPixelSize
+        )
+        let radius = CGFloat(bodyPixelSize) * macApplicationIconCornerRadiusRatio
         context.addPath(CGPath(
             roundedRect: bounds,
             cornerWidth: radius,

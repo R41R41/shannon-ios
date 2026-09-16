@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const iosAssets = resolve(root, 'apps/ios-app/ShannonApp/Assets.xcassets');
 const macAssets = resolve(root, 'apps/macos-app/ShannonDesk/Assets.xcassets');
 const previews = resolve(root, 'apps/ios/Sources/ShannonAppCore/Resources');
+const execFileAsync = promisify(execFile);
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -74,8 +77,18 @@ async function main() {
     failures.push('icon manifest must expose only L02, L06, and L10 with L06 as default');
   }
   if (manifest.macosRendering?.alphaMask !== 'roundedRectangle'
-      || manifest.macosRendering?.cornerRadiusRatio !== 0.223) {
-    failures.push('macOS icons must use the reproducible rounded-rectangle alpha mask');
+      || manifest.macosRendering?.cornerRadiusRatio !== 0.223
+      || manifest.macosRendering?.bodyScale !== 0.84375) {
+    failures.push('macOS icons must use the reproducible 84.375% rounded-rectangle layout');
+  }
+
+  try {
+    await execFileAsync('swift', ['scripts/apply-macos-icon-mask.swift', '--check'], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (error) {
+    failures.push(`macOS icon visual footprint check failed: ${error.stderr || error.message}`);
   }
 
   for (const [platform, directory] of [['iOS', iosAssets], ['macOS', macAssets]]) {
@@ -122,6 +135,9 @@ async function main() {
   }
   for (const source of [iosInfo, macInfo]) {
     if (!source.includes(`<string>${manifest.displayName}</string>`)) failures.push('Apple app display name must be シャノン');
+  }
+  if (!macInfo.includes('<key>CFBundleName</key>\n\t<string>シャノン</string>')) {
+    failures.push('macOS bundle name must be シャノン');
   }
   for (const assetName of ['ShannonL02', 'ShannonL10']) {
     if (!iosProject.includes(assetName) || !iosInfo.includes(`<key>${assetName}</key>`)) {

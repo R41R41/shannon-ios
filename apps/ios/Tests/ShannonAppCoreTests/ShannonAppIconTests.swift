@@ -65,7 +65,7 @@ final class ShannonAppIconTests: XCTestCase {
     }
 
 #if canImport(AppKit)
-    func testEveryMacApplicationIconHasTransparentCorners() throws {
+    func testEveryMacApplicationIconHasStandardFootprintAndTransparentCorners() throws {
         for choice in ShannonAppIconChoice.selectableChoices {
             let image = try XCTUnwrap(ShannonAppIconAssets.macApplicationIcon(for: choice.previewAssetName))
             let representation = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
@@ -82,6 +82,21 @@ final class ShannonAppIconTests: XCTestCase {
                 )).alphaComponent,
                 0.99,
                 "\(choice.levelName) must keep its visible center opaque"
+            )
+
+            let centerY = representation.pixelsHigh / 2
+            let visibleColumns = (0..<representation.pixelsWide).filter {
+                representation.colorAt(x: $0, y: centerY)?.alphaComponent ?? 0 > 0.01
+            }
+            let firstVisibleColumn = try XCTUnwrap(visibleColumns.first)
+            let lastVisibleColumn = try XCTUnwrap(visibleColumns.last)
+            let bodyScale = Double(lastVisibleColumn - firstVisibleColumn + 1)
+                / Double(representation.pixelsWide)
+            XCTAssertEqual(
+                bodyScale,
+                ShannonAppIconAssets.macApplicationIconBodyScale,
+                accuracy: 0.002,
+                "\(choice.levelName) must match the standard macOS visual footprint"
             )
         }
     }
