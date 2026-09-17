@@ -7,12 +7,7 @@ import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
-import {
-  configuredAuthPepper,
-  normalizePairingCode,
-  SQLiteDeviceAuthStore,
-  type ShannonDevicePrincipal,
-} from './deviceAuth.js';
+import { configuredAuthPepper, normalizePairingCode, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
 import { SQLiteWorldStore } from './worldStore.js';
@@ -350,9 +345,13 @@ async function handleRealtimeVoiceCall(
     }
     const offer = Buffer.from(await readBytes(request, 128 * 1024)).toString('utf8');
     const requestedThreadId = scalarHeader(request.headers['x-shannon-thread-id']);
-    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
-      clientDelegation: realtimeVoiceGateway.engine === 'live',
-    });
+    const participantMode = scalarHeader(request.headers['x-shannon-voice-participant-mode']) ?? 'owner';
+    if (participantMode !== 'owner' && participantMode !== 'guest') {
+      sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'participant mode is invalid' });
+      return;
+    }
+    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId,
+      { clientDelegation: realtimeVoiceGateway.engine === 'live', participantMode });
     const createdAt = now();
     const reservation = persistentStore.reserveRealtimeVoiceSession({
       scopeKey: principal.scopeKey,

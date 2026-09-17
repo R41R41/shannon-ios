@@ -5,6 +5,28 @@ public enum ShannonVoiceEngine: String, Equatable, Sendable {
     case live
 }
 
+public enum ShannonVoiceParticipantMode: String, Codable, CaseIterable, Equatable, Sendable {
+    case owner
+    case guest
+
+    public var japaneseName: String {
+        switch self {
+        case .owner: "本人だけ"
+        case .guest: "友人も一緒"
+        }
+    }
+
+    public var transcriptSpeakerName: String {
+        switch self {
+        case .owner: "あなた"
+        case .guest: "参加者"
+        }
+    }
+
+    public var allowsTranscriptPersistence: Bool { self == .owner }
+    public var allowsCameraSharing: Bool { self == .owner }
+}
+
 public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     public let answerSDP: String
     public let threadID: String
@@ -34,11 +56,18 @@ public struct ShannonLiveVoiceDelegationRequestDTO: Codable, Equatable, Sendable
     public let scopeKey: String
     public let threadId: String?
     public let transcript: String
+    public let participantMode: ShannonVoiceParticipantMode
 
-    public init(scopeKey: String, threadId: String?, transcript: String) {
+    public init(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode
+    ) {
         self.scopeKey = scopeKey
         self.threadId = threadId
         self.transcript = transcript
+        self.participantMode = participantMode
     }
 }
 

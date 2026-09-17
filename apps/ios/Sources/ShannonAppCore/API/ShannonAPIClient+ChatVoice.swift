@@ -66,13 +66,15 @@ extension ShannonAPIClient {
     public func createRealtimeVoiceCall(
         scopeKey: String,
         threadId: String?,
-        offerSDP: String
+        offerSDP: String,
+        participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonRealtimeVoiceCallDTO {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/realtime/calls"))
         request.httpMethod = "POST"
         request.timeoutInterval = 40
         request.setValue("application/sdp", forHTTPHeaderField: "content-type")
+        request.setValue(participantMode.rawValue, forHTTPHeaderField: "x-shannon-voice-participant-mode")
         if let threadId, !threadId.isEmpty {
             request.setValue(threadId, forHTTPHeaderField: "x-shannon-thread-id")
         }
@@ -108,7 +110,8 @@ extension ShannonAPIClient {
     public func performLiveVoiceDelegation(
         scopeKey: String,
         threadId: String?,
-        transcript: String
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/live/delegations"))
@@ -119,7 +122,8 @@ extension ShannonAPIClient {
         request.httpBody = try JSONEncoder().encode(ShannonLiveVoiceDelegationRequestDTO(
             scopeKey: connection?.scopeKey ?? scopeKey,
             threadId: threadId,
-            transcript: transcript
+            transcript: transcript,
+            participantMode: participantMode
         ))
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }

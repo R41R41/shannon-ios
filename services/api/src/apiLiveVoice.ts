@@ -3,7 +3,7 @@ import {
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
-import { agentTaskPromptProjection } from './apiPromptProjection.js';
+import { agentTaskPromptProjection, voiceHistoryProjection } from './apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
 import type { AgentTaskStore } from './agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
@@ -29,6 +29,59 @@ export function voiceConversationInstructions(clientDelegation: boolean): string
   ].join('\n');
 }
 
+export type VoiceParticipantMode = 'owner' | 'guest';
+
+const temporaryGuestVoiceInstructions = [
+  '[Temporary guest voice session]',
+  '- More than one person may be speaking. Do not identify, name, or distinguish speakers from their voices.',
+  '- Treat every utterance as temporary session context only.',
+  '- Do not refer to or infer the owner\'s memories, prior conversations, tasks, relationships, or private state.',
+  '- Do not claim that this conversation or any participant detail will be remembered after the session ends.',
+].join('\n');
+
+interface VoiceSessionDependencies {
+  stateStore: CompanionStateStore;
+  conversationStore: ConversationStore;
+  knowledgeStore: KnowledgeStore | null;
+  dailyMind: DailyMindReader | null;
+  now: CompanionClock;
+  voice: string;
+}
+
+export function realtimeVoiceSessionProjection(
+  scopeKey: string,
+  requestedThreadId: string | undefined,
+  options: { clientDelegation?: boolean; participantMode?: VoiceParticipantMode },
+  dependencies: VoiceSessionDependencies,
+): { threadId: string; instructions: string; voice: string } {
+  if (options.participantMode === 'guest') {
+    return {
+      threadId: requestedThreadId?.trim() || 'temporary-guest-session',
+      instructions: [
+        temporaryGuestVoiceInstructions,
+        voiceConversationInstructions(options.clientDelegation === true),
+      ].join('\n\n'),
+      voice: dependencies.voice,
+    };
+  }
+  const threadId = dependencies.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
+  const captured = dependencies.stateStore.snapshot(scopeKey);
+  const basePrompt = dependencies.knowledgeStore?.promptProjection(scopeKey)
+    ?? assembleShannonSystemPrompt(captured);
+  const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
+  const history = voiceHistoryProjection(dependencies.conversationStore.history(scopeKey, threadId));
+  return {
+    threadId,
+    instructions: [
+      basePrompt,
+      dailyMindPrompt,
+      history,
+      voiceConversationInstructions(options.clientDelegation === true),
+    ].filter(Boolean).join('\n\n'),
+    voice: dependencies.voice,
+  };
+}
+
 interface LiveVoiceDependencies {
   chatModel: ShannonChatModel;
   stateStore: CompanionStateStore;
@@ -48,23 +101,32 @@ export function dispatchLiveVoiceRequest(
   const scopeKey = request.body.scopeKey;
   if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
   if (!validBoundedString(request.body.transcript, 8_000)) return badRequest('transcript is invalid');
+  const participantMode = request.body.participantMode ?? 'owner';
+  if (participantMode !== 'owner' && participantMode !== 'guest') {
+    return badRequest('participantMode is invalid');
+  }
 
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined;
-  return completeLiveVoiceDelegation(scopeKey, requestedThreadId, request.body.transcript.trim(), dependencies);
+  return completeLiveVoiceDelegation(
+    scopeKey,
+    requestedThreadId,
+    request.body.transcript.trim(),
+    participantMode,
+    dependencies,
+  );
 }
 
 async function completeLiveVoiceDelegation(
   scopeKey: string,
   requestedThreadId: string | undefined,
   transcript: string,
+  participantMode: VoiceParticipantMode,
   dependencies: LiveVoiceDependencies,
 ): Promise<ApiResponse> {
-  const threadId = dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
-  const captured = dependencies.stateStore.snapshot(scopeKey);
-  const basePrompt = dependencies.knowledgeStore?.promptProjection(scopeKey)
-    ?? assembleShannonSystemPrompt(captured);
-  const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const taskPrompt = agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
+  const temporaryGuest = participantMode === 'guest';
+  const threadId = temporaryGuest
+    ? requestedThreadId || 'temporary-guest-session'
+    : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
   const backendInstructions = [
     '[GPT-Live client delegation backend]',
     '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
@@ -72,11 +134,24 @@ async function completeLiveVoiceDelegation(
     '- This lane is read-only. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
   ].join('\n');
-  const priorThreadSummary = dependencies.conversationStore.threadSummary(scopeKey, threadId);
+  const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
+  const basePrompt = temporaryGuest
+    ? temporaryGuestVoiceInstructions
+    : dependencies.knowledgeStore?.promptProjection(scopeKey)
+      ?? assembleShannonSystemPrompt(captured!);
+  const dailyMindPrompt = temporaryGuest
+    ? ''
+    : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
+  const taskPrompt = temporaryGuest
+    ? ''
+    : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
+  const priorThreadSummary = temporaryGuest
+    ? ''
+    : dependencies.conversationStore.threadSummary(scopeKey, threadId);
   const completion = await dependencies.chatModel.generate({
     scopeKey,
     systemPrompt: [basePrompt, dailyMindPrompt, taskPrompt, backendInstructions].filter(Boolean).join('\n\n'),
-    history: dependencies.conversationStore.history(scopeKey, threadId),
+    history: temporaryGuest ? [] : dependencies.conversationStore.history(scopeKey, threadId),
     ...(priorThreadSummary ? { priorThreadSummary } : {}),
     message: transcript,
     useWebSearch: true,

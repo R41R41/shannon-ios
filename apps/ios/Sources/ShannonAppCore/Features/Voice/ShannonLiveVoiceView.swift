@@ -6,16 +6,18 @@ import UIKit
 public struct ShannonLiveVoiceView: View {
     @Bindable private var model: ShannonRealtimeVoiceSessionModel
     private let expression: ShannonExpressionDTO
-    private let createCall: @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO
-    private let performLiveDelegation: @MainActor (String) async throws -> String
+    private let createCall: @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO
+    private let performLiveDelegation: @MainActor (String, ShannonVoiceParticipantMode) async throws -> String
     private let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let commitTurn: @MainActor (String, String) async throws -> Void
     private let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var didStart = false
     @State private var pulse = false
+    @State private var showsParticipantModePicker = false
 #if os(iOS)
     @State private var showsCamera = false
     @State private var pendingCameraImage: UIImage?
@@ -27,8 +29,8 @@ public struct ShannonLiveVoiceView: View {
     public init(
         model: ShannonRealtimeVoiceSessionModel,
         expression: ShannonExpressionDTO,
-        createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
+        createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         dismiss: @escaping () -> Void
@@ -67,6 +69,10 @@ public struct ShannonLiveVoiceView: View {
                 topBar(palette)
                 ScrollView {
                     VStack(spacing: ShannonSpacing.medium) {
+                        if model.participantMode == .guest {
+                            ShannonVoiceGuestModeNotice(palette: palette)
+                        }
+
                         ZStack(alignment: .bottom) {
                             ShannonDialogueStagePortraitView()
                                 .frame(maxWidth: 440)
@@ -88,7 +94,7 @@ public struct ShannonLiveVoiceView: View {
 
                         if !model.userTranscript.isEmpty {
                             transcriptCard(
-                                speaker: "あなた",
+                                speaker: model.participantMode.transcriptSpeakerName,
                                 text: model.userTranscript,
                                 alignment: .trailing,
                                 palette: palette
@@ -165,12 +171,24 @@ public struct ShannonLiveVoiceView: View {
             didStart = true
             pulse = true
             await model.start(
+                participantMode: .owner,
                 createCall: createCall,
                 performLiveDelegation: performLiveDelegation,
                 commitTurn: commitTurn
             )
         }
         .onDisappear { model.stop() }
+        .confirmationDialog(
+            "音声の参加者",
+            isPresented: $showsParticipantModePicker,
+            titleVisibility: .visible
+        ) {
+            Button("本人だけ") { switchParticipantMode(to: .owner) }
+            Button("友人も一緒") { switchParticipantMode(to: .guest) }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("「友人も一緒」では話者を識別せず、この通話を履歴・個人記憶へ保存しません。切り替えると音声をつなぎ直します。")
+        }
     }
 
     @ViewBuilder
@@ -198,11 +216,21 @@ public struct ShannonLiveVoiceView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("シャノン")
                     .font(.headline)
-                Text(model.phase.japaneseLabel)
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(model.phase.japaneseLabel)
+                        .font(.caption)
+                        .foregroundStyle(palette.textSecondary)
+                }
             }
             Spacer()
+            Button { showsParticipantModePicker = true } label: {
+                Image(systemName: model.participantMode == .owner ? "person.fill" : "person.2.fill")
+                    .font(.body.weight(.semibold))
+                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("音声の参加者、\(model.participantMode.japaneseName)")
+            .accessibilityHint("本人だけ、または友人も一緒を選びます")
             Button {
                 model.stop()
                 dismiss()
@@ -250,6 +278,7 @@ public struct ShannonLiveVoiceView: View {
                 Button {
                     Task {
                         await model.start(
+                            participantMode: model.participantMode,
                             createCall: createCall,
                             performLiveDelegation: performLiveDelegation,
                             commitTurn: commitTurn
@@ -288,7 +317,7 @@ public struct ShannonLiveVoiceView: View {
             .accessibilityLabel("音声会話を終了")
 
 #if os(iOS)
-            if model.engine == .live {
+            if model.engine == .live && model.participantMode.allowsCameraSharing {
                 Button {
                     presentCamera()
                 } label: {
@@ -312,6 +341,23 @@ public struct ShannonLiveVoiceView: View {
             }
             .frame(width: 52, height: 52)
             .accessibilityHidden(true)
+        }
+    }
+
+    private func switchParticipantMode(to mode: ShannonVoiceParticipantMode) {
+        guard mode != model.participantMode else { return }
+#if os(iOS)
+        pendingCameraImage = nil
+        pendingCameraData = nil
+        cameraErrorMessage = nil
+#endif
+        Task {
+            await model.start(
+                participantMode: mode,
+                createCall: createCall,
+                performLiveDelegation: performLiveDelegation,
+                commitTurn: commitTurn
+            )
         }
     }
 

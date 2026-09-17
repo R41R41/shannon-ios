@@ -175,11 +175,17 @@ public struct ShannonConversationView: View {
             ShannonLiveVoiceView(
                 model: realtimeVoiceModel,
                 expression: model.currentExpression,
-                createCall: { offer in
-                    try await model.createRealtimeVoiceCall(offerSDP: offer)
+                createCall: { offer, participantMode in
+                    try await model.createRealtimeVoiceCall(
+                        offerSDP: offer,
+                        participantMode: participantMode
+                    )
                 },
-                performLiveDelegation: { transcript in
-                    try await model.performLiveVoiceDelegation(transcript: transcript)
+                performLiveDelegation: { transcript, participantMode in
+                    try await model.performLiveVoiceDelegation(
+                        transcript: transcript,
+                        participantMode: participantMode
+                    )
                 },
                 analyzeCameraSnapshot: { jpegData in
                     try await model.analyzeVoiceCameraSnapshot(jpegData: jpegData)

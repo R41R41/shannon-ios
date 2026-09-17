@@ -7,12 +7,16 @@ import {
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
-import { agentTaskPromptProjection, voiceHistoryProjection } from './apiPromptProjection.js';
+import { agentTaskPromptProjection } from './apiPromptProjection.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
-import { dispatchLiveVoiceRequest, voiceConversationInstructions } from './apiLiveVoice.js';
+import {
+  dispatchLiveVoiceRequest,
+  realtimeVoiceSessionProjection,
+  type VoiceParticipantMode,
+} from './apiLiveVoice.js';
 import {
   appendWebSources,
   badRequest,
@@ -152,23 +156,18 @@ export class ShannonApiKernel {
     this.worldSubscriptions = options.worldSubscriptions ?? null;
   }
 
-  realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: { clientDelegation?: boolean } = {}): {
-    threadId: string;
-    instructions: string;
-    voice: string;
-  } {
-    const threadId = this.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
-    const captured = this.stateStore.snapshot(scopeKey);
-    const basePrompt = this.knowledgeStore?.promptProjection(scopeKey)
-      ?? assembleShannonSystemPrompt(captured);
-    const dailyMindPrompt = this.dailyMind?.promptFor(scopeKey, this.now()) ?? '';
-    const history = voiceHistoryProjection(this.conversationStore.history(scopeKey, threadId));
-    const voiceInstructions = voiceConversationInstructions(options.clientDelegation === true);
-    return {
-      threadId,
-      instructions: [basePrompt, dailyMindPrompt, history, voiceInstructions].filter(Boolean).join('\n\n'),
+  realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
+    clientDelegation?: boolean;
+    participantMode?: VoiceParticipantMode;
+  } = {}): { threadId: string; instructions: string; voice: string } {
+    return realtimeVoiceSessionProjection(scopeKey, requestedThreadId, options, {
+      stateStore: this.stateStore,
+      conversationStore: this.conversationStore,
+      knowledgeStore: this.knowledgeStore,
+      dailyMind: this.dailyMind,
+      now: this.now,
       voice: this.voiceIdentity.read(scopeKey).effectiveVoice,
-    };
+    });
   }
 
   async dispatch(request: ApiRequest): Promise<ApiResponse> {

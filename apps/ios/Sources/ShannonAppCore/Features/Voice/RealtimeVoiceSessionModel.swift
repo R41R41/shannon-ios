@@ -17,13 +17,14 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var dailyRemainingSeconds: Int?
     public private(set) var engine: ShannonVoiceEngine = .realtime
     public private(set) var liveAudioSeconds: Double = 0
+    public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
 
     var transport: ShannonWebRTCVoiceTransport?
     var transcriptState = ShannonRealtimeVoiceTranscriptState()
     var sessionLimitTask: Task<Void, Never>?
     var disconnectGraceTask: Task<Void, Never>?
     var commitTurn: (@MainActor (String, String) async throws -> Void)?
-    var performLiveDelegation: (@MainActor (String) async throws -> String)?
+    var performLiveDelegation: (@MainActor (String, ShannonVoiceParticipantMode) async throws -> String)?
     var liveDelegationTasks: [String: Task<Void, Never>] = [:]
     var sessionGeneration = 0
     let diagnostics = ShannonVoiceDiagnostics.shared
@@ -31,11 +32,13 @@ public final class ShannonRealtimeVoiceSessionModel {
     public init() {}
 
     public func start(
-        createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
+        participantMode: ShannonVoiceParticipantMode,
+        createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {
         stop()
+        self.participantMode = participantMode
         sessionGeneration += 1
         let generation = sessionGeneration
         phase = .requestingPermission
@@ -105,7 +108,7 @@ public final class ShannonRealtimeVoiceSessionModel {
                 "realtime.offer.after",
                 metadata: ShannonRealtimeOfferDiagnostics(sdp: offer).metadata
             )
-            let call = try await createCall(offer)
+            let call = try await createCall(offer, participantMode)
             guard generation == sessionGeneration else {
                 transport.close()
                 return
@@ -248,10 +251,11 @@ public final class ShannonRealtimeVoiceSessionModel {
             return
         }
         diagnostics.record("live.delegation.started")
+        let mode = participantMode
         liveDelegationTasks[id] = Task { @MainActor [weak self] in
             defer { self?.liveDelegationTasks[id] = nil }
             do {
-                let reply = try await performLiveDelegation(transcript)
+                let reply = try await performLiveDelegation(transcript, mode)
                 guard !Task.isCancelled, self?.sessionGeneration == generation else { return }
                 try transport.send(ShannonLiveVoiceClientEvent.commentary(
                     delegationID: id,
@@ -281,6 +285,10 @@ public final class ShannonRealtimeVoiceSessionModel {
     }
 
     func persist(_ turn: (user: String, shannon: String), generation: Int) {
+        guard participantMode.allowsTranscriptPersistence else {
+            diagnostics.record("realtime.turn.discarded_for_guest_mode")
+            return
+        }
         guard let commitTurn else { return }
         Task { @MainActor [weak self] in
             do {
@@ -395,10 +403,12 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var dailyRemainingSeconds: Int?
     public private(set) var engine: ShannonVoiceEngine = .realtime
     public private(set) var liveAudioSeconds: Double = 0
+    public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public init() {}
     public func start(
-        createCall: @escaping @MainActor (String) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String) async throws -> String,
+        participantMode: ShannonVoiceParticipantMode,
+        createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
+        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {}
     public func toggleMute() {}

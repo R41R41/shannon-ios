@@ -335,6 +335,7 @@ final class ShannonConnectionTests: XCTestCase {
                 XCTAssertEqual(request.httpMethod, "POST")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "application/sdp")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-thread-id"), "thread-voice")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-voice-participant-mode"), "owner")
                 XCTAssertTrue(String(data: try XCTUnwrap(requestBody(request)), encoding: .utf8)?.hasPrefix("v=0") == true)
                 let response = try XCTUnwrap(HTTPURLResponse(
                     url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
@@ -361,7 +362,8 @@ final class ShannonConnectionTests: XCTestCase {
 
         let call = try await client.createRealtimeVoiceCall(
             scopeKey: "untrusted-client-scope", threadId: "thread-voice",
-            offerSDP: "v=0\r\ns=offer with enough bytes\r\n"
+            offerSDP: "v=0\r\ns=offer with enough bytes\r\n",
+            participantMode: .owner
         )
         XCTAssertEqual(call.threadID, "thread-voice")
         XCTAssertEqual(call.engine, .live)
@@ -396,6 +398,7 @@ final class ShannonConnectionTests: XCTestCase {
             XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
             XCTAssertEqual(json["threadId"] as? String, "thread-travel")
             XCTAssertEqual(json["transcript"] as? String, "浜松の天気を調べて")
+            XCTAssertEqual(json["participantMode"] as? String, "guest")
             return try response(url: request.url!, json: [
                 "threadId": "thread-travel",
                 "model": "gpt-5.6-luna",
@@ -408,7 +411,8 @@ final class ShannonConnectionTests: XCTestCase {
         let result = try await client.performLiveVoiceDelegation(
             scopeKey: "untrusted-client-scope",
             threadId: "thread-travel",
-            transcript: "浜松の天気を調べて"
+            transcript: "浜松の天気を調べて",
+            participantMode: .guest
         )
 
         XCTAssertEqual(result.threadId, "thread-travel")
@@ -479,7 +483,8 @@ final class ShannonConnectionTests: XCTestCase {
             _ = try await client.createRealtimeVoiceCall(
                 scopeKey: "untrusted-client-scope",
                 threadId: nil,
-                offerSDP: "v=0\r\ns=offer with enough bytes\r\n"
+                offerSDP: "v=0\r\ns=offer with enough bytes\r\n",
+                participantMode: .owner
             )
             XCTFail("Expected the daily allowance rejection")
         } catch {

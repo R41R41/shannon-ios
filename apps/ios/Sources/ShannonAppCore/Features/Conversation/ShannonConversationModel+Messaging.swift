@@ -34,23 +34,31 @@ extension ShannonConversationModel {
         return value
     }
 
-    public func createRealtimeVoiceCall(offerSDP: String) async throws -> ShannonRealtimeVoiceCallDTO {
+    public func createRealtimeVoiceCall(
+        offerSDP: String,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonRealtimeVoiceCallDTO {
         let call = try await client.createRealtimeVoiceCall(
             scopeKey: scopeKey,
             threadId: selectedThreadId,
-            offerSDP: offerSDP
+            offerSDP: offerSDP,
+            participantMode: participantMode
         )
-        selectedThreadId = call.threadID
+        if participantMode == .owner { selectedThreadId = call.threadID }
         return call
     }
 
-    public func performLiveVoiceDelegation(transcript: String) async throws -> String {
+    public func performLiveVoiceDelegation(
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> String {
         let result = try await client.performLiveVoiceDelegation(
             scopeKey: scopeKey,
             threadId: selectedThreadId,
-            transcript: transcript
+            transcript: transcript,
+            participantMode: participantMode
         )
-        selectedThreadId = result.threadId
+        if participantMode == .owner { selectedThreadId = result.threadId }
         return result.reply
     }
 

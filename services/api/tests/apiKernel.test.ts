@@ -75,6 +75,50 @@ describe('Shannon local API kernel', () => {
     expect(model.requests).toHaveLength(0);
   });
 
+  it('keeps temporary guest voice sessions outside owner context and history', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-18T00:00:00.000Z',
+      { chatModel: model },
+    );
+    const privateTurn = await api.dispatch({
+      method: 'POST', path: '/v1/chat', body: {
+        scopeKey: 'owner-a', message: '秘密の合言葉はミズクラゲ',
+      },
+    });
+    const privateThreadId = String((privateTurn.body as { threadId: string }).threadId);
+    model.requests.length = 0;
+
+    const session = api.realtimeVoiceSession('owner-a', undefined, { participantMode: 'guest' });
+    expect(session.threadId).toBe('temporary-guest-session');
+    expect(session.instructions).toContain('[Temporary guest voice session]');
+    expect(session.instructions).not.toContain('[Shannon shared state v1]');
+    expect(session.instructions).not.toContain('ミズクラゲ');
+
+    const delegated = await api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a', threadId: privateThreadId,
+        transcript: '今日の天気を調べて', participantMode: 'guest',
+      },
+    });
+    expect(delegated).toMatchObject({ status: 200, body: { threadId: privateThreadId } });
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]?.history).toEqual([]);
+    expect(model.requests[0]?.systemPrompt).toContain('[Temporary guest voice session]');
+    expect(model.requests[0]?.systemPrompt).not.toContain('ミズクラゲ');
+  });
+
+  it('rejects an unknown live voice participant mode', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(() => '2026-09-18T00:00:00.000Z', { chatModel: model });
+    await expect(api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a', transcript: '天気を調べて', participantMode: 'crowd',
+      },
+    })).resolves.toMatchObject({ status: 400 });
+    expect(model.requests).toHaveLength(0);
+  });
+
   it('shares a bounded voice choice and applies it when a new realtime session starts', async () => {
     const voiceIdentity = new InMemoryVoiceIdentityStore('marin');
     const api = createLocalApiKernel(
