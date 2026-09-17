@@ -3,7 +3,14 @@ import { fileURLToPath } from 'node:url';
 import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from './backgroundJobStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
-import type { ConversationStore, ConversationThread, ShannonExperience, StoredConversationMessage, TurnPersistenceContext } from './conversationStore.js';
+import type {
+  ConversationStore,
+  ConversationThread,
+  PlatformTurnPersistenceInput,
+  ShannonExperience,
+  StoredConversationMessage,
+  TurnPersistenceContext,
+} from './conversationStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 import type { ActivityItem } from './memoryService.js';
 import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
@@ -63,6 +70,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
+  ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 

@@ -49,12 +49,11 @@ import {
   SQLiteVoiceIdentityStore,
   VoicePreviewError,
 } from './voiceIdentity.js';
+import { SHANNON_PLATFORM_TURN_PATH } from './platformBridge.js';
+import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeTurn } from './serverPlatformBridgeRoute.js';
 
 const now = () => new Date().toISOString();
-const persistentStore = new SQLiteShannonStore({
-  path: configuredDatabasePath(),
-  now,
-});
+const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
 const initiativeStore = new SQLiteInitiativeStore(configuredDatabasePath(), now);
 const pushStore = new SQLitePushNotificationStore(configuredDatabasePath(), now);
@@ -72,11 +71,12 @@ const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
   : 'marin';
 const voiceIdentityStore = new SQLiteVoiceIdentityStore(configuredDatabasePath(), automaticRealtimeVoice);
 const voicePreviewGateway = createConfiguredVoicePreviewGateway(process.env);
+const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
   stateStore: persistentStore,
   conversationStore: persistentStore,
-  background: new DurableBackgroundDispatcher(persistentStore, persistentStore),
+  background: backgroundDispatcher,
   memoryStore: new ShannonMemoryService(
     persistentStore, persistentStore, now, persistentStore, worldStore,
     persistentStore, undefined, initiativeStore, dailyMindStore,
@@ -100,6 +100,7 @@ const kernel = createLocalApiKernel(now, {
   voiceIdentity: voiceIdentityStore,
   worldSubscriptions: worldStore,
 });
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
 const authMode = configuredAuthMode(host);
@@ -143,6 +144,11 @@ const server = createServer(async (request, response) => {
         body: hostBody,
       });
       sendJson(response, result.status, result.body);
+      return;
+    }
+
+    if (url.pathname === SHANNON_PLATFORM_TURN_PATH) {
+      await handlePlatformBridgeTurn(request, response, platformBridge);
       return;
     }
 

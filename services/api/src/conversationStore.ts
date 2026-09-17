@@ -44,6 +44,23 @@ export interface TurnPersistenceContext {
   artifacts?: readonly ShannonGeneratedArtifact[];
 }
 
+export interface PlatformTurnPersistenceInput {
+  scopeKey: string;
+  platform: string;
+  requestId: string;
+  payloadHash: string;
+  threadId: string;
+  userMessage: string;
+  shannonReply: string;
+  observedAt: string;
+  context: TurnPersistenceContext;
+}
+
+export interface PlatformTurnPersistenceResult {
+  duplicate: boolean;
+  experience: ShannonExperience;
+}
+
 export interface ConversationStore {
   listThreads(scopeKey: string): readonly ConversationThread[];
   threadId(scopeKey: string, threadId?: string): string;
@@ -63,6 +80,7 @@ export interface ConversationStore {
     observedAt: string,
     context?: TurnPersistenceContext,
   ): ShannonExperience;
+  ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult;
 }
 
 export class InMemoryConversationStore implements ConversationStore {
@@ -72,6 +90,7 @@ export class InMemoryConversationStore implements ConversationStore {
   private readonly protectedTitles = new Map<string, Set<string>>();
   private readonly experiences = new Map<string, ShannonExperience[]>();
   private readonly archivedThreads = new Map<string, Set<string>>();
+  private readonly platformReceipts = new Map<string, { payloadHash: string; experience: ShannonExperience }>();
 
   private readonly defaultThreadCache = new Map<string, string>();
 
@@ -249,6 +268,25 @@ export class InMemoryConversationStore implements ConversationStore {
     experiences.push(experience);
     this.experiences.set(scopeKey, experiences.slice(-this.maximumExperiences));
     return experience;
+  }
+
+  ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult {
+    const key = `${input.scopeKey}\u0000${input.platform}\u0000${input.requestId}`;
+    const previous = this.platformReceipts.get(key);
+    if (previous) {
+      if (previous.payloadHash !== input.payloadHash) throw new Error('PLATFORM_TURN_CONFLICT');
+      return { duplicate: true, experience: previous.experience };
+    }
+    const experience = this.appendTurn(
+      input.scopeKey,
+      input.threadId,
+      input.userMessage,
+      input.shannonReply,
+      input.observedAt,
+      input.context,
+    );
+    this.platformReceipts.set(key, { payloadHash: input.payloadHash, experience });
+    return { duplicate: false, experience };
   }
 }
 

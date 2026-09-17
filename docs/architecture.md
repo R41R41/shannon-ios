@@ -15,6 +15,7 @@ iPhone app + Shannon Desk for Mac
           ▼
 Azure VM: API + SQLite + background workers
   ├─ FCA response lane
+  ├─ allowlisted legacy-platform turn ingestion
   ├─ emotion, memory, sleep, world and initiative lanes
   ├─ Aether bounded context + proposal inbox
   └─ durable agent-task state
@@ -43,6 +44,26 @@ For a newly created thread without an explicit title, the first successful user/
 SQLite schema v8 adds `conversation_threads.title_origin` (`pending`, `automatic`, or `manual`). Migration preserves all existing titles as manual because older rows have no edit provenance. Only newly created untitled threads are eligible for automatic naming. The migration is additive and runs inside the existing restart-safe migration transaction.
 
 Emotion and memory updates affect the next reply after they commit. Prediction-error processing is not part of v1.
+
+## Legacy platform convergence
+
+Discord, LINE, Minecraft, X, and YouTube remain transport/tool adapters in the
+legacy Azure runtime during the first convergence phase. After that runtime has
+successfully sent one owner-authored reply, it may mirror the completed turn to
+`POST /v1/platform/turns` using a dedicated service credential. The endpoint
+binds the canonical owner scope from server configuration, accepts only exact
+platform conversation and external-owner pairs, derives an opaque hash-based
+thread identifier, and idempotently records the turn before scheduling the same memory
+refinement used by app chat. Unknown conversations, friends, group participants,
+and caller-supplied scope keys are rejected rather than being learned as owner
+facts. This makes the app API the gradual source of truth for Shannon's memory
+without changing the legacy channel's response model or action tools in the same
+release.
+
+Later phases can move response generation and consented relationship memory onto
+the shared core after the mirror path is observed in production. They must not
+dual-write friend statements into owner memory or expose iPhone/device tokens to
+the legacy runtime.
 
 ## State and sleep lanes
 
@@ -216,6 +237,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Explicit organization | `organize_sessions`, `organize_items`, `organize_thread_cursors` |
 | Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Realtime voice allowance | `realtime_voice_session_reservations` |
+| Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 

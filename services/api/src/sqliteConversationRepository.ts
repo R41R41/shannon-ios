@@ -4,6 +4,8 @@ import {
   threadNavigation,
   type ConversationStore,
   type ConversationThread,
+  type PlatformTurnPersistenceInput,
+  type PlatformTurnPersistenceResult,
   type ShannonExperience,
   type StoredConversationMessage,
   type TurnPersistenceContext,
@@ -257,6 +259,64 @@ export class SQLiteConversationRepository implements ConversationStore {
       this.context.insertActivity(scopeKey, 'conversation', 'トーク', summary, observedAt, { threadId: effectiveThreadId });
     });
     return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt });
+  }
+
+  ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult {
+    return this.context.transaction(() => {
+      const previous = this.context.database.prepare(`
+        SELECT payload_hash, experience_id
+        FROM platform_turn_receipts
+        WHERE scope_key = ? AND platform = ? AND request_id = ?
+      `).get(input.scopeKey, input.platform, input.requestId) as unknown as {
+        payload_hash: string;
+        experience_id: string;
+      } | undefined;
+      if (previous) {
+        if (previous.payload_hash !== input.payloadHash) throw new Error('PLATFORM_TURN_CONFLICT');
+        const event = this.context.database.prepare(`
+          SELECT observed_at, payload_json
+          FROM experience_events
+          WHERE event_id = ? AND scope_key = ? AND event_type = 'turn.completed'
+        `).get(previous.experience_id, input.scopeKey) as unknown as {
+          observed_at: string;
+          payload_json: string;
+        } | undefined;
+        const turn = event ? parseTurnPayload(event.payload_json) : null;
+        if (!event || !turn) throw new Error('PLATFORM_TURN_RECEIPT_CORRUPT');
+        return {
+          duplicate: true,
+          experience: Object.freeze({
+            id: previous.experience_id,
+            userMessage: turn.userMessage,
+            shannonReply: turn.shannonReply,
+            summary: turn.summary,
+            observedAt: event.observed_at,
+          }),
+        };
+      }
+      const experience = this.appendTurn(
+        input.scopeKey,
+        input.threadId,
+        input.userMessage,
+        input.shannonReply,
+        input.observedAt,
+        input.context,
+      );
+      this.context.database.prepare(`
+        INSERT INTO platform_turn_receipts
+          (scope_key, platform, request_id, payload_hash, thread_id, experience_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        input.scopeKey,
+        input.platform,
+        input.requestId,
+        input.payloadHash,
+        input.threadId,
+        experience.id,
+        input.observedAt,
+      );
+      return { duplicate: false, experience };
+    });
   }
 
   events(scopeKey: string): readonly PersistedExperienceEvent[] {

@@ -74,3 +74,18 @@ new API without the worker, because queued affect and memory updates would then
 remain pending. The worker schedules one sleep job per owner/day; transient
 failures can retry it up to five times. It uses `SHANNON_SLEEP_TIMEZONE` /
 `SHANNON_SLEEP_HOUR` from its unit environment.
+
+## Optional legacy-platform bridge
+
+`POST /v1/platform/turns` is a service-to-service ingestion boundary for the
+existing Discord, LINE, Minecraft, X, and YouTube runtimes. It does not replace
+their transports or tools. It mirrors a completed owner-authored turn into the
+canonical Shannon conversation store and queues the normal memory refinement.
+
+The route is disabled unless its token, canonical owner scope, and JSON binding
+list are all present. Every binding fixes one platform conversation to one
+external owner ID and a safe thread title. Unknown conversations and actors fail
+closed. The request cannot choose a Shannon scope, retries are idempotent by
+platform plus request ID, and the database stores only a hash-derived thread ID
+rather than the raw external conversation ID. Give the legacy runtime a
+dedicated revocable token; never reuse a paired-device or Agent Host credential.

@@ -6,7 +6,7 @@ import { conciseThreadTitle, parseSnapshot, parseTurnPayload } from './sqliteSto
 import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
 
 export class SQLiteStoreMigrator {
@@ -119,6 +119,7 @@ export class SQLiteStoreMigrator {
       if (previousVersion < 9) this.migrateVoiceUsageLane();
       if (previousVersion < 10) this.migrateThreadSummary();
       if (previousVersion < 11) this.migrateRealtimeVoiceReservations();
+      if (previousVersion < 12) this.migratePlatformTurnReceipts();
       this.context.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }
@@ -136,6 +137,23 @@ export class SQLiteStoreMigrator {
     if (!columns.some(column => column.name === 'summary')) {
       this.context.database.exec('ALTER TABLE conversation_threads ADD COLUMN summary TEXT;');
     }
+  }
+
+  private migratePlatformTurnReceipts(): void {
+    this.context.database.exec(`
+      CREATE TABLE IF NOT EXISTS platform_turn_receipts (
+        scope_key TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        experience_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, platform, request_id)
+      );
+      CREATE INDEX IF NOT EXISTS platform_turn_receipts_created
+        ON platform_turn_receipts (created_at DESC);
+    `);
   }
 
   private migrateThreadedConversations(): void {
