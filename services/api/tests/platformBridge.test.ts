@@ -119,6 +119,24 @@ describe('legacy platform bridge', () => {
     ]);
   });
 
+  it('returns a bounded read-only owner projection and rejects other actors', () => {
+    const state = new InMemoryCompanionStateStore(now);
+    state.apply('owner', { type: 'interest-observed', interest: '分散システム' });
+    const conversations = new InMemoryConversationStore();
+    const bridge = new PlatformBridgeService(configuration(), state, conversations, new RecordingBackground(), now);
+
+    const projection = bridge.context({
+      platform: 'discord', conversationId: '12345', sourceUserId: '67890',
+    });
+    expect(projection).toMatchObject({ schemaVersion: 1, stateVersion: 1, updatedAt: now() });
+    expect(projection.projection).toContain('分散システム');
+    expect(projection.projection.length).toBeLessThanOrEqual(2_400);
+    expect(conversations.listThreads('owner')).toEqual([]);
+    expectBridgeError(() => bridge.context({
+      platform: 'discord', conversationId: '12345', sourceUserId: 'friend',
+    }), 'PLATFORM_ACTOR_DENIED');
+  });
+
   it('fails closed for unknown conversations, unbound actors, and conflicting retries', () => {
     const state = new InMemoryCompanionStateStore(now);
     const conversations = new InMemoryConversationStore();

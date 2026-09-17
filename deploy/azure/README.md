@@ -82,6 +82,13 @@ existing Discord, LINE, Minecraft, X, and YouTube runtimes. It does not replace
 their transports or tools. It mirrors a completed owner-authored turn into the
 canonical Shannon conversation store and queues the normal memory refinement.
 
+`POST /v1/platform/context` uses the same credential and owner binding to return
+a read-only, 2,400-character maximum projection of current temperament,
+emotion, interests, owner facts, relationship guidance, and active memories.
+It returns no scope key or conversation history and performs no database write.
+Legacy response generation must fall back to its existing prompt when this
+optional read is unavailable.
+
 The route is disabled unless its token, canonical owner scope, and JSON binding
 list are all present. Every binding fixes one platform conversation to one
 external owner ID and a safe thread title. Discord may additionally bind one

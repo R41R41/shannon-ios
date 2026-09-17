@@ -49,8 +49,7 @@ import {
   SQLiteVoiceIdentityStore,
   VoicePreviewError,
 } from './voiceIdentity.js';
-import { SHANNON_PLATFORM_TURN_PATH } from './platformBridge.js';
-import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeTurn } from './serverPlatformBridgeRoute.js';
+import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
@@ -147,8 +146,8 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (url.pathname === SHANNON_PLATFORM_TURN_PATH) {
-      await handlePlatformBridgeTurn(request, response, platformBridge);
+    if (isPlatformBridgePath(url.pathname)) {
+      await handlePlatformBridgeRequest(url.pathname, request, response, platformBridge);
       return;
     }
 

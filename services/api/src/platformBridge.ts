@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  buildCompanionStatePrompt,
   createShannonMessageEmotion,
   projectEmotionReaction,
   type CompanionClock,
@@ -9,6 +10,7 @@ import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 
 export const SHANNON_PLATFORM_TURN_PATH = '/v1/platform/turns';
+export const SHANNON_PLATFORM_CONTEXT_PATH = '/v1/platform/context';
 
 const platforms = ['discord', 'line', 'minecraft', 'x', 'youtube'] as const;
 export type ShannonPlatform = typeof platforms[number];
@@ -44,6 +46,13 @@ export interface PlatformTurnResponse {
   experienceId: string;
 }
 
+export interface PlatformContextResponse {
+  schemaVersion: 1;
+  stateVersion: number;
+  updatedAt: string;
+  projection: string;
+}
+
 export class PlatformBridgeError extends Error {
   constructor(
     readonly code: 'BAD_REQUEST' | 'PLATFORM_CONVERSATION_DENIED' | 'PLATFORM_ACTOR_DENIED' | 'PLATFORM_TURN_CONFLICT',
@@ -66,21 +75,7 @@ export class PlatformBridgeService {
 
   ingest(value: unknown): PlatformTurnResponse {
     const request = validatedPlatformTurn(value, this.now());
-    const binding = bindingFor(this.configuration, request.platform, request.conversationId);
-    if (!binding) {
-      throw new PlatformBridgeError(
-        'PLATFORM_CONVERSATION_DENIED',
-        403,
-        'This platform conversation is not allowlisted.',
-      );
-    }
-    if (request.sourceUserId !== binding.ownerUserId) {
-      throw new PlatformBridgeError(
-        'PLATFORM_ACTOR_DENIED',
-        403,
-        'This external actor is not bound to the Shannon owner.',
-      );
-    }
+    const binding = this.authorizedBinding(request);
 
     const threadId = platformBridgeThreadId(request.platform, request.conversationId);
     const capturedState = this.stateStore.snapshot(this.configuration.scopeKey);
@@ -128,6 +123,41 @@ export class PlatformBridgeService {
       threadId,
       experienceId: persisted.experience.id,
     };
+  }
+
+  context(value: unknown): PlatformContextResponse {
+    const request = validatedPlatformContext(value);
+    this.authorizedBinding(request);
+    const snapshot = this.stateStore.snapshot(this.configuration.scopeKey);
+    return Object.freeze({
+      schemaVersion: 1 as const,
+      stateVersion: snapshot.version,
+      updatedAt: snapshot.updatedAt,
+      projection: buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 }),
+    });
+  }
+
+  private authorizedBinding(request: {
+    platform: ShannonPlatform;
+    conversationId: string;
+    sourceUserId: string;
+  }): PlatformBridgeBinding {
+    const binding = bindingFor(this.configuration, request.platform, request.conversationId);
+    if (!binding) {
+      throw new PlatformBridgeError(
+        'PLATFORM_CONVERSATION_DENIED',
+        403,
+        'This platform conversation is not allowlisted.',
+      );
+    }
+    if (request.sourceUserId !== binding.ownerUserId) {
+      throw new PlatformBridgeError(
+        'PLATFORM_ACTOR_DENIED',
+        403,
+        'This external actor is not bound to the Shannon owner.',
+      );
+    }
+    return binding;
   }
 }
 
@@ -211,6 +241,18 @@ function validatedPlatformTurn(value: unknown, now: string): PlatformTurnRequest
     userMessage: value.userMessage.trim(),
     shannonReply: value.shannonReply.trim(),
     observedAt: new Date(value.observedAt).toISOString(),
+  };
+}
+
+function validatedPlatformContext(value: unknown): Pick<PlatformTurnRequest, 'platform' | 'conversationId' | 'sourceUserId'> {
+  if (!recordValue(value)) throw badRequest('JSON object body is required.');
+  if (!isPlatform(value.platform)) throw badRequest('platform is invalid.');
+  if (!boundedIdentifier(value.conversationId, 240)) throw badRequest('conversationId is invalid.');
+  if (!boundedIdentifier(value.sourceUserId, 160)) throw badRequest('sourceUserId is invalid.');
+  return {
+    platform: value.platform,
+    conversationId: value.conversationId.trim(),
+    sourceUserId: value.sourceUserId.trim(),
   };
 }
 

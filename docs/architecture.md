@@ -66,6 +66,13 @@ the shared core after the mirror path is observed in production. They must not
 dual-write friend statements into owner memory or expose iPhone/device tokens to
 the legacy runtime.
 
+The next convergence slice adds a read-only `POST /v1/platform/context` route.
+It authenticates with the same service credential and exact owner binding, then
+returns only the bounded companion-state prompt projection; it never returns a
+scope key, device credential, or conversation transcript. The legacy runtime may
+use that projection for an owner-authored response, but an unavailable or invalid
+projection must fall back to the legacy prompt without delaying community replies.
+
 ## State and sleep lanes
 
 - Emotion is a continuous shared state updated after conversation events and decayed toward its baseline.
