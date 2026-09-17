@@ -6,6 +6,8 @@ import type { ApiRequest, ApiResponse, StateEventRequest } from './contracts.js'
 import type { InitiativeInbox } from './initiativeStore.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonMemoryStore } from './memoryService.js';
+import { dispatchPersonRequest } from './apiPersonRoutes.js';
+import type { PersonIdentityStore } from './personIdentity.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
 import { badRequest, objectBody, validBoundedString, validEvent, validMemoryAction, validScopeKey, validThreadTitle } from './apiValidation.js';
 
@@ -16,11 +18,15 @@ export interface ApiDataRouteDependencies {
   knowledgeStore: KnowledgeStore | null;
   initiativeInbox: InitiativeInbox | null;
   aetherProposals: AetherProposalStore;
+  personIdentities: PersonIdentityStore;
   worldSubscriptions: WorldSubscriptionReader | null;
   now: () => string;
 }
 
 export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRouteDependencies): ApiResponse | undefined {
+  const personResponse = dispatchPersonRequest(request, dependencies);
+  if (personResponse) return personResponse;
+
   if (request.method === 'GET' && request.path === '/v1/threads') {
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');

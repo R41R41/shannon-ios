@@ -30,11 +30,7 @@ import {
   validatedChatAttachments,
 } from './apiValidation.js';
 import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backgroundUpdates.js';
-import {
-  LocalStubChatModel,
-  type ShannonChatAttachment,
-  type ShannonChatModel,
-} from './chatModel.js';
+import { LocalStubChatModel, type ShannonChatAttachment, type ShannonChatModel } from './chatModel.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
 import {
@@ -58,6 +54,7 @@ import { randomUUID } from 'node:crypto';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
+import { SQLitePersonIdentityStore, type PersonIdentityStore } from './personIdentity.js';
 import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
@@ -81,7 +78,6 @@ import {
   type ShannonVoiceIdentityStore,
   voiceIdentityResponse,
 } from './voiceIdentity.js';
-
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   stateStore?: CompanionStateStore;
@@ -101,6 +97,7 @@ export interface ShannonApiKernelOptions {
   voyagerDestination?: VoyagerTaskDestination;
   voyagerCatalog?: VoyagerCatalog;
   voiceIdentity?: ShannonVoiceIdentityStore;
+  personIdentities?: PersonIdentityStore;
   worldSubscriptions?: WorldSubscriptionReader;
 }
 
@@ -122,6 +119,7 @@ export class ShannonApiKernel {
   private readonly voyagerDestination: VoyagerTaskDestination;
   private readonly voyagerCatalog: VoyagerCatalog;
   private readonly voiceIdentity: ShannonVoiceIdentityStore;
+  private readonly personIdentities: PersonIdentityStore;
   private readonly worldSubscriptions: WorldSubscriptionReader | null;
 
   constructor(
@@ -150,6 +148,7 @@ export class ShannonApiKernel {
     this.voyagerDestination = options.voyagerDestination ?? new DisabledVoyagerTaskDestination();
     this.voyagerCatalog = options.voyagerCatalog ?? new DisabledVoyagerCatalog();
     this.voiceIdentity = options.voiceIdentity ?? new InMemoryVoiceIdentityStore();
+    this.personIdentities = options.personIdentities ?? new SQLitePersonIdentityStore(':memory:');
     this.worldSubscriptions = options.worldSubscriptions ?? null;
   }
 
@@ -307,6 +306,7 @@ export class ShannonApiKernel {
       knowledgeStore: this.knowledgeStore,
       initiativeInbox: this.initiativeInbox,
       aetherProposals: this.aetherProposals,
+      personIdentities: this.personIdentities,
       worldSubscriptions: this.worldSubscriptions,
       now: this.now,
     });

@@ -50,6 +50,7 @@ import {
   VoicePreviewError,
 } from './voiceIdentity.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
+import { SQLitePersonIdentityStore } from './personIdentity.js';
 
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
@@ -69,6 +70,7 @@ const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
   ? configuredRealtimeVoice
   : 'marin';
 const voiceIdentityStore = new SQLiteVoiceIdentityStore(configuredDatabasePath(), automaticRealtimeVoice);
+const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
 const voicePreviewGateway = createConfiguredVoicePreviewGateway(process.env);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
@@ -97,6 +99,7 @@ const kernel = createLocalApiKernel(now, {
   voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   voiceIdentity: voiceIdentityStore,
+  personIdentities: personIdentityStore,
   worldSubscriptions: worldStore,
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);

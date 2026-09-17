@@ -73,6 +73,15 @@ scope key, device credential, or conversation transcript. The legacy runtime may
 use that projection for an owner-authored response, but an unavailable or invalid
 projection must fall back to the legacy prompt without delaying community replies.
 
+Phase 3 begins with an owner-managed person identity registry, not automatic
+relationship learning. Paired owner clients may create a Discord identity as an
+unconfirmed candidate, explicitly confirm it, correct it, revoke it, or delete the
+person. Changing an external ID always resets the identity to candidate status and
+requires confirmation again. Every mutation uses an expected revision. Deletion
+removes the display name and raw external ID; the retained audit event contains only
+an opaque internal person ID, action, platform, and timestamp. Candidate or confirmed
+third-party identities do not enter owner memory or legacy prompts in this slice.
+
 ## State and sleep lanes
 
 - Emotion is a continuous shared state updated after conversation events and decayed toward its baseline.
@@ -246,6 +255,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Realtime voice allowance | `realtime_voice_session_reservations` |
 | Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
+| Person identity registry | `people`, `person_platform_identities`, `person_identity_events` |
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 

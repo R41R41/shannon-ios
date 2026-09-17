@@ -98,3 +98,18 @@ conversations and actors fail closed. The request cannot choose a Shannon scope,
 platform plus request ID, and the database stores only a hash-derived thread ID
 rather than the raw external conversation ID. Give the legacy runtime a
 dedicated revocable token; never reuse a paired-device or Agent Host credential.
+
+## Owner-managed person identities
+
+Authenticated owner clients manage the Phase 3 identity registry through
+`GET /v1/people`, `GET /v1/people/audit`, `POST /v1/people/candidates`, the
+`/v1/people/identities/{confirm,correct,revoke}` actions, and
+`POST /v1/people/delete`. Paired authentication binds every request to the owner
+scope; Discord IDs are never accepted from the public platform bridge as automatic
+relationship memory.
+
+New Discord IDs start as candidates. Confirmation is explicit, correction of the
+ID returns it to candidate status, and stale revisions fail closed. Deleting a person
+removes the name and raw Discord ID while retaining a content-free audit event. The
+SQLite tables are created additively when the API starts; back up the production
+database before the first restart that includes this schema.
