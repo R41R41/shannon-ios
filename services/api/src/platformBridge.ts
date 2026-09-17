@@ -15,7 +15,8 @@ export type ShannonPlatform = typeof platforms[number];
 
 export interface PlatformBridgeBinding {
   platform: ShannonPlatform;
-  conversationId: string;
+  conversationId?: string;
+  conversationIdPrefix?: string;
   ownerUserId: string;
   title: string;
 }
@@ -24,6 +25,7 @@ export interface PlatformBridgeConfiguration {
   token: string;
   scopeKey: string;
   bindings: ReadonlyMap<string, PlatformBridgeBinding>;
+  prefixBindings: readonly PlatformBridgeBinding[];
 }
 
 export interface PlatformTurnRequest {
@@ -64,7 +66,7 @@ export class PlatformBridgeService {
 
   ingest(value: unknown): PlatformTurnResponse {
     const request = validatedPlatformTurn(value, this.now());
-    const binding = this.configuration.bindings.get(bindingKey(request.platform, request.conversationId));
+    const binding = bindingFor(this.configuration, request.platform, request.conversationId);
     if (!binding) {
       throw new PlatformBridgeError(
         'PLATFORM_CONVERSATION_DENIED',
@@ -150,13 +152,28 @@ export function configuredPlatformBridge(
     throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON must contain 1..64 bindings');
   }
   const bindings = new Map<string, PlatformBridgeBinding>();
+  const prefixBindings: PlatformBridgeBinding[] = [];
   for (const candidate of decoded) {
     const binding = validatedBinding(candidate);
-    const key = bindingKey(binding.platform, binding.conversationId);
-    if (bindings.has(key)) throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains a duplicate conversation');
-    bindings.set(key, Object.freeze(binding));
+    if (binding.conversationId) {
+      const key = bindingKey(binding.platform, binding.conversationId);
+      if (bindings.has(key)) throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains a duplicate conversation');
+      bindings.set(key, Object.freeze(binding));
+    } else {
+      if (prefixBindings.some(existing => existing.platform === binding.platform
+        && existing.conversationIdPrefix === binding.conversationIdPrefix)) {
+        throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains a duplicate conversation prefix');
+      }
+      prefixBindings.push(Object.freeze(binding));
+    }
   }
-  return Object.freeze({ token, scopeKey, bindings });
+  for (const exact of bindings.values()) {
+    if (prefixBindings.some(prefix => prefix.platform === exact.platform
+      && exact.conversationId?.startsWith(prefix.conversationIdPrefix ?? ''))) {
+      throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains overlapping bindings');
+    }
+  }
+  return Object.freeze({ token, scopeKey, bindings, prefixBindings: Object.freeze(prefixBindings) });
 }
 
 export function platformBridgeThreadId(platform: ShannonPlatform, conversationId: string): string {
@@ -198,18 +215,43 @@ function validatedPlatformTurn(value: unknown, now: string): PlatformTurnRequest
 }
 
 function validatedBinding(value: unknown): PlatformBridgeBinding {
+  const exactConversation = recordValue(value) && boundedIdentifier(value.conversationId, 240);
+  const prefixConversation = recordValue(value) && validConversationPrefix(value.platform, value.conversationIdPrefix);
   if (!recordValue(value) || !isPlatform(value.platform)
-    || !boundedIdentifier(value.conversationId, 240)
+    || exactConversation === prefixConversation
     || !boundedIdentifier(value.ownerUserId, 160)
     || !boundedText(value.title, 80)) {
     throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains an invalid binding');
   }
   return {
     platform: value.platform,
-    conversationId: value.conversationId.trim(),
+    ...(exactConversation ? { conversationId: (value.conversationId as string).trim() } : {}),
+    ...(prefixConversation ? { conversationIdPrefix: (value.conversationIdPrefix as string).trim() } : {}),
     ownerUserId: value.ownerUserId.trim(),
     title: value.title.trim(),
   };
+}
+
+function bindingFor(
+  configuration: PlatformBridgeConfiguration,
+  platform: ShannonPlatform,
+  conversationId: string,
+): PlatformBridgeBinding | undefined {
+  return configuration.bindings.get(bindingKey(platform, conversationId))
+    ?? configuration.prefixBindings.find(binding => binding.platform === platform
+      && matchesConversationPrefix(conversationId, binding.conversationIdPrefix));
+}
+
+function matchesConversationPrefix(conversationId: string, prefix: string | undefined): boolean {
+  return prefix !== undefined
+    && conversationId.startsWith(prefix)
+    && /^\d{1,32}$/.test(conversationId.slice(prefix.length));
+}
+
+function validConversationPrefix(platform: unknown, value: unknown): value is string {
+  return platform === 'discord'
+    && typeof value === 'string'
+    && /^discord:\d{1,32}:$/.test(value.trim());
 }
 
 function validObservedAt(value: string, now: string): boolean {

@@ -48,6 +48,52 @@ describe('legacy platform bridge', () => {
     expect(configured.bindings.get('discord\u000012345')).toEqual({
       platform: 'discord', conversationId: '12345', ownerUserId: '67890', title: 'Discord・友人グループ',
     });
+    expect(configured.prefixBindings).toEqual([]);
+  });
+
+  it('allows an exact owner across every channel in one Discord guild without accepting other actors or guilds', () => {
+    const configured = configuredPlatformBridge({
+      SHANNON_PLATFORM_BRIDGE_TOKEN: 'a'.repeat(32),
+      SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
+      SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([{
+        platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: '67890', title: 'Discord・コミュニティ',
+      }]),
+    });
+    if (!configured) throw new Error('test configuration missing');
+    const state = new InMemoryCompanionStateStore(now);
+    const conversations = new InMemoryConversationStore();
+    const bridge = new PlatformBridgeService(configured, state, conversations, new RecordingBackground(), now);
+
+    expect(bridge.ingest({ ...validRequest(), conversationId: 'discord:111:222' }).duplicate).toBe(false);
+    expect(bridge.ingest({ ...validRequest(), requestId: 'message-101', conversationId: 'discord:111:333' }).duplicate).toBe(false);
+    expectBridgeError(
+      () => bridge.ingest({ ...validRequest(), requestId: 'message-102', conversationId: 'discord:112:222' }),
+      'PLATFORM_CONVERSATION_DENIED',
+    );
+    expectBridgeError(
+      () => bridge.ingest({ ...validRequest(), requestId: 'message-102b', conversationId: 'discord:111:not-a-channel' }),
+      'PLATFORM_CONVERSATION_DENIED',
+    );
+    expectBridgeError(
+      () => bridge.ingest({ ...validRequest(), requestId: 'message-103', conversationId: 'discord:111:444', sourceUserId: 'friend' }),
+      'PLATFORM_ACTOR_DENIED',
+    );
+  });
+
+  it('rejects malformed or overlapping Discord conversation prefixes', () => {
+    const environment = (bindings: unknown[]) => ({
+      SHANNON_PLATFORM_BRIDGE_TOKEN: 'a'.repeat(32),
+      SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
+      SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify(bindings),
+    });
+    expect(() => configuredPlatformBridge(environment([{
+      platform: 'discord', conversationIdPrefix: 'discord:111', ownerUserId: '67890', title: 'Discord',
+    }]))).toThrow('invalid binding');
+    expect(() => configuredPlatformBridge(environment([{
+      platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: '67890', title: 'Discord',
+    }, {
+      platform: 'discord', conversationId: 'discord:111:222', ownerUserId: '67890', title: 'Discord channel',
+    }]))).toThrow('overlapping bindings');
   });
 
   it('records an owner turn once in a stable platform thread and queues memory refinement once', () => {

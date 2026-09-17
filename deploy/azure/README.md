@@ -84,8 +84,10 @@ canonical Shannon conversation store and queues the normal memory refinement.
 
 The route is disabled unless its token, canonical owner scope, and JSON binding
 list are all present. Every binding fixes one platform conversation to one
-external owner ID and a safe thread title. Unknown conversations and actors fail
-closed. The request cannot choose a Shannon scope, retries are idempotent by
+external owner ID and a safe thread title. Discord may additionally bind one
+exact guild prefix (`discord:<guild-id>:`) so that future channels are covered
+without admitting another guild; the external owner ID remains exact. Unknown
+conversations and actors fail closed. The request cannot choose a Shannon scope, retries are idempotent by
 platform plus request ID, and the database stores only a hash-derived thread ID
 rather than the raw external conversation ID. Give the legacy runtime a
 dedicated revocable token; never reuse a paired-device or Agent Host credential.

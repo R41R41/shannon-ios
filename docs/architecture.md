@@ -52,7 +52,8 @@ legacy Azure runtime during the first convergence phase. After that runtime has
 successfully sent one owner-authored reply, it may mirror the completed turn to
 `POST /v1/platform/turns` using a dedicated service credential. The endpoint
 binds the canonical owner scope from server configuration, accepts only exact
-platform conversation and external-owner pairs, derives an opaque hash-based
+external owners paired with either an exact platform conversation or one explicit
+Discord guild prefix, derives an opaque hash-based
 thread identifier, and idempotently records the turn before scheduling the same memory
 refinement used by app chat. Unknown conversations, friends, group participants,
 and caller-supplied scope keys are rejected rather than being learned as owner
