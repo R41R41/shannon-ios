@@ -5,7 +5,7 @@
   "defaultVariant": "L06",
   "release": {
     "marketingVersion": "0.1.0",
-    "iosBuild": "54",
+    "iosBuild": "55",
     "macosBuild": "11"
   },
   "macosRendering": {
