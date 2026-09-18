@@ -18,6 +18,9 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var engine: ShannonVoiceEngine = .realtime
     public private(set) var liveAudioSeconds: Double = 0
     public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
+    public private(set) var inputState: ShannonVoiceInputState
+    public private(set) var isSendingText = false
+    public private(set) var textSendErrorMessage: String?
 
     var transport: ShannonWebRTCVoiceTransport?
     var transcriptState = ShannonRealtimeVoiceTranscriptState()
@@ -28,8 +31,17 @@ public final class ShannonRealtimeVoiceSessionModel {
     var liveDelegationTasks: [String: Task<Void, Never>] = [:]
     var sessionGeneration = 0
     let diagnostics = ShannonVoiceDiagnostics.shared
+    static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
 
-    public init() {}
+    public init() {
+        let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
+        let preference = stored.flatMap(ShannonVoiceInputPreference.init(rawValue:)) ?? .automatic
+        inputState = ShannonVoiceInputState(preference: preference)
+    }
+
+    public var canSendText: Bool {
+        phase.keepsSessionActive && sessionStartedAt != nil && !isSendingText
+    }
 
     public func start(
         participantMode: ShannonVoiceParticipantMode,
@@ -50,6 +62,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         engine = .realtime
         liveAudioSeconds = 0
         dailyRemainingSeconds = nil
+        isSendingText = false
+        textSendErrorMessage = nil
         diagnostics.record("realtime.start.requested")
 
         let granted = await AVAudioApplication.requestRecordPermission()
@@ -93,6 +107,12 @@ public final class ShannonRealtimeVoiceSessionModel {
                 )
             }
         }
+        transport.onAudioInputStateChange = { [weak self] state in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.inputState = state
+            }
+        }
         transport.onAudioServicesReset = { [weak self] in
             Task { @MainActor in
                 guard self?.sessionGeneration == generation else { return }
@@ -102,6 +122,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         }
 
         do {
+            try transport.setInputPreference(inputState.preference)
             diagnostics.record("realtime.offer.before")
             let offer = try await transport.createOffer()
             diagnostics.record(
@@ -137,6 +158,74 @@ public final class ShannonRealtimeVoiceSessionModel {
     public func toggleMute() {
         isMuted.toggle()
         transport?.setMuted(isMuted)
+    }
+
+    public func selectInput(_ preference: ShannonVoiceInputPreference) {
+        guard inputState.canSelect(preference) else {
+            errorMessage = "選んだマイクは現在接続されていません。"
+            return
+        }
+        let previous = inputState.preference
+        do {
+            try transport?.setInputPreference(preference)
+            inputState = ShannonVoiceInputState(
+                preference: preference,
+                activeInputName: inputState.activeInputName,
+                isBuiltInAvailable: inputState.isBuiltInAvailable,
+                isConnectedInputAvailable: inputState.isConnectedInputAvailable
+            )
+            UserDefaults.standard.set(preference.rawValue, forKey: Self.inputPreferenceDefaultsKey)
+            diagnostics.record("realtime.audio.input_selected", metadata: ["preference": preference.rawValue])
+        } catch {
+            try? transport?.setInputPreference(previous)
+            errorMessage = "マイクを切り替えられませんでした。接続を確認して、もう一度お試しください。"
+            diagnostics.record("realtime.audio.input_selection_failed", metadata: safeErrorMetadata(error))
+        }
+    }
+
+    public func sendText(_ content: String) async throws {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { throw ShannonRealtimeVoiceTextError.emptyMessage }
+        guard canSendText, let transport else { throw ShannonRealtimeVoiceTextError.sessionUnavailable }
+        let boundedContent = String(normalized.prefix(8_000))
+        let generation = sessionGeneration
+        isSendingText = true
+        textSendErrorMessage = nil
+        phase = .thinking
+        if let completed = transcriptState.beginTypedUserTurn(boundedContent) {
+            persist(completed, generation: generation)
+        }
+        userTranscript = transcriptState.userText
+        shannonTranscript = transcriptState.shannonText
+
+        do {
+            if engine == .live {
+                guard let performLiveDelegation else {
+                    throw ShannonRealtimeVoiceTextError.sessionUnavailable
+                }
+                let reply = try await performLiveDelegation(boundedContent, participantMode)
+                guard generation == sessionGeneration, self.transport === transport else {
+                    throw ShannonRealtimeVoiceTextError.sessionEnded
+                }
+                try transport.send(ShannonLiveVoiceClientEvent.commentary(
+                    delegationID: nil,
+                    content: reply
+                ))
+            } else {
+                for event in try ShannonLiveVoiceClientEvent.realtimeTextTurn(content: boundedContent) {
+                    try transport.send(event)
+                }
+            }
+            diagnostics.record("realtime.text.sent", metadata: ["engine": engine.rawValue])
+            isSendingText = false
+        } catch {
+            guard generation == sessionGeneration else { throw error }
+            isSendingText = false
+            if phase == .thinking { phase = .listening }
+            textSendErrorMessage = "テキストを送れませんでした。入力内容を残したまま、もう一度試せます。"
+            diagnostics.record("realtime.text.failed", metadata: safeErrorMetadata(error))
+            throw error
+        }
     }
 
     public func shareCameraSnapshot(
@@ -179,6 +268,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         commitTurn = nil
         performLiveDelegation = nil
         isMuted = false
+        isSendingText = false
+        textSendErrorMessage = nil
         sessionStartedAt = nil
         phase = .idle
         errorMessage = nil
@@ -373,6 +464,7 @@ public final class ShannonRealtimeVoiceSessionModel {
         commitTurn = nil
         performLiveDelegation = nil
         isMuted = false
+        isSendingText = false
         sessionStartedAt = nil
         phase = .failed
         errorMessage = message
@@ -385,33 +477,4 @@ public final class ShannonRealtimeVoiceSessionModel {
     }
 }
 
-public enum ShannonRealtimeVoiceCameraError: Error, Equatable, Sendable {
-    case liveSessionRequired
-    case sessionEnded
-}
-#else
-@MainActor
-@Observable
-public final class ShannonRealtimeVoiceSessionModel {
-    public private(set) var phase: ShannonRealtimeVoicePhase = .failed
-    public private(set) var userTranscript = ""
-    public private(set) var shannonTranscript = ""
-    public private(set) var errorMessage: String? = "ライブ音声はiPhoneで利用できます。"
-    public private(set) var isMuted = false
-    public private(set) var sessionStartedAt: Date?
-    public private(set) var usage = ShannonRealtimeVoiceUsage.zero
-    public private(set) var dailyRemainingSeconds: Int?
-    public private(set) var engine: ShannonVoiceEngine = .realtime
-    public private(set) var liveAudioSeconds: Double = 0
-    public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
-    public init() {}
-    public func start(
-        participantMode: ShannonVoiceParticipantMode,
-        createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
-        commitTurn: @escaping @MainActor (String, String) async throws -> Void
-    ) async {}
-    public func toggleMute() {}
-    public func stop() { phase = .idle }
-}
 #endif

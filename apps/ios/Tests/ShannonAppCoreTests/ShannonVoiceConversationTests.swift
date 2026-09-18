@@ -134,6 +134,50 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertEqual(last.shannon, "折り畳み傘が安心。")
     }
 
+    func testTypedTextBeginsAVisibleTurnAndFlushesAnEarlierLiveTurn() throws {
+        var state = ShannonRealtimeVoiceTranscriptState()
+        XCTAssertNil(state.apply(.liveInputTranscriptDelta(
+            "先の質問", startMilliseconds: 100, endMilliseconds: 500
+        )))
+        XCTAssertNil(state.apply(.liveOutputTranscriptDelta(
+            "先の回答", startMilliseconds: 600, endMilliseconds: 1_000
+        )))
+
+        let completed = try XCTUnwrap(state.beginTypedUserTurn("  文字で続ける  "))
+        XCTAssertEqual(completed.user, "先の質問")
+        XCTAssertEqual(completed.shannon, "先の回答")
+        XCTAssertEqual(state.userText, "文字で続ける")
+        XCTAssertEqual(state.shannonText, "")
+    }
+
+    func testRealtimeTextTurnCreatesUserItemThenRequestsResponse() throws {
+        let events = try ShannonLiveVoiceClientEvent.realtimeTextTurn(content: "  声を止めずに送る  ")
+        XCTAssertEqual(events.count, 2)
+        let item = try XCTUnwrap(JSONSerialization.jsonObject(with: events[0]) as? [String: Any])
+        XCTAssertEqual(item["type"] as? String, "conversation.item.create")
+        let message = try XCTUnwrap(item["item"] as? [String: Any])
+        XCTAssertEqual(message["role"] as? String, "user")
+        let content = try XCTUnwrap(message["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "input_text")
+        XCTAssertEqual(content.first?["text"] as? String, "声を止めずに送る")
+
+        let response = try XCTUnwrap(JSONSerialization.jsonObject(with: events[1]) as? [String: Any])
+        XCTAssertEqual(response["type"] as? String, "response.create")
+    }
+
+    func testVoiceInputStateExposesAvailabilityAndActualRoute() {
+        let state = ShannonVoiceInputState(
+            preference: .builtIn,
+            activeInputName: "iPhone Microphone",
+            isBuiltInAvailable: true,
+            isConnectedInputAvailable: false
+        )
+        XCTAssertEqual(state.activeInputLabel, "使用中: iPhone Microphone")
+        XCTAssertTrue(state.canSelect(.automatic))
+        XCTAssertTrue(state.canSelect(.builtIn))
+        XCTAssertFalse(state.canSelect(.connected))
+    }
+
     func testLiveCommentaryEventIsBoundedAndKeepsTheOpaqueDelegationID() throws {
         let data = try ShannonLiveVoiceClientEvent.commentary(
             delegationID: "item_opaque_123",

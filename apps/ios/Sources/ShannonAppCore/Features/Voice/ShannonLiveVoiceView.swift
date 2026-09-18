@@ -151,7 +151,12 @@ public struct ShannonLiveVoiceView: View {
         }
         .foregroundStyle(palette.textPrimary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            controls(palette)
+            VStack(spacing: ShannonSpacing.small) {
+                if model.phase != .failed {
+                    ShannonVoiceTextComposer(model: model, palette: palette)
+                }
+                controls(palette)
+            }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, ShannonSpacing.large)
                 .padding(.vertical, ShannonSpacing.small)
@@ -223,6 +228,7 @@ public struct ShannonLiveVoiceView: View {
                 }
             }
             Spacer()
+            ShannonVoiceInputMenu(model: model)
             Button { showsParticipantModePicker = true } label: {
                 Image(systemName: model.participantMode == .owner ? "person.fill" : "person.2.fill")
                     .font(.body.weight(.semibold))

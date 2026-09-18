@@ -16,6 +16,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var onConnectionState: (@Sendable (ShannonWebRTCConnectionState) -> Void)?
     var onAudioInterruption: (@Sendable (ShannonRealtimeVoiceInterruptionEvent) -> Void)?
     var onAudioRouteChange: (@Sendable (Int) -> Void)?
+    var onAudioInputStateChange: (@Sendable (ShannonVoiceInputState) -> Void)?
     var onAudioServicesReset: (@Sendable () -> Void)?
 
     let factory: RTCPeerConnectionFactory
@@ -26,6 +27,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var audioSessionObservers: [NSObjectProtocol] = []
     let iceGatheringEvents: AsyncStream<Void>
     let iceGatheringEventContinuation: AsyncStream<Void>.Continuation
+    var inputPreference: ShannonVoiceInputPreference = .automatic
 
     override init() {
         let iceGatheringEventPair = AsyncStream<Void>.makeStream(
@@ -116,6 +118,15 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         audioTrack?.isEnabled = !muted
     }
 
+    func setInputPreference(_ preference: ShannonVoiceInputPreference) throws {
+        inputPreference = preference
+        guard peerConnection != nil else {
+            publishAudioInputState()
+            return
+        }
+        try applyInputPreference()
+    }
+
     func send(_ data: Data) throws {
         guard let dataChannel, dataChannel.readyState == .open,
               dataChannel.sendData(RTCDataBuffer(data: data, isBinary: false)) else {
@@ -144,6 +155,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         try session.setMode(.voiceChat)
         try session.setActive(true)
         session.isAudioEnabled = true
+        try applyInputPreference()
     }
 
     func deactivateAudioSession() {
@@ -174,6 +186,9 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
                     shouldResume: options.contains(.shouldResume)
                 )
                 self?.pitchShiftAudioDevice?.handleInterruption(event)
+                if options.contains(.shouldResume) {
+                    try? self?.applyInputPreference()
+                }
                 self?.onAudioInterruption?(event)
             @unknown default:
                 break
@@ -186,6 +201,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         ) { [weak self] notification in
             let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
             self?.pitchShiftAudioDevice?.handleRouteChange()
+            try? self?.applyInputPreference()
             self?.onAudioRouteChange?(Int(reason))
         })
         audioSessionObservers.append(center.addObserver(
@@ -202,6 +218,41 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         let center = NotificationCenter.default
         audioSessionObservers.forEach(center.removeObserver)
         audioSessionObservers.removeAll()
+    }
+
+    func applyInputPreference() throws {
+        let session = AVAudioSession.sharedInstance()
+        defer { publishAudioInputState() }
+        let inputs = session.availableInputs ?? []
+        let selected: AVAudioSessionPortDescription?
+        switch inputPreference {
+        case .automatic:
+            selected = nil
+        case .builtIn:
+            guard let builtIn = inputs.first(where: { $0.portType == .builtInMic }) else {
+                throw TransportError.requestedInputUnavailable
+            }
+            selected = builtIn
+        case .connected:
+            guard let connected = inputs.first(where: { $0.portType != .builtInMic }) else {
+                throw TransportError.requestedInputUnavailable
+            }
+            selected = connected
+        }
+        if session.preferredInput?.uid != selected?.uid {
+            try session.setPreferredInput(selected)
+        }
+    }
+
+    func publishAudioInputState() {
+        let session = AVAudioSession.sharedInstance()
+        let inputs = session.availableInputs ?? []
+        onAudioInputStateChange?(ShannonVoiceInputState(
+            preference: inputPreference,
+            activeInputName: session.currentRoute.inputs.first?.portName,
+            isBuiltInAvailable: inputs.contains(where: { $0.portType == .builtInMic }),
+            isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic })
+        ))
     }
 
     func createOffer(on peer: RTCPeerConnection, constraints: RTCMediaConstraints) async throws -> RTCSessionDescription {
@@ -255,6 +306,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         case iceGatheringCancelled
         case iceGatheringTimedOut
         case eventSendFailed
+        case requestedInputUnavailable
     }
 }
 

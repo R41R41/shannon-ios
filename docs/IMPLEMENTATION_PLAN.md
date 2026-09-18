@@ -1,6 +1,6 @@
 # Shannon implementation plan
 
-Revision: 2026-09-15
+Revision: 2026-09-18
 Status: current execution plan
 
 ## Goal
@@ -37,7 +37,8 @@ These terms are not interchangeable.
 | WebRTC symbols | Current framework and dSYM UUID match; Cloud copy is sandbox-safe | Xcode Cloud Build 49 passed the symbol phase | Confirm no symbol warning on later local Mac/iOS uploads |
 | Waterlight Eye | Empty-conversation iPhone hero, bounded reaction, semantic blush, Reduce Motion | Included in Build 49 | iPhone Light/Dark, repeated tap, interruption, Reduce Motion Smoke |
 | Voice Identity | Marin/Cedar/Coral preview, selection, Azure persistence, iPhone/Mac sharing | API deployed and clients included in current builds | Physical-device preview, next-session application, cross-device sync Smoke |
-| GPT-Live travel voice | Production Live WebRTC engine (`gpt-live-1`／automatic `marin`), bounded read-only delegation, confirmed single camera snapshot, Realtime rollback, and iPhone remote-playout-only +200 cents finish | Azure Live rollout and camera smoke passed; Apple Time Pitch implementation, rollback setting, policy tests, unsigned iPhone build, signed device build, install, and launch passed | Run 60-second speaker/headphones/Bluetooth, barge-in, route/interruption, transcript/delegation, and rollback Smoke on the installed device |
+| GPT-Live travel voice | Production Live WebRTC engine (`gpt-live-1`／automatic `marin`), bounded read-only delegation, confirmed single camera snapshot, Realtime rollback, and iPhone remote-playout-only +200 cents finish | Azure Live rollout and camera smoke passed; Apple Time Pitch implementation, rollback setting, policy tests, unsigned iPhone build, signed device build, install, and launch passed | No current release blocker. The user accepted the remaining 60-second, route/interruption, barge-in, transcript/delegation, and rollback checks as deferred until a real-world issue appears |
+| Live voice input and text | Same-session text composer plus persisted Auto/iPhone/external input preference, actual-route display, and route/interruption reapplication | Local branch only | Deterministic tests, iOS builds, then later physical-device route and conversation Smoke |
 | Aether/Voyager organization | Existing bounded Shannon proxy and explicit review flow remain implemented | Existing production flow preserved | Re-run adjacent Smoke after Build 50 |
 | Cross-app acceptance scenarios | Requirements are known | Not yet stored in Aether's current documentation | Aether-owned scenario document and links from its document index |
 | State-based UI audit | High-priority iPhone Talk/Work and Mac Talk/Development remediations are implemented; screen contracts were reconciled on 2026-09-15 | Existing safe Mac evidence retained; source guards, iOS 132 tests, Mac 19 tests, and both app builds pass | Current-release visual evidence for empty/loading/error/offline/permission, Light/Dark, larger text and Reduce Motion |

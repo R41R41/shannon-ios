@@ -62,6 +62,72 @@ public enum ShannonRealtimeVoiceInterruptionAction: Equatable, Sendable {
     case fail
 }
 
+public enum ShannonVoiceInputPreference: String, CaseIterable, Identifiable, Sendable {
+    case automatic
+    case builtIn
+    case connected
+
+    public var id: String { rawValue }
+
+    public var japaneseLabel: String {
+        switch self {
+        case .automatic: "自動"
+        case .builtIn: "iPhoneのマイク"
+        case .connected: "イヤホン／外部マイク"
+        }
+    }
+
+    public var systemImage: String {
+        switch self {
+        case .automatic: "wand.and.rays"
+        case .builtIn: "iphone"
+        case .connected: "headphones"
+        }
+    }
+}
+
+public struct ShannonVoiceInputState: Equatable, Sendable {
+    public let preference: ShannonVoiceInputPreference
+    public let activeInputName: String?
+    public let isBuiltInAvailable: Bool
+    public let isConnectedInputAvailable: Bool
+
+    public init(
+        preference: ShannonVoiceInputPreference = .automatic,
+        activeInputName: String? = nil,
+        isBuiltInAvailable: Bool = true,
+        isConnectedInputAvailable: Bool = false
+    ) {
+        self.preference = preference
+        self.activeInputName = activeInputName
+        self.isBuiltInAvailable = isBuiltInAvailable
+        self.isConnectedInputAvailable = isConnectedInputAvailable
+    }
+
+    public var activeInputLabel: String {
+        activeInputName.map { "使用中: \($0)" } ?? "入力を確認中"
+    }
+
+    public func canSelect(_ preference: ShannonVoiceInputPreference) -> Bool {
+        switch preference {
+        case .automatic: true
+        case .builtIn: isBuiltInAvailable
+        case .connected: isConnectedInputAvailable
+        }
+    }
+}
+
+public enum ShannonRealtimeVoiceTextError: Error, Equatable, Sendable {
+    case emptyMessage
+    case sessionUnavailable
+    case sessionEnded
+}
+
+public enum ShannonRealtimeVoiceCameraError: Error, Equatable, Sendable {
+    case liveSessionRequired
+    case sessionEnded
+}
+
 public struct ShannonRealtimeVoiceUsage: Equatable, Sendable {
     public private(set) var totalTokens: Int
     public private(set) var inputTokens: Int
@@ -296,6 +362,18 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
         return turn
     }
 
+    public mutating func beginTypedUserTurn(_ text: String) -> (user: String, shannon: String)? {
+        let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedText.isEmpty else { return nil }
+        let completed = pendingLiveTurn()
+        userText = normalizedText
+        shannonText = ""
+        completedUserText = normalizedText
+        completedShannonText = ""
+        liveSpeaker = .user
+        return completed
+    }
+
     public var delegationTranscript: String {
         userText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -313,6 +391,31 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
 }
 
 enum ShannonLiveVoiceClientEvent {
+    static func realtimeTextTurn(content: String) throws -> [Data] {
+        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { throw EncodingError.invalidValue(
+            content,
+            .init(codingPath: [], debugDescription: "Realtime text input requires content")
+        ) }
+        let item: [String: Any] = [
+            "type": "conversation.item.create",
+            "event_id": "shannon-text-\(UUID().uuidString.lowercased())",
+            "item": [
+                "type": "message",
+                "role": "user",
+                "content": [[
+                    "type": "input_text",
+                    "text": String(normalized.prefix(8_000)),
+                ]],
+            ],
+        ]
+        let response: [String: Any] = [
+            "type": "response.create",
+            "event_id": "shannon-response-\(UUID().uuidString.lowercased())",
+        ]
+        return try [item, response].map { try JSONSerialization.data(withJSONObject: $0) }
+    }
+
     static func commentary(delegationID: String?, content: String) throws -> Data {
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard delegationID?.isEmpty != true, !normalized.isEmpty else { throw EncodingError.invalidValue(
