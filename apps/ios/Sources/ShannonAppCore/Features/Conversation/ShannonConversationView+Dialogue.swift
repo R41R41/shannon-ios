@@ -8,7 +8,7 @@ extension ShannonConversationView {
     func dialogueStage(_ palette: ShannonPalette) -> some View {
         GeometryReader { geometry in
             let keyboardScale: CGFloat = composerIsFocused ? 0.84 : 1
-            let portraitWidth = min(geometry.size.width * 1.04, 430) * keyboardScale
+            let faceSize = min(geometry.size.width * 0.74, 310) * keyboardScale
 
             ZStack(alignment: .top) {
                 LinearGradient(
@@ -29,19 +29,17 @@ extension ShannonConversationView {
                     .blur(radius: 42)
                     .position(x: geometry.size.width / 2, y: geometry.size.height * 0.50)
 
-                ShannonDialogueStagePortraitView()
-                    .frame(width: portraitWidth)
-                    .scaleEffect(dialoguePresenceIsBreathing && !reduceMotion ? 1.008 : 1)
+                ShannonWaterlightEyeView(
+                    expression: model.currentExpression,
+                    activity: dialogueActivity,
+                    size: faceSize
+                )
                     .shadow(color: palette.brandPresence.opacity(0.14), radius: 28, y: 10)
                     .position(
                         x: geometry.size.width / 2,
                         y: geometry.size.height * (composerIsFocused ? 0.59 : 0.62)
                     )
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: composerIsFocused)
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 3.2).repeatForever(autoreverses: true),
-                        value: dialoguePresenceIsBreathing
-                    )
 
                 VStack(spacing: ShannonSpacing.small) {
                     HStack(spacing: 6) {
@@ -132,8 +130,20 @@ extension ShannonConversationView {
         }
         .contentShape(Rectangle())
         .onTapGesture { composerIsFocused = false }
-        .onAppear { dialoguePresenceIsBreathing = true }
-        .onDisappear { dialoguePresenceIsBreathing = false }
+        .onAppear { dialogueActivity = model.isSending ? .thinking : .idle }
+        .onChange(of: model.isSending) { _, isSending in
+            if isSending {
+                dialogueActivity = .thinking
+            } else {
+                dialogueActivity = model.errorMessage == nil ? .speaking : .failed
+            }
+        }
+        .task(id: dialogueActivity) {
+            guard dialogueActivity == .speaking else { return }
+            try? await Task.sleep(for: .seconds(1.8))
+            guard !Task.isCancelled, !model.isSending else { return }
+            dialogueActivity = .idle
+        }
         .onChange(of: model.messages.count) { dialogueIsExpanded = false }
     }
 }

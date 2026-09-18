@@ -15,6 +15,8 @@ struct ShannonEyeStyle: Equatable, Sendable {
         var height: Double
         var tilt: Double = 0
         var open: Double = 1
+        var offsetX: Double = 0
+        var offsetY: Double = 0
     }
 
     var gaze: Gaze
@@ -32,7 +34,9 @@ struct ShannonEyeStyle: Equatable, Sendable {
                 width: mix(start.width, end.width),
                 height: mix(start.height, end.height),
                 tilt: mix(start.tilt, end.tilt),
-                open: mix(start.open, end.open)
+                open: mix(start.open, end.open),
+                offsetX: mix(start.offsetX, end.offsetX),
+                offsetY: mix(start.offsetY, end.offsetY)
             )
         }
 
@@ -70,6 +74,29 @@ enum ShannonEyeRig {
         let driftX: Double
         let driftY: Double
         let breath: Double
+        let decor: Decor
+    }
+
+    struct Pose: Sendable {
+        let style: ShannonEyeStyle
+        let energy: Double
+        let decor: Decor
+    }
+
+    struct Decor: Sendable {
+        enum Kind: Equatable, Sendable {
+            case none
+            case orbit
+            case thinkingDot
+            case scan
+            case burst
+        }
+
+        let kind: Kind
+        let strength: Double
+        let phase: Double
+
+        static let none = Decor(kind: .none, strength: 0, phase: 0)
     }
 
     private struct Vector3: Sendable {
@@ -80,51 +107,90 @@ enum ShannonEyeRig {
 
     static func style(for expression: ShannonExpressionDTO) -> ShannonEyeStyle {
         switch expression {
-        case .joyful, .amused, .tender:
-            return style(gaze: (5, 9, 0), split: 17, pair: (0.27, 0.17, 14, 1))
+        case .neutral:
+            return style(
+                gaze: (8, 5, -4),
+                split: 16.4,
+                left: .init(width: 0.23, height: 0.54, tilt: -7),
+                right: .init(width: 0.22, height: 0.51, tilt: -4)
+            )
+        case .joyful:
+            return style(gaze: (1, 10, 0), split: 17.2, pair: (0.32, 0.14, 15, 1))
         case .excited:
-            return style(gaze: (6, -14, 0), split: 19.5, pair: (0.40, 0.56, -10, 1))
+            return style(gaze: (2, -11, 0), split: 19.4, pair: (0.37, 0.60, -9, 1))
+        case .amused:
+            return style(
+                gaze: (7, 5, -3),
+                split: 17.3,
+                left: .init(width: 0.31, height: 0.14, tilt: 15),
+                right: .init(width: 0.22, height: 0.48, tilt: -7)
+            )
         case .laughing:
-            return style(gaze: (4, 14, 0), split: 18, pair: (0.34, 0.13, 20, 1))
-        case .bashful, .embarrassed:
-            return style(gaze: (-19, -14, -7), split: 14, pair: (0.17, 0.30, 0, 1))
+            return style(gaze: (0, 14, 0), split: 18.1, pair: (0.35, 0.115, 21, 1))
+        case .bashful:
+            return style(gaze: (-10, -3, -5), split: 15.2, pair: (0.29, 0.15, 13, 1))
+        case .embarrassed:
+            return style(gaze: (-17, -12, -7), split: 14.7, pair: (0.19, 0.39, -8, 1))
         case .relieved:
-            return style(gaze: (5, 17, 0), split: 17, pair: (0.30, 0.15, 18, 1))
+            return style(gaze: (0, 9, 0), split: 16.1, pair: (0.29, 0.13, 10, 1))
         case .surprised:
-            return style(gaze: (3, -3, 0), split: 19, pair: (0.45, 0.47, 0, 1))
+            return style(gaze: (0, -8, 0), split: 19.8, pair: (0.43, 0.49, 0, 1))
         case .curious:
-            return style(gaze: (16, -9, -15), split: 16.5, pair: (0.24, 0.46, -8, 1), rightSize: (0.20, 0.38))
+            return style(
+                gaze: (17, -8, -11),
+                split: 16.2,
+                left: .init(width: 0.25, height: 0.55, tilt: -7),
+                right: .init(width: 0.20, height: 0.43, tilt: -7)
+            )
         case .thinking:
             return style(
-                gaze: (12, 6, -6),
-                split: 16,
-                left: .init(width: 0.21, height: 0.40),
-                right: .init(width: 0.22, height: 0.15)
+                gaze: (-17, -13, 8),
+                split: 15.6,
+                left: .init(width: 0.21, height: 0.46, tilt: -12),
+                right: .init(width: 0.20, height: 0.39, tilt: -12)
             )
         case .confused:
             return style(
-                gaze: (-14, 3, 8),
-                split: 16.5,
-                left: .init(width: 0.20, height: 0.44, tilt: -18),
-                right: .init(width: 0.28, height: 0.17, tilt: 14)
+                gaze: (-10, 1, 7),
+                split: 16.4,
+                left: .init(width: 0.21, height: 0.50, tilt: -18),
+                right: .init(width: 0.30, height: 0.16, tilt: 15)
             )
-        case .determined, .annoyed:
-            return style(gaze: (3, 7, 0), split: 17, pair: (0.34, 0.15, 30, 1))
-        case .calm, .neutral:
-            return style(gaze: (28.49, 28.62, -13), split: eyeSplit, pair: (eyeWidth, eyeHeight, 0, 1))
-        case .jealous, .wry:
+        case .determined:
+            return style(gaze: (0, 8, 0), split: 17.1, pair: (0.33, 0.16, 28, 1))
+        case .tender:
+            return style(gaze: (0, 7, 0), split: 15.8, pair: (0.24, 0.43, 7, 1))
+        case .calm:
+            return style(gaze: (0, 8, -2), split: 16, pair: (0.28, 0.18, 9, 1))
+        case .jealous:
             return style(
-                gaze: (12, 6, -6),
-                split: 16,
-                left: .init(width: 0.21, height: 0.40),
-                right: .init(width: 0.22, height: 0.15)
+                gaze: (20, 3, -5),
+                split: 15.8,
+                left: .init(width: 0.22, height: 0.38, tilt: -9),
+                right: .init(width: 0.28, height: 0.14, tilt: -4)
+            )
+        case .wry:
+            return style(
+                gaze: (12, 7, -4),
+                split: 16.2,
+                left: .init(width: 0.31, height: 0.14, tilt: 14),
+                right: .init(width: 0.22, height: 0.42, tilt: -10)
             )
         case .exasperated:
-            return style(gaze: (-22, 2, 0), split: 16, pair: (0.30, 0.12, 0, 1))
-        case .concerned, .sad:
-            return style(gaze: (3, -13, 0), split: 16, pair: (0.22, 0.40, -28, 1))
+            return style(
+                gaze: (19, 2, 0),
+                split: 16.8,
+                left: .init(width: 0.31, height: 0.13, tilt: 3),
+                right: .init(width: 0.28, height: 0.11, tilt: -3)
+            )
+        case .annoyed:
+            return style(gaze: (8, 8, 0), split: 16.6, pair: (0.34, 0.15, 27, 1))
+        case .concerned:
+            return style(gaze: (0, -7, 0), split: 15.8, pair: (0.22, 0.43, -25, 1))
+        case .sad:
+            return style(gaze: (0, -15, 0), split: 15.4, pair: (0.22, 0.47, -27, 1))
         case .sleepy:
-            return style(gaze: (6, -9, -3), split: 16, pair: (0.20, 0.42, 0, 0.42))
+            return style(gaze: (-4, -5, -3), split: 15.8, pair: (0.28, 0.105, 2, 0.62))
         }
     }
 
@@ -133,7 +199,20 @@ enum ShannonEyeRig {
         elapsedTime: TimeInterval,
         isAnimated: Bool
     ) -> Frame {
-        let liveness = isAnimated ? liveness(at: elapsedTime) : Liveness.still
+        frame(
+            pose: Pose(style: style, energy: 0.56, decor: .none),
+            elapsedTime: elapsedTime,
+            isAnimated: isAnimated
+        )
+    }
+
+    static func frame(
+        pose: Pose,
+        elapsedTime: TimeInterval,
+        isAnimated: Bool
+    ) -> Frame {
+        let style = pose.style
+        let liveness = isAnimated ? liveness(at: elapsedTime, energy: pose.energy) : Liveness.still
         var forward = Vector3(x: 0, y: 0, z: 1)
         var horizontal = Vector3(x: 1, y: 0, z: 0)
         var vertical = Vector3(x: 0, y: 1, z: 0)
@@ -161,7 +240,8 @@ enum ShannonEyeRig {
             lid: liveness.lid,
             driftX: liveness.driftX,
             driftY: liveness.driftY,
-            breath: liveness.breath
+            breath: liveness.breath,
+            decor: pose.decor
         )
     }
 
@@ -172,6 +252,10 @@ enum ShannonEyeRig {
 
     static func blinkScale(_ lid: Double) -> Double {
         0.06 + 0.94 * min(1, max(0, lid))
+    }
+
+    static func hasPersistentBlush(_ expression: ShannonExpressionDTO) -> Bool {
+        expression == .bashful || expression == .embarrassed
     }
 
     private static func style(
@@ -245,17 +329,17 @@ enum ShannonEyeRig {
         )
     }
 
-    private static func liveness(at time: Double) -> Liveness {
+    private static func liveness(at time: Double, energy: Double) -> Liveness {
         Liveness(
-            yaw: loopNoise(time, period: 11.3, seed: 0.4) * 5.5
-                + loopNoise(time, period: 3.7, seed: 2.1) * 1.6,
-            pitch: loopNoise(time, period: 9.1, seed: 1.3) * 4.2
-                + loopNoise(time, period: 4.3, seed: 0.7) * 1.3,
-            roll: loopNoise(time, period: 13.7, seed: 3.2) * 2.2,
+            yaw: (loopNoise(time, period: 11.3, seed: 0.4) * 5.5
+                + loopNoise(time, period: 3.7, seed: 2.1) * 1.6) * energy,
+            pitch: (loopNoise(time, period: 9.1, seed: 1.3) * 4.2
+                + loopNoise(time, period: 4.3, seed: 0.7) * 1.3) * energy,
+            roll: loopNoise(time, period: 13.7, seed: 3.2) * 2.2 * energy,
             lid: blinkLid(at: time),
-            driftX: loopNoise(time, period: 7.9, seed: 1.9) * 0.006,
-            driftY: loopNoise(time, period: 5.3, seed: 0.3) * 0.007,
-            breath: 1 + sin((time / 3.4) * 2 * .pi) * 0.005
+            driftX: loopNoise(time, period: 7.9, seed: 1.9) * 0.006 * energy,
+            driftY: loopNoise(time, period: 5.3, seed: 0.3) * 0.007 * energy,
+            breath: 1 + sin((time / 3.4) * 2 * .pi) * 0.005 * energy
         )
     }
 
@@ -309,57 +393,5 @@ enum ShannonEyeRig {
             value ^= value >> 14
             return Double(value) / 4_294_967_296
         }
-    }
-}
-
-struct ShannonEyeReactionSample: Equatable, Sendable {
-    let style: ShannonEyeStyle
-    let blushOpacity: Double
-}
-
-enum ShannonEyeReactionTimeline {
-    static let surpriseEnd = 0.16
-    static let bashfulEnd = 0.42
-    static let holdEnd = 1.10
-    static let duration = 1.50
-
-    static func sample(
-        origin: ShannonEyeStyle,
-        base: ShannonEyeStyle,
-        elapsedTime: TimeInterval
-    ) -> ShannonEyeReactionSample {
-        let elapsedTime = max(0, elapsedTime)
-        let surprised = ShannonEyeRig.style(for: .surprised)
-        let bashful = ShannonEyeRig.style(for: .bashful)
-
-        if elapsedTime < surpriseEnd {
-            let progress = ShannonEyeRig.easeOutQuint(elapsedTime / surpriseEnd)
-            return .init(
-                style: origin.blended(toward: surprised, progress: progress),
-                blushOpacity: 0
-            )
-        }
-        if elapsedTime < bashfulEnd {
-            let progress = ShannonEyeRig.easeOutQuint(
-                (elapsedTime - surpriseEnd) / (bashfulEnd - surpriseEnd)
-            )
-            return .init(
-                style: surprised.blended(toward: bashful, progress: progress),
-                blushOpacity: progress
-            )
-        }
-        if elapsedTime < holdEnd {
-            return .init(style: bashful, blushOpacity: 1)
-        }
-        if elapsedTime < duration {
-            let progress = ShannonEyeRig.easeOutQuint(
-                (elapsedTime - holdEnd) / (duration - holdEnd)
-            )
-            return .init(
-                style: bashful.blended(toward: base, progress: progress),
-                blushOpacity: 1 - progress
-            )
-        }
-        return .init(style: base, blushOpacity: 0)
     }
 }

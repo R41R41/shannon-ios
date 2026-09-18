@@ -18,6 +18,8 @@ improve:
   - "生成物を会話内で確認し、ユーザーが選んだ場所へ保存できる"
   - "空状態のShannonだけはWaterlight Eyeの視線・瞬き・表情変化で静かに存在を示す"
   - "空状態の大型Waterlight Eyeは角丸四角と160%の目で表示し、タップ時だけ驚きから照れへ反応する"
+  - "対話表示とLive音声のWaterlight Eyeは22感情と会話状態を目の形・球面視線・連続モーフで示し、接続中・聞いています・考えています・話していますの文言を置き換えない"
+  - "Waterlight Eyeはポインターのない端末でも不規則な瞬きと微細な自律視線を保ち、押している間だけ指の位置を見る"
   - "Live音声では会話中の調査結果を同じ音声セッションへ戻し、状態を接続中・聞いています・考えています・話していますで明示する"
   - "Live音声中のカメラはユーザーが撮影した1枚だけをプレビューし、共有確認後に会話へ戻す"
   - "Live音声は小さい画面や大きい文字でも状態と映像をスクロールでき、主要操作を下端へ固定する"
@@ -48,9 +50,11 @@ accessibility:
   voiceover: "入力、添付、Web検索、音声、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、撮り直し、写真共有の役割を個別に読み上げる"
   target_size: "主要操作のヒット領域を44ポイント以上にする"
   focus: "入力中にTextFieldを破棄せず、会話外の明示操作ではキーボードを閉じて最初のタップをその操作へ渡す"
-  reduce_motion: "入力欄の展開とWaterlight EyeはReduce Motion時に不要な移動を行わず、タップ反応は照れの静止形で伝える"
+  reduce_motion: "入力欄の展開とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形とタップ時の照れた静止形を保つ"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-dialogue-waterlight-light-v1.png"
+    - "docs/screenshots/shannon-ios-dialogue-waterlight-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-guest-light-v54.png"
     - "docs/screenshots/shannon-ios-voice-guest-dark-v54.png"
   approved: []

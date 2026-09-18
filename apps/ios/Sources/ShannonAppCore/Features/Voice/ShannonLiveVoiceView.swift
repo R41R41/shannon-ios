@@ -74,9 +74,12 @@ public struct ShannonLiveVoiceView: View {
                         }
 
                         ZStack(alignment: .bottom) {
-                            ShannonDialogueStagePortraitView()
-                                .frame(maxWidth: 440)
-                                .scaleEffect(pulse && model.phase == .speaking && !reduceMotion ? 1.015 : 1)
+                            ShannonWaterlightEyeView(
+                                expression: expression,
+                                activity: model.phase.dialogueActivity,
+                                size: dynamicTypeSize.isAccessibilitySize ? 210 : 260
+                            )
+                            .frame(maxWidth: 440)
 
                             if !model.shannonTranscript.isEmpty {
                                 transcriptCard(
