@@ -3,14 +3,16 @@ screen_id: shannon-ios-settings
 platform: ios
 baseline_commit: a392bc582ce9644889296297a42073e2bdd1ca67
 last_verified_at: 2026-09-15
-user_job: "表示や接続を壊さず、シャノンの外観とアプリアイコンを選ぶ"
+user_job: "表示や接続を壊さず、シャノンの外観、声、アプリアイコンを選ぶ"
 primary_action: "L02、L06、L10からアプリアイコンを選ぶ"
 preserve:
   - "会話、接続、音声、情報源、配信、診断への設定導線"
   - "Light、Dark、Systemの外観設定"
+  - "声の変更は進行中の会話へ割り込まず、次の音声会話から反映する"
 improve:
   - "実際の3候補を画像、レベル、説明と選択状態で示す"
   - "L06を標準・おすすめとして明示する"
+  - "GPT-Liveの受信音声だけに適用する+200 centsを、標準Toggleで次回セッションから解除・再適用できる"
 do_not_change:
   - "Bundle ID、署名、URL scheme、CloudKit、保存データの識別子"
 states:
@@ -20,9 +22,10 @@ states:
   offline: "アイコン切替は端末内で完結する"
   conflict: "OSが返す現在のalternate iconを正として再表示する"
   selection: "選択中をチェック、枠、読み上げで示す"
+  voice_pitch: "加工対象がシャノンの受信音声だけであることと、反映時点を文言で示す"
 accessibility:
   dynamic_type: "レベル名と説明は必要に応じて複数行にする"
-  voiceover: "候補名、レベル、選択状態を読み上げる"
+  voiceover: "候補名、レベル、選択状態、声の高さ調整の対象と反映時点を読み上げる"
   target_size: "候補カード全体を44ポイント以上の操作領域にする"
   focus: "シートを閉じても設定一覧へ戻る"
   reduce_motion: "切替状態を動きだけで表現しない"

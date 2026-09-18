@@ -154,6 +154,10 @@ public struct ShannonVoiceIdentityView: View {
     @Bindable private var model: ShannonVoiceIdentityModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+#if os(iOS)
+    @AppStorage(ShannonRemoteVoicePitchPolicy.enabledDefaultsKey)
+    private var remotePitchEnabled = true
+#endif
 
     public init(model: ShannonVoiceIdentityModel) {
         self.model = model
@@ -180,6 +184,7 @@ public struct ShannonVoiceIdentityView: View {
 
                 Section("声を選ぶ") {
                     ForEach(model.response.candidates) { candidate in
+                        let isPreviewing = model.previewingVoiceID == candidate.id
                         HStack(spacing: ShannonSpacing.medium) {
                             Button {
                                 Task { await model.select(candidate) }
@@ -198,19 +203,38 @@ public struct ShannonVoiceIdentityView: View {
                             Button {
                                 Task { await model.togglePreview(candidate) }
                             } label: {
-                                Image(systemName: model.previewingVoiceID == candidate.id
-                                      ? "stop.fill" : "play.fill")
+                                Image(systemName: isPreviewing ? "stop.fill" : "play.fill")
                                     .font(.system(size: 15, weight: .semibold))
                                     .frame(width: 42, height: 42)
                                     .background(palette.elevatedSurface, in: Circle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel(model.previewingVoiceID == candidate.id
-                                                ? "\(candidate.name)の試聴を停止"
-                                                : "\(candidate.name)を試聴")
+                            .accessibilityLabel(
+                                isPreviewing ? "\(candidate.name)の試聴を停止" : "\(candidate.name)を試聴"
+                            )
                         }
                     }
                 }
+
+#if os(iOS)
+                Section {
+                    Toggle(isOn: $remotePitchEnabled) {
+                        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                            Text("明るい声に調整")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(palette.textPrimary)
+                            Text("受信したシャノンの声だけを少し高くします")
+                                .font(.caption)
+                                .foregroundStyle(palette.textSecondary)
+                        }
+                    }
+                    .accessibilityHint("次に始める音声会話から反映されます")
+                } header: {
+                    Text("リアルタイム音声の仕上げ")
+                } footer: {
+                    Text("Marinの高さを+200 centsに調整します。マイクから送るあなたの声には加工しません。")
+                }
+#endif
 
                 Section {
                     Text("声の変更は、接続中の会話を急に変えず、次に始める音声会話から反映されます。選択はiPhoneとMacで共有されます。")

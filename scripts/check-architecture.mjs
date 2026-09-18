@@ -43,6 +43,10 @@ const legacyMonoliths = [
 for (const path of legacyMonoliths) if (existsSync(resolve(root, path))) fail(`${path} must remain split by responsibility`);
 
 const swiftFiles = productionSources.filter(path => extname(path) === '.swift');
+const webRTCAdapterFiles = new Set([
+  'WebRTCVoiceTransport.swift',
+  'ShannonPitchShiftRTCAudioDevice.swift',
+]);
 for (const path of swiftFiles) {
   const imports = source(path);
   for (const legacyToken of ['M3Palette', 'M3Spacing', 'M3Shape', 'M3TouchTarget']) {
@@ -53,7 +57,7 @@ for (const path of swiftFiles) {
       || /\breturn \.(?:red|orange|green)\b/u.test(imports)) {
     fail(`${projectPath(path)} bypasses Shannon semantic status colors`);
   }
-  if (imports.includes('import WebRTC') && basename(path) !== 'WebRTCVoiceTransport.swift') {
+  if (imports.includes('import WebRTC') && !webRTCAdapterFiles.has(basename(path))) {
     fail(`${projectPath(path)} imports WebRTC outside the transport adapter`);
   }
   if (imports.includes('import Security') && basename(path) !== 'ShannonConnectionKeychainStore.swift') {
