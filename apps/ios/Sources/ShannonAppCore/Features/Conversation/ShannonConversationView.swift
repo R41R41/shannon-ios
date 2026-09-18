@@ -32,7 +32,7 @@ public struct ShannonConversationView: View {
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
     @State var dialogueDidCopy = false
-    @State var dialoguePresenceIsBreathing = false
+    @State var dialogueActivity: ShannonDialogueActivity = .idle
     @State var selectedAgentTaskID: UUID?
     @State var composerAttachments: [ShannonChatAttachmentDTO] = []
     @State var composerUsesWebSearch = false

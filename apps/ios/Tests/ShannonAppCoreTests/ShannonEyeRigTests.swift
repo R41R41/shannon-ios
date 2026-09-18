@@ -2,16 +2,85 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonEyeRigTests: XCTestCase {
-    func testNeutralPoseKeepsTheMeasuredWaterlightGeometry() {
+    func testNeutralPoseKeepsTheApprovedKuriLikeGeometry() {
         let style = ShannonEyeRig.style(for: .neutral)
 
-        XCTAssertEqual(style.gaze.yaw, 28.49, accuracy: 0.001)
-        XCTAssertEqual(style.gaze.pitch, 28.62, accuracy: 0.001)
-        XCTAssertEqual(style.gaze.roll, -13, accuracy: 0.001)
-        XCTAssertEqual(style.split, 15.46, accuracy: 0.001)
-        XCTAssertEqual(style.left.width, 0.186, accuracy: 0.001)
-        XCTAssertEqual(style.left.height, 0.412, accuracy: 0.001)
-        XCTAssertEqual(style.left, style.right)
+        XCTAssertEqual(style.gaze.yaw, 8, accuracy: 0.001)
+        XCTAssertEqual(style.gaze.pitch, 5, accuracy: 0.001)
+        XCTAssertEqual(style.gaze.roll, -4, accuracy: 0.001)
+        XCTAssertEqual(style.split, 16.4, accuracy: 0.001)
+        XCTAssertEqual(style.left.width, 0.23, accuracy: 0.001)
+        XCTAssertEqual(style.left.height, 0.54, accuracy: 0.001)
+        XCTAssertEqual(style.right.width, 0.22, accuracy: 0.001)
+        XCTAssertEqual(style.right.height, 0.51, accuracy: 0.001)
+    }
+
+    func testEveryExpressionAndDialogueActivityProducesFiniteGeometry() {
+        for expression in ShannonExpressionDTO.allCases {
+            for activity in ShannonDialogueActivity.allCases {
+                for elapsedTime in [0.0, 0.17, 0.9, 2.4, 7.7] {
+                    let pose = ShannonEyeRig.pose(
+                        for: expression,
+                        activity: activity,
+                        elapsedTime: elapsedTime,
+                        isAnimated: true
+                    )
+                    let frame = ShannonEyeRig.frame(
+                        pose: pose,
+                        elapsedTime: elapsedTime,
+                        isAnimated: true
+                    )
+
+                    XCTAssertEqual(frame.eyes.count, 2, "Missing eyes for \(expression) / \(activity)")
+                    XCTAssertTrue(frame.eyes.allSatisfy { eye in
+                        eye.position.x.isFinite
+                            && eye.position.y.isFinite
+                            && eye.depth.isFinite
+                            && eye.depth > 0
+                            && eye.configuration.width.isFinite
+                            && eye.configuration.height.isFinite
+                            && eye.configuration.width > 0
+                            && eye.configuration.height > 0
+                            && eye.configuration.open >= 0
+                    }, "Invalid geometry for \(expression) / \(activity) at \(elapsedTime)")
+                }
+            }
+        }
+    }
+
+    func testReducedMotionKeepsEveryActivityReadableButStill() {
+        for activity in ShannonDialogueActivity.allCases {
+            let first = ShannonEyeRig.pose(
+                for: .curious,
+                activity: activity,
+                elapsedTime: 0,
+                isAnimated: false
+            )
+            let later = ShannonEyeRig.pose(
+                for: .curious,
+                activity: activity,
+                elapsedTime: 8,
+                isAnimated: false
+            )
+
+            XCTAssertEqual(first.style, later.style, "Reduced-motion pose moved for \(activity)")
+            XCTAssertEqual(first.decor.kind, later.decor.kind)
+            XCTAssertEqual(first.decor.strength, later.decor.strength, accuracy: 0.001)
+        }
+    }
+
+    func testTrackingLooksTowardTheTouchPoint() {
+        let pose = ShannonEyeRig.pose(
+            for: .neutral,
+            activity: .idle,
+            elapsedTime: 0,
+            isAnimated: true,
+            tracking: CGPoint(x: 0.5, y: -0.25)
+        )
+
+        XCTAssertEqual(pose.style.gaze.yaw, 15.5, accuracy: 0.001)
+        XCTAssertEqual(pose.style.gaze.pitch, 6, accuracy: 0.001)
+        XCTAssertEqual(pose.style.gaze.roll, -4, accuracy: 0.001)
     }
 
     func testEveryShannonExpressionProducesTwoVisibleFiniteEyes() {

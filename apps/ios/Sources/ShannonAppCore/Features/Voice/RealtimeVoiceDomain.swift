@@ -29,6 +29,18 @@ public enum ShannonRealtimeVoicePhase: Equatable, Sendable {
             false
         }
     }
+
+    var dialogueActivity: ShannonDialogueActivity {
+        switch self {
+        case .idle: .idle
+        case .requestingPermission: .preparing
+        case .connecting: .connecting
+        case .listening: .listening
+        case .thinking: .thinking
+        case .speaking: .speaking
+        case .failed: .failed
+        }
+    }
 }
 
 public enum ShannonRealtimeVoiceRecoveryPolicy {
