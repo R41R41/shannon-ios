@@ -75,6 +75,10 @@ extension ShannonAPIClient {
         request.timeoutInterval = 40
         request.setValue("application/sdp", forHTTPHeaderField: "content-type")
         request.setValue(participantMode.rawValue, forHTTPHeaderField: "x-shannon-voice-participant-mode")
+        request.setValue(
+            ShannonRemoteVoicePitchPolicy.headerValue(),
+            forHTTPHeaderField: "x-shannon-voice-brightness"
+        )
         if let threadId, !threadId.isEmpty {
             request.setValue(threadId, forHTTPHeaderField: "x-shannon-thread-id")
         }

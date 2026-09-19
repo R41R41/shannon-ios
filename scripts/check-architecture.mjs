@@ -45,7 +45,6 @@ for (const path of legacyMonoliths) if (existsSync(resolve(root, path))) fail(`$
 const swiftFiles = productionSources.filter(path => extname(path) === '.swift');
 const webRTCAdapterFiles = new Set([
   'WebRTCVoiceTransport.swift',
-  'ShannonPitchShiftRTCAudioDevice.swift',
 ]);
 for (const path of swiftFiles) {
   const imports = source(path);

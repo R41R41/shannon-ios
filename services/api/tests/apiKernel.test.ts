@@ -700,6 +700,10 @@ describe('Shannon local API kernel', () => {
     expect(session.instructions).toContain('[Shannon shared state v1]');
     expect(session.instructions).toContain('音声で続きを話したい');
     expect(session.instructions).toContain('[Live voice conversation]');
+    expect(session.instructions).toContain('primarily speaks Japanese');
+
+    const brightSession = api.realtimeVoiceSession('owner-a', threadId, { brightVoice: true });
+    expect(brightSession.instructions).toContain('lightly brighter, slightly higher');
 
     const committed = await api.dispatch({ method: 'POST', path: '/v1/voice/realtime/turns', body: {
       scopeKey: 'owner-a', threadId,

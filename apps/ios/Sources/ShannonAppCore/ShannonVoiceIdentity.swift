@@ -154,6 +154,10 @@ public struct ShannonVoiceIdentityView: View {
     @Bindable private var model: ShannonVoiceIdentityModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+#if os(iOS)
+    @AppStorage(ShannonRemoteVoicePitchPolicy.enabledDefaultsKey)
+    private var remotePitchEnabled = true
+#endif
 
     public init(model: ShannonVoiceIdentityModel) {
         self.model = model
@@ -211,6 +215,26 @@ public struct ShannonVoiceIdentityView: View {
                         }
                     }
                 }
+
+#if os(iOS)
+                Section {
+                    Toggle(isOn: $remotePitchEnabled) {
+                        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                            Text("明るい声に調整")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(palette.textPrimary)
+                            Text("シャノンの話し方を少し明るくします")
+                                .font(.caption)
+                                .foregroundStyle(palette.textSecondary)
+                        }
+                    }
+                    .accessibilityHint("次に始める音声会話から反映されます")
+                } header: {
+                    Text("リアルタイム音声の仕上げ")
+                } footer: {
+                    Text("音声モデルへ明るく少し高めの声で話すように伝えます。マイク入力は加工しません。")
+                }
+#endif
 
                 Section {
                     Text("声の変更は、接続中の会話を急に変えず、次に始める音声会話から反映されます。選択はiPhoneとMacで共有されます。")

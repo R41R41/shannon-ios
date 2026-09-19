@@ -159,6 +159,7 @@ export class ShannonApiKernel {
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
     clientDelegation?: boolean;
     participantMode?: VoiceParticipantMode;
+    brightVoice?: boolean;
   } = {}): { threadId: string; instructions: string; voice: string } {
     return realtimeVoiceSessionProjection(scopeKey, requestedThreadId, options, {
       stateStore: this.stateStore,

@@ -334,7 +334,6 @@ async function handleRealtimeVoiceCall(
     sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
     return;
   }
-
   let reservationId: string | undefined;
   let upstreamCallCreated = false;
   try {
@@ -350,8 +349,10 @@ async function handleRealtimeVoiceCall(
       sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'participant mode is invalid' });
       return;
     }
-    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId,
-      { clientDelegation: realtimeVoiceGateway.engine === 'live', participantMode });
+    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
+      clientDelegation: realtimeVoiceGateway.engine === 'live', participantMode,
+      brightVoice: scalarHeader(request.headers['x-shannon-voice-brightness']) === 'enabled',
+    });
     const createdAt = now();
     const reservation = persistentStore.reserveRealtimeVoiceSession({
       scopeKey: principal.scopeKey,

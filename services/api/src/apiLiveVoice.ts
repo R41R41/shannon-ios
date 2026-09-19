@@ -12,12 +12,19 @@ import type { DailyMindReader } from './dailyMind.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonChatModel } from './chatModel.js';
 
-export function voiceConversationInstructions(clientDelegation: boolean): string {
+export function voiceConversationInstructions(
+  clientDelegation: boolean,
+  brightVoice = false,
+): string {
   return [
     '[Live voice conversation]',
     '- Speak naturally in Japanese as Shannon. Keep most turns concise enough for a live conversation.',
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
+    '- The user primarily speaks Japanese. If a name, number, or homophone is uncertain, ask one short confirmation instead of guessing.',
     '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
+    ...(brightVoice ? [
+      '- Use a lightly brighter, slightly higher, warm speaking tone while preserving natural Japanese rhythm and speed.',
+    ] : []),
     ...(clientDelegation ? [
       '- Handle ordinary conversation directly. Delegate requests that need current web facts, project records, tools, or longer reasoning to the client.',
       '- When delegating, briefly acknowledge the request without inventing a result, then wait for verified client context.',
@@ -51,7 +58,11 @@ interface VoiceSessionDependencies {
 export function realtimeVoiceSessionProjection(
   scopeKey: string,
   requestedThreadId: string | undefined,
-  options: { clientDelegation?: boolean; participantMode?: VoiceParticipantMode },
+  options: {
+    clientDelegation?: boolean;
+    participantMode?: VoiceParticipantMode;
+    brightVoice?: boolean;
+  },
   dependencies: VoiceSessionDependencies,
 ): { threadId: string; instructions: string; voice: string } {
   if (options.participantMode === 'guest') {
@@ -59,7 +70,7 @@ export function realtimeVoiceSessionProjection(
       threadId: requestedThreadId?.trim() || 'temporary-guest-session',
       instructions: [
         temporaryGuestVoiceInstructions,
-        voiceConversationInstructions(options.clientDelegation === true),
+        voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true),
       ].join('\n\n'),
       voice: dependencies.voice,
     };
@@ -76,7 +87,7 @@ export function realtimeVoiceSessionProjection(
       basePrompt,
       dailyMindPrompt,
       history,
-      voiceConversationInstructions(options.clientDelegation === true),
+      voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true),
     ].filter(Boolean).join('\n\n'),
     voice: dependencies.voice,
   };

@@ -317,6 +317,22 @@ final class ShannonConnectionTests: XCTestCase {
     }
 
     func testAPIClientCreatesRealtimeCallAndCommitsTheVisibleTranscript() async throws {
+        let previousBrightness = UserDefaults.standard.object(
+            forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey
+        )
+        UserDefaults.standard.set(true, forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey)
+        defer {
+            if let previousBrightness {
+                UserDefaults.standard.set(
+                    previousBrightness,
+                    forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey
+                )
+            } else {
+                UserDefaults.standard.removeObject(
+                    forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey
+                )
+            }
+        }
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "r", count: 43)
         let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
@@ -336,6 +352,7 @@ final class ShannonConnectionTests: XCTestCase {
                 XCTAssertEqual(request.value(forHTTPHeaderField: "content-type"), "application/sdp")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-thread-id"), "thread-voice")
                 XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-voice-participant-mode"), "owner")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "x-shannon-voice-brightness"), "enabled")
                 XCTAssertTrue(String(data: try XCTUnwrap(requestBody(request)), encoding: .utf8)?.hasPrefix("v=0") == true)
                 let response = try XCTUnwrap(HTTPURLResponse(
                     url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
