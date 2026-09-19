@@ -70,6 +70,7 @@ enum ShannonEyeRig {
 
     struct Frame: Sendable {
         let eyes: [ProjectedEye]
+        let gaze: ShannonEyeStyle.Gaze
         let lid: Double
         let driftX: Double
         let driftY: Double
@@ -81,6 +82,39 @@ enum ShannonEyeRig {
         let style: ShannonEyeStyle
         let energy: Double
         let decor: Decor
+        let blinkProfile: BlinkProfile
+    }
+
+    enum BlinkProfile: Equatable, Sendable {
+        case natural
+        case bright
+        case sparse
+        case slow
+        case double
+        case wink
+        case sideEye
+        case drowsy
+
+        var duration: Double {
+            switch self {
+            case .slow: 0.28
+            case .drowsy: 0.42
+            default: 0.18
+            }
+        }
+
+        var intervalRange: ClosedRange<Double> {
+            switch self {
+            case .bright: 2.2...3.7
+            case .sparse: 4.1...6.7
+            case .slow: 3.1...5.2
+            case .double: 2.4...4.1
+            case .wink: 2.7...4.5
+            case .sideEye: 3.2...5.1
+            case .drowsy: 1.8...3.0
+            case .natural: 2.8...5.2
+            }
+        }
     }
 
     struct Decor: Sendable {
@@ -200,7 +234,7 @@ enum ShannonEyeRig {
         isAnimated: Bool
     ) -> Frame {
         frame(
-            pose: Pose(style: style, energy: 0.56, decor: .none),
+            pose: Pose(style: style, energy: 0.56, decor: .none, blinkProfile: .natural),
             elapsedTime: elapsedTime,
             isAnimated: isAnimated
         )
@@ -212,7 +246,9 @@ enum ShannonEyeRig {
         isAnimated: Bool
     ) -> Frame {
         let style = pose.style
-        let liveness = isAnimated ? liveness(at: elapsedTime, energy: pose.energy) : Liveness.still
+        let liveness = isAnimated
+            ? liveness(at: elapsedTime, energy: pose.energy, blinkProfile: pose.blinkProfile)
+            : Liveness.still
         var forward = Vector3(x: 0, y: 0, z: 1)
         var horizontal = Vector3(x: 1, y: 0, z: 0)
         var vertical = Vector3(x: 0, y: 1, z: 0)
@@ -237,6 +273,11 @@ enum ShannonEyeRig {
 
         return Frame(
             eyes: eyes,
+            gaze: .init(
+                yaw: style.gaze.yaw + liveness.yaw,
+                pitch: style.gaze.pitch + liveness.pitch,
+                roll: style.gaze.roll + liveness.roll
+            ),
             lid: liveness.lid,
             driftX: liveness.driftX,
             driftY: liveness.driftY,
@@ -329,69 +370,60 @@ enum ShannonEyeRig {
         )
     }
 
-    private static func liveness(at time: Double, energy: Double) -> Liveness {
+    private static func liveness(
+        at time: Double,
+        energy: Double,
+        blinkProfile: BlinkProfile
+    ) -> Liveness {
         Liveness(
-            yaw: (loopNoise(time, period: 11.3, seed: 0.4) * 5.5
-                + loopNoise(time, period: 3.7, seed: 2.1) * 1.6) * energy,
-            pitch: (loopNoise(time, period: 9.1, seed: 1.3) * 4.2
-                + loopNoise(time, period: 4.3, seed: 0.7) * 1.3) * energy,
-            roll: loopNoise(time, period: 13.7, seed: 3.2) * 2.2 * energy,
-            lid: blinkLid(at: time),
-            driftX: loopNoise(time, period: 7.9, seed: 1.9) * 0.006 * energy,
-            driftY: loopNoise(time, period: 5.3, seed: 0.3) * 0.007 * energy,
-            breath: 1 + sin((time / 3.4) * 2 * .pi) * 0.005 * energy
+            yaw: (signedNoise(time, period: 8.7, phase: 0.13) * 4.8
+                + signedNoise(time, period: 3.9, phase: 0.51) * 1.5) * energy,
+            pitch: (signedNoise(time, period: 10.9, phase: 0.31) * 3.5
+                + signedNoise(time, period: 4.7, phase: 0.09)) * energy,
+            roll: signedNoise(time, period: 12.7, phase: 0.76) * 2.1 * energy,
+            lid: blinkLid(at: time, profile: blinkProfile),
+            driftX: 0,
+            driftY: 0,
+            breath: 1 + signedNoise(time, period: 4.9, phase: 0.2) * 0.0035 * energy
         )
     }
 
-    private static func loopNoise(_ time: Double, period: Double, seed: Double) -> Double {
-        let phase = (time / period) * 2 * .pi
-        return 0.55 * sin(phase + seed)
-            + 0.30 * sin(2 * phase + seed * 1.7 + 1.1)
-            + 0.15 * sin(3 * phase + seed * 2.3 + 2.4)
+    private static func signedNoise(_ time: Double, period: Double, phase: Double) -> Double {
+        sin((time / period + phase) * 2 * .pi)
     }
 
     static func blinkLid(at time: Double) -> Double {
-        let blinkDuration = 0.18
+        blinkLid(at: time, profile: .natural)
+    }
+
+    static func blinkLid(at time: Double, profile: BlinkProfile) -> Double {
         var localTime = time.truncatingRemainder(dividingBy: 900)
         if localTime < 0 { localTime += 900 }
 
-        for start in blinkSchedule {
+        for start in blinkSchedule(for: profile) {
             if localTime < start { break }
             let elapsed = localTime - start
-            guard elapsed <= blinkDuration else { continue }
-            let progress = elapsed / blinkDuration
-            if progress < 0.45 {
-                return 1 - progress / 0.45
+            guard elapsed <= profile.duration else { continue }
+            let progress = elapsed / profile.duration
+            if progress < 0.42 {
+                return 1 - progress / 0.42
             }
-            return (progress - 0.45) / 0.55
+            return (progress - 0.42) / 0.58
         }
         return 1
     }
 
-    private static let blinkSchedule: [Double] = {
-        var random = SeededRandom(state: 0x5EED)
-        var time = 1.4
+    private static func blinkSchedule(for profile: BlinkProfile) -> [Double] {
+        var time = 1.9
+        var blinkIndex = 0
         var result: [Double] = []
         while time < 900 {
             result.append(time)
-            if random.next() < 0.18 {
-                result.append(time + 0.24)
-            }
-            time += 1.9 + random.next() * 2.7
+            blinkIndex += 1
+            let seeded = 0.5 + 0.5 * sin(Double(blinkIndex) * 9.173 + 1.7)
+            let range = profile.intervalRange
+            time += range.lowerBound + (range.upperBound - range.lowerBound) * seeded
         }
         return result
-    }()
-
-    private struct SeededRandom {
-        var state: UInt32
-
-        mutating func next() -> Double {
-            state &+= 0x6D2B79F5
-            var value = state
-            value = (value ^ (value >> 15)) &* (UInt32(1) | value)
-            value = (value &+ ((value ^ (value >> 7)) &* (UInt32(61) | value))) ^ value
-            value ^= value >> 14
-            return Double(value) / 4_294_967_296
-        }
     }
 }

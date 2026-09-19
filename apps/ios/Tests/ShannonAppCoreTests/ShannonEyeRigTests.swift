@@ -101,30 +101,60 @@ final class ShannonEyeRigTests: XCTestCase {
     }
 
     func testBlinkClosesAndReopensWithoutCollapsingToZero() {
-        XCTAssertEqual(ShannonEyeRig.blinkLid(at: 1.4), 1, accuracy: 0.001)
-        XCTAssertLessThan(ShannonEyeRig.blinkLid(at: 1.481), 0.01)
-        XCTAssertEqual(ShannonEyeRig.blinkLid(at: 1.58), 1, accuracy: 0.001)
+        XCTAssertEqual(ShannonEyeRig.blinkLid(at: 1.9), 1, accuracy: 0.001)
+        XCTAssertLessThan(ShannonEyeRig.blinkLid(at: 1.9756), 0.01)
+        XCTAssertEqual(ShannonEyeRig.blinkLid(at: 2.08), 1, accuracy: 0.001)
         XCTAssertEqual(ShannonEyeRig.blinkScale(0), 0.06, accuracy: 0.001)
+
+        let drowsy = ShannonEyeRig.blinkLid(at: 1.9 + 0.42 * 0.42, profile: .drowsy)
+        XCTAssertLessThan(drowsy, 0.01)
     }
 
-    func testWaterlightReactionMovesFromSurpriseToBashfulAndBackToBase() {
+    func testWaterlightReactionKeepsTheExpressionAndAddsTheApprovedPulseAndBlush() {
         let origin = ShannonEyeRig.style(for: .curious)
         let base = ShannonEyeRig.style(for: .calm)
 
         XCTAssertEqual(
             ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 0).style,
-            origin
+            base
         )
-        XCTAssertEqual(
-            ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 0.16).style,
-            ShannonEyeRig.style(for: .surprised)
-        )
-        let bashful = ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 0.42)
-        XCTAssertEqual(bashful.style, ShannonEyeRig.style(for: .bashful))
-        XCTAssertEqual(bashful.blushOpacity, 1, accuracy: 0.001)
-        let finished = ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 1.50)
+        let peak = ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 0.45)
+        XCTAssertEqual(peak.style.left.width, base.left.width * 1.07, accuracy: 0.001)
+        XCTAssertEqual(peak.style.left.height, base.left.height * 0.90, accuracy: 0.001)
+        XCTAssertEqual(peak.blushOpacity, 0.54, accuracy: 0.001)
+        let finished = ShannonEyeReactionTimeline.sample(origin: origin, base: base, elapsedTime: 0.90)
         XCTAssertEqual(finished.style, base)
         XCTAssertEqual(finished.blushOpacity, 0, accuracy: 0.001)
+    }
+
+    func testWaterlightUsesTheApprovedDemoVisualConstants() {
+        XCTAssertEqual(ShannonWaterlightVisualTokens.faceTop, 0x11243B)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.faceMiddle, 0x081522)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.faceBottom, 0x03070C)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.eyeTop, 0xC4FBFF)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.eyeMiddle, 0x76E7FF)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.eyeBottom, 0x6397FF)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.bodyRadiusRatio, 68.0 / 160.0, accuracy: 0.000_001)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.cornerRadiusRatio, 43.0 / 160.0, accuracy: 0.000_001)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.borderInsetRatio, 1.2 / 160.0, accuracy: 0.000_001)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.borderCornerRadiusRatio, 41.8 / 160.0, accuracy: 0.000_001)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.borderWidthRatio, 1.45 / 160.0, accuracy: 0.000_001)
+        XCTAssertEqual(ShannonWaterlightVisualTokens.scanlineSpacingRatio, 4.0 / 160.0, accuracy: 0.000_001)
+    }
+
+    func testExpressionSelectsTheApprovedBlinkProfile() {
+        XCTAssertEqual(
+            ShannonEyeRig.pose(for: .neutral, activity: .idle, elapsedTime: 0, isAnimated: true).blinkProfile,
+            .natural
+        )
+        XCTAssertEqual(
+            ShannonEyeRig.pose(for: .excited, activity: .idle, elapsedTime: 0, isAnimated: true).blinkProfile,
+            .sparse
+        )
+        XCTAssertEqual(
+            ShannonEyeRig.pose(for: .sleepy, activity: .idle, elapsedTime: 0, isAnimated: true).blinkProfile,
+            .drowsy
+        )
     }
 
     func testWaterlightHeroUsesTheApprovedEyeScale() {

@@ -131,7 +131,12 @@ extension ShannonEyeRig {
             )
         }
 
-        return Pose(style: style, energy: energy(for: expression), decor: decor)
+        return Pose(
+            style: style,
+            energy: energy(for: expression),
+            decor: decor,
+            blinkProfile: blinkProfile(for: expression)
+        )
     }
 
     private static func activityDuration(_ activity: ShannonDialogueActivity) -> Double {
@@ -170,6 +175,19 @@ extension ShannonEyeRig {
         case .sad: 0.24
         case .calm: 0.22
         case .sleepy: 0.14
+        }
+    }
+
+    private static func blinkProfile(for expression: ShannonExpressionDTO) -> BlinkProfile {
+        switch expression {
+        case .neutral, .curious: .natural
+        case .joyful: .bright
+        case .excited, .surprised, .determined: .sparse
+        case .relieved, .thinking, .tender, .calm, .sad: .slow
+        case .laughing, .bashful, .embarrassed, .confused, .concerned: .double
+        case .amused, .wry: .wink
+        case .jealous, .exasperated, .annoyed: .sideEye
+        case .sleepy: .drowsy
         }
     }
 

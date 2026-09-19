@@ -19,6 +19,7 @@ public struct ShannonWaterlightEyeView: View {
     @State private var reducedMotionReactionActive = false
     @State private var localReactionTrigger = 0
     @State private var trackingPoint: CGPoint?
+    @GestureState private var isPressed = false
 
     public init(
         expression: ShannonExpressionDTO,
@@ -33,16 +34,13 @@ public struct ShannonWaterlightEyeView: View {
         self.reactionTrigger = reactionTrigger
         self.allowsTracking = allowsTracking
     }
-
     public var body: some View {
-        let palette = ShannonPalette.resolve(colorScheme)
-
         Group {
             if reduceMotion {
-                waterlightCanvas(at: startedAt, palette: palette, isAnimated: false)
+                waterlightCanvas(at: startedAt, isAnimated: false)
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-                    waterlightCanvas(at: timeline.date, palette: palette, isAnimated: true)
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+                    waterlightCanvas(at: timeline.date, isAnimated: true)
                 }
             }
         }
@@ -83,7 +81,6 @@ public struct ShannonWaterlightEyeView: View {
 
     private func waterlightCanvas(
         at date: Date,
-        palette: ShannonPalette,
         isAnimated: Bool
     ) -> some View {
         let sample = renderedSample(at: date)
@@ -95,37 +92,44 @@ public struct ShannonWaterlightEyeView: View {
             isAnimated: isAnimated,
             tracking: trackingPoint
         )
-        return ShannonWaterlightCanvas(
-            style: sample.style,
-            pose: pose,
+        let frame = ShannonEyeRig.frame(
+            pose: .init(
+                style: sample.style,
+                energy: pose.energy,
+                decor: pose.decor,
+                blinkProfile: pose.blinkProfile
+            ),
             elapsedTime: isAnimated ? max(0, date.timeIntervalSince(startedAt)) : 0,
-            isAnimated: isAnimated,
-            palette: palette,
+            isAnimated: isAnimated
+        )
+        return ShannonWaterlightCanvas(
+            frame: frame,
             increasedContrast: colorSchemeContrast == .increased,
             blushOpacity: sample.blushOpacity
         )
         .offset(
-            x: isAnimated ? sample.style.gaze.yaw * size * 0.00065 : 0,
-            y: isAnimated ? -sample.style.gaze.pitch * size * 0.00045 : 0
+            x: isAnimated ? frame.gaze.yaw * size * 0.00075 : 0,
+            y: isAnimated ? -frame.gaze.pitch * size * 0.00050 : 0
         )
         .rotation3DEffect(
-            .degrees(isAnimated ? -sample.style.gaze.pitch * 0.095 : 0),
+            .degrees(isAnimated ? -frame.gaze.pitch * 0.095 : 0),
             axis: (x: 1, y: 0, z: 0),
             perspective: 0.62
         )
         .rotation3DEffect(
-            .degrees(isAnimated ? sample.style.gaze.yaw * 0.10 : 0),
+            .degrees(isAnimated ? frame.gaze.yaw * 0.095 : 0),
             axis: (x: 0, y: 1, z: 0),
             perspective: 0.62
         )
-        .rotationEffect(.degrees(isAnimated ? sample.style.gaze.roll * 0.08 : 0))
+        .rotationEffect(.degrees(isAnimated ? frame.gaze.roll * 0.08 : 0))
+        .scaleEffect((isAnimated && isPressed ? 0.975 : 1) * frame.breath)
     }
 
     private func renderedSample(at date: Date) -> ShannonEyeReactionSample {
         let base = displayedStyle(for: expression, activity: activity, at: date)
-        let baseBlush = ShannonEyeRig.hasPersistentBlush(expression) ? 1.0 : 0
+        let baseBlush = ShannonEyeRig.hasPersistentBlush(expression) ? 0.40 : 0
         if reduceMotion, reducedMotionReactionActive {
-            return .init(style: ShannonEyeRig.style(for: .bashful), blushOpacity: 1)
+            return .init(style: ShannonEyeRig.style(for: .bashful), blushOpacity: 0.40)
         }
         guard !reduceMotion, let reactionOrigin, let reactionStartedAt else {
             return .init(style: base, blushOpacity: baseBlush)
@@ -158,6 +162,10 @@ public struct ShannonWaterlightEyeView: View {
 
     private var faceGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .updating($isPressed) { _, isPressed, _ in
+                guard !reduceMotion else { return }
+                isPressed = true
+            }
             .onChanged { value in
                 guard allowsTracking, !reduceMotion else { return }
                 trackingPoint = CGPoint(
@@ -184,64 +192,58 @@ public struct ShannonWaterlightEyeView: View {
 }
 
 private struct ShannonWaterlightCanvas: View {
-    let style: ShannonEyeStyle
-    let pose: ShannonEyeRig.Pose
-    let elapsedTime: TimeInterval
-    let isAnimated: Bool
-    let palette: ShannonPalette
+    let frame: ShannonEyeRig.Frame
     let increasedContrast: Bool
     let blushOpacity: Double
 
     var body: some View {
-        Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, canvasSize in
+        // The approved browser study and icon are authored in sRGB.
+        Canvas(opaque: false, colorMode: .nonLinear, rendersAsynchronously: true) { context, canvasSize in
             draw(in: &context, canvasSize: canvasSize)
         }
     }
 
     private func draw(in context: inout GraphicsContext, canvasSize: CGSize) {
-        let frame = ShannonEyeRig.frame(
-            pose: .init(style: style, energy: pose.energy, decor: pose.decor),
-            elapsedTime: elapsedTime,
-            isAnimated: isAnimated
-        )
         let side = min(canvasSize.width, canvasSize.height)
-        let radius = side * 0.47
-        let center = CGPoint(
-            x: canvasSize.width / 2 + frame.driftX * radius,
-            y: canvasSize.height / 2 + frame.driftY * radius
-        )
+        let radius = side * ShannonWaterlightVisualTokens.bodyRadiusRatio
+        let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
         let bodyRect = CGRect(
             x: center.x - radius,
-            y: center.y - radius * frame.breath,
+            y: center.y - radius,
             width: radius * 2,
-            height: radius * 2 * frame.breath
+            height: radius * 2
         )
-        let bodyPath = Path(roundedRect: bodyRect, cornerRadius: side * 0.22)
+        let bodyPath = Path(
+            roundedRect: bodyRect,
+            cornerRadius: side * ShannonWaterlightVisualTokens.cornerRadiusRatio
+        )
+        let borderPath = Path(
+            roundedRect: bodyRect.insetBy(
+                dx: side * ShannonWaterlightVisualTokens.borderInsetRatio,
+                dy: side * ShannonWaterlightVisualTokens.borderInsetRatio
+            ),
+            cornerRadius: side * ShannonWaterlightVisualTokens.borderCornerRadiusRatio
+        )
 
         context.fill(
             bodyPath,
             with: .linearGradient(
                 Gradient(colors: [
-                    palette.intelligenceInk.opacity(0.96),
-                    palette.intelligenceInk,
-                    Color.black.opacity(0.98),
+                    Color(hex: ShannonWaterlightVisualTokens.faceTop),
+                    Color(hex: ShannonWaterlightVisualTokens.faceMiddle),
+                    Color(hex: ShannonWaterlightVisualTokens.faceBottom),
                 ]),
                 startPoint: CGPoint(x: bodyRect.minX, y: bodyRect.minY),
                 endPoint: CGPoint(x: bodyRect.maxX, y: bodyRect.maxY)
             )
         )
         context.stroke(
-            bodyPath,
-            with: .linearGradient(
-                Gradient(colors: [
-                    palette.intelligenceSky.opacity(increasedContrast ? 0.90 : 0.55),
-                    palette.brandPresence.opacity(increasedContrast ? 0.72 : 0.34),
-                    palette.intelligenceDepth.opacity(increasedContrast ? 0.86 : 0.58),
-                ]),
-                startPoint: CGPoint(x: bodyRect.minX, y: bodyRect.minY),
-                endPoint: CGPoint(x: bodyRect.maxX, y: bodyRect.maxY)
+            borderPath,
+            with: .color(
+                Color(hex: ShannonWaterlightVisualTokens.border)
+                    .opacity(increasedContrast ? 0.42 : 0.22)
             ),
-            lineWidth: max(1.2, side / 58)
+            lineWidth: max(1, side * ShannonWaterlightVisualTokens.borderWidthRatio)
         )
 
         var clippedContext = context
@@ -257,42 +259,58 @@ private struct ShannonWaterlightCanvas: View {
         side: CGFloat,
         in context: inout GraphicsContext
     ) {
-        let highlight = Path(
-            ellipseIn: CGRect(
-                x: bodyRect.minX - bodyRect.width * 0.22,
-                y: bodyRect.minY - bodyRect.height * 0.34,
-                width: bodyRect.width * 1.12,
-                height: bodyRect.height * 0.92
-            )
-        )
+        let highlight = Path(roundedRect: bodyRect, cornerRadius: 0)
         context.fill(
             highlight,
             with: .radialGradient(
                 Gradient(colors: [
-                    palette.intelligenceSky.opacity(increasedContrast ? 0.14 : 0.085),
-                    palette.intelligenceSky.opacity(0),
+                    Color(hex: ShannonWaterlightVisualTokens.faceGlow)
+                        .opacity(increasedContrast ? 0.44 : 0.34),
+                    Color(hex: ShannonWaterlightVisualTokens.faceGlow).opacity(0),
                 ]),
-                center: CGPoint(x: bodyRect.minX + bodyRect.width * 0.30, y: bodyRect.minY + bodyRect.height * 0.20),
+                center: CGPoint(
+                    x: bodyRect.midX,
+                    y: bodyRect.minY + bodyRect.height * 0.36
+                ),
                 startRadius: 0,
-                endRadius: bodyRect.width * 0.62
+                endRadius: bodyRect.width * 0.64
             )
         )
 
-        let lineSpacing = max(5, side / 30)
-        let lineWidth = max(1, side / 210)
+        let lineSpacing = side * ShannonWaterlightVisualTokens.scanlineSpacingRatio
+        let lineWidth = max(0.5, side * ShannonWaterlightVisualTokens.scanlineWidthRatio)
         var y = bodyRect.minY + lineSpacing
         while y < bodyRect.maxY {
             var line = Path()
             line.move(to: CGPoint(x: bodyRect.minX, y: y))
             line.addLine(to: CGPoint(x: bodyRect.maxX, y: y))
-            let highlightWeight = max(0, 1 - (y - bodyRect.minY) / (bodyRect.height * 0.72))
             context.stroke(
                 line,
-                with: .color(palette.intelligenceSky.opacity(0.018 + 0.025 * highlightWeight)),
+                with: .color(
+                    Color(hex: ShannonWaterlightVisualTokens.scanline)
+                        .opacity(increasedContrast ? 0.095 : 0.055)
+                ),
                 lineWidth: lineWidth
             )
             y += lineSpacing
         }
+
+        let scale = side / 160
+        var glassSheen = Path()
+        glassSheen.move(to: CGPoint(x: 24 * scale, y: 45 * scale))
+        glassSheen.addCurve(
+            to: CGPoint(x: 139 * scale, y: 45 * scale),
+            control1: CGPoint(x: 53 * scale, y: 23 * scale),
+            control2: CGPoint(x: 102 * scale, y: 20 * scale)
+        )
+        context.stroke(
+            glassSheen,
+            with: .color(
+                Color(hex: ShannonWaterlightVisualTokens.glassSheen)
+                    .opacity(increasedContrast ? 0.09 : 0.055)
+            ),
+            style: StrokeStyle(lineWidth: 10 * scale, lineCap: .round)
+        )
     }
 
     private func drawDecor(
@@ -302,7 +320,8 @@ private struct ShannonWaterlightCanvas: View {
         in context: inout GraphicsContext
     ) {
         guard decor.strength > 0 else { return }
-        let water = palette.intelligenceSky.opacity(0.58 * decor.strength)
+        let water = Color(hex: ShannonWaterlightVisualTokens.eyeMiddle)
+            .opacity(0.58 * decor.strength)
         switch decor.kind {
         case .none:
             break
@@ -339,7 +358,7 @@ private struct ShannonWaterlightCanvas: View {
             context.fill(
                 Path(ellipseIn: rect),
                 with: .linearGradient(
-                    Gradient(colors: [palette.intelligenceSky, palette.brandPresence, palette.intelligenceDepth]),
+                    Gradient(colors: ShannonWaterlightVisualTokens.eyeGradient),
                     startPoint: CGPoint(x: rect.minX, y: rect.minY),
                     endPoint: CGPoint(x: rect.maxX, y: rect.maxY)
                 )
@@ -392,7 +411,7 @@ private struct ShannonWaterlightCanvas: View {
             )
             context.fill(
                 Path(roundedRect: cheekRect, cornerRadius: cheekHeight / 2),
-                with: .color(palette.characterBlush.opacity(blushOpacity * 0.72))
+                with: .color(Color(hex: ShannonWaterlightVisualTokens.blush).opacity(blushOpacity))
             )
         }
     }
@@ -417,19 +436,25 @@ private struct ShannonWaterlightCanvas: View {
                 cornerRadius: min(eyeWidth, eyeHeight) / 2
             )
             eyePath = eyePath.applying(transform(for: eye, center: center, radius: radius, lid: frame.lid))
-
+            let eyeBounds = eyePath.boundingRect
             var eyeContext = context
-            eyeContext.opacity = min(1, max(0, eye.depth / 0.12))
+            eyeContext.opacity = min(1, max(0, (eye.depth - 0.08) / 0.35))
             eyeContext.fill(
                 eyePath,
                 with: .linearGradient(
                     Gradient(colors: [
-                        palette.intelligenceSky,
-                        palette.brandPresence,
-                        palette.intelligenceDepth,
+                        Color(hex: ShannonWaterlightVisualTokens.eyeTop),
+                        Color(hex: ShannonWaterlightVisualTokens.eyeMiddle),
+                        Color(hex: ShannonWaterlightVisualTokens.eyeBottom),
                     ]),
-                    startPoint: CGPoint(x: bodyRect.minX, y: bodyRect.minY),
-                    endPoint: CGPoint(x: bodyRect.maxX, y: bodyRect.maxY)
+                    startPoint: CGPoint(
+                        x: eyeBounds.minX + eyeBounds.width * 0.12,
+                        y: eyeBounds.minY
+                    ),
+                    endPoint: CGPoint(
+                        x: eyeBounds.minX + eyeBounds.width * 0.86,
+                        y: eyeBounds.maxY
+                    )
                 )
             )
 
@@ -443,8 +468,8 @@ private struct ShannonWaterlightCanvas: View {
             sheen = sheen.applying(transform(for: eye, center: center, radius: radius, lid: frame.lid))
             eyeContext.stroke(
                 sheen,
-                with: .color(.white.opacity(0.42)),
-                lineWidth: max(0.7, radius / 74)
+                with: .color(Color(hex: ShannonWaterlightVisualTokens.eyeSheen).opacity(0.48)),
+                lineWidth: max(0.7, radius * 1.8 / 68)
             )
         }
     }
@@ -455,7 +480,7 @@ private struct ShannonWaterlightCanvas: View {
         radius: CGFloat,
         lid: Double
     ) -> CGAffineTransform {
-        let blinkScale = ShannonEyeRig.blinkScale(min(lid, eye.configuration.open))
+        let blinkScale = eye.configuration.open * ShannonEyeRig.blinkScale(lid)
         let tilt = eye.configuration.tilt * .pi / 180
         let cosine = cos(tilt)
         let sine = sin(tilt)
