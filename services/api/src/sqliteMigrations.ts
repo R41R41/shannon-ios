@@ -6,7 +6,7 @@ import { conciseThreadTitle, parseSnapshot, parseTurnPayload } from './sqliteSto
 import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
 
 export class SQLiteStoreMigrator {
@@ -120,6 +120,7 @@ export class SQLiteStoreMigrator {
       if (previousVersion < 10) this.migrateThreadSummary();
       if (previousVersion < 11) this.migrateRealtimeVoiceReservations();
       if (previousVersion < 12) this.migratePlatformTurnReceipts();
+      if (previousVersion < 13) this.migrateRealtimeVoiceAllowanceExtensions();
       this.context.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }
@@ -325,6 +326,18 @@ export class SQLiteStoreMigrator {
       );
       CREATE INDEX IF NOT EXISTS realtime_voice_session_reservations_scope_day
         ON realtime_voice_session_reservations (scope_key, day_key);
+    `);
+  }
+
+  private migrateRealtimeVoiceAllowanceExtensions(): void {
+    this.context.database.exec(`
+      CREATE TABLE IF NOT EXISTS realtime_voice_allowance_extensions (
+        scope_key TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        additional_seconds INTEGER NOT NULL CHECK (additional_seconds > 0),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, day_key)
+      );
     `);
   }
 

@@ -3,6 +3,7 @@ import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRo
 import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, scalarHeader, sendJson } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
+import { handleRealtimeVoiceAllowance } from './serverRealtimeVoiceAllowanceRoute.js';
 import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
@@ -46,7 +47,6 @@ import {
 } from './voiceIdentity.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
-
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -110,7 +110,6 @@ const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
 const deviceVoiceUsage = new Map<string, { startedAt: number; count: number }>();
 const activeVoiceScopes = new Set<string>();
-
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'GET' && request.method !== 'POST') {
@@ -122,7 +121,6 @@ const server = createServer(async (request, response) => {
       await handlePairing(request, response);
       return;
     }
-
     if (url.pathname.startsWith('/v1/agent/host/')) {
       const hostToken = process.env.SHANNON_AGENT_HOST_TOKEN?.trim();
       if (!hostToken || hostToken.length < 32) {
@@ -143,12 +141,10 @@ const server = createServer(async (request, response) => {
       sendJson(response, result.status, result.body);
       return;
     }
-
     if (isPlatformBridgePath(url.pathname)) {
       await handlePlatformBridgeRequest(url.pathname, request, response, platformBridge);
       return;
     }
-
     const principal = deviceAuth ? deviceAuth.authenticate(request.headers.authorization) : null;
     const authorized = authMode === 'paired'
       ? principal !== null
@@ -157,13 +153,16 @@ const server = createServer(async (request, response) => {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
       return;
     }
-
     if (url.pathname === '/v1/voice/transcriptions') {
       await handleVoiceTranscription(request, response, principal);
       return;
     }
     if (url.pathname === '/v1/voice/realtime/calls') {
       await handleRealtimeVoiceCall(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/realtime/allowance') {
+      handleRealtimeVoiceAllowance(request, response, principal, { store: persistentStore, baseAllowanceSeconds: realtimeVoiceDailyAllowanceSeconds, now });
       return;
     }
     if (url.pathname === '/v1/voice/vision/snapshots') {
@@ -174,7 +173,6 @@ const server = createServer(async (request, response) => {
       await handleVoiceIdentityPreview(request, response, principal);
       return;
     }
-
     const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
@@ -354,11 +352,13 @@ async function handleRealtimeVoiceCall(
       brightVoice: scalarHeader(request.headers['x-shannon-voice-brightness']) === 'enabled',
     });
     const createdAt = now();
+    const dayKey = realtimeVoiceJapanDayKey(new Date(createdAt));
+    const allowance = persistentStore.realtimeVoiceAllowanceStatus(principal.scopeKey, dayKey, realtimeVoiceDailyAllowanceSeconds);
     const reservation = persistentStore.reserveRealtimeVoiceSession({
       scopeKey: principal.scopeKey,
-      dayKey: realtimeVoiceJapanDayKey(new Date(createdAt)),
+      dayKey,
       reservedSeconds: SHANNON_REALTIME_SESSION_RESERVATION_SECONDS,
-      dailyLimitSeconds: realtimeVoiceDailyAllowanceSeconds,
+      dailyLimitSeconds: allowance.totalAllowanceSeconds,
       createdAt,
     });
     if (!reservation) {

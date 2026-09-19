@@ -386,7 +386,7 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 12 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
     database.close();
   });
 
@@ -420,6 +420,47 @@ describe('SQLite Shannon persistence', () => {
     const reopened = new SQLiteShannonStore({ path, now: sequenceClock() });
     expect(reopened.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-11')).toBe(1_200);
     expect(reopened.realtimeVoiceReservedSecondsForDay('owner-a', '2026-09-12')).toBe(0);
+    reopened.close();
+  });
+
+  it('adds auditable same-day Realtime allowance without deleting reservations', () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: sequenceClock() });
+    const dayKey = '2026-09-19';
+    const request = {
+      scopeKey: 'owner-a', dayKey, reservedSeconds: 600, dailyLimitSeconds: 3_600,
+      createdAt: '2026-09-19T03:00:00.000Z',
+    };
+    for (let index = 0; index < 6; index += 1) {
+      expect(store.reserveRealtimeVoiceSession({
+        ...request, createdAt: `2026-09-19T03:${String(index * 10).padStart(2, '0')}:00.000Z`,
+      })).not.toBeNull();
+    }
+    expect(store.reserveRealtimeVoiceSession(request)).toBeNull();
+    expect(store.realtimeVoiceAllowanceStatus('owner-a', dayKey, 3_600)).toMatchObject({
+      reservedSeconds: 3_600, additionalAllowanceSeconds: 0, remainingSeconds: 0,
+    });
+
+    const extended = store.extendRealtimeVoiceAllowance(
+      'owner-a', dayKey, 3_600, 3_600, 86_400, '2026-09-19T04:00:00.000Z',
+    );
+    expect(extended).toMatchObject({
+      baseAllowanceSeconds: 3_600,
+      additionalAllowanceSeconds: 3_600,
+      totalAllowanceSeconds: 7_200,
+      reservedSeconds: 3_600,
+      remainingSeconds: 3_600,
+    });
+    expect(store.realtimeVoiceReservedSecondsForDay('owner-a', dayKey)).toBe(3_600);
+    expect(store.realtimeVoiceAllowanceStatus('owner-b', dayKey, 3_600)).toMatchObject({
+      additionalAllowanceSeconds: 0, remainingSeconds: 3_600,
+    });
+    store.close();
+
+    const reopened = new SQLiteShannonStore({ path, now: sequenceClock() });
+    expect(reopened.realtimeVoiceAllowanceStatus('owner-a', dayKey, 3_600)).toMatchObject({
+      additionalAllowanceSeconds: 3_600, reservedSeconds: 3_600, remainingSeconds: 3_600,
+    });
     reopened.close();
   });
 
@@ -495,7 +536,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 12 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
     expect(database.prepare("PRAGMA table_info('conversation_threads')").all())
       .toContainEqual(expect.objectContaining({ name: 'summary' }));
     database.close();
@@ -525,7 +566,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 12 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 13 });
     expect(database.prepare("PRAGMA table_info('realtime_voice_session_reservations')").all())
       .toContainEqual(expect.objectContaining({ name: 'reserved_seconds' }));
     database.close();

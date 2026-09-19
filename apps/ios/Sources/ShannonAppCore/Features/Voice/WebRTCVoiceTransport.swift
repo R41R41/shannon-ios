@@ -23,6 +23,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var peerConnection: RTCPeerConnection?
     var dataChannel: RTCDataChannel?
     var audioTrack: RTCAudioTrack?
+    let pitchShiftAudioDevice: ShannonPitchShiftRTCAudioDevice?
     var audioSessionObservers: [NSObjectProtocol] = []
     let iceGatheringEvents: AsyncStream<Void>
     let iceGatheringEventContinuation: AsyncStream<Void>.Continuation
@@ -35,10 +36,18 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         iceGatheringEvents = iceGatheringEventPair.stream
         iceGatheringEventContinuation = iceGatheringEventPair.continuation
         RTCInitializeSSL()
-        // Keep WebRTC's native audio device in charge of both capture and playout.
-        // Replacing it to process remote audio also replaced microphone capture and
-        // could leave a connected session with no PCM reaching transcription.
-        factory = RTCPeerConnectionFactory()
+        if let profile = ShannonRemoteVoicePitchPolicy.profile(for: .remotePlayout) {
+            let audioDevice = ShannonPitchShiftRTCAudioDevice(profile: profile)
+            pitchShiftAudioDevice = audioDevice
+            factory = RTCPeerConnectionFactory(
+                encoderFactory: RTCDefaultVideoEncoderFactory(),
+                decoderFactory: RTCDefaultVideoDecoderFactory(),
+                audioDevice: audioDevice
+            )
+        } else {
+            pitchShiftAudioDevice = nil
+            factory = RTCPeerConnectionFactory()
+        }
         super.init()
         installAudioSessionObservers()
     }
@@ -168,6 +177,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
                   let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
             switch type {
             case .began:
+                self?.pitchShiftAudioDevice?.handleInterruption(.began)
                 self?.onAudioInterruption?(.began)
             case .ended:
                 let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
@@ -178,6 +188,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
                 if options.contains(.shouldResume) {
                     try? self?.applyInputPreference()
                 }
+                self?.pitchShiftAudioDevice?.handleInterruption(event)
                 self?.onAudioInterruption?(event)
             @unknown default:
                 break
@@ -190,6 +201,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         ) { [weak self] notification in
             let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
             try? self?.applyInputPreference()
+            self?.pitchShiftAudioDevice?.handleRouteChange()
             self?.onAudioRouteChange?(Int(reason))
         })
         audioSessionObservers.append(center.addObserver(
@@ -197,6 +209,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            self?.pitchShiftAudioDevice?.handleMediaServicesReset()
             self?.onAudioServicesReset?()
         })
     }

@@ -52,6 +52,34 @@ public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     }
 }
 
+public struct ShannonRealtimeVoiceAllowanceDTO: Codable, Equatable, Sendable {
+    public let dayKey: String
+    public let baseAllowanceSeconds: Int
+    public let additionalAllowanceSeconds: Int
+    public let totalAllowanceSeconds: Int
+    public let reservedSeconds: Int
+    public let remainingSeconds: Int
+    public let maximumAllowanceSeconds: Int
+
+    public init(
+        dayKey: String,
+        baseAllowanceSeconds: Int,
+        additionalAllowanceSeconds: Int,
+        totalAllowanceSeconds: Int,
+        reservedSeconds: Int,
+        remainingSeconds: Int,
+        maximumAllowanceSeconds: Int
+    ) {
+        self.dayKey = dayKey
+        self.baseAllowanceSeconds = baseAllowanceSeconds
+        self.additionalAllowanceSeconds = additionalAllowanceSeconds
+        self.totalAllowanceSeconds = totalAllowanceSeconds
+        self.reservedSeconds = reservedSeconds
+        self.remainingSeconds = remainingSeconds
+        self.maximumAllowanceSeconds = maximumAllowanceSeconds
+    }
+}
+
 public struct ShannonLiveVoiceDelegationRequestDTO: Codable, Equatable, Sendable {
     public let scopeKey: String
     public let threadId: String?

@@ -14,7 +14,12 @@ import type {
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 import type { ActivityItem } from './memoryService.js';
 import type { LlmUsageEvent, LlmUsageStore } from './llmUsage.js';
-import type { RealtimeVoiceReservationStore, RealtimeVoiceSessionReservation, RealtimeVoiceSessionReservationRequest } from './realtimeVoice.js';
+import type {
+  RealtimeVoiceAllowanceStatus,
+  RealtimeVoiceReservationStore,
+  RealtimeVoiceSessionReservation,
+  RealtimeVoiceSessionReservationRequest,
+} from './realtimeVoice.js';
 import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, PersonalityProfile } from './knowledgeStore.js';
 import { SQLiteBackgroundJobRepository } from './sqliteBackgroundJobRepository.js';
 import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
@@ -57,6 +62,14 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   reserveRealtimeVoiceSession(request: RealtimeVoiceSessionReservationRequest): RealtimeVoiceSessionReservation | null { return this.companion.reserveRealtimeVoiceSession(request); }
   releaseRealtimeVoiceSessionReservation(reservationId: string) { return this.companion.releaseRealtimeVoiceSessionReservation(reservationId); }
   realtimeVoiceReservedSecondsForDay(scopeKey: string, dayKey: string) { return this.companion.realtimeVoiceReservedSecondsForDay(scopeKey, dayKey); }
+  realtimeVoiceAllowanceStatus(scopeKey: string, dayKey: string, baseAllowanceSeconds: number, maximumAllowanceSeconds?: number): RealtimeVoiceAllowanceStatus {
+    return this.companion.realtimeVoiceAllowanceStatus(scopeKey, dayKey, baseAllowanceSeconds, maximumAllowanceSeconds);
+  }
+  extendRealtimeVoiceAllowance(scopeKey: string, dayKey: string, baseAllowanceSeconds: number, additionalSeconds: number, maximumAllowanceSeconds: number, updatedAt: string): RealtimeVoiceAllowanceStatus | null {
+    return this.companion.extendRealtimeVoiceAllowance(
+      scopeKey, dayKey, baseAllowanceSeconds, additionalSeconds, maximumAllowanceSeconds, updatedAt,
+    );
+  }
   llmUsageSummary(scopeKey: string, monthKey: string) { return this.companion.llmUsageSummary(scopeKey, monthKey); }
 
   listThreads(scopeKey: string): readonly ConversationThread[] { return this.conversations.listThreads(scopeKey); }

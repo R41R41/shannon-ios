@@ -54,6 +54,35 @@ final class ShannonVoiceIdentityModelTests: XCTestCase {
         XCTAssertEqual(model.summary, "Cedar")
         XCTAssertNil(model.errorMessage)
     }
+
+    func testLoadsAndExtendsTodaysRealtimeVoiceAllowance() async {
+        let initial = allowance(additional: 0, remaining: 0)
+        let extended = allowance(additional: 3_600, remaining: 3_600)
+        let client = AllowanceClient(initial: initial, extended: extended)
+        let model = ShannonVoiceIdentityModel(scopeKey: "owner-a", client: client)
+
+        await model.reloadAllowance()
+        XCTAssertEqual(model.allowanceRemainingText, "約0分")
+        XCTAssertEqual(model.allowanceDetailText, "通常60分")
+        XCTAssertTrue(model.canExtendAllowance)
+
+        await model.extendAllowance()
+        XCTAssertEqual(model.allowanceRemainingText, "約60分")
+        XCTAssertEqual(model.allowanceDetailText, "通常60分 + 本日の追加60分")
+        XCTAssertNil(model.allowanceErrorMessage)
+    }
+}
+
+private func allowance(additional: Int, remaining: Int) -> ShannonRealtimeVoiceAllowanceDTO {
+    ShannonRealtimeVoiceAllowanceDTO(
+        dayKey: "2026-09-19",
+        baseAllowanceSeconds: 3_600,
+        additionalAllowanceSeconds: additional,
+        totalAllowanceSeconds: 3_600 + additional,
+        reservedSeconds: 3_600,
+        remainingSeconds: remaining,
+        maximumAllowanceSeconds: 86_400
+    )
 }
 
 private func response(
@@ -150,6 +179,28 @@ private actor DelayedVoiceIdentityClient: ShannonAPIClientProtocol {
     func finishLoad() {
         loadContinuation?.resume(returning: loadResponse)
         loadContinuation = nil
+    }
+}
+
+private actor AllowanceClient: ShannonAPIClientProtocol {
+    let initial: ShannonRealtimeVoiceAllowanceDTO
+    let extended: ShannonRealtimeVoiceAllowanceDTO
+
+    init(initial: ShannonRealtimeVoiceAllowanceDTO, extended: ShannonRealtimeVoiceAllowanceDTO) {
+        self.initial = initial
+        self.extended = extended
+    }
+
+    func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
+        throw VoiceIdentityTestError.failed
+    }
+
+    func loadRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        initial
+    }
+
+    func extendRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        extended
     }
 }
 

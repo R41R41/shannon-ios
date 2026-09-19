@@ -14,7 +14,7 @@ import type { ShannonChatModel } from './chatModel.js';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
-  brightVoice = false,
+  _brightVoice = false,
 ): string {
   return [
     '[Live voice conversation]',
@@ -22,9 +22,6 @@ export function voiceConversationInstructions(
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
     '- The user primarily speaks Japanese. If a name, number, or homophone is uncertain, ask one short confirmation instead of guessing.',
     '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
-    ...(brightVoice ? [
-      '- Use a lightly brighter, slightly higher, warm speaking tone while preserving natural Japanese rhythm and speed.',
-    ] : []),
     ...(clientDelegation ? [
       '- Handle ordinary conversation directly. Delegate requests that need current web facts, project records, tools, or longer reasoning to the client.',
       '- When delegating, briefly acknowledge the request without inventing a result, then wait for verified client context.',

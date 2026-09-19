@@ -42,6 +42,8 @@ public protocol ShannonVoiceServing: Sendable {
         mode: ShannonVoiceIdentityModeDTO,
         selectedVoice: String?
     ) async throws -> ShannonVoiceIdentityResponseDTO
+    func loadRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO
+    func extendRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO
     func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data
     func commitRealtimeVoiceTurn(
         scopeKey: String,
@@ -292,6 +294,14 @@ public extension ShannonAPIClientProtocol {
     }
 
     func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func extendRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
         throw ShannonAPIError.invalidResponse
     }
 

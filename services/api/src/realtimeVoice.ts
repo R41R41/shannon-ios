@@ -33,15 +33,41 @@ export interface RealtimeVoiceSessionReservation {
   remainingSeconds: number;
 }
 
+export interface RealtimeVoiceAllowanceStatus {
+  dayKey: string;
+  baseAllowanceSeconds: number;
+  additionalAllowanceSeconds: number;
+  totalAllowanceSeconds: number;
+  reservedSeconds: number;
+  remainingSeconds: number;
+  maximumAllowanceSeconds: number;
+}
+
 export interface RealtimeVoiceReservationStore {
   reserveRealtimeVoiceSession(
     request: RealtimeVoiceSessionReservationRequest,
   ): RealtimeVoiceSessionReservation | null;
   releaseRealtimeVoiceSessionReservation(reservationId: string): void;
+  realtimeVoiceAllowanceStatus(
+    scopeKey: string,
+    dayKey: string,
+    baseAllowanceSeconds: number,
+    maximumAllowanceSeconds?: number,
+  ): RealtimeVoiceAllowanceStatus;
+  extendRealtimeVoiceAllowance(
+    scopeKey: string,
+    dayKey: string,
+    baseAllowanceSeconds: number,
+    additionalSeconds: number,
+    maximumAllowanceSeconds: number,
+    updatedAt: string,
+  ): RealtimeVoiceAllowanceStatus | null;
 }
 
 export const SHANNON_REALTIME_SESSION_RESERVATION_SECONDS = 10 * 60;
 export const SHANNON_REALTIME_DEFAULT_DAILY_ALLOWANCE_SECONDS = 60 * 60;
+export const SHANNON_REALTIME_ALLOWANCE_EXTENSION_SECONDS = 60 * 60;
+export const SHANNON_REALTIME_MAXIMUM_DAILY_ALLOWANCE_SECONDS = 24 * 60 * 60;
 
 export type RealtimeVoiceFailureCode =
   | 'VOICE_REALTIME_NOT_CONFIGURED'

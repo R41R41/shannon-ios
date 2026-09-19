@@ -211,6 +211,30 @@ extension ShannonAPIClient {
         return try JSONDecoder().decode(ShannonVoiceIdentityResponseDTO.self, from: data)
     }
 
+    public func loadRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        try await realtimeVoiceAllowance(scopeKey: scopeKey, method: "GET")
+    }
+
+    public func extendRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        try await realtimeVoiceAllowance(scopeKey: scopeKey, method: "POST")
+    }
+
+    private func realtimeVoiceAllowance(
+        scopeKey: String,
+        method: String
+    ) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/realtime/allowance"))
+        request.httpMethod = method
+        authorize(&request, connection: connection)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        return try JSONDecoder().decode(ShannonRealtimeVoiceAllowanceDTO.self, from: data)
+    }
+
     public func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/identity/preview"))

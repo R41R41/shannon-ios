@@ -107,6 +107,43 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(updated.preference.selectedVoice, "cedar")
     }
 
+    func testAPIClientLoadsAndExtendsRealtimeVoiceAllowance() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "a", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "allowance-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        var requestCount = 0
+        let session = stubSession { request in
+            requestCount += 1
+            XCTAssertEqual(request.url?.path, "/companion/v1/voice/realtime/allowance")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertEqual(request.httpMethod, requestCount == 1 ? "GET" : "POST")
+            return try response(url: request.url!, json: [
+                "dayKey": "2026-09-19",
+                "baseAllowanceSeconds": 3_600,
+                "additionalAllowanceSeconds": requestCount == 1 ? 0 : 3_600,
+                "totalAllowanceSeconds": requestCount == 1 ? 3_600 : 7_200,
+                "reservedSeconds": 3_600,
+                "remainingSeconds": requestCount == 1 ? 0 : 3_600,
+                "maximumAllowanceSeconds": 86_400,
+            ])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let initial = try await client.loadRealtimeVoiceAllowance(scopeKey: "untrusted-client-scope")
+        let extended = try await client.extendRealtimeVoiceAllowance(scopeKey: "untrusted-client-scope")
+
+        XCTAssertEqual(initial.remainingSeconds, 0)
+        XCTAssertEqual(extended.additionalAllowanceSeconds, 3_600)
+        XCTAssertEqual(extended.remainingSeconds, 3_600)
+    }
+
     func testAPIClientLoadsAndDecidesWorldSubscriptionWithBoundScope() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "s", count: 43)
