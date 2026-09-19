@@ -12,8 +12,13 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
 
     private var delegateStorage: RTCAudioDeviceDelegate?
     private var engine: AVAudioEngine?
+    private var engineConfigurationObserver: NSObjectProtocol?
     private var sourceNode: AVAudioSourceNode?
     private var sinkNode: AVAudioSinkNode?
+    private var recordingMixerNode: AVAudioMixerNode?
+    private var playoutFormatMixerNode: AVAudioMixerNode?
+    private var pitchNode: AVAudioUnitTimePitch?
+    private var gainMixerNode: AVAudioMixerNode?
     private var recorderConverter: ShannonVoiceAudioConverter?
     private var shouldPlay = false
     private var shouldRecord = false
@@ -112,7 +117,9 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
     }
 
     func handleRouteChange() {
-        dispatchToAudioThread { device, _ in
+        dispatchToAudioThread { device, delegate in
+            delegate.notifyAudioInputInterrupted()
+            delegate.notifyAudioOutputInterrupted()
             device.shutdownEngine()
             _ = device.updateEngine()
         }
@@ -123,6 +130,7 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
             delegate.notifyAudioInputInterrupted()
             delegate.notifyAudioOutputInterrupted()
             device.shutdownEngine()
+            _ = device.updateEngine()
         }
     }
 
@@ -142,40 +150,69 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
             return true
         }
 
-        shutdownEngine()
-        let nextEngine = AVAudioEngine()
-        nextEngine.isAutoShutdownEnabled = false
-        do {
-            if !nextEngine.outputNode.isVoiceProcessingEnabled {
-                try nextEngine.outputNode.setVoiceProcessingEnabled(true)
+        let nextEngine: AVAudioEngine
+        if let engine {
+            nextEngine = engine
+        } else {
+            let createdEngine = AVAudioEngine()
+            createdEngine.isAutoShutdownEnabled = true
+            do {
+                if !createdEngine.outputNode.isVoiceProcessingEnabled {
+                    try createdEngine.outputNode.setVoiceProcessingEnabled(true)
+                }
+            } catch {
+                shutdownEngine(createdEngine)
+                recordFailure(stage: "voice_processing", error: error)
+                return false
             }
-            let ioAudioUnit = nextEngine.outputNode.auAudioUnit
+
+            nextEngine = createdEngine
+            engine = createdEngine
+            installConfigurationObserver(for: createdEngine)
+        }
+
+        let ioAudioUnit = nextEngine.outputNode.auAudioUnit
+        let shouldBypassVoiceProcessing = shouldRecord && !shouldPlay
+        if nextEngine.inputNode.isVoiceProcessingBypassed != shouldBypassVoiceProcessing {
+            nextEngine.inputNode.isVoiceProcessingBypassed = shouldBypassVoiceProcessing
+        }
+        if ioAudioUnit.isInputEnabled != shouldRecord || ioAudioUnit.isOutputEnabled != shouldPlay {
+            if nextEngine.isRunning {
+                nextEngine.stop()
+            }
             ioAudioUnit.isInputEnabled = shouldRecord
             ioAudioUnit.isOutputEnabled = shouldPlay
-        } catch {
-            shutdownEngine(nextEngine)
-            return false
         }
 
-        if shouldRecord, !configureRecording(engine: nextEngine, delegate: delegate) {
-            shutdownEngine(nextEngine)
+        if shouldRecord, sinkNode == nil, !configureRecording(engine: nextEngine, delegate: delegate) {
+            shutdownEngine()
+            recordFailure(stage: "recording_graph")
             return false
         }
-        if shouldPlay, !configurePlayout(engine: nextEngine, delegate: delegate) {
-            shutdownEngine(nextEngine)
+        if !shouldRecord {
+            removeRecordingGraph(from: nextEngine)
+        }
+        if shouldPlay, sourceNode == nil, !configurePlayout(engine: nextEngine, delegate: delegate) {
+            shutdownEngine()
+            recordFailure(stage: "playout_graph")
             return false
+        }
+        if !shouldPlay {
+            removePlayoutGraph(from: nextEngine)
         }
 
-        nextEngine.prepare()
-        do {
-            try nextEngine.start()
-            engine = nextEngine
-            recordPitchActivationIfNeeded(in: nextEngine)
-            return true
-        } catch {
-            shutdownEngine(nextEngine)
-            return false
+        if !nextEngine.isRunning {
+            nextEngine.prepare()
+            do {
+                try nextEngine.start()
+                recordPitchActivationIfNeeded(in: nextEngine)
+            } catch {
+                shutdownEngine()
+                recordFailure(stage: "engine_start", error: error)
+                return false
+            }
         }
+        return true
     }
 
     private func configureRecording(
@@ -214,17 +251,19 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
             var context = (Unmanaged.passUnretained(converter), UnsafePointer(inputData))
             return deliver(&flags, timestamp, 1, frameCount, nil, &context, render)
         }
+        let recordingMixer = AVAudioMixerNode()
 
+        engine.attach(recordingMixer)
         engine.attach(sink)
-        engine.connect(
-            inputNode,
-            to: sink,
-            fromBus: voiceProcessingBus,
-            toBus: 0,
-            format: nativeFormat
-        )
+        // AVAudioEngine exposes Voice Processing I/O's capture format on bus 1,
+        // while its graph connection is made from the input node's sole output.
+        // Connecting from bus 1 directly produces an active-looking session with
+        // silent PCM on physical iPhones.
+        engine.connect(inputNode, to: recordingMixer, format: nativeFormat)
+        engine.connect(recordingMixer, to: sink, format: nativeFormat)
         updateInputFormat(rtcFormat, delegate: delegate)
         recorderConverter = converter
+        recordingMixerNode = recordingMixer
         sinkNode = sink
         return true
     }
@@ -271,6 +310,9 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
 
         updateOutputFormat(rtcFormat, delegate: delegate)
         sourceNode = source
+        playoutFormatMixerNode = formatMixer
+        pitchNode = timePitch
+        gainMixerNode = gainMixer
         return true
     }
 
@@ -288,15 +330,78 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
         if changed { delegate.notifyAudioOutputParametersChange() }
     }
 
+    private func removeRecordingGraph(from engine: AVAudioEngine) {
+        if let sinkNode {
+            engine.disconnectNodeInput(sinkNode)
+            engine.detach(sinkNode)
+        }
+        if let recordingMixerNode {
+            engine.disconnectNodeInput(recordingMixerNode)
+            engine.disconnectNodeOutput(recordingMixerNode)
+            engine.detach(recordingMixerNode)
+        }
+        sinkNode = nil
+        recordingMixerNode = nil
+        recorderConverter = nil
+    }
+
+    private func removePlayoutGraph(from engine: AVAudioEngine) {
+        for node in [sourceNode, playoutFormatMixerNode, pitchNode, gainMixerNode].compactMap({ $0 }) {
+            engine.disconnectNodeInput(node)
+            engine.disconnectNodeOutput(node)
+            engine.detach(node)
+        }
+        sourceNode = nil
+        playoutFormatMixerNode = nil
+        pitchNode = nil
+        gainMixerNode = nil
+    }
+
     private func shutdownEngine(_ specificEngine: AVAudioEngine? = nil) {
         let target = specificEngine ?? engine
+        if specificEngine == nil, let engineConfigurationObserver {
+            NotificationCenter.default.removeObserver(engineConfigurationObserver)
+            self.engineConfigurationObserver = nil
+        }
         target?.stop()
         target?.reset()
         if specificEngine == nil {
             engine = nil
             sourceNode = nil
             sinkNode = nil
+            recordingMixerNode = nil
+            playoutFormatMixerNode = nil
+            pitchNode = nil
+            gainMixerNode = nil
             recorderConverter = nil
+        }
+    }
+
+    private func installConfigurationObserver(for engine: AVAudioEngine) {
+        engineConfigurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.dispatchToAudioThread { device, delegate in
+                delegate.notifyAudioInputInterrupted()
+                delegate.notifyAudioOutputInterrupted()
+                device.shutdownEngine()
+                _ = device.updateEngine()
+            }
+        }
+    }
+
+    private func recordFailure(stage: String, error: Error? = nil) {
+        var metadata = ["stage": stage]
+        if let error {
+            metadata["error"] = String(describing: error)
+        }
+        Task.detached(priority: .utility) {
+            ShannonVoiceDiagnostics.shared.record(
+                "realtime.audio.custom_device_failed",
+                metadata: metadata
+            )
         }
     }
 

@@ -3,68 +3,65 @@ import SwiftUI
 struct ShannonVoiceTextComposer: View {
     @Bindable var model: ShannonRealtimeVoiceSessionModel
     let palette: ShannonPalette
+    let onDismiss: () -> Void
 
     @State private var textDraft = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
-                TextField("音声会話へテキストを送る", text: $textDraft, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.plain)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: ShannonSpacing.small) {
+                TextField("メッセージ", text: $textDraft, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.roundedBorder)
                     .focused($isFocused)
                     .submitLabel(.send)
                     .onSubmit(send)
-                    .padding(.horizontal, ShannonSpacing.medium)
-                    .padding(.vertical, 10)
-                    .background(
-                        palette.canvas.opacity(0.82),
-                        in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
-                            .stroke(palette.divider.opacity(0.75), lineWidth: 0.7)
-                    }
                     .accessibilityLabel("音声会話へのテキスト入力")
 
                 Button(action: send) {
-                    Group {
-                        if model.isSendingText {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.up")
-                                .font(.body.weight(.bold))
-                        }
+                    if model.isSendingText {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.body.weight(.semibold))
+                            .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     }
-                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                    .foregroundStyle(.white)
-                    .background(palette.action, in: Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.circle)
+                .tint(palette.action)
                 .disabled(textDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !model.canSendText)
                 .accessibilityLabel(model.isSendingText ? "送信中" : "テキストを送信")
+
+                Button(action: dismissComposer) {
+                    Image(systemName: "chevron.down")
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("テキスト入力を閉じる")
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: ShannonSpacing.small) {
-                    statusLabels
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    statusLabels
-                }
+            if let message = model.textSendErrorMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(palette.danger)
             }
-            .font(.caption)
-            .foregroundStyle(palette.textSecondary)
         }
-    }
-
-    @ViewBuilder
-    private var statusLabels: some View {
-        Label(model.inputState.activeInputLabel, systemImage: "mic.fill")
-        if let message = model.textSendErrorMessage {
-            Text(message).foregroundStyle(palette.danger)
+#if os(iOS)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完了", action: dismissComposer)
+            }
+        }
+#endif
+        .task {
+            await Task.yield()
+            isFocused = true
         }
     }
 
@@ -77,9 +74,15 @@ struct ShannonVoiceTextComposer: View {
                 if textDraft.trimmingCharacters(in: .whitespacesAndNewlines) == content {
                     textDraft = ""
                 }
+                dismissComposer()
             } catch {
                 isFocused = true
             }
         }
+    }
+
+    private func dismissComposer() {
+        isFocused = false
+        onDismiss()
     }
 }

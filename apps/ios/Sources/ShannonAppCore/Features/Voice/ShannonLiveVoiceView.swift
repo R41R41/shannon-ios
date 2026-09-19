@@ -18,6 +18,7 @@ public struct ShannonLiveVoiceView: View {
     @State private var didStart = false
     @State private var pulse = false
     @State private var showsParticipantModePicker = false
+    @State private var showsTextComposer = false
 #if os(iOS)
     @State private var showsCamera = false
     @State private var pendingCameraImage: UIImage?
@@ -155,8 +156,13 @@ public struct ShannonLiveVoiceView: View {
         .foregroundStyle(palette.textPrimary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: ShannonSpacing.small) {
-                if model.phase != .failed {
-                    ShannonVoiceTextComposer(model: model, palette: palette)
+                if showsTextComposer && model.phase != .failed {
+                    ShannonVoiceTextComposer(
+                        model: model,
+                        palette: palette,
+                        onDismiss: { showsTextComposer = false }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 controls(palette)
             }
@@ -164,6 +170,10 @@ public struct ShannonLiveVoiceView: View {
                 .padding(.horizontal, ShannonSpacing.large)
                 .padding(.vertical, ShannonSpacing.small)
                 .background(.ultraThinMaterial)
+                .animation(
+                    reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0),
+                    value: showsTextComposer
+                )
         }
 #if os(iOS)
         .fullScreenCover(isPresented: $showsCamera) {
@@ -342,14 +352,17 @@ public struct ShannonLiveVoiceView: View {
             }
 #endif
 
-            ZStack {
-                Circle().fill(.thinMaterial)
-                Image(systemName: phaseSymbol)
+            Button {
+                showsTextComposer.toggle()
+            } label: {
+                Image(systemName: showsTextComposer ? "keyboard.chevron.compact.down" : "keyboard")
                     .font(.title3)
-                    .foregroundStyle(palette.action)
+                    .frame(width: 52, height: 52)
+                    .background(.thinMaterial, in: Circle())
             }
-            .frame(width: 52, height: 52)
-            .accessibilityHidden(true)
+            .buttonStyle(.plain)
+            .disabled(model.phase == .failed || !model.phase.keepsSessionActive)
+            .accessibilityLabel(showsTextComposer ? "テキスト入力を閉じる" : "テキストで入力")
         }
     }
 
@@ -475,17 +488,6 @@ public struct ShannonLiveVoiceView: View {
         }
     }
 #endif
-
-    private var phaseSymbol: String {
-        switch model.phase {
-        case .idle: "waveform"
-        case .requestingPermission, .connecting: "ellipsis"
-        case .listening: "ear.fill"
-        case .thinking: "sparkles"
-        case .speaking: "waveform.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        }
-    }
 
     private var phaseGlowOpacity: Double {
         switch model.phase {
