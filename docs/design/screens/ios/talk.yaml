@@ -1,7 +1,7 @@
 schema_version: 1
 screen_id: shannon-ios-talk
 platform: ios
-baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
+baseline_commit: 7486cfbbca3f0db77248c8107d4971239af8c2c0
 last_verified_at: 2026-09-19
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
