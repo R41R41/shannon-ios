@@ -90,8 +90,8 @@ extension ShannonConversationView {
                     Color.clear.frame(height: 1).id("conversation-bottom")
                 }
                 .padding(.horizontal, ShannonSpacing.large)
-                .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-                .padding(.bottom, ShannonWorkspaceChrome.contentBottomInset)
+                .padding(.top, ShannonSpacing.medium)
+                .padding(.bottom, ShannonSpacing.large)
             }
             .scrollIndicators(.hidden)
             .shannonKeyboardDismissMode()
@@ -114,6 +114,5 @@ extension ShannonConversationView {
             }
 #endif
         }
-        .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 }

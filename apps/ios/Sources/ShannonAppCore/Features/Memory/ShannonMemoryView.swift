@@ -23,22 +23,24 @@ public struct ShannonMemoryView: View {
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
-        NavigationStack {
+        Group {
             if showsDismissButton {
-                memoryContent(palette)
-                    .navigationTitle("シャノンの記憶")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("閉じる") { dismiss() }
-                        }
-                        ToolbarItem(placement: .primaryAction) {
-                            Button { Task { await model.reload() } } label: {
-                                Image(systemName: "arrow.clockwise")
+                NavigationStack {
+                    memoryContent(palette)
+                        .navigationTitle("シャノンの記憶")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("閉じる") { dismiss() }
                             }
-                            .disabled(model.isLoading)
-                            .accessibilityLabel("記憶を更新")
+                            ToolbarItem(placement: .primaryAction) {
+                                Button { Task { await model.reload() } } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .disabled(model.isLoading)
+                                .accessibilityLabel("記憶を更新")
+                            }
                         }
-                    }
+                }
             } else {
                 memoryContent(palette)
             }

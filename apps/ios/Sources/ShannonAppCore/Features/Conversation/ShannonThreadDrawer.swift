@@ -43,144 +43,95 @@ struct ShannonThreadDrawer: View {
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
-        VStack(spacing: 0) {
-            HStack {
-                Text("Shannon")
-                    .font(.title2.bold())
-                Spacer()
-                Button {
-                    Task {
-                        isCreating = true
-                        defer { isCreating = false }
-                        await model.createThread(title: nil)
-                        openTalk()
-                    }
-                } label: {
-                    Image(systemName: isCreating ? "ellipsis" : "square.and.pencil")
-                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                }
-                .buttonStyle(.plain)
-                .disabled(isCreating)
-                .accessibilityLabel(isCreating ? "新しいトークを作成中" : "新しいトーク")
-
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("閉じる")
-            }
-            .padding(.top, 58)
-            .padding(.horizontal, ShannonSpacing.large)
-            .padding(.bottom, ShannonSpacing.medium)
-
-            HStack(spacing: ShannonSpacing.small) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(palette.textSecondary)
-                TextField("トークを検索", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.search)
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(palette.textSecondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("検索を消去")
-                }
-            }
-            .padding(.horizontal, ShannonSpacing.medium)
-            .frame(height: 42)
-            .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.medium))
-            .padding(.horizontal, ShannonSpacing.medium)
-            .padding(.bottom, ShannonSpacing.small)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+        NavigationStack {
+            List {
+                if visibleThreads.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                        .listRowBackground(Color.clear)
+                } else {
                     if !initiativeThreads.isEmpty {
-                        drawerSectionTitle("シャノンから", symbol: "sparkles", palette: palette)
-                        ForEach(initiativeThreads, id: \.threadId) { thread in
-                            threadRow(thread, palette: palette)
+                        Section {
+                            ForEach(initiativeThreads, id: \.threadId) { thread in
+                                threadRow(thread, palette: palette)
+                            }
+                        } header: {
+                            Label("シャノンから", systemImage: "sparkles")
                         }
                     }
 
                     if !conversationThreads.isEmpty {
-                        drawerSectionTitle(isSearching ? "検索結果" : "トーク", symbol: nil, palette: palette)
-                        ForEach(conversationThreads, id: \.threadId) { thread in
-                            threadRow(thread, palette: palette)
+                        Section(isSearching ? "検索結果" : "トーク") {
+                            ForEach(conversationThreads, id: \.threadId) { thread in
+                                threadRow(thread, palette: palette)
+                            }
                         }
                     }
-
-                    if visibleThreads.isEmpty {
-                        ContentUnavailableView.search(text: searchText)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, ShannonSpacing.extraLarge)
-                    }
                 }
-                .padding(.horizontal, ShannonSpacing.small)
-            }
-            .scrollIndicators(.hidden)
 
-            if let creatingError {
-                Text(creatingError)
-                    .font(.caption)
-                    .foregroundStyle(palette.danger)
-                    .padding(ShannonSpacing.medium)
-            }
-
-            Divider()
-                .overlay(palette.divider.opacity(0.6))
-
-            VStack(spacing: ShannonSpacing.extraSmall) {
-                Button(action: openWork) {
-                    ShannonDrawerDestinationRow(
+                Section("画面") {
+                    destinationButton(
                         title: "作業全体",
                         detail: model.agentTasks.isEmpty ? "進行中の作業はありません" : "いま・これから・完了",
                         symbol: "point.3.connected.trianglepath.dotted",
                         badge: model.unreadAgentTaskCount,
-                        palette: palette
+                        palette: palette,
+                        action: openWork
                     )
-                }
-                .buttonStyle(.plain)
-
-                Button(action: openMemory) {
-                    ShannonDrawerDestinationRow(
+                    destinationButton(
                         title: "頭の中",
                         detail: "いま・知識・日記",
                         symbol: "brain.head.profile",
                         badge: nil,
-                        palette: palette
+                        palette: palette,
+                        action: openMemory
                     )
-                }
-                .buttonStyle(.plain)
-
-                Button(action: openSettings) {
-                    ShannonDrawerDestinationRow(
+                    destinationButton(
                         title: "設定",
                         detail: nil,
                         symbol: "gearshape",
                         badge: nil,
-                        palette: palette
+                        palette: palette,
+                        action: openSettings
                     )
                 }
-                .buttonStyle(.plain)
+
+                if let creatingError {
+                    Section {
+                        Label(creatingError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(palette.danger)
+                    }
+                }
             }
-            .padding(.horizontal, ShannonSpacing.small)
-            .padding(.top, ShannonSpacing.small)
-            .padding(.bottom, 28)
+            .searchable(text: $searchText, prompt: "トークを検索")
+            .navigationTitle("シャノン")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("閉じる", action: close)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task {
+                            isCreating = true
+                            defer { isCreating = false }
+                            await model.createThread(title: nil)
+                            openTalk()
+                        }
+                    } label: {
+                        if isCreating {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "square.and.pencil")
+                        }
+                    }
+                    .disabled(isCreating)
+                    .accessibilityLabel(isCreating ? "新しいトークを作成中" : "新しいトーク")
+                }
+            }
         }
-        .frame(maxHeight: .infinity)
-        .background {
-            Rectangle()
-                .fill(.regularMaterial)
-                .ignoresSafeArea(.container, edges: [.top, .bottom])
-        }
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(palette.divider.opacity(0.45)).frame(width: 0.7)
-        }
-        .shadow(color: .black.opacity(0.16), radius: 20, x: 8)
         .sheet(isPresented: Binding(
             get: { editingThread != nil },
             set: { if !$0 { editingThread = nil } }
@@ -195,6 +146,26 @@ struct ShannonThreadDrawer: View {
                 )
             }
         }
+    }
+
+    func destinationButton(
+        title: String,
+        detail: String?,
+        symbol: String,
+        badge: Int?,
+        palette: ShannonPalette,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            ShannonDrawerDestinationRow(
+                title: title,
+                detail: detail,
+                symbol: symbol,
+                badge: badge,
+                palette: palette
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     func drawerSectionTitle(_ title: String, symbol: String?, palette: ShannonPalette) -> some View {
@@ -272,12 +243,6 @@ struct ShannonThreadDrawer: View {
             }
             .accessibilityLabel("\(thread.title)の操作")
         }
-        .background(
-            thread.threadId == selectedThreadId
-                ? palette.subtleSurface.opacity(0.72)
-                : Color.clear,
-            in: RoundedRectangle(cornerRadius: ShannonShape.medium)
-        )
     }
 
     @ViewBuilder

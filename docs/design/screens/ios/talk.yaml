@@ -2,7 +2,7 @@ schema_version: 1
 screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
-last_verified_at: 2026-09-18
+last_verified_at: 2026-09-19
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -12,8 +12,10 @@ preserve:
 improve:
   - "入力中も本文の左余白を保ち、文字が容器端へ寄らない"
   - "用途の曖昧な黄色い追加ボタンを使わず、クリップで添付機能を示す"
-  - "下端の透過フェードは入力欄の背後で十分に濃くし、本文を残しながら入力操作の視認性を守る"
-  - "下端の透過フェードは入力欄と状態表示の実測高に追随し、キーボード表示中も本文を不必要に覆わない"
+  - "トーク名、トーク一覧、新規トーク、表示切替はNavigationStackの標準タイトル・ツールバー・シートで提供する"
+  - "トーク一覧、作業全体、頭の中、設定は標準Listと検索を使う一枚のシートから移動できる"
+  - "入力欄と状態表示はsafeAreaInset内の標準bar背景に置き、本文とホームインジケータへ重ならない"
+  - "非表示の作業・記憶画面が検索欄やツールバーをトーク画面へ漏らさない"
   - "入力中でもトーク一覧、新規トーク、設定、外観の直接操作を最初のタップで実行できる"
   - "生成物を会話内で確認し、ユーザーが選んだ場所へ保存できる"
   - "空状態のShannonだけはWaterlight Eyeの視線・瞬き・表情変化で静かに存在を示す"
@@ -46,15 +48,16 @@ states:
   voice_text: "送信中、送信失敗、再試行を音声接続と分離し、失敗時も入力文を失わない"
   voice_input_route: "選択希望と実際の入力経路を区別して示し、切断された外部マイクは選択不可にする"
 accessibility:
-  dynamic_type: "複数行入力、添付名、生成物名は必要に応じて伸長または安全に省略する"
+  dynamic_type: "複数行入力、添付名、生成物名は必要に応じて伸長または安全に省略する。アクセシビリティ文字サイズでは対話の補助ラベルと作業通知の副文を省き、回答・Waterlight Eye・入力操作を優先する"
   voiceover: "入力、添付、Web検索、音声、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、撮り直し、写真共有の役割を個別に読み上げる"
   target_size: "主要操作のヒット領域を44ポイント以上にする"
   focus: "入力中にTextFieldを破棄せず、会話外の明示操作ではキーボードを閉じて最初のタップをその操作へ渡す"
   reduce_motion: "入力欄の展開とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形とタップ時の照れた静止形を保つ"
 evidence:
   current:
-    - "docs/screenshots/shannon-ios-dialogue-waterlight-light-v1.png"
-    - "docs/screenshots/shannon-ios-dialogue-waterlight-dark-v1.png"
+    - "docs/screenshots/shannon-ios-dialogue-native-light-v2.png"
+    - "docs/screenshots/shannon-ios-dialogue-native-dark-v2.png"
+    - "docs/screenshots/shannon-ios-thread-list-native-light-v2.png"
     - "docs/screenshots/shannon-ios-voice-guest-light-v54.png"
     - "docs/screenshots/shannon-ios-voice-guest-dark-v54.png"
   approved: []

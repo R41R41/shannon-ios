@@ -108,7 +108,7 @@ struct ShannonAgentTaskOverviewView: View {
 #endif
         .searchable(text: $query, prompt: "作業、プロジェクト、結果を検索")
         .scrollContentBackground(.hidden)
-        .contentMargins(.top, ShannonWorkspaceChrome.contentTopInset + ShannonSpacing.medium, for: .scrollContent)
+        .contentMargins(.top, ShannonSpacing.medium, for: .scrollContent)
         .contentMargins(.bottom, ShannonSpacing.huge, for: .scrollContent)
         .refreshable {
             await model.synchronizeAgentTasks()

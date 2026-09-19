@@ -5,36 +5,61 @@ import UIKit
 import AppKit
 #endif
 extension ShannonConversationView {
-    func workspaceContent(
-        _ palette: ShannonPalette,
-        bottomSafeAreaInset: CGFloat
-    ) -> some View {
-        ZStack {
-            talkPage(palette, bottomSafeAreaInset: bottomSafeAreaInset)
-                .opacity(selectedPage == .talk ? 1 : 0)
-                .allowsHitTesting(selectedPage == .talk)
-                .accessibilityHidden(selectedPage != .talk)
+    var workspaceNavigationTitle: String {
+        guard selectedPage == .talk else { return selectedPage.title }
+        return model.threads.first(where: { $0.threadId == model.selectedThreadId })?.title ?? "トーク"
+    }
+
+    @ToolbarContentBuilder
+    var workspaceToolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button(action: openThreadDrawer) {
+                Image(systemName: "sidebar.left")
+            }
+            .accessibilityLabel("トークと画面を開く")
+            .overlay(alignment: .topTrailing) {
+                if model.totalBadgeCount > 0 {
+                    Circle()
+                        .fill(ShannonPalette.resolve(resolvedColorScheme).danger)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+
+        if selectedPage == .talk {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: toggleDisplayMode) {
+                    Image(systemName: displayMode.switchActionSymbolName)
+                }
+                .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
+
+                Button(action: createThreadFromHeader) {
+                    Image(systemName: "square.and.pencil")
+                }
+                .accessibilityLabel("新しいトーク")
+            }
+        }
+    }
+
+    func workspaceContent(_ palette: ShannonPalette) -> some View {
+        Group {
+            switch selectedPage {
+            case .talk:
+                talkPage(palette)
+            case .work:
             ShannonAgentTaskOverviewView(model: model, openTask: openAgentTask)
-                .opacity(selectedPage == .work ? 1 : 0)
-                .allowsHitTesting(selectedPage == .work)
-                .accessibilityHidden(selectedPage != .work)
+            case .memory:
             ShannonMemoryView(
                 model: memoryModel,
                 showsDismissButton: false,
-                workspaceTopInset: ShannonWorkspaceChrome.contentTopInset
+                workspaceTopInset: 0
             )
-            .ignoresSafeArea(.container, edges: [.top, .bottom])
-            .opacity(selectedPage == .memory ? 1 : 0)
-            .allowsHitTesting(selectedPage == .memory)
-            .accessibilityHidden(selectedPage != .memory)
+            }
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: selectedPage)
     }
 
-    func talkPage(
-        _ palette: ShannonPalette,
-        bottomSafeAreaInset: CGFloat
-    ) -> some View {
+    func talkPage(_ palette: ShannonPalette) -> some View {
         ZStack {
             Group {
                 switch displayMode {
@@ -45,91 +70,49 @@ extension ShannonConversationView {
                 }
             }
 
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: toggleDisplayMode) {
-                        Label(displayMode.switchActionTitle, systemImage: displayMode.switchActionSymbolName)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.textSecondary)
-                            .padding(.horizontal, ShannonSpacing.medium)
-                            .frame(minHeight: 38)
-                            .background(.thinMaterial, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
-                }
-                .padding(.horizontal, ShannonSpacing.large)
-                .padding(.top, ShannonWorkspaceChrome.contentTopInset)
-                Spacer()
-            }
         }
-        .overlay(alignment: .bottom) {
-            ZStack(alignment: .bottom) {
-                ShannonBottomReadabilityGradient(
-                    palette: palette,
-                    bottomSafeAreaInset: bottomSafeAreaInset,
-                    contentHeight: conversationBottomOverlayHeight
-                )
-                    .offset(y: bottomSafeAreaInset)
-                    .allowsHitTesting(false)
-                VStack(spacing: ShannonSpacing.small) {
-                    if let statusMessage = model.statusMessage {
-                        ShannonSnackbar(
-                            message: statusMessage,
-                            showsRetry: false,
-                            retry: {},
-                            dismiss: model.dismissStatus
-                        )
-                        .padding(.horizontal, ShannonSpacing.large)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    if let errorMessage = model.errorMessage {
-                        ShannonSnackbar(
-                            message: errorMessage,
-                            showsRetry: model.hasFailedMessage,
-                            retry: { Task { await model.retryLastFailed() } },
-                            dismiss: model.dismissError
-                        )
-                        .padding(.horizontal, ShannonSpacing.large)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    if let task = model.latestAgentTaskNotice {
-                        ShannonAgentTaskCapsule(task: task) {
-                            openAgentTask(task.id)
-                        }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    if voiceModel.phase != .idle {
-                        ShannonVoiceStatusBar(
-                            model: voiceModel,
-                            primaryAction: performTranscriptionPrimaryAction,
-                            cancel: voiceModel.cancel
-                        )
-                        .padding(.horizontal, ShannonSpacing.medium)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                    composer(palette)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: ShannonSpacing.small) {
+                if let statusMessage = model.statusMessage {
+                    ShannonSnackbar(
+                        message: statusMessage,
+                        showsRetry: false,
+                        retry: {},
+                        dismiss: model.dismissStatus
+                    )
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .background {
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: ShannonConversationBottomOverlayHeightKey.self,
-                            value: geometry.size.height
-                        )
-                    }
+                if let errorMessage = model.errorMessage {
+                    ShannonSnackbar(
+                        message: errorMessage,
+                        showsRetry: model.hasFailedMessage,
+                        retry: { Task { await model.retryLastFailed() } },
+                        dismiss: model.dismissError
+                    )
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                if let task = model.latestAgentTaskNotice {
+                    ShannonAgentTaskCapsule(task: task) {
+                        openAgentTask(task.id)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if voiceModel.phase != .idle {
+                    ShannonVoiceStatusBar(
+                        model: voiceModel,
+                        primaryAction: performTranscriptionPrimaryAction,
+                        cancel: voiceModel.cancel
+                    )
+                    .padding(.horizontal, ShannonSpacing.medium)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                composer(palette)
             }
+            .background(.bar)
         }
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
-    }
-}
-
-struct ShannonConversationBottomOverlayHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
     }
 }

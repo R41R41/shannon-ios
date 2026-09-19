@@ -25,10 +25,8 @@ public struct ShannonConversationView: View {
     @State var showsWorldSubscriptions = false
     @State var showsLiveVoice = false
     @State var showsSettings = false
+    @State var showsThreadList = false
     @State var selectedPage: ShannonWorkspacePage = .talk
-    @State var drawerProgress: CGFloat = 0
-    @State var drawerDragIsActive = false
-    @State var drawerDragStartProgress: CGFloat = 0
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
     @State var dialogueDidCopy = false
@@ -38,11 +36,11 @@ public struct ShannonConversationView: View {
     @State var composerUsesWebSearch = false
     @State var composerIsImporting = false
     @State var composerAttachmentError: String?
-    @State var conversationBottomOverlayHeight: CGFloat = ShannonWorkspaceChrome.contentBottomInset
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.scenePhase) var scenePhase
 
@@ -66,60 +64,13 @@ public struct ShannonConversationView: View {
         let activeColorScheme = resolvedColorScheme
         let palette = ShannonPalette.resolve(activeColorScheme)
 
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                workspaceContent(
-                    palette,
-                    bottomSafeAreaInset: geometry.safeAreaInsets.bottom
-                )
-
-                if selectedPage == .memory {
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        ShannonBottomReadabilityGradient(palette: palette)
-                            .ignoresSafeArea(.container, edges: .bottom)
-                    }
-                    .allowsHitTesting(false)
-                }
-
-                ShannonTopReadabilityGradient(palette: palette)
-
-                ShannonAppHeader(
-                    selection: selectedPage,
-                    unreadInitiativeCount: model.unreadInitiativeCount,
-                    openThreadDrawer: openThreadDrawer,
-                    createThread: createThreadFromHeader
-                )
-                .padding(.top, ShannonSpacing.extraSmall)
-
-                Color.black.opacity(0.22 * drawerProgress)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture { closeThreadDrawer() }
-                    .allowsHitTesting(drawerProgress > 0.01)
-
-                HStack(spacing: 0) {
-                    ShannonThreadDrawer(
-                        model: model,
-                        selectedThreadId: model.selectedThreadId,
-                        openTalk: openTalkFromDrawer,
-                        openWork: openWorkFromDrawer,
-                        openMemory: openMemoryFromDrawer,
-                        openSettings: openSettingsFromDrawer,
-                        openAgentTask: openAgentTaskFromDrawer,
-                        close: closeThreadDrawer
-                    )
-                    .frame(width: drawerWidth(for: geometry.size.width))
-                    .frame(maxHeight: .infinity)
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .offset(x: -drawerWidth(for: geometry.size.width) * (1 - drawerProgress))
-                .ignoresSafeArea(.container, edges: .all)
-                .allowsHitTesting(drawerProgress > 0.98)
-                .accessibilityHidden(drawerProgress < 0.98)
-            }
-            .simultaneousGesture(threadDrawerGesture(viewWidth: geometry.size.width))
+        NavigationStack {
+            workspaceContent(palette)
+                .navigationTitle(workspaceNavigationTitle)
+#if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+#endif
+                .toolbar { workspaceToolbar }
         }
         .background { palette.canvas.ignoresSafeArea() }
         .foregroundStyle(palette.textPrimary)
@@ -145,10 +96,6 @@ public struct ShannonConversationView: View {
         .onChange(of: model.selectedThreadId) {
             resetComposerTools()
         }
-        .onPreferenceChange(ShannonConversationBottomOverlayHeightKey.self) { height in
-            guard height > 0 else { return }
-            conversationBottomOverlayHeight = height
-        }
         .onChange(of: scenePhase) {
             if scenePhase != .active {
                 voiceModel.cancel()
@@ -166,6 +113,21 @@ public struct ShannonConversationView: View {
             settingsSheet
         }
 #endif
+        .sheet(isPresented: $showsThreadList) {
+            ShannonThreadDrawer(
+                model: model,
+                selectedThreadId: model.selectedThreadId,
+                openTalk: openTalkFromDrawer,
+                openWork: openWorkFromDrawer,
+                openMemory: openMemoryFromDrawer,
+                openSettings: openSettingsFromDrawer,
+                openAgentTask: openAgentTaskFromDrawer,
+                close: closeThreadDrawer
+            )
+#if os(iOS)
+            .presentationDetents([.large])
+#endif
+        }
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
             showsSettings = true
             showsTestFlightDelivery = true
