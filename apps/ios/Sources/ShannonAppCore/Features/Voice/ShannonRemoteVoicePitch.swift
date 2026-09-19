@@ -23,15 +23,16 @@ public enum ShannonRemoteVoicePitchPolicy {
     )
 
     public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: enabledDefaultsKey) != nil else { return true }
-        return defaults.bool(forKey: enabledDefaultsKey)
+        // Retired after the custom RTCAudioDevice interrupted microphone capture
+        // on physical devices. Keep the key and profile types only so existing
+        // preferences remain harmless and older migrations continue to compile.
+        false
     }
 
     public static func profile(
         for stream: ShannonVoiceAudioStream,
         defaults: UserDefaults = .standard
     ) -> ShannonRemoteVoicePitchProfile? {
-        guard stream == .remotePlayout, isEnabled(defaults: defaults) else { return nil }
-        return productionProfile
+        nil
     }
 }

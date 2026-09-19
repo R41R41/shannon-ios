@@ -4,17 +4,14 @@ import Testing
 
 @Suite("Shannon remote voice pitch")
 struct ShannonRemoteVoicePitchTests {
-    @Test("new installs enable the approved Marin pitch profile")
-    func defaultProfile() throws {
+    @Test("new installs keep custom WebRTC audio processing retired")
+    func defaultProfileIsRetired() throws {
         let suiteName = "ShannonRemoteVoicePitchTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        #expect(ShannonRemoteVoicePitchPolicy.isEnabled(defaults: defaults))
-        #expect(
-            ShannonRemoteVoicePitchPolicy.profile(for: .remotePlayout, defaults: defaults)
-                == ShannonRemoteVoicePitchProfile(pitchCents: 200, outputGainDecibels: -1)
-        )
+        #expect(!ShannonRemoteVoicePitchPolicy.isEnabled(defaults: defaults))
+        #expect(ShannonRemoteVoicePitchPolicy.profile(for: .remotePlayout, defaults: defaults) == nil)
     }
 
     @Test("microphone input never receives the pitch profile")
@@ -26,12 +23,12 @@ struct ShannonRemoteVoicePitchTests {
         #expect(ShannonRemoteVoicePitchPolicy.profile(for: .microphoneInput, defaults: defaults) == nil)
     }
 
-    @Test("the persisted rollback switch disables remote processing")
-    func rollbackSwitch() throws {
+    @Test("a persisted legacy opt-in cannot reactivate remote processing")
+    func legacyOptInStaysRetired() throws {
         let suiteName = "ShannonRemoteVoicePitchTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(false, forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey)
+        defaults.set(true, forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey)
 
         #expect(!ShannonRemoteVoicePitchPolicy.isEnabled(defaults: defaults))
         #expect(ShannonRemoteVoicePitchPolicy.profile(for: .remotePlayout, defaults: defaults) == nil)
