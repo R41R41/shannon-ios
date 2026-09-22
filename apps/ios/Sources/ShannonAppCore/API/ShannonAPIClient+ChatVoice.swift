@@ -117,6 +117,22 @@ extension ShannonAPIClient {
         transcript: String,
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        try await performLiveVoiceDelegation(
+            scopeKey: scopeKey,
+            threadId: threadId,
+            transcript: transcript,
+            participantMode: participantMode,
+            deviceContext: nil
+        )
+    }
+
+    public func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/live/delegations"))
         request.httpMethod = "POST"
@@ -127,7 +143,8 @@ extension ShannonAPIClient {
             scopeKey: connection?.scopeKey ?? scopeKey,
             threadId: threadId,
             transcript: transcript,
-            participantMode: participantMode
+            participantMode: participantMode,
+            deviceContext: deviceContext
         ))
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }

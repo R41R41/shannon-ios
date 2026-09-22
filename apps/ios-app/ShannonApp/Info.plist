@@ -6,6 +6,8 @@
 	<string>撮影した写真を確認してから、シャノンとの会話へ共有するためにカメラを使用します。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>シャノンと音声で会話するためにマイクを使用します。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>現在地に関する質問をしたときだけ、近くの場所や交通を調べるために位置情報を使用します。</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>

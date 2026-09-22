@@ -453,6 +453,11 @@ final class ShannonConnectionTests: XCTestCase {
             XCTAssertEqual(json["threadId"] as? String, "thread-travel")
             XCTAssertEqual(json["transcript"] as? String, "浜松の天気を調べて")
             XCTAssertEqual(json["participantMode"] as? String, "guest")
+            let context = try XCTUnwrap(json["deviceContext"] as? [String: Any])
+            XCTAssertEqual(context["timeZoneIdentifier"] as? String, "Asia/Tokyo")
+            XCTAssertEqual(context["requestedLocation"] as? Bool, true)
+            let location = try XCTUnwrap(context["location"] as? [String: Any])
+            XCTAssertEqual(location["latitude"] as? Double, 34.7038)
             return try response(url: request.url!, json: [
                 "threadId": "thread-travel",
                 "model": "gpt-5.6-luna",
@@ -466,7 +471,17 @@ final class ShannonConnectionTests: XCTestCase {
             scopeKey: "untrusted-client-scope",
             threadId: "thread-travel",
             transcript: "浜松の天気を調べて",
-            participantMode: .guest
+            participantMode: .guest,
+            deviceContext: ShannonVoiceDeviceContextDTO(
+                timeZoneIdentifier: "Asia/Tokyo",
+                requestedLocation: true,
+                location: ShannonVoiceDeviceLocationDTO(
+                    latitude: 34.7038,
+                    longitude: 137.7346,
+                    accuracyMeters: 24,
+                    observedAt: "2026-09-22T01:37:55Z"
+                )
+            )
         )
 
         XCTAssertEqual(result.threadId, "thread-travel")

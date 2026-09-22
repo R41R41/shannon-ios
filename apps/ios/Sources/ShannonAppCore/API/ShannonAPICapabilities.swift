@@ -31,6 +31,13 @@ public protocol ShannonVoiceServing: Sendable {
         transcript: String,
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO
+    func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO
     func analyzeVoiceCameraSnapshot(
         scopeKey: String,
         threadId: String?,
@@ -271,6 +278,21 @@ public extension ShannonAPIClientProtocol {
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
         throw ShannonAPIError.invalidResponse
+    }
+
+    func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        try await performLiveVoiceDelegation(
+            scopeKey: scopeKey,
+            threadId: threadId,
+            transcript: transcript,
+            participantMode: participantMode
+        )
     }
 
     func analyzeVoiceCameraSnapshot(

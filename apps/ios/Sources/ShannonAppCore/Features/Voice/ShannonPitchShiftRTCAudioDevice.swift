@@ -378,18 +378,38 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
     }
 
     private func installConfigurationObserver(for engine: AVAudioEngine) {
+        let engineIdentifier = ObjectIdentifier(engine)
         engineConfigurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
             queue: nil
         ) { [weak self] _ in
             self?.dispatchToAudioThread { device, delegate in
+                guard let activeEngine = device.engine,
+                      ObjectIdentifier(activeEngine) == engineIdentifier,
+                      (!activeEngine.isRunning || device.hasAudioFormatChanged(in: activeEngine)) else { return }
                 delegate.notifyAudioInputInterrupted()
                 delegate.notifyAudioOutputInterrupted()
                 device.shutdownEngine()
                 _ = device.updateEngine()
             }
         }
+    }
+
+    private func hasAudioFormatChanged(in engine: AVAudioEngine) -> Bool {
+        if shouldRecord {
+            let format = engine.inputNode.outputFormat(forBus: 1)
+            if inputFormat?.sampleRate != format.sampleRate || inputFormat?.channelCount != format.channelCount {
+                return true
+            }
+        }
+        if shouldPlay {
+            let format = engine.outputNode.outputFormat(forBus: 0)
+            if outputFormat?.sampleRate != format.sampleRate || outputFormat?.channelCount != format.channelCount {
+                return true
+            }
+        }
+        return false
     }
 
     private func recordFailure(stage: String, error: Error? = nil) {

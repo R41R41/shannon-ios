@@ -85,17 +85,50 @@ public struct ShannonLiveVoiceDelegationRequestDTO: Codable, Equatable, Sendable
     public let threadId: String?
     public let transcript: String
     public let participantMode: ShannonVoiceParticipantMode
+    public let deviceContext: ShannonVoiceDeviceContextDTO?
 
     public init(
         scopeKey: String,
         threadId: String?,
         transcript: String,
-        participantMode: ShannonVoiceParticipantMode
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO? = nil
     ) {
         self.scopeKey = scopeKey
         self.threadId = threadId
         self.transcript = transcript
         self.participantMode = participantMode
+        self.deviceContext = deviceContext
+    }
+}
+
+public struct ShannonVoiceDeviceLocationDTO: Codable, Equatable, Sendable {
+    public let latitude: Double
+    public let longitude: Double
+    public let accuracyMeters: Double
+    public let observedAt: String
+
+    public init(latitude: Double, longitude: Double, accuracyMeters: Double, observedAt: String) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.accuracyMeters = accuracyMeters
+        self.observedAt = observedAt
+    }
+}
+
+public struct ShannonVoiceDeviceContextDTO: Codable, Equatable, Sendable {
+    public let timeZoneIdentifier: String
+    public let requestedLocation: Bool
+    public let location: ShannonVoiceDeviceLocationDTO?
+
+    public init(
+        timeZoneIdentifier: String,
+        requestedLocation: Bool,
+        location: ShannonVoiceDeviceLocationDTO?
+    ) {
+        self.timeZoneIdentifier = timeZoneIdentifier
+        self.requestedLocation = requestedLocation
+        self.location = location
     }
 }
 

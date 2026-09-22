@@ -15,7 +15,7 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var onEvent: (@Sendable (Data) -> Void)?
     var onConnectionState: (@Sendable (ShannonWebRTCConnectionState) -> Void)?
     var onAudioInterruption: (@Sendable (ShannonRealtimeVoiceInterruptionEvent) -> Void)?
-    var onAudioRouteChange: (@Sendable (Int) -> Void)?
+    var onAudioRouteChange: (@Sendable (Int, String, String) -> Void)?
     var onAudioInputStateChange: (@Sendable (ShannonVoiceInputState) -> Void)?
     var onAudioServicesReset: (@Sendable () -> Void)?
 
@@ -28,6 +28,8 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     let iceGatheringEvents: AsyncStream<Void>
     let iceGatheringEventContinuation: AsyncStream<Void>.Continuation
     var inputPreference: ShannonVoiceInputPreference = .automatic
+    private let routeChangeLock = NSLock()
+    private var routeChangeGate = ShannonVoiceRouteChangeGate()
 
     override init() {
         let iceGatheringEventPair = AsyncStream<Void>.makeStream(
@@ -156,6 +158,9 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         try session.setActive(true)
         session.isAudioEnabled = true
         try applyInputPreference()
+        routeChangeLock.withLock {
+            routeChangeGate.seed(signature: audioRouteSignature())
+        }
     }
 
     func deactivateAudioSession() {
@@ -200,9 +205,23 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
             queue: .main
         ) { [weak self] notification in
             let reason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt ?? 0
-            try? self?.applyInputPreference()
-            self?.pitchShiftAudioDevice?.handleRouteChange()
-            self?.onAudioRouteChange?(Int(reason))
+            guard let self else { return }
+            let signature = audioRouteSignature()
+            let decision = routeChangeLock.withLock {
+                routeChangeGate.inspect(
+                    signature: signature,
+                    isSpeakerOverride: reason == AVAudioSession.RouteChangeReason.override.rawValue
+                )
+            }
+            guard decision != .unchanged else { return }
+            if decision == .rebuildAudioDevice {
+                try? applyInputPreference()
+                pitchShiftAudioDevice?.handleRouteChange()
+            }
+            let route = AVAudioSession.sharedInstance().currentRoute
+            let inputPorts = route.inputs.map(\.portType.rawValue).joined(separator: ",")
+            let outputPorts = route.outputs.map(\.portType.rawValue).joined(separator: ",")
+            onAudioRouteChange?(Int(reason), inputPorts, outputPorts)
         })
         audioSessionObservers.append(center.addObserver(
             forName: AVAudioSession.mediaServicesWereResetNotification,
@@ -253,6 +272,15 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
             isBuiltInAvailable: inputs.contains(where: { $0.portType == .builtInMic }),
             isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic })
         ))
+    }
+
+    private func audioRouteSignature() -> String {
+        let session = AVAudioSession.sharedInstance()
+        let inputs = session.currentRoute.inputs.map { "\($0.portType.rawValue):\($0.uid)" }.joined(separator: ",")
+        let outputs = session.currentRoute.outputs.map { "\($0.portType.rawValue):\($0.uid)" }.joined(separator: ",")
+        // VPIO may renegotiate sample rate and channel counts while rebuilding.
+        // Those are handled by AVAudioEngineConfigurationChange, not as new routes.
+        return "\(inputs)|\(outputs)"
     }
 
     func createOffer(on peer: RTCPeerConnection, constraints: RTCMediaConstraints) async throws -> RTCSessionDescription {

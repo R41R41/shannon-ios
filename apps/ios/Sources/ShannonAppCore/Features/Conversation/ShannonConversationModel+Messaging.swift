@@ -52,11 +52,24 @@ extension ShannonConversationModel {
         transcript: String,
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> String {
+        let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
+#if os(iOS)
+        let location = requestedLocation
+            ? await ShannonVoiceLocationProvider.shared.currentLocation()
+            : nil
+#else
+        let location: ShannonVoiceDeviceLocationDTO? = nil
+#endif
         let result = try await client.performLiveVoiceDelegation(
             scopeKey: scopeKey,
             threadId: selectedThreadId,
             transcript: transcript,
-            participantMode: participantMode
+            participantMode: participantMode,
+            deviceContext: ShannonVoiceDeviceContextDTO(
+                timeZoneIdentifier: TimeZone.current.identifier,
+                requestedLocation: requestedLocation,
+                location: location
+            )
         )
         if participantMode == .owner { selectedThreadId = result.threadId }
         return result.reply

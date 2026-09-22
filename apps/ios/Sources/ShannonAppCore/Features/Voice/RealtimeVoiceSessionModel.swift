@@ -98,12 +98,16 @@ public final class ShannonRealtimeVoiceSessionModel {
                 self?.receiveAudioInterruption(event)
             }
         }
-        transport.onAudioRouteChange = { [weak self] reason in
+        transport.onAudioRouteChange = { [weak self] reason, inputPorts, outputPorts in
             Task { @MainActor in
                 guard self?.sessionGeneration == generation else { return }
                 self?.diagnostics.record(
                     "realtime.audio.route_changed",
-                    metadata: ["reason": String(reason)]
+                    metadata: [
+                        "reason": String(reason),
+                        "input_port": inputPorts,
+                        "output_port": outputPorts,
+                    ]
                 )
             }
         }

@@ -61,6 +61,73 @@ describe('Shannon local API kernel', () => {
       generateThreadTitle: false,
     });
     expect(model.requests[0]?.systemPrompt).toContain('This lane is read-only');
+    expect(model.requests[0]?.systemPrompt).toContain('2026年9月15日');
+  });
+
+  it('passes fresh one-time device location and local clock to travel search without writing state', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-22T01:38:00.000Z',
+      { chatModel: model },
+    );
+    const result = await api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a',
+        transcript: 'ここから浜松城までバスでどう行く？',
+        deviceContext: {
+          timeZoneIdentifier: 'Asia/Tokyo',
+          requestedLocation: true,
+          location: {
+            latitude: 34.7038,
+            longitude: 137.7346,
+            accuracyMeters: 24,
+            observedAt: '2026-09-22T01:37:55.000Z',
+          },
+        },
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(model.requests[0]?.message).toBe('ここから浜松城までバスでどう行く？');
+    expect(model.requests[0]?.systemPrompt).toContain('2026年9月22日');
+    expect(model.requests[0]?.systemPrompt).toContain('10:38');
+    expect(model.requests[0]?.systemPrompt).toContain('34.7038');
+    expect(model.requests[0]?.systemPrompt).toContain('137.7346');
+    expect(model.requests[0]?.systemPrompt).toContain('Give no exact departure');
+    expect(model.requests[0]?.useWebSearch).toBe(true);
+  });
+
+  it('asks for a landmark when device location is unavailable and rejects stale or invalid coordinates', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-22T01:38:00.000Z',
+      { chatModel: model },
+    );
+    const unavailable = await api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a',
+        transcript: '現在地からの行き方を調べて',
+        deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: true },
+      },
+    });
+    expect(unavailable.status).toBe(200);
+    expect(model.requests[0]?.systemPrompt).toContain('could not provide a current location');
+
+    const invalid = await api.dispatch({
+      method: 'POST', path: '/v1/voice/live/delegations', body: {
+        scopeKey: 'owner-a',
+        transcript: 'ここからの電車を調べて',
+        deviceContext: {
+          timeZoneIdentifier: 'Asia/Tokyo',
+          requestedLocation: true,
+          location: {
+            latitude: 34.7038, longitude: 137.7346, accuracyMeters: 24,
+            observedAt: '2026-09-22T00:00:00.000Z',
+          },
+        },
+      },
+    });
+    expect(invalid.status).toBe(400);
+    expect(model.requests).toHaveLength(1);
   });
 
   it('rejects an empty GPT-Live client delegation before calling the model', async () => {

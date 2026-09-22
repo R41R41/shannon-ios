@@ -24,6 +24,7 @@ export function voiceConversationInstructions(
     '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
     ...(clientDelegation ? [
       '- Handle ordinary conversation directly. Delegate requests that need current web facts, project records, tools, or longer reasoning to the client.',
+      '- Delegate exact current time, current location, weather, train or bus routes, schedules, and service disruption questions to the client. Never guess the device location or current timetable.',
       '- When delegating, briefly acknowledge the request without inventing a result, then wait for verified client context.',
       '- Never claim that an external action, booking, purchase, deployment, or code change succeeded until the client returns a verified result.',
     ] : [
@@ -113,6 +114,8 @@ export function dispatchLiveVoiceRequest(
   if (participantMode !== 'owner' && participantMode !== 'guest') {
     return badRequest('participantMode is invalid');
   }
+  const deviceContext = validatedVoiceDeviceContext(request.body.deviceContext, dependencies.now());
+  if (deviceContext === false) return badRequest('deviceContext is invalid');
 
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined;
   return completeLiveVoiceDelegation(
@@ -120,8 +123,62 @@ export function dispatchLiveVoiceRequest(
     requestedThreadId,
     request.body.transcript.trim(),
     participantMode,
+    deviceContext,
     dependencies,
   );
+}
+
+interface VoiceDeviceContext {
+  timeZoneIdentifier: string;
+  requestedLocation: boolean;
+  location: { latitude: number; longitude: number; accuracyMeters: number } | null;
+}
+
+function validatedVoiceDeviceContext(value: unknown, nowIso: string): VoiceDeviceContext | null | false {
+  if (value === undefined || value === null) return null;
+  if (!objectBody(value)
+    || !validBoundedString(value.timeZoneIdentifier, 64)
+    || typeof value.requestedLocation !== 'boolean') return false;
+  try {
+    new Intl.DateTimeFormat('ja-JP', { timeZone: value.timeZoneIdentifier });
+  } catch {
+    return false;
+  }
+  if (value.location === undefined || value.location === null) {
+    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null };
+  }
+  if (!value.requestedLocation || !objectBody(value.location)) return false;
+  const { latitude, longitude, accuracyMeters, observedAt } = value.location;
+  const observedMilliseconds = typeof observedAt === 'string' ? Date.parse(observedAt) : NaN;
+  if (typeof latitude !== 'number' || !Number.isFinite(latitude) || Math.abs(latitude) > 90
+    || typeof longitude !== 'number' || !Number.isFinite(longitude) || Math.abs(longitude) > 180
+    || typeof accuracyMeters !== 'number' || !Number.isFinite(accuracyMeters)
+    || accuracyMeters < 0 || accuracyMeters > 1_000
+    || !Number.isFinite(observedMilliseconds)
+    || Math.abs(Date.parse(nowIso) - observedMilliseconds) > 300_000) return false;
+  return {
+    timeZoneIdentifier: value.timeZoneIdentifier,
+    requestedLocation: true,
+    location: { latitude, longitude, accuracyMeters },
+  };
+}
+
+function voiceDeviceContextPrompt(nowIso: string, context: VoiceDeviceContext | null): string {
+  const timeZone = context?.timeZoneIdentifier ?? 'Asia/Tokyo';
+  const localTime = new Intl.DateTimeFormat('ja-JP', {
+    timeZone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(new Date(nowIso));
+  const location = context?.location;
+  return [
+    '[Current request context]',
+    `Server clock: ${localTime} (${timeZone}). Use this for today's date and departure-time questions.`,
+    ...(location ? [
+      `One-time iPhone GPS for this request: latitude ${location.latitude.toFixed(4)}, longitude ${location.longitude.toFixed(4)}, accuracy about ${Math.round(location.accuracyMeters)} m. It is approximate, not a verified street address.`,
+    ] : context?.requestedLocation ? [
+      'The iPhone could not provide a current location. Ask the user for their station or nearby landmark; do not infer GPS from memory.',
+    ] : []),
+  ].join('\n');
 }
 
 async function completeLiveVoiceDelegation(
@@ -129,6 +186,7 @@ async function completeLiveVoiceDelegation(
   requestedThreadId: string | undefined,
   transcript: string,
   participantMode: VoiceParticipantMode,
+  deviceContext: VoiceDeviceContext | null,
   dependencies: LiveVoiceDependencies,
 ): Promise<ApiResponse> {
   const temporaryGuest = participantMode === 'guest';
@@ -141,6 +199,9 @@ async function completeLiveVoiceDelegation(
     '- Return concise verified facts for Shannon to paraphrase aloud. Avoid Markdown tables and long URLs.',
     '- This lane is read-only. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
+    '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
+    '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
+    voiceDeviceContextPrompt(dependencies.now(), deviceContext),
   ].join('\n');
   const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
   const basePrompt = temporaryGuest

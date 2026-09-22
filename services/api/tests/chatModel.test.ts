@@ -114,7 +114,7 @@ describe('OpenAI Responses chat adapter', () => {
       expect(body.tool_choice).toEqual({ type: 'web_search' });
       expect(body.include).toEqual(['web_search_call.action.sources']);
       expect(body.max_tool_calls).toBe(3);
-      expect(body.instructions).toContain('ユーザーがこのターンでWeb検索を明示的に有効にした');
+      expect(body.instructions).toContain('このターンではWeb検索が有効');
       return new Response(JSON.stringify({
         output_text: JSON.stringify({
           reply: '現在の情報を確認したよ。',
