@@ -17,6 +17,12 @@ final class ShannonAppIconTests: XCTestCase {
         XCTAssertNil(ShannonAppIconChoice.level06.alternateIconName)
     }
 
+    func testChatAvatarCanSelectTheSecondApprovedIconIndependently() {
+        XCTAssertEqual(ShannonChatAvatarStyle.allCases, [.expression, .secondAppIcon])
+        XCTAssertEqual(ShannonChatAvatarStyle.secondIconChoice, ShannonAppIconChoice.selectableChoices[1])
+        assertPreviewCanBeDecoded(ShannonChatAvatarStyle.secondIconChoice.previewAssetName)
+    }
+
     func testOtherLevelsUseRegisteredAlternateIconNames() {
         XCTAssertEqual(ShannonAppIconChoice.level02.alternateIconName, "ShannonL02")
         XCTAssertEqual(ShannonAppIconChoice.level10.alternateIconName, "ShannonL10")

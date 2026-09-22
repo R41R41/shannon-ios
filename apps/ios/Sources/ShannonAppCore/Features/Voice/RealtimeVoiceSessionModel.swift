@@ -248,7 +248,7 @@ public final class ShannonRealtimeVoiceSessionModel {
             }
             try transport.send(ShannonLiveVoiceClientEvent.commentary(
                 delegationID: nil,
-                content: "ユーザーが確認して共有した現在のカメラ写真についての観察です。\n\(description)"
+                content: "ユーザーが確認して共有した1枚の写真についての観察です。撮影時刻は不明です。\n\(description)"
             ))
             diagnostics.record("live.camera_snapshot.returned")
         } catch {

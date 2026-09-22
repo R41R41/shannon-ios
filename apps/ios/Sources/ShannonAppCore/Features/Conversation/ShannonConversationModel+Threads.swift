@@ -178,7 +178,8 @@ extension ShannonConversationModel {
             text: message.text,
             userMessageID: message.id,
             attachments: pendingAttachmentsByMessageID[message.id] ?? [],
-            webSearch: pendingWebSearchMessageIDs.contains(message.id)
+            webSearch: pendingWebSearchMessageIDs.contains(message.id),
+            photoJPEGData: pendingPhotoByMessageID[message.id]
         )
     }
 

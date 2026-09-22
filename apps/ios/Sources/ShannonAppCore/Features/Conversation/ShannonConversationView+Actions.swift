@@ -153,27 +153,53 @@ extension ShannonConversationView {
 
     func sendDraft() {
         voiceModel.stopSpeaking()
-        guard model.canSendDraft(attachmentCount: composerAttachments.count) else { return }
+        guard !composerIsSubmitting,
+              !composerPhotoIsLoading,
+              model.canSendDraft(attachmentCount: composerAttachments.count + (composerHasPhoto ? 1 : 0))
+        else { return }
+        composerIsSubmitting = true
         let attachments = composerAttachments
         let usesWebSearch = composerUsesWebSearch
+        let photoJPEGData = composerPhotoJPEGData
         composerAttachments = []
         composerUsesWebSearch = false
         composerAttachmentError = nil
+#if os(iOS)
+        composerPhoto = nil
+#endif
         Task {
-            await model.sendDraft(attachments: attachments, webSearch: usesWebSearch)
+            defer { composerIsSubmitting = false }
+            await model.sendDraft(
+                attachments: attachments,
+                webSearch: usesWebSearch,
+                photoJPEGData: photoJPEGData
+            )
         }
     }
+
+    var composerPhotoJPEGData: Data? {
+#if os(iOS)
+        composerPhoto?.jpegData
+#else
+        nil
+#endif
+    }
+
+    var composerHasPhoto: Bool { composerPhotoJPEGData != nil }
 
     var composerIsExpanded: Bool {
         composerIsFocused
             || !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !composerAttachments.isEmpty
+            || composerHasPhoto
             || composerUsesWebSearch
     }
 
     var composerActionIsEnabled: Bool {
+        guard !composerIsSubmitting else { return false }
         if composerHasSendableContent {
-            return model.canSendDraft(attachmentCount: composerAttachments.count)
+            return !composerPhotoIsLoading
+                && model.canSendDraft(attachmentCount: composerAttachments.count + (composerHasPhoto ? 1 : 0))
         }
         return !model.isSending
     }
@@ -206,14 +232,20 @@ extension ShannonConversationView {
     var composerHasSendableContent: Bool {
         !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !composerAttachments.isEmpty
+            || composerHasPhoto
     }
 
     func importComposerAttachments(_ result: Result<[URL], Error>) {
         do {
-            composerAttachments = try ShannonChatAttachmentLoader.load(
+            let loaded = try ShannonChatAttachmentLoader.load(
                 urls: result.get(),
                 existing: composerAttachments
             )
+            guard loaded.count + (composerHasPhoto ? 1 : 0) <= ShannonChatAttachmentLimits.maximumCount else {
+                composerAttachmentError = "写真とファイルは合わせて4件までです。"
+                return
+            }
+            composerAttachments = loaded
             composerAttachmentError = nil
         } catch {
             composerAttachmentError = (error as? LocalizedError)?.errorDescription

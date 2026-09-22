@@ -104,7 +104,7 @@ struct ShannonTypingIndicator: View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
-            ShannonAvatarView(expression: expression, size: 54)
+            ShannonChatAvatarView(expression: expression, size: 54)
             HStack(spacing: ShannonSpacing.small) {
                 ProgressView()
                     .controlSize(.small)

@@ -6,22 +6,38 @@ extension ShannonConversationModel {
         text: String,
         userMessageID: UUID,
         attachments: [ShannonChatAttachmentDTO] = [],
-        webSearch: Bool = false
+        webSearch: Bool = false,
+        photoJPEGData: Data? = nil
     ) async {
         errorMessage = nil
         isSending = true
         let titleRevisionsAtSend = titleEditRevisions
 
         do {
+            var referenceAttachments = attachments
+            if let photoJPEGData {
+                let vision = try await client.analyzeVoiceCameraSnapshot(
+                    scopeKey: scopeKey,
+                    threadId: selectedThreadId,
+                    jpegData: photoJPEGData
+                )
+                selectedThreadId = vision.threadId
+                referenceAttachments.append(ShannonChatAttachmentDTO(
+                    name: "写真の観察.txt",
+                    mimeType: "text/plain",
+                    text: "ユーザーが選んで共有した写真の視覚的な観察です。撮影時刻は不明です。\n\(vision.description)"
+                ))
+            }
             let response = try await client.send(
                 message: text,
                 scopeKey: scopeKey,
                 threadId: selectedThreadId,
-                attachments: attachments,
+                attachments: referenceAttachments,
                 webSearch: webSearch
             )
             updateDeliveryState(for: userMessageID, to: .sent)
             pendingAttachmentsByMessageID.removeValue(forKey: userMessageID)
+            pendingPhotoByMessageID.removeValue(forKey: userMessageID)
             pendingWebSearchMessageIDs.remove(userMessageID)
             state = response.state
             selectedThreadId = response.threadId
@@ -72,19 +88,24 @@ extension ShannonConversationModel {
             }
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)
-            errorMessage = "シャノンに接続できませんでした。ローカルAPIを確認してください。"
+            errorMessage = photoJPEGData == nil
+                ? "シャノンに接続できませんでした。ローカルAPIを確認してください。"
+                : "写真を確認または送信できませんでした。再試行できます。"
         }
         isSending = false
     }
 
     static func messageText(
         text: String,
-        attachments: [ShannonChatAttachmentDTO]
+        attachments: [ShannonChatAttachmentDTO],
+        includesPhoto: Bool = false
     ) -> String {
-        let instruction = text.isEmpty ? "この添付資料を確認してください。" : text
-        guard !attachments.isEmpty else { return instruction }
-        let files = attachments.map { "📎 \($0.name)" }.joined(separator: "\n")
-        return "\(instruction)\n\n\(files)"
+        let instruction = text.isEmpty
+            ? (includesPhoto ? "この写真を見てください。" : "この添付資料を確認してください。")
+            : text
+        let references = attachments.map { "📎 \($0.name)" } + (includesPhoto ? ["📷 写真"] : [])
+        guard !references.isEmpty else { return instruction }
+        return "\(instruction)\n\n\(references.joined(separator: "\n"))"
     }
 
     func updateDeliveryState(for id: UUID, to deliveryState: ConversationMessage.DeliveryState) {

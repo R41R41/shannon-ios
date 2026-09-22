@@ -36,6 +36,12 @@ extension ShannonConversationView {
                         detail: savedAppearanceMode.japaneseName,
                         symbol: savedAppearanceMode.symbolName
                     ) { showsAppearanceSettings = true }
+                    Picker("チャットのシャノンのアイコン", selection: $chatAvatarStyleRawValue) {
+                        ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
+                            Text(style.japaneseName).tag(style.rawValue)
+                        }
+                    }
+                    .accessibilityHint("シャノンの返答横に表示するアイコンを切り替えます")
                 }
 
                 Section("音声と情報") {

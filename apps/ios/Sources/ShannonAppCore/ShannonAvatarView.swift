@@ -54,6 +54,66 @@ public struct ShannonAvatarView: View {
     }
 }
 
+public enum ShannonChatAvatarStyle: String, CaseIterable, Sendable {
+    case expression
+    case secondAppIcon
+
+    public static let storageKey = "shannon.chat-avatar.style"
+    public static let secondIconChoice: ShannonAppIconChoice = .level06
+
+    public var japaneseName: String {
+        switch self {
+        case .expression: "表情アイコン"
+        case .secondAppIcon: "2つ目のアイコン（L06）"
+        }
+    }
+}
+
+public struct ShannonChatAvatarView: View {
+    public let expression: ShannonExpressionDTO
+    public let size: CGFloat
+
+    @AppStorage(ShannonChatAvatarStyle.storageKey) private var styleRawValue = ShannonChatAvatarStyle.expression.rawValue
+    @Environment(\.colorScheme) private var colorScheme
+
+    public init(expression: ShannonExpressionDTO, size: CGFloat = 44) {
+        self.expression = expression
+        self.size = size
+    }
+
+    public var body: some View {
+        if styleRawValue == ShannonChatAvatarStyle.secondAppIcon.rawValue {
+            let palette = ShannonPalette.resolve(colorScheme)
+            iconImage
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                        .stroke(palette.divider.opacity(0.75), lineWidth: max(1, size / 48))
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("シャノン、2つ目のアイコン")
+        } else {
+            ShannonAvatarView(expression: expression, size: size)
+        }
+    }
+
+    private var iconImage: Image {
+#if canImport(UIKit)
+        if let image = ShannonAppIconAssets.uiImage(for: ShannonChatAvatarStyle.secondIconChoice.previewAssetName) {
+            return Image(uiImage: image)
+        }
+#elseif canImport(AppKit)
+        if let image = ShannonAppIconAssets.nsImage(for: ShannonChatAvatarStyle.secondIconChoice.previewAssetName) {
+            return Image(nsImage: image)
+        }
+#endif
+        return Image(systemName: "person.crop.circle.fill")
+    }
+}
+
 public struct ShannonExpressionPortraitView: View {
     public let expression: ShannonExpressionDTO
 

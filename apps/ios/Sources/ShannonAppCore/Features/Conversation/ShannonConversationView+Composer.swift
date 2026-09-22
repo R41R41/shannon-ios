@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
+import PhotosUI
 #elseif canImport(AppKit)
 import AppKit
 #endif
@@ -36,6 +37,13 @@ extension ShannonConversationView {
             allowsMultipleSelection: true,
             onCompletion: importComposerAttachments
         )
+#if os(iOS)
+        .photosPicker(isPresented: $composerIsPickingPhoto, selection: $composerPhotoPickerItem, matching: .images)
+        .onChange(of: composerPhotoPickerItem) {
+            guard let composerPhotoPickerItem else { return }
+            Task { await loadComposerPhoto(composerPhotoPickerItem) }
+        }
+#endif
     }
 
     var composerTextField: some View {
@@ -53,6 +61,36 @@ extension ShannonConversationView {
 
     @ViewBuilder
     func composerContext(_ palette: ShannonPalette) -> some View {
+#if os(iOS)
+        if let composerPhoto {
+            HStack(spacing: ShannonSpacing.small) {
+                Image(uiImage: composerPhoto.preview)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: ShannonShape.small))
+                    .accessibilityLabel("送信前の写真")
+                Text("写真を添付")
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                Button {
+                    self.composerPhoto = nil
+                    composerAttachmentError = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("写真を外す")
+            }
+            .padding(.horizontal, 6)
+        }
+        if composerIsLoadingPhoto {
+            ProgressView("写真を準備中")
+                .font(.caption)
+                .padding(.horizontal, 10)
+        }
+#endif
         if !composerAttachments.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: ShannonSpacing.extraSmall) {
@@ -110,6 +148,14 @@ extension ShannonConversationView {
 
     func composerToolsButton(_ palette: ShannonPalette) -> some View {
         Menu {
+#if os(iOS)
+            Button {
+                composerIsPickingPhoto = true
+            } label: {
+                Label("写真ライブラリから追加", systemImage: "photo.on.rectangle")
+            }
+            .disabled(composerAttachments.count >= ShannonChatAttachmentLimits.maximumCount)
+#endif
             Button {
                 composerIsImporting = true
             } label: {
@@ -126,7 +172,7 @@ extension ShannonConversationView {
             }
 
             Divider()
-            Text("テキスト・Markdown・コードを4件まで")
+            Text("写真とファイルを合わせて4件まで")
         } label: {
             Image(systemName: "paperclip")
                 .font(.system(size: 18, weight: .medium))
@@ -136,9 +182,44 @@ extension ShannonConversationView {
         }
         .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
         .buttonStyle(.plain)
-        .disabled(model.isSending)
+        .disabled(model.isSending || composerIsSubmitting || composerPhotoIsLoading)
         .accessibilityLabel("添付とWeb検索")
     }
+
+    var composerPhotoIsLoading: Bool {
+#if os(iOS)
+        composerIsLoadingPhoto
+#else
+        false
+#endif
+    }
+
+#if os(iOS)
+    @MainActor
+    func loadComposerPhoto(_ item: PhotosPickerItem) async {
+        composerIsLoadingPhoto = true
+        defer {
+            if composerPhotoPickerItem == item {
+                composerIsLoadingPhoto = false
+                composerPhotoPickerItem = nil
+            }
+        }
+        do {
+            let photo = try await ShannonPhotoLibrarySelection.prepare(item)
+            guard composerPhotoPickerItem == item else { return }
+            guard composerAttachments.count < ShannonChatAttachmentLimits.maximumCount else {
+                composerAttachmentError = "写真とファイルは合わせて4件までです。"
+                return
+            }
+            composerPhoto = photo
+            composerAttachmentError = nil
+        } catch {
+            guard composerPhotoPickerItem == item else { return }
+            composerAttachmentError = (error as? LocalizedError)?.errorDescription
+                ?? "写真を読み込めませんでした。別の写真を選んでください。"
+        }
+    }
+#endif
 
     func transcriptionButton(_ palette: ShannonPalette) -> some View {
         Button(action: performTranscriptionPrimaryAction) {

@@ -64,7 +64,7 @@ export class OpenAIVoiceVisionGateway implements VoiceVisionGateway {
           model: this.model,
           instructions: [
             request.conversationContext,
-            '[One user-approved camera snapshot]',
+            '[One user-approved photo from camera or photo library; capture time is unknown]',
             'Describe only what is reasonably visible. Distinguish observation from uncertainty.',
             'Answer in concise natural Japanese for Shannon to paraphrase aloud.',
             'Do not identify an unknown person, infer sensitive traits, or claim that an external action occurred.',

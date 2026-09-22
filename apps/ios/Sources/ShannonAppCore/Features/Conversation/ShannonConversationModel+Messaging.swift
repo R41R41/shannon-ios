@@ -4,12 +4,13 @@ import Observation
 extension ShannonConversationModel {
     public func sendDraft(
         attachments: [ShannonChatAttachmentDTO] = [],
-        webSearch: Bool = false
+        webSearch: Bool = false,
+        photoJPEGData: Data? = nil
     ) async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (!text.isEmpty || !attachments.isEmpty), !isSending else { return }
+        guard (!text.isEmpty || !attachments.isEmpty || photoJPEGData != nil), !isSending else { return }
         draft = ""
-        let messageText = Self.messageText(text: text, attachments: attachments)
+        let messageText = Self.messageText(text: text, attachments: attachments, includesPhoto: photoJPEGData != nil)
         let message = ConversationMessage(role: .user, text: messageText, deliveryState: .sending)
         messages.append(message)
         if !attachments.isEmpty {
@@ -18,11 +19,15 @@ extension ShannonConversationModel {
         if webSearch {
             pendingWebSearchMessageIDs.insert(message.id)
         }
+        if let photoJPEGData {
+            pendingPhotoByMessageID[message.id] = photoJPEGData
+        }
         await send(
             text: messageText,
             userMessageID: message.id,
             attachments: attachments,
-            webSearch: webSearch
+            webSearch: webSearch,
+            photoJPEGData: photoJPEGData
         )
     }
 

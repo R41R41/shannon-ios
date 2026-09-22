@@ -276,6 +276,39 @@ final class ShannonConversationModelTests: XCTestCase {
         XCTAssertEqual(model.messages.first?.text, "今日のOpenAI情報を調べて")
     }
 
+    func testPhotoIsAnalyzedBeforeTextReplyWithoutPersistingImageBytes() async {
+        let client = AttachmentClient()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        model.draft = "この写真を見て"
+        let photo = Data(repeating: 0x42, count: 128)
+
+        await model.sendDraft(photoJPEGData: photo)
+
+        let captured = await client.captured
+        let visionBytes = await client.visionBytes
+        XCTAssertEqual(visionBytes, photo.count)
+        XCTAssertEqual(captured?.message, "この写真を見て\n\n📷 写真")
+        XCTAssertEqual(captured?.attachments.count, 1)
+        XCTAssertTrue(captured?.attachments[0].text.contains("青い看板") == true)
+        XCTAssertFalse(captured?.message.contains(photo.base64EncodedString()) == true)
+        XCTAssertEqual(model.messages.map(\.role), [.user, .shannon])
+        XCTAssertTrue(model.pendingPhotoByMessageID.isEmpty)
+    }
+
+    func testPhotoRemainsAvailableForRetryWhenAnalysisFails() async {
+        let client = AttachmentClient(visionFailuresRemaining: 1)
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        let photo = Data(repeating: 0x42, count: 128)
+
+        await model.sendDraft(photoJPEGData: photo)
+        XCTAssertEqual(model.messages.first?.deliveryState, .failed)
+        XCTAssertEqual(model.pendingPhotoByMessageID[model.messages[0].id], photo)
+
+        await model.retryLastFailed()
+        XCTAssertEqual(model.messages.first?.deliveryState, .sent)
+        XCTAssertTrue(model.pendingPhotoByMessageID.isEmpty)
+    }
+
     func testGeneratedArtifactsRemainAttachedToTheAssistantReply() async {
         let artifact = ShannonGeneratedArtifactDTO(
             name: "plan.md",
@@ -813,6 +846,29 @@ private actor AttachmentClient: ShannonAPIClientProtocol {
     }
 
     private(set) var captured: Captured?
+    private(set) var visionBytes: Int?
+    private var visionFailuresRemaining: Int
+
+    init(visionFailuresRemaining: Int = 0) {
+        self.visionFailuresRemaining = visionFailuresRemaining
+    }
+
+    func analyzeVoiceCameraSnapshot(
+        scopeKey: String,
+        threadId: String?,
+        jpegData: Data
+    ) async throws -> ShannonVoiceVisionResponseDTO {
+        if visionFailuresRemaining > 0 {
+            visionFailuresRemaining -= 1
+            throw ShannonAPIError.invalidResponse
+        }
+        visionBytes = jpegData.count
+        return ShannonVoiceVisionResponseDTO(
+            threadId: threadId ?? "test-thread",
+            model: "vision-stub",
+            description: "青い看板が写っています。"
+        )
+    }
 
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
         TestFixtures.chatResponse()

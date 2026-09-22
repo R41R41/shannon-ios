@@ -1,6 +1,7 @@
 import SwiftUI
 #if os(iOS)
 import UIKit
+import PhotosUI
 #endif
 
 public struct ShannonLiveVoiceView: View {
@@ -21,10 +22,15 @@ public struct ShannonLiveVoiceView: View {
     @State private var showsTextComposer = false
 #if os(iOS)
     @State private var showsCamera = false
+    @State private var showsPhotoSource = false
+    @State private var showsPhotoLibrary = false
+    @State private var selectedLibraryPhoto: PhotosPickerItem?
     @State private var pendingCameraImage: UIImage?
     @State private var pendingCameraData: Data?
+    @State private var pendingPhotoFromLibrary = false
     @State private var cameraErrorMessage: String?
     @State private var isSharingCameraSnapshot = false
+    @State private var isLoadingLibraryPhoto = false
 #endif
 
     public init(
@@ -132,10 +138,26 @@ public struct ShannonLiveVoiceView: View {
 
 #if os(iOS)
                         if let pendingCameraImage, let pendingCameraData {
-                            cameraPreview(
+                            ShannonVoicePhotoPreview(
                                 image: pendingCameraImage,
-                                data: pendingCameraData,
-                                palette: palette
+                                palette: palette,
+                                fromLibrary: pendingPhotoFromLibrary,
+                                isSharing: isSharingCameraSnapshot,
+                                remove: {
+                                    self.pendingCameraImage = nil
+                                    self.pendingCameraData = nil
+                                    cameraErrorMessage = nil
+                                },
+                                chooseAgain: {
+                                    self.pendingCameraImage = nil
+                                    self.pendingCameraData = nil
+                                    if pendingPhotoFromLibrary {
+                                        showsPhotoLibrary = true
+                                    } else {
+                                        presentCamera()
+                                    }
+                                },
+                                share: { shareCameraSnapshot(pendingCameraData) }
                             )
                         }
 
@@ -182,6 +204,16 @@ public struct ShannonLiveVoiceView: View {
                 onCancel: { showsCamera = false }
             )
             .ignoresSafeArea()
+        }
+        .photosPicker(isPresented: $showsPhotoLibrary, selection: $selectedLibraryPhoto, matching: .images)
+        .onChange(of: selectedLibraryPhoto) {
+            guard let selectedLibraryPhoto else { return }
+            Task { await receiveLibraryPhoto(selectedLibraryPhoto) }
+        }
+        .confirmationDialog("写真を共有", isPresented: $showsPhotoSource) {
+            Button("写真を撮る") { presentCamera() }
+            Button("写真ライブラリから選ぶ") { showsPhotoLibrary = true }
+            Button("キャンセル", role: .cancel) {}
         }
 #endif
         .task {
@@ -338,7 +370,7 @@ public struct ShannonLiveVoiceView: View {
 #if os(iOS)
             if model.engine == .live && model.participantMode.allowsCameraSharing {
                 Button {
-                    presentCamera()
+                    showsPhotoSource = true
                 } label: {
                     Image(systemName: "camera.fill")
                         .font(.title3)
@@ -346,9 +378,9 @@ public struct ShannonLiveVoiceView: View {
                         .background(.thinMaterial, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!model.phase.keepsSessionActive || isSharingCameraSnapshot)
-                .accessibilityLabel("写真を撮ってシャノンに見せる")
-                .accessibilityHint("撮影後に写真を確認してから共有できます")
+                .disabled(!model.phase.keepsSessionActive || isSharingCameraSnapshot || isLoadingLibraryPhoto)
+                .accessibilityLabel("写真をシャノンに見せる")
+                .accessibilityHint("撮影するか写真ライブラリから選び、確認してから共有できます")
             }
 #endif
 
@@ -371,6 +403,8 @@ public struct ShannonLiveVoiceView: View {
 #if os(iOS)
         pendingCameraImage = nil
         pendingCameraData = nil
+        selectedLibraryPhoto = nil
+        isLoadingLibraryPhoto = false
         cameraErrorMessage = nil
 #endif
         Task {
@@ -384,70 +418,6 @@ public struct ShannonLiveVoiceView: View {
     }
 
 #if os(iOS)
-    private func cameraPreview(image: UIImage, data: Data, palette: ShannonPalette) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: ShannonSpacing.medium) {
-                cameraPreviewImage(image)
-                cameraPreviewActions(data: data, palette: palette)
-                Spacer(minLength: 0)
-            }
-            VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                cameraPreviewImage(image)
-                cameraPreviewActions(data: data, palette: palette)
-            }
-        }
-        .padding(ShannonSpacing.small)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
-                .stroke(palette.divider.opacity(0.7), lineWidth: 0.7)
-        }
-    }
-
-    private func cameraPreviewImage(_ image: UIImage) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFill()
-            .frame(width: 72, height: 72)
-            .clipShape(RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous))
-            .accessibilityLabel("共有前の撮影写真")
-    }
-
-    private func cameraPreviewActions(data: Data, palette: ShannonPalette) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-                Text("この1枚だけを共有します")
-                    .font(.callout.weight(.semibold))
-                Text("シャノンが見た内容を音声会話へ戻します")
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
-                HStack(spacing: ShannonSpacing.small) {
-                    Button("撮り直す") {
-                        pendingCameraImage = nil
-                        pendingCameraData = nil
-                        presentCamera()
-                    }
-                    .buttonStyle(.bordered)
-                    .frame(minHeight: ShannonTouchTarget.minimum)
-
-                    Button {
-                        shareCameraSnapshot(data)
-                    } label: {
-                        if isSharingCameraSnapshot {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Text("共有")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(palette.action)
-                    .frame(minHeight: ShannonTouchTarget.minimum)
-                    .disabled(isSharingCameraSnapshot)
-                }
-                .controlSize(.regular)
-        }
-    }
-
     @MainActor
     private func receiveCameraImage(_ image: UIImage) {
         showsCamera = false
@@ -459,7 +429,33 @@ public struct ShannonLiveVoiceView: View {
         }
         pendingCameraImage = snapshot.preview
         pendingCameraData = snapshot.data
+        pendingPhotoFromLibrary = false
         cameraErrorMessage = nil
+    }
+
+    @MainActor
+    private func receiveLibraryPhoto(_ item: PhotosPickerItem) async {
+        isLoadingLibraryPhoto = true
+        defer {
+            if selectedLibraryPhoto == item {
+                isLoadingLibraryPhoto = false
+                selectedLibraryPhoto = nil
+            }
+        }
+        do {
+            let photo = try await ShannonPhotoLibrarySelection.prepare(item)
+            guard selectedLibraryPhoto == item,
+                  model.participantMode.allowsCameraSharing,
+                  model.phase.keepsSessionActive else { return }
+            pendingCameraImage = photo.preview
+            pendingCameraData = photo.jpegData
+            pendingPhotoFromLibrary = true
+            cameraErrorMessage = nil
+        } catch {
+            guard selectedLibraryPhoto == item else { return }
+            cameraErrorMessage = (error as? LocalizedError)?.errorDescription
+                ?? "写真を読み込めませんでした。もう一度お試しください。"
+        }
     }
 
     @MainActor

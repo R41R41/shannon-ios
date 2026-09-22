@@ -140,7 +140,7 @@ struct ShannonMessageRow: View {
     func shannonReply(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             HStack(alignment: .center, spacing: ShannonSpacing.extraSmall) {
-                ShannonAvatarView(
+                ShannonChatAvatarView(
                     expression: message.emotionSnapshot?.expression ?? .neutral,
                     size: 42
                 )

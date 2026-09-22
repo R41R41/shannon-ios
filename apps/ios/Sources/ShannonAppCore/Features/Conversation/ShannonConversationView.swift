@@ -1,6 +1,7 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+import PhotosUI
 #elseif canImport(AppKit)
 import AppKit
 #endif
@@ -37,9 +38,17 @@ public struct ShannonConversationView: View {
     @State var composerAttachments: [ShannonChatAttachmentDTO] = []
     @State var composerUsesWebSearch = false
     @State var composerIsImporting = false
+    @State var composerIsSubmitting = false
     @State var composerAttachmentError: String?
+#if os(iOS)
+    @State var composerPhoto: ShannonPreparedPhoto?
+    @State var composerPhotoPickerItem: PhotosPickerItem?
+    @State var composerIsPickingPhoto = false
+    @State var composerIsLoadingPhoto = false
+#endif
     @State var conversationBottomOverlayHeight: CGFloat = ShannonWorkspaceChrome.contentBottomInset
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
+    @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
