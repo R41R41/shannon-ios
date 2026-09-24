@@ -2,6 +2,83 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonVoiceConversationTests: XCTestCase {
+    func testVoiceGlowUsesTheActiveSpeakerAndKeepsThinkingMotionSemantic() {
+        let quietListening = ShannonVoiceGlowDynamics.sample(
+            phase: .listening,
+            microphoneLevel: 0,
+            playbackLevel: 0.9,
+            isMuted: false,
+            elapsedTime: 0.5,
+            reduceMotion: false
+        )
+        let voicedListening = ShannonVoiceGlowDynamics.sample(
+            phase: .listening,
+            microphoneLevel: 0.76,
+            playbackLevel: 0,
+            isMuted: false,
+            elapsedTime: 0.5,
+            reduceMotion: false
+        )
+        let speaking = ShannonVoiceGlowDynamics.sample(
+            phase: .speaking,
+            microphoneLevel: 0.95,
+            playbackLevel: 0.64,
+            isMuted: false,
+            elapsedTime: 0.5,
+            reduceMotion: false
+        )
+        let thinking = ShannonVoiceGlowDynamics.sample(
+            phase: .thinking,
+            microphoneLevel: 1,
+            playbackLevel: 1,
+            isMuted: false,
+            elapsedTime: 0.525,
+            reduceMotion: false
+        )
+
+        XCTAssertEqual(quietListening.level, 0.10, accuracy: 0.001)
+        XCTAssertEqual(voicedListening.level, 0.76, accuracy: 0.001)
+        XCTAssertEqual(speaking.level, 0.64, accuracy: 0.001)
+        XCTAssertTrue(thinking.isProcessing)
+        XCTAssertEqual(thinking.processingPosition, 1, accuracy: 0.001)
+    }
+
+    func testVoiceGlowReducedMotionAndMuteKeepStateReadableWithoutTravel() {
+        let muted = ShannonVoiceGlowDynamics.sample(
+            phase: .listening,
+            microphoneLevel: 1,
+            playbackLevel: 0,
+            isMuted: true,
+            elapsedTime: 8,
+            reduceMotion: false
+        )
+        let reducedThinking = ShannonVoiceGlowDynamics.sample(
+            phase: .thinking,
+            microphoneLevel: 0,
+            playbackLevel: 0,
+            isMuted: false,
+            elapsedTime: 8,
+            reduceMotion: true
+        )
+
+        XCTAssertEqual(muted.level, 0.10, accuracy: 0.001)
+        XCTAssertEqual(reducedThinking.level, 0.38, accuracy: 0.001)
+        XCTAssertEqual(reducedThinking.processingPosition, 0)
+        XCTAssertEqual(reducedThinking.flowPhase, 0)
+    }
+
+    func testVoiceAudioEnvelopeAttacksFasterThanItReleasesAndRejectsInvalidInput() {
+        var envelope = ShannonVoiceAudioLevelEnvelope()
+        let attacked = envelope.ingest(linearRMS: 0.25)
+        let released = envelope.ingest(linearRMS: 0)
+        let invalid = envelope.ingest(linearRMS: .nan)
+
+        XCTAssertGreaterThan(attacked, 0.3)
+        XCTAssertLessThan(released, attacked)
+        XCTAssertGreaterThan(released, 0)
+        XCTAssertLessThan(invalid, released)
+    }
+
     func testRealtimeActivePhasesAllowTransientConnectionRecovery() {
         XCTAssertFalse(ShannonRealtimeVoicePhase.idle.keepsSessionActive)
         XCTAssertTrue(ShannonRealtimeVoicePhase.requestingPermission.keepsSessionActive)

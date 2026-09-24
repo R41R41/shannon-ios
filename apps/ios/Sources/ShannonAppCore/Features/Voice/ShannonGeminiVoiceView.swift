@@ -9,6 +9,7 @@ public struct ShannonGeminiVoiceView: View {
     private let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var userTranscript = ""
     @State private var shannonTranscript = ""
     @State private var latestSpeech: ShannonGeminiSpeech?
@@ -40,6 +41,14 @@ public struct ShannonGeminiVoiceView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
+
+            ShannonVoiceGlowLayer(
+                phase: .init(voiceModel.phase),
+                microphoneLevel: 0,
+                playbackLevel: 0,
+                isMuted: false,
+                usesCompactHeight: dynamicTypeSize.isAccessibilitySize
+            )
 
             VStack(spacing: ShannonSpacing.large) {
                 HStack {

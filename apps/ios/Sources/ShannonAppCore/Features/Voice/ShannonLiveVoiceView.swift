@@ -17,7 +17,6 @@ public struct ShannonLiveVoiceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var didStart = false
-    @State private var pulse = false
     @State private var showsParticipantModePicker = false
     @State private var showsTextComposer = false
 #if os(iOS)
@@ -61,16 +60,13 @@ public struct ShannonLiveVoiceView: View {
             )
             .ignoresSafeArea()
 
-            Circle()
-                .fill(palette.intelligenceGradient)
-                .opacity(phaseGlowOpacity)
-                .frame(width: 330, height: 330)
-                .scaleEffect(pulse && !reduceMotion ? 1.08 : 0.94)
-                .blur(radius: 36)
-                .animation(
-                    reduceMotion ? nil : .easeInOut(duration: model.phase == .speaking ? 0.8 : 1.7).repeatForever(autoreverses: true),
-                    value: pulse
-                )
+            ShannonVoiceGlowLayer(
+                phase: .init(model.phase),
+                microphoneLevel: model.microphoneLevel,
+                playbackLevel: model.playbackLevel,
+                isMuted: model.isMuted,
+                usesCompactHeight: dynamicTypeSize.isAccessibilitySize
+            )
 
             VStack(spacing: 0) {
                 topBar(palette)
@@ -217,9 +213,8 @@ public struct ShannonLiveVoiceView: View {
         }
 #endif
         .task {
-            guard !didStart else { return }
+            guard !didStart, !ShannonVoiceDesignPreview.isEnabled else { return }
             didStart = true
-            pulse = true
             await model.start(
                 participantMode: .owner,
                 createCall: createCall,
@@ -485,14 +480,6 @@ public struct ShannonLiveVoiceView: View {
     }
 #endif
 
-    private var phaseGlowOpacity: Double {
-        switch model.phase {
-        case .speaking: 0.22
-        case .listening: 0.14
-        case .thinking, .connecting, .requestingPermission: 0.10
-        case .idle, .failed: 0.06
-        }
-    }
     private var embodiment: ShannonVoiceEmbodimentFrame {
         .init(phase: model.phase, pendingTools: model.pendingToolCount, expression: expression)
     }

@@ -18,6 +18,8 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
     var onAudioRouteChange: (@Sendable (Int, String, String) -> Void)?
     var onAudioInputStateChange: (@Sendable (ShannonVoiceInputState) -> Void)?
     var onAudioServicesReset: (@Sendable () -> Void)?
+    var onMicrophoneLevel: (@Sendable (Float) -> Void)?
+    var onPlaybackLevel: (@Sendable (Float) -> Void)?
 
     let factory: RTCPeerConnectionFactory
     var peerConnection: RTCPeerConnection?
@@ -51,6 +53,12 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
             factory = RTCPeerConnectionFactory()
         }
         super.init()
+        pitchShiftAudioDevice?.onMicrophoneLevel = { [weak self] level in
+            self?.onMicrophoneLevel?(level)
+        }
+        pitchShiftAudioDevice?.onPlaybackLevel = { [weak self] level in
+            self?.onPlaybackLevel?(level)
+        }
         installAudioSessionObservers()
     }
 
@@ -146,6 +154,8 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         dataChannel = nil
         peerConnection = nil
         audioTrack = nil
+        onMicrophoneLevel?(0)
+        onPlaybackLevel?(0)
         deactivateAudioSession()
     }
 
