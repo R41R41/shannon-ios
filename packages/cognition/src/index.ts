@@ -11,7 +11,9 @@ export {
   SHANNON_CORE_PROMPT,
   assembleShannonSystemPrompt,
   buildCompanionStatePrompt,
+  buildIntentPrompt,
   buildTurnCognitivePrompt,
+  selectPrimaryIntent,
   type CompanionPromptOptions,
 } from './prompt.js';
 export {
@@ -33,11 +35,13 @@ export {
 export type {
   ContextualMemory,
   ShannonActionReceipt,
+  ShannonCognitiveFrame,
   ShannonEmbodimentFrame,
   ShannonExperienceChannel,
   ShannonMemoryQuery,
   ShannonRecallReason,
   ShannonSituationSnapshot,
+  ShannonIntent,
 } from './runtime.js';
 export type {
   ActiveMemory,

@@ -49,6 +49,7 @@ import {
 } from './voiceIdentity.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
+import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -68,6 +69,7 @@ const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
   : 'marin';
 const voiceIdentityStore = new SQLiteVoiceIdentityStore(configuredDatabasePath(), automaticRealtimeVoice);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
+const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
 const voicePreviewGateway = createConfiguredVoicePreviewGateway(process.env);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
@@ -98,6 +100,7 @@ const kernel = createLocalApiKernel(now, {
   voiceIdentity: voiceIdentityStore,
   personIdentities: personIdentityStore,
   worldSubscriptions: worldStore,
+  cognitiveIntents: cognitiveIntentStore,
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);
 const port = parsePort(process.env.SHANNON_API_PORT);
@@ -255,6 +258,7 @@ function shutdown(): void {
     dailyMindStore.close();
     organizeStore.close();
     voiceIdentityStore.close();
+    cognitiveIntentStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

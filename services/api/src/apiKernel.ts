@@ -66,6 +66,12 @@ import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
 import { SQLitePersonIdentityStore, type PersonIdentityStore } from './personIdentity.js';
 import {
+  extractExplicitUserIntent,
+  InMemoryCognitiveIntentStore,
+  type CognitiveIntentStore,
+} from './cognitiveIntent.js';
+import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
+import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
   InMemoryOrganizeStore,
@@ -108,6 +114,7 @@ export interface ShannonApiKernelOptions {
   voiceIdentity?: ShannonVoiceIdentityStore;
   personIdentities?: PersonIdentityStore;
   worldSubscriptions?: WorldSubscriptionReader;
+  cognitiveIntents?: CognitiveIntentStore;
 }
 
 export class ShannonApiKernel {
@@ -130,6 +137,7 @@ export class ShannonApiKernel {
   private readonly voiceIdentity: ShannonVoiceIdentityStore;
   private readonly personIdentities: PersonIdentityStore;
   private readonly worldSubscriptions: WorldSubscriptionReader | null;
+  private readonly cognitiveIntents: CognitiveIntentStore;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -159,6 +167,7 @@ export class ShannonApiKernel {
     this.voiceIdentity = options.voiceIdentity ?? new InMemoryVoiceIdentityStore();
     this.personIdentities = options.personIdentities ?? new SQLitePersonIdentityStore(':memory:');
     this.worldSubscriptions = options.worldSubscriptions ?? null;
+    this.cognitiveIntents = options.cognitiveIntents ?? new InMemoryCognitiveIntentStore();
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -173,6 +182,7 @@ export class ShannonApiKernel {
       dailyMind: this.dailyMind,
       now: this.now,
       voice: this.voiceIdentity.read(scopeKey).effectiveVoice,
+      cognitiveIntents: this.cognitiveIntents,
     });
   }
 
@@ -313,6 +323,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals,
       personIdentities: this.personIdentities,
       worldSubscriptions: this.worldSubscriptions,
+      cognitiveIntents: this.cognitiveIntents,
       now: this.now,
     });
     if (dataResponse) return dataResponse;
@@ -327,6 +338,7 @@ export class ShannonApiKernel {
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities,
+      cognitiveIntents: this.cognitiveIntents,
       now: this.now,
     });
     if (liveVoiceResponse) return await liveVoiceResponse;
@@ -358,8 +370,12 @@ export class ShannonApiKernel {
         });
       const captured = this.stateStore.snapshot(body.scopeKey);
       const occurredAt = this.now();
+      const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
       const cognitiveContext = prepareTurnCognitiveContext(captured, this.conversationStore, {
         scopeKey: body.scopeKey, message, occurredAt, channel: 'text',
+        threadId,
+        intents: this.cognitiveIntents.list(body.scopeKey, 'active'),
+        provisionalIntent,
         participants: this.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
       });
       const basePrompt = this.knowledgeStore?.promptProjection(body.scopeKey)
@@ -386,6 +402,9 @@ export class ShannonApiKernel {
           messageEmotion, completedAt: occurredAt,
         };
         const experience = this.background.recordTurn(completedTurn);
+        recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
+          threadId, channel: 'text', action: 'command', summary: '確認済みの会話コマンドを処理した。', occurredAt,
+        });
         const lastMessage = this.conversationStore.conversationHistory(body.scopeKey, threadId).at(-1);
         if (lastMessage && session) session = this.organizeStore.setCommandThrough(body.scopeKey, session.id, lastMessage.id, this.now());
         this.background.schedule(completedTurn, experience.id);
@@ -449,6 +468,9 @@ export class ShannonApiKernel {
         completedAt: occurredAt,
       };
       const experience = this.background.recordTurn(completedTurn);
+      recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
+        threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
+      });
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };
@@ -458,6 +480,7 @@ export class ShannonApiKernel {
   waitForBackground(scopeKey: string): Promise<void> {
     return this.background.waitForIdle(scopeKey);
   }
+
 }
 
 export function createLocalApiKernel(

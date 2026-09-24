@@ -9,6 +9,7 @@ import type { ShannonMemoryStore } from './memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
+import type { CognitiveIntentStatus, CognitiveIntentStore } from './cognitiveIntent.js';
 import { badRequest, objectBody, validBoundedString, validEvent, validMemoryAction, validScopeKey, validThreadTitle } from './apiValidation.js';
 
 export interface ApiDataRouteDependencies {
@@ -20,12 +21,41 @@ export interface ApiDataRouteDependencies {
   aetherProposals: AetherProposalStore;
   personIdentities: PersonIdentityStore;
   worldSubscriptions: WorldSubscriptionReader | null;
+  cognitiveIntents: CognitiveIntentStore;
   now: () => string;
 }
 
 export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRouteDependencies): ApiResponse | undefined {
   const personResponse = dispatchPersonRequest(request, dependencies);
   if (personResponse) return personResponse;
+
+  if (request.method === 'GET' && request.path === '/v1/cognition') {
+    const scopeKey = request.query?.get('scopeKey');
+    if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    return { status: 200, body: {
+      intents: dependencies.cognitiveIntents.list(scopeKey),
+      recentCycles: dependencies.cognitiveIntents.recentCycles(scopeKey, 20),
+    } };
+  }
+
+  if (request.method === 'POST' && request.path === '/v1/cognition/intents/status') {
+    if (!objectBody(request.body)) return badRequest('JSON object body is required');
+    const scopeKey = request.body.scopeKey;
+    const intentID = request.body.intentId;
+    const status = request.body.status;
+    if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    if (!validBoundedString(intentID, 160)) return badRequest('intentId is invalid');
+    if (!isCognitiveIntentStatus(status)) return badRequest('status is invalid');
+    try {
+      const intent = dependencies.cognitiveIntents.updateStatus(scopeKey, intentID, status, dependencies.now());
+      return intent ? { status: 200, body: { intent } } : { status: 404, body: { error: 'INTENT_NOT_FOUND' } };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'COGNITIVE_INTENT_ACTIVE_CONFLICT') {
+        return { status: 409, body: { error: error.message } };
+      }
+      throw error;
+    }
+  }
 
   if (request.method === 'GET' && request.path === '/v1/threads') {
     const scopeKey = request.query?.get('scopeKey');
@@ -243,4 +273,8 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
     }
   }
   return undefined;
+}
+
+function isCognitiveIntentStatus(value: unknown): value is CognitiveIntentStatus {
+  return value === 'active' || value === 'paused' || value === 'completed' || value === 'dismissed';
 }

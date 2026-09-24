@@ -45,6 +45,31 @@ export interface ShannonActionReceipt {
   occurredAt: string;
 }
 
+/** A durable, owner-visible objective. It is evidence, not a hidden chain of thought. */
+export interface ShannonIntent {
+  id: string;
+  title: string;
+  desiredOutcome: string;
+  status: 'active' | 'paused' | 'completed' | 'dismissed';
+  source: 'explicit-user-goal';
+  sourceExperienceId?: string;
+  threadId?: string;
+  nextStep?: string;
+  priority: number;
+  confidence: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Present-tense frame shared by text and voice before either one answers. */
+export interface ShannonCognitiveFrame {
+  situation: ShannonSituationSnapshot;
+  primaryIntent?: ShannonIntent;
+  supportingIntentIDs: readonly string[];
+  recalledMemoryIDs: readonly string[];
+  responseMode: 'answer' | 'clarify' | 'propose-action';
+}
+
 /** One provider-neutral frame that any avatar renderer can consume. */
 export interface ShannonEmbodimentFrame {
   attention: 'user' | 'memory' | 'tool' | 'environment' | 'rest';

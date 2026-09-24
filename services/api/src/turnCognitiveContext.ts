@@ -1,11 +1,15 @@
 import {
   buildTurnCognitivePrompt,
+  buildIntentPrompt,
   buildCompanionStatePrompt,
+  selectPrimaryIntent,
   selectContextualMemories,
   visibleMemoryText,
   type CompanionStateSnapshot,
   type ContextualMemory,
   type ShannonExperienceChannel,
+  type ShannonCognitiveFrame,
+  type ShannonIntent,
   type ShannonSituationSnapshot,
 } from '@shannon/cognition';
 import type { ConversationStore } from './conversationStore.js';
@@ -13,6 +17,7 @@ import type { ConversationStore } from './conversationStore.js';
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;
   memories: readonly ContextualMemory[];
+  frame: ShannonCognitiveFrame;
   prompt: string;
 }
 
@@ -32,11 +37,22 @@ export function prepareTurnCognitiveContext(
     locationLabels?: readonly string[];
     currentGoal?: string;
     timeZone?: string;
+    threadId?: string;
+    intents?: readonly ShannonIntent[];
+    provisionalIntent?: ShannonIntent | null;
   },
 ): TurnCognitiveContext {
   // Current locations come only from an explicit utterance, never an old memory.
   const locations = input.locationLabels ?? [...input.message.matchAll(/(?:今は?|現在)[、\s]*([^、。\s]{2,24}?)(?:にいる|に来て|に着|です)/gu)].map(match => match[1]!);
-  const currentGoal = input.currentGoal ?? snapshot.prospectiveMemories.find(memory =>
+  const intentCandidates = [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])]
+    .filter((intent, index, rows) => rows.findIndex(candidate => candidate.id === intent.id) === index);
+  const primaryIntent = selectPrimaryIntent(
+    input.message,
+    input.threadId ?? '',
+    intentCandidates,
+    input.occurredAt,
+  );
+  const currentGoal = input.currentGoal ?? primaryIntent?.desiredOutcome ?? snapshot.prospectiveMemories.find(memory =>
     memory.status === 'pending' && visibleMemoryText(snapshot, memory.id, memory.summary)
     && memory.summary.split(/[、のをは]/u).some(piece => piece.length >= 3 && input.message.includes(piece)))?.summary;
   const candidates = [
@@ -66,12 +82,26 @@ export function prepareTurnCognitiveContext(
     ...(locations.length ? { locationLabels: Object.freeze([...locations]) } : {}),
     ...(currentGoal ? { currentGoal } : {}),
   });
+  const frame: ShannonCognitiveFrame = Object.freeze({
+    situation,
+    ...(primaryIntent ? { primaryIntent } : {}),
+    supportingIntentIDs: Object.freeze(intentCandidates.filter(intent => intent.status === 'active' && intent.id !== primaryIntent?.id).slice(0, 4).map(intent => intent.id)),
+    recalledMemoryIDs: Object.freeze(memories.map(memory => memory.id)),
+    responseMode: responseMode(input.message),
+  });
   return Object.freeze({
     situation,
     memories: Object.freeze(memories),
-    prompt: [buildTurnCognitivePrompt(situation, memories),
+    frame,
+    prompt: [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
       // KnowledgeStore projections may not yet contain the commitment extension.
       buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200 }),
     ].join('\n\n'),
   });
+}
+
+function responseMode(message: string): ShannonCognitiveFrame['responseMode'] {
+  if (/(?:予約|購入|送信|公開|配布|デプロイ|削除|変更|登録|実装|修正)(?:して|をお願い)/u.test(message)) return 'propose-action';
+  if (/^(?:それ|これ|あれ|その件)(?:を)?(?:お願い|進めて|続けて)[。.!！]?$/u.test(message.trim())) return 'clarify';
+  return 'answer';
 }

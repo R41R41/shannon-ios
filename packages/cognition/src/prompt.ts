@@ -1,5 +1,5 @@
 import type { CompanionStateSnapshot } from './types.js';
-import type { ContextualMemory, ShannonSituationSnapshot } from './runtime.js';
+import type { ContextualMemory, ShannonCognitiveFrame, ShannonIntent, ShannonSituationSnapshot } from './runtime.js';
 import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.js';
 import { filterMeaningfulInterests } from './interests.js';
 
@@ -110,4 +110,51 @@ export function buildTurnCognitivePrompt(
       : 'Relevant memories recalled for this exact turn: none. Do not invent continuity.',
     'Use recalled memories only when they naturally help. Do not recite them, expose retrieval mechanics, or pretend certainty beyond the evidence.',
   ], Math.max(0, maximumCharacters));
+}
+
+export function buildIntentPrompt(
+  frame: ShannonCognitiveFrame,
+  maximumCharacters = 1_200,
+): string {
+  const intent = frame.primaryIntent;
+  if (!intent) return '';
+  return fitSections([
+    '[Current intention frame — durable, owner-visible, and evidence-backed]',
+    `Primary objective: ${intent.title}`,
+    `Desired outcome: ${intent.desiredOutcome}`,
+    ...(intent.nextStep ? [`Next known step: ${intent.nextStep}`] : []),
+    `Evidence: explicitly stated by the user; recorded_at=${intent.createdAt}; confidence=${fixed(intent.confidence)}`,
+    `Response mode: ${frame.responseMode}`,
+    'Use this objective to maintain continuity across turns. Do not announce the frame, invent progress, or treat a proposal as completed work.',
+    'Only a verified action receipt can prove an external change. If the next step is ambiguous or consequential, ask or propose it instead of silently acting.',
+  ], Math.max(0, maximumCharacters));
+}
+
+/**
+ * Selects one bounded objective without model calls. Exact current-turn evidence,
+ * the current thread, and recency win; inactive objectives never participate.
+ */
+export function selectPrimaryIntent(
+  message: string,
+  threadId: string,
+  intents: readonly ShannonIntent[],
+  occurredAt = new Date().toISOString(),
+): ShannonIntent | undefined {
+  const terms = normalizedTerms(message);
+  return intents.filter(intent => intent.status === 'active').map(intent => {
+    const intentTerms = normalizedTerms(`${intent.title} ${intent.desiredOutcome} ${intent.nextStep ?? ''}`);
+    const overlap = terms.size
+      ? [...terms].filter(term => intentTerms.has(term)).length / terms.size
+      : 0;
+    const thread = intent.threadId === threadId ? 0.28 : 0;
+    const priority = Math.max(0, Math.min(1, intent.priority)) * 0.2;
+    const recency = Math.max(0, 0.18 - Math.max(0, Date.parse(occurredAt) - Date.parse(intent.updatedAt)) / 86_400_000 * 0.01);
+    return { intent, score: overlap * 0.7 + thread + priority + recency };
+  }).sort((left, right) => right.score - left.score || right.intent.updatedAt.localeCompare(left.intent.updatedAt))[0]?.intent;
+}
+
+function normalizedTerms(value: string): Set<string> {
+  return new Set(value.toLocaleLowerCase('ja-JP').replace(/[\s\p{P}\p{S}]+/gu, ' ')
+    .split(' ').flatMap(part => part.length >= 2 ? [part, ...part.match(/.{2,6}/gu) ?? []] : [])
+    .filter(term => term.length >= 2));
 }

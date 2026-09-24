@@ -35,16 +35,25 @@ The response path is intentionally short and uses one immutable state snapshot:
 1. Authenticate the device and resolve the conversation thread.
 2. Load the latest committed companion state.
 3. Run one bounded, read-only relevance pass over prior experience using the current utterance and situation cues. This pure pass does not write shared state, call another model, or wait for the background worker.
-4. Assemble the minimal identity prompt, prompt projection, turn-specific recalled memories, relevant Aether context, active agent-task projection, and bounded conversation history.
-5. Call the fixed chat model once with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work.
-6. Store the assistant reply and its selected expression.
-7. Enqueue non-blocking emotion, durable memory, prospective-memory, and activity work.
+4. Select one owner-visible active intention using current-turn evidence, thread affinity, priority, and recency. An explicitly stated goal in the current utterance participates provisionally so the same reply can honor it, but is persisted only after the turn succeeds.
+5. Assemble the minimal identity prompt, prompt projection, turn-specific recalled memories, selected intention, relevant Aether context, active agent-task projection, and bounded conversation history.
+6. Call the fixed chat model once with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work.
+7. Store the assistant reply and its selected expression, then persist the explicit intention and a bounded cognitive-cycle receipt containing only visible inputs, selected IDs, action class, outcome, and summary. It never stores hidden chain-of-thought.
+8. Enqueue non-blocking emotion, durable memory, prospective-memory, and activity work.
 
 For a newly created thread without an explicit title, the first successful user/assistant exchange also produces a short title in that same model call. The store commits the title and both messages in one transaction, rechecking title ownership after the model returns. Manual edits always win, including an explicit edit to `新しいトーク`. Missing or invalid title metadata falls back to a bounded excerpt of the user message without failing the reply. The chat response includes the committed thread so iOS can update and cache its list immediately; older responses still use the existing thread-list refresh.
 
 SQLite schema v8 adds `conversation_threads.title_origin` (`pending`, `automatic`, or `manual`). Migration preserves all existing titles as manual because older rows have no edit provenance. Only newly created untitled threads are eligible for automatic naming. The migration is additive and runs inside the existing restart-safe migration transaction.
 
 Emotion and memory updates affect the next reply after they commit. Prediction-error processing is not part of v1.
+
+## Intention and cognitive-cycle lane
+
+Text chat and owner-mode live voice share the same intention frame. Conservative Japanese rules capture only explicit owner goals such as a stated objective or a concrete request to build, improve, integrate, or finish something. Negated goals, vague continuation phrases, questions, and guest voice sessions do not create durable intentions. Matching active goals are deduplicated rather than multiplied by repeated wording.
+
+`GET /v1/cognition` exposes the owner's intention ledger and recent bounded cycle receipts. `POST /v1/cognition/intents/status` can pause, reactivate, complete, or dismiss one exact intention. The prompt treats an intention as continuity evidence, never proof that work occurred; only the existing verified action or agent-task receipts can establish an external change.
+
+This lane is the first durable perceive → recall → intend → respond → record vertical slice. It does not yet decompose goals into multi-step plans, choose autonomous external actions, or mark goals complete from model prose. Those remain later bounded extensions over the same owner-visible ledger.
 
 ## Legacy platform convergence
 
@@ -239,7 +248,7 @@ Due, visible, pending commitments can also supply a candidate to that same loop.
 
 Turn recall now uses observed timestamps for recency, explicit location mentions, explicitly named registered participants and a matching current commitment. Retrieved items carry their evidence time. A small deterministic synonym map handles selected paraphrases; there is no embedding index or general semantic retrieval yet. Memory-sensitive voice questions are instructed to consult fresh backend state, but this remains provider tool-use behavior to evaluate on-device, not a guaranteed per-audio-frame shared-context update.
 
-Waterlight consumes a native provider-neutral embodiment frame derived from actual speaking/listening/tool activity. This connects tool attention to the displayed state without changing audio processing. The TypeScript runtime types are contract scaffolding, not a new universal planner. Live2D rendering, broader goal planning, cross-platform shared action orchestration and model-quality A/B evaluation remain separate work.
+Waterlight consumes a native provider-neutral embodiment frame derived from actual speaking/listening/tool activity. This connects tool attention to the displayed state without changing audio processing. The TypeScript runtime types and durable intention ledger now provide one bounded response orchestrator, not a universal planner. Live2D rendering, multi-step goal planning, cross-platform shared action orchestration and model-quality A/B evaluation remain separate work.
 
 Candidate ranking does not treat a publisher name as a quality proxy. It rewards bounded contextual metadata, then applies a seven-day signal-history check shared by Daily Mind and Initiative. Canonical URL variants and strongly overlapping titles are treated as one topic even when they arrive through different sources, while an unrelated item from the same source remains eligible. If equally relevant alternatives exist, the immediately previous source or destination host receives a small ranking penalty rather than a blanket ban. This keeps variety without hiding a uniquely relevant item, adding another scheduler, or spending another model call.
 
@@ -283,6 +292,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Realtime voice allowance | `realtime_voice_session_reservations` |
 | Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
 | Person identity registry | `people`, `person_platform_identities`, `person_identity_events` |
+| Intention and cognitive audit | `cognitive_intents`, `cognitive_cycle_receipts` |
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 

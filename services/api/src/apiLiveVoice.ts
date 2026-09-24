@@ -1,5 +1,7 @@
 import {
   assembleShannonSystemPrompt,
+  buildIntentPrompt,
+  selectPrimaryIntent,
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
@@ -14,6 +16,8 @@ import type { ShannonChatModel } from './chatModel.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { visibleConversationHistory, mayUseThreadSummary } from './memoryVisibility.js';
 import { executeConversationCommand, type ConversationCommandDependencies, type UserUtterance } from './conversationCommands.js';
+import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
+import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
@@ -67,6 +71,7 @@ interface VoiceSessionDependencies {
   dailyMind: DailyMindReader | null;
   now: CompanionClock;
   voice: string;
+  cognitiveIntents: CognitiveIntentStore;
 }
 
 export function realtimeVoiceSessionProjection(
@@ -95,10 +100,20 @@ export function realtimeVoiceSessionProjection(
     ?? assembleShannonSystemPrompt(captured);
   const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
   const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId));
+  const occurredAt = dependencies.now();
+  const primaryIntent = selectPrimaryIntent('', threadId, dependencies.cognitiveIntents.list(scopeKey, 'active'), occurredAt);
+  const intentionPrompt = primaryIntent ? buildIntentPrompt(Object.freeze({
+    situation: Object.freeze({ occurredAt, channel: 'voice' as const }),
+    primaryIntent,
+    supportingIntentIDs: Object.freeze([]),
+    recalledMemoryIDs: Object.freeze([]),
+    responseMode: 'answer' as const,
+  })) : '';
   return {
     threadId,
     instructions: [
       basePrompt,
+      intentionPrompt,
       dailyMindPrompt,
       history,
       voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true),
@@ -116,6 +131,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   dailyMind: DailyMindReader | null;
   agentTasks: AgentTaskStore;
   now: CompanionClock;
+  cognitiveIntents: CognitiveIntentStore;
 }
 
 export function dispatchLiveVoiceRequest(
@@ -216,12 +232,25 @@ async function completeLiveVoiceDelegation(
   const threadId = temporaryGuest
     ? requestedThreadId || 'temporary-guest-session'
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
+  const occurredAt = dependencies.now();
   const command = !temporaryGuest && deviceContext?.userUtterance
-    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, dependencies.now(), dependencies)
+    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, dependencies)
     : null;
-  if (command) return { status: 200, body: { threadId, model: dependencies.chatModel.model,
-    reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
-    ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
+  if (command) {
+    const captured = dependencies.stateStore.snapshot(scopeKey);
+    const message = deviceContext?.userUtterance?.text ?? transcript;
+    const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
+    const cognitiveContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
+      scopeKey, message, occurredAt, channel: 'voice', threadId,
+      intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
+    });
+    recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
+      threadId, channel: 'voice', action: 'command', summary: '確認済みの音声コマンドを処理した。', occurredAt,
+    });
+    return { status: 200, body: { threadId, model: dependencies.chatModel.model,
+      reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
+      ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
+  }
   const backendInstructions = [
     '[GPT-Live client delegation backend]',
     '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
@@ -233,11 +262,12 @@ async function completeLiveVoiceDelegation(
     voiceDeviceContextPrompt(dependencies.now(), deviceContext),
   ].join('\n');
   const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const occurredAt = dependencies.now();
+  const provisionalIntent = temporaryGuest ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
   const cognitiveContext = temporaryGuest ? null : prepareTurnCognitiveContext(
     captured!,
     dependencies.conversationStore,
-    { scopeKey, message: transcript, occurredAt, channel: 'voice',
+    { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId,
+      intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
       timeZone: deviceContext?.timeZoneIdentifier,
       participants: dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
@@ -266,6 +296,11 @@ async function completeLiveVoiceDelegation(
     useWebSearch: true,
     generateThreadTitle: false,
   });
+  if (!temporaryGuest && cognitiveContext) {
+    recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
+      threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
+    });
+  }
   return {
     status: 200,
     body: {
