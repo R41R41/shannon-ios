@@ -181,7 +181,9 @@ function decodedAudio(responseText: string): Uint8Array {
   }
   const root = record(value)?.interaction ?? value;
   const outputAudio = record(record(root)?.output_audio);
-  const encoded = outputAudio?.data;
+  const encoded = typeof outputAudio?.data === 'string'
+    ? outputAudio.data
+    : interactionAudioData(root);
   if (typeof encoded !== 'string' || !encoded) throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
   const audio = Buffer.from(encoded, 'base64');
   if (!audio.length || audio.length > SHANNON_GEMINI_SPEECH_MAXIMUM_BYTES) {
@@ -191,6 +193,25 @@ function decodedAudio(responseText: string): Uint8Array {
     throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
   }
   return audio;
+}
+
+function interactionAudioData(value: unknown): string | undefined {
+  const steps = record(value)?.steps;
+  if (!Array.isArray(steps)) return undefined;
+  for (const step of steps) {
+    const content = record(step)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const item of content) {
+      const audio = record(item);
+      if (
+        audio?.type === 'audio'
+        && audio.mime_type === 'audio/wav'
+        && typeof audio.data === 'string'
+        && audio.data
+      ) return audio.data;
+    }
+  }
+  return undefined;
 }
 
 function wavDurationSeconds(audio: Uint8Array): number {

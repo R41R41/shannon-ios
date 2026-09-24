@@ -22,7 +22,13 @@ describe('Gemini speech gateway', () => {
         expect(body.input[0].content[0].text).toBe('おかえりなさい。');
         expect(body.generation_config.speech_config).toEqual([{ voice: 'Leda' }]);
         expect(body.response_format).toMatchObject({ mime_type: 'audio/wav', sample_rate: 24_000 });
-        return new Response(JSON.stringify({ output_audio: { data: wav.toString('base64') } }));
+        return new Response(JSON.stringify({
+          status: 'completed',
+          steps: [{
+            type: 'model_output',
+            content: [{ type: 'audio', mime_type: 'audio/wav', data: wav.toString('base64') }],
+          }],
+        }));
       },
     });
 
