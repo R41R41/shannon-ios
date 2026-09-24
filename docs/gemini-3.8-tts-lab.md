@@ -1,6 +1,6 @@
 # Gemini 3.8 TTS listening lab
 
-Status: listening harness plus opt-in iPhone turn-based production experiment; not the default voice provider
+Status: listening harness plus opt-in iPhone turn-based and native-audio Live experiments; not the default voice provider
 
 ## Purpose
 
@@ -154,6 +154,16 @@ sends the transcript through the ordinary Shannon text/history/tool lane, reques
 Live path remains available and unchanged. The Gemini key never enters the app, and
 neither source audio nor generated WAV is persisted by Shannon.
 
+The second experiment uses `Gemini 3.8 Live` rather than a TTS model. It sends
+16 kHz mono PCM from iPhone directly to Google's Live WebSocket and receives native
+24 kHz audio, input/output transcription, interruption, tool calls, and session
+resumption on the same connection. Azure authenticates the paired owner and mints a
+one-use ephemeral token whose field mask fixes `gemini-3.8-live` and AUDIO output;
+the permanent key remains in its mode-0600 secret file. The client retains local
+control of the selected Aoede voice, Shannon instruction, tool declaration, context
+compression, and resumption handle. Completed transcript pairs are persisted to the
+same Talk thread, while raw PCM is not retained.
+
 ## Cost comparison baseline
 
 Provider list prices used by the UI estimate are valid through 2026-12-31:
@@ -164,6 +174,8 @@ Provider list prices used by the UI estimate are valid through 2026-12-31:
 | Gemini 3.8 Flash TTS output | $0.00225 / 10 s | $0.0135 / output minute |
 | OpenAI `gpt-transcribe` input | $0.0045 / input minute | $0.00225 / 30 s input |
 | OpenAI GPT-Live active session | $0.05 / active minute | $0.05 / conversation minute, plus backend/tool calls |
+| Gemini 3.8 Live input audio | $0.005 / input minute | $0.0025 / 30 s input |
+| Gemini 3.8 Live output audio | $0.018 / output minute | $0.009 / 30 s output |
 
 For a one-minute turn cycle with 30 seconds of user speech and 30 seconds of Shannon
 speech, the Flash-Lite speech transport estimate is about $0.00675: $0.00225 for
@@ -171,9 +183,16 @@ transcription plus $0.0045 for Gemini audio output. Ordinary Shannon text-model 
 tool costs remain additional. Gemini TTS prices double on 2027-01-01, so the server's
 configurable 10-second estimate must be updated before then.
 
+For the same 30-second input plus 30-second output cycle, Gemini 3.8 Live is about
+$0.0115 before Shannon backend/tool calls. Unlike the Flash-Lite cascade, its native
+audio model performs the live conversation itself, so the cost and behavior are not
+directly interchangeable with transcription + ordinary Shannon text inference + TTS.
+
 ## Official references
 
 - [Gemini API text-to-speech guide](https://ai.google.dev/gemini-api/docs/speech-generation)
 - [Gemini 3.8 Flash TTS model](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash-tts)
 - [Voice design](https://ai.google.dev/gemini-api/docs/voice-design)
 - [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)
+- [Gemini 3.8 Live](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live)
+- [Live API ephemeral tokens](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens)

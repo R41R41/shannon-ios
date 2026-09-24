@@ -220,6 +220,17 @@ enum ShannonVoiceGlowPhase: Equatable, Sendable {
         case .denied, .failed: .failed
         }
     }
+
+    init(_ phase: ShannonGeminiLivePhase) {
+        self = switch phase {
+        case .idle: .idle
+        case .requestingPermission, .connecting, .reconnecting: .connecting
+        case .listening: .listening
+        case .thinking: .thinking
+        case .speaking: .speaking
+        case .failed: .failed
+        }
+    }
 }
 
 struct ShannonVoiceGlowSample: Equatable, Sendable {

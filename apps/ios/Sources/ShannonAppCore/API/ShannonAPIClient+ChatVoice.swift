@@ -93,6 +93,31 @@ extension ShannonAPIClient {
         )
     }
 
+    public func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/live/sessions"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(GeminiLiveSessionRequestDTO(threadId: threadId))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        let result = try JSONDecoder().decode(ShannonGeminiLiveSessionDTO.self, from: data)
+        guard !result.token.isEmpty,
+              result.model == "gemini-3.8-live",
+              !result.voice.isEmpty,
+              !result.threadId.isEmpty,
+              !result.instructions.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return result
+    }
+
     public func createRealtimeVoiceCall(
         scopeKey: String,
         threadId: String?,
@@ -325,4 +350,8 @@ extension ShannonAPIClient {
 
 private struct GeminiSpeechRequestDTO: Encodable {
     let text: String
+}
+
+private struct GeminiLiveSessionRequestDTO: Encodable {
+    let threadId: String?
 }

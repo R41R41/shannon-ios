@@ -16,6 +16,7 @@ public struct ShannonConversationView: View {
     @State var appIconModel = ShannonAppIconModel()
     @State var voiceModel = ShannonVoiceConversationModel()
     @State var realtimeVoiceModel = ShannonRealtimeVoiceSessionModel()
+    @State var geminiLiveVoiceModel = ShannonGeminiLiveSessionModel()
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
     @State var showsAppIconSettings = false
@@ -25,6 +26,7 @@ public struct ShannonConversationView: View {
     @State var showsVoiceIdentity = false
     @State var showsWorldSubscriptions = false
     @State var showsLiveVoice = false
+    @State var showsGeminiLiveVoice = false
     @State var showsGeminiVoice = false
     @State var showsVoiceModePicker = false
     @State var showsSettings = false
@@ -164,8 +166,10 @@ public struct ShannonConversationView: View {
             if scenePhase != .active {
                 voiceModel.cancel()
                 realtimeVoiceModel.stop()
+                geminiLiveVoiceModel.stop()
                 voiceIdentityModel.stopPreview()
                 showsLiveVoice = false
+                showsGeminiLiveVoice = false
                 showsGeminiVoice = false
             }
         }
@@ -185,11 +189,13 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .modifier(ShannonVoicePresentationModifier(
             showsLiveVoice: $showsLiveVoice,
+            showsGeminiLiveVoice: $showsGeminiLiveVoice,
             showsGeminiVoice: $showsGeminiVoice,
             showsVoiceModePicker: $showsVoiceModePicker,
             conversationModel: model,
             voiceModel: voiceModel,
             realtimeVoiceModel: realtimeVoiceModel,
+            geminiLiveVoiceModel: geminiLiveVoiceModel,
             expression: model.currentExpression
         ))
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {

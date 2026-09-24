@@ -7,6 +7,7 @@ import { handleRealtimeVoiceAllowance } from './serverRealtimeVoiceAllowanceRout
 import { createPairingRoute } from './serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
+import { createGeminiLiveRoute } from './serverGeminiLiveRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
@@ -118,6 +119,9 @@ const activeVoiceScopes = new Set<string>();
 const geminiSpeechRoute = createGeminiSpeechRoute(
   process.env, persistentStore, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
 );
+const geminiLiveRoute = createGeminiLiveRoute(
+  process.env, kernel, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+);
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'GET' && request.method !== 'POST') {
@@ -167,6 +171,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/gemini/speech') {
       await geminiSpeechRoute(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/gemini/live/sessions') {
+      await geminiLiveRoute(request, response, principal);
       return;
     }
     if (url.pathname === '/v1/voice/realtime/calls') {

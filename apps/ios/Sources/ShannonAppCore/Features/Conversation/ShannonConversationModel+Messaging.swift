@@ -54,6 +54,15 @@ extension ShannonConversationModel {
         try await client.synthesizeGeminiSpeech(scopeKey: scopeKey, text: text)
     }
 
+    public func createGeminiLiveSession() async throws -> ShannonGeminiLiveSessionDTO {
+        let session = try await client.createGeminiLiveSession(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId
+        )
+        selectedThreadId = session.threadId
+        return session
+    }
+
     public func createRealtimeVoiceCall(
         offerSDP: String,
         participantMode: ShannonVoiceParticipantMode
