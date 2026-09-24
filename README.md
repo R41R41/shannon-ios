@@ -83,6 +83,10 @@ pnpm worker
 
 実際のLLMを使う場合は`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ`OPENAI_API_KEY`を設定する。v1の既定モデルは`gpt-5.6-luna`。
 
+Gemini 3.8 TTSの日本語音声は、本番のLive／Realtime経路から隔離した
+[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスで比較する。
+音声ファイルの評価だけでライブ音声を差し替えず、端末上の割り込み・経路変更・AEC・遅延gateを別に通す。
+
 別のターミナルでiOSコアを検証する。
 
 ```sh
