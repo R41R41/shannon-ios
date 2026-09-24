@@ -1,0 +1,33 @@
+schema_version: 1
+screen_id: shannon-macos-memory
+platform: macos
+baseline_commit: 0b5c5a0ebb831c3e4878709df086a93e8f45d0b4
+last_verified_at: 2026-09-25
+verification_scope: "合成fixture・shared Swiftモデル/部品描画。起動中アプリの画面遷移は未確認"
+user_job: "頭の中から記憶と約束の状態・根拠を確認し、必要な訂正や復元を行う"
+primary_action: "記憶と約束の一覧から詳細を開く"
+preserve:
+  - "Mac sidebarと会話・開発・作業の構成"
+  - "いま・知識・記憶の概要、日記、活動表示"
+improve:
+  - "rich dashboardでも記憶と約束の管理入口を常設する"
+  - "完了・取り消し済みや忘れた記憶も一覧から詳細へ進める"
+do_not_change:
+  - "サーバー正本、記憶変更API、他アプリへの承認境界"
+states:
+  loading: "管理入口を保持し読み込み状態を示す"
+  empty: "4分類を説明付きで表示する"
+  error: "前回データを保持し更新を再試行できる"
+  offline: "前回取得状態と通信失敗を区別する"
+  conflict: "変更後はサーバー結果を正本として再描画する"
+  selection: "memory IDを使い詳細を保持する"
+accessibility:
+  dynamic_type: "内容と状態を必要に応じて複数行で表示する"
+  voiceover: "行の本文、期限、状態をひとまとまりで提供する"
+  target_size: "主要行は44ポイント以上"
+  focus: "標準ListとNavigationLinkによるキーボード移動を保つ"
+  reduce_motion: "意味伝達を動きだけに依存させない"
+evidence:
+  current: []
+  approved: []
+  privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない"

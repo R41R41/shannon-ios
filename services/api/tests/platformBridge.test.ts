@@ -119,7 +119,7 @@ describe('legacy platform bridge', () => {
     ]);
   });
 
-  it('returns a bounded read-only owner projection and rejects other actors', () => {
+  it('does not expose private owner state to a group or unspecified audience', () => {
     const state = new InMemoryCompanionStateStore(now);
     state.apply('owner', { type: 'interest-observed', interest: '分散システム' });
     const conversations = new InMemoryConversationStore();
@@ -128,8 +128,8 @@ describe('legacy platform bridge', () => {
     const projection = bridge.context({
       platform: 'discord', conversationId: '12345', sourceUserId: '67890',
     });
-    expect(projection).toMatchObject({ schemaVersion: 1, stateVersion: 1, updatedAt: now() });
-    expect(projection.projection).toContain('分散システム');
+    expect(projection).toMatchObject({ schemaVersion: 1, stateVersion: 0, updatedAt: now() });
+    expect(projection.projection).not.toContain('分散システム');
     expect(projection.projection.length).toBeLessThanOrEqual(2_400);
     expect(conversations.listThreads('owner')).toEqual([]);
     expectBridgeError(() => bridge.context({
@@ -146,6 +146,28 @@ describe('legacy platform bridge', () => {
     expectBridgeError(() => bridge.ingest({ ...validRequest(), sourceUserId: 'friend' }), 'PLATFORM_ACTOR_DENIED');
     bridge.ingest(validRequest());
     expectBridgeError(() => bridge.ingest({ ...validRequest(), userMessage: '同じIDの別内容' }), 'PLATFORM_TURN_CONFLICT');
+  });
+
+  it('allows owner context only for an explicit server-configured private exact conversation', () => {
+    const state = new InMemoryCompanionStateStore(now);
+    state.apply('owner', { type: 'interest-observed', interest: '分散システム' });
+    const privateConfiguration = configuration();
+    const binding = privateConfiguration.bindings.get('discord\u000012345')!;
+    const bridge = new PlatformBridgeService({ ...privateConfiguration, bindings: new Map([
+      ['discord\u000012345', { ...binding, audience: 'owner-private' }],
+    ]) }, state, new InMemoryConversationStore(), new RecordingBackground(), now);
+    expect(bridge.context({ platform: 'discord', conversationId: '12345', sourceUserId: '67890' }).projection)
+      .toContain('分散システム');
+
+    const shared = new PlatformBridgeService(configuration(), state, new InMemoryConversationStore(), new RecordingBackground(), now);
+    expect(shared.context({ platform: 'discord', conversationId: '12345', sourceUserId: '67890', audience: 'owner-private' }).projection)
+      .not.toContain('分散システム');
+    expect(() => configuredPlatformBridge({
+      SHANNON_PLATFORM_BRIDGE_TOKEN: 'a'.repeat(32), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
+      SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([{
+        platform: 'discord', conversationIdPrefix: 'discord:111:', ownerUserId: '67890', title: 'guild', audience: 'owner-private',
+      }]),
+    })).toThrow('invalid binding');
   });
 
   it('keeps deduplication durable across a SQLite restart', () => {

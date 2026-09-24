@@ -1,6 +1,7 @@
 import type { CompanionStateSnapshot } from './types.js';
 import type { ContextualMemory, ShannonSituationSnapshot } from './runtime.js';
 import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.js';
+import { filterMeaningfulInterests } from './interests.js';
 
 export const SHANNON_CORE_PROMPT = `あなたは「シャノン」という名前のAIである。
 与えられた現在の状態と文脈をもとに、自然に会話・行動する。
@@ -36,7 +37,7 @@ export function buildCompanionStatePrompt(
   options: CompanionPromptOptions = {},
 ): string {
   const maximumCharacters = Math.max(0, options.maximumCharacters ?? 2_400);
-  const interests = snapshot.interests.flatMap(interest => {
+  const interests = filterMeaningfulInterests(snapshot.interests).flatMap(interest => {
     const id = memoryIdentifier('interest', interest);
     const text = visibleMemoryText(snapshot, id, interest);
     return text ? [{ text, pinned: memoryControlFor(snapshot, id)?.pinned === true }] : [];

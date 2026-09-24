@@ -50,6 +50,7 @@ function cleanFact(fact: UserFact): UserFact {
     confidence: clamp(fact.confidence, 0, 1),
     observedAt: fact.observedAt,
     ...(fact.evidence ? { evidence: cleanText(fact.evidence, 320) } : {}),
+    ...(fact.sourceExperienceId ? { sourceExperienceId: cleanText(fact.sourceExperienceId, 120) } : {}),
   });
 }
 
@@ -69,6 +70,7 @@ function cleanRelationship(relationship: RelationshipInsight): RelationshipInsig
     confidence: clamp(relationship.confidence, 0, 1),
     observedAt: relationship.observedAt,
     ...(relationship.evidence ? { evidence: cleanText(relationship.evidence, 320) } : {}),
+    ...(relationship.sourceExperienceId ? { sourceExperienceId: cleanText(relationship.sourceExperienceId, 120) } : {}),
   });
 }
 
@@ -81,6 +83,8 @@ function cleanControl(control: MemoryControl): MemoryControl {
     updatedAt: control.updatedAt,
     changeReason: cleanText(control.changeReason, 240),
     ...(control.overrideText ? { overrideText: cleanText(control.overrideText, 320) } : {}),
+    ...(control.sourceEvidence ? { sourceEvidence: cleanText(control.sourceEvidence, 8_000) } : {}),
+    ...(control.contextInvalidatedAt && Number.isFinite(Date.parse(control.contextInvalidatedAt)) ? { contextInvalidatedAt: control.contextInvalidatedAt } : {}),
   });
 }
 
@@ -190,7 +194,8 @@ export function reduceCompanionState(
         && previous.statement === fact.statement
         && previous.confidence === fact.confidence
         && previous.observedAt === fact.observedAt
-        && previous.evidence === fact.evidence) return current;
+        && previous.evidence === fact.evidence
+        && previous.sourceExperienceId === fact.sourceExperienceId) return current;
       const userFacts = [fact, ...current.userFacts.filter(item => item.id !== fact.id)].slice(0, MAX_USER_FACTS);
       next = { ...current, userFacts };
       break;
@@ -203,7 +208,8 @@ export function reduceCompanionState(
         && previous.statement === relationship.statement
         && previous.confidence === relationship.confidence
         && previous.observedAt === relationship.observedAt
-        && previous.evidence === relationship.evidence) return current;
+        && previous.evidence === relationship.evidence
+        && previous.sourceExperienceId === relationship.sourceExperienceId) return current;
       const relationships = [relationship, ...current.relationships.filter(item => item.id !== relationship.id)]
         .slice(0, MAX_RELATIONSHIPS);
       next = { ...current, relationships };
@@ -247,7 +253,9 @@ export function reduceCompanionState(
         && previous.pinned === control.pinned
         && previous.updatedAt === control.updatedAt
         && previous.changeReason === control.changeReason
-        && previous.overrideText === control.overrideText) return current;
+        && previous.overrideText === control.overrideText
+        && previous.sourceEvidence === control.sourceEvidence
+        && previous.contextInvalidatedAt === control.contextInvalidatedAt) return current;
       const memoryControls = [control, ...current.memoryControls.filter(item => item.memoryId !== control.memoryId)]
         .slice(0, MAX_MEMORY_CONTROLS);
       next = { ...current, memoryControls };
@@ -352,6 +360,7 @@ export function restoreCompanionState(
       confidence: restoredNumber(value.confidence, 0, 0, 1),
       observedAt: restoredTimestamp(value.observedAt, nowIso),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+      ...(restoredText(value.sourceExperienceId, 120) ? { sourceExperienceId: restoredText(value.sourceExperienceId, 120) } : {}),
     });
   }, item => item.id);
   const activeMemories = normalizeMemories(restoredItems(row.activeMemories, MAX_ACTIVE_MEMORIES * 2, value => {
@@ -375,6 +384,7 @@ export function restoreCompanionState(
       confidence: restoredNumber(value.confidence, 0, 0, 1),
       observedAt: restoredTimestamp(value.observedAt, nowIso),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+      ...(restoredText(value.sourceExperienceId, 120) ? { sourceExperienceId: restoredText(value.sourceExperienceId, 120) } : {}),
     });
   }, item => item.id);
   const prospectiveMemories = restoredItems(row.prospectiveMemories, MAX_PROSPECTIVE_MEMORIES, value => {
@@ -413,6 +423,8 @@ export function restoreCompanionState(
       updatedAt: restoredTimestamp(value.updatedAt, nowIso),
       changeReason,
       ...(restoredText(value.overrideText, 320) ? { overrideText: restoredText(value.overrideText, 320) } : {}),
+      ...(restoredText(value.sourceEvidence, 8_000) ? { sourceEvidence: restoredText(value.sourceEvidence, 8_000) } : {}),
+      ...(typeof value.contextInvalidatedAt === 'string' ? { contextInvalidatedAt: value.contextInvalidatedAt } : {}),
     });
   }, item => item.memoryId);
 

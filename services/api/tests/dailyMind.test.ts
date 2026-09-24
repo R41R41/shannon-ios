@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { memoryIdentifier } from '@shannon/cognition';
 import { OpenAIDailyMindModel, SQLiteDailyMindStore, type DailyMindModel } from '../src/dailyMind.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
@@ -12,6 +14,74 @@ const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));
 
 describe('daily Shannon mind', () => {
+  it('anchors topic and reason to the matched interest, not the first interest or invented model topic', async () => {
+    const path = databasePath();
+    const at = '2026-09-05T02:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.apply('owner', { type: 'interest-observed', interest: '写真' });
+    state.apply('owner', { type: 'interest-observed', interest: '登山' });
+    const daily = new SQLiteDailyMindStore(path, () => at);
+    try {
+      const focus = (await daily.ensureForKnownScopes([worldItem('photo', '写真の撮り方')], {
+        generate: async () => ({ topic: '君の秘密の趣味', reason: '昨日の相談を覚えている', openingLine: '昨日の話だね' }),
+      })).get('owner');
+      expect(focus?.topic).toBe('写真');
+      expect(focus?.reason).toContain('写真');
+      expect(daily.promptFor('owner')).not.toMatch(/秘密|昨日|登山/);
+    } finally { daily.close(); state.close(); }
+  });
+
+  it('does not reuse pre-repair daily focus or regenerate it repeatedly', async () => {
+    const path = databasePath();
+    const at = '2026-09-05T02:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.snapshot('owner');
+    const daily = new SQLiteDailyMindStore(path, () => at);
+    let calls = 0;
+    const model = { generate: async () => { calls += 1; return null; } };
+    const fixture = new DatabaseSync(path);
+    try {
+      await daily.ensureForKnownScopes([], model);
+      fixture.prepare("UPDATE daily_mind SET topic = '思ってるんだ', opening_line = '聞こえますか', grounding_version = 0").run();
+      expect(daily.promptFor('owner')).not.toMatch(/思ってるんだ|聞こえますか/);
+      expect((await daily.ensureForKnownScopes([], model)).get('owner')?.openingLine).toBeUndefined();
+      expect(calls).toBe(1);
+      expect(fixture.prepare('SELECT topic FROM daily_mind').get()?.topic).toBe('思ってるんだ');
+    } finally { fixture.close(); daily.close(); state.close(); }
+  });
+  it('silences a cached focus after forgetting its interest without regenerating or deleting history', async () => {
+    const path = databasePath();
+    const at = '2026-09-05T02:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.apply('owner', { type: 'interest-observed', interest: '写真' });
+    const daily = new SQLiteDailyMindStore(path, () => at);
+    let calls = 0;
+    const model = { generate: async () => { calls += 1; return { topic: '写真', reason: '写真が好きだから', openingLine: '写真の話、気になる。' }; } };
+    try {
+      const candidates = [worldItem('photo', '写真の撮り方')];
+      expect((await daily.ensureForKnownScopes(candidates, model)).get('owner')?.openingLine).toContain('写真');
+      state.apply('owner', { type: 'memory-control-upserted', control: {
+        memoryId: memoryIdentifier('interest', '写真'), kind: 'interest', status: 'forgotten',
+        pinned: false, updatedAt: at, changeReason: 'forget', sourceEvidence: '写真',
+      } });
+      expect(daily.promptFor('owner')).not.toContain('写真');
+      expect((await daily.ensureForKnownScopes(candidates, model)).get('owner')?.openingLine).toBeUndefined();
+      expect(calls).toBe(1);
+      expect(state.snapshot('owner').interests).toContain('写真');
+    } finally { daily.close(); state.close(); }
+  });
+  it('does not claim unrelated world news overlaps a photography interest', async () => {
+    const path = databasePath();
+    const at = '2026-09-05T02:00:00.000Z';
+    const state = new SQLiteShannonStore({ path, now: () => at });
+    state.apply('owner', { type: 'interest-observed', interest: '写真' });
+    const daily = new SQLiteDailyMindStore(path, () => at);
+    try {
+      const result = await daily.ensureForKnownScopes([worldItem('lint', 'Biome noReactObject lint rule')], { generate: async () => null });
+      expect(result.get('owner')?.sourceItemId).toBeUndefined();
+      expect(result.get('owner')?.reason).not.toContain('重なった');
+    } finally { daily.close(); state.close(); }
+  });
   it('creates one bounded focus per local day and reuses it without another model call', async () => {
     const path = databasePath();
     const at = '2026-09-05T02:00:00.000Z';
@@ -27,10 +97,10 @@ describe('daily Shannon mind', () => {
 
     expect(model.calls).toBe(1);
     expect(first.get('owner')).toMatchObject({
-      dayKey: '2026-09-05', topic: '記憶が育つ条件', sourceItemId: 'memory', openingLine: 'これ、昨日の話と少しつながっていた。',
+      dayKey: '2026-09-05', topic: 'AIエージェントの記憶', sourceItemId: 'memory', openingLine: 'これ、少し気になった。',
     });
     expect(second.get('owner')).toEqual(first.get('owner'));
-    expect(daily.promptFor('owner')).toContain('topic: 記憶が育つ条件');
+    expect(daily.promptFor('owner')).toContain('topic: AIエージェントの記憶');
 
     daily.close();
     state.close();

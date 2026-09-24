@@ -27,6 +27,7 @@ export interface ClaimedBackgroundJob {
 export interface DailyUserMessage {
   content: string;
   observedAt: string;
+  sourceExperienceId?: string;
 }
 
 export interface BackgroundJobStore {

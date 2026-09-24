@@ -22,6 +22,7 @@ export interface UserFact {
   confidence: number;
   observedAt: string;
   evidence?: string;
+  sourceExperienceId?: string;
 }
 
 export interface ActiveMemory {
@@ -37,6 +38,7 @@ export interface RelationshipInsight {
   confidence: number;
   observedAt: string;
   evidence?: string;
+  sourceExperienceId?: string;
 }
 
 export interface ProspectiveMemory {
@@ -66,6 +68,10 @@ export interface MemoryControl {
   updatedAt: string;
   changeReason: string;
   overrideText?: string;
+  /** Original evidence for exclusion, not a new fact or a replacement value. */
+  sourceEvidence?: string;
+  /** Old assistant paraphrases remain invalid after restore/pin as well. */
+  contextInvalidatedAt?: string;
 }
 
 export interface CompanionStateSnapshot {

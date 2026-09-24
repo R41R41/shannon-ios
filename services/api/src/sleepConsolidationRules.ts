@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { memoryIdentifier, type CompanionStateSnapshot, type MemoryKind, type RelationshipInsight, type UserFact } from '@shannon/cognition';
+import { memoryIdentifier, isOwnerMemoryEvidence, type CompanionStateSnapshot, type MemoryKind, type RelationshipInsight, type UserFact } from '@shannon/cognition';
 import type { SleepChange } from './memoryService.js';
 import type { ImmediateMemoryOutcome, UserFactProposal } from './sleepConsolidation.js';
 
@@ -26,8 +26,8 @@ export const EXPLICIT_FACT_PATTERNS = [
     statement: (value: string) => `ユーザーの好きな食べ物は${value}`,
     accept: directPreferenceValue,
   },
-  { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が好き|を好む)/u, statement: (value: string) => `ユーザーは${value}が好き` },
-  { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が苦手|が嫌い)/u, statement: (value: string) => `ユーザーは${value}が苦手` },
+  { pattern: /^(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が好き|を好む)(?:です|だ|なんだ)?(?:よ)?$/u, statement: (value: string) => `ユーザーは${value}が好き` },
+  { pattern: /^(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:が苦手|が嫌い)(?:です|だ|なんだ)?(?:よ)?$/u, statement: (value: string) => `ユーザーは${value}が苦手` },
   {
     pattern: /^([^はが、]{1,60}?)(?:が)?(?:一番)?(?:大)?好き(?:です|だ|なんだ)?(?:よ)?$/u,
     statement: (value: string) => `ユーザーは${value}が好き`,
@@ -38,11 +38,11 @@ export const EXPLICIT_FACT_PATTERNS = [
     statement: (value: string) => `ユーザーは${value}が苦手`,
     accept: directPreferenceValue,
   },
-  { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:をしている|をやっている)/u, statement: (value: string) => `ユーザーは${value}をしている` },
-  { pattern: /(?:僕の|私の|自分の)?名前は(?:、)?(.{1,60})/u, statement: (value: string) => `ユーザーの名前は${value}` },
-  { pattern: /(?:僕の|私の|自分の)?(?:仕事|職業)は(?:、)?(.{1,100})/u, statement: (value: string) => `ユーザーの仕事は${value}` },
-  { pattern: /(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:に住んでいる|在住)/u, statement: (value: string) => `ユーザーは${value}に住んでいる` },
-  { pattern: /(?:僕の|私の|自分の)?誕生日は(?:、)?(.{1,60})/u, statement: (value: string) => `ユーザーの誕生日は${value}` },
+  { pattern: /^(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:をしている|をやっている)(?:んだ|よ)?$/u, statement: (value: string) => `ユーザーは${value}をしている` },
+  { pattern: /^(?:僕の|私の|自分の)?名前は(?:、)?(.{1,60})$/u, statement: (value: string) => `ユーザーの名前は${value}` },
+  { pattern: /^(?:僕の|私の|自分の)?(?:仕事|職業)は(?:、)?(.{1,100})$/u, statement: (value: string) => `ユーザーの仕事は${value}` },
+  { pattern: /^(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:に住んでいる|在住)(?:です|なんだ|よ)?$/u, statement: (value: string) => `ユーザーは${value}に住んでいる` },
+  { pattern: /^(?:僕の|私の|自分の)?誕生日は(?:、)?(.{1,60})$/u, statement: (value: string) => `ユーザーの誕生日は${value}` },
 ] as const;
 
 export const RELATIONSHIP_PATTERNS = [
@@ -68,6 +68,7 @@ export function appendRuleProposal(
   pattern: RulePattern,
   kind: 'user-fact' | 'relationship' | 'interest',
 ): void {
+  if (!isOwnerMemoryEvidence(text)) return;
   const match = text.match(pattern.pattern);
   if (!match) return;
   const value = (match[1] ?? '').trim().replace(/[。！？].*$/u, '').slice(0, 100);
@@ -94,7 +95,7 @@ export function consolidateProposals(
     const kind = proposal.kind ?? 'user-fact';
     const statement = normalize(proposal.statement).slice(0, 160);
     const evidence = normalize(proposal.evidence).slice(0, 240);
-    if (!statement || !evidence || !source.includes(evidence)) continue;
+    if (!statement || !evidence || !source.includes(evidence) || !isOwnerMemoryEvidence(evidence, source)) continue;
     if (isForgottenCommitmentEvidence(current, evidence)) continue;
     const id = memoryId(kind, statement);
     const control = current.memoryControls.find(item => item.memoryId === id);

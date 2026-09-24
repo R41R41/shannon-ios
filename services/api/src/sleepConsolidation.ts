@@ -3,6 +3,7 @@ import { isForgottenCommitmentEvidence } from './memoryVisibility.js';
 import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
 import {
   memoryIdentifier,
+  isOwnerMemoryEvidence,
   type CompanionStateSnapshot,
   type MemoryKind,
   type RelationshipInsight,
@@ -281,8 +282,12 @@ export async function consolidateSleepMemory(
   const proposals = await analyzer.analyze(visibleMessages, context);
   const source = visibleMessages.map(message => normalize(message.content)).join('\n');
   const consolidated = consolidateProposals(proposals, source, current, observedAt, 0.55);
-  const facts = [...consolidated.facts];
-  const relationships = [...consolidated.relationships];
+  const withSource = <T extends UserFact | RelationshipInsight>(item: T): T => {
+    const original = visibleMessages.find(message => item.evidence && normalize(message.content).includes(item.evidence));
+    return original?.sourceExperienceId ? { ...item, sourceExperienceId: original.sourceExperienceId } : item;
+  };
+  const facts = consolidated.facts.map(withSource);
+  const relationships = consolidated.relationships.map(withSource);
   const interests = [...consolidated.interests];
   const learned: SleepChange[] = [];
   const updated: SleepChange[] = [];
@@ -292,7 +297,7 @@ export async function consolidateSleepMemory(
     const kind = proposal.kind ?? 'user-fact';
     const statement = normalize(proposal.statement).slice(0, 160);
     const evidence = normalize(proposal.evidence).slice(0, 240);
-    if (!statement || !evidence || !source.includes(evidence)) continue;
+    if (!statement || !evidence || !source.includes(evidence) || !isOwnerMemoryEvidence(evidence, source)) continue;
     if (isForgottenCommitmentEvidence(current, evidence)) continue;
     const id = memoryId(kind, statement);
     const control = current.memoryControls.find(item => item.memoryId === id);

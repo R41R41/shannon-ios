@@ -1,3 +1,8 @@
+// Shared by the intent recognizer and deadline resolver, longest forms first.
+export const COMMITMENT_DATE_SOURCE = '今日|明後日|あさって|明日|あした|来週の?[月火水木金土日]曜(?:日)?|[月火水木金土日]曜(?:日)?|(?:\\d{4}年)?\\d{1,2}月\\d{1,2}日';
+export const COMMITMENT_VAGUE_SOURCE = '後で|あとで|次回|今度|今週末|来週末|来週|週末|旅行後|旅行のあと';
+export const COMMITMENT_TEMPORAL_SOURCE = `(?:${COMMITMENT_DATE_SOURCE}|${COMMITMENT_VAGUE_SOURCE})`;
+
 /** Resolve explicit calendar dates against the source utterance, never job time. */
 export function commitmentDeadline(text: string, observedAt: string, timeZone = 'Asia/Tokyo'): {
   dueHint?: string; dueDate?: string; dueAt?: string; timeZone: string;
@@ -10,8 +15,8 @@ export function commitmentDeadline(text: string, observedAt: string, timeZone = 
   try { local = parts(new Date(observedAt)); } catch { return { timeZone }; }
   const year = Number(local.year);
   const today = new Date(Date.UTC(year, Number(local.month) - 1, Number(local.day)));
-  const temporal = text.match(/(今日|明後日|あさって|明日|あした|来週の?[月火水木金土日]曜(?:日)?|[月火水木金土日]曜(?:日)?|(?:\d{4}年)?\d{1,2}月\d{1,2}日)/u);
-  const vague = text.match(/(後で|あとで|次回|今度|来週|週末|旅行後|旅行のあと)/u);
+  const temporal = text.match(new RegExp(COMMITMENT_DATE_SOURCE, 'u'));
+  const vague = text.match(new RegExp(COMMITMENT_VAGUE_SOURCE, 'u'));
   if (!temporal) return { timeZone, ...(vague ? { dueHint: vague[0] } : {}) };
   const hint = temporal[0];
   const date = new Date(today);

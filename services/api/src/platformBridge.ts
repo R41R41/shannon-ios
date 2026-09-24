@@ -21,6 +21,8 @@ export interface PlatformBridgeBinding {
   conversationIdPrefix?: string;
   ownerUserId: string;
   title: string;
+  /** Server-configured only. Missing/unknown audiences never receive owner memory. */
+  audience?: 'shared' | 'owner-private';
 }
 
 export interface PlatformBridgeConfiguration {
@@ -127,13 +129,16 @@ export class PlatformBridgeService {
 
   context(value: unknown): PlatformContextResponse {
     const request = validatedPlatformContext(value);
-    this.authorizedBinding(request);
-    const snapshot = this.stateStore.snapshot(this.configuration.scopeKey);
+    const binding = this.authorizedBinding(request);
+    const snapshot = binding.audience === 'owner-private' && binding.conversationId
+      ? this.stateStore.snapshot(this.configuration.scopeKey) : null;
     return Object.freeze({
       schemaVersion: 1 as const,
-      stateVersion: snapshot.version,
-      updatedAt: snapshot.updatedAt,
-      projection: buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 }),
+      stateVersion: snapshot?.version ?? 0,
+      updatedAt: snapshot?.updatedAt ?? this.now(),
+      projection: snapshot
+        ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
+        : '[Shannon shared audience]\nあなたはシャノンです。今この会話で共有された内容だけを使って自然に応答してください。\n個人アプリの記憶・約束・関係性・関心は、この場では共有されていません。覚えているふりをしないでください。',
     });
   }
 
@@ -262,6 +267,8 @@ function validatedBinding(value: unknown): PlatformBridgeBinding {
   if (!recordValue(value) || !isPlatform(value.platform)
     || exactConversation === prefixConversation
     || !boundedIdentifier(value.ownerUserId, 160)
+    || (value.audience !== undefined && value.audience !== 'shared' && value.audience !== 'owner-private')
+    || (value.audience === 'owner-private' && !exactConversation)
     || !boundedText(value.title, 80)) {
     throw new Error('SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON contains an invalid binding');
   }
@@ -271,6 +278,7 @@ function validatedBinding(value: unknown): PlatformBridgeBinding {
     ...(prefixConversation ? { conversationIdPrefix: (value.conversationIdPrefix as string).trim() } : {}),
     ownerUserId: value.ownerUserId.trim(),
     title: value.title.trim(),
+    ...(value.audience === 'shared' || value.audience === 'owner-private' ? { audience: value.audience } : {}),
   };
 }
 

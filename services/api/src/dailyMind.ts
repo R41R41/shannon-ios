@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { restoreCompanionState } from '@shannon/cognition';
+import { groundedWorldOpening, isWorldFocusVisible, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
 import {
   configuredBackgroundBudgetUsd,
   estimatedOpenAICostUsd,
@@ -79,6 +81,17 @@ export class SQLiteDailyMindStore implements DailyMindReader {
       );
       CREATE INDEX IF NOT EXISTS daily_mind_expiry ON daily_mind (expires_at);
     `);
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const columns = this.database.prepare('PRAGMA table_info(daily_mind)').all();
+      if (!columns.some(column => column.name === 'grounding_version')) {
+        this.database.exec('ALTER TABLE daily_mind ADD COLUMN grounding_version INTEGER NOT NULL DEFAULT 0');
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      if (this.database.isTransaction) this.database.exec('ROLLBACK');
+      throw error;
+    }
     this.secureFiles();
   }
 
@@ -100,7 +113,7 @@ export class SQLiteDailyMindStore implements DailyMindReader {
         result.set(row.scope_key, existing);
         continue;
       }
-      const interests = parsedInterests(row.snapshot_json);
+      const interests = parsedInterests(row.snapshot_json, row.scope_key, at);
       const candidate = selectCandidate(candidates, this.recentSignals(row.scope_key, at), interests, at);
       let generated: DailyMindModelResult | null = null;
       try {
@@ -109,17 +122,21 @@ export class SQLiteDailyMindStore implements DailyMindReader {
         // Daily focus must remain available even when the optional model lane fails.
       }
       const local = localDay(at, timeZone);
-      const topic = bounded(generated?.topic, 120) ?? bounded(interests[0], 120)
-        ?? bounded(candidate?.title, 120) ?? '今日は静かに周りを見る';
-      const reason = bounded(generated?.reason, 280)
-        ?? fallbackReason(interests[0], candidate);
-      const openingLine = bounded(generated?.openingLine, 280);
+      const matchedInterest = interests.find(interest => candidate && topicMatchesSource(interest, candidate.title, candidate.summary));
+      const groundedTopic = candidate && topicMatchesSource(generated?.topic, candidate.title, candidate.summary)
+        ? bounded(generated?.topic, 120) : null;
+      const topic = groundedTopic ?? bounded(matchedInterest, 120) ?? bounded(candidate?.title, 120)
+        ?? bounded(interests[0], 120) ?? '今日は静かに周りを見る';
+      // Model prose is not evidence of a connection to a prior conversation.
+      const reason = fallbackReason(matchedInterest ?? (candidate ? undefined : interests[0]), candidate);
+      const openingLine = candidate && bounded(generated?.openingLine, 280)
+        ? groundedWorldOpening(generated?.openingLine, candidate.title, matchedInterest ?? null) : null;
       const expiresAt = nextLocalDayBoundary(at, timeZone);
       this.database.prepare(`
         INSERT OR IGNORE INTO daily_mind
           (scope_key, day_key, topic, reason, source_item_id, source_title, source_url,
-           opening_line, generation_mode, created_at, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           opening_line, generation_mode, created_at, expires_at, grounding_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
         row.scope_key, local.dayKey, topic, reason,
         candidate?.id ?? null, candidate?.sourceTitle ?? null, candidate?.url ?? null,
@@ -140,10 +157,22 @@ export class SQLiteDailyMindStore implements DailyMindReader {
     const dayKey = localDay(at, timeZone).dayKey;
     const row = this.database.prepare(`
       SELECT scope_key, day_key, topic, reason, source_item_id, source_title, source_url,
-        opening_line, created_at, expires_at
+        opening_line, created_at, expires_at, grounding_version
       FROM daily_mind WHERE scope_key = ? AND day_key = ? AND expires_at > ? LIMIT 1
     `).get(scopeKey, dayKey, at) as unknown as Record<string, unknown> | undefined;
-    return row ? Object.freeze({
+    if (!row) return null;
+    const storedState = this.tableExists('companion_states') ? this.database.prepare(
+      'SELECT snapshot_json FROM companion_states WHERE scope_key = ?',
+    ).get(scopeKey) as { snapshot_json: string } | undefined : undefined;
+    const snapshot = restoreCompanionState(scopeKey, parseJson(storedState?.snapshot_json ?? '{}'), at);
+    if (row.grounding_version !== 1 || !isWorldFocusVisible(snapshot, [row.topic, row.reason, row.opening_line].join('\n'))) {
+      // Keep the day occupied: a rejected cached focus must not cause repeated
+      // billable regeneration or escape through the initiative fallback lane.
+      return Object.freeze({ scopeKey, dayKey, topic: '今日は静かに周りを見る',
+        reason: '出典と記憶の設定を確認できない話題は、会話に持ち込まない。',
+        createdAt: String(row.created_at), expiresAt: String(row.expires_at) });
+    }
+    return Object.freeze({
       scopeKey: String(row.scope_key),
       dayKey: String(row.day_key),
       topic: String(row.topic),
@@ -154,7 +183,7 @@ export class SQLiteDailyMindStore implements DailyMindReader {
       ...(row.opening_line ? { openingLine: String(row.opening_line) } : {}),
       createdAt: String(row.created_at),
       expiresAt: String(row.expires_at),
-    }) : null;
+    });
   }
 
   promptFor(scopeKey: string, at = this.now(), timeZone = 'Asia/Tokyo'): string {
@@ -291,12 +320,9 @@ export function createConfiguredDailyMindModel(
   });
 }
 
-function parsedInterests(snapshotJson: string): string[] {
+function parsedInterests(snapshotJson: string, scopeKey: string, at: string): string[] {
   try {
-    const value = JSON.parse(snapshotJson) as { interests?: unknown };
-    return Array.isArray(value.interests)
-      ? value.interests.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 6)
-      : [];
+    return worldVisibleInterests(restoreCompanionState(scopeKey, JSON.parse(snapshotJson), at)).slice(0, 6);
   } catch { return []; }
 }
 
@@ -308,24 +334,22 @@ function selectCandidate(
 ): WorldItem | null {
   const cutoff = Date.parse(at) - DAILY_MIND_CANDIDATE_MAX_AGE_MILLISECONDS;
   const maximumPublishedAt = Date.parse(at) + 24 * 60 * 60_000;
-  const tokens = [...new Set(interests.flatMap(value => normalize(value).split(/[\s、,・/]+/u)).filter(value => value.length >= 2))];
   const ranked = candidates.filter(candidate => {
     const discoveredAt = Date.parse(candidate.discoveredAt);
     const publishedAt = candidate.publishedAt ? Date.parse(candidate.publishedAt) : discoveredAt;
     return Number.isFinite(discoveredAt) && discoveredAt >= cutoff
       && Number.isFinite(publishedAt) && publishedAt >= cutoff && publishedAt <= maximumPublishedAt;
   }).filter(candidate => !isRepeatedWorldSignal(candidate, recentSignals)).slice(0, 40).map((candidate, index) => {
-    const text = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
-    const matches = tokens.filter(token => text.includes(token)).length;
+    const matches = interests.filter(interest => topicMatchesSource(interest, candidate.title, candidate.summary)).length;
     // Source order is only a stable tie-breaker; it must not outweigh a recent-source rotation.
-    return { candidate, score: matches * 10 - index / 100 + sourceDiversityAdjustment(candidate, recentSignals) };
-  }).sort((left, right) => right.score - left.score);
+    return { candidate, matches, score: matches * 10 - index / 100 + sourceDiversityAdjustment(candidate, recentSignals) };
+  }).filter(row => !interests.length || row.matches > 0).sort((left, right) => right.score - left.score);
   return ranked[0]?.candidate ?? null;
 }
 
 function fallbackReason(interest: string | undefined, candidate: WorldItem | null): string {
   if (interest && candidate) return `最近気になっている「${interest}」と、${candidate.sourceTitle}で見つけた話が重なったから。`;
-  if (interest) return `最近の会話で「${interest}」が何度か心に残ったから。`;
+  if (interest) return `現在の関心に「${interest}」が残っているから。`;
   if (candidate) return `${candidate.sourceTitle}で見つけて、もう少し考えてみたくなったから。`;
   return '急いで話題を作らず、今日の出来事を静かに見ていたいから。';
 }
@@ -349,7 +373,6 @@ function bounded(value: string | undefined, maximum: number): string | null {
   const cleaned = value?.replace(/\s+/gu, ' ').trim();
   return cleaned ? cleaned.slice(0, maximum) : null;
 }
-function normalize(value: string): string { return value.normalize('NFKC').toLocaleLowerCase('ja-JP'); }
 function parseJson(value: string): unknown { try { return value ? JSON.parse(value) : {}; } catch { return {}; } }
 function outputText(value: unknown): string {
   if (!value || typeof value !== 'object') return '';

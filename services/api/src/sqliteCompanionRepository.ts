@@ -4,7 +4,8 @@ import {
   createInitialCompanionState,
   reduceCompanionState,
   visibleMemoryText,
-  memoryIdentifier,
+  isOwnerMemoryEvidence,
+  isMemoryEvidenceVisible,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
   type CompanionStateStore,
@@ -27,7 +28,7 @@ import {
 } from './realtimeVoice.js';
 import { parseSnapshot } from './sqliteStoreCodecs.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
-import { isForgottenCommitmentEvidence } from './memoryVisibility.js';
+import { hydrateMemoryBoundaries, safePersonalityAnalysis } from './memoryProjectionSafety.js';
 
 interface StateRow { snapshot_json: string; }
 interface KnowledgeAnswerRow { answer_id: string; question_key: string; category: string; question: string; answer: string; confidence: number; source: KnowledgeSource; confirmed: number; updated_at: string; }
@@ -43,7 +44,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       FROM companion_states
       WHERE scope_key = ?
     `).get(scopeKey) as unknown as StateRow | undefined;
-    if (row) return parseSnapshot(row.snapshot_json, scopeKey, this.context.now());
+    if (row) return hydrateMemoryBoundaries(this.context, parseSnapshot(row.snapshot_json, scopeKey, this.context.now()));
 
     const initial = createInitialCompanionState(scopeKey, this.context.now());
     this.context.transaction(() => {
@@ -222,14 +223,15 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       WHERE scope_key = ? AND active = 1
       ORDER BY version DESC LIMIT 1
     `).get(scopeKey) as unknown as { version: number; analysis: string; created_at: string } | undefined;
-    return row ? Object.freeze({ version: Number(row.version), analysis: row.analysis, createdAt: row.created_at }) : null;
+    return row ? Object.freeze({ version: Number(row.version), analysis: safePersonalityAnalysis(this.snapshot(scopeKey)), createdAt: row.created_at }) : null;
   }
 
   promptProjection(scopeKey: string): string | null {
     const row = this.context.database.prepare(`
       SELECT content FROM prompt_projections WHERE scope_key = ?
     `).get(scopeKey) as unknown as { content: string } | undefined;
-    return row?.content ?? null;
+    // Cached/profile text can predate a privacy-policy upgrade or a correction.
+    return row ? this.promptContent(scopeKey, this.snapshot(scopeKey)) : null;
   }
 
   recordLlmUsage(event: LlmUsageEvent): void {
@@ -425,18 +427,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
   }
 
   writePromptProjection(scopeKey: string, state: CompanionStateSnapshot): void {
-    const personality = this.personalityProfile(scopeKey);
-    const knowledge = this.knowledgeAnswers(scopeKey).flatMap(item => {
-      const answer = visibleMemoryText(state, item.answerId, item.answer);
-      return answer && !item.evidence.some(evidence => isForgottenCommitmentEvidence(state, evidence.quote))
-        ? [{ ...item, answer }] : [];
-    }).slice(0, 80);
-    const sections = [assembleShannonSystemPrompt(state)];
-    if (knowledge.length) {
-      sections.push(`[User knowledge]\n${knowledge.map(item => `- ${item.question}: ${item.answer} (confidence ${item.confidence.toFixed(2)}, source ${item.source})`).join('\n')}`);
-    }
-    if (personality) sections.push(`[Personality analysis v${personality.version}]\n${personality.analysis}`);
-    const content = sections.join('\n\n');
+    const content = this.promptContent(scopeKey, state);
     this.context.database.prepare(`
       INSERT INTO prompt_projections (scope_key, state_version, content, updated_at)
       VALUES (?, ?, ?, ?)
@@ -447,20 +438,28 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
     `).run(scopeKey, state.version, content, state.updatedAt);
   }
 
+  private promptContent(scopeKey: string, state: CompanionStateSnapshot): string {
+    const personality = this.personalityProfile(scopeKey);
+    const knowledge = this.knowledgeAnswers(scopeKey).flatMap(item => {
+      const answer = visibleMemoryText(state, item.answerId, item.answer);
+      const corrected = state.memoryControls.some(control => control.memoryId === item.answerId && control.overrideText);
+      return answer && !item.evidence.some(evidence => !isMemoryEvidenceVisible(state, evidence.quote, item.answerId)
+        || (item.source !== 'user' && !isOwnerMemoryEvidence(evidence.quote)))
+        ? [{ ...item, answer, question: corrected ? '本人が訂正した情報' : item.question }] : [];
+    }).slice(0, 80);
+    const sections = [assembleShannonSystemPrompt(state)];
+    if (knowledge.length) {
+      sections.push(`[User knowledge]\n${knowledge.map(item => `- ${item.question}: ${item.answer} (confidence ${item.confidence.toFixed(2)}, source ${item.source})`).join('\n')}`);
+    }
+    if (personality) sections.push(`[Personality analysis v${personality.version}]\n${safePersonalityAnalysis(state)}`);
+    return sections.join('\n\n');
+  }
+
   writePersonalityProfile(scopeKey: string, state: CompanionStateSnapshot, createdAt: string): void {
     const previous = this.context.database.prepare(`
       SELECT COALESCE(MAX(version), 0) AS version FROM personality_profiles WHERE scope_key = ?
     `).get(scopeKey) as unknown as { version: number };
-    const facts = state.userFacts.filter(item => !isForgottenCommitmentEvidence(state, item.evidence ?? ''))
-      .flatMap(item => visibleMemoryText(state, item.id, item.statement) ?? []).slice(0, 6);
-    const relationships = state.relationships.filter(item => !isForgottenCommitmentEvidence(state, item.evidence ?? ''))
-      .flatMap(item => visibleMemoryText(state, item.id, item.statement) ?? []).slice(0, 4);
-    const interests = state.interests.flatMap(item => visibleMemoryText(state, memoryIdentifier('interest', item), item) ?? []).slice(0, 8);
-    const analysis = [
-      facts.length ? `把握している特徴: ${facts.join('、')}` : '本人について断定できる特徴はまだ少ない。',
-      relationships.length ? `好む関わり方: ${relationships.join('、')}` : '好む関わり方はまだ観察中。',
-      interests.length ? `最近の関心: ${interests.join('、')}` : '最近の関心はまだ定まっていない。',
-    ].join('\n');
+    const analysis = safePersonalityAnalysis(state);
     this.context.database.prepare(`UPDATE personality_profiles SET active = 0 WHERE scope_key = ?`).run(scopeKey);
     this.context.database.prepare(`
       INSERT INTO personality_profiles

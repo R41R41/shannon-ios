@@ -28,6 +28,8 @@ export interface ConversationThread {
 
 export interface StoredConversationMessage extends ShannonConversationItem {
   id: string;
+  /** Durable turn.completed event that owns this message, when available. */
+  sourceExperienceId?: string;
   observedAt: string;
   messageEmotion?: ShannonMessageEmotion;
   stateVersion?: number;
@@ -239,9 +241,10 @@ export class InMemoryConversationStore implements ConversationStore {
     if (nextSummary) summaries.set(resolvedThreadId, nextSummary);
     this.threadSummaries.set(scopeKey, summaries);
     conversation.push(
-      { id: randomUUID(), role: 'user', content: userMessage, observedAt },
+      { id: randomUUID(), sourceExperienceId: turnId, role: 'user', content: userMessage, observedAt },
       {
         id: randomUUID(),
+        sourceExperienceId: turnId,
         role: 'assistant',
         content: shannonReply,
         observedAt,

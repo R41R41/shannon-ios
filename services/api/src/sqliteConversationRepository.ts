@@ -163,9 +163,9 @@ export class SQLiteConversationRepository implements ConversationStore {
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] {
     const effectiveThreadId = this.threadId(scopeKey, threadId);
     const rows = this.context.database.prepare(`
-      SELECT message_id, thread_id, role, content, observed_at, metadata_json
+      SELECT message_id, thread_id, turn_id, role, content, observed_at, metadata_json
       FROM (
-        SELECT sequence, message_id, thread_id, role, content, observed_at, metadata_json
+        SELECT sequence, message_id, thread_id, turn_id, role, content, observed_at, metadata_json
         FROM conversation_messages
         WHERE scope_key = ? AND thread_id = ?
         ORDER BY sequence DESC

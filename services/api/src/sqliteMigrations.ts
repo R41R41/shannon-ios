@@ -6,7 +6,7 @@ import { conciseThreadTitle, parseSnapshot, parseTurnPayload } from './sqliteSto
 import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
 
 export class SQLiteStoreMigrator {
@@ -121,8 +121,23 @@ export class SQLiteStoreMigrator {
       if (previousVersion < 11) this.migrateRealtimeVoiceReservations();
       if (previousVersion < 12) this.migratePlatformTurnReceipts();
       if (previousVersion < 13) this.migrateRealtimeVoiceAllowanceExtensions();
+      if (previousVersion < 14) this.repairMemoryProjections();
       this.context.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
+  }
+
+  private repairMemoryProjections(): void {
+    const scopes = this.context.database.prepare('SELECT scope_key FROM companion_states').all();
+    for (const row of scopes) {
+      const scope = String(row.scope_key);
+      const state = this.companion.snapshot(scope);
+      // Add provenance only. History, facts, old profile versions and controls
+      // remain auditable; active derivatives are rebuilt under current policy.
+      this.context.database.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?')
+        .run(JSON.stringify(state), scope);
+      this.companion.writePersonalityProfile(scope, state, this.context.now());
+      this.companion.writePromptProjection(scope, state);
+    }
   }
 
   private migrateThreadTitleOrigin(): void {

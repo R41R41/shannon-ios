@@ -22,6 +22,7 @@ export {
   type ShannonMessageEmotion,
 } from './expression.js';
 export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';
+export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,
   scoreMemoryRelevance,
@@ -53,4 +54,4 @@ export type {
   ShannonTemperament,
   UserFact,
 } from './types.js';
-export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible } from './memory.js';
+export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';

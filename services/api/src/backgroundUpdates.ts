@@ -3,6 +3,7 @@ import {
   deriveResonantInterest,
   selectActiveMemories,
   visibleMemoryText,
+  isMemoryEvidenceVisible,
   type CompanionStateSnapshot,
   type CompanionStateStore,
   type ShannonMessageEmotion,
@@ -57,10 +58,13 @@ export class TurnRefinementProcessor {
     const sourceTime = source?.observedAt ?? observedAt ?? new Date().toISOString();
     if (recordedExperienceId && !visibleMemoryText(this.stateStore.snapshot(scopeKey), recordedExperienceId, 'visible')) return;
     applyExplicitCommitmentCommand(this.stateStore, this.conversationStore, scopeKey, userMessage, sourceTime);
-    const candidates = this.conversationStore.experienceCandidates(scopeKey)
-      .filter(candidate => candidate.id !== recordedExperienceId);
-    const recalled = selectActiveMemories(userMessage, candidates);
     const current = this.stateStore.snapshot(scopeKey);
+    if (!isMemoryEvidenceVisible(current, userMessage)) return;
+    const candidates = this.conversationStore.experienceCandidates(scopeKey)
+      .filter(candidate => candidate.id !== recordedExperienceId
+        && visibleMemoryText(current, candidate.id, candidate.summary)
+        && isMemoryEvidenceVisible(current, candidate.userMessage));
+    const recalled = selectActiveMemories(userMessage, candidates);
 
     this.stateStore.apply(scopeKey, {
       type: 'emotion-adjusted',
@@ -74,10 +78,12 @@ export class TurnRefinementProcessor {
       supplementalProposals,
     );
     for (const fact of immediate.facts) {
-      this.stateStore.apply(scopeKey, { type: 'user-fact-upserted', fact, source: 'conversation' });
+      this.stateStore.apply(scopeKey, { type: 'user-fact-upserted',
+        fact: { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
     }
     for (const relationship of immediate.relationships) {
-      this.stateStore.apply(scopeKey, { type: 'relationship-upserted', relationship, source: 'conversation' });
+      this.stateStore.apply(scopeKey, { type: 'relationship-upserted',
+        relationship: { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
     }
     for (const interest of immediate.interests) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
@@ -90,7 +96,8 @@ export class TurnRefinementProcessor {
       .filter(control => control.kind === 'experience' && control.status === 'active' && control.pinned)
       .map(control => control.memoryId));
     const recalledIds = new Set(recalled.map(memory => memory.id));
-    const pinned = current.activeMemories.filter(memory => pinnedIds.has(memory.id) && !recalledIds.has(memory.id));
+    const pinned = current.activeMemories.filter(memory => pinnedIds.has(memory.id) && !recalledIds.has(memory.id)
+      && visibleMemoryText(current, memory.id, memory.summary));
     this.stateStore.apply(scopeKey, { type: 'active-memories-replaced', memories: [...recalled, ...pinned] });
     const resonantInterest = current.temperament.curiosity >= 0.5
       ? deriveResonantInterest(userMessage, recalled)

@@ -1,4 +1,5 @@
 import type { ActiveMemory } from './types.js';
+import { isMeaningfulInterest } from './interests.js';
 import type { ContextualMemory, ShannonMemoryQuery, ShannonRecallReason } from './runtime.js';
 
 export interface RecallCandidate {
@@ -117,8 +118,6 @@ export function selectContextualMemories(
     .slice(0, maximum);
 }
 
-const INTEREST_STOP_WORDS = new Set(['これ', 'それ', 'あれ', '今日', '昨日', '明日', '続き', 'こと', 'もの', '感じ', '気持ち']);
-
 /** A topic becomes Shannon's interest only when the current input resonates with recalled experience. */
 export function deriveResonantInterest(
   query: string,
@@ -131,7 +130,9 @@ export function deriveResonantInterest(
     .replace(/[\p{P}\p{S}\s]+/gu, ' ')
     .split(/[のをにはがでともへや]|\s+/u)
     .map(value => value.trim())
-    .filter(value => value.length >= 2 && value.length <= 24 && !INTEREST_STOP_WORDS.has(value));
+    .filter(value => value.length <= 24 && isMeaningfulInterest(value));
+  if (query.trim().length <= 24 && isMeaningfulInterest(query)
+    && /^[a-z0-9][a-z0-9 .+#-]+$/iu.test(query.trim())) candidates.unshift(query.trim().toLowerCase());
   return candidates
     .filter(candidate => remembered.includes(candidate))
     .sort((a, b) => b.length - a.length)[0] ?? null;

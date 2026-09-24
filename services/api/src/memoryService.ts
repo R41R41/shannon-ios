@@ -197,7 +197,10 @@ export class ShannonMemoryService implements ShannonMemoryStore {
         evidence: relationship.evidence,
       }, controls.get(relationship.id), metadata.get(relationship.id)));
     }
-    for (const experience of experiences.slice(-80).reverse()) {
+    // Overview pagination must never orphan a durable control or pinned item.
+    const managedExperiences = experiences.filter((experience, index) =>
+      index >= experiences.length - 80 || controls.has(experience.id));
+    for (const experience of managedExperiences.reverse()) {
       items.push(buildItem({
         id: experience.id,
         kind: 'experience',
@@ -210,12 +213,13 @@ export class ShannonMemoryService implements ShannonMemoryStore {
 
     const known = new Set(items.map(item => item.id));
     for (const control of state.memoryControls) {
-      if (known.has(control.memoryId) || !control.overrideText) continue;
+      if (known.has(control.memoryId)) continue;
       items.push(buildItem({
         id: control.memoryId,
         kind: control.kind,
-        text: control.overrideText,
+        text: control.overrideText ?? control.sourceEvidence ?? '元の内容を一覧で取得できない記憶',
         observedAt: control.updatedAt,
+        ...(control.sourceEvidence ? { evidence: control.sourceEvidence } : {}),
       }, control, metadata.get(control.memoryId)));
     }
 
@@ -264,7 +268,10 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     if ((mutation.action === 'complete' || mutation.action === 'dismiss') && !promise) {
       throw new Error('MEMORY_COMMITMENT_REQUIRED');
     }
-    const control = actionControl(item, previous, mutation, timestamp);
+    const source = this.history?.experienceCandidates(scopeKey).find(value => value.id === (promise?.sourceExperienceId ?? item.id));
+    const control = { ...actionControl(item, previous, mutation, timestamp),
+      sourceEvidence: previous?.sourceEvidence ?? source?.userMessage ?? item.evidence[0]?.quote,
+      contextInvalidatedAt: ['forget', 'reject', 'correct'].includes(mutation.action) ? timestamp : previous?.contextInvalidatedAt };
     events.push({ type: 'memory-control-upserted', control });
     if (promise && mutation.action === 'correct' && control.overrideText) {
       const { dueAt: _at, dueDate: _date, dueHint: _hint, ...retained } = promise;

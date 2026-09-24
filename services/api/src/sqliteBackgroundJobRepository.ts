@@ -167,13 +167,13 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
 
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] {
     const rows = this.context.database.prepare(`
-      SELECT content, observed_at
+      SELECT content, observed_at, turn_id
       FROM conversation_messages
       WHERE scope_key = ? AND role = 'user' AND observed_at >= ? AND observed_at < ?
       ORDER BY sequence ASC
       LIMIT 200
-    `).all(scopeKey, startAt, endAt) as unknown as Array<{ content: string; observed_at: string }>;
-    return Object.freeze(rows.map(row => Object.freeze({ content: row.content, observedAt: row.observed_at })));
+    `).all(scopeKey, startAt, endAt) as unknown as Array<{ content: string; observed_at: string; turn_id: string }>;
+    return Object.freeze(rows.map(row => Object.freeze({ content: row.content, observedAt: row.observed_at, sourceExperienceId: row.turn_id })));
   }
 
   applySleepOutcome(

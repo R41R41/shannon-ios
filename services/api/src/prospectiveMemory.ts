@@ -1,7 +1,8 @@
-import type { ProspectiveMemory } from '@shannon/cognition';
-import { commitmentDeadline } from './commitmentTime.js';
+import { isOwnerMemoryEvidence, type ProspectiveMemory } from '@shannon/cognition';
+import { commitmentDeadline, COMMITMENT_TEMPORAL_SOURCE } from './commitmentTime.js';
+import { containsUnresolvedConversationReference } from './conversationReference.js';
 
-const TEMPORAL_PROMISE = /^(明日|あした|あとで|後で|今度|次回|来週|週末|旅行のあと|旅行後)[、,\s]*(.{2,160}?)(?:しよう|したい|する|やる|やりたい|話そう|お願い)(?:ね|よ)?$/u;
+const TEMPORAL_PROMISE = new RegExp(`^(${COMMITMENT_TEMPORAL_SOURCE})(?:までに|の|に|は)?[、,\\s]*(.{2,160}?)(?:しよう|したい|する|やる|やりたい|話そう|お願い)(?:ね|よ)?$`, 'u');
 const EXPLICIT_REMINDER = /^(.{2,180}?)(?:を)?(?:覚えておいて|忘れないで|リマインドして)(?:ね|ください)?$/u;
 
 function prospectiveId(summary: string): string {
@@ -26,10 +27,11 @@ export function extractProspectiveMemories(
   for (const raw of sentences) {
     if (/[？?]\s*$/u.test(raw)) continue;
     const sentence = raw.replace(/[。！!]\s*$/u, '').trim().slice(0, 200);
-    if (!sentence || /(?:かもしれない|たぶん|多分|予定は未定)/u.test(sentence)) continue;
+    if (!sentence || !isOwnerMemoryEvidence(sentence) || /(?:かもしれない|たぶん|多分|予定は未定)/u.test(sentence)) continue;
     const temporal = sentence.match(TEMPORAL_PROMISE);
     const reminder = sentence.match(EXPLICIT_REMINDER);
     if (!temporal && !reminder) continue;
+    if (containsUnresolvedConversationReference(temporal?.[2] ?? reminder?.[1] ?? '')) continue;
     const summary = sentence;
     const id = prospectiveId(`${sourceExperienceId ?? observedAt}:${summary}`);
     memories.set(id, Object.freeze({

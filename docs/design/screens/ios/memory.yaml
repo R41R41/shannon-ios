@@ -1,0 +1,34 @@
+schema_version: 1
+screen_id: shannon-ios-memory
+platform: ios
+baseline_commit: 0b5c5a0ebb831c3e4878709df086a93e8f45d0b4
+last_verified_at: 2026-09-25
+verification_scope: "合成fixture・shared Swiftモデル/部品描画。実iPhoneの画面遷移は未確認"
+user_job: "シャノンの記憶と約束を確認し、訂正、完了、取り消し、忘却、復元する"
+primary_action: "頭の中の記憶と約束から対象を開く"
+preserve:
+  - "いま・知識・記憶の概要、日記、活動表示"
+  - "サーバー正本と既存の記憶変更API"
+improve:
+  - "活動や知識が豊富でも管理入口を常に表示する"
+  - "未完了・終えた約束、保存した記憶、忘れた・否定した記憶から詳細へ進める"
+  - "復元対象は物理削除ではないことを説明する"
+do_not_change:
+  - "所有者スコープと外部アプリ承認の境界"
+states:
+  loading: "入口は保持し、読み込み中を表示する"
+  empty: "各分類を空状態付きで保持する"
+  error: "最後の一覧を保持し更新を再試行できる"
+  offline: "最後の取得結果を保持し、更新失敗を表示する"
+  conflict: "変更成功時はサーバーの返したdashboardを表示する"
+  selection: "同じmemory IDで詳細を開き、変更後も履歴に到達できる"
+accessibility:
+  dynamic_type: "行の本文・状態は複数行で伸長する"
+  voiceover: "本文、約束状態、期限または忘却状態、開く役割を提供する"
+  target_size: "行の最小高は44ポイント"
+  focus: "標準NavigationLinkで一覧・詳細・戻るを提供する"
+  reduce_motion: "導線と状態の理解に装飾アニメーションを使わない"
+evidence:
+  current: []
+  approved: []
+  privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない"

@@ -81,41 +81,7 @@ public struct ShannonMemoryView: View {
     func memoryContent(_ palette: ShannonPalette) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                if let report = model.latestSleepReport {
-                    Button {
-                        selectedSleepReport = report
-                    } label: {
-                        SleepSummaryCard(report: report, palette: palette)
-                    }
-                    .buttonStyle(.plain)
-                }
-                Picker("表示", selection: $area) {
-                    ForEach(MemoryArea.allCases) { area in
-                        Label(area.title, systemImage: area.symbol).tag(area)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if model.isLoading && model.dashboard == nil {
-                    ProgressView("読み込み中…")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 64)
-                } else {
-                    switch area {
-                    case .current:
-                        currentStateContent(palette)
-                    case .knowledge:
-                        knowledgeContent(palette)
-                    case .activity:
-                        activityContent(palette)
-                    }
-                }
-
-                if let error = model.errorMessage {
-                    MemoryErrorCard(message: error, palette: palette) {
-                        Task { await model.reload() }
-                    }
-                }
+                overviewContent(palette)
             }
             .padding(.horizontal, ShannonSpacing.large)
             .padding(.top, max(ShannonSpacing.large, workspaceTopInset))
@@ -124,6 +90,54 @@ public struct ShannonMemoryView: View {
         .background(Color.clear)
         .task { await model.loadIfNeeded() }
         .refreshable { await model.reload() }
+    }
+
+    @ViewBuilder
+    func overviewContent(_ palette: ShannonPalette) -> some View {
+        // This shared composition is also rendered directly by fixture tests;
+        // LazyVStack/ScrollView virtualization must not hide the entry in tests.
+        managementEntry(palette)
+        if let report = model.latestSleepReport {
+            Button { selectedSleepReport = report } label: {
+                SleepSummaryCard(report: report, palette: palette)
+            }
+            .buttonStyle(.plain)
+        }
+        Picker("表示", selection: $area) {
+            ForEach(MemoryArea.allCases) { area in
+                Label(area.title, systemImage: area.symbol).tag(area)
+            }
+        }
+        .pickerStyle(.segmented)
+        if model.isLoading && model.dashboard == nil {
+            ProgressView("読み込み中…")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 64)
+        } else {
+            switch area {
+            case .current: currentStateContent(palette)
+            case .knowledge: knowledgeContent(palette)
+            case .activity: activityContent(palette)
+            }
+        }
+        if let error = model.errorMessage {
+            MemoryErrorCard(message: error, palette: palette) {
+                Task { await model.reload() }
+            }
+        }
+    }
+
+    func managementEntry(_ palette: ShannonPalette) -> some View {
+        NavigationLink {
+            ShannonMemoryLibraryView(model: model)
+        } label: {
+            ShannonMemoryManagementLabel(
+                summary: model.dashboard == nil ? "読み込み・再試行はこちらから" : ShannonMemoryLibrary(dashboard: model.dashboard).summary,
+                palette: palette
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("memory-management-entry")
     }
 
     @ViewBuilder

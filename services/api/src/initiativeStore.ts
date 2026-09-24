@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from './dailyMind.js';
 import { dueCommitmentCandidate } from './commitmentInitiative.js';
+import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
 
 import {
   candidateScore,
@@ -145,9 +147,10 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         if (this.persistMessage(scope.scope_key, state, promise, null, null, dayKey, at)) sent += 1;
         continue;
       }
-      const interest = firstInterest(state.interests);
+      const interests = worldVisibleInterests(restoreCompanionState(scope.scope_key, JSON.parse(scope.snapshot_json), at));
+      const interest = firstInterest(interests);
       const dailyFocus = dailyFocuses.get(scope.scope_key) ?? null;
-      if (dailyFocus && !dailyFocus.openingLine) {
+      if (dailyFocus && (!dailyFocus.openingLine || !dailyFocus.sourceItemId)) {
         lastStop = 'nothing-worth-saying';
         continue;
       }
@@ -172,7 +175,12 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'nothing-worth-saying';
         continue;
       }
-      if (this.persistMessage(scope.scope_key, state, selected, interest, dailyFocus, dayKey, at)) sent += 1;
+      const matchedInterest = interests.find(value => topicMatchesSource(value, selected.title, selected.summary ?? '')) ?? null;
+      if (dailyFocus && interest && !matchedInterest) {
+        lastStop = 'nothing-worth-saying';
+        continue;
+      }
+      if (this.persistMessage(scope.scope_key, state, selected, matchedInterest, dailyFocus, dayKey, at)) sent += 1;
       lastStop = null;
     }
     this.secureFiles();
@@ -288,12 +296,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const initiativeId = randomUUID();
     const threadId = this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
-    const reason = dailyFocus?.reason
-      ?? (interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。');
+    const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。';
     const content = candidate.source_id === 'commitment'
       ? `「${truncate(candidate.title, 240)}」という約束が残っているよ。今、続ける？ もう済んでいたら、完了にできるよ。`
       : dailyFocus?.openingLine
-      ? `${dailyFocus.openingLine}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
+      ? `${groundedWorldOpening(dailyFocus.openingLine, candidate.title, interest)}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : interest
       ? `今日の関心の「${interest}」に近くて、これが少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : `これ、少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`;

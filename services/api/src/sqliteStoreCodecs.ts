@@ -3,7 +3,7 @@ import type { BackgroundJobPayload } from './backgroundJobStore.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
 import type { ShannonSourceAttribution, StoredConversationMessage } from './conversationStore.js';
 
-export interface MessageRow { message_id: string; thread_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
+export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
 export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; }
 export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; }
 
@@ -16,6 +16,7 @@ export function freezeStoredMessage(row: MessageRow): StoredConversationMessage 
   const metadata = row.metadata_json ? parseMessageMetadata(row.metadata_json) : null;
   return Object.freeze({
     id: row.message_id,
+    sourceExperienceId: row.turn_id,
     role,
     content: row.content,
     observedAt: row.observed_at,

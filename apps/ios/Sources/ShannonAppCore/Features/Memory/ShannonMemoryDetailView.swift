@@ -47,7 +47,7 @@ struct ShannonMemoryDetailView: View {
         } message: {
             Text(destructiveAction == .reject
                  ? "今後の睡眠バッチでも同じ内容を自動で覚え直しません。"
-                 : "会話の生成には使われなくなります。あとから復元できます。")
+                 : "会話の生成には使われなくなります。「記憶と約束」の一覧から復元できます。元の会話や根拠は削除しません。")
         }
     }
 

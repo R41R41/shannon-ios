@@ -65,3 +65,9 @@ App naming and the three-level icon selector are governed by
 [`docs/design/screens/ios/settings.yaml`](design/screens/ios/settings.yaml) and
 [`docs/design/screens/macos/settings.yaml`](design/screens/macos/settings.yaml).
 The app-owned shared-role mapping is [`docs/design/semantic-role-map.v1.json`](design/semantic-role-map.v1.json) and is checked deterministically by `scripts/check-semantic-role-map.mjs`.
+
+Memory management is governed by [`docs/design/screens/ios/memory.yaml`](design/screens/ios/memory.yaml)
+and [`docs/design/screens/macos/memory.yaml`](design/screens/macos/memory.yaml). The shared memory
+overview always exposes a native navigation entry to all durable memories and commitments,
+including completed/dismissed commitments and forgotten/rejected items. Rich activity or
+knowledge projections must not hide this management path.

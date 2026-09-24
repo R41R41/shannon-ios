@@ -1,3 +1,5 @@
+import { filterMeaningfulInterests } from '@shannon/cognition';
+import { topicMatchesSource } from './worldInterestRelevance.js';
 import {
   isRepeatedWorldSignal,
   recentSignalCutoff,
@@ -56,10 +58,7 @@ export function candidateScore(candidate: CandidateRow, interest: string | null,
   const effectiveAt = Number.isFinite(publishedAt) ? Math.min(discoveredAt, publishedAt) : discoveredAt;
   const age = Math.max(0, Date.parse(at) - effectiveAt);
   const freshness = Math.max(0, 1 - age / CANDIDATE_MAX_AGE_MILLISECONDS);
-  const searchable = normalize(`${candidate.title} ${candidate.summary ?? ''}`);
-  const tokens = interestTokens(interest);
-  const matches = tokens.filter(token => searchable.includes(token)).length;
-  const interestScore = tokens.length ? Math.min(1, matches / Math.min(tokens.length, 3)) : 0;
+  const interestScore = topicMatchesSource(interest, candidate.title, candidate.summary ?? '') ? 1 : 0;
   const contextScore = (candidate.summary?.trim().length ?? 0) >= 80 ? 0.12
     : (candidate.summary?.trim().length ?? 0) >= 24 ? 0.09 : 0.05;
   return round(0.34 + freshness * 0.12 + contextScore + Math.min(1, Math.max(0, initiative)) * 0.08 + interestScore * 0.46);
@@ -76,7 +75,7 @@ export function signalCandidate(candidate: CandidateRow) {
 
 export function firstInterest(value: unknown): string | null {
   if (!Array.isArray(value)) return null;
-  const first = value.find(item => typeof item === 'string' && item.trim());
+  const first = filterMeaningfulInterests(value)[0];
   return typeof first === 'string' ? first.trim().slice(0, 80) : null;
 }
 

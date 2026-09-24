@@ -96,9 +96,10 @@ describe('Shannon initiative loop', () => {
 
     expect(initiatives.runOnce(at, 'Asia/Tokyo', new Map([['owner', focus]]))).toMatchObject({ sent: 1 });
     expect(state.conversationHistory('owner', threadId).at(-1)?.content)
-      .toContain('昨日の話と少しつながるものを見つけた。');
+      .toContain('A small agent learns to remember');
+    expect(state.conversationHistory('owner', threadId).at(-1)?.content).not.toContain('昨日の話');
     expect(state.conversationHistory('owner', threadId).at(-1)?.sourceAttribution)
-      .toEqual({ title: 'Hacker News', url: 'https://example.com/focus', reason: focus.reason });
+      .toEqual({ title: 'Hacker News', url: 'https://example.com/focus', reason: 'シャノン自身が気になったから。' });
 
     initiatives.close();
     world.close();
