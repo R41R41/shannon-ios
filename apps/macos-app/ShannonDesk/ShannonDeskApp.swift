@@ -69,8 +69,9 @@ struct ShannonDeskApp: App {
                 }
             }
         }
+        // The root view owns the 860×600 minimum. Content-driven scene sizing and a
+        // restored SwiftUI inspector can otherwise re-enter AppKit's constraint pass.
         .defaultSize(width: previewWindowSize.width, height: previewWindowSize.height)
-        .windowResizability(.contentMinSize)
         .commands {
             ShannonDeskCommands(conversation: conversationModel)
         }

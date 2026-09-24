@@ -53,6 +53,11 @@ run_macos_app() {
   scripts/xcode.sh mac-debug
 }
 
+run_macos_launch_smoke() {
+  run_macos_app
+  scripts/smoke-macos-inspector-launch.sh
+}
+
 run_release_macos_app() {
   scripts/xcode.sh mac-release
 }
@@ -69,6 +74,7 @@ case "$target" in
   ios) run_fast; run_ios ;;
   app) run_fast; run_app ;;
   mac) run_fast; run_macos_app ;;
+  mac-smoke) run_fast; run_macos_launch_smoke ;;
   mac-release) run_release_macos_app ;;
   release) run_release_app ;;
   release-runner) run_release_runner ;;
@@ -81,7 +87,7 @@ case "$target" in
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [fast|architecture|api|ios|app|mac|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [fast|architecture|api|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac
