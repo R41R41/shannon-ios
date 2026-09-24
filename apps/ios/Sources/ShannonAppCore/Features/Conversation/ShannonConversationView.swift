@@ -25,6 +25,8 @@ public struct ShannonConversationView: View {
     @State var showsVoiceIdentity = false
     @State var showsWorldSubscriptions = false
     @State var showsLiveVoice = false
+    @State var showsGeminiVoice = false
+    @State var showsVoiceModePicker = false
     @State var showsSettings = false
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var drawerProgress: CGFloat = 0
@@ -164,6 +166,7 @@ public struct ShannonConversationView: View {
                 realtimeVoiceModel.stop()
                 voiceIdentityModel.stopPreview()
                 showsLiveVoice = false
+                showsGeminiVoice = false
             }
         }
 #if os(iOS)
@@ -180,35 +183,15 @@ public struct ShannonConversationView: View {
             showsTestFlightDelivery = true
         }
 #if os(iOS)
-        .fullScreenCover(isPresented: $showsLiveVoice) {
-            ShannonLiveVoiceView(
-                model: realtimeVoiceModel,
-                expression: model.currentExpression,
-                createCall: { offer, participantMode in
-                    try await model.createRealtimeVoiceCall(
-                        offerSDP: offer,
-                        participantMode: participantMode
-                    )
-                },
-                performLiveDelegation: { transcript, utterance, participantMode in
-                    try await model.performLiveVoiceDelegation(
-                        transcript: transcript,
-                        userUtterance: utterance,
-                        participantMode: participantMode
-                    )
-                },
-                analyzeCameraSnapshot: { jpegData in
-                    try await model.analyzeVoiceCameraSnapshot(jpegData: jpegData)
-                },
-                commitTurn: { user, shannon in
-                    try await model.commitRealtimeVoiceTurn(
-                        userTranscript: user,
-                        shannonTranscript: shannon
-                    )
-                },
-                dismiss: { showsLiveVoice = false }
-            )
-        }
+        .modifier(ShannonVoicePresentationModifier(
+            showsLiveVoice: $showsLiveVoice,
+            showsGeminiVoice: $showsGeminiVoice,
+            showsVoiceModePicker: $showsVoiceModePicker,
+            conversationModel: model,
+            voiceModel: voiceModel,
+            realtimeVoiceModel: realtimeVoiceModel,
+            expression: model.currentExpression
+        ))
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
             agentTaskRoom
         }

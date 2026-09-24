@@ -82,6 +82,28 @@ public struct ShannonVoiceTranscriptionDTO: Codable, Equatable, Sendable {
     public let estimatedCostUsd: Double
 }
 
+public struct ShannonGeminiSpeech: Equatable, Sendable {
+    public let audio: Data
+    public let model: String
+    public let voice: String
+    public let durationSeconds: Double
+    public let estimatedCostUsd: Double
+
+    public init(
+        audio: Data,
+        model: String,
+        voice: String,
+        durationSeconds: Double,
+        estimatedCostUsd: Double
+    ) {
+        self.audio = audio
+        self.model = model
+        self.voice = voice
+        self.durationSeconds = durationSeconds
+        self.estimatedCostUsd = estimatedCostUsd
+    }
+}
+
 public enum ShannonVoiceRecordingPolicy {
     public static let maximumDuration: TimeInterval = 60
     public static let maximumBytes = 5 * 1_024 * 1_024
@@ -108,6 +130,7 @@ public final class ShannonVoiceConversationModel: NSObject {
     public private(set) var errorMessage: String?
 
     private let synthesizer = AVSpeechSynthesizer()
+    private var audioPlayer: AVAudioPlayer?
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var meteringTask: Task<Void, Never>?
@@ -244,8 +267,24 @@ public final class ShannonVoiceConversationModel: NSObject {
         synthesizer.speak(utterance)
     }
 
+    public func speakGemini(_ speech: ShannonGeminiSpeech) throws {
+        guard !speech.audio.isEmpty else { throw PlaybackError.invalidAudio }
+        stopSpeaking()
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        let player = try AVAudioPlayer(data: speech.audio)
+        player.delegate = self
+        guard player.prepareToPlay(), player.play() else { throw PlaybackError.startFailed }
+        audioPlayer = player
+        phase = .speaking
+    }
+
     public func stopSpeaking() {
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        if audioPlayer?.isPlaying == true { audioPlayer?.stop() }
+        audioPlayer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if phase == .speaking { phase = .idle }
     }
 
@@ -261,6 +300,11 @@ public final class ShannonVoiceConversationModel: NSObject {
     public func finishAfterFailedReply() {
         phase = .failed
         errorMessage = "返答を受け取れませんでした。テキストから再送できます。"
+    }
+
+    public func finishAfterFailedGeminiSpeech() {
+        phase = .failed
+        errorMessage = "Gemini音声を生成または再生できませんでした。返答はトークに保存されています。"
     }
 
     private func beginFileRecording(sessionID: String) throws {
@@ -343,9 +387,14 @@ public final class ShannonVoiceConversationModel: NSObject {
         case preparationFailed
         case startFailed
     }
+
+    private enum PlaybackError: Error {
+        case invalidAudio
+        case startFailed
+    }
 }
 
-extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthesizerDelegate {
+extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     nonisolated public func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         Task { @MainActor [weak self] in
             guard let self, self.phase == .listening else { return }
@@ -373,6 +422,16 @@ extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthe
             self?.phase = .idle
         }
     }
+
+    nonisolated public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard self?.audioPlayer === player else { return }
+            self?.audioPlayer = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            self?.phase = flag ? .idle : .failed
+            if !flag { self?.errorMessage = "Gemini音声を最後まで再生できませんでした。" }
+        }
+    }
 }
 #else
 @MainActor
@@ -389,8 +448,10 @@ public final class ShannonVoiceConversationModel {
     public func acceptTranscript(_ value: String) {}
     public func finishAfterFailedTranscription() {}
     public func speak(_ text: String) {}
+    public func speakGemini(_ speech: ShannonGeminiSpeech) throws {}
     public func stopSpeaking() {}
     public func cancel() { phase = .denied }
     public func finishAfterFailedReply() {}
+    public func finishAfterFailedGeminiSpeech() {}
 }
 #endif

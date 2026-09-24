@@ -353,6 +353,54 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(result.model, "gpt-transcribe")
     }
 
+    func testAPIClientRequestsGeminiSpeechWithoutSendingAProviderKey() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "g", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-gemini",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let wav = Data("RIFF0000WAVEfmt data".utf8)
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/voice/gemini/speech")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-goog-api-key"))
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            XCTAssertEqual(json["text"], "おかえりなさい。")
+            guard let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "content-type": "audio/wav",
+                    "x-shannon-gemini-model": "gemini-3.8-flash-lite-tts",
+                    "x-shannon-gemini-voice": "Leda",
+                    "x-shannon-audio-duration-seconds": "1.250",
+                    "x-shannon-estimated-cost-usd": "0.00018750",
+                ]
+            ) else { throw ShannonAPIError.invalidResponse }
+            return (response, wav)
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let speech = try await client.synthesizeGeminiSpeech(
+            scopeKey: "untrusted-client-scope",
+            text: "おかえりなさい。"
+        )
+
+        XCTAssertEqual(speech.audio, wav)
+        XCTAssertEqual(speech.model, "gemini-3.8-flash-lite-tts")
+        XCTAssertEqual(speech.voice, "Leda")
+        XCTAssertEqual(speech.durationSeconds, 1.25)
+        XCTAssertEqual(speech.estimatedCostUsd, 0.0001875)
+    }
+
     func testAPIClientCreatesRealtimeCallAndCommitsTheVisibleTranscript() async throws {
         let previousBrightness = UserDefaults.standard.object(
             forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey

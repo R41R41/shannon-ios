@@ -2,13 +2,14 @@ import Foundation
 import Observation
 
 extension ShannonConversationModel {
+    @discardableResult
     func send(
         text: String,
         userMessageID: UUID,
         attachments: [ShannonChatAttachmentDTO] = [],
         webSearch: Bool = false,
         photoJPEGData: Data? = nil
-    ) async {
+    ) async -> String? {
         errorMessage = nil
         isSending = true
         let titleRevisionsAtSend = titleEditRevisions
@@ -86,6 +87,8 @@ extension ShannonConversationModel {
                 // Older servers expose title changes through the existing thread-list API.
                 await loadThreads(force: true)
             }
+            isSending = false
+            return response.reply
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)
             errorMessage = photoJPEGData == nil
@@ -93,6 +96,7 @@ extension ShannonConversationModel {
                 : "写真を確認または送信できませんでした。再試行できます。"
         }
         isSending = false
+        return nil
     }
 
     static func messageText(

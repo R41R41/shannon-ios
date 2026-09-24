@@ -4,11 +4,13 @@ import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, rea
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
 import { handleRealtimeVoiceAllowance } from './serverRealtimeVoiceAllowanceRoute.js';
+import { createPairingRoute } from './serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
+import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
-import { configuredAuthPepper, normalizePairingCode, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
+import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
 import { SQLiteWorldStore } from './worldStore.js';
@@ -105,11 +107,14 @@ const apiToken = authMode === 'fixed' ? configuredApiToken(host, process.env.SHA
 const deviceAuth = authMode === 'paired'
   ? new SQLiteDeviceAuthStore({ path: configuredDatabasePath(), pepper: configuredAuthPepper() })
   : null;
-let pairingWindow = { startedAt: 0, count: 0 };
+const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
 const deviceVoiceUsage = new Map<string, { startedAt: number; count: number }>();
 const activeVoiceScopes = new Set<string>();
+const geminiSpeechRoute = createGeminiSpeechRoute(
+  process.env, persistentStore, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+);
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'GET' && request.method !== 'POST') {
@@ -118,7 +123,7 @@ const server = createServer(async (request, response) => {
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     if (url.pathname === '/v1/pair') {
-      await handlePairing(request, response);
+      await pairingRoute(request, response);
       return;
     }
     if (url.pathname.startsWith('/v1/agent/host/')) {
@@ -155,6 +160,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/transcriptions') {
       await handleVoiceTranscription(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/gemini/speech') {
+      await geminiSpeechRoute(request, response, principal);
       return;
     }
     if (url.pathname === '/v1/voice/realtime/calls') {
@@ -462,39 +471,3 @@ async function handleVoiceIdentityPreview(
 
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
-
-async function handlePairing(request: IncomingMessage, response: ServerResponse): Promise<void> {
-  if (!deviceAuth || authMode !== 'paired') {
-    sendJson(response, 404, { error: 'NOT_FOUND' });
-    return;
-  }
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  const timestamp = Date.now();
-  if (timestamp - pairingWindow.startedAt >= 60_000) pairingWindow = { startedAt: timestamp, count: 0 };
-  pairingWindow.count += 1;
-  if (pairingWindow.count > 20) {
-    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-    return;
-  }
-  const body = await readJson(request, 1_024);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    sendJson(response, 400, { error: 'INVALID_REQUEST' });
-    return;
-  }
-  const requestBody = body as Record<string, unknown>;
-  const normalizedCode = normalizePairingCode(requestBody.code);
-  if (!normalizedCode) {
-    sendJson(response, 400, { error: 'INVALID_PAIRING_CODE', message: '12桁の接続コードを入力してください。' });
-    return;
-  }
-  const deviceName = typeof requestBody.deviceName === 'string' ? requestBody.deviceName : 'iPhone';
-  const result = deviceAuth.pair(normalizedCode, deviceName);
-  if (!result) {
-    sendJson(response, 401, { error: 'PAIRING_REJECTED', message: '接続コードが無効・期限切れです。' });
-    return;
-  }
-  sendJson(response, 200, result);
-}

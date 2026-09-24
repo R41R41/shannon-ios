@@ -39,6 +39,21 @@ extension ShannonConversationModel {
         return value
     }
 
+    public func sendGeminiVoiceTurn(_ transcript: String) async throws -> String {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isSending else { throw ShannonAPIError.invalidResponse }
+        let message = ConversationMessage(role: .user, text: text, deliveryState: .sending)
+        messages.append(message)
+        guard let reply = await send(text: text, userMessageID: message.id) else {
+            throw ShannonAPIError.invalidResponse
+        }
+        return reply
+    }
+
+    public func synthesizeGeminiSpeech(_ text: String) async throws -> ShannonGeminiSpeech {
+        try await client.synthesizeGeminiSpeech(scopeKey: scopeKey, text: text)
+    }
+
     public func createRealtimeVoiceCall(
         offerSDP: String,
         participantMode: ShannonVoiceParticipantMode

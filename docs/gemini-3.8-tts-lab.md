@@ -1,6 +1,6 @@
 # Gemini 3.8 TTS listening lab
 
-Status: isolated development experiment; not a production voice provider
+Status: listening harness plus opt-in iPhone turn-based production experiment; not the default voice provider
 
 ## Purpose
 
@@ -145,6 +145,31 @@ expressive/long-form turns only if evaluation shows the extra latency is worthwh
 Before rollout, measure first-audio p50/p95 and verify barge-in, cancellation,
 speaker/headset/Bluetooth routes, interruptions, AEC, transcript persistence, guest
 boundaries, camera commentary, and backend tool delegation on a physical device.
+
+The first production experiment intentionally stops short of that full cascade. From
+the iPhone waveform menu, the owner may choose `Gemini 3.8 Flash-Lite · 試験版`.
+Each turn records one bounded M4A, uses the existing OpenAI transcription endpoint,
+sends the transcript through the ordinary Shannon text/history/tool lane, requests a
+24 kHz WAV from Gemini on Azure, and plays the result locally. The existing OpenAI
+Live path remains available and unchanged. The Gemini key never enters the app, and
+neither source audio nor generated WAV is persisted by Shannon.
+
+## Cost comparison baseline
+
+Provider list prices used by the UI estimate are valid through 2026-12-31:
+
+| Item | Current list price | Example |
+| --- | ---: | ---: |
+| Gemini 3.8 Flash-Lite TTS output | $0.0015 / 10 s | $0.009 / output minute |
+| Gemini 3.8 Flash TTS output | $0.00225 / 10 s | $0.0135 / output minute |
+| OpenAI `gpt-transcribe` input | $0.0045 / input minute | $0.00225 / 30 s input |
+| OpenAI GPT-Live active session | $0.05 / active minute | $0.05 / conversation minute, plus backend/tool calls |
+
+For a one-minute turn cycle with 30 seconds of user speech and 30 seconds of Shannon
+speech, the Flash-Lite speech transport estimate is about $0.00675: $0.00225 for
+transcription plus $0.0045 for Gemini audio output. Ordinary Shannon text-model and
+tool costs remain additional. Gemini TTS prices double on 2027-01-01, so the server's
+configurable 10-second estimate must be updated before then.
 
 ## Official references
 

@@ -19,6 +19,7 @@ public protocol ShannonChatServing: Sendable {
 
 public protocol ShannonVoiceServing: Sendable {
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
+    func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech
     func createRealtimeVoiceCall(
         scopeKey: String,
         threadId: String?,
@@ -259,6 +260,10 @@ public extension ShannonAPIClientProtocol {
     }
 
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech {
         throw ShannonAPIError.invalidResponse
     }
 

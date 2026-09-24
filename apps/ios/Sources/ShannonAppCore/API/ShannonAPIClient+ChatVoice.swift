@@ -63,6 +63,36 @@ extension ShannonAPIClient {
         return try JSONDecoder().decode(ShannonVoiceTranscriptionDTO.self, from: data)
     }
 
+    public func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/speech"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 75
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        guard http.value(forHTTPHeaderField: "content-type")?.lowercased().hasPrefix("audio/wav") == true,
+              !data.isEmpty
+        else { throw ShannonAPIError.invalidResponse }
+        guard let model = http.value(forHTTPHeaderField: "x-shannon-gemini-model"),
+              let voice = http.value(forHTTPHeaderField: "x-shannon-gemini-voice"),
+              let duration = http.value(forHTTPHeaderField: "x-shannon-audio-duration-seconds").flatMap(Double.init),
+              let cost = http.value(forHTTPHeaderField: "x-shannon-estimated-cost-usd").flatMap(Double.init)
+        else { throw ShannonAPIError.invalidResponse }
+        return ShannonGeminiSpeech(
+            audio: data,
+            model: model,
+            voice: voice,
+            durationSeconds: duration,
+            estimatedCostUsd: cost
+        )
+    }
+
     public func createRealtimeVoiceCall(
         scopeKey: String,
         threadId: String?,
@@ -291,4 +321,8 @@ extension ShannonAPIClient {
         guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }
         return try JSONDecoder().decode(ShannonRealtimeVoiceTurnResponseDTO.self, from: data)
     }
+}
+
+private struct GeminiSpeechRequestDTO: Encodable {
+    let text: String
 }

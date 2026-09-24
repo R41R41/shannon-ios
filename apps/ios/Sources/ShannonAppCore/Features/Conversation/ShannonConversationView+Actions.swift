@@ -226,7 +226,7 @@ extension ShannonConversationView {
     func performVoicePrimaryAction() {
         composerIsFocused = false
         voiceModel.cancel()
-        showsLiveVoice = true
+        showsVoiceModePicker = true
     }
 
     var composerHasSendableContent: Bool {
