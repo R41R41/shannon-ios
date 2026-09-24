@@ -369,6 +369,51 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v1]');
   });
 
+  it('recalls a related past turn before generating the current response', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-24T03:00:00.000Z',
+      { chatModel: model },
+    );
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', message: '浜松で雨の日にうなぎ屋を探したね',
+    } });
+
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', message: '浜松の雨の日の続き、覚えてる？',
+    } });
+
+    expect(model.requests[1]?.systemPrompt).toContain('[Current cognitive context — use before answering]');
+    expect(model.requests[1]?.systemPrompt).toContain('浜松で雨の日にうなぎ屋を探したね');
+    expect(model.requests[1]?.systemPrompt).toContain('cue: words');
+  });
+
+  it('captures explicit future intent and projects it into later turns', async () => {
+    const model = new RecordingChatModel();
+    const api = createLocalApiKernel(
+      () => '2026-09-24T03:00:00.000Z',
+      { chatModel: model },
+    );
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', message: '明日、旅行の写真を一緒に整理しよう',
+    } });
+    await api.waitForBackground('owner-a');
+    const state = await api.dispatch({
+      method: 'GET', path: '/v1/state', query: new URLSearchParams({ scopeKey: 'owner-a' }),
+    });
+    expect(state).toMatchObject({ status: 200, body: {
+      prospectiveMemories: [{
+        summary: '明日、旅行の写真を一緒に整理しよう', status: 'pending', dueHint: '明日',
+      }],
+    } });
+
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', message: '次は何をしようか',
+    } });
+    expect(model.requests[1]?.systemPrompt).toContain('未完了の約束・未来記憶');
+    expect(model.requests[1]?.systemPrompt).toContain('旅行の写真を一緒に整理');
+  });
+
   it('suppresses a duplicate agent-work card for an explicit Voyager update request', async () => {
     const model = new RecordingChatModel();
     model.taskDecision = { disposition: 'propose', reason: '更新依頼を作業として誤認' };

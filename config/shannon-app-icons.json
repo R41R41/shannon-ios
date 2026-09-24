@@ -6,7 +6,7 @@
   "release": {
     "marketingVersion": "0.1.0",
     "iosBuild": "55",
-    "macosBuild": "12"
+    "macosBuild": "13"
   },
   "macosRendering": {
     "alphaMask": "roundedRectangle",

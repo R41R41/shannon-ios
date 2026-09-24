@@ -22,6 +22,19 @@ struct ShannonSleepReportView: View {
                 reportSection("理解が深まったこと", symbol: "arrow.triangle.2.circlepath", changes: report.updated, palette: palette)
                 reportSection("興味の変化", symbol: "sparkles", changes: report.interestChanges, palette: palette)
                 contradictionSection(palette)
+                if let review = report.commitmentReview {
+                    VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                        Label("約束の点検", systemImage: "calendar.badge.checkmark").font(.title3.weight(.semibold))
+                        Text("未完了 \(review.pending)件・完了 \(review.completed)件・取り消し \(review.dismissed)件")
+                        Text("期限の確認が必要 \(review.needsDateClarification)件・時刻を過ぎた約束 \(review.overdue)件")
+                            .foregroundStyle(palette.textSecondary)
+                        Text("睡眠中に勝手に完了にはしません。変更は記憶の詳細から確認できます。")
+                            .font(.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    .padding(ShannonSpacing.large)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
+                }
             }
             .padding(ShannonSpacing.large)
         }

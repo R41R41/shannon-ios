@@ -69,6 +69,12 @@ export function actionControl(
   let overrideText = previous?.overrideText;
   let changeReason: string;
   switch (mutation.action) {
+    case 'complete':
+      changeReason = 'ユーザーが約束を完了';
+      break;
+    case 'dismiss':
+      changeReason = 'ユーザーが約束を取り消し';
+      break;
     case 'correct': {
       const text = mutation.text?.replace(/\s+/g, ' ').trim().slice(0, 320);
       if (!text) throw new Error('MEMORY_CORRECTION_REQUIRED');
@@ -222,8 +228,15 @@ export function parseSleepReports(events: readonly MemoryHistoryEvent[]): SleepR
       updated: parseChanges(payload?.updated),
       interestChanges: parseChanges(payload?.interestChanges),
       contradictions: parseContradictions(payload?.contradictions),
+      ...(validCommitmentReview(payload?.commitmentReview) ? { commitmentReview: payload!.commitmentReview as import('./sleepCommitmentReview.js').CommitmentSleepReview } : {}),
     }];
   });
+}
+
+function validCommitmentReview(value: unknown): boolean {
+  const record = objectValue(value);
+  return Boolean(record && ['pending', 'completed', 'dismissed', 'needsDateClarification', 'overdue']
+    .every(key => Number.isSafeInteger(record[key]) && (record[key] as number) >= 0));
 }
 
 export function parseChanges(value: unknown): SleepChange[] {

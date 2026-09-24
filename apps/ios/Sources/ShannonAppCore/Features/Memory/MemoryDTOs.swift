@@ -49,6 +49,23 @@ public struct ShannonMemoryItemDTO: Codable, Equatable, Identifiable, Sendable {
     public let updatedAt: String
     public let changeReason: String
     public let evidence: [ShannonMemoryEvidenceDTO]
+    public var commitment: ShannonCommitmentDTO? = nil
+}
+
+public struct ShannonCommitmentDTO: Codable, Equatable, Sendable {
+    public let status: String
+    public let dueAt: String?
+    public let dueDate: String?
+    public let dueHint: String?
+    public let timeZone: String?
+
+    public var statusLabel: String {
+        switch status {
+        case "completed": "完了"
+        case "dismissed": "取り消し済み"
+        default: "未完了の約束"
+        }
+    }
 }
 
 public struct ShannonSleepChangeDTO: Codable, Equatable, Identifiable, Sendable {
@@ -73,6 +90,7 @@ public struct ShannonSleepContradictionDTO: Codable, Equatable, Identifiable, Se
 }
 
 public struct ShannonSleepReportDTO: Codable, Equatable, Identifiable, Sendable {
+    public var commitmentReview: ShannonCommitmentSleepReviewDTO? = nil
     public let dayKey: String
     public let completedAt: String
     public let learned: [ShannonSleepChangeDTO]
@@ -81,6 +99,14 @@ public struct ShannonSleepReportDTO: Codable, Equatable, Identifiable, Sendable 
     public let contradictions: [ShannonSleepContradictionDTO]
 
     public var id: String { "\(dayKey):\(completedAt)" }
+}
+
+public struct ShannonCommitmentSleepReviewDTO: Codable, Equatable, Sendable {
+    public let pending: Int
+    public let completed: Int
+    public let dismissed: Int
+    public let needsDateClarification: Int
+    public let overdue: Int
 }
 
 public struct ShannonMemoryDashboardDTO: Codable, Equatable, Sendable {
@@ -230,6 +256,8 @@ public enum ShannonMemoryActionDTO: String, Codable, Equatable, Sendable {
     case unpin
     case reject
     case restore
+    case complete
+    case dismiss
 }
 
 public struct ShannonMemoryMutationDTO: Codable, Equatable, Sendable {

@@ -12,6 +12,7 @@ export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
+import { dispatchVoiceTurn } from './apiVoiceTurns.js';
 import {
   dispatchLiveVoiceRequest,
   realtimeVoiceSessionProjection,
@@ -55,6 +56,11 @@ import {
   type HostAgentEvent,
 } from './agentTaskStore.js';
 import { randomUUID } from 'node:crypto';
+import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
+import { conversationCapabilityPrompt } from './conversationCapabilities.js';
+import { prepareConversationOrganize } from './conversationOrganize.js';
+import { executeConversationCommand } from './conversationCommands.js';
+import { visibleConversationHistory, mayUseThreadSummary } from './memoryVisibility.js';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
@@ -67,7 +73,6 @@ import {
   OrganizeError,
   isExplicitVoyagerUpdateRequest,
   isOrganizeCommand,
-  messagesAfterCursor,
   type OrganizeDecision,
   type OrganizeExtractor,
   type OrganizeStore,
@@ -319,52 +324,16 @@ export class ShannonApiKernel {
       knowledgeStore: this.knowledgeStore,
       dailyMind: this.dailyMind,
       agentTasks: this.agentTasks,
+      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
+      aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
+      personIdentities: this.personIdentities,
       now: this.now,
     });
     if (liveVoiceResponse) return await liveVoiceResponse;
 
-    if (request.method === 'POST' && request.path === '/v1/voice/realtime/turns') {
-      if (!objectBody(request.body)) return badRequest('JSON object body is required');
-      const scopeKey = request.body.scopeKey;
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      if (!validBoundedString(request.body.userTranscript, 8_000)) {
-        return badRequest('userTranscript is invalid');
-      }
-      if (!validBoundedString(request.body.shannonTranscript, 8_000)) {
-        return badRequest('shannonTranscript is invalid');
-      }
-      const userMessage = request.body.userTranscript.trim();
-      const shannonReply = request.body.shannonTranscript.trim();
-      const threadId = this.conversationStore.threadId(
-        scopeKey,
-        typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined,
-      );
-      const captured = this.stateStore.snapshot(scopeKey);
-      const messageEmotion = createShannonMessageEmotion(
-        projectEmotionReaction(captured, userMessage),
-        captured.temperament,
-        { userMessage, shannonReply },
-      );
-      const completedTurn = {
-        scopeKey,
-        threadId,
-        capturedState: captured,
-        userMessage,
-        shannonReply,
-        messageEmotion,
-        completedAt: this.now(),
-      };
-      const experience = this.background.recordTurn(completedTurn);
-      this.background.schedule(completedTurn, experience.id);
-      return {
-        status: 201,
-        body: {
-          threadId,
-          messageEmotion,
-          state: captured,
-        },
-      };
-    }
+    const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore,
+      conversationStore: this.conversationStore, background: this.background, now: this.now });
+    if (turnResponse) return turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');
@@ -380,43 +349,45 @@ export class ShannonApiKernel {
       if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') {
         return badRequest('webSearch must be a boolean');
       }
-
       const message = body.message.trim();
       const threadId = this.conversationStore.threadId(body.scopeKey, body.threadId?.trim());
+      const explicitCommand = executeConversationCommand(body.scopeKey, threadId,
+        { id: randomUUID(), text: message }, this.now(), {
+          stateStore: this.stateStore, conversationStore: this.conversationStore,
+          organizeStore: this.organizeStore, aetherProposals: this.aetherProposals,
+        });
       const captured = this.stateStore.snapshot(body.scopeKey);
+      const occurredAt = this.now();
+      const cognitiveContext = prepareTurnCognitiveContext(captured, this.conversationStore, {
+        scopeKey: body.scopeKey, message, occurredAt, channel: 'text',
+        participants: this.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
+      });
       const basePrompt = this.knowledgeStore?.promptProjection(body.scopeKey)
         ?? assembleShannonSystemPrompt(captured);
-      const aetherPrompt = this.aetherContext?.promptFor(body.scopeKey, message) ?? '';
+      const capabilityContext = explicitCommand ? '' : conversationCapabilityPrompt(body.scopeKey, message,
+        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog });
+      const capabilityPrompt = typeof capabilityContext === 'string' ? capabilityContext : await capabilityContext;
       const dailyMindPrompt = this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '';
-      const taskPrompt = agentTaskPromptProjection(
-        this.agentTasks.list(body.scopeKey),
-        threadId,
-      );
-      const systemPrompt = [basePrompt, dailyMindPrompt, aetherPrompt, taskPrompt].filter(Boolean).join('\n\n');
-      if (isOrganizeCommand(message)) {
-        const completeHistory = this.conversationStore.conversationHistory(body.scopeKey, threadId);
-        const source = messagesAfterCursor(completeHistory, this.organizeStore.cursor(body.scopeKey, threadId)).slice(-100);
-        const drafts = await this.organizeExtractor.extract(body.scopeKey, source.map(item => ({ role: item.role, content: item.content })));
-        let session = this.organizeStore.create({
-          scopeKey: body.scopeKey,
-          threadId,
-          sourceMessageIds: source.map(item => item.id),
-          drafts,
-        }, this.now());
-        const reply = drafts.length
-          ? `Voyagerへ送るTask案を${drafts.length}件まとめたよ。内容を確認して、採用する案を選んでください。`
-          : '今回の範囲には、Voyagerへ送るTask案は見つかりませんでした。';
+      const systemPrompt = [
+        basePrompt, cognitiveContext.prompt, dailyMindPrompt, capabilityPrompt,
+        agentTaskPromptProjection(this.agentTasks.list(body.scopeKey), threadId),
+      ].filter(Boolean).join('\n\n');
+      if (explicitCommand || isOrganizeCommand(message)) {
+        let { session, reply } = explicitCommand
+          ? { session: explicitCommand.organizeSession, reply: explicitCommand.reply }
+          : await prepareConversationOrganize(body.scopeKey, threadId, occurredAt,
+            this.conversationStore, this.organizeStore, this.organizeExtractor);
         const messageEmotion = createShannonMessageEmotion(
           projectEmotionReaction(captured, message), captured.temperament,
           { userMessage: message, shannonReply: reply },
         );
         const completedTurn = {
           scopeKey: body.scopeKey, threadId, capturedState: captured, userMessage: message, shannonReply: reply,
-          messageEmotion, completedAt: this.now(),
+          messageEmotion, completedAt: occurredAt,
         };
         const experience = this.background.recordTurn(completedTurn);
         const lastMessage = this.conversationStore.conversationHistory(body.scopeKey, threadId).at(-1);
-        if (lastMessage) session = this.organizeStore.setCommandThrough(body.scopeKey, session.id, lastMessage.id, this.now());
+        if (lastMessage && session) session = this.organizeStore.setCommandThrough(body.scopeKey, session.id, lastMessage.id, this.now());
         this.background.schedule(completedTurn, experience.id);
         return {
           status: 200,
@@ -424,15 +395,15 @@ export class ShannonApiKernel {
             mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId,
             snapshotVersion: captured.version, messageEmotion, systemPrompt, state: captured,
             thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId),
-            uiBlocks: [{ type: 'organize_session', session }],
+            ...(session ? { uiBlocks: [{ type: 'organize_session' as const, session }] } : {}),
           } satisfies ChatResponse,
         };
       }
-      const priorThreadSummary = this.conversationStore.threadSummary(body.scopeKey, threadId);
+      const priorThreadSummary = mayUseThreadSummary(captured) ? this.conversationStore.threadSummary(body.scopeKey, threadId) : undefined;
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt,
-        history: this.conversationStore.history(body.scopeKey, threadId),
+        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),
@@ -464,7 +435,6 @@ export class ShannonApiKernel {
           }],
         } : {}),
       };
-
       const completedTurn = {
         scopeKey: body.scopeKey,
         threadId,
@@ -476,17 +446,15 @@ export class ShannonApiKernel {
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-        completedAt: this.now(),
+        completedAt: occurredAt,
       };
       const experience = this.background.recordTurn(completedTurn);
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };
     }
-
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
-
   waitForBackground(scopeKey: string): Promise<void> {
     return this.background.waitForIdle(scopeKey);
   }

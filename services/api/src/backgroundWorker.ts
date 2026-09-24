@@ -78,7 +78,8 @@ export class ShannonBackgroundWorker {
           job.scopeKey,
           payload.userMessage,
           payload.experienceId,
-          completedAt,
+          payload.observedAt ?? completedAt,
+          [], payload.timeZone,
         );
       });
       return;

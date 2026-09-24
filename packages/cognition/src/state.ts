@@ -5,6 +5,7 @@ import type {
   ShannonEmotion,
   ShannonTemperament,
   MemoryControl,
+  ProspectiveMemory,
   RelationshipInsight,
   UserFact,
 } from './types.js';
@@ -28,7 +29,10 @@ const MAX_INTERESTS = 12;
 const MAX_USER_FACTS = 24;
 const MAX_ACTIVE_MEMORIES = 8;
 const MAX_RELATIONSHIPS = 24;
-const MAX_MEMORY_CONTROLS = 160;
+// These are authoritative records, not working-memory projections. Never evict
+// unresolved commitments or explicit forget boundaries when another is added.
+const MAX_MEMORY_CONTROLS = Number.POSITIVE_INFINITY;
+const MAX_PROSPECTIVE_MEMORIES = Number.POSITIVE_INFINITY;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) return minimum;
@@ -80,6 +84,22 @@ function cleanControl(control: MemoryControl): MemoryControl {
   });
 }
 
+function cleanProspectiveMemory(memory: ProspectiveMemory): ProspectiveMemory {
+  return Object.freeze({
+    id: cleanText(memory.id, 120),
+    summary: cleanText(memory.summary, 320),
+    status: memory.status,
+    createdAt: memory.createdAt,
+    updatedAt: memory.updatedAt,
+    ...(memory.dueHint ? { dueHint: cleanText(memory.dueHint, 80) } : {}),
+    ...(memory.dueAt && Number.isFinite(Date.parse(memory.dueAt)) ? { dueAt: memory.dueAt } : {}),
+    ...(memory.dueDate ? { dueDate: cleanText(memory.dueDate, 10) } : {}),
+    ...(memory.timeZone ? { timeZone: cleanText(memory.timeZone, 64) } : {}),
+    ...(memory.sourceExperienceId ? { sourceExperienceId: cleanText(memory.sourceExperienceId, 120) } : {}),
+    ...(memory.evidence ? { evidence: cleanText(memory.evidence, 320) } : {}),
+  });
+}
+
 function sameEmotion(left: ShannonEmotion, right: ShannonEmotion): boolean {
   return left.valence === right.valence
     && left.arousal === right.arousal
@@ -126,6 +146,7 @@ export function createInitialCompanionState(scopeKey: string, nowIso: string): C
     userFacts: [],
     activeMemories: [],
     relationships: [],
+    prospectiveMemories: [],
     memoryControls: [],
   });
 }
@@ -137,6 +158,13 @@ export function reduceCompanionState(
 ): CompanionStateSnapshot {
   let next: CompanionStateSnapshot;
   switch (event.type) {
+    case 'memory-transaction': {
+      if (!event.events.length) return current;
+      if (event.events.some(item => item.type === 'memory-transaction')) throw new Error('Nested memory transaction');
+      next = event.events.reduce((state, item) => reduceCompanionState(state, item, nowIso), current);
+      if (next === current) return current;
+      break;
+    }
     case 'emotion-adjusted': {
       const emotion = { ...current.emotion };
       if (event.delta.valence !== undefined) emotion.valence = clamp(emotion.valence + event.delta.valence, -1, 1);
@@ -179,6 +207,34 @@ export function reduceCompanionState(
       const relationships = [relationship, ...current.relationships.filter(item => item.id !== relationship.id)]
         .slice(0, MAX_RELATIONSHIPS);
       next = { ...current, relationships };
+      break;
+    }
+    case 'prospective-memory-upserted': {
+      const memory = cleanProspectiveMemory(event.memory);
+      if (!memory.id || !memory.summary) return current;
+      const previous = current.prospectiveMemories.find(item => item.id === memory.id);
+      // A background-job retry must not resurrect a completed/cancelled promise
+      // or overwrite a later explicit correction.
+      if (previous && !event.replace) return current;
+      if (previous
+        && previous.summary === memory.summary
+        && previous.status === memory.status
+        && previous.createdAt === memory.createdAt
+        && previous.updatedAt === memory.updatedAt
+        && previous.dueHint === memory.dueHint
+        && previous.evidence === memory.evidence) return current;
+      const prospectiveMemories = [memory, ...current.prospectiveMemories.filter(item => item.id !== memory.id)]
+        .slice(0, MAX_PROSPECTIVE_MEMORIES);
+      next = { ...current, prospectiveMemories };
+      break;
+    }
+    case 'prospective-memory-status-changed': {
+      const index = current.prospectiveMemories.findIndex(item => item.id === event.memoryId);
+      if (index < 0 || current.prospectiveMemories[index]?.status === event.status) return current;
+      const prospectiveMemories = current.prospectiveMemories.map((memory, memoryIndex) => memoryIndex === index
+        ? cleanProspectiveMemory({ ...memory, status: event.status, updatedAt: nowIso })
+        : memory);
+      next = { ...current, prospectiveMemories };
       break;
     }
     case 'memory-control-upserted': {
@@ -321,6 +377,26 @@ export function restoreCompanionState(
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
     });
   }, item => item.id);
+  const prospectiveMemories = restoredItems(row.prospectiveMemories, MAX_PROSPECTIVE_MEMORIES, value => {
+    const id = restoredText(value.id, 120);
+    const summary = restoredText(value.summary, 320);
+    const status = value.status;
+    if (!id || !summary || (status !== 'pending' && status !== 'completed' && status !== 'dismissed')) return null;
+    const createdAt = restoredTimestamp(value.createdAt, nowIso);
+    return cleanProspectiveMemory({
+      id,
+      summary,
+      status,
+      createdAt,
+      updatedAt: restoredTimestamp(value.updatedAt, createdAt),
+      ...(restoredText(value.dueHint, 80) ? { dueHint: restoredText(value.dueHint, 80) } : {}),
+      ...(typeof value.dueAt === 'string' ? { dueAt: value.dueAt } : {}),
+      ...(typeof value.dueDate === 'string' ? { dueDate: value.dueDate } : {}),
+      ...(typeof value.timeZone === 'string' ? { timeZone: value.timeZone } : {}),
+      ...(typeof value.sourceExperienceId === 'string' ? { sourceExperienceId: value.sourceExperienceId } : {}),
+      ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+    });
+  }, item => item.id);
   const memoryControls = restoredItems(row.memoryControls, MAX_MEMORY_CONTROLS, value => {
     const memoryId = restoredText(value.memoryId, 120);
     const changeReason = restoredText(value.changeReason, 240);
@@ -350,6 +426,7 @@ export function restoreCompanionState(
     userFacts,
     activeMemories,
     relationships,
+    prospectiveMemories,
     memoryControls,
   });
 }
@@ -361,6 +438,9 @@ export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionState
   const userFacts = Object.freeze(snapshot.userFacts.map(item => Object.freeze({ ...item })));
   const activeMemories = Object.freeze(snapshot.activeMemories.map(item => Object.freeze({ ...item })));
   const relationships = Object.freeze(snapshot.relationships.map(item => Object.freeze({ ...item })));
+  const prospectiveMemories = Object.freeze(snapshot.prospectiveMemories.map(item => Object.freeze({ ...item })));
   const memoryControls = Object.freeze(snapshot.memoryControls.map(item => Object.freeze({ ...item })));
-  return Object.freeze({ ...snapshot, temperament, emotion, interests, userFacts, activeMemories, relationships, memoryControls });
+  return Object.freeze({
+    ...snapshot, temperament, emotion, interests, userFacts, activeMemories, relationships, prospectiveMemories, memoryControls,
+  });
 }

@@ -87,7 +87,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 
-  enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string) { return this.jobs.enqueueTurnRefinement(scopeKey, experienceId, userMessage, observedAt); }
+  enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string, timeZone?: string) { return this.jobs.enqueueTurnRefinement(scopeKey, experienceId, userMessage, observedAt, timeZone); }
   recoverUnqueuedTurnRefinements(nowIso: string) { return this.jobs.recoverUnqueuedTurnRefinements(nowIso); }
   enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string) { return this.jobs.enqueueSleepConsolidations(dayKey, startAt, endAt, nowIso); }
   claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string) { return this.jobs.claimNextBackgroundJob(workerId, nowIso, leaseUntilIso); }

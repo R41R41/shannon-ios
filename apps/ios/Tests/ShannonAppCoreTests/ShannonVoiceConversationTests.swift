@@ -82,6 +82,10 @@ final class ShannonVoiceConversationTests: XCTestCase {
             event(#"{"type":"error","error":{"code":"session_expired","message":"secret"}}"#),
             .failed("session_expired")
         )
+        XCTAssertEqual(
+            event(#"{"type":"response.function_call_arguments.done","name":"consult_shannon_backend","call_id":"call_123","arguments":"{\"request\":\"浜松駅からの終電を調べて\"}"}"#),
+            .realtimeFunctionCall(callID: "call_123", request: "浜松駅からの終電を調べて")
+        )
     }
 
     func testLiveEventsDecodeTimelineTranscriptsDelegationAndUsage() {
@@ -188,6 +192,22 @@ final class ShannonVoiceConversationTests: XCTestCase {
         XCTAssertEqual(json["delegation_id"] as? String, "item_opaque_123")
         XCTAssertEqual((json["content"] as? String)?.count, 800)
         XCTAssertTrue((json["event_id"] as? String)?.hasPrefix("shannon-result-") == true)
+    }
+
+    func testRealtimeFunctionResultAppendsOutputWithoutStartingAnUncoordinatedResponse() throws {
+        let events = try ShannonLiveVoiceClientEvent.realtimeFunctionResult(
+            callID: "call_123",
+            content: "現在の検索結果です。"
+        )
+        XCTAssertEqual(events.count, 1)
+        let output = try XCTUnwrap(JSONSerialization.jsonObject(with: events[0]) as? [String: Any])
+        XCTAssertEqual(output["type"] as? String, "conversation.item.create")
+        XCTAssertTrue((output["event_id"] as? String)?.hasPrefix("shannon-tool-") == true)
+        XCTAssertFalse((output["event_id"] as? String)?.contains("UUID()") == true)
+        let item = try XCTUnwrap(output["item"] as? [String: Any])
+        XCTAssertEqual(item["type"] as? String, "function_call_output")
+        XCTAssertEqual(item["call_id"] as? String, "call_123")
+        XCTAssertEqual(item["output"] as? String, "現在の検索結果です。")
     }
 
     func testCameraObservationCommentaryHasAnExplicitNullDelegationID() throws {

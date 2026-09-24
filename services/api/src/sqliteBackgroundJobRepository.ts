@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { reconcileSleepOutcome } from './sleepCommitmentReview.js';
 import type { BackgroundJobPayload, BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from './backgroundJobStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
 import { parseBackgroundJobPayload, parseTurnPayload } from './sqliteStoreCodecs.js';
@@ -16,8 +17,9 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     experienceId: string,
     userMessage: string,
     observedAt: string,
+    timeZone?: string,
   ): void {
-    const payload: BackgroundJobPayload = { kind: 'turn-refinement', experienceId, userMessage };
+    const payload: BackgroundJobPayload = { kind: 'turn-refinement', experienceId, userMessage, observedAt, ...(timeZone ? { timeZone } : {}) };
     this.context.database.prepare(`
       INSERT OR IGNORE INTO background_jobs
         (job_id, dedupe_key, scope_key, job_kind, payload_json, status, available_at, attempts, created_at)
@@ -45,6 +47,8 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
           kind: 'turn-refinement',
           experienceId: row.event_id,
           userMessage: turn.userMessage,
+          observedAt: row.observed_at,
+          ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
         };
         const result = this.context.database.prepare(`
           INSERT OR IGNORE INTO background_jobs
@@ -179,6 +183,7 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
     outcome: SleepConsolidationOutcome,
   ): void {
     this.completeClaimedBackgroundJob(job, workerId, completedAt, () => {
+      outcome = reconcileSleepOutcome(outcome, this.companion.snapshot(job.scopeKey), completedAt);
       for (const fact of outcome.facts) {
         this.companion.apply(job.scopeKey, { type: 'user-fact-upserted', fact, source: 'sleep' });
       }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { OrganizeStore } from './organize.js';
 import type {
   OrganizeDecision,
@@ -29,9 +29,12 @@ export class InMemoryOrganizeStore implements OrganizeStore {
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt)).map(cloneSession);
   }
 
-  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[] }, now: string): OrganizeSession {
+  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[]; requestKey?: string }, now: string): OrganizeSession {
+    const id = input.requestKey ? createHash('sha256').update(JSON.stringify([input.scopeKey, input.threadId, input.requestKey])).digest('hex') : randomUUID();
+    const existing = this.sessions.get(id);
+    if (existing) return cloneSession(existing);
     const session: OrganizeSession = {
-      id: randomUUID(), scopeKey: input.scopeKey, threadId: input.threadId,
+      id, scopeKey: input.scopeKey, threadId: input.threadId,
       state: 'ready_for_review', revision: 1, sourceMessageIds: [...new Set(input.sourceMessageIds)],
       items: input.drafts.slice(0, 12).map(draft => {
         const operation = normalizedOperation(draft.operation, draft.target);

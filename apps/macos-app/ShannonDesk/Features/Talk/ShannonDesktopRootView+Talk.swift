@@ -47,7 +47,7 @@ extension ShannonDesktopRootView {
 
     @ViewBuilder
     var talkTimeline: some View {
-        if conversation.messages.isEmpty && !conversation.isLoadingHistory {
+        if conversation.messages.isEmpty && conversation.unattachedSelectedThreadOrganizeSessions.isEmpty && !conversation.isLoadingHistory {
             ContentUnavailableView {
                 Label("シャノンに話しかける", systemImage: "bubble.left")
             } description: {
@@ -71,33 +71,13 @@ extension ShannonDesktopRootView {
                             )
                                 .id(message.id)
                             if let session = conversation.organizeSession(sourceMessageID: message.id) {
-                                ShannonOrganizeSessionCard(
-                                    session: session,
-                                    isWorking: conversation.pendingOrganizeSessionIDs.contains(session.id),
-                                    error: conversation.organizeActionErrors[session.id],
-                                    taskCandidatesByItemID: conversation.voyagerTaskCandidatesByItemID,
-                                    projects: conversation.voyagerProjects,
-                                    pendingCatalogItemIDs: conversation.pendingVoyagerCatalogItemIDs,
-                                    catalogErrorsByItemID: conversation.voyagerCatalogErrorsByItemID,
-                                    decide: { itemID, decision, title, details, operation, target, projectIds in
-                                        Task {
-                                            await conversation.decideOrganizeItem(
-                                                sessionID: session.id, itemID: itemID,
-                                                decision: decision, title: title, details: details,
-                                                operation: operation, target: target, projectIds: projectIds
-                                            )
-                                        }
-                                    },
-                                    searchTasks: { itemID, query in
-                                        Task { await conversation.searchVoyagerTasks(itemID: itemID, query: query) }
-                                    },
-                                    loadProjects: { itemID in
-                                        Task { await conversation.loadVoyagerProjects(itemID: itemID) }
-                                    },
-                                    apply: { Task { await conversation.applyOrganizeSession(session.id) } }
-                                )
+                                ShannonConversationOrganizeCard(model: conversation, session: session)
                                 .id("organize-session-\(session.id)")
                             }
+                        }
+                        ForEach(conversation.unattachedSelectedThreadOrganizeSessions) { session in
+                            ShannonConversationOrganizeCard(model: conversation, session: session)
+                                .id("organize-session-\(session.id)")
                         }
                         if conversation.isSending {
                             HStack(spacing: 8) {

@@ -4,6 +4,8 @@ export interface TurnRefinementJobPayload {
   kind: 'turn-refinement';
   experienceId: string;
   userMessage: string;
+  observedAt?: string;
+  timeZone?: string;
 }
 
 export interface SleepConsolidationJobPayload {
@@ -28,7 +30,7 @@ export interface DailyUserMessage {
 }
 
 export interface BackgroundJobStore {
-  enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string): void;
+  enqueueTurnRefinement(scopeKey: string, experienceId: string, userMessage: string, observedAt: string, timeZone?: string): void;
   recoverUnqueuedTurnRefinements(nowIso: string): number;
   enqueueSleepConsolidations(dayKey: string, startAt: string, endAt: string, nowIso: string): number;
   claimNextBackgroundJob(workerId: string, nowIso: string, leaseUntilIso: string): ClaimedBackgroundJob | null;
