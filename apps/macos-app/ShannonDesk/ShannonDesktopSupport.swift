@@ -17,9 +17,7 @@ enum DesktopDevelopmentTool: String, CaseIterable, Hashable, Identifiable {
     case changes
     case git
     case build
-
     var id: String { rawValue }
-
     var title: String {
         switch self {
         case .files: "ファイル"
@@ -29,7 +27,6 @@ enum DesktopDevelopmentTool: String, CaseIterable, Hashable, Identifiable {
         case .build: "ビルド"
         }
     }
-
     var symbolName: String {
         switch self {
         case .files: "folder"
@@ -44,14 +41,12 @@ enum DesktopDevelopmentTool: String, CaseIterable, Hashable, Identifiable {
 enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
     case outline
     case task
-
     var title: String {
         switch self {
         case .outline: "目次"
         case .task: "現在地"
         }
     }
-
     var symbolName: String {
         switch self {
         case .outline: "list.bullet.indent"
@@ -60,23 +55,25 @@ enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
     }
 }
 
+struct ShannonDesktopWindowChromeState: Equatable {
+    let showsInspector: Bool, auxiliaryPanel: DesktopAuxiliaryPanel
+}
 enum ShannonDesktopFocusedControl: Hashable {
     case threadSearch
 }
-
 enum ShannonDesktopWindowRestoration {
+    static let lastInspectorVisibleKey = "shannon.desktop.lastShowsInspector"
+    static let lastAuxiliaryPanelKey = "shannon.desktop.lastAuxiliaryPanel"
     static func destination(sceneRawValue: String?, lastRawValue: String) -> DesktopDestination {
         if let sceneRawValue, let destination = DesktopDestination(rawValue: sceneRawValue) {
             return destination
         }
         return DesktopDestination(rawValue: lastRawValue) ?? .talk
     }
-
     static func identifier(sceneValue: String?, lastValue: String) -> String? {
         if let sceneValue, !sceneValue.isEmpty { return sceneValue }
         return lastValue.isEmpty ? nil : lastValue
     }
-
     static func inspectorVisible(sceneRawValue: String?, lastValue: Bool) -> Bool {
         switch sceneRawValue {
         case "visible": true
@@ -90,6 +87,16 @@ enum ShannonDesktopWindowRestoration {
             return panel
         }
         return DesktopAuxiliaryPanel(rawValue: lastRawValue) ?? .task
+    }
+
+    static func windowChrome(sceneInspectorRawValue: String?, sceneAuxiliaryPanelRawValue: String?,
+                             lastInspectorVisible: Bool, lastAuxiliaryPanelRawValue: String)
+        -> ShannonDesktopWindowChromeState {
+        ShannonDesktopWindowChromeState(
+            showsInspector: inspectorVisible(sceneRawValue: sceneInspectorRawValue, lastValue: lastInspectorVisible),
+            auxiliaryPanel: auxiliaryPanel(sceneRawValue: sceneAuxiliaryPanelRawValue,
+                                           lastRawValue: lastAuxiliaryPanelRawValue)
+        )
     }
 }
 

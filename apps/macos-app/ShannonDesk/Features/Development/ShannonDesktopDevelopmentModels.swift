@@ -87,6 +87,19 @@ struct ShannonDesktopReviewChange: Equatable, Identifiable {
     }
 }
 
+struct ShannonDesktopDiffLine: Equatable, Identifiable {
+    let id: Int
+    let text: String
+}
+
+enum ShannonDesktopDiffProjection {
+    static func lines(in diff: String) -> [ShannonDesktopDiffLine] {
+        diff.components(separatedBy: .newlines).enumerated().map { offset, line in
+            ShannonDesktopDiffLine(id: offset, text: line)
+        }
+    }
+}
+
 enum ShannonDesktopWorkspaceResourceState: Equatable {
     case idle
     case loading(path: String, kind: ShannonAgentWorkspaceResourceKind)

@@ -309,20 +309,24 @@ private struct DevelopmentChangeCount: View {
 }
 
 private struct DevelopmentDiffText: View {
-    let diff: String
+    let lines: [ShannonDesktopDiffLine]
     @Environment(\.colorScheme) private var colorScheme
 
+    init(diff: String) {
+        lines = ShannonDesktopDiffProjection.lines(in: diff)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(diff.components(separatedBy: .newlines).enumerated()), id: \.offset) { _, line in
-                Text(line.isEmpty ? " " : line)
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(lines) { line in
+                Text(line.text.isEmpty ? " " : line.text)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(foreground(for: line))
+                    .foregroundStyle(foreground(for: line.text))
                     .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(background(for: line))
+                    .background(background(for: line.text))
             }
         }
     }

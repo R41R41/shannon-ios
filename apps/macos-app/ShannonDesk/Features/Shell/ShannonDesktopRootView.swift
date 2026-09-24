@@ -20,8 +20,8 @@ public struct ShannonDesktopRootView: View {
     @AppStorage("shannon.desktop.lastDestination") var lastDestinationRawValue = DesktopDestination.talk.rawValue
     @AppStorage("shannon.desktop.lastSelectedThread") var lastRestoredThreadID = ""
     @AppStorage("shannon.desktop.lastSelectedTask") var lastRestoredTaskID = ""
-    @AppStorage("shannon.desktop.lastShowsInspector") var lastShowsInspector = false
-    @AppStorage("shannon.desktop.lastAuxiliaryPanel") var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
+    @AppStorage(ShannonDesktopWindowRestoration.lastInspectorVisibleKey) var lastShowsInspector = false
+    @AppStorage(ShannonDesktopWindowRestoration.lastAuxiliaryPanelKey) var lastAuxiliaryPanelRawValue = DesktopAuxiliaryPanel.task.rawValue
     @State var searchText = ""
     @State var selectedTaskID: UUID?
     @State var showsInspector = false
@@ -64,6 +64,19 @@ public struct ShannonDesktopRootView: View {
         release: ShannonTestFlightDeliveryModel,
         appIcon: ShannonAppIconModel
     ) {
+        let defaults = UserDefaults.standard
+        let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
+            sceneInspectorRawValue: nil,
+            sceneAuxiliaryPanelRawValue: nil,
+            lastInspectorVisible: defaults.object(
+                forKey: ShannonDesktopWindowRestoration.lastInspectorVisibleKey
+            ) as? Bool ?? false,
+            lastAuxiliaryPanelRawValue: defaults.string(
+                forKey: ShannonDesktopWindowRestoration.lastAuxiliaryPanelKey
+            ) ?? DesktopAuxiliaryPanel.task.rawValue
+        )
+        _showsInspector = State(initialValue: initialChrome.showsInspector)
+        _auxiliaryPanel = State(initialValue: initialChrome.auxiliaryPanel)
         self.conversation = conversation
         self.connection = connection
         self.memory = memory
