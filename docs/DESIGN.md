@@ -70,4 +70,7 @@ Memory management is governed by [`docs/design/screens/ios/memory.yaml`](design/
 and [`docs/design/screens/macos/memory.yaml`](design/screens/macos/memory.yaml). The shared memory
 overview always exposes a native navigation entry to all durable memories and commitments,
 including completed/dismissed commitments and forgotten/rejected items. Rich activity or
-knowledge projections must not hide this management path.
+knowledge projections must not hide this management path. The current-state area also exposes
+owner-visible durable intentions and bounded cognitive-cycle receipts. Intent status changes are
+explicit user actions backed by the server result; a receipt summarizes purpose, recall, action,
+and outcome without storing or presenting private chain-of-thought.

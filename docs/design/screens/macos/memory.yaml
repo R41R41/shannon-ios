@@ -1,31 +1,33 @@
 schema_version: 1
 screen_id: shannon-macos-memory
 platform: macos
-baseline_commit: 0b5c5a0ebb831c3e4878709df086a93e8f45d0b4
+baseline_commit: c1ca802
 last_verified_at: 2026-09-25
-verification_scope: "合成fixture・shared Swiftモデル/部品描画。起動中アプリの画面遷移は未確認"
-user_job: "頭の中から記憶と約束の状態・根拠を確認し、必要な訂正や復元を行う"
-primary_action: "記憶と約束の一覧から詳細を開く"
+verification_scope: "合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
+user_job: "頭の中から記憶・約束・継続目的と認知結果を確認し、必要な状態変更を行う"
+primary_action: "継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
   - "Mac sidebarと会話・開発・作業の構成"
   - "いま・知識・記憶の概要、日記、活動表示"
 improve:
   - "rich dashboardでも記憶と約束の管理入口を常設する"
   - "完了・取り消し済みや忘れた記憶も一覧から詳細へ進める"
+  - "継続目的と最近の認知履歴を一覧し、目的状態を明示操作で変更する"
 do_not_change:
   - "サーバー正本、記憶変更API、他アプリへの承認境界"
+  - "認知履歴を非公開の思考過程として記録・表示すること"
 states:
-  loading: "管理入口を保持し読み込み状態を示す"
-  empty: "4分類を説明付きで表示する"
-  error: "前回データを保持し更新を再試行できる"
-  offline: "前回取得状態と通信失敗を区別する"
-  conflict: "変更後はサーバー結果を正本として再描画する"
-  selection: "memory IDを使い詳細を保持する"
+  loading: "記憶・目的の管理入口を保持し読み込み状態を示す"
+  empty: "記憶4分類と目的3分類を説明付きで表示する"
+  error: "記憶と認知の前回データをそれぞれ保持し更新を再試行できる"
+  offline: "前回取得状態と未保存の状態変更を区別する"
+  conflict: "同じ目的の再開競合を説明し、再読み込みで整理できる"
+  selection: "memory IDで記憶詳細を、intent IDで目的状態を保持する"
 accessibility:
-  dynamic_type: "内容と状態を必要に応じて複数行で表示する"
-  voiceover: "行の本文、期限、状態をひとまとまりで提供する"
+  dynamic_type: "記憶・目的・認知要約を必要に応じて複数行で表示する"
+  voiceover: "目的本文、明示状態、変更メニュー、認知結果をひとまとまりで提供する"
   target_size: "主要行は44ポイント以上"
-  focus: "標準ListとNavigationLinkによるキーボード移動を保つ"
+  focus: "標準List・NavigationLink・Menuによるキーボード移動と状態変更を保つ"
   reduce_motion: "意味伝達を動きだけに依存させない"
 evidence:
   current: []

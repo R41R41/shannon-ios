@@ -1,6 +1,35 @@
 import Foundation
 
 extension ShannonAPIClient {
+    public func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO {
+        let connection = currentConnection()
+        var components = URLComponents(url: baseURL.appending(path: "/v1/cognition"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey)]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonCognitionDashboardDTO.self, for: request)
+    }
+
+    public func updateCognitiveIntent(
+        scopeKey: String,
+        intentID: String,
+        status: ShannonCognitiveIntentStatusDTO
+    ) async throws -> ShannonCognitiveIntentDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/cognition/intents/status"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(ShannonCognitiveIntentStatusRequestDTO(
+            scopeKey: connection?.scopeKey ?? scopeKey,
+            intentId: intentID,
+            status: status
+        ))
+        let result = try await response(ShannonCognitiveIntentStatusResponseDTO.self, for: request)
+        return result.intent
+    }
+
     public func loadMemories(scopeKey: String) async throws -> ShannonMemoryDashboardDTO {
         let connection = currentConnection()
         var components = URLComponents(url: baseURL.appending(path: "/v1/memories"), resolvingAgainstBaseURL: false)

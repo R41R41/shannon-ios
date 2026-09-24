@@ -1,11 +1,11 @@
 schema_version: 1
 screen_id: shannon-ios-memory
 platform: ios
-baseline_commit: 0b5c5a0ebb831c3e4878709df086a93e8f45d0b4
+baseline_commit: c1ca802
 last_verified_at: 2026-09-25
-verification_scope: "合成fixture・shared Swiftモデル/部品描画。実iPhoneの画面遷移は未確認"
-user_job: "シャノンの記憶と約束を確認し、訂正、完了、取り消し、忘却、復元する"
-primary_action: "頭の中の記憶と約束から対象を開く"
+verification_scope: "合成fixture・shared Swiftモデル/部品描画。実iPhoneでの目的状態変更は未確認"
+user_job: "シャノンの記憶・約束・継続目的と、目的を意識して行った認知履歴を確認して管理する"
+primary_action: "頭の中から継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
   - "いま・知識・記憶の概要、日記、活動表示"
   - "サーバー正本と既存の記憶変更API"
@@ -13,20 +13,23 @@ improve:
   - "活動や知識が豊富でも管理入口を常に表示する"
   - "未完了・終えた約束、保存した記憶、忘れた・否定した記憶から詳細へ進める"
   - "復元対象は物理削除ではないことを説明する"
+  - "明示された継続目的と最近の認知サイクルを所有者が確認できる"
+  - "目的を一時停止・完了・取り下げ・再開して次の対話に反映できる"
 do_not_change:
   - "所有者スコープと外部アプリ承認の境界"
+  - "シャノンが根拠なく目的を完了扱いすること"
 states:
-  loading: "入口は保持し、読み込み中を表示する"
-  empty: "各分類を空状態付きで保持する"
-  error: "最後の一覧を保持し更新を再試行できる"
-  offline: "最後の取得結果を保持し、更新失敗を表示する"
-  conflict: "変更成功時はサーバーの返したdashboardを表示する"
-  selection: "同じmemory IDで詳細を開き、変更後も履歴に到達できる"
+  loading: "記憶と目的の入口は保持し、読み込み中を表示する"
+  empty: "記憶分類と目的分類を空状態の説明付きで保持する"
+  error: "記憶と認知を独立して扱い、失敗した側も最後の一覧を保持して再試行できる"
+  offline: "前回の記憶・目的を保持し、未保存の状態変更を成功扱いにしない"
+  conflict: "目的の再開競合を説明し、再読み込みして整理できる"
+  selection: "memory IDで記憶詳細を、intent IDで目的状態を保持し、変更後も履歴に到達できる"
 accessibility:
-  dynamic_type: "行の本文・状態は複数行で伸長する"
-  voiceover: "本文、約束状態、期限または忘却状態、開く役割を提供する"
+  dynamic_type: "記憶・目的・認知要約は複数行で伸長する"
+  voiceover: "目的本文、明示状態、変更メニュー、認知結果を文字とアイコンで提供する"
   target_size: "行の最小高は44ポイント"
-  focus: "標準NavigationLinkで一覧・詳細・戻るを提供する"
+  focus: "標準NavigationLink・List・Menuで一覧、状態変更、戻るを提供する"
   reduce_motion: "導線と状態の理解に装飾アニメーションを使わない"
 evidence:
   current: []

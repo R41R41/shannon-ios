@@ -134,10 +134,83 @@ struct ShannonMemoryLibraryTests {
             try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("memory-management-components-\(name).png"))
         }
     }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["SHANNON_RENDER_MEMORY_REVIEW"] == "1"))
+    func renderCognitionComponentsInLightDarkAndLargeText() throws {
+        let dashboard = LibraryFixture.cognition()
+        let intent = try #require(dashboard.intents.first)
+        let cycle = try #require(dashboard.recentCycles.first)
+        let directory = ProcessInfo.processInfo.environment["SHANNON_MEMORY_EVIDENCE_DIR"] ?? "/tmp"
+        for (name, scheme, size) in [("light", ColorScheme.light, ContentSizeCategory.large),
+                                    ("dark", .dark, .large),
+                                    ("large-text", .light, .accessibilityExtraExtraExtraLarge)] {
+            let palette = ShannonPalette.resolve(scheme)
+            let content = VStack(alignment: .leading, spacing: ShannonSpacing.large) {
+                ShannonCognitionManagementLabel(
+                    cognition: dashboard,
+                    isLoading: false,
+                    hasError: false,
+                    palette: palette
+                )
+                // ImageRenderer cannot host a native Menu. Keep the exact
+                // app-owned row content and render its menu label statically.
+                ShannonCognitiveIntentRow(
+                    intent: intent,
+                    isUpdating: false,
+                    palette: palette,
+                    showsActionMenu: false
+                ) { _ in }
+                Divider()
+                ShannonCognitiveCycleRow(cycle: cycle, palette: palette)
+            }
+            .padding(ShannonSpacing.large)
+            .frame(width: 430)
+            .background(palette.readingSurface)
+            .environment(\.colorScheme, scheme)
+            .environment(\.sizeCategory, size)
+            let renderer = ImageRenderer(content: content)
+            renderer.scale = 2
+            let cg = try #require(renderer.cgImage)
+            #expect(cg.width == 860)
+            #expect(cg.height > 300)
+            let png = try #require(NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("memory-cognition-components-\(name).png"))
+        }
+    }
 #endif
 }
 
 private enum LibraryFixture {
+    static func cognition(rich: Bool = true) -> ShannonCognitionDashboardDTO {
+        guard rich else { return .empty }
+        let intent = ShannonCognitiveIntentDTO(
+            id: "goal-voice",
+            title: "自然な音声対話を育てる",
+            desiredOutcome: "場所や記憶を使いながら自然な日本語で話せるようにする",
+            status: .active,
+            source: "explicit-user-goal",
+            sourceExperienceId: nil,
+            threadId: "fixture-thread",
+            nextStep: "音声と現在地を組み合わせて確認する",
+            priority: 0.8,
+            confidence: 0.95,
+            createdAt: "2026-09-24T12:00:00Z",
+            updatedAt: "2026-09-25T08:00:00Z"
+        )
+        let cycle = ShannonCognitiveCycleDTO(
+            id: "cycle-voice",
+            threadId: "fixture-thread",
+            channel: "voice",
+            primaryIntentID: intent.id,
+            recalledMemoryIDs: ["remembered"],
+            action: "delegate",
+            outcome: "completed",
+            summary: "現在地を確認して交通案内を調べた",
+            occurredAt: "2026-09-25T08:01:00Z"
+        )
+        return ShannonCognitionDashboardDTO(intents: [intent], recentCycles: [cycle])
+    }
+
     static func dashboard(rich: Bool = true, action: ShannonMemoryActionDTO? = nil, text: String? = nil) throws -> ShannonMemoryDashboardDTO {
         let status = action == .forget ? "forgotten" : action == .reject ? "rejected" : "active"
         let commitment = action == .complete ? "completed" : action == .dismiss ? "dismissed" : "pending"
@@ -162,11 +235,13 @@ private enum LibraryFixture {
 
 private actor LibraryFixtureClient: ShannonMemoryServing {
     private var dashboard: ShannonMemoryDashboardDTO
+    private var cognition: ShannonCognitionDashboardDTO
     private let rich: Bool
     private var unavailable = false
     init(rich: Bool = true) throws {
         self.rich = rich
         dashboard = try LibraryFixture.dashboard(rich: rich)
+        cognition = LibraryFixture.cognition(rich: rich)
     }
     func setUnavailable(_ value: Bool) { unavailable = value }
     func loadMemories(scopeKey: String) async throws -> ShannonMemoryDashboardDTO {
@@ -179,4 +254,37 @@ private actor LibraryFixtureClient: ShannonMemoryServing {
         return dashboard
     }
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO { dashboard }
+    func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO {
+        if unavailable { throw URLError(.notConnectedToInternet) }
+        return cognition
+    }
+    func updateCognitiveIntent(
+        scopeKey: String,
+        intentID: String,
+        status: ShannonCognitiveIntentStatusDTO
+    ) async throws -> ShannonCognitiveIntentDTO {
+        if unavailable { throw URLError(.notConnectedToInternet) }
+        guard let current = cognition.intents.first(where: { $0.id == intentID }) else {
+            throw URLError(.resourceUnavailable)
+        }
+        let updated = ShannonCognitiveIntentDTO(
+            id: current.id,
+            title: current.title,
+            desiredOutcome: current.desiredOutcome,
+            status: status,
+            source: current.source,
+            sourceExperienceId: current.sourceExperienceId,
+            threadId: current.threadId,
+            nextStep: current.nextStep,
+            priority: current.priority,
+            confidence: current.confidence,
+            createdAt: current.createdAt,
+            updatedAt: "2026-09-25T09:00:00Z"
+        )
+        cognition = ShannonCognitionDashboardDTO(
+            intents: cognition.intents.map { $0.id == intentID ? updated : $0 },
+            recentCycles: cognition.recentCycles
+        )
+        return updated
+    }
 }

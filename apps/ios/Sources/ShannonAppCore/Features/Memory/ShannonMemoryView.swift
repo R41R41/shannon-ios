@@ -142,6 +142,19 @@ public struct ShannonMemoryView: View {
 
     @ViewBuilder
     func currentStateContent(_ palette: ShannonPalette) -> some View {
+        NavigationLink {
+            ShannonCognitionView(model: model)
+        } label: {
+            ShannonCognitionManagementLabel(
+                cognition: model.cognition,
+                isLoading: model.isLoading,
+                hasError: model.cognitionErrorMessage != nil,
+                palette: palette
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("cognition-management-entry")
+
         if let state = model.dashboard?.currentState {
             ShannonCurrentStateCard(state: state, dailyMind: model.dashboard?.dailyMind, palette: palette)
             if let usage = model.dashboard?.usage {

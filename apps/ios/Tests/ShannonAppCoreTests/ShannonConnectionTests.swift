@@ -144,6 +144,64 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(extended.remainingSeconds, 3_600)
     }
 
+    func testAPIClientLoadsAndUpdatesCognitionWithBoundScope() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "c", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "cognition-device",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        var requestCount = 0
+        let activeIntent: [String: Any] = [
+            "id": "goal-1",
+            "title": "音声対話を改善したい",
+            "desiredOutcome": "音声対話を改善したい",
+            "status": "active",
+            "source": "explicit-user-goal",
+            "priority": 0.8,
+            "confidence": 0.95,
+            "createdAt": "2026-09-25T00:00:00Z",
+            "updatedAt": "2026-09-25T01:00:00Z",
+        ]
+        let session = stubSession { request in
+            requestCount += 1
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            if request.httpMethod == "GET" {
+                XCTAssertEqual(
+                    request.url?.absoluteString,
+                    "https://shannon.example/companion/v1/cognition?scopeKey=owner-from-server"
+                )
+                return try response(url: request.url!, json: ["intents": [activeIntent], "recentCycles": []])
+            }
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/cognition/intents/status")
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
+            XCTAssertEqual(json["intentId"] as? String, "goal-1")
+            XCTAssertEqual(json["status"] as? String, "paused")
+            var pausedIntent = activeIntent
+            pausedIntent["status"] = "paused"
+            pausedIntent["updatedAt"] = "2026-09-25T02:00:00Z"
+            return try response(url: request.url!, json: ["intent": pausedIntent])
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let cognition = try await client.loadCognition(scopeKey: "untrusted-client-scope")
+        let updated = try await client.updateCognitiveIntent(
+            scopeKey: "untrusted-client-scope",
+            intentID: "goal-1",
+            status: .paused
+        )
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(cognition.intents.first?.status, .active)
+        XCTAssertEqual(updated.status, .paused)
+    }
+
     func testAPIClientLoadsAndDecidesWorldSubscriptionWithBoundScope() async throws {
         let baseURL = URL(string: "https://shannon.example/companion")!
         let bearer = String(repeating: "s", count: 43)

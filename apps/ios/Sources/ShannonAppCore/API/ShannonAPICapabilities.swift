@@ -78,6 +78,24 @@ public protocol ShannonMemoryServing: Sendable {
         text: String?
     ) async throws -> ShannonMemoryDashboardDTO
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO
+    func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO
+    func updateCognitiveIntent(
+        scopeKey: String,
+        intentID: String,
+        status: ShannonCognitiveIntentStatusDTO
+    ) async throws -> ShannonCognitiveIntentDTO
+}
+
+public extension ShannonMemoryServing {
+    func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO { .empty }
+
+    func updateCognitiveIntent(
+        scopeKey: String,
+        intentID: String,
+        status: ShannonCognitiveIntentStatusDTO
+    ) async throws -> ShannonCognitiveIntentDTO {
+        throw ShannonAPIError.invalidResponse
+    }
 }
 
 public protocol ShannonInitiativeServing: Sendable {
