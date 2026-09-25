@@ -161,6 +161,7 @@ final class ShannonGeminiLiveTransport {
     }
 
     private func startAudioEngine() throws {
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.start.before")
         let input = audioEngine.inputNode
         if !audioEngine.outputNode.isVoiceProcessingEnabled {
             try audioEngine.outputNode.setVoiceProcessingEnabled(true)
@@ -194,7 +195,43 @@ final class ShannonGeminiLiveTransport {
         let vad = self.vad
         let captureChunker = self.captureChunker
         let captureHandler = self.captureHandler
-        let sink = AVAudioSinkNode { _, frameCount, inputData in
+        let sink = Self.makeCaptureSink(
+            outgoing: outgoing,
+            vad: vad,
+            captureChunker: captureChunker,
+            captureHandler: captureHandler,
+            sampleRate: captureFormat.sampleRate
+        )
+        let recordingMixer = AVAudioMixerNode()
+
+        audioEngine.attach(playerNode)
+        audioEngine.attach(recordingMixer)
+        audioEngine.attach(sink)
+        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
+        audioEngine.connect(input, to: recordingMixer, format: inputFormat)
+        audioEngine.connect(recordingMixer, to: sink, format: captureFormat)
+        recordingMixerNode = recordingMixer
+        sinkNode = sink
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.graph.connected")
+        audioEngine.prepare()
+        try audioEngine.start()
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.started")
+        playerNode.play()
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.player.started")
+    }
+
+    /// AVAudioSinkNode invokes this closure on Core Audio's realtime I/O thread.
+    /// Constructing the closure inside the @MainActor transport method makes Swift
+    /// inherit MainActor isolation and traps at runtime before the first PCM frame.
+    /// Keep the callback factory explicitly nonisolated and hop only the UI update.
+    nonisolated private static func makeCaptureSink(
+        outgoing: AsyncStream<Data>.Continuation?,
+        vad: ShannonGeminiLiveVADState,
+        captureChunker: ShannonGeminiLiveAudioChunker,
+        captureHandler: @escaping CaptureHandler,
+        sampleRate: Double
+    ) -> AVAudioSinkNode {
+        AVAudioSinkNode { _, frameCount, inputData in
             let mutableInputData = UnsafeMutablePointer(mutating: inputData)
             let buffers = UnsafeMutableAudioBufferListPointer(mutableInputData)
             guard let data = buffers.first?.mData else { return noErr }
@@ -210,25 +247,12 @@ final class ShannonGeminiLiveTransport {
             }
             let rms = ShannonGeminiLivePCM.rootMeanSquare(samples: samples)
             let transition = vad.consume(rms: rms, now: ProcessInfo.processInfo.systemUptime)
-            let capturedSeconds = Double(frameCount) / captureFormat.sampleRate
+            let capturedSeconds = Double(frameCount) / sampleRate
             Task { @MainActor in
                 captureHandler(rms, capturedSeconds, transition.speechStarted, transition.speechEnded)
             }
             return noErr
         }
-        let recordingMixer = AVAudioMixerNode()
-
-        audioEngine.attach(playerNode)
-        audioEngine.attach(recordingMixer)
-        audioEngine.attach(sink)
-        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
-        audioEngine.connect(input, to: recordingMixer, format: inputFormat)
-        audioEngine.connect(recordingMixer, to: sink, format: captureFormat)
-        recordingMixerNode = recordingMixer
-        sinkNode = sink
-        audioEngine.prepare()
-        try audioEngine.start()
-        playerNode.play()
     }
 
     private func send(_ data: Data) {
