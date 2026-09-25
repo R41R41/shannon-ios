@@ -29,7 +29,6 @@ export function validateDesignInput(value) {
     throw new InputError('confirmStore must be true because Voice Design stores a voice in the Google project');
   }
   return Object.freeze({
-    model: choice(body.model, 'model', GEMINI_TTS_MODELS),
     name: boundedText(body.name, 'name', 1, 100),
     prompt: boundedText(body.prompt, 'prompt', 1, 1_000),
     language: choice(body.language ?? 'ja-JP', 'language', ['ja-JP']),
@@ -47,7 +46,7 @@ export function validateDeleteInput(value) {
 
 export function validateLiveTokenInput(value) {
   const body = record(value);
-  const voice = choice(body.voice, 'voice', DEFAULT_LIVE_VOICES);
+  const voice = voiceIdentifier(body.voice);
   return Object.freeze({ voice });
 }
 
@@ -65,16 +64,14 @@ export function buildLiveTokenRequest({ expiresAt, newSessionExpiresAt }) {
 }
 
 export function buildLiveSetupMessage({ voice }) {
-  const selectedVoice = choice(voice, 'voice', DEFAULT_LIVE_VOICES);
+  const selectedVoice = voiceIdentifier(voice);
   return {
     setup: {
       model: `models/${GEMINI_LIVE_MODEL}`,
       generationConfig: {
         responseModalities: ['AUDIO'],
         speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice },
-          },
+          voiceConfig: liveVoiceConfig(selectedVoice),
         },
       },
       systemInstruction: {
@@ -97,6 +94,13 @@ export function buildLiveSetupMessage({ voice }) {
       contextWindowCompression: { slidingWindow: {} },
     },
   };
+}
+
+export function liveVoiceConfig(voice) {
+  const selectedVoice = voiceIdentifier(voice);
+  return selectedVoice.startsWith('voice_')
+    ? { voice: selectedVoice }
+    : { prebuiltVoiceConfig: { voiceName: selectedVoice } };
 }
 
 export function createRequestToken() {

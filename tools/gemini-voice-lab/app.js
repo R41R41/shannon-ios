@@ -50,6 +50,11 @@ sampleText.addEventListener('input', () => {
   if (!Object.values(scripts).includes(sampleText.value)) scriptPreset.value = 'custom';
   updateTextCount();
 });
+voiceSelect.addEventListener('change', () => {
+  if (liveVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
+    liveVoice.value = voiceSelect.value;
+  }
+});
 stylePreset.addEventListener('change', () => {
   customStyleField.classList.toggle('hidden', stylePreset.value !== 'custom');
   if (stylePreset.value === 'custom') customStyle.focus();
@@ -78,17 +83,21 @@ async function initialize() {
 async function loadVoices() {
   try {
     const result = await getJSON('/api/voices');
-    const voices = new Map(knownVoices.map(name => [name, { id: name, label: name }]));
+    const voices = new Map(knownVoices.map(name => [name, { id: name, label: name, type: 'prebuilt' }]));
     for (const item of result.voices ?? []) {
       const id = String(item.id ?? item.name ?? item.voice ?? '').replace(/^voices\//u, '');
-      if (!id || id.startsWith('voice_')) continue;
+      if (!id) continue;
       const label = String(item.display_name ?? item.displayName ?? item.name ?? id);
-      voices.set(id, { id, label });
+      voices.set(id, { id, label, type: String(item.type ?? '') });
     }
     const selected = voiceSelect.value;
-    voiceSelect.replaceChildren(...[...voices.values()].map(({ id, label }) => option(id, label)));
+    const liveSelected = liveVoice.value;
+    voiceSelect.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
+    liveVoice.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
     if (voices.has(selected)) voiceSelect.value = selected;
     else voiceSelect.value = 'Leda';
+    if (voices.has(liveSelected)) liveVoice.value = liveSelected;
+    else liveVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
   } catch (error) {
     setStatus(sampleStatus, `声一覧は既定候補を使います: ${message(error)}`);
   }
@@ -176,7 +185,6 @@ async function designVoice(event) {
   setStatus(designStatus, '声を設計しています。通常の試聴より時間がかかります…');
   try {
     const response = await post('/api/design', {
-      model: new FormData(sampleForm).get('model'),
       name: document.querySelector('#design-name').value,
       prompt: document.querySelector('#design-prompt').value,
       language: 'ja-JP',
@@ -238,6 +246,8 @@ async function deleteDesignedVoice(input, button) {
     const response = await post('/api/delete', { id, confirm: id });
     if (!response.ok) throw await responseError(response);
     voiceSelect.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
+    liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
+    if (liveVoice.value === id) liveVoice.value = 'Aoede';
     URL.revokeObjectURL(state.designedVoice.url);
     state.designedVoice = null;
     designResult.className = 'design-result empty-state';
@@ -250,26 +260,29 @@ async function deleteDesignedVoice(input, button) {
 }
 
 function addDesignedVoiceOption(id, name) {
-  voiceSelect.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
-  const customGroup = voiceSelect.querySelector('optgroup[label="Designed voices"]') ?? document.createElement('optgroup');
-  customGroup.label = 'Designed voices';
-  customGroup.append(option(id, `${name} · custom`));
-  if (!customGroup.parentNode) voiceSelect.append(customGroup);
+  for (const select of [voiceSelect, liveVoice]) {
+    select.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
+    select.prepend(option(id, `${name} · 作成した声`));
+  }
   voiceSelect.value = id;
+  liveVoice.value = id;
 }
 
 async function startLive() {
   if (!state.config) return;
   liveToggle.disabled = true;
-  setStatus(liveStatus, '短命トークンとマイクを準備しています…');
+  setStatus(liveStatus, 'マイク権限を確認しています…');
+  let pendingStream;
+  let pendingContext;
   try {
+    pendingStream = await requestMicrophone();
+    setStatus(liveStatus, '短命トークンと音声処理を準備しています…');
     const tokenResponse = await post('/api/live-token', { voice: liveVoice.value });
     if (!tokenResponse.ok) throw await responseError(tokenResponse);
     const session = await tokenResponse.json();
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-    });
+    const stream = pendingStream;
     const context = new AudioContext({ latencyHint: 'interactive' });
+    pendingContext = context;
     await context.audioWorklet.addModule('/capture-worklet.js');
     const source = context.createMediaStreamSource(stream);
     const capture = new AudioWorkletNode(context, 'shannon-capture');
@@ -280,6 +293,8 @@ async function startLive() {
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url);
     state.live = { socket, session, stream, context, source, capture, mute, ready: false, nextPlaybackTime: 0, sources: new Set() };
+    pendingStream = null;
+    pendingContext = null;
     capture.port.onmessage = ({ data }) => sendMicrophoneChunk(data);
     socket.addEventListener('open', () => {
       socket.send(JSON.stringify(liveSetup(session.model, session.voice)));
@@ -291,7 +306,9 @@ async function startLive() {
       if (state.live?.socket === socket) stopLive('Live接続が終了しました。', 'error');
     });
   } catch (error) {
-    stopLive(`開始できませんでした: ${message(error)}`, 'error');
+    for (const track of pendingStream?.getTracks() ?? []) track.stop();
+    pendingContext?.close().catch(() => {});
+    stopLive(`開始できませんでした: ${liveStartMessage(error)}`, 'error');
   } finally {
     liveToggle.disabled = false;
   }
@@ -390,16 +407,36 @@ function stopPlaybackFor(live) {
 }
 
 function liveSetup(model, voice) {
+  const voiceConfig = voice.startsWith('voice_')
+    ? { voice }
+    : { prebuiltVoiceConfig: { voiceName: voice } };
   return {
     setup: {
       model: `models/${model}`,
-      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig } },
       systemInstruction: { parts: [{ text: 'あなたはShannonの声を試聴する短時間の会話相手です。日本語で、自然で短い返答をしてください。声質を評価しやすいよう、過剰な演技や長い説明は避けてください。' }] },
       inputAudioTranscription: {}, outputAudioTranscription: {},
       realtimeInputConfig: { automaticActivityDetection: { disabled: false, startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH', endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 80, silenceDurationMs: 600 }, activityHandling: 'START_OF_ACTIVITY_INTERRUPTS' },
       contextWindowCompression: { slidingWindow: {} },
     },
   };
+}
+
+async function requestMicrophone() {
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error('このブラウザではマイクを安全に利用できません。127.0.0.1のラボをChromeまたはSafariで開いてください。');
+  }
+  return navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+  });
+}
+
+function liveStartMessage(error) {
+  const detail = message(error);
+  if (error?.name === 'NotAllowedError' || /permission denied|permission dismissed|notallowed/i.test(detail)) {
+    return 'マイクがOSまたはブラウザで拒否されています。macOSの「システム設定 → プライバシーとセキュリティ → マイク」で使用中のブラウザを許可し、ブラウザを完全に終了して開き直してください。サイト側で拒否した場合は、アドレスバー左の設定からマイクを「許可」に変更します。';
+  }
+  return detail;
 }
 
 function appendTranscript(kind, speaker, text) {
@@ -442,6 +479,11 @@ function option(value, label) {
   item.value = value;
   item.textContent = label;
   return item;
+}
+
+function voiceLabel(id, label, type) {
+  if (id.startsWith('voice_') || type === 'prompted' || type === 'replicated') return `${label} · 作成した声`;
+  return label === id ? id : `${label} · ${id}`;
 }
 
 function updateTextCount() { textCount.value = String(sampleText.value.length); }

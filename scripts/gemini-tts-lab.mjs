@@ -138,9 +138,7 @@ async function designVoice(values) {
   const prompt = values.prompt ?? DESIGN_PRESETS[preset];
   if (!prompt) throw new Error(`Unknown design preset: ${preset}`);
   const name = values.name ?? `Shannon ${preset.replace(/^shannon-/u, '')}`;
-  const model = normalizedModel(values.model);
   const body = buildVoiceDesignRequest({
-    model,
     name,
     prompt,
     language: values.language ?? 'ja-JP',
@@ -153,7 +151,15 @@ async function designVoice(values) {
   const directory = await outputDirectory(values.out);
   const file = path.join(directory, `${safeFileSegment(id)}-preview.wav`);
   await writeFile(file, audio, { flag: values.force === true ? 'w' : 'wx' });
-  const result = { id, name, preset, model, mimeType, file, wav: wavMetadata(audio) };
+  const result = {
+    id,
+    name,
+    preset,
+    creationModel: typeof response.model === 'string' ? response.model : null,
+    mimeType,
+    file,
+    wav: wavMetadata(audio),
+  };
   await writeFile(path.join(directory, `${safeFileSegment(id)}.json`), `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx' });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

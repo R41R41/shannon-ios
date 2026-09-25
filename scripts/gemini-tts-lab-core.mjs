@@ -47,12 +47,10 @@ export function buildTTSRequest({ model, voice, text, style = '' }) {
   };
 }
 
-export function buildVoiceDesignRequest({ model, name, prompt, language = 'ja-JP', gender = 'female' }) {
-  assertModel(model);
+export function buildVoiceDesignRequest({ name, prompt, language = 'ja-JP', gender = 'female' }) {
   return {
     store: true,
     voice: {
-      model,
       type: 'prompted',
       display_name: requiredText(name, 'name', 100),
       gender: requiredChoice(gender, 'gender', ['female', 'male', 'neutral']),

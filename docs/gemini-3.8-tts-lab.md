@@ -50,13 +50,17 @@ Use the three areas in order:
 2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
    one-year storage, quota, and cost. Deletion requires retyping the exact ID.
 3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
-   interruption, and native-audio character with a prebuilt voice.
+   interruption, and native-audio character with the voice selected in step 1 or
+   the stored Voice ID created in step 2.
 
 The lab intentionally does not make Live a prerequisite for voice selection.
 Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is
 useful after narrowing candidates because native audio can pace and color the same
-prebuilt voice differently from TTS. Custom `voice_...` identities are therefore
-tested in TTS unless equivalent Live support has been separately verified.
+voice differently from TTS. The browser synchronizes the step-1 selection into the
+Live selector and adds a newly designed `voice_...` identity to both selectors.
+An actual `gemini-3.8-live` setup handshake was verified for an Extended Voice
+Library ID and a temporary prompted Voice ID on 2026-09-25; the temporary voice was
+deleted after its TTS and Live compatibility checks passed.
 
 The browser sends neither the API key nor ordinary TTS text/audio to Shannon's
 database. Samples use in-memory object URLs; Live uses a single-use token and browser
@@ -140,6 +144,9 @@ pnpm voice:gemini -- design --store --preset shannon-calm
 
 The returned voice ID and preview WAV are saved locally. Use the exact ID with
 `sample --voice voice_...` to compare the same identity on both TTS models.
+The creation request deliberately omits `voice.model`; Gemini selects the current
+default supported Voice Design model and returns the actual creation model with the
+new voice. The resulting Voice ID is independent of the TTS model used later.
 
 Delete a discarded stored design only by repeating its exact ID:
 

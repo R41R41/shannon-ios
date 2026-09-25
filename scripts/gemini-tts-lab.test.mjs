@@ -33,14 +33,14 @@ test('buildTTSRequest rejects aliases before they reach the wire format', () => 
   );
 });
 
-test('buildVoiceDesignRequest always declares persistent prompted voice design', () => {
+test('buildVoiceDesignRequest uses the default creation model for persistent prompted voice design', () => {
   const request = buildVoiceDesignRequest({
-    model: 'gemini-3.8-flash-tts',
     name: 'Shannon bright',
     prompt: 'A clear and warm Japanese voice.',
   });
   assert.equal(request.store, true);
   assert.equal(request.voice.type, 'prompted');
+  assert.equal('model' in request.voice, false);
   assert.equal(request.voice.language_code, 'ja-JP');
   assert.equal(request.voice.gender, 'female');
 });

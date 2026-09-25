@@ -129,11 +129,11 @@ const server = createServer(async (request, response) => {
           if (!/^voice_[A-Za-z0-9_-]+$/u.test(id)) throw new Error('Gemini did not return a valid voice ID');
           const { audio, mimeType } = voiceSampleFromResponse(upstream);
           const wav = wavMetadata(audio);
-          audit('design.completed', { model: input.model, voice: id });
+          audit('design.completed', { model: upstream.model ?? 'default', voice: id });
           json(response, 200, {
             id,
             name: input.name,
-            model: input.model,
+            creationModel: typeof upstream.model === 'string' ? upstream.model : null,
             mimeType,
             durationMilliseconds: wav.durationMilliseconds,
             audioBase64: audio.toString('base64'),

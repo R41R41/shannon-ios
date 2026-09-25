@@ -28,11 +28,22 @@ test('sample input accepts a prebuilt or designed voice without changing text an
 
 test('voice design and deletion require explicit confirmation', () => {
   assert.throws(() => validateDesignInput({}), /confirmStore/u);
+  assert.deepEqual(validateDesignInput({
+    model: 'gemini-3.8-flash-lite-tts',
+    name: 'Shannon bright',
+    prompt: 'A clear and warm young adult Japanese voice.',
+    confirmStore: true,
+  }), {
+    name: 'Shannon bright',
+    prompt: 'A clear and warm young adult Japanese voice.',
+    language: 'ja-JP',
+    gender: 'female',
+  });
   assert.throws(() => validateDeleteInput({ id: 'voice_ABC', confirm: 'voice_OTHER' }), /exactly match/u);
   assert.equal(validateDeleteInput({ id: 'voice_ABC', confirm: 'voice_ABC' }).id, 'voice_ABC');
 });
 
-test('Live remains constrained to the audio model and prebuilt comparison voices', () => {
+test('Live remains constrained to the audio model and accepts catalog or designed voices', () => {
   const token = buildLiveTokenRequest({
     expiresAt: '2026-09-25T10:20:00.000Z',
     newSessionExpiresAt: '2026-09-25T10:01:00.000Z',
@@ -40,9 +51,13 @@ test('Live remains constrained to the audio model and prebuilt comparison voices
   assert.equal(token.bidiGenerateContentSetup.model, 'models/gemini-3.8-live');
   assert.deepEqual(token.bidiGenerateContentSetup.generationConfig.responseModalities, ['AUDIO']);
   assert.equal(validateLiveTokenInput({ voice: 'Leda' }).voice, 'Leda');
-  assert.throws(() => validateLiveTokenInput({ voice: 'voice_Custom' }), /not supported/u);
+  assert.equal(validateLiveTokenInput({ voice: 'ja-jp-assistant-7' }).voice, 'ja-jp-assistant-7');
+  assert.equal(validateLiveTokenInput({ voice: 'voice_Custom' }).voice, 'voice_Custom');
+  assert.throws(() => validateLiveTokenInput({ voice: '../bad' }), /identifier/u);
   const setup = buildLiveSetupMessage({ voice: 'Aoede' });
   assert.equal(setup.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Aoede');
+  const customSetup = buildLiveSetupMessage({ voice: 'voice_Custom' });
+  assert.equal(customSetup.setup.generationConfig.speechConfig.voiceConfig.voice, 'voice_Custom');
   assert.deepEqual(setup.setup.inputAudioTranscription, {});
 });
 
