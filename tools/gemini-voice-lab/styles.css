@@ -36,6 +36,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .privacy-badge span { font-size: 8px; margin-right: 5px; }
 
 main { max-width: 1180px; margin: 0 auto; padding: 0 24px 72px; }
+.launch-notice { max-width: 1132px; margin: 18px auto 0; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid color-mix(in srgb, var(--attention, #d97706) 40%, var(--border)); border-radius: 16px; background: color-mix(in srgb, #f59e0b 9%, var(--surface)); box-shadow: var(--shadow); }
+.launch-notice > div { display: grid; gap: 4px; }
+.launch-notice strong { font-size: 13px; }
+.launch-notice span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.launch-notice code { width: fit-content; margin-top: 5px; padding: 5px 8px; border-radius: 7px; background: var(--surface-strong); color: var(--text); font-size: 12px; }
+.launch-notice a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; padding: 0 15px; border-radius: 11px; background: var(--action); color: white; text-decoration: none; font-size: 12px; font-weight: 720; }
+.error-notice { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
+.file-mode main, .file-mode body > footer { opacity: .72; }
 .hero { text-align: center; padding: 76px 20px 42px; }
 .eyebrow, .step { margin: 0 0 12px; color: var(--action); font-size: 11px; letter-spacing: .16em; font-weight: 760; }
 .hero h1 { margin: 0; font-size: clamp(38px, 6vw, 64px); letter-spacing: -.055em; line-height: 1.05; background: linear-gradient(115deg, var(--text) 18%, var(--presence-c) 62%, var(--presence-b)); -webkit-background-clip: text; color: transparent; }
@@ -162,6 +170,8 @@ body > footer { text-align: center; border-top: 1px solid var(--border); padding
   .hero { padding: 52px 10px 30px; }
   .section-tabs { justify-content: start; overflow-x: auto; }
   .workspace-main, .comparison, .panel { padding: 22px 18px; }
+  .launch-notice { margin-inline: 14px; align-items: stretch; flex-direction: column; }
+  .launch-notice a { justify-content: center; }
   .segmented, .segmented.three-up, .variant-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-color-scheme: dark) {

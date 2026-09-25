@@ -30,6 +30,10 @@ import {
 } from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 test('voice design presets are original, bounded, and uniquely addressable', () => {
+  assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/file-mode-guard.js'), [
+    'file-mode-guard.js',
+    'text/javascript; charset=utf-8',
+  ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-design-presets.js'), [
     'voice-design-presets.js',
     'text/javascript; charset=utf-8',

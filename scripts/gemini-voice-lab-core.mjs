@@ -9,6 +9,7 @@ export const VOICE_LAB_STATIC_FILES = new Map([
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/file-mode-guard.js', ['file-mode-guard.js', 'text/javascript; charset=utf-8']],
   ['/voice-audition-presets.js', ['voice-audition-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-design-presets.js', ['voice-design-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-live-profiles.js', ['voice-live-profiles.js', 'text/javascript; charset=utf-8']],
