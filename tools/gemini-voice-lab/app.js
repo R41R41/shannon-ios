@@ -1,17 +1,16 @@
-import { voiceDesignPresets, voiceDesignPresetsVerifiedAt } from './voice-design-presets.js';
-
-const scripts = Object.freeze({
-  identity: 'こんにちは、シャノンです。今日も一緒に、ゆっくり考えていこうね。',
-  pronunciation: 'AetherとVoyager、それからSyzygyの進み具合を確認したよ。APIとSwiftUIの接続も大丈夫。',
-  emotion: 'えへへ、うれしい。<short pause> でも、無理しすぎないでね。',
-  long: 'おかえりなさい。今日はどんな一日だった？ うまく言葉にできなくても大丈夫。少しずつ、一緒に整理していこう。',
-});
+import { auditionJobs, auditionScript, auditionScripts, auditionStyle } from './voice-audition-presets.js';
+import {
+  voiceDesignPresets,
+  voiceDesignPresetsVerifiedAt,
+  voiceDesignPrompt,
+  voiceDesignVariantIsVerified,
+} from './voice-design-presets.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
   config: null,
   samples: [],
-  designedVoice: null,
+  designedVoices: [],
   live: null,
 };
 
@@ -23,6 +22,7 @@ const textCount = document.querySelector('#text-count');
 const stylePreset = document.querySelector('#style-preset');
 const customStyleField = document.querySelector('#custom-style-field');
 const customStyle = document.querySelector('#custom-style');
+const experimentSummary = document.querySelector('#experiment-summary');
 const sampleStatus = document.querySelector('#sample-status');
 const sampleList = document.querySelector('#sample-list');
 const sampleEmpty = document.querySelector('#sample-empty');
@@ -32,10 +32,13 @@ const designPreset = document.querySelector('#design-preset');
 const designPresetHelp = document.querySelector('#design-preset-help');
 const designName = document.querySelector('#design-name');
 const designPrompt = document.querySelector('#design-prompt');
+const promptLanguages = [...document.querySelectorAll('input[name="prompt-language"]')];
+const promptDetails = [...document.querySelectorAll('input[name="prompt-detail"]')];
 const designButton = document.querySelector('#design-button');
 const confirmStore = document.querySelector('#confirm-store');
 const designStatus = document.querySelector('#design-status');
-const designResult = document.querySelector('#design-result');
+const designResults = document.querySelector('#design-results');
+const designEmpty = document.querySelector('#design-empty');
 const liveToggle = document.querySelector('#live-toggle');
 const liveVoice = document.querySelector('#live-voice');
 const liveStatus = document.querySelector('#live-status');
@@ -43,19 +46,22 @@ const liveOrb = document.querySelector('#live-orb');
 const transcriptEmpty = document.querySelector('#transcript-empty');
 const transcriptList = document.querySelector('#transcript-list');
 
-sampleText.value = scripts.identity;
+sampleText.value = auditionScript('everyday').text;
 applyDesignPreset(designPreset.value);
 updateTextCount();
+updateExperimentSummary();
 initialize();
 
 scriptPreset.addEventListener('change', () => {
-  if (scriptPreset.value !== 'custom') sampleText.value = scripts[scriptPreset.value];
+  if (scriptPreset.value !== 'custom') sampleText.value = auditionScript(scriptPreset.value).text;
   sampleText.focus();
   updateTextCount();
+  updateExperimentSummary();
 });
 sampleText.addEventListener('input', () => {
-  if (!Object.values(scripts).includes(sampleText.value)) scriptPreset.value = 'custom';
+  if (!auditionScripts.some(script => script.text === sampleText.value)) scriptPreset.value = 'custom';
   updateTextCount();
+  updateExperimentSummary();
 });
 voiceSelect.addEventListener('change', () => {
   if (liveVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
@@ -65,14 +71,26 @@ voiceSelect.addEventListener('change', () => {
 stylePreset.addEventListener('change', () => {
   customStyleField.classList.toggle('hidden', stylePreset.value !== 'custom');
   if (stylePreset.value === 'custom') customStyle.focus();
+  updateExperimentSummary();
 });
+customStyle.addEventListener('input', updateExperimentSummary);
+for (const input of document.querySelectorAll('input[name="model-mode"], input[name="repetitions"]')) {
+  input.addEventListener('change', updateExperimentSummary);
+}
 designPreset.addEventListener('change', () => {
   if (designPreset.value !== 'custom') applyDesignPreset(designPreset.value, true);
   else updateDesignPresetHelp();
 });
+for (const input of [...promptLanguages, ...promptDetails]) {
+  input.addEventListener('change', () => {
+    if (designPreset.value !== 'custom') applyDesignPreset(designPreset.value);
+    else updateDesignPresetHelp();
+  });
+}
 designPrompt.addEventListener('input', () => {
   const current = voiceDesignPresets.find(preset => preset.id === designPreset.value);
-  if (!current || designPrompt.value !== current.prompt) {
+  const { language, detail } = selectedDesignVariant();
+  if (!current || designPrompt.value !== voiceDesignPrompt(current, language, detail)) {
     designPreset.value = 'custom';
     updateDesignPresetHelp();
   }
@@ -85,7 +103,7 @@ liveToggle.addEventListener('click', () => state.live ? stopLive('停止しま�
 window.addEventListener('beforeunload', () => {
   stopLive();
   for (const sample of state.samples) URL.revokeObjectURL(sample.url);
-  if (state.designedVoice?.url) URL.revokeObjectURL(state.designedVoice.url);
+  for (const voice of state.designedVoices) URL.revokeObjectURL(voice.url);
 });
 
 async function initialize() {
@@ -125,30 +143,48 @@ async function generateSample(event) {
   event.preventDefault();
   if (!state.config) return;
   generateButton.disabled = true;
-  setStatus(sampleStatus, '音声を生成しています…');
-  const model = new FormData(sampleForm).get('model');
+  const form = new FormData(sampleForm);
+  const modelMode = form.get('model-mode');
+  const repetitions = Number(form.get('repetitions')) || 1;
+  const jobs = auditionJobs(modelMode, repetitions);
   const voice = voiceSelect.value;
-  const style = stylePreset.value === 'custom' ? customStyle.value : stylePreset.value;
-  try {
-    const response = await post('/api/sample', { model, voice, text: sampleText.value, style });
-    if (!response.ok) throw await responseError(response);
-    const blob = await response.blob();
-    const durationMilliseconds = Number(response.headers.get('x-shannon-duration-ms')) || 0;
-    const elapsedMilliseconds = Number(response.headers.get('x-shannon-elapsed-ms')) || 0;
-    const sample = {
-      id: crypto.randomUUID(), model, voice, style, text: sampleText.value, blob,
-      url: URL.createObjectURL(blob), durationMilliseconds, elapsedMilliseconds,
-    };
-    state.samples.unshift(sample);
-    while (state.samples.length > 8) removeSample(state.samples.at(-1).id);
-    renderSamples();
-    const estimate = ttsCost(model, durationMilliseconds);
-    setStatus(sampleStatus, `${formatDuration(durationMilliseconds)}の音声を${formatDuration(elapsedMilliseconds)}で生成 · 約${usd(estimate)}`, 'success');
-  } catch (error) {
-    setStatus(sampleStatus, `生成できませんでした: ${message(error)}`, 'error');
-  } finally {
-    generateButton.disabled = false;
+  const selectedStyle = stylePreset.value === 'custom' ? null : auditionStyle(stylePreset.value);
+  const style = stylePreset.value === 'custom' ? customStyle.value : selectedStyle?.value ?? '';
+  const script = auditionScript(scriptPreset.value);
+  const batchId = crypto.randomUUID();
+  let completed = 0;
+  let failures = 0;
+  let totalCost = 0;
+  for (const job of jobs) {
+    setStatus(sampleStatus, `${completed + failures + 1} / ${jobs.length} を生成中 · ${shortModelName(job.model)} ${job.run}/${repetitions}`);
+    try {
+      const response = await post('/api/sample', { model: job.model, voice, text: sampleText.value, style });
+      if (!response.ok) throw await responseError(response);
+      const blob = await response.blob();
+      const durationMilliseconds = Number(response.headers.get('x-shannon-duration-ms')) || 0;
+      const elapsedMilliseconds = Number(response.headers.get('x-shannon-elapsed-ms')) || 0;
+      totalCost += ttsCost(job.model, durationMilliseconds);
+      state.samples.unshift({
+        id: crypto.randomUUID(), batchId, model: job.model, voice, style,
+        styleName: stylePreset.value === 'custom' ? '自由入力' : selectedStyle?.label,
+        scriptName: script?.label ?? '自由入力', text: sampleText.value, blob,
+        url: URL.createObjectURL(blob), durationMilliseconds, elapsedMilliseconds,
+        run: job.run, repetitions,
+      });
+      completed += 1;
+      while (state.samples.length > 8) {
+        const removed = state.samples.pop();
+        URL.revokeObjectURL(removed.url);
+      }
+      renderSamples();
+    } catch (error) {
+      failures += 1;
+      setStatus(sampleStatus, `${shortModelName(job.model)} ${job.run}/${repetitions} を生成できませんでした: ${message(error)}`, 'error');
+    }
   }
+  generateButton.disabled = false;
+  const result = `${completed}/${jobs.length}件を生成 · 合計約${usd(totalCost)}`;
+  setStatus(sampleStatus, failures ? `${result} · ${failures}件は失敗しました。成功分は比較できます。` : result, failures ? 'error' : 'success');
 }
 
 function renderSamples() {
@@ -156,15 +192,15 @@ function renderSamples() {
   sampleList.replaceChildren(...state.samples.map((sample, index) => {
     const item = document.createElement('li');
     item.className = 'sample-card';
-    const shortModel = sample.model.includes('lite') ? 'Flash-Lite' : 'Flash';
-    item.innerHTML = `<header><div><h4>${escapeHTML(sample.voice)}</h4><div class="meta">${shortModel}${sample.style ? ` · ${escapeHTML(styleLabel(sample.style))}` : ' · 指定なし'}</div></div><small>#${state.samples.length - index}</small></header>`;
+    const shortModel = shortModelName(sample.model);
+    item.innerHTML = `<header><div><h4>${escapeHTML(sample.voice)}</h4><div class="meta">${shortModel} · ${escapeHTML(sample.scriptName)} · ${escapeHTML(sample.styleName ?? '指定なし')}</div></div><small>${sample.run}/${sample.repetitions}</small></header>`;
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.preload = 'metadata';
     audio.src = sample.url;
     const footer = document.createElement('footer');
     const metrics = document.createElement('span');
-    metrics.textContent = `${formatDuration(sample.durationMilliseconds)} · 約${usd(ttsCost(sample.model, sample.durationMilliseconds))}`;
+    metrics.textContent = `${formatDuration(sample.durationMilliseconds)} · 生成${formatDuration(sample.elapsedMilliseconds)} · 約${usd(ttsCost(sample.model, sample.durationMilliseconds))}`;
     const actions = document.createElement('span');
     const download = document.createElement('a');
     download.href = sample.url;
@@ -196,12 +232,24 @@ function clearSamples() {
   setStatus(sampleStatus, '比較トレイを空にしました。');
 }
 
+function updateExperimentSummary() {
+  const form = new FormData(sampleForm);
+  const models = form.get('model-mode') === 'both' ? 2 : 1;
+  const repetitions = Number(form.get('repetitions')) || 1;
+  const calls = models * repetitions;
+  const style = stylePreset.value === 'custom'
+    ? (customStyle.value.trim() ? '自由入力の演技' : '演技指定なし')
+    : auditionStyle(stylePreset.value)?.label ?? '演技指定なし';
+  experimentSummary.innerHTML = `<strong>${calls}件を順番に生成</strong> · ${models === 2 ? 'Flash / Flash-Lite' : '1モデル'} × ${repetitions}回 · ${escapeHTML(style)}`;
+}
+
 async function designVoice(event) {
   event.preventDefault();
   if (!confirmStore.checked) return;
   designButton.disabled = true;
   setStatus(designStatus, '声を設計しています。通常の試聴より時間がかかります…');
   try {
+    const variant = selectedDesignVariant();
     const response = await post('/api/design', {
       name: designName.value,
       prompt: designPrompt.value,
@@ -211,12 +259,18 @@ async function designVoice(event) {
     });
     if (!response.ok) throw await responseError(response);
     const result = await response.json();
-    if (state.designedVoice?.url) URL.revokeObjectURL(state.designedVoice.url);
     const blob = base64Blob(result.audioBase64, result.mimeType);
-    state.designedVoice = { ...result, url: URL.createObjectURL(blob) };
+    state.designedVoices.unshift({
+      ...result,
+      localId: crypto.randomUUID(),
+      url: URL.createObjectURL(blob),
+      presetLabel: voiceDesignPresets.find(item => item.id === designPreset.value)?.label ?? '自由入力',
+      language: variant.language,
+      detail: variant.detail,
+    });
     addDesignedVoiceOption(result.id, result.name);
-    renderDesignResult();
-    setStatus(designStatus, '新しい声を作りました。比較欄でも選べます。', 'success');
+    renderDesignResults();
+    setStatus(designStatus, `新しい声を作りました。候補は${state.designedVoices.length}件です。比較欄でも選べます。`, 'success');
   } catch (error) {
     setStatus(designStatus, `声を作れませんでした: ${designErrorMessage(error)}`, 'error');
   } finally {
@@ -227,8 +281,9 @@ async function designVoice(event) {
 function applyDesignPreset(id, focus = false) {
   const preset = voiceDesignPresets.find(item => item.id === id);
   if (!preset) return;
+  const { language, detail } = selectedDesignVariant();
   designName.value = preset.name;
-  designPrompt.value = preset.prompt;
+  designPrompt.value = voiceDesignPrompt(preset, language, detail);
   updateDesignPresetHelp();
   if (focus) designPrompt.focus();
 }
@@ -238,7 +293,12 @@ function updateDesignPresetHelp() {
     designPresetHelp.textContent = '自由入力は実API未確認です。年齢の数値指定や、人物・既存キャラクターの模倣表現は安全判定で拒否される場合があります。';
     return;
   }
-  designPresetHelp.textContent = `${voiceDesignPresets.length}種類とも${voiceDesignPresetsVerifiedAt}にGemini実APIで作成・削除確認済みです。`;
+  const preset = voiceDesignPresets.find(item => item.id === designPreset.value);
+  const { language, detail } = selectedDesignVariant();
+  const variant = `${language === 'ja' ? '日本語' : '英語'}・${detail === 'short' ? '短文' : '詳細'}`;
+  designPresetHelp.textContent = voiceDesignVariantIsVerified(preset, language, detail)
+    ? `${variant}版は${voiceDesignPresetsVerifiedAt}にGemini実APIで作成・即時削除確認済みです。`
+    : `${variant}版は実API未確認です。作成前に内容を確認してください。`;
 }
 
 function designErrorMessage(error) {
@@ -249,39 +309,46 @@ function designErrorMessage(error) {
   return detail;
 }
 
-function renderDesignResult() {
-  const result = state.designedVoice;
-  designResult.className = 'design-result';
-  designResult.replaceChildren();
-  const title = document.createElement('h3');
-  title.textContent = result.name;
-  const note = document.createElement('p');
-  note.textContent = 'このIDを選ぶと同じ声をFlash / Flash-Liteで比較できます。';
-  const code = document.createElement('code');
-  code.textContent = result.id;
-  const audio = document.createElement('audio');
-  audio.controls = true;
-  audio.src = result.url;
-  const deletion = document.createElement('div');
-  deletion.className = 'delete-row';
-  const label = document.createElement('label');
-  label.className = 'field';
-  label.textContent = '破棄する場合はVoice IDを正確に入力';
-  const input = document.createElement('input');
-  input.placeholder = result.id;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = 'この保存済み音声を削除';
-  button.disabled = true;
-  input.addEventListener('input', () => { button.disabled = input.value !== result.id; });
-  button.addEventListener('click', () => deleteDesignedVoice(input, button));
-  label.append(input);
-  deletion.append(label, button);
-  designResult.append(title, note, code, audio, deletion);
+function renderDesignResults() {
+  designEmpty.classList.toggle('hidden', state.designedVoices.length > 0);
+  for (const card of designResults.querySelectorAll('[data-designed-voice]')) card.remove();
+  for (const result of state.designedVoices) {
+    const card = document.createElement('article');
+    card.className = 'design-result';
+    card.dataset.designedVoice = result.localId;
+    const title = document.createElement('h3');
+    title.textContent = result.name;
+    const note = document.createElement('p');
+    note.className = 'meta';
+    note.textContent = `${result.presetLabel} · ${result.language === 'ja' ? '日本語' : '英語'} · ${result.detail === 'short' ? '短文' : '詳細'} · ${result.creationModel ?? 'default model'}`;
+    const code = document.createElement('code');
+    code.textContent = result.id;
+    const audio = document.createElement('audio');
+    audio.controls = true;
+    audio.src = result.url;
+    const deletion = document.createElement('div');
+    deletion.className = 'delete-row';
+    const label = document.createElement('label');
+    label.className = 'field';
+    label.textContent = '破棄する場合はVoice IDを正確に入力';
+    const input = document.createElement('input');
+    input.placeholder = result.id;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'この候補をGoogleから削除';
+    button.disabled = true;
+    input.addEventListener('input', () => { button.disabled = input.value !== result.id; });
+    button.addEventListener('click', () => deleteDesignedVoice(result.localId, input, button));
+    label.append(input);
+    deletion.append(label, button);
+    card.append(title, note, code, audio, deletion);
+    designResults.append(card);
+  }
 }
 
-async function deleteDesignedVoice(input, button) {
-  const id = state.designedVoice?.id;
+async function deleteDesignedVoice(localId, input, button) {
+  const result = state.designedVoices.find(item => item.localId === localId);
+  const id = result?.id;
   if (!id || input.value !== id) return;
   button.disabled = true;
   setStatus(designStatus, '保存済み音声を削除しています…');
@@ -291,15 +358,21 @@ async function deleteDesignedVoice(input, button) {
     voiceSelect.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     if (liveVoice.value === id) liveVoice.value = 'Aoede';
-    URL.revokeObjectURL(state.designedVoice.url);
-    state.designedVoice = null;
-    designResult.className = 'design-result empty-state';
-    designResult.innerHTML = '<span aria-hidden="true">✦</span><p>作った声のプレビューとVoice IDを表示します。</p>';
+    URL.revokeObjectURL(result.url);
+    state.designedVoices = state.designedVoices.filter(item => item.localId !== localId);
+    renderDesignResults();
     setStatus(designStatus, '保存済み音声を削除しました。', 'success');
   } catch (error) {
     button.disabled = false;
     setStatus(designStatus, `削除できませんでした: ${message(error)}`, 'error');
   }
+}
+
+function selectedDesignVariant() {
+  return {
+    language: document.querySelector('input[name="prompt-language"]:checked')?.value ?? 'ja',
+    detail: document.querySelector('input[name="prompt-detail"]:checked')?.value ?? 'detailed',
+  };
 }
 
 function addDesignedVoiceOption(id, name) {
@@ -532,6 +605,7 @@ function voiceLabel(id, label, type) {
 function updateTextCount() { textCount.value = String(sampleText.value.length); }
 function setStatus(element, text, kind) { element.textContent = text; element.className = `status${kind ? ` ${kind}` : ''}`; }
 function message(error) { return error instanceof Error ? error.message : '不明なエラー'; }
+function shortModelName(model) { return String(model).includes('lite') ? 'Flash-Lite' : 'Flash'; }
 function formatDuration(milliseconds) { return milliseconds >= 1_000 ? `${(milliseconds / 1_000).toFixed(1)}秒` : `${milliseconds}ms`; }
 function ttsCost(model, durationMilliseconds) { return Math.ceil(durationMilliseconds / 10_000) * (model.includes('lite') ? .0015 : .00225); }
 function usd(value) { return `$${value.toFixed(value < .01 ? 4 : 3)}`; }

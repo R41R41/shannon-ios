@@ -45,13 +45,19 @@ The permanent Gemini key remains in Azure's mode-0600 environment file.
 
 Use the three areas in order:
 
-1. **声を比較** — generate matched Flash-Lite / Flash samples, keep up to eight
-   in an in-memory A/B tray, and optionally download only the samples worth keeping.
+1. **声を比較** — choose one Japanese emotion script and a short turn-level acting
+   direction, then generate Flash and Flash-Lite either once or three times each.
+   The in-memory A/B tray keeps up to eight samples with model, repetition, request
+   time, audio duration, and estimated cost, so identity stability is visible rather
+   than inferred from one lucky take.
 2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
    one-year storage, quota, and cost. Eight editable original-character presets
-   cover translucent emotional Shannon, a frank 14-year-old, confident tsundere,
-   refined clarity, tender devotion, digital idol, reserved lower register, and
-   formal emotion that gradually opens. Deletion requires retyping the exact ID.
+   cover translucent emotional Shannon, frank sunny energy, confident prickly
+   warmth, refined clarity, tender devotion, digital idol, reserved lower register,
+   and formal emotion that gradually opens. Each preset provides Japanese / English
+   and short / detailed design text for matched prompt-language experiments. Multiple
+   candidates remain visible in the current tab; deletion requires retyping each
+   exact ID.
 3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
    interruption, and native-audio character with the voice selected in step 1 or
    the stored Voice ID created in step 2.
@@ -70,8 +76,9 @@ database. Samples use in-memory object URLs; Live uses a single-use token and br
 echo cancellation, sends 16 kHz mono PCM, and plays 24 kHz PCM. No audio, transcript,
 message, token, or credential is logged or persisted by the lab.
 
-All eight built-in design prompts were verified against the real Voices API on
-2026-09-25. Every successful smoke-test Voice ID was deleted immediately. Numeric
+All four prompt variants for all eight built-in designs were verified against the
+real Voices API on 2026-09-25. Every successful smoke-test Voice ID was deleted
+immediately. Numeric
 minor-age wording and negative phrases about imitating known voices were rejected by
 the safety filter, so the shipped presets express the same intended age impression
 through register, tempo, pitch movement, diction, and emotional delivery without
@@ -79,7 +86,7 @@ sending those trigger phrases. A custom edit is labeled unverified. The billable
 smoke command is intentionally excluded from deterministic checks:
 
 ```sh
-node scripts/gemini-voice-preset-smoke.mjs --confirm-billable --delete-successes
+node scripts/gemini-voice-preset-smoke.mjs --confirm-billable --delete-successes --all-variants
 ```
 
 ## Discover Japanese voices

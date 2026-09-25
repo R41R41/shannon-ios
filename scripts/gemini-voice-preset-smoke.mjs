@@ -4,11 +4,12 @@ import process from 'node:process';
 
 import { buildVoiceDesignRequest } from './gemini-tts-lab-core.mjs';
 import { safeUpstreamError } from './gemini-voice-lab-core.mjs';
-import { voiceDesignPresets } from '../tools/gemini-voice-lab/voice-design-presets.js';
+import { voiceDesignPresets, voiceDesignPrompt } from '../tools/gemini-voice-lab/voice-design-presets.js';
 
 const API_ROOT = 'https://generativelanguage.googleapis.com/v1beta';
 const API_KEY = String(process.env.GEMINI_API_KEY ?? '').trim();
 const requestedPreset = argumentValue('--preset');
+const requestedAllVariants = process.argv.includes('--all-variants');
 
 if (!process.argv.includes('--confirm-billable') || !process.argv.includes('--delete-successes')) {
   throw new Error('This smoke test creates billable stored voices. Pass --confirm-billable --delete-successes.');
@@ -20,19 +21,25 @@ const presets = requestedPreset
   : voiceDesignPresets;
 if (!presets.length) throw new Error(`Unknown preset: ${requestedPreset}`);
 
+const variants = requestedAllVariants
+  ? [{ language: 'en', detail: 'short' }, { language: 'en', detail: 'detailed' }, { language: 'ja', detail: 'short' }, { language: 'ja', detail: 'detailed' }]
+  : [{ language: 'en', detail: 'detailed' }];
+
 const results = [];
-for (const preset of presets) results.push(await checkPreset(preset));
+for (const preset of presets) {
+  for (const variant of variants) results.push(await checkPreset(preset, variant));
+}
 process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
 if (results.some(result => result.status !== 'passed' || result.deleted !== true)) process.exitCode = 1;
 
-async function checkPreset(preset) {
+async function checkPreset(preset, variant) {
   let voiceId;
   try {
     const response = await request('/voices', {
       method: 'POST',
       body: buildVoiceDesignRequest({
-        name: `Smoke ${preset.id}`,
-        prompt: preset.prompt,
+        name: `Smoke ${preset.id} ${variant.language} ${variant.detail}`,
+        prompt: voiceDesignPrompt(preset, variant.language, variant.detail),
         language: 'ja-JP',
         gender: 'female',
       }),
@@ -40,7 +47,7 @@ async function checkPreset(preset) {
     voiceId = typeof response.id === 'string' ? response.id : '';
     if (!/^voice_[A-Za-z0-9_-]+$/u.test(voiceId)) throw new Error('Gemini did not return a valid voice ID');
     await request(`/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE', allowEmpty: true });
-    return { preset: preset.id, status: 'passed', deleted: true, creationModel: response.model ?? null };
+    return { preset: preset.id, variant: `${variant.language}:${variant.detail}`, status: 'passed', deleted: true, creationModel: response.model ?? null };
   } catch (error) {
     let deleted = false;
     if (voiceId) {
@@ -51,7 +58,7 @@ async function checkPreset(preset) {
         process.stderr.write(`Cleanup failed for ${voiceId}\n`);
       }
     }
-    return { preset: preset.id, status: 'failed', deleted, error: safeMessage(error) };
+    return { preset: preset.id, variant: `${variant.language}:${variant.detail}`, status: 'failed', deleted, error: safeMessage(error) };
   }
 }
 

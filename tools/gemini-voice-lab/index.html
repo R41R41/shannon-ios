@@ -39,10 +39,19 @@
 
         <form id="sample-form" class="form-stack">
           <fieldset>
-            <legend>モデル</legend>
+            <legend>モデル比較</legend>
+            <div class="segmented three-up">
+              <label><input type="radio" name="model-mode" value="both" checked><span>両方<small>おすすめ · A/B</small></span></label>
+              <label><input type="radio" name="model-mode" value="gemini-3.8-flash-tts"><span>Flash<small>品質優先</small></span></label>
+              <label><input type="radio" name="model-mode" value="gemini-3.8-flash-lite-tts"><span>Flash-Lite<small>速い · 安い</small></span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>同じ条件の生成回数</legend>
             <div class="segmented">
-              <label><input type="radio" name="model" value="gemini-3.8-flash-lite-tts" checked><span>Flash-Lite<small>速い · 安い</small></span></label>
-              <label><input type="radio" name="model" value="gemini-3.8-flash-tts"><span>Flash<small>品質優先</small></span></label>
+              <label><input type="radio" name="repetitions" value="1"><span>1回<small>すばやく確認</small></span></label>
+              <label><input type="radio" name="repetitions" value="3" checked><span>3回<small>声の安定性も確認</small></span></label>
             </div>
           </fieldset>
 
@@ -56,10 +65,13 @@
 
           <label class="field">台本
             <select id="script-preset">
-              <option value="identity">自己紹介</option>
-              <option value="pronunciation">固有名詞・英字</option>
-              <option value="emotion">感情と間</option>
-              <option value="long">長めの会話</option>
+              <option value="everyday">日常 · 自然な会話</option>
+              <option value="joy">喜び · はずむ反応</option>
+              <option value="prickly">強気 · 照れ隠し</option>
+              <option value="reassure">慰め · 静かな優しさ</option>
+              <option value="resolve">決意 · 凛とした芯</option>
+              <option value="pronunciation">固有名詞 · 明瞭さ</option>
+              <option value="range">感情レンジ · 1本で確認</option>
               <option value="custom">自由入力</option>
             </select>
           </label>
@@ -70,10 +82,12 @@
 
           <label class="field">話し方
             <select id="style-preset">
-              <option value="">指定なし（まずはこちら）</option>
-              <option value="warm, friendly, reassuring, and natural">あたたかく自然</option>
-              <option value="lightly bright, affectionate, and charming without sounding childish">明るく愛嬌、子どもっぽくしない</option>
-              <option value="calm, gentle, intimate, and unhurried">静かで親密</option>
+              <option value="plain">指定なし · 声そのもの</option>
+              <option value="anime-natural" selected>アニメ自然体 · おすすめ</option>
+              <option value="crystal-heroine">透明感ヒロイン · 優しく鮮やか</option>
+              <option value="sunny-spark">天真爛漫 · 快活で素直</option>
+              <option value="prickly-warm">ツンデレ調 · 強気から照れ</option>
+              <option value="tender-close">親密な優しさ · 静かな芯</option>
               <option value="custom">自由入力</option>
             </select>
           </label>
@@ -81,14 +95,15 @@
             <input id="custom-style" maxlength="500" placeholder="例: airy, tender, subtly playful">
           </label>
 
-          <button id="generate-button" class="primary" type="submit"><span aria-hidden="true">▶</span> この声を生成</button>
+          <div class="experiment-summary" id="experiment-summary" aria-live="polite"></div>
+          <button id="generate-button" class="primary" type="submit"><span aria-hidden="true">▶</span> 比較セットを生成</button>
           <p id="sample-status" class="status" role="status" aria-live="polite"></p>
         </form>
       </div>
 
       <aside class="comparison" aria-labelledby="comparison-title">
         <div class="aside-heading"><h3 id="comparison-title">比較トレイ</h3><button id="clear-samples" class="text-button" type="button">すべて消す</button></div>
-        <div id="sample-empty" class="empty-state"><span aria-hidden="true">♪</span><p>生成した声がここに並びます。</p><small>同じ台本で2〜4候補を比べるのがおすすめです。</small></div>
+        <div id="sample-empty" class="empty-state"><span aria-hidden="true">♪</span><p>生成した声がここに並びます。</p><small>「両方 × 3回」なら、音質・速度・声のぶれを一度に比べられます。</small></div>
         <ol id="sample-list" class="sample-list" aria-live="polite"></ol>
       </aside>
     </section>
@@ -102,8 +117,8 @@
         <div class="form-stack">
           <label class="field">声質プリセット
             <select id="design-preset">
-              <option value="shannon-crystal">シャノン本命 · 16〜18歳イメージ</option>
-              <option value="sunny-fourteen">天真爛漫 · 14歳イメージ</option>
+              <option value="shannon-crystal">シャノン本命 · 透明感ヒロイン</option>
+              <option value="sunny-fourteen">天真爛漫 · 竹を割った快活さ</option>
               <option value="tsundere-leader">ツンデレ快活 · 強気なリーダー</option>
               <option value="refined-translucent">上品な透明感 · 柔らかな知性</option>
               <option value="devoted-tender">献身的で優しい · 静かな芯</option>
@@ -114,6 +129,22 @@
             </select>
             <small id="design-preset-help">8種類ともGeminiの実APIで作成・削除確認済みです。</small>
           </label>
+          <div class="variant-grid">
+            <fieldset>
+              <legend>設計文の言語</legend>
+              <div class="segmented">
+                <label><input type="radio" name="prompt-language" value="ja" checked><span>日本語<small>意図を読みやすい</small></span></label>
+                <label><input type="radio" name="prompt-language" value="en"><span>英語<small>基準と比較</small></span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>設計文の密度</legend>
+              <div class="segmented">
+                <label><input type="radio" name="prompt-detail" value="short"><span>短文<small>特徴を絞る</small></span></label>
+                <label><input type="radio" name="prompt-detail" value="detailed" checked><span>詳細<small>演技幅まで指定</small></span></label>
+              </div>
+            </fieldset>
+          </div>
           <label class="field">名前<input id="design-name" maxlength="100" value="Shannon bright"></label>
           <label class="field">声の設計文
             <textarea id="design-prompt" rows="9" maxlength="1000"></textarea>
@@ -123,8 +154,11 @@
           <button id="design-button" class="secondary" type="submit" disabled>新しい声を作る</button>
           <p id="design-status" class="status" role="status" aria-live="polite"></p>
         </div>
-        <div id="design-result" class="design-result empty-state">
+        <div id="design-results" class="design-results">
+          <div id="design-empty" class="design-result empty-state">
           <span aria-hidden="true">✦</span><p>作った声のプレビューとVoice IDを表示します。</p>
+          <small>複数作っても、このタブ内で並べて管理できます。</small>
+          </div>
         </div>
       </form>
     </section>
