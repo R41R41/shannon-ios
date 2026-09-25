@@ -22,11 +22,17 @@ describe('Shannon intention frame', () => {
 
   it('projects an evidence boundary without exposing hidden reasoning', () => {
     const frame: ShannonCognitiveFrame = {
-      situation: { occurredAt: at, channel: 'text' }, primaryIntent: intent(),
+      situation: { occurredAt: at, channel: 'text' }, primaryIntent: intent({
+        nextStep: '現在地を確認する',
+        planSteps: ['現在地を確認する', '小さく改善する', '結果を検証する'],
+      }),
       supportingIntentIDs: [], recalledMemoryIDs: [], responseMode: 'propose-action',
     };
     const prompt = buildIntentPrompt(frame);
     expect(prompt).toContain('Primary objective: シャノンの人格を育てる');
+    expect(prompt).toContain('Owner-visible plan proposal:');
+    expect(prompt).toContain('2. 小さく改善する');
+    expect(prompt).toContain('The plan is guidance, not proof');
     expect(prompt).toContain('Only a verified action receipt');
     expect(prompt).not.toContain('chain of thought');
   });

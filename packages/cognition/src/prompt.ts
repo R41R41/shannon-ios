@@ -123,10 +123,11 @@ export function buildIntentPrompt(
     `Primary objective: ${intent.title}`,
     `Desired outcome: ${intent.desiredOutcome}`,
     ...(intent.nextStep ? [`Next known step: ${intent.nextStep}`] : []),
+    ...(intent.planSteps?.length ? [`Owner-visible plan proposal:\n${intent.planSteps.slice(0, 5).map((step, index) => `${index + 1}. ${step}`).join('\n')}`] : []),
     `Evidence: explicitly stated by the user; recorded_at=${intent.createdAt}; confidence=${fixed(intent.confidence)}`,
     `Response mode: ${frame.responseMode}`,
     'Use this objective to maintain continuity across turns. Do not announce the frame, invent progress, or treat a proposal as completed work.',
-    'Only a verified action receipt can prove an external change. If the next step is ambiguous or consequential, ask or propose it instead of silently acting.',
+    'The plan is guidance, not proof of action or completion. Only a verified action receipt can prove an external change. If the next step is ambiguous or consequential, ask or propose it instead of silently acting.',
   ], Math.max(0, maximumCharacters));
 }
 

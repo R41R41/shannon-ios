@@ -73,4 +73,6 @@ including completed/dismissed commitments and forgotten/rejected items. Rich act
 knowledge projections must not hide this management path. The current-state area also exposes
 owner-visible durable intentions and bounded cognitive-cycle receipts. Intent status changes are
 explicit user actions backed by the server result; a receipt summarizes purpose, recall, action,
-and outcome without storing or presenting private chain-of-thought.
+and outcome without storing or presenting private chain-of-thought. An explicitly stated goal may
+also carry one next step and up to five owner-visible plan stages. The UI labels these as a proposal;
+they never imply execution or completion without an existing verified receipt.

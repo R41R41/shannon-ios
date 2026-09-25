@@ -470,7 +470,7 @@ export class ShannonApiKernel {
       const experience = this.background.recordTurn(completedTurn);
       recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
         threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
-      });
+      }, provisionalIntent ? completion.intentPlan : undefined);
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };

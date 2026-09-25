@@ -3,6 +3,7 @@ import { normalizedThreadTitle } from './threadTitle.js';
 import type {
   ShannonChatAttachment,
   ShannonGeneratedArtifact,
+  ShannonIntentPlan,
   ShannonTaskDecision,
   ShannonTaskDisposition,
   ShannonTaskProposal,
@@ -60,6 +61,7 @@ export function parseStructuredTurn(raw: string): {
   reply: string;
   taskDecision: ShannonTaskDecision;
   taskProposal: ShannonTaskProposal | null;
+  intentPlan: ShannonIntentPlan | null;
   artifacts: ShannonGeneratedArtifact[];
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
@@ -80,12 +82,13 @@ export function parseStructuredTurn(raw: string): {
     reason: rawDecision.reason.trim(),
   };
   const artifacts = validatedGeneratedArtifacts(object.artifacts);
+  const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
   if (object.taskProposal === null) {
     if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
     return {
-      reply: object.reply.trim(), taskDecision, taskProposal: null, artifacts,
+      reply: object.reply.trim(), taskDecision, taskProposal: null, intentPlan, artifacts,
       ...(threadTitle ? { threadTitle } : {}),
       ...(threadSummary ? { threadSummary } : {}),
     };
@@ -104,6 +107,7 @@ export function parseStructuredTurn(raw: string): {
     ...(threadTitle ? { threadTitle } : {}),
     ...(threadSummary ? { threadSummary } : {}),
     taskDecision,
+    intentPlan,
     artifacts,
     taskProposal: {
       title: proposal.title.trim(),
@@ -165,6 +169,32 @@ export const GENERATED_ARTIFACT_INSTRUCTIONS = `[生成物]
 ユーザーが、文章・Markdown・JSON・CSV・ソースコードなどをファイルとして作る、編集する、または保存できる形にすることを明示的に求めた場合だけ、artifactsに生成物を入れる。それ以外はnullにする。
 artifactsは最大2件、各contentはUTF-8テキストで最大12000文字。nameはパスではなく拡張子を含む短いファイル名にし、スラッシュ、バックスラッシュ、制御文字を含めない。実行ファイル、秘密、認証情報、セッション、トークンは生成物に含めない。
 生成物は会話内プレビュー用のデータであり、保存や実行が済んだとは言わない。ユーザーがmacOSの保存パネルで保存先を選んだ時だけクライアントが書き出す。replyには生成物を用意したことと、プレビューして保存できることを自然に伝える。`;
+
+export const INTENT_PLAN_INSTRUCTIONS = `[目的の計画案]
+今回のユーザー発言そのものが、新しい目標・目的、または実装・改善・統合・構築・作成・開発・修正・整理・実現・完成したいことを明示している場合だけintentPlanを作る。それ以外はnullにする。
+intentPlanはShannonが継続して覚えるための提案であり、実行済みの記録ではない。nextStepには今から着手できる具体的な一手を1つ、stepsには目的達成までの検証可能な段階を1〜5件、順番どおりに短い日本語で書く。
+外部操作・購入・公開・配布・デプロイ・削除・承認を、実行済みまたは自動実行予定として書かない。必要なら「確認する」「提案する」「承認後に実行する」のように境界を明示する。`;
+
+export function validatedIntentPlan(value: unknown): ShannonIntentPlan | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  const row = value as Record<string, unknown>;
+  const nextStep = normalizedPlanText(row.nextStep);
+  if (!nextStep || !Array.isArray(row.steps) || row.steps.length < 1 || row.steps.length > 5) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  const steps = row.steps.map(normalizedPlanText);
+  if (steps.some(step => !step) || new Set(steps).size !== steps.length) {
+    throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
+  }
+  return { nextStep, steps };
+}
+
+function normalizedPlanText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const normalized = value.replace(/[\r\n\t]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  return Array.from(normalized).slice(0, 160).join('');
+}
 
 export const GENERATED_ARTIFACT_MIME_TYPES = new Set([
   'text/plain',

@@ -3,6 +3,11 @@ import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { ShannonCognitiveFrame, ShannonExperienceChannel, ShannonIntent } from '@shannon/cognition';
 
+export interface CognitiveIntentPlan {
+  nextStep: string;
+  steps: readonly string[];
+}
+
 export type CognitiveIntentStatus = ShannonIntent['status'];
 
 export interface CognitiveCycleReceipt {
@@ -20,6 +25,7 @@ export interface CognitiveCycleReceipt {
 export interface CognitiveIntentStore {
   list(scopeKey: string, status?: CognitiveIntentStatus): readonly ShannonIntent[];
   capture(scopeKey: string, intent: ShannonIntent, sourceExperienceId?: string): ShannonIntent;
+  updatePlan(scopeKey: string, intentID: string, plan: CognitiveIntentPlan, at: string): ShannonIntent | null;
   updateStatus(scopeKey: string, intentID: string, status: CognitiveIntentStatus, at: string): ShannonIntent | null;
   recordCycle(scopeKey: string, frame: ShannonCognitiveFrame, receipt: Omit<CognitiveCycleReceipt, 'id'>): CognitiveCycleReceipt;
   recentCycles(scopeKey: string, limit?: number): readonly CognitiveCycleReceipt[];
@@ -111,6 +117,20 @@ export class InMemoryCognitiveIntentStore implements CognitiveIntentStore {
     return saved;
   }
 
+  updatePlan(scopeKey: string, intentID: string, plan: CognitiveIntentPlan, at: string): ShannonIntent | null {
+    const rows = this.intents.get(scopeKey) ?? [];
+    const existing = rows.find(item => item.id === intentID);
+    if (!existing) return null;
+    const saved = Object.freeze({
+      ...existing,
+      nextStep: plan.nextStep,
+      planSteps: Object.freeze([...plan.steps]),
+      updatedAt: at,
+    });
+    this.intents.set(scopeKey, rows.map(item => item.id === intentID ? saved : item));
+    return saved;
+  }
+
   recordCycle(scopeKey: string, frame: ShannonCognitiveFrame, receipt: Omit<CognitiveCycleReceipt, 'id'>): CognitiveCycleReceipt {
     const saved = Object.freeze({ id: randomUUID(), ...receipt,
       ...(frame.primaryIntent ? { primaryIntentID: frame.primaryIntent.id } : {}),
@@ -141,6 +161,7 @@ export class SQLiteCognitiveIntentStore implements CognitiveIntentStore {
         source_experience_id TEXT,
         thread_id TEXT,
         next_step TEXT,
+        plan_steps_json TEXT,
         priority REAL NOT NULL CHECK (priority >= 0 AND priority <= 1),
         confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
         created_at TEXT NOT NULL,
@@ -165,6 +186,7 @@ export class SQLiteCognitiveIntentStore implements CognitiveIntentStore {
       CREATE INDEX IF NOT EXISTS cognitive_cycle_receipts_scope_occurred
         ON cognitive_cycle_receipts (scope_key, occurred_at DESC);
     `);
+    this.ensurePlanColumn();
     this.secureFiles();
   }
 
@@ -216,6 +238,17 @@ export class SQLiteCognitiveIntentStore implements CognitiveIntentStore {
     return this.list(scopeKey).find(item => item.id === intentID) ?? null;
   }
 
+  updatePlan(scopeKey: string, intentID: string, plan: CognitiveIntentPlan, at: string): ShannonIntent | null {
+    const result = this.database.prepare(`UPDATE cognitive_intents
+      SET next_step = ?, plan_steps_json = ?, updated_at = ?
+      WHERE scope_key = ? AND intent_id = ?`).run(
+      plan.nextStep, JSON.stringify(plan.steps), at, scopeKey, intentID,
+    );
+    if (Number(result.changes) === 0) return null;
+    this.secureFiles();
+    return this.list(scopeKey).find(item => item.id === intentID) ?? null;
+  }
+
   recordCycle(scopeKey: string, frame: ShannonCognitiveFrame, receipt: Omit<CognitiveCycleReceipt, 'id'>): CognitiveCycleReceipt {
     const saved = Object.freeze({ id: randomUUID(), ...receipt });
     this.database.prepare(`INSERT INTO cognitive_cycle_receipts
@@ -250,6 +283,13 @@ export class SQLiteCognitiveIntentStore implements CognitiveIntentStore {
     if (this.path === ':memory:') return;
     for (const candidate of [this.path, `${this.path}-wal`, `${this.path}-shm`]) if (existsSync(candidate)) chmodSync(candidate, 0o600);
   }
+
+  private ensurePlanColumn(): void {
+    const columns = this.database.prepare('PRAGMA table_info(cognitive_intents)').all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'plan_steps_json')) {
+      this.database.exec('ALTER TABLE cognitive_intents ADD COLUMN plan_steps_json TEXT');
+    }
+  }
 }
 
 function decodeIntent(row: Record<string, unknown>): ShannonIntent {
@@ -259,6 +299,7 @@ function decodeIntent(row: Record<string, unknown>): ShannonIntent {
     ...(row.source_experience_id ? { sourceExperienceId: String(row.source_experience_id) } : {}),
     ...(row.thread_id ? { threadId: String(row.thread_id) } : {}),
     ...(row.next_step ? { nextStep: String(row.next_step) } : {}),
+    ...(safeStringArray(row.plan_steps_json).length ? { planSteps: Object.freeze(safeStringArray(row.plan_steps_json)) } : {}),
     priority: Number(row.priority), confidence: Number(row.confidence),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   });

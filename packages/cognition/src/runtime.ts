@@ -55,6 +55,8 @@ export interface ShannonIntent {
   sourceExperienceId?: string;
   threadId?: string;
   nextStep?: string;
+  /** A bounded, owner-visible proposal. Steps are guidance, not action receipts. */
+  planSteps?: readonly string[];
   priority: number;
   confidence: number;
   createdAt: string;

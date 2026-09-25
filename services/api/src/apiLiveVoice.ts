@@ -299,7 +299,7 @@ async function completeLiveVoiceDelegation(
   if (!temporaryGuest && cognitiveContext) {
     recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
       threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
-    });
+    }, provisionalIntent ? completion.intentPlan : undefined);
   }
   return {
     status: 200,

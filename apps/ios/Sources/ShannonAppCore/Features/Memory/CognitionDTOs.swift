@@ -34,6 +34,7 @@ public struct ShannonCognitiveIntentDTO: Codable, Equatable, Identifiable, Senda
     public let sourceExperienceId: String?
     public let threadId: String?
     public let nextStep: String?
+    public let planSteps: [String]?
     public let priority: Double
     public let confidence: Double
     public let createdAt: String

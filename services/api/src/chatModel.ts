@@ -9,6 +9,7 @@ import {
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
+  INTENT_PLAN_INSTRUCTIONS,
   SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
   THREAD_SUMMARY_INSTRUCTIONS,
   THREAD_TITLE_INSTRUCTIONS,
@@ -72,6 +73,12 @@ export interface ShannonChatModelResult {
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;
+  intentPlan?: ShannonIntentPlan;
+}
+
+export interface ShannonIntentPlan {
+  nextStep: string;
+  steps: readonly string[];
 }
 
 export type ShannonTaskDisposition = 'none' | 'clarify' | 'propose';
@@ -145,6 +152,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
           ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
           ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
           GENERATED_ARTIFACT_INSTRUCTIONS,
+          INTENT_PLAN_INSTRUCTIONS,
           agentTaskInstructions(this.options.agentHostHint),
           ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
           THREAD_SUMMARY_INSTRUCTIONS,
@@ -207,6 +215,23 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
                     },
                   ],
                 },
+                intentPlan: {
+                  anyOf: [
+                    { type: 'null' },
+                    {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        nextStep: { type: 'string', description: '目的に対する直近の具体的な一手' },
+                        steps: {
+                          type: 'array', minItems: 1, maxItems: 5,
+                          items: { type: 'string', description: '短く検証可能な計画段階' },
+                        },
+                      },
+                      required: ['nextStep', 'steps'],
+                    },
+                  ],
+                },
                 artifacts: {
                   anyOf: [
                     { type: 'null' },
@@ -231,7 +256,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
                   ],
                 },
               },
-              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'artifacts', ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.generateThreadTitle ? ['threadTitle'] : [])],
             },
           },
         },
@@ -274,6 +299,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
       ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
       taskDecision: structured.taskDecision,
+      ...(structured.intentPlan ? { intentPlan: structured.intentPlan } : {}),
       ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
     };
   }

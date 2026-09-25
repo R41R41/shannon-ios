@@ -158,10 +158,39 @@ struct ShannonCognitiveIntentRow: View {
                     .font(.caption)
                     .foregroundStyle(statusColor)
                 if let nextStep = intent.nextStep, !nextStep.isEmpty {
-                    Label(nextStep, systemImage: "arrow.right.circle")
-                        .font(.caption)
-                        .foregroundStyle(palette.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                        Label("次の一手", systemImage: "arrow.right.circle")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.action)
+                        Text(nextStep)
+                            .font(.caption)
+                            .foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let planSteps = intent.planSteps, !planSteps.isEmpty {
+                    VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                        Label("計画案", systemImage: "list.number")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.brandPresence)
+                        ForEach(Array(planSteps.prefix(5).enumerated()), id: \.offset) { index, step in
+                            HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.extraSmall) {
+                                Text("\(index + 1)")
+                                    .font(.caption2.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(palette.brandPresence)
+                                    .frame(width: 18, height: 18)
+                                    .background(palette.intelligenceSoft, in: Circle())
+                                Text(step)
+                                    .font(.caption)
+                                    .foregroundStyle(palette.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        Text("計画は提案です。実行・完了は検証済みの記録で確認します。")
+                            .font(.caption2)
+                            .foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Text("更新 \(displayDate(intent.updatedAt))")
                     .font(.caption2)

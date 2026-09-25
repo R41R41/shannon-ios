@@ -1,10 +1,10 @@
 schema_version: 1
 screen_id: shannon-ios-memory
 platform: ios
-baseline_commit: c1ca802
+baseline_commit: a84f898
 last_verified_at: 2026-09-25
 verification_scope: "合成fixture・shared Swiftモデル/部品描画。実iPhoneでの目的状態変更は未確認"
-user_job: "シャノンの記憶・約束・継続目的と、目的を意識して行った認知履歴を確認して管理する"
+user_job: "シャノンの記憶・約束・継続目的、その次の一手と計画案、目的を意識して行った認知履歴を確認して管理する"
 primary_action: "頭の中から継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
   - "いま・知識・記憶の概要、日記、活動表示"
@@ -15,9 +15,11 @@ improve:
   - "復元対象は物理削除ではないことを説明する"
   - "明示された継続目的と最近の認知サイクルを所有者が確認できる"
   - "目的を一時停止・完了・取り下げ・再開して次の対話に反映できる"
+  - "明示目標から作られた次の一手と最大5段階の計画案を、実行記録と混同せず確認できる"
 do_not_change:
   - "所有者スコープと外部アプリ承認の境界"
   - "シャノンが根拠なく目的を完了扱いすること"
+  - "計画案を実行済み・完了済みとして扱うこと"
 states:
   loading: "記憶と目的の入口は保持し、読み込み中を表示する"
   empty: "記憶分類と目的分類を空状態の説明付きで保持する"
@@ -26,8 +28,8 @@ states:
   conflict: "目的の再開競合を説明し、再読み込みして整理できる"
   selection: "memory IDで記憶詳細を、intent IDで目的状態を保持し、変更後も履歴に到達できる"
 accessibility:
-  dynamic_type: "記憶・目的・認知要約は複数行で伸長する"
-  voiceover: "目的本文、明示状態、変更メニュー、認知結果を文字とアイコンで提供する"
+  dynamic_type: "記憶・目的・次の一手・計画案・認知要約は複数行で伸長する"
+  voiceover: "目的本文、明示状態、次の一手、番号付き計画案、変更メニュー、認知結果を文字とアイコンで提供する"
   target_size: "行の最小高は44ポイント"
   focus: "標準NavigationLink・List・Menuで一覧、状態変更、戻るを提供する"
   reduce_motion: "導線と状態の理解に装飾アニメーションを使わない"

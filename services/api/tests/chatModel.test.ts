@@ -8,6 +8,7 @@ describe('OpenAI Responses chat adapter', () => {
       const body = JSON.parse(String(init?.body));
       expect(body.text.format.schema.required).toContain('threadTitle');
       expect(body.text.format.schema.required).toContain('threadSummary');
+      expect(body.text.format.schema.required).toContain('intentPlan');
       expect(body.instructions).toContain('シャノン側のreplyの両方');
       expect(body.instructions).toContain('後からトークを探して再開する');
       expect(body.input).toEqual([{ role: 'user', content: '週末は京都に行きたい' }]);
@@ -167,6 +168,46 @@ describe('OpenAI Responses chat adapter', () => {
     expect(result.artifacts).toEqual([{
       name: 'plan.md', mimeType: 'text/markdown', content: '# Plan\n', summary: '実装計画',
     }]);
+  });
+
+  it('returns a bounded owner-visible plan only as proposal metadata', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.instructions).toContain('[目的の計画案]');
+      expect(body.instructions).toContain('実行済みの記録ではない');
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        reply: 'まず現状を確かめよう。',
+        taskDecision: { disposition: 'none', reason: '目的の整理' },
+        taskProposal: null,
+        intentPlan: {
+          nextStep: ' 現状を\n確認する ',
+          steps: ['現状を確認する', '小さく改善する', '結果を検証する'],
+        },
+      }) }));
+    });
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+
+    const result = await model.generate({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '音声対話を改善したい',
+    });
+
+    expect(result.intentPlan).toEqual({
+      nextStep: '現状を 確認する',
+      steps: ['現状を確認する', '小さく改善する', '結果を検証する'],
+    });
+  });
+
+  it('rejects duplicate or unbounded intent plan steps', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ output_text: JSON.stringify({
+      reply: '計画したよ。',
+      taskDecision: { disposition: 'none', reason: '目的の整理' }, taskProposal: null,
+      intentPlan: { nextStep: '確認する', steps: ['確認する', '確認する'] },
+    }) })));
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+
+    await expect(model.generate({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '改善したい',
+    })).rejects.toThrow('OPENAI_RESPONSE_SCHEMA_INVALID');
   });
 
   it('rejects generated artifact paths', async () => {

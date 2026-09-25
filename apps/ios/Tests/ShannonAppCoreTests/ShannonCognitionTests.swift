@@ -11,6 +11,7 @@ struct ShannonCognitionTests {
           "intents": [{
             "id":"goal-1","title":"音声対話を改善したい","desiredOutcome":"音声対話を改善したい",
             "status":"active","source":"explicit-user-goal","threadId":"thread-1",
+            "nextStep":"話し方を評価する","planSteps":["現状を評価する","改善案を試す","実機で確認する"],
             "priority":0.8,"confidence":0.95,"createdAt":"2026-09-25T00:00:00Z","updatedAt":"2026-09-25T01:00:00Z"
           }],
           "recentCycles": [{
@@ -25,6 +26,8 @@ struct ShannonCognitionTests {
 
         #expect(dashboard.intents.first?.status == .active)
         #expect(dashboard.intents.first?.threadId == "thread-1")
+        #expect(dashboard.intents.first?.nextStep == "話し方を評価する")
+        #expect(dashboard.intents.first?.planSteps == ["現状を評価する", "改善案を試す", "実機で確認する"])
         #expect(dashboard.recentCycles.first?.channelLabel == "音声")
         #expect(dashboard.recentCycles.first?.recalledMemoryIDs == ["memory-1"])
     }
@@ -140,6 +143,7 @@ private func cognitionIntent(
         sourceExperienceId: nil,
         threadId: "thread-1",
         nextStep: nil,
+        planSteps: nil,
         priority: 0.8,
         confidence: 0.95,
         createdAt: "2026-09-25T00:00:00Z",
