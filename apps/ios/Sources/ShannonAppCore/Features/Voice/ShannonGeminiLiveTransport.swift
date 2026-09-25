@@ -37,7 +37,7 @@ final class ShannonGeminiLiveTransport {
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var recordingMixerNode: AVAudioMixerNode?
-    private var sinkNode: AVAudioSinkNode?
+    private var mutedCaptureMixerNode: AVAudioMixerNode?
     private var audioStarted = false
     private var stopped = false
     private var didRecordFirstAudioSend = false
@@ -157,16 +157,18 @@ final class ShannonGeminiLiveTransport {
         urlSession?.invalidateAndCancel()
         urlSession = nil
         playerNode.stop()
-        if let sinkNode {
-            audioEngine.disconnectNodeInput(sinkNode)
-            audioEngine.detach(sinkNode)
-        }
         if let recordingMixerNode {
+            recordingMixerNode.removeTap(onBus: 0)
             audioEngine.disconnectNodeInput(recordingMixerNode)
             audioEngine.disconnectNodeOutput(recordingMixerNode)
             audioEngine.detach(recordingMixerNode)
         }
-        sinkNode = nil
+        if let mutedCaptureMixerNode {
+            audioEngine.disconnectNodeInput(mutedCaptureMixerNode)
+            audioEngine.disconnectNodeOutput(mutedCaptureMixerNode)
+            audioEngine.detach(mutedCaptureMixerNode)
+        }
+        mutedCaptureMixerNode = nil
         recordingMixerNode = nil
         captureChunker.reset()
         audioEngine.stop()
@@ -216,7 +218,7 @@ final class ShannonGeminiLiveTransport {
         let vad = self.vad
         let captureChunker = self.captureChunker
         let captureHandler = self.captureHandler
-        let sink = Self.makeCaptureSink(
+        let captureTap = Self.makeCaptureTap(
             outgoing: outgoing,
             vad: vad,
             captureChunker: captureChunker,
@@ -225,26 +227,38 @@ final class ShannonGeminiLiveTransport {
             channelStride: inputFormat.isInterleaved ? Int(inputFormat.channelCount) : 1
         )
         let recordingMixer = AVAudioMixerNode()
+        let mutedCaptureMixer = AVAudioMixerNode()
+        mutedCaptureMixer.outputVolume = 0
 
         audioEngine.attach(playerNode)
         audioEngine.attach(recordingMixer)
-        audioEngine.attach(sink)
+        audioEngine.attach(mutedCaptureMixer)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
         audioEngine.connect(input, to: recordingMixer, format: inputFormat)
-        // AVAudioSinkNode does not perform sample-rate conversion. Keep the
-        // proven Voice Processing I/O graph at the native microphone format,
-        // then resample the captured Float32 frames to Gemini's 16 kHz PCM.
-        audioEngine.connect(recordingMixer, to: sink, format: inputFormat)
+        // A terminal AVAudioSinkNode branch is not pulled by Voice Processing I/O
+        // on every physical-device route. Keep capture inside the rendered output
+        // graph so the microphone is guaranteed to advance, tap before muting, and
+        // silence the downstream mixer so local microphone audio never loops back.
+        audioEngine.connect(recordingMixer, to: mutedCaptureMixer, format: inputFormat)
+        audioEngine.connect(mutedCaptureMixer, to: audioEngine.mainMixerNode, format: inputFormat)
+        recordingMixer.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: inputFormat,
+            block: captureTap
+        )
         recordingMixerNode = recordingMixer
-        sinkNode = sink
+        mutedCaptureMixerNode = mutedCaptureMixer
         ShannonVoiceDiagnostics.shared.record(
             "gemini.audio.graph.connected",
             metadata: [
                 "sample_rate": String(Int(inputFormat.sampleRate)),
                 "channels": String(inputFormat.channelCount),
                 "interleaved": String(inputFormat.isInterleaved),
+                "capture": "rendered_mixer_tap",
             ]
         )
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.tap.installed")
         audioEngine.prepare()
         try audioEngine.start()
         ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.started")
@@ -252,31 +266,23 @@ final class ShannonGeminiLiveTransport {
         ShannonVoiceDiagnostics.shared.record("gemini.audio.player.started")
     }
 
-    /// AVAudioSinkNode invokes this closure on Core Audio's realtime I/O thread.
+    /// AVAudioEngine invokes this tap on Core Audio's realtime I/O thread.
     /// Constructing the closure inside the @MainActor transport method makes Swift
     /// inherit MainActor isolation and traps at runtime before the first PCM frame.
     /// Keep the callback factory explicitly nonisolated and hop only the UI update.
-    nonisolated private static func makeCaptureSink(
+    nonisolated private static func makeCaptureTap(
         outgoing: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?,
         vad: ShannonGeminiLiveVADState,
         captureChunker: ShannonGeminiLiveAudioChunker,
         captureHandler: @escaping CaptureHandler,
         sampleRate: Double,
         channelStride: Int
-    ) -> AVAudioSinkNode {
-        AVAudioSinkNode { _, frameCount, inputData in
-            let mutableInputData = UnsafeMutablePointer(mutating: inputData)
-            let buffers = UnsafeMutableAudioBufferListPointer(mutableInputData)
-            guard let firstBuffer = buffers.first,
-                  let data = firstBuffer.mData else { return noErr }
-            let sampleCount = Int(frameCount) * channelStride
-            guard Int(firstBuffer.mDataByteSize) >= sampleCount * MemoryLayout<Float>.size else {
-                return noErr
-            }
-            let samples = UnsafeBufferPointer(
-                start: data.assumingMemoryBound(to: Float.self),
-                count: sampleCount
-            )
+    ) -> AVAudioNodeTapBlock {
+        { buffer, _ in
+            guard let data = buffer.floatChannelData?[0] else { return }
+            let frameCount = Int(buffer.frameLength)
+            let sampleCount = frameCount * channelStride
+            let samples = UnsafeBufferPointer(start: data, count: sampleCount)
             let pcm = ShannonGeminiLivePCM.pcm16Mono16k(
                 samples: samples,
                 sampleRate: sampleRate,
@@ -301,7 +307,6 @@ final class ShannonGeminiLiveTransport {
                     emittedAudioChunks
                 )
             }
-            return noErr
         }
     }
 
