@@ -65,12 +65,19 @@ export function buildVoiceDesignRequest({ model, name, prompt, language = 'ja-JP
 export function audioBlockFromResponse(value) {
   const root = isRecord(value?.interaction) ? value.interaction : value;
   const block = root?.output_audio;
-  if (!isRecord(block) || typeof block.data !== 'string' || !block.data) {
+  const fallback = interactionAudioBlock(root);
+  const encoded = isRecord(block) && typeof block.data === 'string' && block.data
+    ? block.data
+    : fallback?.data;
+  if (typeof encoded !== 'string' || !encoded) {
     throw new Error('Gemini response did not contain output_audio.data');
   }
-  const audio = Buffer.from(block.data, 'base64');
+  const audio = Buffer.from(encoded, 'base64');
   if (!audio.length) throw new Error('Gemini returned an empty audio payload');
-  return { audio, mimeType: typeof block.mime_type === 'string' ? block.mime_type : 'audio/wav' };
+  const mimeType = isRecord(block) && typeof block.mime_type === 'string'
+    ? block.mime_type
+    : fallback?.mimeType ?? 'audio/wav';
+  return { audio, mimeType };
 }
 
 export function voiceSampleFromResponse(value) {
@@ -228,4 +235,25 @@ function requiredChoice(value, name, choices) {
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function interactionAudioBlock(value) {
+  if (!isRecord(value) || !Array.isArray(value.steps)) return undefined;
+  for (const step of value.steps) {
+    if (!isRecord(step) || !Array.isArray(step.content)) continue;
+    for (const item of step.content) {
+      if (
+        isRecord(item)
+        && item.type === 'audio'
+        && typeof item.data === 'string'
+        && item.data
+      ) {
+        return {
+          data: item.data,
+          mimeType: typeof item.mime_type === 'string' ? item.mime_type : 'audio/wav',
+        };
+      }
+    }
+  }
+  return undefined;
 }

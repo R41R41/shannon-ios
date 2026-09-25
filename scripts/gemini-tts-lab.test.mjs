@@ -49,6 +49,8 @@ test('audioBlockFromResponse supports direct and wrapped interaction responses',
   const data = Buffer.from('RIFF').toString('base64');
   assert.deepEqual(audioBlockFromResponse({ output_audio: { data } }).audio, Buffer.from('RIFF'));
   assert.deepEqual(audioBlockFromResponse({ interaction: { output_audio: { data } } }).audio, Buffer.from('RIFF'));
+  const steps = { interaction: { steps: [{ content: [{ type: 'audio', mime_type: 'audio/wav', data }] }] } };
+  assert.deepEqual(audioBlockFromResponse(steps).audio, Buffer.from('RIFF'));
 });
 
 test('wavMetadata reads PCM duration and tolerates odd-sized chunks', () => {
