@@ -20,7 +20,13 @@ import {
   validateSampleInput,
   VOICE_LAB_STATIC_FILES,
 } from './gemini-voice-lab-core.mjs';
-import { shouldInterruptCascadeOutput, shouldSendCascadeAudio } from '../tools/gemini-voice-lab/cascade-audio-policy.js';
+import {
+  CASCADE_BARGE_CONFIRM_MS,
+  CASCADE_BARGE_RELEASE_MS,
+  cascadeBargeInAction,
+  shouldRestoreCascadeVolume,
+  shouldSendCascadeAudio,
+} from '../tools/gemini-voice-lab/cascade-audio-policy.js';
 import {
   voiceDesignPresets,
   voiceDesignPrompt,
@@ -122,13 +128,17 @@ test('cascade transcription is locked to Japanese streaming text', () => {
   assert.equal(setup.setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs, 450);
 });
 
-test('cascade full duplex keeps listening and only interrupts on recognized speech', () => {
+test('cascade full duplex ducks first and interrupts only after sustained or final speech', () => {
   assert.equal(shouldSendCascadeAudio({ ready: true, socketOpen: true, activeTurn: true, bargeIn: true }), true);
   assert.equal(shouldSendCascadeAudio({ ready: true, socketOpen: true, activeTurn: true, bargeIn: false }), false);
   assert.equal(shouldSendCascadeAudio({ ready: false, socketOpen: true, activeTurn: false, bargeIn: true }), false);
-  assert.equal(shouldInterruptCascadeOutput({ bargeIn: true, activeTurn: true, interimText: 'ちょっと待って' }), true);
-  assert.equal(shouldInterruptCascadeOutput({ bargeIn: true, activeTurn: true, interimText: '  ', finalText: '' }), false);
-  assert.equal(shouldInterruptCascadeOutput({ bargeIn: false, activeTurn: true, finalText: '止めて' }), false);
+  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, now: 1_000, interimText: 'ちょっと' }), 'duck');
+  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, candidateStartedAt: 1_000, now: 1_200, interimText: 'ちょっと待って' }), 'hold');
+  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, candidateStartedAt: 1_000, now: 1_000 + CASCADE_BARGE_CONFIRM_MS, interimText: 'ちょっと待って' }), 'interrupt');
+  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, now: 1_000, finalText: '止めて' }), 'interrupt');
+  assert.equal(cascadeBargeInAction({ bargeIn: false, activeTurn: true, now: 1_000, finalText: '止めて' }), 'ignore');
+  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_000 + CASCADE_BARGE_RELEASE_MS - 1 }), false);
+  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_000 + CASCADE_BARGE_RELEASE_MS }), true);
 });
 
 test('cascade response keeps a short history and uses the selected profile', () => {

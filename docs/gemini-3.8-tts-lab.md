@@ -73,8 +73,10 @@ Use the four areas in order:
    Voice ID in conversation. It shows response-text, TTS-first-audio, and combined
    final-transcript-to-first-audio latency for every turn. Full-duplex mode is enabled
    by default: browser echo cancellation keeps microphone upload and transcription
-   active while Shannon speaks, and recognized user speech aborts both the active HTTP
-   generation and queued playback before starting the next turn. A visible switch
+   active while Shannon speaks. Initial recognized speech first ducks Shannon's output;
+   sustained or finalized speech then aborts both the active HTTP generation and queued
+   playback before starting the next turn, while an unconfirmed detection restores the
+   original volume. A visible switch
    restores the previous turn-taking behavior in environments where acoustic echo
    remains strong.
 

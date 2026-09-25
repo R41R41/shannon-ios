@@ -6,7 +6,12 @@ import {
   voiceDesignVariantVerifiedAt,
 } from './voice-design-presets.js';
 import { liveProfile, liveProfiles, liveSystemInstruction, liveTTSStyle } from './voice-live-profiles.js';
-import { shouldInterruptCascadeOutput, shouldSendCascadeAudio } from './cascade-audio-policy.js';
+import {
+  CASCADE_BARGE_RELEASE_MS,
+  cascadeBargeInAction,
+  shouldRestoreCascadeVolume,
+  shouldSendCascadeAudio,
+} from './cascade-audio-policy.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
@@ -131,6 +136,7 @@ liveToggle.addEventListener('click', () => state.live ? stopLive('停止しま�
 liveProfileSelect.addEventListener('change', updateLiveProfileSummary);
 cascadeToggle.addEventListener('click', () => state.cascade ? stopCascade('停止しました。') : startCascade());
 cascadeProfileSelect.addEventListener('change', updateCascadeProfileSummary);
+cascadeBargeIn.addEventListener('change', updateCascadeBargeInMode);
 window.addEventListener('beforeunload', () => {
   stopLive();
   stopCascade();
@@ -612,17 +618,20 @@ async function startCascade() {
     const source = context.createMediaStreamSource(stream);
     const capture = new AudioWorkletNode(context, 'shannon-capture');
     const mute = context.createGain();
+    const playbackGain = context.createGain();
     mute.gain.value = 0;
+    playbackGain.gain.value = 1;
     source.connect(capture).connect(mute).connect(context.destination);
+    playbackGain.connect(context.destination);
 
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url);
     const profileId = cascadeProfileSelect.value;
     state.cascade = {
-      socket, session, profileId, stream, context, source, capture, mute,
+      socket, session, profileId, stream, context, source, capture, mute, playbackGain,
       ready: false, busy: false, speaking: false, nextPlaybackTime: 0,
       sources: new Set(), controllers: new Set(), transcriptBuffer: '', finalizeTimer: null,
-      activeTurn: null, turnSerial: 0,
+      activeTurn: null, turnSerial: 0, bargeInCandidate: null,
     };
     pendingStream = null;
     pendingContext = null;
@@ -698,12 +707,7 @@ async function handleCascadeTranscription(data) {
     const interim = String(content.interimInputTranscription?.text ?? '').trim();
     const finalText = String(content.inputTranscription?.text ?? '');
     if (cascade.activeTurn && !cascadeBargeIn.checked) return;
-    if (shouldInterruptCascadeOutput({
-      bargeIn: cascadeBargeIn.checked,
-      activeTurn: Boolean(cascade.activeTurn),
-      interimText: interim,
-      finalText,
-    })) interruptCascadeTurn(cascade);
+    handleCascadeBargeIn(cascade, interim, finalText);
     if (interim) showCascadeInterim(interim);
     if (finalText) {
       cascade.transcriptBuffer = mergeStreamingText(cascade.transcriptBuffer, finalText);
@@ -776,7 +780,7 @@ async function handleCascadeTurn(text, cascade) {
           cascadeTTSLatency.textContent = formatDuration(Math.round(firstAudioAt - responseReadyAt));
           cascadeTotalLatency.textContent = formatDuration(Math.round(firstAudioAt - finalizedAt));
           setStatus(cascadeStatus, cascadeBargeIn.checked
-            ? 'Shannonが話しています · そのまま話せば割り込めます。'
+            ? 'Shannonが話しています · 話し始めると音量を下げ、発話が続くと割り込みます。'
             : 'Shannonが話しています · 交互会話モードです。', 'success');
         }
         audioChunks += 1;
@@ -794,6 +798,7 @@ async function handleCascadeTurn(text, cascade) {
   } finally {
     cascade.controllers.delete(controller);
     if (isActiveCascadeTurn(cascade, turn)) {
+      clearCascadeBargeInCandidate(cascade, { restore: true });
       cascade.activeTurn = null;
       cascade.busy = false;
       cascade.speaking = false;
@@ -805,12 +810,83 @@ function isActiveCascadeTurn(cascade, turn) {
   return state.cascade === cascade && cascade.activeTurn === turn && !turn.interrupted;
 }
 
+function handleCascadeBargeIn(cascade, interimText, finalText) {
+  const now = performance.now();
+  const action = cascadeBargeInAction({
+    bargeIn: cascadeBargeIn.checked,
+    activeTurn: Boolean(cascade.activeTurn),
+    candidateStartedAt: cascade.bargeInCandidate?.startedAt,
+    now,
+    interimText,
+    finalText,
+  });
+  if (action === 'ignore') return;
+  if (action === 'interrupt') {
+    interruptCascadeTurn(cascade);
+    return;
+  }
+  if (action === 'duck') {
+    cascade.bargeInCandidate = {
+      turn: cascade.activeTurn,
+      startedAt: now,
+      lastHeardAt: now,
+      releaseTimer: null,
+    };
+    setCascadePlaybackGain(cascade, .18);
+    setStatus(cascadeStatus, '話し声を確認中 · Shannonの音量を下げています…', 'success');
+  } else if (cascade.bargeInCandidate) {
+    cascade.bargeInCandidate.lastHeardAt = now;
+  }
+  scheduleCascadeDuckRelease(cascade);
+}
+
+function scheduleCascadeDuckRelease(cascade) {
+  const candidate = cascade.bargeInCandidate;
+  if (!candidate) return;
+  clearTimeout(candidate.releaseTimer);
+  candidate.releaseTimer = setTimeout(() => {
+    if (state.cascade !== cascade || cascade.bargeInCandidate !== candidate) return;
+    if (!shouldRestoreCascadeVolume({
+      candidateLastHeardAt: candidate.lastHeardAt,
+      now: performance.now(),
+    })) {
+      scheduleCascadeDuckRelease(cascade);
+      return;
+    }
+    clearCascadeBargeInCandidate(cascade, { restore: true });
+    if (!isActiveCascadeTurn(cascade, candidate.turn)) return;
+    setStatus(cascadeStatus, cascade.speaking
+      ? 'Shannonが話しています · 誤検知だったため音量を戻しました。'
+      : '返答を考えています · 誤検知だったため処理を続けます。', 'success');
+  }, CASCADE_BARGE_RELEASE_MS);
+}
+
+function clearCascadeBargeInCandidate(cascade, { restore = false } = {}) {
+  const candidate = cascade.bargeInCandidate;
+  if (candidate) clearTimeout(candidate.releaseTimer);
+  cascade.bargeInCandidate = null;
+  if (restore) setCascadePlaybackGain(cascade, 1);
+}
+
+function setCascadePlaybackGain(cascade, value) {
+  const gain = cascade.playbackGain?.gain;
+  if (!gain) return;
+  const now = cascade.context.currentTime;
+  if (typeof gain.cancelAndHoldAtTime === 'function') gain.cancelAndHoldAtTime(now);
+  else {
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+  }
+  gain.linearRampToValueAtTime(value, now + .08);
+}
+
 function interruptCascadeTurn(cascade) {
   const turn = cascade.activeTurn;
   if (!turn) return;
   turn.interrupted = true;
   turn.controller.abort();
   cascade.controllers.delete(turn.controller);
+  clearCascadeBargeInCandidate(cascade, { restore: true });
   stopCascadePlayback(cascade);
   cascade.activeTurn = null;
   cascade.busy = false;
@@ -834,7 +910,7 @@ function playCascadePCM24k(encoded, cascade) {
   for (let index = 0; index < count; index += 1) channel[index] = view.getInt16(index * 2, true) / 32768;
   const source = cascade.context.createBufferSource();
   source.buffer = buffer;
-  source.connect(cascade.context.destination);
+  source.connect(cascade.playbackGain);
   cascade.sources.add(source);
   source.addEventListener('ended', () => cascade.sources.delete(source));
   const start = Math.max(cascade.context.currentTime + .025, cascade.nextPlaybackTime);
@@ -847,6 +923,7 @@ function stopCascade(status, kind) {
   state.cascade = null;
   if (cascade) {
     clearTimeout(cascade.finalizeTimer);
+    clearCascadeBargeInCandidate(cascade);
     for (const controller of cascade.controllers) controller.abort();
     stopCascadePlayback(cascade);
     if (cascade.socket.readyState === WebSocket.OPEN) {
@@ -856,6 +933,7 @@ function stopCascade(status, kind) {
     for (const track of cascade.stream.getTracks()) track.stop();
     cascade.capture.disconnect();
     cascade.source.disconnect();
+    cascade.playbackGain.disconnect();
     cascade.context.close().catch(() => {});
   }
   cascadeToggle.disabled = false;
@@ -873,6 +951,19 @@ function setCascadeControlsDisabled(disabled) {
   for (const input of document.querySelectorAll('input[name="cascade-text-model"], input[name="cascade-tts-model"]')) {
     input.disabled = disabled;
   }
+}
+
+function updateCascadeBargeInMode() {
+  const cascade = state.cascade;
+  if (!cascade) return;
+  clearCascadeBargeInCandidate(cascade, { restore: true });
+  if (!cascade.activeTurn) {
+    setStatus(cascadeStatus, '聞いています · 話し終わると返答を作ります。', 'success');
+    return;
+  }
+  setStatus(cascadeStatus, cascadeBargeIn.checked
+    ? '割り込みON · Shannonの発話中も聞き続けます。'
+    : '交互会話モード · Shannonの発話中はマイク送信を止めます。', 'success');
 }
 
 function updateCascadeProfileSummary() {
