@@ -5,7 +5,7 @@ import {
   voiceDesignPrompt,
   voiceDesignVariantIsVerified,
 } from './voice-design-presets.js';
-import { liveProfile, liveProfiles, liveSystemInstruction } from './voice-live-profiles.js';
+import { liveProfile, liveProfiles, liveSystemInstruction, liveTTSStyle } from './voice-live-profiles.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
@@ -13,6 +13,8 @@ const state = {
   samples: [],
   designedVoices: [],
   live: null,
+  cascade: null,
+  cascadeHistory: [],
 };
 
 const sampleForm = document.querySelector('#sample-form');
@@ -48,12 +50,27 @@ const liveStatus = document.querySelector('#live-status');
 const liveOrb = document.querySelector('#live-orb');
 const transcriptEmpty = document.querySelector('#transcript-empty');
 const transcriptList = document.querySelector('#transcript-list');
+const cascadeToggle = document.querySelector('#cascade-toggle');
+const cascadeVoice = document.querySelector('#cascade-voice');
+const cascadeProfileSelect = document.querySelector('#cascade-profile');
+const cascadeProfileSummary = document.querySelector('#cascade-profile-summary');
+const cascadeStatus = document.querySelector('#cascade-status');
+const cascadeOrb = document.querySelector('#cascade-orb');
+const cascadeTranscriptEmpty = document.querySelector('#cascade-transcript-empty');
+const cascadeTranscriptList = document.querySelector('#cascade-transcript-list');
+const cascadeInterim = document.querySelector('#cascade-interim');
+const cascadeTextLatency = document.querySelector('#cascade-text-latency');
+const cascadeTTSLatency = document.querySelector('#cascade-tts-latency');
+const cascadeTotalLatency = document.querySelector('#cascade-total-latency');
 
 sampleText.value = auditionScript('everyday').text;
 liveProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
 liveProfileSelect.value = 'tsundere-leader';
+cascadeProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
+cascadeProfileSelect.value = 'tsundere-leader';
 applyDesignPreset(designPreset.value);
 updateLiveProfileSummary();
+updateCascadeProfileSummary();
 updateTextCount();
 updateExperimentSummary();
 initialize();
@@ -72,6 +89,9 @@ sampleText.addEventListener('input', () => {
 voiceSelect.addEventListener('change', () => {
   if (liveVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
     liveVoice.value = voiceSelect.value;
+  }
+  if (cascadeVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
+    cascadeVoice.value = voiceSelect.value;
   }
 });
 stylePreset.addEventListener('change', () => {
@@ -107,8 +127,11 @@ sampleForm.addEventListener('submit', generateSample);
 designForm.addEventListener('submit', designVoice);
 liveToggle.addEventListener('click', () => state.live ? stopLive('停止しました。') : startLive());
 liveProfileSelect.addEventListener('change', updateLiveProfileSummary);
+cascadeToggle.addEventListener('click', () => state.cascade ? stopCascade('停止しました。') : startCascade());
+cascadeProfileSelect.addEventListener('change', updateCascadeProfileSummary);
 window.addEventListener('beforeunload', () => {
   stopLive();
+  stopCascade();
   for (const sample of state.samples) URL.revokeObjectURL(sample.url);
   for (const voice of state.designedVoices) URL.revokeObjectURL(voice.url);
 });
@@ -135,12 +158,18 @@ async function loadVoices() {
     }
     const selected = voiceSelect.value;
     const liveSelected = liveVoice.value;
+    const cascadeSelected = cascadeVoice.value;
     voiceSelect.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
     liveVoice.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
+    cascadeVoice.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
     if (voices.has(selected)) voiceSelect.value = selected;
     else voiceSelect.value = 'Leda';
     if (voices.has(liveSelected)) liveVoice.value = liveSelected;
     else liveVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
+    const shannon = [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon');
+    if (shannon) cascadeVoice.value = shannon.id;
+    else if (voices.has(cascadeSelected)) cascadeVoice.value = cascadeSelected;
+    else cascadeVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
   } catch (error) {
     setStatus(sampleStatus, `声一覧は既定候補を使います: ${message(error)}`);
   }
@@ -364,7 +393,9 @@ async function deleteDesignedVoice(localId, input, button) {
     if (!response.ok) throw await responseError(response);
     voiceSelect.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
+    cascadeVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     if (liveVoice.value === id) liveVoice.value = 'Aoede';
+    if (cascadeVoice.value === id) cascadeVoice.value = 'Aoede';
     URL.revokeObjectURL(result.url);
     state.designedVoices = state.designedVoices.filter(item => item.localId !== localId);
     renderDesignResults();
@@ -383,16 +414,18 @@ function selectedDesignVariant() {
 }
 
 function addDesignedVoiceOption(id, name) {
-  for (const select of [voiceSelect, liveVoice]) {
+  for (const select of [voiceSelect, liveVoice, cascadeVoice]) {
     select.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     select.prepend(option(id, `${name} · 作成した声`));
   }
   voiceSelect.value = id;
   liveVoice.value = id;
+  cascadeVoice.value = id;
 }
 
 async function startLive() {
   if (!state.config) return;
+  if (state.cascade) stopCascade('Liveへ切り替えました。');
   liveToggle.disabled = true;
   setStatus(liveStatus, 'マイク権限を確認しています…');
   let pendingStream;
@@ -556,6 +589,307 @@ function updateLiveProfileSummary() {
   liveProfileSummary.innerHTML = `<strong>${escapeHTML(profile.shortLabel)}</strong><span>${escapeHTML(profile.summary)}</span>`;
 }
 
+async function startCascade() {
+  if (!state.config) return;
+  if (state.live) stopLive('カスケード会話へ切り替えました。');
+  cascadeToggle.disabled = true;
+  setStatus(cascadeStatus, 'マイク権限を確認しています…');
+  let pendingStream;
+  let pendingContext;
+  try {
+    pendingStream = await requestMicrophone();
+    setStatus(cascadeStatus, '音声認識と再生処理を準備しています…');
+    const tokenResponse = await post('/api/transcribe-token', {});
+    if (!tokenResponse.ok) throw await responseError(tokenResponse);
+    const session = await tokenResponse.json();
+    const stream = pendingStream;
+    const context = new AudioContext({ latencyHint: 'interactive' });
+    pendingContext = context;
+    await context.audioWorklet.addModule('/capture-worklet.js');
+    const source = context.createMediaStreamSource(stream);
+    const capture = new AudioWorkletNode(context, 'shannon-capture');
+    const mute = context.createGain();
+    mute.gain.value = 0;
+    source.connect(capture).connect(mute).connect(context.destination);
+
+    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(session.token)}`;
+    const socket = new WebSocket(url);
+    const profileId = cascadeProfileSelect.value;
+    state.cascade = {
+      socket, session, profileId, stream, context, source, capture, mute,
+      ready: false, busy: false, speaking: false, nextPlaybackTime: 0,
+      sources: new Set(), controllers: new Set(), transcriptBuffer: '', finalizeTimer: null,
+    };
+    pendingStream = null;
+    pendingContext = null;
+    capture.port.onmessage = ({ data }) => sendCascadeMicrophoneChunk(data);
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify(transcribeSetup(session.model)));
+      setStatus(cascadeStatus, '接続済み · 音声認識を設定しています…');
+    });
+    socket.addEventListener('message', event => handleCascadeTranscription(event.data));
+    socket.addEventListener('error', () => stopCascade('音声認識の接続でエラーが発生しました。', 'error'));
+    socket.addEventListener('close', () => {
+      if (state.cascade?.socket === socket) stopCascade('音声認識の接続が終了しました。', 'error');
+    });
+  } catch (error) {
+    for (const track of pendingStream?.getTracks() ?? []) track.stop();
+    pendingContext?.close().catch(() => {});
+    stopCascade(`開始できませんでした: ${liveStartMessage(error)}`, 'error');
+  } finally {
+    cascadeToggle.disabled = false;
+  }
+}
+
+function transcribeSetup(model) {
+  return {
+    setup: {
+      model: `models/${model}`,
+      generationConfig: { responseModalities: ['TEXT'] },
+      inputAudioTranscription: { languageCodes: ['ja-JP'] },
+      realtimeInputConfig: {
+        automaticActivityDetection: {
+          disabled: false,
+          startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+          endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+          prefixPaddingMs: 80,
+          silenceDurationMs: 450,
+        },
+      },
+    },
+  };
+}
+
+function sendCascadeMicrophoneChunk(buffer) {
+  const cascade = state.cascade;
+  if (!cascade?.ready || cascade.busy || cascade.speaking || cascade.socket.readyState !== WebSocket.OPEN) return;
+  cascade.socket.send(JSON.stringify({
+    realtimeInput: { audio: { data: arrayBufferBase64(buffer), mimeType: 'audio/pcm;rate=16000' } },
+  }));
+}
+
+async function handleCascadeTranscription(data) {
+  try {
+    const cascade = state.cascade;
+    if (!cascade) return;
+    const text = data instanceof Blob ? await data.text() : String(data);
+    const event = JSON.parse(text);
+    if (event.setupComplete) {
+      cascade.ready = true;
+      cascadeToggle.disabled = false;
+      cascadeToggle.innerHTML = '<span aria-hidden="true">■</span> カスケード会話を止める';
+      cascadeToggle.classList.add('secondary');
+      setCascadeControlsDisabled(true);
+      cascadeOrb.classList.add('active');
+      appendCascadeSessionMarker(`${cascadeVoice.options[cascadeVoice.selectedIndex]?.textContent ?? cascadeVoice.value} × ${liveProfile(cascade.profileId).shortLabel}`);
+      setStatus(cascadeStatus, '聞いています · 話し終わると返答を作ります。', 'success');
+    }
+    const content = event.serverContent;
+    if (!content || cascade.busy) return;
+    const interim = String(content.interimInputTranscription?.text ?? '').trim();
+    if (interim) showCascadeInterim(interim);
+    const finalText = String(content.inputTranscription?.text ?? '');
+    if (finalText) {
+      cascade.transcriptBuffer = mergeStreamingText(cascade.transcriptBuffer, finalText);
+      showCascadeInterim(cascade.transcriptBuffer);
+      clearTimeout(cascade.finalizeTimer);
+      cascade.finalizeTimer = setTimeout(() => finalizeCascadeTranscript(cascade), 350);
+    }
+    if (content.turnComplete && cascade.transcriptBuffer.trim()) finalizeCascadeTranscript(cascade);
+  } catch (error) {
+    setStatus(cascadeStatus, `音声認識を処理できませんでした: ${message(error)}`, 'error');
+  }
+}
+
+function finalizeCascadeTranscript(cascade) {
+  if (state.cascade !== cascade || cascade.busy) return;
+  clearTimeout(cascade.finalizeTimer);
+  cascade.finalizeTimer = null;
+  const text = cascade.transcriptBuffer.trim();
+  cascade.transcriptBuffer = '';
+  showCascadeInterim('');
+  if (text) handleCascadeTurn(text, cascade);
+}
+
+async function handleCascadeTurn(text, cascade) {
+  if (state.cascade !== cascade || cascade.busy) return;
+  cascade.busy = true;
+  const finalizedAt = performance.now();
+  appendCascadeTranscript('user', 'あなた', text);
+  setStatus(cascadeStatus, '返答を考えています…');
+  const controller = new AbortController();
+  cascade.controllers.add(controller);
+  try {
+    const response = await post('/api/cascade-response', {
+      model: selectedCascadeModel('cascade-text-model'),
+      text,
+      profile: cascade.profileId,
+      history: state.cascadeHistory,
+    }, { signal: controller.signal });
+    if (!response.ok) throw await responseError(response);
+    const result = await response.json();
+    if (state.cascade !== cascade) return;
+    const responseReadyAt = performance.now();
+    cascadeTextLatency.textContent = formatDuration(Math.round(responseReadyAt - finalizedAt));
+    appendCascadeTranscript('model', 'Shannon', result.text);
+    state.cascadeHistory = [...state.cascadeHistory, { role: 'user', text }, { role: 'model', text: result.text }].slice(-12);
+    setStatus(cascadeStatus, 'Shannonの声を作っています…');
+
+    const speechResponse = await post('/api/cascade-speech', {
+      model: selectedCascadeModel('cascade-tts-model'),
+      voice: cascadeVoice.value,
+      text: result.text,
+      style: liveTTSStyle(cascade.profileId),
+    }, { signal: controller.signal });
+    if (!speechResponse.ok) throw await responseError(speechResponse);
+    cascade.speaking = true;
+    let firstAudioAt = null;
+    let audioChunks = 0;
+    for await (const event of browserServerSentEvents(speechResponse.body)) {
+      if (state.cascade !== cascade) return;
+      for (const part of event?.candidates?.[0]?.content?.parts ?? []) {
+        if (!part?.inlineData?.data) continue;
+        if (!firstAudioAt) {
+          firstAudioAt = performance.now();
+          cascadeTTSLatency.textContent = formatDuration(Math.round(firstAudioAt - responseReadyAt));
+          cascadeTotalLatency.textContent = formatDuration(Math.round(firstAudioAt - finalizedAt));
+          setStatus(cascadeStatus, 'Shannonが話しています · マイク送信は一時停止中です。', 'success');
+        }
+        audioChunks += 1;
+        playCascadePCM24k(part.inlineData.data, cascade);
+      }
+    }
+    if (!firstAudioAt || audioChunks === 0) throw new Error('Gemini TTSから音声が返りませんでした');
+    const remainingMilliseconds = Math.max(0, (cascade.nextPlaybackTime - cascade.context.currentTime) * 1_000) + 160;
+    await wait(remainingMilliseconds);
+    if (state.cascade === cascade) setStatus(cascadeStatus, '聞いています · 続けて話しかけられます。', 'success');
+  } catch (error) {
+    if (error?.name !== 'AbortError' && state.cascade === cascade) {
+      setStatus(cascadeStatus, `返答できませんでした: ${message(error)}`, 'error');
+    }
+  } finally {
+    cascade.controllers.delete(controller);
+    if (state.cascade === cascade) {
+      cascade.busy = false;
+      cascade.speaking = false;
+    }
+  }
+}
+
+function playCascadePCM24k(encoded, cascade) {
+  const bytes = base64Bytes(encoded);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const count = Math.floor(bytes.byteLength / 2);
+  const buffer = cascade.context.createBuffer(1, count, 24_000);
+  const channel = buffer.getChannelData(0);
+  for (let index = 0; index < count; index += 1) channel[index] = view.getInt16(index * 2, true) / 32768;
+  const source = cascade.context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(cascade.context.destination);
+  cascade.sources.add(source);
+  source.addEventListener('ended', () => cascade.sources.delete(source));
+  const start = Math.max(cascade.context.currentTime + .025, cascade.nextPlaybackTime);
+  source.start(start);
+  cascade.nextPlaybackTime = start + buffer.duration;
+}
+
+function stopCascade(status, kind) {
+  const cascade = state.cascade;
+  state.cascade = null;
+  if (cascade) {
+    clearTimeout(cascade.finalizeTimer);
+    for (const controller of cascade.controllers) controller.abort();
+    for (const source of cascade.sources) { try { source.stop(); } catch {} }
+    if (cascade.socket.readyState === WebSocket.OPEN) {
+      try { cascade.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); } catch {}
+    }
+    try { cascade.socket.close(); } catch {}
+    for (const track of cascade.stream.getTracks()) track.stop();
+    cascade.capture.disconnect();
+    cascade.source.disconnect();
+    cascade.context.close().catch(() => {});
+  }
+  cascadeToggle.disabled = false;
+  cascadeToggle.innerHTML = '<span aria-hidden="true">●</span> カスケード会話を始める';
+  cascadeToggle.classList.remove('secondary');
+  setCascadeControlsDisabled(false);
+  cascadeOrb.classList.remove('active');
+  showCascadeInterim('');
+  if (status) setStatus(cascadeStatus, status, kind);
+}
+
+function setCascadeControlsDisabled(disabled) {
+  cascadeVoice.disabled = disabled;
+  cascadeProfileSelect.disabled = disabled;
+  for (const input of document.querySelectorAll('input[name="cascade-text-model"], input[name="cascade-tts-model"]')) {
+    input.disabled = disabled;
+  }
+}
+
+function updateCascadeProfileSummary() {
+  const profile = liveProfile(cascadeProfileSelect.value);
+  cascadeProfileSummary.innerHTML = `<strong>${escapeHTML(profile.shortLabel)}</strong><span>${escapeHTML(profile.summary)}</span>`;
+}
+
+function appendCascadeTranscript(kind, speaker, text) {
+  cascadeTranscriptEmpty.classList.add('hidden');
+  const item = document.createElement('li');
+  item.className = kind;
+  const title = document.createElement('strong');
+  title.textContent = speaker;
+  item.append(title, document.createTextNode(text));
+  cascadeTranscriptList.append(item);
+  cascadeTranscriptList.scrollTop = cascadeTranscriptList.scrollHeight;
+}
+
+function appendCascadeSessionMarker(text) {
+  cascadeTranscriptEmpty.classList.add('hidden');
+  const item = document.createElement('li');
+  item.className = 'session';
+  item.textContent = text;
+  cascadeTranscriptList.append(item);
+}
+
+function showCascadeInterim(text) {
+  cascadeInterim.textContent = text ? `認識中: ${text}` : '';
+  cascadeInterim.classList.toggle('hidden', !text);
+}
+
+function selectedCascadeModel(name) {
+  return document.querySelector(`input[name="${name}"]:checked`)?.value ?? '';
+}
+
+function mergeStreamingText(current, incoming) {
+  const next = String(incoming).trim();
+  if (!current || next.startsWith(current)) return next;
+  if (current.endsWith(next)) return current;
+  return `${current}${next}`;
+}
+
+async function* browserServerSentEvents(stream) {
+  if (!stream) throw new Error('Gemini TTSのストリームを開始できませんでした');
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value ?? new Uint8Array(), { stream: !done }).replace(/\r\n/gu, '\n');
+    let boundary;
+    while ((boundary = pending.indexOf('\n\n')) >= 0) {
+      const block = pending.slice(0, boundary);
+      pending = pending.slice(boundary + 2);
+      const payload = block.split('\n')
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trimStart())
+        .join('\n');
+      if (!payload || payload === '[DONE]') continue;
+      yield JSON.parse(payload);
+    }
+    if (done) break;
+  }
+  if (pending.trim() && !pending.includes('[DONE]')) throw new Error('Gemini TTSのストリームが途中で終了しました');
+}
+
 function voiceDisplayName(id) {
   return liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.textContent ?? id;
 }
@@ -608,11 +942,12 @@ async function getJSON(url) {
   return response.json();
 }
 
-function post(url, body) {
+function post(url, body, options = {}) {
   return fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-shannon-request-token': state.config.requestToken },
     body: JSON.stringify(body),
+    signal: options.signal,
   });
 }
 
@@ -638,6 +973,7 @@ function setStatus(element, text, kind) { element.textContent = text; element.cl
 function message(error) { return error instanceof Error ? error.message : '不明なエラー'; }
 function shortModelName(model) { return String(model).includes('lite') ? 'Flash-Lite' : 'Flash'; }
 function formatDuration(milliseconds) { return milliseconds >= 1_000 ? `${(milliseconds / 1_000).toFixed(1)}秒` : `${milliseconds}ms`; }
+function wait(milliseconds) { return new Promise(resolve => setTimeout(resolve, milliseconds)); }
 function ttsCost(model, durationMilliseconds) { return Math.ceil(durationMilliseconds / 10_000) * (model.includes('lite') ? .0015 : .00225); }
 function usd(value) { return `$${value.toFixed(value < .01 ? 4 : 3)}`; }
 function styleLabel(style) { return style.length > 26 ? `${style.slice(0, 26)}…` : style; }

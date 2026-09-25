@@ -40,6 +40,7 @@
       <a href="#compare">声を比較</a>
       <a href="#design">声をデザイン</a>
       <a href="#live">Liveで会話確認</a>
+      <a href="#cascade">Shannon音声で会話</a>
     </nav>
 
     <section id="compare" class="workspace" aria-labelledby="compare-title">
@@ -214,12 +215,63 @@
       </div>
     </section>
 
+    <section id="cascade" class="panel cascade-panel" aria-labelledby="cascade-title">
+      <div class="section-heading">
+        <div><p class="step">04 · CASCADE CHECK</p><h2 id="cascade-title">作ったShannonの声で会話</h2></div>
+        <p>音声認識・返答生成・TTSを分け、Voice Designの声を保ったまま会話した時の遅延を測ります。</p>
+      </div>
+      <div class="cascade-grid">
+        <div class="cascade-controls">
+          <label class="field">Shannonの声
+            <select id="cascade-voice">
+              <option>Leda</option><option>Aoede</option><option>Zephyr</option><option>Achernar</option>
+            </select>
+            <small>Googleに保存したVoice IDをそのままTTSへ渡します。「Shannon」という作成済み音声があれば最初に選びます。</small>
+          </label>
+          <fieldset>
+            <legend>返答モデル</legend>
+            <div class="segmented">
+              <label><input type="radio" name="cascade-text-model" value="gemini-3.5-flash-lite" checked><span>Flash-Lite<small>応答速度優先</small></span></label>
+              <label><input type="radio" name="cascade-text-model" value="gemini-3.8-flash"><span>3.8 Flash<small>会話品質優先</small></span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>音声モデル</legend>
+            <div class="segmented">
+              <label><input type="radio" name="cascade-tts-model" value="gemini-3.8-flash-lite-tts" checked><span>Flash-Lite TTS<small>約1秒で先頭音</small></span></label>
+              <label><input type="radio" name="cascade-tts-model" value="gemini-3.8-flash-tts"><span>Flash TTS<small>演技品質優先</small></span></label>
+            </div>
+          </fieldset>
+          <label class="field">演技プロファイル
+            <select id="cascade-profile"></select>
+            <small>返答文の人格と、TTSの短い話し方指定へ同じプロファイルを使います。</small>
+          </label>
+          <div id="cascade-profile-summary" class="profile-summary" aria-live="polite"></div>
+          <div class="latency-strip" aria-label="直前のターンのレイテンシ">
+            <div><span>返答文</span><output id="cascade-text-latency">—</output></div>
+            <div><span>TTS先頭</span><output id="cascade-tts-latency">—</output></div>
+            <div class="latency-total"><span>認識確定→先頭音</span><output id="cascade-total-latency">—</output></div>
+          </div>
+          <button id="cascade-toggle" class="primary" type="button"><span aria-hidden="true">●</span> カスケード会話を始める</button>
+          <p id="cascade-status" class="status" role="status" aria-live="polite">停止中 · 返答中は反響防止のためマイク送信を一時停止します。</p>
+          <div class="cost-note"><strong>料金と確認項目</strong><span>Voice IDの再現性と、発話終了後の待ち時間</span><small>TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
+        </div>
+        <div class="transcript cascade-transcript" aria-label="カスケード会話の文字起こし">
+          <div class="orb" id="cascade-orb" aria-hidden="true"><i></i><i></i></div>
+          <p id="cascade-transcript-empty">開始して話しかけると、認識結果・返答・実測時間がここに表示されます。</p>
+          <p id="cascade-interim" class="interim hidden" aria-live="polite"></p>
+          <ol id="cascade-transcript-list"></ol>
+        </div>
+      </div>
+    </section>
+
     <section class="guidance" aria-labelledby="guidance-title">
       <h2 id="guidance-title">おすすめの使い分け</h2>
       <div class="guidance-grid">
         <article><strong>1</strong><h3>TTSで声を絞る</h3><p>同じ台本で声とスタイルを比較。速く、差が分かりやすい。</p></article>
         <article><strong>2</strong><h3>Voice Designで個性を作る</h3><p>既存声で足りないときだけ、Shannonらしい声の設計文を調整。</p></article>
         <article><strong>3</strong><h3>Liveで会話感を確認</h3><p>候補を実会話で試し、間・割り込み・自然さを最終確認。</p></article>
+        <article><strong>4</strong><h3>作った声で遅延を測る</h3><p>カスケード会話でVoice Designの再現性と、最初の音までの時間を確認。</p></article>
       </div>
     </section>
   </main>

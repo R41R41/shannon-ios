@@ -43,7 +43,7 @@ This opens an SSH local-forward to `http://127.0.0.1:4322` and launches the
 default browser. Keep the terminal open while testing; closing it removes access.
 The permanent Gemini key remains in Azure's mode-0600 environment file.
 
-Use the three areas in order:
+Use the four areas in order:
 
 1. **声を比較** — choose one Japanese emotion script and a short turn-level acting
    direction, then generate Flash and Flash-Lite either once or three times each.
@@ -66,6 +66,13 @@ Use the three areas in order:
    conversational timing, emotional contrast, and sentence endings. The transcript
    marks each new voice/profile combination, and three fixed conversation topics
    provide a repeatable comparison path.
+4. **作ったShannonの声で会話** — run a browser-only cascade with
+   `gemini-3.5-transcribe-live`, a selectable Flash-Lite / Flash text response,
+   and streaming Gemini 3.8 TTS. This is the path for judging the exact stored
+   Voice ID in conversation. It shows response-text, TTS-first-audio, and combined
+   final-transcript-to-first-audio latency for every turn. Microphone upload pauses
+   from transcript finalization through playback plus a short tail, preventing the
+   generated voice from being recognized as the next user turn.
 
 The lab intentionally does not make Live a prerequisite for voice selection.
 Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is
@@ -77,9 +84,16 @@ Library ID and a temporary prompted Voice ID on 2026-09-25; the temporary voice 
 deleted after its TTS and Live compatibility checks passed.
 
 The browser sends neither the API key nor ordinary TTS text/audio to Shannon's
-database. Samples use in-memory object URLs; Live uses a single-use token and browser
-echo cancellation, sends 16 kHz mono PCM, and plays 24 kHz PCM. No audio, transcript,
-message, token, or credential is logged or persisted by the lab.
+database. Samples use in-memory object URLs; Live and cascade transcription use
+single-use tokens and browser echo cancellation, send 16 kHz mono PCM, and play
+24 kHz PCM. The cascade's bounded text history exists only in the current tab. No
+audio, transcript, message, token, or credential is logged or persisted by the lab.
+
+The deployed Azure smoke check on 2026-09-25 used stored voice
+`voice_8hj0yjm1cckv`. With the latency-first pair, response text completed in
+1.05 seconds and Flash-Lite TTS produced its first PCM chunk in another 1.04 seconds
+(about 2.1 seconds from finalized transcript to first audio, excluding the speech
+endpoint detector). These are one-run transport observations, not p50/p95 targets.
 
 All four prompt variants for all eight built-in designs were verified against the
 real Voices API on 2026-09-25. Every successful smoke-test Voice ID was deleted

@@ -1,9 +1,14 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { GEMINI_TTS_MODELS } from './gemini-tts-lab-core.mjs';
-import { liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
+import { liveProfile, liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.8-live';
+export const GEMINI_TRANSCRIBE_LIVE_MODEL = 'gemini-3.5-transcribe-live';
+export const GEMINI_CASCADE_TEXT_MODELS = Object.freeze([
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+]);
 export const VOICE_LAB_STATIC_FILES = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
@@ -62,6 +67,37 @@ export function validateLiveTokenInput(value) {
   return Object.freeze({ voice });
 }
 
+export function validateCascadeResponseInput(value) {
+  const body = record(value);
+  const model = choice(body.model ?? GEMINI_CASCADE_TEXT_MODELS[0], 'model', GEMINI_CASCADE_TEXT_MODELS);
+  const text = boundedText(body.text, 'text', 1, 2_000);
+  const profile = liveProfile(String(body.profile ?? 'neutral')).id;
+  const history = Array.isArray(body.history) ? body.history : [];
+  if (history.length > 12) throw new InputError('history must contain at most 12 turns');
+  return Object.freeze({
+    model,
+    text,
+    profile,
+    history: history.map((turn, index) => {
+      const item = record(turn);
+      return Object.freeze({
+        role: choice(item.role, `history[${index}].role`, ['user', 'model']),
+        text: boundedText(item.text, `history[${index}].text`, 1, 2_000),
+      });
+    }),
+  });
+}
+
+export function validateCascadeSpeechInput(value) {
+  const body = record(value);
+  return Object.freeze({
+    model: choice(body.model, 'model', GEMINI_TTS_MODELS),
+    voice: voiceIdentifier(body.voice),
+    text: boundedText(body.text, 'text', 1, 1_000),
+    style: boundedText(body.style ?? '', 'style', 0, 500),
+  });
+}
+
 export function buildLiveTokenRequest({ expiresAt, newSessionExpiresAt }) {
   return {
     uses: 1,
@@ -73,6 +109,86 @@ export function buildLiveTokenRequest({ expiresAt, newSessionExpiresAt }) {
       generationConfig: { responseModalities: ['AUDIO'] },
     },
   };
+}
+
+export function buildTranscribeTokenRequest({ expiresAt, newSessionExpiresAt }) {
+  return {
+    uses: 1,
+    expireTime: expiresAt,
+    newSessionExpireTime: newSessionExpiresAt,
+    fieldMask: 'model,generationConfig.responseModalities',
+    bidiGenerateContentSetup: {
+      model: `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`,
+      generationConfig: { responseModalities: ['TEXT'] },
+    },
+  };
+}
+
+export function buildTranscribeSetupMessage() {
+  return {
+    setup: {
+      model: `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`,
+      generationConfig: { responseModalities: ['TEXT'] },
+      inputAudioTranscription: { languageCodes: ['ja-JP'] },
+      realtimeInputConfig: {
+        automaticActivityDetection: {
+          disabled: false,
+          startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+          endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+          prefixPaddingMs: 80,
+          silenceDurationMs: 450,
+        },
+      },
+    },
+  };
+}
+
+export function buildCascadeResponseRequest({ model, text, history, profile }) {
+  const input = validateCascadeResponseInput({ model, text, history, profile });
+  const instruction = [
+    'あなたはShannon。日本語で自然に会話する、明るく率直で親しみやすい相棒です。',
+    '返答は音声で読み上げます。原則1〜2文、80文字程度までで、最初の文から要点を答えてください。',
+    'Markdown、箇条書き、括弧書きの演技指示、プロフィール説明は使わないでください。',
+    liveSystemInstruction(input.profile),
+  ].join('\n');
+  return {
+    systemInstruction: { parts: [{ text: instruction }] },
+    contents: [
+      ...input.history.map(turn => ({ role: turn.role, parts: [{ text: turn.text }] })),
+      { role: 'user', parts: [{ text: input.text }] },
+    ],
+    generationConfig: {
+      temperature: 0.8,
+      maxOutputTokens: 160,
+      ...(input.model === 'gemini-3.8-flash' ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
+    },
+  };
+}
+
+export function buildCascadeSpeechRequest(value) {
+  const input = validateCascadeSpeechInput(value);
+  return {
+    contents: [{
+      role: 'user',
+      parts: [{
+        text: input.text,
+        speech_metadata: { style: input.style },
+      }],
+    }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      responseFormat: { audio: { mimeType: 'AUDIO_L16', sampleRate: 24_000 } },
+      speechConfig: { voiceConfig: { voice: input.voice } },
+    },
+  };
+}
+
+export function generatedTextFromResponse(value) {
+  const parts = value?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) throw new Error('Gemini response did not contain text');
+  const text = parts.map(part => typeof part?.text === 'string' ? part.text : '').join('').trim();
+  if (!text) throw new Error('Gemini returned an empty text response');
+  return text;
 }
 
 export function buildLiveSetupMessage({ voice, profile = 'neutral' }) {

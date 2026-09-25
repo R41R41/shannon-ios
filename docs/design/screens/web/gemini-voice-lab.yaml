@@ -3,8 +3,8 @@ screen_id: shannon-web-gemini-voice-lab
 platform: web
 baseline_commit: c40eb9da36495c3730347ca164282ae417d4574b
 last_verified_at: 2026-09-25
-user_job: "iPhoneアプリを再配信せず、Shannonの日本語音声を同条件で比較し、必要な候補だけ会話でも確認する"
-primary_action: "同じ日本語台本でFlash / Flash-Liteを各1回または3回生成し、声質・速度・安定性を比較トレイで聴き比べる"
+user_job: "iPhoneアプリを再配信せず、Shannonの日本語音声を同条件で比較し、作ったVoice IDを会話と実測遅延でも確認する"
+primary_action: "同じ日本語台本で声を絞り、Voice DesignのVoice IDを音声認識・返答・ストリーミングTTSのカスケードで聴き比べる"
 preserve:
   - "Geminiの恒久APIキーをAzureのmode-0600秘密ファイルから出さない"
   - "既存のiPhone音声モード、会話履歴、声設定をラボから変更しない"
@@ -22,6 +22,9 @@ improve:
   - "Liveは一回限りの短命トークン、ブラウザAEC、16kHz入力、24kHz出力を使う"
   - "LiveではVoice IDと独立した9種の演技プロファイルを選び、同じ声のまま日常会話の感情・間・語尾を比較できる"
   - "8種のVoice Design意図を対応するLiveプロファイルとして再現し、自然体を比較基準として残す"
+  - "作成済みVoice IDをGemini 3.5 Transcribe Live、短いGeminiテキスト応答、Gemini 3.8 TTSストリームへ渡すブラウザ限定カスケードを用意する"
+  - "カスケードでは返答文、TTS先頭、認識確定から先頭音までの実測値をターンごとに表示する"
+  - "返答生成から再生後の短い尾までマイク送信を止め、Shannonの出力が次の入力になる自己反響を防ぐ"
   - "MacからSSHトンネルを開く一つのコマンドで、公開URLなしにアクセスできる"
 do_not_change:
   - "ラボからShannonの本番Voice設定、会話、Memory、データベースへ書き込まない"
@@ -38,11 +41,12 @@ states:
   generated: "音声時間、生成時間、概算料金、モデル、同条件内の回数を添えて比較トレイ先頭へ追加する。セットの一部が失敗しても成功分を保持する"
   preset_verification: "既知プリセットの日本語 / 英語と短文 / 詳細の各組合せは実APIで作成・即時削除した検証日を示し、自由編集後は未検証であることと安全拒否時の修正方針を示す"
   live: "選択した声と演技プロファイルの組合せ、接続準備、会話中、停止、エラーを文言で示し、停止時にマイク・再生・WebSocketを閉じる"
+  cascade: "認識中、返答生成中、音声生成中、再生中、再待機を文言で示し、返答中は入力を止め、停止時にマイク・再生・WebSocket・HTTP要求を閉じる"
 accessibility:
   dynamic_type: "ブラウザ拡大と狭幅で1列に再配置し、入力・結果・Liveの順序を保つ"
   voiceover: "入力ラベル、選択値、進行状態、話者付き文字起こし、破壊操作の対象IDを読み上げる"
   target_size: "主要ボタンと選択操作を最低44 CSSピクセル相当にする"
-  focus: "見出し、モデル、声、台本、話し方、生成、結果、Designプリセット、設計文、保存確認、Liveの順でキーボード移動できる"
+  focus: "見出し、モデル、声、台本、話し方、生成、結果、Designプリセット、設計文、保存確認、Live、カスケードの順でキーボード移動できる"
   reduce_motion: "状態をグローや動きだけに依存せず、文言と標準control状態を常に併用する"
 evidence:
   current: []

@@ -14,8 +14,13 @@ import {
   wavMetadata,
 } from './gemini-tts-lab-core.mjs';
 import {
+  buildCascadeResponseRequest,
+  buildCascadeSpeechRequest,
   buildLiveTokenRequest,
+  buildTranscribeTokenRequest,
   createRequestToken,
+  generatedTextFromResponse,
+  GEMINI_TRANSCRIBE_LIVE_MODEL,
   GEMINI_LIVE_MODEL,
   InputError,
   isAllowedBrowserRequest,
@@ -24,6 +29,8 @@ import {
   VOICE_LAB_STATIC_FILES,
   validateDeleteInput,
   validateDesignInput,
+  validateCascadeResponseInput,
+  validateCascadeSpeechInput,
   validateLiveTokenInput,
   validateSampleInput,
 } from './gemini-voice-lab-core.mjs';
@@ -158,6 +165,60 @@ const server = createServer(async (request, response) => {
           json(response, 200, { token: upstream.name, model: GEMINI_LIVE_MODEL, voice, expiresAt });
         });
       }
+      if (url.pathname === '/api/transcribe-token') {
+        return await withOperation(response, 'transcribe-token', async () => {
+          const now = Date.now();
+          const expiresAt = new Date(now + 20 * 60_000).toISOString();
+          const newSessionExpiresAt = new Date(now + 60_000).toISOString();
+          const upstream = await geminiJSON('/auth_tokens', {
+            method: 'POST',
+            body: buildTranscribeTokenRequest({ expiresAt, newSessionExpiresAt }),
+          });
+          if (typeof upstream.name !== 'string' || upstream.name.length < 12) {
+            throw new Error('Gemini did not return a valid ephemeral token');
+          }
+          audit('transcribe-token.created', { model: GEMINI_TRANSCRIBE_LIVE_MODEL });
+          json(response, 200, { token: upstream.name, model: GEMINI_TRANSCRIBE_LIVE_MODEL, expiresAt });
+        });
+      }
+      if (url.pathname === '/api/cascade-response') {
+        return await withOperation(response, 'cascade-response', async () => {
+          const input = validateCascadeResponseInput(body);
+          const started = performance.now();
+          const upstream = await geminiJSON(`/models/${input.model}:generateContent`, {
+            method: 'POST',
+            body: buildCascadeResponseRequest(input),
+          });
+          const text = generatedTextFromResponse(upstream);
+          const elapsedMilliseconds = Math.round(performance.now() - started);
+          audit('cascade-response.completed', { model: input.model, elapsedMilliseconds });
+          json(response, 200, { text, model: input.model, elapsedMilliseconds });
+        });
+      }
+      if (url.pathname === '/api/cascade-speech') {
+        return await withOperation(response, 'cascade-speech', async () => {
+          const input = validateCascadeSpeechInput(body);
+          const started = performance.now();
+          const upstream = await geminiFetch(`/models/${input.model}:streamGenerateContent?alt=sse`, {
+            method: 'POST',
+            body: buildCascadeSpeechRequest(input),
+          });
+          response.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-accel-buffering': 'no',
+            'x-shannon-model': input.model,
+            'x-shannon-voice': input.voice,
+          });
+          for await (const chunk of upstream.body) response.write(chunk);
+          response.end();
+          audit('cascade-speech.completed', {
+            model: input.model,
+            voice: input.voice,
+            elapsedMilliseconds: Math.round(performance.now() - started),
+          });
+        });
+      }
     }
     json(response, 404, { error: 'Not found' });
   } catch (error) {
@@ -186,6 +247,17 @@ async function withOperation(response, name, work) {
 }
 
 async function geminiJSON(resource, { method = 'GET', body, allowEmpty = false } = {}) {
+  const upstream = await geminiFetch(resource, { method, body });
+  const text = await upstream.text();
+  if (!text.trim()) {
+    if (allowEmpty) return {};
+    throw new Error('Gemini returned an empty response');
+  }
+  try { return JSON.parse(text); }
+  catch { throw new Error('Gemini returned a non-JSON response'); }
+}
+
+async function geminiFetch(resource, { method = 'GET', body } = {}) {
   const upstream = await fetch(`${API_ROOT}${resource}`, {
     method,
     headers: {
@@ -195,14 +267,11 @@ async function geminiJSON(resource, { method = 'GET', body, allowEmpty = false }
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(120_000),
   });
-  const text = await upstream.text();
-  if (!upstream.ok) throw new Error(`Gemini ${upstream.status}: ${safeUpstreamError(text)}`);
-  if (!text.trim()) {
-    if (allowEmpty) return {};
-    throw new Error('Gemini returned an empty response');
+  if (!upstream.ok) {
+    const text = await upstream.text();
+    throw new Error(`Gemini ${upstream.status}: ${safeUpstreamError(text)}`);
   }
-  try { return JSON.parse(text); }
-  catch { throw new Error('Gemini returned a non-JSON response'); }
+  return upstream;
 }
 
 async function readJSON(request) {

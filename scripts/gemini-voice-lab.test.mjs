@@ -2,10 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildCascadeResponseRequest,
+  buildCascadeSpeechRequest,
   buildLiveSetupMessage,
   buildLiveTokenRequest,
+  buildTranscribeSetupMessage,
+  buildTranscribeTokenRequest,
+  generatedTextFromResponse,
+  GEMINI_TRANSCRIBE_LIVE_MODEL,
   isAllowedBrowserRequest,
   requestTokenMatches,
+  validateCascadeResponseInput,
+  validateCascadeSpeechInput,
   validateDeleteInput,
   validateDesignInput,
   validateLiveTokenInput,
@@ -27,6 +35,7 @@ import {
   liveProfile,
   liveProfiles,
   liveSystemInstruction,
+  liveTTSStyle,
 } from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 test('voice design presets are original, bounded, and uniquely addressable', () => {
@@ -75,10 +84,60 @@ test('Live profiles preserve all voice concepts and provide distinct bounded ins
     assert.ok(item.summary.length > 20);
     const instruction = liveSystemInstruction(item.id);
     assert.ok(instruction.length > 150 && instruction.length < 2_000);
+    assert.ok(liveTTSStyle(item.id).length > 20 && liveTTSStyle(item.id).length <= 500);
     assert.doesNotMatch(instruction, /過剰な演技や長い説明は避けて/u);
   }
   assert.equal(liveProfile('unknown').id, 'neutral');
   assert.match(liveSystemInstruction('tsundere-leader'), /照れた時だけ/u);
+});
+
+test('cascade transcription is locked to Japanese streaming text', () => {
+  const token = buildTranscribeTokenRequest({
+    expiresAt: '2026-09-25T10:20:00.000Z',
+    newSessionExpiresAt: '2026-09-25T10:01:00.000Z',
+  });
+  assert.equal(GEMINI_TRANSCRIBE_LIVE_MODEL, 'gemini-3.5-transcribe-live');
+  assert.equal(token.bidiGenerateContentSetup.model, `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`);
+  assert.deepEqual(token.bidiGenerateContentSetup.generationConfig.responseModalities, ['TEXT']);
+  const setup = buildTranscribeSetupMessage();
+  assert.equal(setup.setup.model, `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`);
+  assert.deepEqual(setup.setup.inputAudioTranscription.languageCodes, ['ja-JP']);
+  assert.equal(setup.setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs, 450);
+});
+
+test('cascade response keeps a short history and uses the selected profile', () => {
+  const input = validateCascadeResponseInput({
+    model: 'gemini-3.5-flash-lite',
+    text: '今日はどうだった？',
+    profile: 'tsundere-leader',
+    history: [{ role: 'user', text: 'こんにちは' }, { role: 'model', text: 'こんにちは！' }],
+  });
+  assert.equal(input.profile, 'tsundere-leader');
+  const request = buildCascadeResponseRequest(input);
+  assert.equal(request.contents.length, 3);
+  assert.deepEqual(request.contents.at(-1), { role: 'user', parts: [{ text: '今日はどうだった？' }] });
+  assert.match(request.systemInstruction.parts[0].text, /鋭い語尾/u);
+  assert.equal(request.generationConfig.maxOutputTokens, 160);
+  assert.throws(() => validateCascadeResponseInput({
+    model: 'gemini-3.5-flash-lite', text: 'test', history: Array(13).fill({ role: 'user', text: 'x' }),
+  }), /at most 12/u);
+});
+
+test('cascade speech streams a designed voice with a bounded TTS style', () => {
+  const input = validateCascadeSpeechInput({
+    model: 'gemini-3.8-flash-lite-tts',
+    voice: 'voice_8hj0yjm1cckv',
+    text: 'それ、面白そうじゃない。詳しく聞かせて。',
+    style: liveTTSStyle('tsundere-leader'),
+  });
+  const request = buildCascadeSpeechRequest(input);
+  assert.equal(request.generationConfig.speechConfig.voiceConfig.voice, 'voice_8hj0yjm1cckv');
+  assert.deepEqual(request.generationConfig.responseModalities, ['AUDIO']);
+  assert.equal(request.generationConfig.responseFormat.audio.sampleRate, 24_000);
+  assert.match(request.contents[0].parts[0].speech_metadata.style, /きびきび/u);
+  assert.equal(generatedTextFromResponse({
+    candidates: [{ content: { parts: [{ text: ' こんにちは' }, { text: '！ ' }] } }],
+  }), 'こんにちは！');
 });
 
 test('audition presets provide Japanese emotion scripts and bounded turn styles', () => {
