@@ -70,6 +70,18 @@ database. Samples use in-memory object URLs; Live uses a single-use token and br
 echo cancellation, sends 16 kHz mono PCM, and plays 24 kHz PCM. No audio, transcript,
 message, token, or credential is logged or persisted by the lab.
 
+All eight built-in design prompts were verified against the real Voices API on
+2026-09-25. Every successful smoke-test Voice ID was deleted immediately. Numeric
+minor-age wording and negative phrases about imitating known voices were rejected by
+the safety filter, so the shipped presets express the same intended age impression
+through register, tempo, pitch movement, diction, and emotional delivery without
+sending those trigger phrases. A custom edit is labeled unverified. The billable
+smoke command is intentionally excluded from deterministic checks:
+
+```sh
+node scripts/gemini-voice-preset-smoke.mjs --confirm-billable --delete-successes
+```
+
 ## Discover Japanese voices
 
 ```sh

@@ -12,7 +12,10 @@ import {
   validateSampleInput,
   VOICE_LAB_STATIC_FILES,
 } from './gemini-voice-lab-core.mjs';
-import { voiceDesignPresets } from '../tools/gemini-voice-lab/voice-design-presets.js';
+import {
+  voiceDesignPresets,
+  voiceDesignPresetsVerifiedAt,
+} from '../tools/gemini-voice-lab/voice-design-presets.js';
 
 test('voice design presets are original, bounded, and uniquely addressable', () => {
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-design-presets.js'), [
@@ -20,6 +23,7 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
     'text/javascript; charset=utf-8',
   ]);
   assert.equal(voiceDesignPresets.length, 8);
+  assert.equal(voiceDesignPresetsVerifiedAt, '2026-09-25');
   assert.equal(new Set(voiceDesignPresets.map(preset => preset.id)).size, voiceDesignPresets.length);
   for (const preset of voiceDesignPresets) {
     assert.ok(preset.label.length > 0);
@@ -27,6 +31,7 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
     assert.ok(preset.prompt.length > 100 && preset.prompt.length <= 1000);
     assert.match(preset.prompt, /original/i);
     assert.doesNotMatch(preset.prompt, /\b(?:Haruhi|Hayami|Rem|Hatsune|Miku|Nakano|Violet|Evergarden)\b/i);
+    assert.doesNotMatch(preset.prompt, /\b(?:imitate|imitation|performer|existing character|established virtual singer)\b/i);
   }
 });
 

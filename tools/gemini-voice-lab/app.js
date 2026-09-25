@@ -1,4 +1,4 @@
-import { voiceDesignPresets } from './voice-design-presets.js';
+import { voiceDesignPresets, voiceDesignPresetsVerifiedAt } from './voice-design-presets.js';
 
 const scripts = Object.freeze({
   identity: 'こんにちは、シャノンです。今日も一緒に、ゆっくり考えていこうね。',
@@ -29,6 +29,7 @@ const sampleEmpty = document.querySelector('#sample-empty');
 const generateButton = document.querySelector('#generate-button');
 const designForm = document.querySelector('#design-form');
 const designPreset = document.querySelector('#design-preset');
+const designPresetHelp = document.querySelector('#design-preset-help');
 const designName = document.querySelector('#design-name');
 const designPrompt = document.querySelector('#design-prompt');
 const designButton = document.querySelector('#design-button');
@@ -67,10 +68,14 @@ stylePreset.addEventListener('change', () => {
 });
 designPreset.addEventListener('change', () => {
   if (designPreset.value !== 'custom') applyDesignPreset(designPreset.value, true);
+  else updateDesignPresetHelp();
 });
 designPrompt.addEventListener('input', () => {
   const current = voiceDesignPresets.find(preset => preset.id === designPreset.value);
-  if (!current || designPrompt.value !== current.prompt) designPreset.value = 'custom';
+  if (!current || designPrompt.value !== current.prompt) {
+    designPreset.value = 'custom';
+    updateDesignPresetHelp();
+  }
 });
 confirmStore.addEventListener('change', () => { designButton.disabled = !confirmStore.checked; });
 document.querySelector('#clear-samples').addEventListener('click', clearSamples);
@@ -213,7 +218,7 @@ async function designVoice(event) {
     renderDesignResult();
     setStatus(designStatus, '新しい声を作りました。比較欄でも選べます。', 'success');
   } catch (error) {
-    setStatus(designStatus, `声を作れませんでした: ${message(error)}`, 'error');
+    setStatus(designStatus, `声を作れませんでした: ${designErrorMessage(error)}`, 'error');
   } finally {
     designButton.disabled = !confirmStore.checked;
   }
@@ -224,7 +229,24 @@ function applyDesignPreset(id, focus = false) {
   if (!preset) return;
   designName.value = preset.name;
   designPrompt.value = preset.prompt;
+  updateDesignPresetHelp();
   if (focus) designPrompt.focus();
+}
+
+function updateDesignPresetHelp() {
+  if (designPreset.value === 'custom') {
+    designPresetHelp.textContent = '自由入力は実API未確認です。年齢の数値指定や、人物・既存キャラクターの模倣表現は安全判定で拒否される場合があります。';
+    return;
+  }
+  designPresetHelp.textContent = `${voiceDesignPresets.length}種類とも${voiceDesignPresetsVerifiedAt}にGemini実APIで作成・削除確認済みです。`;
+}
+
+function designErrorMessage(error) {
+  const detail = message(error);
+  if (/blocked by safety policies/iu.test(detail)) {
+    return 'Geminiの安全ポリシーで設計文が拒否されました。実API確認済みプリセットへ戻すか、年齢の数値指定と人物・既存キャラクターの模倣表現を外してください。';
+  }
+  return detail;
 }
 
 function renderDesignResult() {
