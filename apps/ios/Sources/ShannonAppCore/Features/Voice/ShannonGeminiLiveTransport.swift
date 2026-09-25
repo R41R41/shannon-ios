@@ -38,8 +38,7 @@ final class ShannonGeminiLiveTransport {
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var keepAliveSourceNode: AVAudioSourceNode?
-    private var recordingMixerNode: AVAudioMixerNode?
-    private var mutedCaptureMixerNode: AVAudioMixerNode?
+    private var inputTapInstalled = false
     private var audioStarted = false
     private var stopped = false
     private var didRecordFirstAudioSend = false
@@ -160,24 +159,15 @@ final class ShannonGeminiLiveTransport {
         urlSession = nil
         playerNode.stop()
         audioEngine.stop()
-        if let recordingMixerNode {
-            recordingMixerNode.removeTap(onBus: 0)
-            audioEngine.disconnectNodeInput(recordingMixerNode)
-            audioEngine.disconnectNodeOutput(recordingMixerNode)
-            audioEngine.detach(recordingMixerNode)
-        }
-        if let mutedCaptureMixerNode {
-            audioEngine.disconnectNodeInput(mutedCaptureMixerNode)
-            audioEngine.disconnectNodeOutput(mutedCaptureMixerNode)
-            audioEngine.detach(mutedCaptureMixerNode)
+        if inputTapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            inputTapInstalled = false
         }
         if let keepAliveSourceNode {
             audioEngine.disconnectNodeOutput(keepAliveSourceNode)
             audioEngine.detach(keepAliveSourceNode)
         }
         keepAliveSourceNode = nil
-        mutedCaptureMixerNode = nil
-        recordingMixerNode = nil
         captureChunker.reset()
         audioStarted = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -234,58 +224,44 @@ final class ShannonGeminiLiveTransport {
             outgoing: outgoing,
             vad: vad,
             captureChunker: captureChunker,
-            captureHandler: captureHandler,
-            sampleRate: inputFormat.sampleRate,
-            channelStride: inputFormat.isInterleaved ? Int(inputFormat.channelCount) : 1
+            captureHandler: captureHandler
         )
-        let recordingMixer = AVAudioMixerNode()
-        let mutedCaptureMixer = AVAudioMixerNode()
         let keepAliveSource = Self.makeKeepAliveSource(
             format: deviceOutputFormat,
             outputRenderProbe: outputRenderProbe
         )
-        // A zero-volume mixer branch can be pruned by Voice Processing I/O on a
-        // physical iPhone. -120 dB remains below the output noise floor while
-        // keeping the microphone branch part of every render cycle.
-        mutedCaptureMixer.outputVolume = 0.000_001
 
         audioEngine.attach(playerNode)
         audioEngine.attach(keepAliveSource)
-        audioEngine.attach(recordingMixer)
-        audioEngine.attach(mutedCaptureMixer)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
         // PlayerNode has no buffers until Gemini speaks. A continuously rendered
         // silent source keeps Voice Processing I/O advancing while the user talks.
         audioEngine.connect(keepAliveSource, to: audioEngine.mainMixerNode, format: deviceOutputFormat)
-        audioEngine.connect(input, to: recordingMixer, format: inputFormat)
-        // A terminal AVAudioSinkNode branch is not pulled by Voice Processing I/O
-        // on every physical-device route. Keep capture inside the rendered output
-        // graph so the microphone is guaranteed to advance, tap before attenuation,
-        // and keep the downstream signal below the hardware output noise floor.
-        audioEngine.connect(recordingMixer, to: mutedCaptureMixer, format: inputFormat)
-        audioEngine.connect(mutedCaptureMixer, to: audioEngine.mainMixerNode, format: inputFormat)
         audioEngine.connect(
             audioEngine.mainMixerNode,
             to: audioEngine.outputNode,
             format: deviceOutputFormat
         )
-        recordingMixer.installTap(
+        // The silent output source keeps the I/O render cycle alive, so capture can
+        // use the input node's native tap without connecting microphone samples to
+        // the audible mixer. This prevents local sidetone while retaining Apple's
+        // Voice Processing echo cancellation for full-duplex conversation.
+        input.installTap(
             onBus: 0,
             bufferSize: 1_024,
-            format: inputFormat,
+            format: nil,
             block: captureTap
         )
         keepAliveSourceNode = keepAliveSource
-        recordingMixerNode = recordingMixer
-        mutedCaptureMixerNode = mutedCaptureMixer
+        inputTapInstalled = true
         ShannonVoiceDiagnostics.shared.record(
             "gemini.audio.graph.connected",
             metadata: [
                 "sample_rate": String(Int(inputFormat.sampleRate)),
                 "channels": String(inputFormat.channelCount),
                 "interleaved": String(inputFormat.isInterleaved),
-                "capture": "driven_mixer_tap",
-                "capture_gain_db": "-120",
+                "capture": "voice_processing_input_tap",
+                "monitoring": "disconnected",
                 "output_sample_rate": String(Int(deviceOutputFormat.sampleRate)),
             ]
         )
@@ -322,12 +298,15 @@ final class ShannonGeminiLiveTransport {
         outgoing: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?,
         vad: ShannonGeminiLiveVADState,
         captureChunker: ShannonGeminiLiveAudioChunker,
-        captureHandler: @escaping CaptureHandler,
-        sampleRate: Double,
-        channelStride: Int
+        captureHandler: @escaping CaptureHandler
     ) -> AVAudioNodeTapBlock {
         { buffer, _ in
             guard let data = buffer.floatChannelData?[0] else { return }
+            let sampleRate = buffer.format.sampleRate
+            let channelStride = buffer.format.isInterleaved
+                ? Int(buffer.format.channelCount)
+                : 1
+            guard sampleRate > 0, channelStride > 0 else { return }
             let frameCount = Int(buffer.frameLength)
             let sampleCount = frameCount * channelStride
             let samples = UnsafeBufferPointer(start: data, count: sampleCount)
