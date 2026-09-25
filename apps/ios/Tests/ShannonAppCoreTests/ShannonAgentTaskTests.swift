@@ -418,9 +418,11 @@ final class ShannonAgentTaskTests: XCTestCase {
 
     func testStructuredChatBlockCreatesProposalAttachedToReply() async throws {
         let proposalID = UUID()
+        let cognitiveIntentID = "goal-personality"
         let response = AgentTaskResponseFixtures.response(uiBlocks: [
             ShannonUIBlockDTO(
                 proposalId: proposalID.uuidString,
+                cognitiveIntentID: cognitiveIntentID,
                 title: "不具合を調べる",
                 goal: "会話履歴を残したまま接続を直す",
                 risk: "変更前に確認する"
@@ -438,6 +440,7 @@ final class ShannonAgentTaskTests: XCTestCase {
         XCTAssertEqual(task.status, .proposed)
         XCTAssertEqual(task.conversationThreadID, response.threadId)
         XCTAssertEqual(task.sourceMessageID, model.messages.last?.id)
+        XCTAssertEqual(task.cognitiveIntentID, cognitiveIntentID)
         XCTAssertTrue(task.summary.contains("変更前に確認する"))
     }
 

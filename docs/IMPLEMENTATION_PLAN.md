@@ -1,7 +1,7 @@
 # Shannon implementation plan
 
-Revision: 2026-09-18
-Status: current execution plan
+Revision: 2026-09-25 (cognitive-continuity slice)
+Status: current architecture roadmap; older release-build rows still require reconciliation
 
 ## Goal
 
@@ -36,8 +36,10 @@ These terms are not interchangeable.
 | Release Center | Seven truthful gates and iPhone release request targets | Build 49 proves Xcode Cloud Archive through internal assignment | Build 50 Install/Smoke confirmation; Mac release path remains user-operated |
 | WebRTC symbols | Current framework and dSYM UUID match; Cloud copy is sandbox-safe | Xcode Cloud Build 49 passed the symbol phase | Confirm no symbol warning on later local Mac/iOS uploads |
 | Waterlight Eye | Empty-conversation iPhone hero, bounded reaction, semantic blush, Reduce Motion | Included in Build 49 | iPhone Light/Dark, repeated tap, interruption, Reduce Motion Smoke |
+| Goal continuity | Explicit goals, bounded plans, owner-visible cognitive receipts, exact goal↔Agent-task identity, verified host-event progress and tests, progress-aware next steps | Implemented locally; not yet deployed or distributed | Full API/iOS checks, deployment, distribution, then approve/pause/fail/complete device Smoke |
+| Bounded autonomy | World/commitment initiative plus goal/task continuation for stale goals, approvals, pauses, failures and completed work; original thread, quiet hours, 90-minute cooldown and one/day limit | Implemented locally; not yet deployed | Restart-safe Azure loop Smoke and notification/device verification |
 | Voice Identity | Marin/Cedar/Coral preview, selection, Azure persistence, iPhone/Mac sharing | API deployed and clients included in current builds | Physical-device preview, next-session application, cross-device sync Smoke |
-| GPT-Live travel voice | Production Live WebRTC engine (`gpt-live-1`／automatic `marin`), bounded read-only delegation, confirmed single camera snapshot, Realtime rollback, and iPhone remote-playout-only +200 cents finish | Azure Live rollout and camera smoke passed; Apple Time Pitch implementation, rollback setting, policy tests, unsigned iPhone build, signed device build, install, and launch passed | No current release blocker. The user accepted the remaining 60-second, route/interruption, barge-in, transcript/delegation, and rollback checks as deferred until a real-world issue appears |
+| Realtime 2 voice | Primary Realtime WebRTC engine (`gpt-realtime-2`, low reasoning, automatic `marin`), bounded backend tools, confirmed single camera snapshot, GPT-Live rollback, and iPhone remote-playout-only +200 cents finish | Realtime 2 source/config implemented locally; prior Azure Live rollout and camera/pitch smoke passed | Deploy Realtime 2 config, then physical-device Japanese speech, interruption, camera, web/time/location/transit, notes/tasks and rollback Smoke |
 | Live voice input and text | Same-session text composer plus persisted Auto/iPhone/external input preference, actual-route display, and route/interruption reapplication | Local branch only | Deterministic tests, iOS builds, then later physical-device route and conversation Smoke |
 | Aether/Voyager organization | Existing bounded Shannon proxy and explicit review flow remain implemented | Existing production flow preserved | Re-run adjacent Smoke after Build 50 |
 | Cross-app acceptance scenarios | Requirements are known | Not yet stored in Aether's current documentation | Aether-owned scenario document and links from its document index |

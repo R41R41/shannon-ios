@@ -157,6 +157,9 @@ struct ShannonCognitiveIntentRow: View {
                 Label(intent.status.japaneseName, systemImage: intent.status.symbolName)
                     .font(.caption)
                     .foregroundStyle(statusColor)
+                if let work = intent.verifiedWork {
+                    verifiedWorkView(work)
+                }
                 if let nextStep = intent.nextStep, !nextStep.isEmpty {
                     VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                         Label("次の一手", systemImage: "arrow.right.circle")
@@ -220,6 +223,52 @@ struct ShannonCognitiveIntentRow: View {
         }
         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private func verifiedWorkView(_ work: ShannonVerifiedWorkDTO) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+            Label("検証済みの作業 · \(work.statusLabel)", systemImage: "checkmark.seal")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(work.testsFailed > 0 ? palette.danger : palette.success)
+            Text(work.title)
+                .font(.caption)
+                .foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let currentAction = work.currentAction, !currentAction.isEmpty {
+                Text("いま: \(currentAction)")
+                    .font(.caption2)
+                    .foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if work.totalPlanSteps > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(palette.success.opacity(0.16))
+                        Capsule()
+                            .fill(palette.success)
+                            .frame(width: geometry.size.width * verifiedProgress(work))
+                    }
+                }
+                .frame(height: 6)
+                    .accessibilityLabel("検証済み作業の進捗")
+                    .accessibilityValue("\(work.completedPlanSteps) / \(work.totalPlanSteps)")
+                Text("計画 \(work.completedPlanSteps)/\(work.totalPlanSteps)・テスト成功 \(work.testsPassed)・失敗 \(work.testsFailed)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(palette.textSecondary)
+            }
+            Text("Agent Hostの記録から同期。目的の完了は自動では確定しません。")
+                .font(.caption2)
+                .foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, ShannonSpacing.extraSmall)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func verifiedProgress(_ work: ShannonVerifiedWorkDTO) -> Double {
+        guard work.totalPlanSteps > 0 else { return 0 }
+        return min(1, max(0, Double(work.completedPlanSteps) / Double(work.totalPlanSteps)))
     }
 
     @ViewBuilder

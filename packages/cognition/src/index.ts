@@ -42,6 +42,8 @@ export type {
   ShannonRecallReason,
   ShannonSituationSnapshot,
   ShannonIntent,
+  ShannonVerifiedWork,
+  ShannonVerifiedWorkPlanItem,
 } from './runtime.js';
 export type {
   ActiveMemory,

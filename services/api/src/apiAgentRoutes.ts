@@ -18,9 +18,12 @@ import {
   normalizedResourcePath,
   type AgentWorkspaceResourceEvent,
 } from './agentWorkspaceResources.js';
+import type { CognitiveIntentStore } from './cognitiveIntent.js';
+import { synchronizeIntentWithAgentTask } from './cognitiveWork.js';
 
 export interface ApiAgentRouteDependencies {
   agentTasks: AgentTaskStore;
+  cognitiveIntents: CognitiveIntentStore;
   defaultAgentHost: string | null;
   now: () => string;
 }
@@ -141,6 +144,9 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
     if (request.body.sourceMessageID !== undefined && !validBoundedString(request.body.sourceMessageID, 160)) {
       return badRequest('sourceMessageID is invalid');
     }
+    if (request.body.cognitiveIntentID !== undefined && !validBoundedString(request.body.cognitiveIntentID, 160)) {
+      return badRequest('cognitiveIntentID is invalid');
+    }
     if (request.body.plan !== undefined && !validPlan(request.body.plan)) return badRequest('plan is invalid');
     if (request.body.projectHint !== undefined && !validBoundedString(request.body.projectHint, 160)) {
       return badRequest('projectHint is invalid');
@@ -152,6 +158,15 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
       return badRequest('reasoningEffort is invalid');
     }
     try {
+      const cognitiveIntentID = typeof request.body.cognitiveIntentID === 'string'
+        ? request.body.cognitiveIntentID.trim() : undefined;
+      if (cognitiveIntentID) {
+        const intent = dependencies.cognitiveIntents.get(scopeKey, cognitiveIntentID);
+        if (!intent) return { status: 404, body: { error: 'COGNITIVE_INTENT_NOT_FOUND' } };
+        if (intent.status !== 'active' || intent.threadId !== request.body.conversationThreadID) {
+          return { status: 409, body: { error: 'COGNITIVE_INTENT_LINK_INVALID' } };
+        }
+      }
       const hostPreference = typeof request.body.hostHint === 'string' && request.body.hostHint.trim()
         ? request.body.hostHint.trim() : 'auto';
       const projectHint = typeof request.body.projectHint === 'string' ? request.body.projectHint.trim() : undefined;
@@ -169,6 +184,7 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
         idempotencyKey: request.body.idempotencyKey,
         conversationThreadID: request.body.conversationThreadID,
         ...(typeof request.body.sourceMessageID === 'string' ? { sourceMessageID: request.body.sourceMessageID } : {}),
+        ...(cognitiveIntentID ? { cognitiveIntentID } : {}),
         title: request.body.title,
         goal: request.body.goal,
         summary: request.body.summary,
@@ -179,6 +195,13 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
         ...(isReasoningEffort(request.body.reasoningEffort)
           ? { reasoningEffort: request.body.reasoningEffort } : {}),
       }, dependencies.now());
+      if (cognitiveIntentID) {
+        if (result.task.cognitiveIntentID !== cognitiveIntentID) {
+          return { status: 409, body: { error: 'COGNITIVE_INTENT_LINK_CONFLICT' } };
+        }
+        dependencies.cognitiveIntents.linkTask(scopeKey, cognitiveIntentID, result.task.id, dependencies.now());
+        synchronizeIntentWithAgentTask(dependencies.cognitiveIntents, scopeKey, result.task, dependencies.now());
+      }
       return { status: result.created ? 201 : 200, body: result };
     } catch (error) {
       if (error instanceof Error && error.message === 'AGENT_TASK_ID_CONFLICT') {
@@ -365,6 +388,11 @@ export function dispatchAgentRequest(request: ApiRequest, dependencies: ApiAgent
         request.body.events as HostAgentEvent[],
         dependencies.now(),
       );
+      for (const task of tasks) {
+        if (task.scopeKey) {
+          synchronizeIntentWithAgentTask(dependencies.cognitiveIntents, task.scopeKey, task, dependencies.now());
+        }
+      }
       return { status: 200, body: { accepted: request.body.events.length, tasks } };
     } catch (error) {
       if (error instanceof Error && error.message === 'AGENT_APPROVAL_INVALID') return badRequest(error.message);

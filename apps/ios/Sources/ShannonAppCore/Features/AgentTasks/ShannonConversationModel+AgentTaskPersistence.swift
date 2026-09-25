@@ -65,6 +65,7 @@ extension ShannonConversationModel {
                 id: block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID(),
                 conversationThreadID: threadID,
                 sourceMessageID: sourceMessageID,
+                cognitiveIntentID: block.cognitiveIntentID,
                 title: title,
                 goal: goal,
                 hostHint: block.hostHint,

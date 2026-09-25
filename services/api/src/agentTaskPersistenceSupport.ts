@@ -17,8 +17,10 @@ import { migrateAgentWorkspaceResources } from './agentWorkspaceResources.js';
 
 export interface AgentTaskRow {
   task_id: string;
+  scope_key: string;
   conversation_thread_id: string;
   source_message_id: string | null;
+  cognitive_intent_id: string | null;
   title: string;
   goal: string;
   assigned_host_id: string | null;
@@ -67,6 +69,7 @@ export function migrateAgentTasks(database: DatabaseSync): void {
       scope_key TEXT NOT NULL,
       conversation_thread_id TEXT NOT NULL,
       source_message_id TEXT,
+      cognitive_intent_id TEXT,
       start_idempotency_key TEXT NOT NULL,
       assigned_host_id TEXT,
       title TEXT NOT NULL,
@@ -135,6 +138,9 @@ export function migrateAgentTasks(database: DatabaseSync): void {
   const taskColumns = database.prepare("PRAGMA table_info('agent_tasks')").all() as unknown as Array<{ name: string }>;
   if (!taskColumns.some(column => column.name === 'assigned_host_id')) {
     database.exec('ALTER TABLE agent_tasks ADD COLUMN assigned_host_id TEXT;');
+  }
+  if (!taskColumns.some(column => column.name === 'cognitive_intent_id')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN cognitive_intent_id TEXT;');
   }
   if (!taskColumns.some(column => column.name === 'project_hint')) {
     database.exec('ALTER TABLE agent_tasks ADD COLUMN project_hint TEXT;');

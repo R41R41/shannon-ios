@@ -50,6 +50,7 @@ export interface ChatResponse {
   uiBlocks?: Array<{
     type: 'agent_task_proposal';
     proposalId: string;
+    cognitiveIntentID?: string;
     title: string;
     goal: string;
     hostHint?: string;

@@ -152,6 +152,7 @@ public struct ChatThreadDTO: Codable, Equatable, Sendable {
 public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
     public let type: String
     public let proposalId: String?
+    public let cognitiveIntentID: String?
     public let title: String?
     public let goal: String?
     public let hostHint: String?
@@ -162,6 +163,7 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
     public init(
         type: String = "agent_task_proposal",
         proposalId: String? = nil,
+        cognitiveIntentID: String? = nil,
         title: String? = nil,
         goal: String? = nil,
         hostHint: String? = nil,
@@ -171,6 +173,7 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
     ) {
         self.type = type
         self.proposalId = proposalId
+        self.cognitiveIntentID = cognitiveIntentID
         self.title = title
         self.goal = goal
         self.hostHint = hostHint

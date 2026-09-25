@@ -52,7 +52,6 @@ import {
   type AgentTaskRow,
 } from './agentTaskPersistenceSupport.js';
 export { migrateAgentTasks } from './agentTaskPersistenceSupport.js';
-
 export class SQLiteAgentTaskStore implements AgentTaskStore {
   private readonly database: DatabaseSync;
 
@@ -85,14 +84,14 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       if (idCollision) throw new Error('AGENT_TASK_ID_CONFLICT');
       this.database.prepare(`
         INSERT INTO agent_tasks
-          (task_id, scope_key, conversation_thread_id, source_message_id, start_idempotency_key,
+          (task_id, scope_key, conversation_thread_id, source_message_id, cognitive_intent_id, start_idempotency_key,
            title, goal, status, summary, current_action, plan_json, pending_approval_json,
            changes_json, tests_json, created_at, updated_at, latest_sequence, assigned_host_id,
            project_hint, model_id, reasoning_effort)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, NULL, ?, NULL, '[]', '[]', ?, ?, 0, ?, ?, ?, ?)
       `).run(
         taskId, scopeKey, input.conversationThreadID, input.sourceMessageID ?? null,
-        input.idempotencyKey, input.title, input.goal, input.summary,
+        input.cognitiveIntentID ?? null, input.idempotencyKey, input.title, input.goal, input.summary,
         JSON.stringify(input.plan ?? []), now, now, input.hostHint?.trim() || null,
         input.projectHint?.trim() || null, input.model?.trim() || null, input.reasoningEffort ?? null,
       );
@@ -333,8 +332,10 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     `).all(row.task_id) as unknown as AgentEventRow[];
     return Object.freeze({
       id: row.task_id,
+      scopeKey: row.scope_key,
       conversationThreadID: row.conversation_thread_id,
       ...(row.source_message_id ? { sourceMessageID: row.source_message_id } : {}),
+      ...(row.cognitive_intent_id ? { cognitiveIntentID: row.cognitive_intent_id } : {}),
       title: row.title,
       goal: row.goal,
       ...(row.assigned_host_id ? { assignedHostID: row.assigned_host_id } : {}),

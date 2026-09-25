@@ -45,6 +45,27 @@ export interface ShannonActionReceipt {
   occurredAt: string;
 }
 
+export interface ShannonVerifiedWorkPlanItem {
+  title: string;
+  status: 'pending' | 'running' | 'completed';
+}
+
+/** A projection of durable Agent Host evidence linked to one owner objective. */
+export interface ShannonVerifiedWork {
+  taskId: string;
+  title: string;
+  status: 'queued' | 'starting' | 'running' | 'waiting_approval' | 'paused'
+    | 'completed' | 'failed' | 'cancelled';
+  summary: string;
+  currentAction?: string;
+  plan: readonly ShannonVerifiedWorkPlanItem[];
+  completedPlanSteps: number;
+  totalPlanSteps: number;
+  testsPassed: number;
+  testsFailed: number;
+  updatedAt: string;
+}
+
 /** A durable, owner-visible objective. It is evidence, not a hidden chain of thought. */
 export interface ShannonIntent {
   id: string;
@@ -57,6 +78,10 @@ export interface ShannonIntent {
   nextStep?: string;
   /** A bounded, owner-visible proposal. Steps are guidance, not action receipts. */
   planSteps?: readonly string[];
+  /** Exact durable task linkage; never inferred from title similarity. */
+  linkedTaskId?: string;
+  /** Progress derived only from verified Agent Host events. */
+  verifiedWork?: ShannonVerifiedWork;
   priority: number;
   confidence: number;
   createdAt: string;

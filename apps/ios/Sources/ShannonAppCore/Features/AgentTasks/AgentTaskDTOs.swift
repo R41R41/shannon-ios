@@ -41,6 +41,7 @@ public struct ShannonAgentTaskRemoteDTO: Codable, Equatable, Sendable {
     public let id: String
     public let conversationThreadID: String
     public let sourceMessageID: String?
+    public let cognitiveIntentID: String?
     public let title: String
     public let goal: String
     public let assignedHostID: String?
@@ -77,6 +78,7 @@ public struct ShannonAgentTaskCreateRequestDTO: Codable, Equatable, Sendable {
     public let idempotencyKey: String
     public let conversationThreadID: String
     public let sourceMessageID: String?
+    public let cognitiveIntentID: String?
     public let title: String
     public let goal: String
     public let summary: String

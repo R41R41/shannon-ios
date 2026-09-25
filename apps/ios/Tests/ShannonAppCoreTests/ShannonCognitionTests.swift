@@ -12,6 +12,17 @@ struct ShannonCognitionTests {
             "id":"goal-1","title":"音声対話を改善したい","desiredOutcome":"音声対話を改善したい",
             "status":"active","source":"explicit-user-goal","threadId":"thread-1",
             "nextStep":"話し方を評価する","planSteps":["現状を評価する","改善案を試す","実機で確認する"],
+            "linkedTaskId":"task-1","verifiedWork":{
+              "taskId":"task-1","title":"音声対話の改善","status":"running",
+              "summary":"実装と検証を進めている","currentAction":"実機で会話を確認中",
+              "plan":[
+                {"id":"step-1","title":"現状を評価する","status":"completed"},
+                {"id":"step-2","title":"改善案を試す","status":"running"},
+                {"id":"step-3","title":"実機で確認する","status":"pending"}
+              ],
+              "completedPlanSteps":1,"totalPlanSteps":3,"testsPassed":2,"testsFailed":0,
+              "updatedAt":"2026-09-25T01:00:00Z"
+            },
             "priority":0.8,"confidence":0.95,"createdAt":"2026-09-25T00:00:00Z","updatedAt":"2026-09-25T01:00:00Z"
           }],
           "recentCycles": [{
@@ -28,6 +39,11 @@ struct ShannonCognitionTests {
         #expect(dashboard.intents.first?.threadId == "thread-1")
         #expect(dashboard.intents.first?.nextStep == "話し方を評価する")
         #expect(dashboard.intents.first?.planSteps == ["現状を評価する", "改善案を試す", "実機で確認する"])
+        #expect(dashboard.intents.first?.linkedTaskId == "task-1")
+        #expect(dashboard.intents.first?.verifiedWork?.currentAction == "実機で会話を確認中")
+        #expect(dashboard.intents.first?.verifiedWork?.completedPlanSteps == 1)
+        #expect(dashboard.intents.first?.verifiedWork?.testsPassed == 2)
+        #expect(dashboard.intents.first?.verifiedWork?.statusLabel == "作業中")
         #expect(dashboard.recentCycles.first?.channelLabel == "音声")
         #expect(dashboard.recentCycles.first?.recalledMemoryIDs == ["memory-1"])
     }
@@ -144,6 +160,8 @@ private func cognitionIntent(
         threadId: "thread-1",
         nextStep: nil,
         planSteps: nil,
+        linkedTaskId: nil,
+        verifiedWork: nil,
         priority: 0.8,
         confidence: 0.95,
         createdAt: "2026-09-25T00:00:00Z",

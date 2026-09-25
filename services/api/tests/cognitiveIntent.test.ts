@@ -9,6 +9,8 @@ import {
   InMemoryCognitiveIntentStore,
   SQLiteCognitiveIntentStore,
 } from '../src/cognitiveIntent.js';
+import { synchronizeIntentWithAgentTask } from '../src/cognitiveWork.js';
+import type { AgentTask } from '../src/agentTaskStore.js';
 import type { ShannonChatModelRequest } from '../src/chatModel.js';
 
 const at = '2026-09-25T03:00:00.000Z';
@@ -120,5 +122,89 @@ describe('durable cognitive intentions', () => {
       planSteps: ['現在地を確認する', '人格表現を改善する', '会話で検証する'],
     })] } });
     expect((projection.body as { recentCycles: unknown[] }).recentCycles).toHaveLength(3);
+  });
+
+  it('links an accepted task proposal to its exact intent and replans only from durable work evidence', async () => {
+    const cognitiveIntents = new InMemoryCognitiveIntentStore();
+    const api = createLocalApiKernel(() => at, {
+      cognitiveIntents,
+      chatModel: { mode: 'local-stub', model: 'test', generate: async () => ({
+        mode: 'local-stub', model: 'test', reply: '作業案を用意したよ。',
+        intentPlan: { nextStep: '現状を確認する', steps: ['現状確認', '実装', '検証'] },
+        taskProposal: {
+          title: '人格の改善', goal: '人格表現を改善して検証する',
+          hostHint: 'auto', projectHint: 'shannon-ios', risk: '通常のコード変更',
+        },
+      }) },
+    });
+    const chat = await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner', threadId: 'thread-goal', message: 'シャノンの人格表現を改善したい',
+    } });
+    const block = (chat.body as { uiBlocks: Array<{ proposalId: string; cognitiveIntentID: string }> }).uiBlocks[0]!;
+    expect(block.cognitiveIntentID).toBeTruthy();
+
+    const started = await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      scopeKey: 'owner', taskId: block.proposalId, idempotencyKey: 'start-goal-task',
+      conversationThreadID: 'thread-goal', cognitiveIntentID: block.cognitiveIntentID,
+      title: '人格の改善', goal: '人格表現を改善して検証する', summary: '作業を始める', plan: [],
+    } });
+    expect(started.status).toBe(201);
+    expect(cognitiveIntents.get('owner', block.cognitiveIntentID)?.linkedTaskId).toBe(block.proposalId);
+
+    const task = (started.body as { task: AgentTask }).task;
+    synchronizeIntentWithAgentTask(cognitiveIntents, 'owner', {
+      ...task,
+      status: 'running', currentAction: '人格プロンプトを更新中',
+      plan: [
+        { id: 'one', title: '現状確認', status: 'completed' },
+        { id: 'two', title: '人格表現を実装', status: 'running' },
+        { id: 'three', title: '会話で検証', status: 'pending' },
+      ],
+      tests: [{ id: 'test-one', name: '人格回帰テスト', status: 'passed' }],
+      updatedAt: '2026-09-25T05:00:00.000Z',
+    }, '2026-09-25T05:00:00.000Z');
+    expect(cognitiveIntents.get('owner', block.cognitiveIntentID)).toMatchObject({
+      nextStep: '人格プロンプトを更新中',
+      planSteps: ['現状確認', '人格表現を実装', '会話で検証'],
+      verifiedWork: {
+        status: 'running', completedPlanSteps: 1, totalPlanSteps: 3, testsPassed: 1, testsFailed: 0,
+      },
+    });
+  });
+
+  it('rejects linking a task to an intent from another thread', async () => {
+    const cognitiveIntents = new InMemoryCognitiveIntentStore();
+    const intent = cognitiveIntents.capture('owner', extractExplicitUserIntent(
+      '目標は人格を改善する', 'thread-a', at,
+    )!);
+    const api = createLocalApiKernel(() => at, { cognitiveIntents });
+    const response = await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      scopeKey: 'owner', taskId: 'task-cross-thread', idempotencyKey: 'cross-thread',
+      conversationThreadID: 'thread-b', cognitiveIntentID: intent.id,
+      title: '人格改善', goal: '人格を改善する', summary: '開始', plan: [],
+    } });
+    expect(response).toEqual({ status: 409, body: { error: 'COGNITIVE_INTENT_LINK_INVALID' } });
+  });
+
+  it('does not let an idempotency replay attach an existing task to a different intent', async () => {
+    const cognitiveIntents = new InMemoryCognitiveIntentStore();
+    const first = cognitiveIntents.capture('owner', extractExplicitUserIntent(
+      '目標は人格を改善する', 'thread-a', at,
+    )!);
+    const second = cognitiveIntents.capture('owner', extractExplicitUserIntent(
+      '目標は音声を改善する', 'thread-a', at,
+    )!);
+    const api = createLocalApiKernel(() => at, { cognitiveIntents });
+    const base = {
+      scopeKey: 'owner', idempotencyKey: 'same-start', conversationThreadID: 'thread-a',
+      title: '改善', goal: '改善して検証する', summary: '開始', plan: [],
+    };
+    expect((await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      ...base, cognitiveIntentID: first.id,
+    } })).status).toBe(201);
+    expect(await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      ...base, cognitiveIntentID: second.id,
+    } })).toEqual({ status: 409, body: { error: 'COGNITIVE_INTENT_LINK_CONFLICT' } });
+    expect(cognitiveIntents.get('owner', second.id)?.linkedTaskId).toBeUndefined();
   });
 });

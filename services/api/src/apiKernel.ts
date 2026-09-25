@@ -309,6 +309,7 @@ export class ShannonApiKernel {
 
     const agentResponse = dispatchAgentRequest(request, {
       agentTasks: this.agentTasks,
+      cognitiveIntents: this.cognitiveIntents,
       defaultAgentHost: this.defaultAgentHost,
       now: this.now,
     });
@@ -446,13 +447,6 @@ export class ShannonApiKernel {
         systemPrompt,
         state: captured,
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-        ...(completion.taskProposal && !suppressAgentTaskProposal ? {
-          uiBlocks: [{
-            type: 'agent_task_proposal' as const,
-            proposalId: randomUUID(),
-            ...completion.taskProposal,
-          }],
-        } : {}),
       };
       const completedTurn = {
         scopeKey: body.scopeKey,
@@ -468,9 +462,17 @@ export class ShannonApiKernel {
         completedAt: occurredAt,
       };
       const experience = this.background.recordTurn(completedTurn);
-      recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
+      const completedIntent = recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
         threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
       }, provisionalIntent ? completion.intentPlan : undefined);
+      if (completion.taskProposal && !suppressAgentTaskProposal) {
+        response.uiBlocks = [{
+          type: 'agent_task_proposal',
+          proposalId: randomUUID(),
+          ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),
+          ...completion.taskProposal,
+        }];
+      }
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
       return { status: 200, body: response };

@@ -130,8 +130,11 @@ export interface AgentTestResult {
 
 export interface AgentTask {
   id: string;
+  /** Server-owned scope, omitted by older fixtures and ignored by Apple clients. */
+  scopeKey?: string;
   conversationThreadID: string;
   sourceMessageID?: string;
+  cognitiveIntentID?: string;
   title: string;
   goal: string;
   assignedHostID?: string;
@@ -158,6 +161,7 @@ export interface CreateAgentTaskInput {
   idempotencyKey: string;
   conversationThreadID: string;
   sourceMessageID?: string;
+  cognitiveIntentID?: string;
   title: string;
   goal: string;
   summary: string;

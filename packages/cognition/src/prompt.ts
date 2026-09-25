@@ -124,11 +124,21 @@ export function buildIntentPrompt(
     `Desired outcome: ${intent.desiredOutcome}`,
     ...(intent.nextStep ? [`Next known step: ${intent.nextStep}`] : []),
     ...(intent.planSteps?.length ? [`Owner-visible plan proposal:\n${intent.planSteps.slice(0, 5).map((step, index) => `${index + 1}. ${step}`).join('\n')}`] : []),
+    ...(intent.verifiedWork ? [verifiedWorkPrompt(intent.verifiedWork)] : []),
     `Evidence: explicitly stated by the user; recorded_at=${intent.createdAt}; confidence=${fixed(intent.confidence)}`,
     `Response mode: ${frame.responseMode}`,
     'Use this objective to maintain continuity across turns. Do not announce the frame, invent progress, or treat a proposal as completed work.',
-    'The plan is guidance, not proof of action or completion. Only a verified action receipt can prove an external change. If the next step is ambiguous or consequential, ask or propose it instead of silently acting.',
+    'The plan is guidance, not proof of action or completion. Verified work is authoritative for task progress, but task completion does not automatically complete the broader objective. If the next step is ambiguous or consequential, ask or propose it instead of silently acting.',
   ], Math.max(0, maximumCharacters));
+}
+
+function verifiedWorkPrompt(work: NonNullable<ShannonIntent['verifiedWork']>): string {
+  const progress = work.totalPlanSteps > 0
+    ? `${work.completedPlanSteps}/${work.totalPlanSteps} plan steps completed`
+    : 'no task plan reported';
+  const current = work.currentAction ? `; current_action=${work.currentAction}` : '';
+  const tests = `; tests_passed=${work.testsPassed}; tests_failed=${work.testsFailed}`;
+  return `Verified linked work: task_id=${work.taskId}; status=${work.status}; ${progress}${current}${tests}; updated_at=${work.updatedAt}\nSummary: ${work.summary}`;
 }
 
 /**

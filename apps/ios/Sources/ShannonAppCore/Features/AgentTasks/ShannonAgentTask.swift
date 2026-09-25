@@ -14,6 +14,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var conversationThreadID: String
     public var sourceMessageID: UUID?
+    public var cognitiveIntentID: String?
     public var title: String
     public var goal: String
     public var hostHint: String?
@@ -37,6 +38,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         id: UUID = UUID(),
         conversationThreadID: String,
         sourceMessageID: UUID? = nil,
+        cognitiveIntentID: String? = nil,
         title: String,
         goal: String,
         hostHint: String? = nil,
@@ -59,6 +61,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.conversationThreadID = conversationThreadID
         self.sourceMessageID = sourceMessageID
+        self.cognitiveIntentID = cognitiveIntentID
         self.title = title
         self.goal = goal
         self.hostHint = hostHint
@@ -181,6 +184,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
             id: id,
             conversationThreadID: remote.conversationThreadID,
             sourceMessageID: remote.sourceMessageID.flatMap(UUID.init(uuidString:)),
+            cognitiveIntentID: remote.cognitiveIntentID,
             title: remote.title,
             goal: remote.goal,
             projectHint: remote.projectHint,

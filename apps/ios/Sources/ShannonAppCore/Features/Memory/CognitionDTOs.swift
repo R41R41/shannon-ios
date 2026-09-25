@@ -35,10 +35,78 @@ public struct ShannonCognitiveIntentDTO: Codable, Equatable, Identifiable, Senda
     public let threadId: String?
     public let nextStep: String?
     public let planSteps: [String]?
+    public let linkedTaskId: String?
+    public let verifiedWork: ShannonVerifiedWorkDTO?
     public let priority: Double
     public let confidence: Double
     public let createdAt: String
     public let updatedAt: String
+
+    public init(
+        id: String,
+        title: String,
+        desiredOutcome: String,
+        status: ShannonCognitiveIntentStatusDTO,
+        source: String,
+        sourceExperienceId: String? = nil,
+        threadId: String? = nil,
+        nextStep: String? = nil,
+        planSteps: [String]? = nil,
+        linkedTaskId: String? = nil,
+        verifiedWork: ShannonVerifiedWorkDTO? = nil,
+        priority: Double,
+        confidence: Double,
+        createdAt: String,
+        updatedAt: String
+    ) {
+        self.id = id
+        self.title = title
+        self.desiredOutcome = desiredOutcome
+        self.status = status
+        self.source = source
+        self.sourceExperienceId = sourceExperienceId
+        self.threadId = threadId
+        self.nextStep = nextStep
+        self.planSteps = planSteps
+        self.linkedTaskId = linkedTaskId
+        self.verifiedWork = verifiedWork
+        self.priority = priority
+        self.confidence = confidence
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct ShannonVerifiedWorkPlanItemDTO: Codable, Equatable, Sendable {
+    public let title: String
+    public let status: String
+}
+
+public struct ShannonVerifiedWorkDTO: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let title: String
+    public let status: String
+    public let summary: String
+    public let currentAction: String?
+    public let plan: [ShannonVerifiedWorkPlanItemDTO]
+    public let completedPlanSteps: Int
+    public let totalPlanSteps: Int
+    public let testsPassed: Int
+    public let testsFailed: Int
+    public let updatedAt: String
+
+    public var statusLabel: String {
+        switch status {
+        case "queued", "starting": "準備中"
+        case "running": "作業中"
+        case "waiting_approval": "確認待ち"
+        case "paused": "一時停止"
+        case "completed": "作業完了"
+        case "failed": "要修正"
+        case "cancelled": "中止"
+        default: "状態確認中"
+        }
+    }
 }
 
 public struct ShannonCognitiveCycleDTO: Codable, Equatable, Identifiable, Sendable {

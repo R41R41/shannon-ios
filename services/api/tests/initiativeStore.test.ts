@@ -6,12 +6,60 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SQLiteWorldStore } from '../src/worldStore.js';
+import { SQLiteCognitiveIntentStore, extractExplicitUserIntent } from '../src/cognitiveIntent.js';
+import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
 import type { DailyMindFocus } from '../src/dailyMind.js';
 
 const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));
 
 describe('Shannon initiative loop', () => {
+  it('brings an exact linked-task approval back to the originating conversation', () => {
+    const path = databasePath();
+    const createdAt = '2026-09-23T00:00:00.000Z';
+    const at = '2026-09-25T03:00:00.000Z'; // 12:00 in Tokyo
+    const state = new SQLiteShannonStore({ path, now: () => createdAt });
+    state.snapshot('owner');
+    state.threadId('owner', 'thread-goal');
+    state.renameThread('owner', 'thread-goal', '目的の会話');
+    const intents = new SQLiteCognitiveIntentStore(path);
+    const intent = intents.capture('owner', extractExplicitUserIntent(
+      'シャノンの人格表現を改善したい', 'thread-goal', createdAt,
+    )!);
+    const tasks = new SQLiteAgentTaskStore(path);
+    const { task } = tasks.create('owner', {
+      idempotencyKey: 'linked-task', conversationThreadID: 'thread-goal', cognitiveIntentID: intent.id,
+      title: '人格の改善', goal: '人格表現を改善して検証する', summary: '作業を開始する。',
+    }, createdAt);
+    intents.linkTask('owner', intent.id, task.id, createdAt);
+    tasks.claim('mac-a', '2026-09-23T00:00:01.000Z');
+    tasks.recordHostEvents('mac-a', [{
+      eventId: 'approval', taskId: task.id, type: 'approval_requested', title: '確認待ち',
+      occurredAt: '2026-09-23T00:00:02.000Z', payload: { approval: {
+        externalRequestID: 'approval-1', kind: 'permission', title: '実機へ配布',
+        reason: '署名済みビルドを端末へ入れるため',
+      } },
+    }], '2026-09-23T00:00:02.000Z');
+
+    const initiatives = new SQLiteInitiativeStore(path, () => at);
+    expect(initiatives.runOnce()).toMatchObject({ sent: 1, stopped: null });
+    expect(initiatives.unreadMessages('owner')).toEqual([
+      expect.objectContaining({
+        threadId: 'thread-goal', sourceTitle: '継続中の目的', sourceURL: '',
+        content: expect.stringContaining('実機へ配布'),
+      }),
+    ]);
+    const initiativeTurn = state.conversationHistory('owner', 'thread-goal').at(-1);
+    expect(initiativeTurn).toMatchObject({ role: 'assistant' });
+    expect(initiativeTurn).not.toHaveProperty('sourceAttribution');
+    expect(initiatives.runOnce()).toMatchObject({ sent: 0, stopped: 'today-is-enough' });
+
+    initiatives.close();
+    tasks.close();
+    intents.close();
+    state.close();
+  });
+
   it('delivers at most one relevant message per local day and keeps it unread until acknowledged', () => {
     const path = databasePath();
     const at = '2026-09-03T03:00:00.000Z'; // 12:00 in Tokyo

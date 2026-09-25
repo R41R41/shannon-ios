@@ -169,6 +169,7 @@ extension ShannonAPIClient {
             idempotencyKey: idempotencyKey,
             conversationThreadID: task.conversationThreadID,
             sourceMessageID: task.sourceMessageID?.uuidString,
+            cognitiveIntentID: task.cognitiveIntentID,
             title: task.title,
             goal: task.goal,
             summary: task.summary,

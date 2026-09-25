@@ -15,7 +15,7 @@ export function recordCompletedCognitiveCycle(
     occurredAt: string;
   },
   plan?: CognitiveIntentPlan,
-): void {
+): ShannonIntent | null {
   const savedIntent = provisionalIntent
     ? store.capture(scopeKey, provisionalIntent, sourceExperienceID)
     : null;
@@ -30,4 +30,5 @@ export function recordCompletedCognitiveCycle(
     recalledMemoryIDs: finalFrame.recalledMemoryIDs,
     outcome: 'completed',
   });
+  return plannedIntent ?? frame.primaryIntent ?? null;
 }

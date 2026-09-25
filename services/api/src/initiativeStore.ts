@@ -5,6 +5,10 @@ import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from './dailyMind.js';
 import { dueCommitmentCandidate } from './commitmentInitiative.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
+import {
+  intentInitiativeCandidateIsCurrent,
+  intentInitiativeCandidates,
+} from './initiativeIntentCandidates.js';
 
 import {
   candidateScore,
@@ -27,6 +31,11 @@ const QUIET_START_HOUR = 23;
 const QUIET_END_HOUR = 7;
 const USER_COOLDOWN_MILLISECONDS = 90 * 60_000;
 const CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
+
+interface InitiativeCandidate extends CandidateRow {
+  score: number;
+  thread_id?: string;
+}
 
 export interface InitiativeMessage {
   id: string;
@@ -145,6 +154,15 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       ).get(scope.scope_key, candidate.item_id));
       if (promise) {
         if (this.persistMessage(scope.scope_key, state, promise, null, null, dayKey, at)) sent += 1;
+        continue;
+      }
+      const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
+      considered += intentCandidates.length;
+      const intentCandidate = intentCandidates.find(candidate => !this.database.prepare(
+        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
+      ).get(scope.scope_key, candidate.item_id));
+      if (intentCandidate) {
+        if (this.persistMessage(scope.scope_key, state, intentCandidate, null, null, dayKey, at)) sent += 1;
         continue;
       }
       const interests = worldVisibleInterests(restoreCompanionState(scope.scope_key, JSON.parse(scope.snapshot_json), at));
@@ -287,18 +305,20 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
   private persistMessage(
     scopeKey: string,
     state: CompanionStateShape,
-    candidate: CandidateRow & { score: number },
+    candidate: InitiativeCandidate,
     interest: string | null,
     dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
   ): boolean {
     const initiativeId = randomUUID();
-    const threadId = this.latestThread(scopeKey, createdAt);
+    const threadId = candidate.thread_id ?? this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
     const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。';
     const content = candidate.source_id === 'commitment'
       ? `「${truncate(candidate.title, 240)}」という約束が残っているよ。今、続ける？ もう済んでいたら、完了にできるよ。`
+      : candidate.source_id === 'intent'
+      ? truncate(candidate.summary ?? `「${candidate.title}」という目的を覚えているよ。次の一手を一緒に確認する？`, 500)
       : dailyFocus?.openingLine
       ? `${groundedWorldOpening(dailyFocus.openingLine, candidate.title, interest)}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : interest
@@ -315,11 +335,13 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       initiativeId,
       sourceItemId: candidate.item_id,
       dailyMindDayKey: dailyFocus?.dayKey ?? null,
-      sourceAttribution: {
-        title: truncate(candidate.source_title, 200),
-        url: candidate.url,
-        reason: truncate(reason, 500),
-      },
+      ...(candidate.source_id === 'intent' || candidate.source_id === 'commitment' ? {} : {
+        sourceAttribution: {
+          title: truncate(candidate.source_title, 200),
+          url: candidate.url,
+          reason: truncate(reason, 500),
+        },
+      }),
     });
 
     this.database.exec('BEGIN IMMEDIATE');
@@ -330,6 +352,11 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
           this.database.exec('ROLLBACK');
           return false;
         }
+      }
+      if (candidate.source_id === 'intent'
+        && !intentInitiativeCandidateIsCurrent(this.database, scopeKey, candidate.item_id)) {
+        this.database.exec('ROLLBACK');
+        return false;
       }
       const inserted = this.database.prepare(`
         INSERT OR IGNORE INTO initiative_messages
