@@ -18,6 +18,7 @@ export const VOICE_LAB_STATIC_FILES = new Map([
   ['/voice-audition-presets.js', ['voice-audition-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-design-presets.js', ['voice-design-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-live-profiles.js', ['voice-live-profiles.js', 'text/javascript; charset=utf-8']],
+  ['/cascade-audio-policy.js', ['cascade-audio-policy.js', 'text/javascript; charset=utf-8']],
   ['/capture-worklet.js', ['capture-worklet.js', 'text/javascript; charset=utf-8']],
 ]);
 export const DEFAULT_LIVE_VOICES = Object.freeze([

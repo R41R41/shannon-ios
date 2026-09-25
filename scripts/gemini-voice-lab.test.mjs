@@ -20,6 +20,7 @@ import {
   validateSampleInput,
   VOICE_LAB_STATIC_FILES,
 } from './gemini-voice-lab-core.mjs';
+import { shouldInterruptCascadeOutput, shouldSendCascadeAudio } from '../tools/gemini-voice-lab/cascade-audio-policy.js';
 import {
   voiceDesignPresets,
   voiceDesignPrompt,
@@ -55,6 +56,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
   ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-live-profiles.js'), [
     'voice-live-profiles.js',
+    'text/javascript; charset=utf-8',
+  ]);
+  assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/cascade-audio-policy.js'), [
+    'cascade-audio-policy.js',
     'text/javascript; charset=utf-8',
   ]);
   assert.equal(voiceDesignPresets.length, 9);
@@ -115,6 +120,15 @@ test('cascade transcription is locked to Japanese streaming text', () => {
   assert.equal(setup.setup.model, `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`);
   assert.deepEqual(setup.setup.inputAudioTranscription.languageCodes, ['ja-JP']);
   assert.equal(setup.setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs, 450);
+});
+
+test('cascade full duplex keeps listening and only interrupts on recognized speech', () => {
+  assert.equal(shouldSendCascadeAudio({ ready: true, socketOpen: true, activeTurn: true, bargeIn: true }), true);
+  assert.equal(shouldSendCascadeAudio({ ready: true, socketOpen: true, activeTurn: true, bargeIn: false }), false);
+  assert.equal(shouldSendCascadeAudio({ ready: false, socketOpen: true, activeTurn: false, bargeIn: true }), false);
+  assert.equal(shouldInterruptCascadeOutput({ bargeIn: true, activeTurn: true, interimText: 'ちょっと待って' }), true);
+  assert.equal(shouldInterruptCascadeOutput({ bargeIn: true, activeTurn: true, interimText: '  ', finalText: '' }), false);
+  assert.equal(shouldInterruptCascadeOutput({ bargeIn: false, activeTurn: true, finalText: '止めて' }), false);
 });
 
 test('cascade response keeps a short history and uses the selected profile', () => {

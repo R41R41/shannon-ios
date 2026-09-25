@@ -6,6 +6,7 @@ import {
   voiceDesignVariantVerifiedAt,
 } from './voice-design-presets.js';
 import { liveProfile, liveProfiles, liveSystemInstruction, liveTTSStyle } from './voice-live-profiles.js';
+import { shouldInterruptCascadeOutput, shouldSendCascadeAudio } from './cascade-audio-policy.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
@@ -53,6 +54,7 @@ const transcriptList = document.querySelector('#transcript-list');
 const cascadeToggle = document.querySelector('#cascade-toggle');
 const cascadeVoice = document.querySelector('#cascade-voice');
 const cascadeProfileSelect = document.querySelector('#cascade-profile');
+const cascadeBargeIn = document.querySelector('#cascade-barge-in');
 const cascadeProfileSummary = document.querySelector('#cascade-profile-summary');
 const cascadeStatus = document.querySelector('#cascade-status');
 const cascadeOrb = document.querySelector('#cascade-orb');
@@ -620,6 +622,7 @@ async function startCascade() {
       socket, session, profileId, stream, context, source, capture, mute,
       ready: false, busy: false, speaking: false, nextPlaybackTime: 0,
       sources: new Set(), controllers: new Set(), transcriptBuffer: '', finalizeTimer: null,
+      activeTurn: null, turnSerial: 0,
     };
     pendingStream = null;
     pendingContext = null;
@@ -663,7 +666,12 @@ function transcribeSetup(model) {
 
 function sendCascadeMicrophoneChunk(buffer) {
   const cascade = state.cascade;
-  if (!cascade?.ready || cascade.busy || cascade.speaking || cascade.socket.readyState !== WebSocket.OPEN) return;
+  if (!cascade || !shouldSendCascadeAudio({
+    ready: cascade.ready,
+    socketOpen: cascade.socket.readyState === WebSocket.OPEN,
+    activeTurn: Boolean(cascade.activeTurn),
+    bargeIn: cascadeBargeIn.checked,
+  })) return;
   cascade.socket.send(JSON.stringify({
     realtimeInput: { audio: { data: arrayBufferBase64(buffer), mimeType: 'audio/pcm;rate=16000' } },
   }));
@@ -686,10 +694,17 @@ async function handleCascadeTranscription(data) {
       setStatus(cascadeStatus, '聞いています · 話し終わると返答を作ります。', 'success');
     }
     const content = event.serverContent;
-    if (!content || cascade.busy) return;
+    if (!content) return;
     const interim = String(content.interimInputTranscription?.text ?? '').trim();
-    if (interim) showCascadeInterim(interim);
     const finalText = String(content.inputTranscription?.text ?? '');
+    if (cascade.activeTurn && !cascadeBargeIn.checked) return;
+    if (shouldInterruptCascadeOutput({
+      bargeIn: cascadeBargeIn.checked,
+      activeTurn: Boolean(cascade.activeTurn),
+      interimText: interim,
+      finalText,
+    })) interruptCascadeTurn(cascade);
+    if (interim) showCascadeInterim(interim);
     if (finalText) {
       cascade.transcriptBuffer = mergeStreamingText(cascade.transcriptBuffer, finalText);
       showCascadeInterim(cascade.transcriptBuffer);
@@ -703,7 +718,11 @@ async function handleCascadeTranscription(data) {
 }
 
 function finalizeCascadeTranscript(cascade) {
-  if (state.cascade !== cascade || cascade.busy) return;
+  if (state.cascade !== cascade) return;
+  if (cascade.activeTurn) {
+    if (!cascadeBargeIn.checked) return;
+    interruptCascadeTurn(cascade);
+  }
   clearTimeout(cascade.finalizeTimer);
   cascade.finalizeTimer = null;
   const text = cascade.transcriptBuffer.trim();
@@ -713,12 +732,14 @@ function finalizeCascadeTranscript(cascade) {
 }
 
 async function handleCascadeTurn(text, cascade) {
-  if (state.cascade !== cascade || cascade.busy) return;
+  if (state.cascade !== cascade || cascade.activeTurn) return;
   cascade.busy = true;
   const finalizedAt = performance.now();
   appendCascadeTranscript('user', 'あなた', text);
   setStatus(cascadeStatus, '返答を考えています…');
   const controller = new AbortController();
+  const turn = { id: ++cascade.turnSerial, controller, transcriptItem: null, interrupted: false };
+  cascade.activeTurn = turn;
   cascade.controllers.add(controller);
   try {
     const response = await post('/api/cascade-response', {
@@ -729,10 +750,10 @@ async function handleCascadeTurn(text, cascade) {
     }, { signal: controller.signal });
     if (!response.ok) throw await responseError(response);
     const result = await response.json();
-    if (state.cascade !== cascade) return;
+    if (!isActiveCascadeTurn(cascade, turn)) return;
     const responseReadyAt = performance.now();
     cascadeTextLatency.textContent = formatDuration(Math.round(responseReadyAt - finalizedAt));
-    appendCascadeTranscript('model', 'Shannon', result.text);
+    turn.transcriptItem = appendCascadeTranscript('model', 'Shannon', result.text);
     state.cascadeHistory = [...state.cascadeHistory, { role: 'user', text }, { role: 'model', text: result.text }].slice(-12);
     setStatus(cascadeStatus, 'Shannonの声を作っています…');
 
@@ -747,14 +768,16 @@ async function handleCascadeTurn(text, cascade) {
     let firstAudioAt = null;
     let audioChunks = 0;
     for await (const event of browserServerSentEvents(speechResponse.body)) {
-      if (state.cascade !== cascade) return;
+      if (!isActiveCascadeTurn(cascade, turn)) return;
       for (const part of event?.candidates?.[0]?.content?.parts ?? []) {
         if (!part?.inlineData?.data) continue;
         if (!firstAudioAt) {
           firstAudioAt = performance.now();
           cascadeTTSLatency.textContent = formatDuration(Math.round(firstAudioAt - responseReadyAt));
           cascadeTotalLatency.textContent = formatDuration(Math.round(firstAudioAt - finalizedAt));
-          setStatus(cascadeStatus, 'Shannonが話しています · マイク送信は一時停止中です。', 'success');
+          setStatus(cascadeStatus, cascadeBargeIn.checked
+            ? 'Shannonが話しています · そのまま話せば割り込めます。'
+            : 'Shannonが話しています · 交互会話モードです。', 'success');
         }
         audioChunks += 1;
         playCascadePCM24k(part.inlineData.data, cascade);
@@ -763,18 +786,43 @@ async function handleCascadeTurn(text, cascade) {
     if (!firstAudioAt || audioChunks === 0) throw new Error('Gemini TTSから音声が返りませんでした');
     const remainingMilliseconds = Math.max(0, (cascade.nextPlaybackTime - cascade.context.currentTime) * 1_000) + 160;
     await wait(remainingMilliseconds);
-    if (state.cascade === cascade) setStatus(cascadeStatus, '聞いています · 続けて話しかけられます。', 'success');
+    if (isActiveCascadeTurn(cascade, turn)) setStatus(cascadeStatus, '聞いています · 続けて話しかけられます。', 'success');
   } catch (error) {
-    if (error?.name !== 'AbortError' && state.cascade === cascade) {
+    if (error?.name !== 'AbortError' && isActiveCascadeTurn(cascade, turn)) {
       setStatus(cascadeStatus, `返答できませんでした: ${message(error)}`, 'error');
     }
   } finally {
     cascade.controllers.delete(controller);
-    if (state.cascade === cascade) {
+    if (isActiveCascadeTurn(cascade, turn)) {
+      cascade.activeTurn = null;
       cascade.busy = false;
       cascade.speaking = false;
     }
   }
+}
+
+function isActiveCascadeTurn(cascade, turn) {
+  return state.cascade === cascade && cascade.activeTurn === turn && !turn.interrupted;
+}
+
+function interruptCascadeTurn(cascade) {
+  const turn = cascade.activeTurn;
+  if (!turn) return;
+  turn.interrupted = true;
+  turn.controller.abort();
+  cascade.controllers.delete(turn.controller);
+  stopCascadePlayback(cascade);
+  cascade.activeTurn = null;
+  cascade.busy = false;
+  cascade.speaking = false;
+  markCascadeTranscriptInterrupted(turn.transcriptItem);
+  setStatus(cascadeStatus, '割り込みを認識中 · Shannonの発話を止めました。', 'success');
+}
+
+function stopCascadePlayback(cascade) {
+  for (const source of cascade.sources) { try { source.stop(); } catch {} }
+  cascade.sources.clear();
+  cascade.nextPlaybackTime = cascade.context.currentTime;
 }
 
 function playCascadePCM24k(encoded, cascade) {
@@ -800,7 +848,7 @@ function stopCascade(status, kind) {
   if (cascade) {
     clearTimeout(cascade.finalizeTimer);
     for (const controller of cascade.controllers) controller.abort();
-    for (const source of cascade.sources) { try { source.stop(); } catch {} }
+    stopCascadePlayback(cascade);
     if (cascade.socket.readyState === WebSocket.OPEN) {
       try { cascade.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); } catch {}
     }
@@ -841,6 +889,16 @@ function appendCascadeTranscript(kind, speaker, text) {
   item.append(title, document.createTextNode(text));
   cascadeTranscriptList.append(item);
   cascadeTranscriptList.scrollTop = cascadeTranscriptList.scrollHeight;
+  return item;
+}
+
+function markCascadeTranscriptInterrupted(item) {
+  if (!item || item.classList.contains('interrupted')) return;
+  item.classList.add('interrupted');
+  const stateLabel = document.createElement('span');
+  stateLabel.className = 'turn-state';
+  stateLabel.textContent = '割り込みで中断';
+  item.append(stateLabel);
 }
 
 function appendCascadeSessionMarker(text) {

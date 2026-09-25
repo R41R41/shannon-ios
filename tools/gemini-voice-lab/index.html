@@ -248,14 +248,18 @@
             <small>返答文の人格と、TTSの短い話し方指定へ同じプロファイルを使います。</small>
           </label>
           <div id="cascade-profile-summary" class="profile-summary" aria-live="polite"></div>
+          <label class="check-row barge-in-row">
+            <input id="cascade-barge-in" type="checkbox" checked>
+            <span><strong>Shannonの発話中も聞く</strong><small>話し始めを認識すると、Shannonを止めて割り込めます。反響が強い環境ではOFFにできます。</small></span>
+          </label>
           <div class="latency-strip" aria-label="直前のターンのレイテンシ">
             <div><span>返答文</span><output id="cascade-text-latency">—</output></div>
             <div><span>TTS先頭</span><output id="cascade-tts-latency">—</output></div>
             <div class="latency-total"><span>認識確定→先頭音</span><output id="cascade-total-latency">—</output></div>
           </div>
           <button id="cascade-toggle" class="primary" type="button"><span aria-hidden="true">●</span> カスケード会話を始める</button>
-          <p id="cascade-status" class="status" role="status" aria-live="polite">停止中 · 返答中は反響防止のためマイク送信を一時停止します。</p>
-          <div class="cost-note"><strong>料金と確認項目</strong><span>Voice IDの再現性と、発話終了後の待ち時間</span><small>TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
+          <p id="cascade-status" class="status" role="status" aria-live="polite">停止中 · 割り込みONではShannonの発話中も聞き続けます。</p>
+          <div class="cost-note"><strong>料金と確認項目</strong><span>Voice IDの再現性、発話終了後の待ち時間、割り込み反応</span><small>TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
         </div>
         <div class="transcript cascade-transcript" aria-label="カスケード会話の文字起こし">
           <div class="orb" id="cascade-orb" aria-hidden="true"><i></i><i></i></div>

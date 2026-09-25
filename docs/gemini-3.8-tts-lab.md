@@ -71,9 +71,12 @@ Use the four areas in order:
    `gemini-3.5-transcribe-live`, a selectable Flash-Lite / Flash text response,
    and streaming Gemini 3.8 TTS. This is the path for judging the exact stored
    Voice ID in conversation. It shows response-text, TTS-first-audio, and combined
-   final-transcript-to-first-audio latency for every turn. Microphone upload pauses
-   from transcript finalization through playback plus a short tail, preventing the
-   generated voice from being recognized as the next user turn.
+   final-transcript-to-first-audio latency for every turn. Full-duplex mode is enabled
+   by default: browser echo cancellation keeps microphone upload and transcription
+   active while Shannon speaks, and recognized user speech aborts both the active HTTP
+   generation and queued playback before starting the next turn. A visible switch
+   restores the previous turn-taking behavior in environments where acoustic echo
+   remains strong.
 
 The `Shannon · ポンコツ天才メイド` path deliberately separates three controls:
 the stored Voice Design describes only permanent audible traits, the response model
