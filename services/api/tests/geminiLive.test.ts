@@ -17,9 +17,9 @@ describe('Gemini Live gateway', () => {
           newSessionExpireTime: '2026-09-25T03:01:00.000Z',
           fieldMask: 'model,generationConfig.responseModalities',
           bidiGenerateContentSetup: {
-            model: 'models/gemini-3.8-live',
+            model: 'models/gemini-3.5-transcribe-live',
             generationConfig: {
-              responseModalities: ['AUDIO'],
+              responseModalities: ['TEXT'],
             },
           },
         });
@@ -33,7 +33,7 @@ describe('Gemini Live gateway', () => {
       instructions: 'あなたはシャノン。',
     })).resolves.toEqual({
       token: 'auth_tokens/ephemeral-test-token',
-      model: 'gemini-3.8-live',
+      model: 'gemini-3.5-transcribe-live',
       voice: 'Aoede',
       threadId: 'thread-a',
       instructions: 'あなたはシャノン。',

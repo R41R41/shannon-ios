@@ -2,12 +2,9 @@ import Foundation
 
 public enum ShannonGeminiLiveServerEvent: Equatable, Sendable {
     case setupComplete
-    case audio(Data)
+    case interimInputTranscript(String)
     case inputTranscript(String)
-    case outputTranscript(String)
-    case interrupted
     case turnComplete
-    case toolCall(id: String, request: String)
     case sessionHandle(String)
     case goAway(String?)
 }
@@ -31,49 +28,19 @@ public enum ShannonGeminiLiveProtocol {
         var setup: [String: Any] = [
             "model": "models/\(session.model)",
             "generationConfig": [
-                "responseModalities": ["AUDIO"],
-                "speechConfig": [
-                    "voiceConfig": [
-                        "prebuiltVoiceConfig": ["voiceName": session.voice],
-                    ],
-                ],
+                "responseModalities": ["TEXT"],
             ],
-            "systemInstruction": [
-                "parts": [[
-                    "text": session.instructions + "\n\nRESPOND IN JAPANESE. YOU MUST RESPOND UNMISTAKABLY IN JAPANESE.",
-                ]],
-            ],
-            "inputAudioTranscription": [:],
-            "outputAudioTranscription": [:],
+            "inputAudioTranscription": ["languageCodes": ["ja-JP"]],
             "realtimeInputConfig": [
                 "automaticActivityDetection": [
                     "disabled": false,
                     "startOfSpeechSensitivity": "START_SENSITIVITY_HIGH",
                     "endOfSpeechSensitivity": "END_SENSITIVITY_HIGH",
                     "prefixPaddingMs": 80,
-                    "silenceDurationMs": 600,
+                    "silenceDurationMs": 360,
                 ],
-                "activityHandling": "START_OF_ACTIVITY_INTERRUPTS",
             ],
-            "contextWindowCompression": ["slidingWindow": [:]],
             "sessionResumption": resumptionHandle.map { ["handle": $0] } ?? [:],
-            "tools": [[
-                "functionDeclarations": [[
-                    "name": "consult_shannon_backend",
-                    "description": "Use for current facts, relevant memories, exact time or location, weather, transit, project records, notes, tasks, and any request that needs Shannon's verified backend. Never invent a tool result.",
-                    "behavior": "NON_BLOCKING",
-                    "parameters": [
-                        "type": "OBJECT",
-                        "properties": [
-                            "request": [
-                                "type": "STRING",
-                                "description": "The complete request in Japanese, including corrected names and constraints.",
-                            ],
-                        ],
-                        "required": ["request"],
-                    ],
-                ]],
-            ]],
         ]
         // Keep the empty object for a new resumable session; only replace it when reconnecting.
         if let resumptionHandle { setup["sessionResumption"] = ["handle": resumptionHandle] }
@@ -95,21 +62,6 @@ public enum ShannonGeminiLiveProtocol {
         try JSONSerialization.data(withJSONObject: ["realtimeInput": ["audioStreamEnd": true]])
     }
 
-    public static func toolResponseMessage(id: String, result: String) throws -> Data {
-        try JSONSerialization.data(withJSONObject: [
-            "toolResponse": [
-                "functionResponses": [[
-                    "id": id,
-                    "name": "consult_shannon_backend",
-                    "response": [
-                        "result": result,
-                        "scheduling": "WHEN_IDLE",
-                    ],
-                ]],
-            ],
-        ])
-    }
-
     public static func events(from data: Data) throws -> [ShannonGeminiLiveServerEvent] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
         var events: [ShannonGeminiLiveServerEvent] = []
@@ -123,32 +75,11 @@ public enum ShannonGeminiLiveProtocol {
         if let goAway = root["goAway"] as? [String: Any] {
             events.append(.goAway(goAway["timeLeft"] as? String))
         }
-        if let calls = (root["toolCall"] as? [String: Any])?["functionCalls"] as? [[String: Any]] {
-            for call in calls where call["name"] as? String == "consult_shannon_backend" {
-                guard let id = call["id"] as? String,
-                      let args = call["args"] as? [String: Any],
-                      let request = args["request"] as? String,
-                      !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                events.append(.toolCall(id: id, request: request))
-            }
-        }
         guard let content = root["serverContent"] as? [String: Any] else { return events }
-        if content["interrupted"] as? Bool == true { events.append(.interrupted) }
+        if let transcript = (content["interimInputTranscription"] as? [String: Any])?["text"] as? String,
+           !transcript.isEmpty { events.append(.interimInputTranscript(transcript)) }
         if let transcript = (content["inputTranscription"] as? [String: Any])?["text"] as? String,
            !transcript.isEmpty { events.append(.inputTranscript(transcript)) }
-        if let transcript = (content["outputTranscription"] as? [String: Any])?["text"] as? String,
-           !transcript.isEmpty { events.append(.outputTranscript(transcript)) }
-        if let parts = (content["modelTurn"] as? [String: Any])?["parts"] as? [[String: Any]] {
-            for part in parts {
-                guard let inline = part["inlineData"] as? [String: Any],
-                      let mimeType = inline["mimeType"] as? String,
-                      mimeType.lowercased().hasPrefix("audio/pcm"),
-                      let encoded = inline["data"] as? String,
-                      let audio = Data(base64Encoded: encoded),
-                      !audio.isEmpty else { continue }
-                events.append(.audio(audio))
-            }
-        }
         if content["turnComplete"] as? Bool == true { events.append(.turnComplete) }
         return events
     }

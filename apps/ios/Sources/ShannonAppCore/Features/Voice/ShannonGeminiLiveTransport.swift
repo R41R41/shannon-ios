@@ -23,10 +23,12 @@ final class ShannonGeminiLiveTransport {
         _ speechEnded: Bool,
         _ emittedAudioChunks: Int
     ) -> Void
+    typealias InputStateHandler = @MainActor @Sendable (ShannonVoiceInputState) -> Void
 
     private let session: ShannonGeminiLiveSessionDTO
     private let eventHandler: EventHandler
     private let captureHandler: CaptureHandler
+    private let inputStateHandler: InputStateHandler
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let vad = ShannonGeminiLiveVADState()
@@ -42,17 +44,21 @@ final class ShannonGeminiLiveTransport {
     private var audioStarted = false
     private var stopped = false
     private var didRecordFirstAudioSend = false
+    private var inputPreference: ShannonVoiceInputPreference = .automatic
+    private var routeObserver: NSObjectProtocol?
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
 
     init(
         session: ShannonGeminiLiveSessionDTO,
         eventHandler: @escaping EventHandler,
-        captureHandler: @escaping CaptureHandler
+        captureHandler: @escaping CaptureHandler,
+        inputStateHandler: @escaping InputStateHandler
     ) {
         self.session = session
         self.eventHandler = eventHandler
         self.captureHandler = captureHandler
+        self.inputStateHandler = inputStateHandler
     }
 
     func start(resumptionHandle: String? = nil) async throws {
@@ -118,7 +124,6 @@ final class ShannonGeminiLiveTransport {
                                 return
                             }
                         }
-                        if case let .audio(audio) = event { self.play(audio) }
                         self.eventHandler(event)
                     }
                 }
@@ -130,10 +135,6 @@ final class ShannonGeminiLiveTransport {
         send(try ShannonGeminiLiveProtocol.setupMessage(session: session, resumptionHandle: resumptionHandle))
     }
 
-    func sendToolResponse(id: String, result: String) throws {
-        send(try ShannonGeminiLiveProtocol.toolResponseMessage(id: id, result: result))
-    }
-
     func finishAudioStream() throws {
         send(try ShannonGeminiLiveProtocol.audioStreamEndMessage())
     }
@@ -142,6 +143,26 @@ final class ShannonGeminiLiveTransport {
         playerNode.stop()
         playerNode.reset()
         if audioEngine.isRunning { playerNode.play() }
+    }
+
+    func setPlaybackVolume(_ volume: Float) {
+        playerNode.volume = min(1, max(0, volume))
+    }
+
+    func setInputPreference(_ preference: ShannonVoiceInputPreference) throws {
+        inputPreference = preference
+        guard routeObserver != nil else { return }
+        try applyInputPreference()
+    }
+
+    @discardableResult
+    func scheduleSpeech(_ speech: ShannonGeminiSpeech) throws -> Double {
+        let wav = try ShannonGeminiWAV.parse(speech.audio)
+        guard wav.sampleRate == 24_000, wav.channels == 1, wav.bitsPerSample == 16 else {
+            throw URLError(.cannotDecodeRawData)
+        }
+        play(wav.pcm)
+        return speech.durationSeconds
     }
 
     func stop() {
@@ -170,6 +191,10 @@ final class ShannonGeminiLiveTransport {
         keepAliveSourceNode = nil
         captureChunker.reset()
         audioStarted = false
+        if let routeObserver {
+            NotificationCenter.default.removeObserver(routeObserver)
+            self.routeObserver = nil
+        }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -182,6 +207,56 @@ final class ShannonGeminiLiveTransport {
         )
         try audioSession.setPreferredIOBufferDuration(0.02)
         try audioSession.setActive(true)
+        try applyInputPreference()
+        if routeObserver == nil {
+            routeObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: audioSession,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    try? self.applyInputPreference()
+                }
+            }
+        }
+    }
+
+    private func applyInputPreference() throws {
+        let audioSession = AVAudioSession.sharedInstance()
+        let inputs = audioSession.availableInputs ?? []
+        let selected: AVAudioSessionPortDescription?
+        switch inputPreference {
+        case .automatic:
+            selected = nil
+        case .builtIn:
+            guard let input = inputs.first(where: { $0.portType == .builtInMic }) else {
+                publishInputState()
+                throw URLError(.cannotOpenFile)
+            }
+            selected = input
+        case .connected:
+            guard let input = inputs.first(where: { $0.portType != .builtInMic }) else {
+                publishInputState()
+                throw URLError(.cannotOpenFile)
+            }
+            selected = input
+        }
+        if audioSession.preferredInput?.uid != selected?.uid {
+            try audioSession.setPreferredInput(selected)
+        }
+        publishInputState()
+    }
+
+    private func publishInputState() {
+        let audioSession = AVAudioSession.sharedInstance()
+        let inputs = audioSession.availableInputs ?? []
+        inputStateHandler(ShannonVoiceInputState(
+            preference: inputPreference,
+            activeInputName: audioSession.currentRoute.inputs.first?.portName,
+            isBuiltInAvailable: inputs.contains(where: { $0.portType == .builtInMic }),
+            isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic })
+        ))
     }
 
     private func startAudioEngine() throws {
@@ -363,57 +438,5 @@ final class ShannonGeminiLiveTransport {
         if !playerNode.isPlaying { playerNode.play() }
     }
 
-}
-
-private final class ShannonGeminiLiveOutputRenderProbe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var didRecordStart = false
-
-    func markStarted() {
-        lock.lock()
-        let shouldRecord = !didRecordStart
-        didRecordStart = true
-        lock.unlock()
-        guard shouldRecord else { return }
-        Task.detached(priority: .utility) {
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.output.render.started")
-        }
-    }
-}
-
-private final class ShannonGeminiLiveVADState: @unchecked Sendable {
-    struct Transition: Sendable {
-        var speechStarted = false
-        var speechEnded = false
-    }
-
-    private let lock = NSLock()
-    private var consecutiveVoiceFrames = 0
-    private var speaking = false
-    private var lastVoiceAt: TimeInterval = 0
-    private var endedForCurrentSpeech = false
-
-    func consume(rms: Float, now: TimeInterval) -> Transition {
-        lock.lock()
-        defer { lock.unlock() }
-        var transition = Transition()
-        if rms >= 0.018 {
-            consecutiveVoiceFrames += 1
-            lastVoiceAt = now
-            if !speaking, consecutiveVoiceFrames >= 3 {
-                speaking = true
-                endedForCurrentSpeech = false
-                transition.speechStarted = true
-            }
-        } else {
-            consecutiveVoiceFrames = 0
-            if speaking, !endedForCurrentSpeech, now - lastVoiceAt >= 0.60 {
-                endedForCurrentSpeech = true
-                speaking = false
-                transition.speechEnded = true
-            }
-        }
-        return transition
-    }
 }
 #endif

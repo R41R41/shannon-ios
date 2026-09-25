@@ -1,9 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
-import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, scalarHeader, sendJson } from './serverHttp.js';
+import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
-import { handleRealtimeVoiceAllowance } from './serverRealtimeVoiceAllowanceRoute.js';
 import { createPairingRoute } from './serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
@@ -35,19 +34,6 @@ import {
   SHANNON_VOICE_MAXIMUM_BYTES,
   VoiceTranscriptionError,
 } from './voiceTranscription.js';
-import {
-  configuredRealtimeDailyAllowanceSeconds,
-  createConfiguredRealtimeVoiceGateway,
-  realtimeVoiceJapanDayKey,
-  RealtimeVoiceError,
-  SHANNON_REALTIME_SESSION_RESERVATION_SECONDS,
-} from './realtimeVoice.js';
-import {
-  createConfiguredVoicePreviewGateway,
-  isShannonRealtimeVoiceId,
-  SQLiteVoiceIdentityStore,
-  VoicePreviewError,
-} from './voiceIdentity.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
@@ -62,16 +48,8 @@ const dailyMindStore = new SQLiteDailyMindStore(configuredDatabasePath(), now);
 const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
-const realtimeVoiceGateway = createConfiguredRealtimeVoiceGateway(process.env);
-const realtimeVoiceDailyAllowanceSeconds = configuredRealtimeDailyAllowanceSeconds(process.env);
-const configuredRealtimeVoice = realtimeVoiceGateway?.defaultVoice;
-const automaticRealtimeVoice = isShannonRealtimeVoiceId(configuredRealtimeVoice)
-  ? configuredRealtimeVoice
-  : 'marin';
-const voiceIdentityStore = new SQLiteVoiceIdentityStore(configuredDatabasePath(), automaticRealtimeVoice);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
-const voicePreviewGateway = createConfiguredVoicePreviewGateway(process.env);
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
@@ -98,7 +76,6 @@ const kernel = createLocalApiKernel(now, {
   organizeExtractor: createConfiguredOrganizeExtractor(process.env),
   voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
-  voiceIdentity: voiceIdentityStore,
   personIdentities: personIdentityStore,
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
@@ -165,6 +142,17 @@ const server = createServer(async (request, response) => {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
       return;
     }
+    if (
+      url.pathname.startsWith('/v1/voice/realtime/')
+      || url.pathname.startsWith('/v1/voice/identity')
+      || url.pathname.startsWith('/v1/voice/live/')
+    ) {
+      sendJson(response, 410, {
+        error: 'VOICE_PROVIDER_RETIRED',
+        message: 'この音声方式は廃止されました。Gemini音声会話をご利用ください。',
+      });
+      return;
+    }
     if (url.pathname === '/v1/voice/transcriptions') {
       await handleVoiceTranscription(request, response, principal);
       return;
@@ -173,24 +161,12 @@ const server = createServer(async (request, response) => {
       await geminiSpeechRoute(request, response, principal);
       return;
     }
-    if (url.pathname === '/v1/voice/gemini/live/sessions') {
+    if (url.pathname === '/v1/voice/gemini/cascade/sessions') {
       await geminiLiveRoute(request, response, principal);
-      return;
-    }
-    if (url.pathname === '/v1/voice/realtime/calls') {
-      await handleRealtimeVoiceCall(request, response, principal);
-      return;
-    }
-    if (url.pathname === '/v1/voice/realtime/allowance') {
-      handleRealtimeVoiceAllowance(request, response, principal, { store: persistentStore, baseAllowanceSeconds: realtimeVoiceDailyAllowanceSeconds, now });
       return;
     }
     if (url.pathname === '/v1/voice/vision/snapshots') {
       await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
-      return;
-    }
-    if (url.pathname === '/v1/voice/identity/preview') {
-      await handleVoiceIdentityPreview(request, response, principal);
       return;
     }
     const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
@@ -265,7 +241,6 @@ function shutdown(): void {
     testFlightDeliveryStore.close();
     dailyMindStore.close();
     organizeStore.close();
-    voiceIdentityStore.close();
     cognitiveIntentStore.close();
     persistentStore.close();
     process.exitCode = 0;
@@ -329,155 +304,6 @@ async function handleVoiceTranscription(
     throw error;
   } finally {
     activeVoiceScopes.delete(principal.scopeKey);
-  }
-}
-
-async function handleRealtimeVoiceCall(
-  request: IncomingMessage,
-  response: ServerResponse,
-  principal: ShannonDevicePrincipal | null,
-): Promise<void> {
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  if (!principal) {
-    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
-    return;
-  }
-  if (!realtimeVoiceGateway) {
-    sendJson(response, 503, { error: 'VOICE_REALTIME_NOT_CONFIGURED', message: 'ライブ音声は現在利用できません。' });
-    return;
-  }
-  if (!consumeDeviceAllowance(deviceVoiceUsage, principal.deviceId, 10)) {
-    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-    return;
-  }
-  let reservationId: string | undefined;
-  let upstreamCallCreated = false;
-  try {
-    const contentType = request.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
-    if (contentType !== 'application/sdp') {
-      sendJson(response, 415, { error: 'VOICE_REALTIME_INVALID_SDP', message: '音声接続の形式が正しくありません。' });
-      return;
-    }
-    const offer = Buffer.from(await readBytes(request, 128 * 1024)).toString('utf8');
-    const requestedThreadId = scalarHeader(request.headers['x-shannon-thread-id']);
-    const participantMode = scalarHeader(request.headers['x-shannon-voice-participant-mode']) ?? 'owner';
-    if (participantMode !== 'owner' && participantMode !== 'guest') {
-      sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'participant mode is invalid' });
-      return;
-    }
-    const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
-      clientDelegation: true, participantMode,
-      brightVoice: scalarHeader(request.headers['x-shannon-voice-brightness']) === 'enabled',
-    });
-    const createdAt = now();
-    const dayKey = realtimeVoiceJapanDayKey(new Date(createdAt));
-    const allowance = persistentStore.realtimeVoiceAllowanceStatus(principal.scopeKey, dayKey, realtimeVoiceDailyAllowanceSeconds);
-    const reservation = persistentStore.reserveRealtimeVoiceSession({
-      scopeKey: principal.scopeKey,
-      dayKey,
-      reservedSeconds: SHANNON_REALTIME_SESSION_RESERVATION_SECONDS,
-      dailyLimitSeconds: allowance.totalAllowanceSeconds,
-      createdAt,
-    });
-    if (!reservation) {
-      sendJson(response, 429, {
-        error: 'VOICE_REALTIME_DAILY_ALLOWANCE_EXHAUSTED',
-        message: '今日はライブ音声を十分使いました。テキスト会話は引き続き使えます。',
-      });
-      return;
-    }
-    reservationId = reservation.reservationId;
-    const result = await realtimeVoiceGateway.createCall({
-      sdp: offer,
-      instructions: session.instructions,
-      voice: session.voice,
-      enableClientTools: realtimeVoiceGateway.engine === 'realtime',
-    });
-    upstreamCallCreated = true;
-    response.writeHead(200, {
-      'content-type': 'application/sdp; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff',
-      'x-shannon-thread-id': session.threadId,
-      'x-shannon-voice-engine': result.engine,
-      'x-shannon-realtime-model': result.model,
-      'x-shannon-realtime-daily-remaining-seconds': String(reservation.remainingSeconds),
-      ...(result.callId ? { 'x-shannon-realtime-call-id': result.callId } : {}),
-    });
-    response.end(result.answerSdp);
-  } catch (error) {
-    if (reservationId && !upstreamCallCreated) {
-      persistentStore.releaseRealtimeVoiceSessionReservation(reservationId);
-    }
-    if (error instanceof RealtimeVoiceError) {
-      console.warn('Shannon realtime voice call failed', {
-        code: error.code,
-        upstreamStatus: error.upstreamStatus,
-        upstreamCode: error.upstreamCode,
-        upstreamRequestId: error.upstreamRequestId,
-        upstreamDetail: error.upstreamDetail,
-      });
-      const status = error.code === 'VOICE_REALTIME_INVALID_SDP' ? 400 : 502;
-      sendJson(response, status, {
-        error: error.code,
-        message: 'ライブ音声に接続できませんでした。少し待ってもう一度お試しください。',
-      });
-      return;
-    }
-    throw error;
-  }
-}
-async function handleVoiceIdentityPreview(
-  request: IncomingMessage,
-  response: ServerResponse,
-  principal: ShannonDevicePrincipal | null,
-): Promise<void> {
-  if (request.method !== 'POST') {
-    sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-  if (!principal) {
-    sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
-    return;
-  }
-  if (!voicePreviewGateway) {
-    sendJson(response, 503, { error: 'VOICE_PREVIEW_NOT_CONFIGURED', message: '声の試聴は現在利用できません。' });
-    return;
-  }
-  const body = await readJson(request, 1_024);
-  const voice = body && typeof body === 'object' && !Array.isArray(body)
-    ? (body as Record<string, unknown>).voice
-    : undefined;
-  if (!isShannonRealtimeVoiceId(voice)) {
-    sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'voice is invalid' });
-    return;
-  }
-  if (!consumeDeviceAllowance(deviceVoiceUsage, principal.deviceId, 10)) {
-    sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-    return;
-  }
-  if (!voiceIdentityStore.consumePreviewAllowance(principal.scopeKey)) {
-    sendJson(response, 429, { error: 'VOICE_PREVIEW_DAILY_LIMIT', message: '今日の声の試聴回数に達しました。' });
-    return;
-  }
-  try {
-    const preview = await voicePreviewGateway.preview(voice);
-    response.writeHead(200, {
-      'content-type': preview.contentType,
-      'content-length': preview.audio.byteLength,
-      'cache-control': 'private, max-age=3600',
-      'x-content-type-options': 'nosniff',
-    });
-    response.end(preview.audio);
-  } catch (error) {
-    if (error instanceof VoicePreviewError) {
-      sendJson(response, 502, { error: error.code, message: '声を試聴できませんでした。' });
-      return;
-    }
-    throw error;
   }
 }
 

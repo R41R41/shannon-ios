@@ -451,7 +451,7 @@ final class ShannonConnectionTests: XCTestCase {
                 ))
                 return (response, Data("v=0\r\ns=answer\r\n".utf8))
             }
-            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/realtime/turns") == true)
+            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/gemini/cascade/turns") == true)
             let body = try XCTUnwrap(requestBody(request))
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["scopeKey"] as? String, "owner-from-server")
@@ -492,7 +492,7 @@ final class ShannonConnectionTests: XCTestCase {
             expiresAt: Date(timeIntervalSinceNow: 3_600)
         ))
         let session = stubSession { request in
-            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/live/delegations") == true)
+            XCTAssertTrue(request.url?.path.hasSuffix("/v1/voice/gemini/cascade/delegations") == true)
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
             let body = try XCTUnwrap(requestBody(request))

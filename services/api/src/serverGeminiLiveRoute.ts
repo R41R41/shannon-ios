@@ -26,7 +26,7 @@ export function createGeminiLiveRoute(
     if (!gateway) {
       return sendJson(response, 503, {
         error: 'GEMINI_LIVE_NOT_CONFIGURED',
-        message: 'Geminiライブ音声は現在利用できません。',
+        message: 'Gemini音声会話は現在利用できません。',
       });
     }
     if (!consumeAllowance(principal.deviceId)) {
@@ -40,9 +40,13 @@ export function createGeminiLiveRoute(
     const requestedThreadId = typeof requestBody.threadId === 'string' && requestBody.threadId.length <= 200
       ? requestBody.threadId
       : undefined;
+    const participantMode = requestBody.participantMode ?? 'owner';
+    if (participantMode !== 'owner' && participantMode !== 'guest') {
+      return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'participant mode is invalid' });
+    }
     const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
       clientDelegation: true,
-      participantMode: 'owner',
+      participantMode,
     });
 
     try {
@@ -56,14 +60,14 @@ export function createGeminiLiveRoute(
       sendJson(response, 200, result);
     } catch (error) {
       if (!(error instanceof GeminiLiveError)) throw error;
-      console.warn('Shannon Gemini Live token failed', {
+      console.warn('Shannon Gemini transcription token failed', {
         code: error.code,
         upstreamStatus: error.upstreamStatus,
         upstreamCode: error.upstreamCode,
       });
       sendJson(response, 502, {
         error: error.code,
-        message: 'Geminiライブ音声へ接続できませんでした。少し待ってもう一度お試しください。',
+        message: 'Gemini音声認識へ接続できませんでした。少し待ってもう一度お試しください。',
       });
     }
   };

@@ -817,7 +817,7 @@ describe('Shannon local API kernel', () => {
     const brightSession = api.realtimeVoiceSession('owner-a', threadId, { brightVoice: true });
     expect(brightSession.voice).toBe(session.voice);
 
-    const committed = await api.dispatch({ method: 'POST', path: '/v1/voice/realtime/turns', body: {
+    const committed = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
       scopeKey: 'owner-a', threadId,
       userTranscript: '明日は散歩に行きたい',
       shannonTranscript: '朝の涼しい時間に行くの、よさそう。',

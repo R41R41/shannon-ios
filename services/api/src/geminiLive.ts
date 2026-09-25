@@ -1,4 +1,4 @@
-export const SHANNON_GEMINI_LIVE_MODEL = 'gemini-3.8-live';
+export const SHANNON_GEMINI_TRANSCRIBE_MODEL = 'gemini-3.5-transcribe-live';
 
 export interface GeminiLiveSessionRequest {
   scopeKey: string;
@@ -55,7 +55,7 @@ export class GoogleGeminiLiveGateway {
 
   constructor(private readonly options: GeminiLiveGatewayOptions) {
     if (!options.apiKey.trim()) throw new GeminiLiveError('GEMINI_LIVE_NOT_CONFIGURED');
-    this.model = validModel(options.model ?? SHANNON_GEMINI_LIVE_MODEL);
+    this.model = validModel(options.model ?? SHANNON_GEMINI_TRANSCRIBE_MODEL);
     this.voice = validIdentifier(options.voice ?? 'Aoede', 'SHANNON_GEMINI_LIVE_VOICE');
     this.endpoint = options.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta/auth_tokens';
     this.fetcher = options.fetcher ?? fetch;
@@ -85,7 +85,7 @@ export class GoogleGeminiLiveGateway {
           bidiGenerateContentSetup: {
             model: `models/${this.model}`,
             generationConfig: {
-              responseModalities: ['AUDIO'],
+              responseModalities: ['TEXT'],
             },
           },
         }),
@@ -122,8 +122,8 @@ export function createConfiguredGeminiLiveGateway(
   if (!apiKey) return null;
   return new GoogleGeminiLiveGateway({
     apiKey,
-    model: environment.SHANNON_GEMINI_LIVE_MODEL,
-    voice: environment.SHANNON_GEMINI_LIVE_VOICE,
+    model: environment.SHANNON_GEMINI_TRANSCRIBE_MODEL,
+    voice: environment.SHANNON_GEMINI_TTS_VOICE,
     endpoint: environment.SHANNON_GEMINI_LIVE_TOKEN_ENDPOINT,
     sessionLifetimeMinutes: optionalNumber(environment.SHANNON_GEMINI_LIVE_SESSION_MINUTES),
     inputUsdPerMinute: optionalNumber(environment.SHANNON_GEMINI_LIVE_INPUT_USD_PER_MINUTE),
@@ -133,7 +133,9 @@ export function createConfiguredGeminiLiveGateway(
 
 function validModel(value: string): string {
   const model = value.trim();
-  if (model !== SHANNON_GEMINI_LIVE_MODEL) throw new Error('SHANNON_GEMINI_LIVE_MODEL is invalid');
+  if (model !== SHANNON_GEMINI_TRANSCRIBE_MODEL) {
+    throw new Error('SHANNON_GEMINI_TRANSCRIBE_MODEL is invalid');
+  }
   return model;
 }
 

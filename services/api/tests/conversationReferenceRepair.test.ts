@@ -199,7 +199,7 @@ describe('source-bound conversation references', () => {
       userUtterance: { id: 'voice-remember', text: 'これを覚えておいて' },
     } };
     expect(await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body })).toMatchObject({ status: 200, body: { receipt: { id: source.id } } });
-    await api.dispatch({ method: 'POST', path: '/v1/voice/realtime/turns', body: {
+    await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
       scopeKey: 'owner', threadId: 'thread', userTranscript: 'これを覚えておいて', shannonTranscript: '会話の記憶を固定したよ',
     } });
     await api.waitForBackground('owner');

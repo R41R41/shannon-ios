@@ -19,8 +19,13 @@ public protocol ShannonChatServing: Sendable {
 
 public protocol ShannonVoiceServing: Sendable {
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
-    func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech
+    func synthesizeGeminiSpeech(scopeKey: String, text: String, style: String?) async throws -> ShannonGeminiSpeech
     func createGeminiLiveSession(scopeKey: String, threadId: String?) async throws -> ShannonGeminiLiveSessionDTO
+    func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonGeminiLiveSessionDTO
     func createRealtimeVoiceCall(
         scopeKey: String,
         threadId: String?,
@@ -264,12 +269,23 @@ public extension ShannonAPIClientProtocol {
         throw ShannonAPIError.invalidResponse
     }
 
-    func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech {
+    func synthesizeGeminiSpeech(scopeKey: String, text: String, style: String? = nil) async throws -> ShannonGeminiSpeech {
         throw ShannonAPIError.invalidResponse
     }
 
-    func createGeminiLiveSession(scopeKey: String, threadId: String?) async throws -> ShannonGeminiLiveSessionDTO {
+    func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?
+    ) async throws -> ShannonGeminiLiveSessionDTO {
         throw ShannonAPIError.invalidResponse
+    }
+
+    func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        try await createGeminiLiveSession(scopeKey: scopeKey, threadId: threadId)
     }
 
     func createRealtimeVoiceCall(

@@ -41,12 +41,15 @@ export function createGeminiSpeechRoute(
     activeScopes.add(principal.scopeKey);
     try {
       const body = await readJson(request, 32 * 1024);
-      const text = normalizedSpeechText(
-        body && typeof body === 'object' && !Array.isArray(body)
-          ? (body as Record<string, unknown>).text
-          : undefined,
-      );
-      const result = await gateway.synthesize({ scopeKey: principal.scopeKey, text });
+      const values = body && typeof body === 'object' && !Array.isArray(body)
+        ? body as Record<string, unknown>
+        : {};
+      const text = normalizedSpeechText(values.text);
+      const style = typeof values.style === 'string' ? values.style : undefined;
+      if (style !== undefined && style.length > 500) {
+        return sendJson(response, 400, { error: 'GEMINI_SPEECH_INVALID_STYLE' });
+      }
+      const result = await gateway.synthesize({ scopeKey: principal.scopeKey, text, style });
       response.writeHead(200, {
         'content-type': result.contentType,
         'content-length': String(result.audio.byteLength),

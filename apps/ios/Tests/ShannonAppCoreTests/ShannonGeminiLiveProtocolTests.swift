@@ -2,11 +2,11 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonGeminiLiveProtocolTests: XCTestCase {
-    func testSetupUsesEphemeralSessionVoiceTranscriptionsCompressionAndTool() throws {
+    func testSetupUsesJapaneseTranscriptionOnlySession() throws {
         let session = ShannonGeminiLiveSessionDTO(
             token: "auth_tokens/temporary",
-            model: "gemini-3.8-live",
-            voice: "Aoede",
+            model: "gemini-3.5-transcribe-live",
+            voice: "voice_shannon",
             threadId: "thread-a",
             instructions: "あなたはシャノン。",
             expiresAt: "2026-09-25T03:20:00.000Z",
@@ -16,61 +16,43 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         let data = try ShannonGeminiLiveProtocol.setupMessage(session: session)
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let setup = try XCTUnwrap(root["setup"] as? [String: Any])
-        XCTAssertEqual(setup["model"] as? String, "models/gemini-3.8-live")
+        XCTAssertEqual(setup["model"] as? String, "models/gemini-3.5-transcribe-live")
         let generation = try XCTUnwrap(setup["generationConfig"] as? [String: Any])
-        XCTAssertEqual(generation["responseModalities"] as? [String], ["AUDIO"])
-        let speech = try XCTUnwrap(generation["speechConfig"] as? [String: Any])
-        let voice = try XCTUnwrap(speech["voiceConfig"] as? [String: Any])
-        let prebuilt = try XCTUnwrap(voice["prebuiltVoiceConfig"] as? [String: String])
-        XCTAssertEqual(prebuilt["voiceName"], "Aoede")
-        XCTAssertNotNil(setup["inputAudioTranscription"])
-        XCTAssertNotNil(setup["outputAudioTranscription"])
+        XCTAssertEqual(generation["responseModalities"] as? [String], ["TEXT"])
+        let transcription = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
+        XCTAssertEqual(transcription["languageCodes"] as? [String], ["ja-JP"])
         let realtime = try XCTUnwrap(setup["realtimeInputConfig"] as? [String: Any])
         let detection = try XCTUnwrap(realtime["automaticActivityDetection"] as? [String: Any])
-        XCTAssertEqual(detection["silenceDurationMs"] as? Int, 600)
-        XCTAssertEqual(realtime["activityHandling"] as? String, "START_OF_ACTIVITY_INTERRUPTS")
-        XCTAssertNotNil(setup["contextWindowCompression"])
+        XCTAssertEqual(detection["silenceDurationMs"] as? Int, 360)
         XCTAssertNotNil(setup["sessionResumption"])
-        let tools = try XCTUnwrap(setup["tools"] as? [[String: Any]])
-        let functions = try XCTUnwrap(tools.first?["functionDeclarations"] as? [[String: Any]])
-        XCTAssertEqual(functions.first?["name"] as? String, "consult_shannon_backend")
-        XCTAssertEqual(functions.first?["behavior"] as? String, "NON_BLOCKING")
+        XCTAssertNil(setup["speechConfig"])
+        XCTAssertNil(setup["tools"])
     }
 
-    func testServerEventsDecodeAudioTranscriptsInterruptionToolAndTurn() throws {
-        let audio = Data([0, 1, 2, 3])
+    func testServerEventsDecodeInterimFinalTranscriptAndTurn() throws {
         let message: [String: Any] = [
-            "toolCall": [
-                "functionCalls": [[
-                    "id": "call-1",
-                    "name": "consult_shannon_backend",
-                    "args": ["request": "明日の天気を調べて"],
-                ]],
-            ],
             "serverContent": [
-                "interrupted": true,
+                "interimInputTranscription": ["text": "明日"],
                 "inputTranscription": ["text": "明日は"],
-                "outputTranscription": ["text": "調べるね"],
-                "modelTurn": [
-                    "parts": [[
-                        "inlineData": [
-                            "mimeType": "audio/pcm;rate=24000",
-                            "data": audio.base64EncodedString(),
-                        ],
-                    ]],
-                ],
                 "turnComplete": true,
             ],
         ]
         let data = try JSONSerialization.data(withJSONObject: message)
         XCTAssertEqual(try ShannonGeminiLiveProtocol.events(from: data), [
-            .toolCall(id: "call-1", request: "明日の天気を調べて"),
-            .interrupted,
+            .interimInputTranscript("明日"),
             .inputTranscript("明日は"),
-            .outputTranscript("調べるね"),
-            .audio(audio),
             .turnComplete,
         ])
+    }
+
+    func testCascadeSpeechSegmentsAndAdaptsStyle() {
+        XCTAssertEqual(
+            ShannonGeminiCascadeSpeech.segments("よし！ 任せてください。大丈夫？"),
+            ["よし！", "任せてください。", "大丈夫？"]
+        )
+        XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "やった！").contains("明るく弾む"))
+        XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "そうだけど", turnComplete: false), 420)
+        XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "はい。", turnComplete: false), 80)
     }
 
     func testPCMResamplesToSixteenKilohertzAndClamps() {

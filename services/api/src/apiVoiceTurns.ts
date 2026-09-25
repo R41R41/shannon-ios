@@ -8,7 +8,10 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   background: TurnBackgroundService; now: () => string;
 }): ApiResponse | null {
-  if (request.method !== 'POST' || request.path !== '/v1/voice/realtime/turns') return null;
+  if (request.method !== 'POST' || ![
+    '/v1/voice/gemini/cascade/turns',
+    '/v1/voice/realtime/turns',
+  ].includes(request.path)) return null;
   if (!objectBody(request.body)) return badRequest('JSON object body is required');
   const { scopeKey, userTranscript, shannonTranscript } = request.body;
   if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');

@@ -21,6 +21,9 @@ describe('Gemini speech gateway', () => {
         expect(body.model).toBe('gemini-3.8-flash-lite-tts');
         expect(body.input[0].content[0].text).toBe('おかえりなさい。');
         expect(body.generation_config.speech_config).toEqual([{ voice: 'Leda' }]);
+        expect(body.input[0].content[0].annotations).toEqual([
+          { type: 'speech_metadata', style: '明るく弾む' },
+        ]);
         expect(body.response_format).toMatchObject({ mime_type: 'audio/wav', sample_rate: 24_000 });
         return new Response(JSON.stringify({
           status: 'completed',
@@ -32,7 +35,9 @@ describe('Gemini speech gateway', () => {
       },
     });
 
-    const result = await gateway.synthesize({ scopeKey: 'owner-a', text: ' おかえりなさい。 ' });
+    const result = await gateway.synthesize({
+      scopeKey: 'owner-a', text: ' おかえりなさい。 ', style: '明るく弾む',
+    });
 
     expect(result).toMatchObject({
       contentType: 'audio/wav',
