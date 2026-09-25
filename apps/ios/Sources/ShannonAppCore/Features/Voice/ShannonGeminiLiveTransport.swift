@@ -2,6 +2,17 @@
 import Foundation
 @preconcurrency import AVFoundation
 
+private struct ShannonGeminiLiveOutgoingPayload: Sendable {
+    enum Kind: Sendable, Equatable {
+        case control
+        case audio
+    }
+
+    let data: Data
+    let kind: Kind
+    let audioByteCount: Int
+}
+
 @MainActor
 final class ShannonGeminiLiveTransport {
     typealias EventHandler = @MainActor @Sendable (ShannonGeminiLiveServerEvent) -> Void
@@ -9,7 +20,8 @@ final class ShannonGeminiLiveTransport {
         _ rms: Float,
         _ capturedSeconds: Double,
         _ speechStarted: Bool,
-        _ speechEnded: Bool
+        _ speechEnded: Bool,
+        _ emittedAudioChunks: Int
     ) -> Void
 
     private let session: ShannonGeminiLiveSessionDTO
@@ -21,13 +33,14 @@ final class ShannonGeminiLiveTransport {
     private let captureChunker = ShannonGeminiLiveAudioChunker()
     private var urlSession: URLSession?
     private var socket: URLSessionWebSocketTask?
-    private var outgoing: AsyncStream<Data>.Continuation?
+    private var outgoing: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
     private var recordingMixerNode: AVAudioMixerNode?
     private var sinkNode: AVAudioSinkNode?
     private var audioStarted = false
     private var stopped = false
+    private var didRecordFirstAudioSend = false
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
 
@@ -43,6 +56,8 @@ final class ShannonGeminiLiveTransport {
 
     func start(resumptionHandle: String? = nil) async throws {
         stopped = false
+        sentAudioSeconds = 0
+        didRecordFirstAudioSend = false
         try configureAudioSession()
 
         let url = try ShannonGeminiLiveProtocol.webSocketURL(token: session.token)
@@ -53,8 +68,8 @@ final class ShannonGeminiLiveTransport {
         urlSession = nextURLSession
         socket = nextSocket
 
-        var streamContinuation: AsyncStream<Data>.Continuation?
-        let stream = AsyncStream<Data> { streamContinuation = $0 }
+        var streamContinuation: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?
+        let stream = AsyncStream<ShannonGeminiLiveOutgoingPayload> { streamContinuation = $0 }
         guard let streamContinuation else { throw URLError(.cannotCreateFile) }
         outgoing = streamContinuation
         nextSocket.resume()
@@ -64,7 +79,17 @@ final class ShannonGeminiLiveTransport {
             do {
                 for await payload in stream {
                     try Task.checkCancellation()
-                    try await nextSocket.send(.data(payload))
+                    try await nextSocket.send(.data(payload.data))
+                    if payload.kind == .audio {
+                        self?.sentAudioSeconds += Double(payload.audioByteCount) / 32_000
+                        if self?.didRecordFirstAudioSend == false {
+                            self?.didRecordFirstAudioSend = true
+                            ShannonVoiceDiagnostics.shared.record(
+                                "gemini.audio.chunk.sent",
+                                metadata: ["pcm_bytes": String(payload.audioByteCount)]
+                            )
+                        }
+                    }
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -175,13 +200,9 @@ final class ShannonGeminiLiveTransport {
         // even though the input node must be connected from its sole graph output.
         // Reading bus 0 here can produce an active engine with silent capture on iPhone.
         let inputFormat = input.outputFormat(forBus: 1)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0,
-              let captureFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: 16_000,
-                channels: 1,
-                interleaved: false
-              ) else {
+        guard inputFormat.sampleRate > 0,
+              inputFormat.channelCount > 0,
+              inputFormat.commonFormat == .pcmFormatFloat32 else {
             throw URLError(.cannotDecodeRawData)
         }
 
@@ -200,7 +221,8 @@ final class ShannonGeminiLiveTransport {
             vad: vad,
             captureChunker: captureChunker,
             captureHandler: captureHandler,
-            sampleRate: captureFormat.sampleRate
+            sampleRate: inputFormat.sampleRate,
+            channelStride: inputFormat.isInterleaved ? Int(inputFormat.channelCount) : 1
         )
         let recordingMixer = AVAudioMixerNode()
 
@@ -209,10 +231,20 @@ final class ShannonGeminiLiveTransport {
         audioEngine.attach(sink)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
         audioEngine.connect(input, to: recordingMixer, format: inputFormat)
-        audioEngine.connect(recordingMixer, to: sink, format: captureFormat)
+        // AVAudioSinkNode does not perform sample-rate conversion. Keep the
+        // proven Voice Processing I/O graph at the native microphone format,
+        // then resample the captured Float32 frames to Gemini's 16 kHz PCM.
+        audioEngine.connect(recordingMixer, to: sink, format: inputFormat)
         recordingMixerNode = recordingMixer
         sinkNode = sink
-        ShannonVoiceDiagnostics.shared.record("gemini.audio.graph.connected")
+        ShannonVoiceDiagnostics.shared.record(
+            "gemini.audio.graph.connected",
+            metadata: [
+                "sample_rate": String(Int(inputFormat.sampleRate)),
+                "channels": String(inputFormat.channelCount),
+                "interleaved": String(inputFormat.isInterleaved),
+            ]
+        )
         audioEngine.prepare()
         try audioEngine.start()
         ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.started")
@@ -225,38 +257,56 @@ final class ShannonGeminiLiveTransport {
     /// inherit MainActor isolation and traps at runtime before the first PCM frame.
     /// Keep the callback factory explicitly nonisolated and hop only the UI update.
     nonisolated private static func makeCaptureSink(
-        outgoing: AsyncStream<Data>.Continuation?,
+        outgoing: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?,
         vad: ShannonGeminiLiveVADState,
         captureChunker: ShannonGeminiLiveAudioChunker,
         captureHandler: @escaping CaptureHandler,
-        sampleRate: Double
+        sampleRate: Double,
+        channelStride: Int
     ) -> AVAudioSinkNode {
         AVAudioSinkNode { _, frameCount, inputData in
             let mutableInputData = UnsafeMutablePointer(mutating: inputData)
             let buffers = UnsafeMutableAudioBufferListPointer(mutableInputData)
-            guard let data = buffers.first?.mData else { return noErr }
+            guard let firstBuffer = buffers.first,
+                  let data = firstBuffer.mData else { return noErr }
+            let sampleCount = Int(frameCount) * channelStride
+            guard Int(firstBuffer.mDataByteSize) >= sampleCount * MemoryLayout<Float>.size else {
+                return noErr
+            }
             let samples = UnsafeBufferPointer(
                 start: data.assumingMemoryBound(to: Float.self),
-                count: Int(frameCount)
+                count: sampleCount
             )
-            let pcm = ShannonGeminiLivePCM.pcm16Mono16k(samples: samples, sampleRate: 16_000)
-            for chunk in captureChunker.append(pcm) {
+            let pcm = ShannonGeminiLivePCM.pcm16Mono16k(
+                samples: samples,
+                sampleRate: sampleRate,
+                stride: channelStride
+            )
+            let chunks = captureChunker.append(pcm)
+            for chunk in chunks {
                 if let payload = try? ShannonGeminiLiveProtocol.audioMessage(chunk) {
-                    outgoing?.yield(payload)
+                    outgoing?.yield(.init(data: payload, kind: .audio, audioByteCount: chunk.count))
                 }
             }
-            let rms = ShannonGeminiLivePCM.rootMeanSquare(samples: samples)
+            let emittedAudioChunks = chunks.count
+            let rms = ShannonGeminiLivePCM.rootMeanSquare(samples: samples, stride: channelStride)
             let transition = vad.consume(rms: rms, now: ProcessInfo.processInfo.systemUptime)
             let capturedSeconds = Double(frameCount) / sampleRate
             Task { @MainActor in
-                captureHandler(rms, capturedSeconds, transition.speechStarted, transition.speechEnded)
+                captureHandler(
+                    rms,
+                    capturedSeconds,
+                    transition.speechStarted,
+                    transition.speechEnded,
+                    emittedAudioChunks
+                )
             }
             return noErr
         }
     }
 
     private func send(_ data: Data) {
-        outgoing?.yield(data)
+        outgoing?.yield(.init(data: data, kind: .control, audioByteCount: 0))
     }
 
     private func play(_ pcm: Data) {

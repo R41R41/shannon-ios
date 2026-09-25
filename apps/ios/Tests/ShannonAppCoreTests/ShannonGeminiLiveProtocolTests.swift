@@ -95,6 +95,19 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
     }
 
+    func testPCMUsesFirstChannelFromInterleavedMicrophoneFrames() {
+        let stereoSamples: [Float] = [-1, 0.75, 0, 0.75, 1, 0.75]
+        let data = stereoSamples.withUnsafeBufferPointer {
+            ShannonGeminiLivePCM.pcm16Mono16k(samples: $0, sampleRate: 48_000, stride: 2)
+        }
+        let values = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
+        XCTAssertEqual(values, [Int16.min + 1])
+        let rms = stereoSamples.withUnsafeBufferPointer {
+            ShannonGeminiLivePCM.rootMeanSquare(samples: $0, stride: 2)
+        }
+        XCTAssertEqual(rms, Float((2.0 / 3.0).squareRoot()), accuracy: 0.0001)
+    }
+
     func testAudioChunkerEmitsHundredMillisecondChunks() {
         let chunker = ShannonGeminiLiveAudioChunker()
         XCTAssertTrue(chunker.append(Data(repeating: 1, count: 1_200)).isEmpty)

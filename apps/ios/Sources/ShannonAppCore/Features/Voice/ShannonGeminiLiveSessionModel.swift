@@ -57,6 +57,8 @@ public final class ShannonGeminiLiveSessionModel {
     private var turnFinalizationTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var didAttemptResume = false
+    private var didRecordCaptureStart = false
+    private var didRecordFirstQueuedChunk = false
     private var createSession: (@MainActor () async throws -> ShannonGeminiLiveSessionDTO)?
     private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?) async throws -> String)?
     private var commitTurn: (@MainActor (String, String) async throws -> Void)?
@@ -132,8 +134,14 @@ public final class ShannonGeminiLiveSessionModel {
         let next = ShannonGeminiLiveTransport(
             session: session,
             eventHandler: { [weak self] event in self?.handle(event) },
-            captureHandler: { [weak self] rms, seconds, started, ended in
-                self?.handleCapture(rms: rms, seconds: seconds, speechStarted: started, speechEnded: ended)
+            captureHandler: { [weak self] rms, seconds, started, ended, emittedChunks in
+                self?.handleCapture(
+                    rms: rms,
+                    seconds: seconds,
+                    speechStarted: started,
+                    speechEnded: ended,
+                    emittedAudioChunks: emittedChunks
+                )
             }
         )
         transport = next
@@ -197,8 +205,20 @@ public final class ShannonGeminiLiveSessionModel {
         rms: Float,
         seconds: Double,
         speechStarted: Bool,
-        speechEnded: Bool
+        speechEnded: Bool,
+        emittedAudioChunks: Int
     ) {
+        if !didRecordCaptureStart {
+            didRecordCaptureStart = true
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.capture.started")
+        }
+        if emittedAudioChunks > 0, !didRecordFirstQueuedChunk {
+            didRecordFirstQueuedChunk = true
+            ShannonVoiceDiagnostics.shared.record(
+                "gemini.audio.chunk.queued",
+                metadata: ["pcm_bytes": String(ShannonGeminiLiveAudioChunker.chunkByteCount)]
+            )
+        }
         audioLevel = min(1, max(0, rms * 18))
         inputAudioSeconds += seconds
         updateCost()
@@ -340,6 +360,8 @@ public final class ShannonGeminiLiveSessionModel {
         playbackLevel = 0
         latestSessionHandle = nil
         didAttemptResume = false
+        didRecordCaptureStart = false
+        didRecordFirstQueuedChunk = false
     }
 
     private func fail(_ message: String) {

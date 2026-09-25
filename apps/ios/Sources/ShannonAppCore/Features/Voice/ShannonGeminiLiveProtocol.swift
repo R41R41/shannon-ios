@@ -155,19 +155,27 @@ public enum ShannonGeminiLiveProtocol {
 }
 
 public enum ShannonGeminiLivePCM {
-    public static func pcm16Mono16k(samples: UnsafeBufferPointer<Float>, sampleRate: Double) -> Data {
-        guard !samples.isEmpty, sampleRate.isFinite, sampleRate > 0 else { return Data() }
-        let outputCount = max(1, Int((Double(samples.count) * 16_000 / sampleRate).rounded(.down)))
+    public static func pcm16Mono16k(
+        samples: UnsafeBufferPointer<Float>,
+        sampleRate: Double,
+        stride: Int = 1
+    ) -> Data {
+        guard !samples.isEmpty, sampleRate.isFinite, sampleRate > 0, stride > 0 else { return Data() }
+        let inputFrameCount = samples.count / stride
+        guard inputFrameCount > 0 else { return Data() }
+        let outputCount = max(1, Int((Double(inputFrameCount) * 16_000 / sampleRate).rounded(.down)))
         var output = Data(count: outputCount * MemoryLayout<Int16>.size)
         output.withUnsafeMutableBytes { rawBuffer in
             guard let destination = rawBuffer.bindMemory(to: Int16.self).baseAddress else { return }
             let scale = sampleRate / 16_000
             for index in 0..<outputCount {
                 let sourcePosition = Double(index) * scale
-                let lower = min(samples.count - 1, Int(sourcePosition))
-                let upper = min(samples.count - 1, lower + 1)
+                let lower = min(inputFrameCount - 1, Int(sourcePosition))
+                let upper = min(inputFrameCount - 1, lower + 1)
                 let fraction = Float(sourcePosition - Double(lower))
-                let sample = samples[lower] + (samples[upper] - samples[lower]) * fraction
+                let lowerSample = samples[lower * stride]
+                let upperSample = samples[upper * stride]
+                let sample = lowerSample + (upperSample - lowerSample) * fraction
                 let clamped = max(-1, min(1, sample))
                 destination[index] = Int16((clamped * Float(Int16.max)).rounded())
             }
@@ -175,11 +183,19 @@ public enum ShannonGeminiLivePCM {
         return output
     }
 
-    public static func rootMeanSquare(samples: UnsafeBufferPointer<Float>) -> Float {
-        guard !samples.isEmpty else { return 0 }
+    public static func rootMeanSquare(
+        samples: UnsafeBufferPointer<Float>,
+        stride: Int = 1
+    ) -> Float {
+        guard !samples.isEmpty, stride > 0 else { return 0 }
+        let frameCount = samples.count / stride
+        guard frameCount > 0 else { return 0 }
         var sum: Float = 0
-        for sample in samples { sum += sample * sample }
-        return sqrt(sum / Float(samples.count))
+        for frame in 0..<frameCount {
+            let sample = samples[frame * stride]
+            sum += sample * sample
+        }
+        return sqrt(sum / Float(frameCount))
     }
 
     public static func rootMeanSquare(pcm16 data: Data) -> Float {
