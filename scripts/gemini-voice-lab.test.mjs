@@ -25,6 +25,7 @@ import {
   voiceDesignPrompt,
   voiceDesignPresetsVerifiedAt,
   voiceDesignVariantIsVerified,
+  voiceDesignVariantVerifiedAt,
 } from '../tools/gemini-voice-lab/voice-design-presets.js';
 import {
   auditionJobs,
@@ -32,6 +33,7 @@ import {
   auditionStyles,
 } from '../tools/gemini-voice-lab/voice-audition-presets.js';
 import {
+  liveConversationExamples,
   liveProfile,
   liveProfiles,
   liveSystemInstruction,
@@ -55,8 +57,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
     'voice-live-profiles.js',
     'text/javascript; charset=utf-8',
   ]);
-  assert.equal(voiceDesignPresets.length, 8);
+  assert.equal(voiceDesignPresets.length, 9);
   assert.equal(voiceDesignPresetsVerifiedAt, '2026-09-25');
+  assert.equal(voiceDesignVariantVerifiedAt(voiceDesignPresets.find(preset => preset.id === 'shannon-maid')), '2026-09-26');
+  assert.equal(voiceDesignVariantVerifiedAt(voiceDesignPresets.find(preset => preset.id === 'shannon-crystal')), '2026-09-25');
   assert.equal(new Set(voiceDesignPresets.map(preset => preset.id)).size, voiceDesignPresets.length);
   for (const preset of voiceDesignPresets) {
     assert.ok(preset.label.length > 0);
@@ -65,7 +69,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
       for (const detail of ['short', 'detailed']) {
         const prompt = voiceDesignPrompt(preset, language, detail);
         assert.ok(prompt.length > 70 && prompt.length <= 1000);
-        assert.equal(voiceDesignVariantIsVerified(preset, language, detail), true);
+        assert.equal(
+          voiceDesignVariantIsVerified(preset, language, detail),
+          preset.id === 'shannon-maid' ? language === 'ja' && detail === 'detailed' : true,
+        );
         assert.doesNotMatch(prompt, /\b(?:Haruhi|Hayami|Rem|Hatsune|Miku|Nakano|Violet|Evergarden)\b/i);
         assert.doesNotMatch(prompt, /\b(?:imitate|imitation|performer|existing character|established virtual singer)\b/i);
       }
@@ -74,7 +81,7 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
 });
 
 test('Live profiles preserve all voice concepts and provide distinct bounded instructions', () => {
-  assert.equal(liveProfiles.length, 9);
+  assert.equal(liveProfiles.length, 10);
   assert.equal(new Set(liveProfiles.map(item => item.id)).size, liveProfiles.length);
   for (const expected of voiceDesignPresets.map(item => item.id)) {
     assert.ok(liveProfiles.some(item => item.id === expected), `missing Live profile: ${expected}`);
@@ -89,6 +96,11 @@ test('Live profiles preserve all voice concepts and provide distinct bounded ins
   }
   assert.equal(liveProfile('unknown').id, 'neutral');
   assert.match(liveSystemInstruction('tsundere-leader'), /照れた時だけ/u);
+  assert.match(liveSystemInstruction('shannon-maid'), /話し相手はあなたを開発した「ライ」/u);
+  assert.match(liveSystemInstruction('shannon-maid'), /例文はそのまま反復せず/u);
+  assert.match(liveTTSStyle('shannon-maid'), /声に笑顔/u);
+  assert.deepEqual(liveConversationExamples('shannon-maid').map(turn => turn.role), ['user', 'model', 'user', 'model']);
+  assert.equal(liveConversationExamples('neutral').length, 0);
 });
 
 test('cascade transcription is locked to Japanese streaming text', () => {
@@ -117,10 +129,24 @@ test('cascade response keeps a short history and uses the selected profile', () 
   assert.equal(request.contents.length, 3);
   assert.deepEqual(request.contents.at(-1), { role: 'user', parts: [{ text: '今日はどうだった？' }] });
   assert.match(request.systemInstruction.parts[0].text, /鋭い語尾/u);
+  assert.doesNotMatch(request.systemInstruction.parts[0].text, /親しみやすい相棒/u);
   assert.equal(request.generationConfig.maxOutputTokens, 160);
   assert.throws(() => validateCascadeResponseInput({
     model: 'gemini-3.5-flash-lite', text: 'test', history: Array(13).fill({ role: 'user', text: 'x' }),
   }), /at most 12/u);
+});
+
+test('Shannon maid cascade sends dialogue examples before conversation history', () => {
+  const request = buildCascadeResponseRequest({
+    model: 'gemini-3.5-flash-lite',
+    text: '自己紹介して',
+    profile: 'shannon-maid',
+    history: [{ role: 'user', text: '初めまして' }, { role: 'model', text: '初めまして、ライ！' }],
+  });
+  assert.equal(request.contents.length, 7);
+  assert.deepEqual(request.contents.slice(0, 4).map(turn => turn.role), ['user', 'model', 'user', 'model']);
+  assert.match(request.contents[1].parts[0].text, /天才AI/u);
+  assert.equal(request.contents.at(-1).parts[0].text, '自己紹介して');
 });
 
 test('cascade speech streams a designed voice with a bounded TTS style', () => {

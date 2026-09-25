@@ -1,9 +1,9 @@
 import { auditionJobs, auditionScript, auditionScripts, auditionStyle } from './voice-audition-presets.js';
 import {
   voiceDesignPresets,
-  voiceDesignPresetsVerifiedAt,
   voiceDesignPrompt,
   voiceDesignVariantIsVerified,
+  voiceDesignVariantVerifiedAt,
 } from './voice-design-presets.js';
 import { liveProfile, liveProfiles, liveSystemInstruction, liveTTSStyle } from './voice-live-profiles.js';
 
@@ -65,9 +65,9 @@ const cascadeTotalLatency = document.querySelector('#cascade-total-latency');
 
 sampleText.value = auditionScript('everyday').text;
 liveProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
-liveProfileSelect.value = 'tsundere-leader';
+liveProfileSelect.value = 'shannon-maid';
 cascadeProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
-cascadeProfileSelect.value = 'tsundere-leader';
+cascadeProfileSelect.value = 'shannon-maid';
 applyDesignPreset(designPreset.value);
 updateLiveProfileSummary();
 updateCascadeProfileSummary();
@@ -166,7 +166,8 @@ async function loadVoices() {
     else voiceSelect.value = 'Leda';
     if (voices.has(liveSelected)) liveVoice.value = liveSelected;
     else liveVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
-    const shannon = [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon');
+    const shannon = [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon maid')
+      ?? [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon');
     if (shannon) cascadeVoice.value = shannon.id;
     else if (voices.has(cascadeSelected)) cascadeVoice.value = cascadeSelected;
     else cascadeVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
@@ -333,7 +334,7 @@ function updateDesignPresetHelp() {
   const { language, detail } = selectedDesignVariant();
   const variant = `${language === 'ja' ? '日本語' : '英語'}・${detail === 'short' ? '短文' : '詳細'}`;
   designPresetHelp.textContent = voiceDesignVariantIsVerified(preset, language, detail)
-    ? `${variant}版は${voiceDesignPresetsVerifiedAt}にGemini実APIで作成・即時削除確認済みです。`
+    ? `${variant}版は${voiceDesignVariantVerifiedAt(preset)}にGemini実APIで作成確認済みです。`
     : `${variant}版は実API未確認です。作成前に内容を確認してください。`;
 }
 

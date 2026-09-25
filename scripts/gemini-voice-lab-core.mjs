@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { GEMINI_TTS_MODELS } from './gemini-tts-lab-core.mjs';
-import { liveProfile, liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
+import { liveConversationExamples, liveProfile, liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.8-live';
 export const GEMINI_TRANSCRIBE_LIVE_MODEL = 'gemini-3.5-transcribe-live';
@@ -146,14 +146,15 @@ export function buildTranscribeSetupMessage() {
 export function buildCascadeResponseRequest({ model, text, history, profile }) {
   const input = validateCascadeResponseInput({ model, text, history, profile });
   const instruction = [
-    'あなたはShannon。日本語で自然に会話する、明るく率直で親しみやすい相棒です。',
+    liveSystemInstruction(input.profile),
+    'あなたはShannonです。上記の選択された人格を保ち、一般的なAIアシスタントの口調へ戻らないでください。',
     '返答は音声で読み上げます。原則1〜2文、80文字程度までで、最初の文から要点を答えてください。',
     'Markdown、箇条書き、括弧書きの演技指示、プロフィール説明は使わないでください。',
-    liveSystemInstruction(input.profile),
   ].join('\n');
   return {
     systemInstruction: { parts: [{ text: instruction }] },
     contents: [
+      ...liveConversationExamples(input.profile).map(turn => ({ role: turn.role, parts: [{ text: turn.text }] })),
       ...input.history.map(turn => ({ role: turn.role, parts: [{ text: turn.text }] })),
       { role: 'user', parts: [{ text: input.text }] },
     ],

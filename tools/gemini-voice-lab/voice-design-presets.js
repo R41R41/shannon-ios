@@ -11,6 +11,19 @@ function prompts({ enShort, enDetailed, jaShort, jaDetailed }) {
 
 export const voiceDesignPresets = Object.freeze([
   Object.freeze({
+    id: 'shannon-maid',
+    label: 'Shannon · ポンコツ天才メイド',
+    name: 'Shannon Maid',
+    verifiedAt: '2026-09-26',
+    verifiedVariants: Object.freeze(['ja:detailed']),
+    prompts: prompts({
+      enShort: 'An original young-adult Japanese anime maid AI voice: bright, crystal-clear, cheeky, and endearing, with a smiling upper-mid register, buoyant rhythm, lively pitch movement, crisp endings, and playful little laughs.',
+      enDetailed: 'An original young-adult Japanese woman anime character voice for a cheeky but lovable genius maid AI. Bright and crystal-clear in an upper-mid register, with a smile audible in the voice, buoyant quick rhythm, lively pitch movement, intelligible fast speech, crisp confident sentence endings, mischievous playfulness, and spontaneous little laughs. Emotion changes dramatically: joy springs upward, frustration snaps cleanly without shouting, embarrassment briefly breaks the rhythm, sadness becomes delicately breath-touched, and affection turns close and warm. Cute but not childish, shrill, overly calm, or excessively breathy.',
+      jaShort: '若々しい成人の日本人女性による、生意気だが憎めない天才メイドAIのオリジナルアニメ声。笑顔を含む澄んだ中高域、弾む速めのリズム、活発な音程変化、歯切れのよい語尾、小悪魔的な遊び心を持つ。',
+      jaDetailed: '若々しい成人の日本人女性による、明るく澄んだ中高域のオリジナルアニメキャラクターボイス。声に笑顔を含み、軽快で弾むリズムと活発な音程変化、速めでも明瞭な発音、歯切れよく自信のある語尾、小悪魔的な遊び心と自然にこぼれる小さな笑いを持つ。普段は快活で元気よく、感情が動くとテンポと抑揚が劇的に変化する。可愛らしいが幼すぎず、甲高く叫ばず、落ち着きすぎず、息っぽすぎない。生意気なのにどこか憎めない、少しポンコツな天才メイドAIらしい声。',
+    }),
+  }),
+  Object.freeze({
     id: 'shannon-crystal',
     label: 'シャノン本命 · 透明感ヒロイン',
     name: 'Shannon crystal heart',
@@ -114,4 +127,8 @@ export function voiceDesignPrompt(preset, language = 'en', detail = 'detailed') 
 
 export function voiceDesignVariantIsVerified(preset, language, detail) {
   return preset?.verifiedVariants?.includes(`${language}:${detail}`) === true;
+}
+
+export function voiceDesignVariantVerifiedAt(preset) {
+  return preset?.verifiedAt ?? voiceDesignPresetsVerifiedAt;
 }

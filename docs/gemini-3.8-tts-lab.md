@@ -51,7 +51,7 @@ Use the four areas in order:
    time, audio duration, and estimated cost, so identity stability is visible rather
    than inferred from one lucky take.
 2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
-   one-year storage, quota, and cost. Eight editable original-character presets
+   one-year storage, quota, and cost. Nine editable original-character presets
    cover translucent emotional Shannon, frank sunny energy, confident prickly
    warmth, refined clarity, tender devotion, digital idol, reserved lower register,
    and formal emotion that gradually opens. Each preset provides Japanese / English
@@ -61,9 +61,10 @@ Use the four areas in order:
 3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
    interruption, and native-audio character with the voice selected in step 1 or
    the stored Voice ID created in step 2. Voice identity and acting are selected
-   independently: a neutral baseline plus eight Live profiles mirror the original
-   Voice Design concepts, so the same Voice ID can be compared with different
-   conversational timing, emotional contrast, and sentence endings. The transcript
+   independently: a neutral baseline plus nine Live profiles mirror the original
+   Voice Design concepts plus Shannon's cheeky genius-maid persona, so the same Voice
+   ID can be compared with different conversational timing, emotional contrast, and
+   sentence endings. The transcript
    marks each new voice/profile combination, and three fixed conversation topics
    provide a repeatable comparison path.
 4. **作ったShannonの声で会話** — run a browser-only cascade with
@@ -73,6 +74,14 @@ Use the four areas in order:
    final-transcript-to-first-audio latency for every turn. Microphone upload pauses
    from transcript finalization through playback plus a short tail, preventing the
    generated voice from being recognized as the next user turn.
+
+The `Shannon · ポンコツ天才メイド` path deliberately separates three controls:
+the stored Voice Design describes only permanent audible traits, the response model
+receives the character relationship and a small set of non-verbatim dialogue
+examples, and TTS receives one short energetic turn style. This keeps example lines
+from being read as instructions while preserving a lively, cheeky baseline in normal
+conversation. The browser prefers a stored voice named `Shannon Maid` for cascade
+testing without deleting or changing the previous `Shannon` voice.
 
 The lab intentionally does not make Live a prerequisite for voice selection.
 Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is
@@ -95,9 +104,11 @@ The deployed Azure smoke check on 2026-09-25 used stored voice
 (about 2.1 seconds from finalized transcript to first audio, excluding the speech
 endpoint detector). These are one-run transport observations, not p50/p95 targets.
 
-All four prompt variants for all eight built-in designs were verified against the
-real Voices API on 2026-09-25. Every successful smoke-test Voice ID was deleted
-immediately. Numeric
+All four prompt variants for the original eight built-in designs were verified
+against the real Voices API on 2026-09-25, and every successful smoke-test Voice ID
+was deleted immediately. The Japanese detailed variant of the Shannon maid design
+was successfully created on 2026-09-26 and retained as `Shannon Maid` for
+conversation testing. Numeric
 minor-age wording and negative phrases about imitating known voices were rejected by
 the safety filter, so the shipped presets express the same intended age impression
 through register, tempo, pitch movement, diction, and emotional delivery without
