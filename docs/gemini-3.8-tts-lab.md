@@ -48,7 +48,10 @@ Use the three areas in order:
 1. **声を比較** — generate matched Flash-Lite / Flash samples, keep up to eight
    in an in-memory A/B tray, and optionally download only the samples worth keeping.
 2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
-   one-year storage, quota, and cost. Deletion requires retyping the exact ID.
+   one-year storage, quota, and cost. Eight editable original-character presets
+   cover translucent emotional Shannon, a frank 14-year-old, confident tsundere,
+   refined clarity, tender devotion, digital idol, reserved lower register, and
+   formal emotion that gradually opens. Deletion requires retyping the exact ID.
 3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
    interruption, and native-audio character with the voice selected in step 1 or
    the stored Voice ID created in step 2.

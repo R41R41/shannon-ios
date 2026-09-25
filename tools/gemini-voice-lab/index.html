@@ -100,9 +100,24 @@
       </div>
       <form id="design-form" class="design-grid">
         <div class="form-stack">
+          <label class="field">声質プリセット
+            <select id="design-preset">
+              <option value="shannon-crystal">シャノン本命 · 透明感と豊かな感情</option>
+              <option value="sunny-fourteen">天真爛漫 · 竹を割った14歳</option>
+              <option value="tsundere-leader">ツンデレ快活 · 強気なリーダー</option>
+              <option value="refined-translucent">上品な透明感 · 柔らかな知性</option>
+              <option value="devoted-tender">献身的で優しい · 静かな芯</option>
+              <option value="digital-idol">デジタルアイドル · 高く澄んだ輝き</option>
+              <option value="reserved-low-soft">控えめ低音 · 静かな照れと本音</option>
+              <option value="formal-awakening">凛とした清廉さ · 感情が花開く</option>
+              <option value="custom">自由入力</option>
+            </select>
+            <small>固有の人物・キャラクターを複製せず、声質と演技の特徴をオリジナル音声へ翻訳しています。</small>
+          </label>
           <label class="field">名前<input id="design-name" maxlength="100" value="Shannon bright"></label>
           <label class="field">声の設計文
-            <textarea id="design-prompt" rows="7" maxlength="1000">A young adult Japanese woman with a clear, lightly bright voice, gentle warmth, delicate expressive detail, and an affectionate conversational presence. Charming and lively without sounding childish or exaggerated.</textarea>
+            <textarea id="design-prompt" rows="9" maxlength="1000"></textarea>
+            <small>プリセットを選んだ後も自由に調整できます。文章を編集すると「自由入力」に切り替わります。</small>
           </label>
           <label class="check-row"><input id="confirm-store" type="checkbox"><span>このVoice IDがGoogleプロジェクトに保存され、API料金とカスタム音声枠を使うことを確認しました。</span></label>
           <button id="design-button" class="secondary" type="submit" disabled>新しい声を作る</button>

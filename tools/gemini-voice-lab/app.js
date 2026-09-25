@@ -1,3 +1,5 @@
+import { voiceDesignPresets } from './voice-design-presets.js';
+
 const scripts = Object.freeze({
   identity: 'こんにちは、シャノンです。今日も一緒に、ゆっくり考えていこうね。',
   pronunciation: 'AetherとVoyager、それからSyzygyの進み具合を確認したよ。APIとSwiftUIの接続も大丈夫。',
@@ -26,6 +28,9 @@ const sampleList = document.querySelector('#sample-list');
 const sampleEmpty = document.querySelector('#sample-empty');
 const generateButton = document.querySelector('#generate-button');
 const designForm = document.querySelector('#design-form');
+const designPreset = document.querySelector('#design-preset');
+const designName = document.querySelector('#design-name');
+const designPrompt = document.querySelector('#design-prompt');
 const designButton = document.querySelector('#design-button');
 const confirmStore = document.querySelector('#confirm-store');
 const designStatus = document.querySelector('#design-status');
@@ -38,6 +43,7 @@ const transcriptEmpty = document.querySelector('#transcript-empty');
 const transcriptList = document.querySelector('#transcript-list');
 
 sampleText.value = scripts.identity;
+applyDesignPreset(designPreset.value);
 updateTextCount();
 initialize();
 
@@ -58,6 +64,13 @@ voiceSelect.addEventListener('change', () => {
 stylePreset.addEventListener('change', () => {
   customStyleField.classList.toggle('hidden', stylePreset.value !== 'custom');
   if (stylePreset.value === 'custom') customStyle.focus();
+});
+designPreset.addEventListener('change', () => {
+  if (designPreset.value !== 'custom') applyDesignPreset(designPreset.value, true);
+});
+designPrompt.addEventListener('input', () => {
+  const current = voiceDesignPresets.find(preset => preset.id === designPreset.value);
+  if (!current || designPrompt.value !== current.prompt) designPreset.value = 'custom';
 });
 confirmStore.addEventListener('change', () => { designButton.disabled = !confirmStore.checked; });
 document.querySelector('#clear-samples').addEventListener('click', clearSamples);
@@ -185,8 +198,8 @@ async function designVoice(event) {
   setStatus(designStatus, '声を設計しています。通常の試聴より時間がかかります…');
   try {
     const response = await post('/api/design', {
-      name: document.querySelector('#design-name').value,
-      prompt: document.querySelector('#design-prompt').value,
+      name: designName.value,
+      prompt: designPrompt.value,
       language: 'ja-JP',
       gender: 'female',
       confirmStore: true,
@@ -204,6 +217,14 @@ async function designVoice(event) {
   } finally {
     designButton.disabled = !confirmStore.checked;
   }
+}
+
+function applyDesignPreset(id, focus = false) {
+  const preset = voiceDesignPresets.find(item => item.id === id);
+  if (!preset) return;
+  designName.value = preset.name;
+  designPrompt.value = preset.prompt;
+  if (focus) designPrompt.focus();
 }
 
 function renderDesignResult() {

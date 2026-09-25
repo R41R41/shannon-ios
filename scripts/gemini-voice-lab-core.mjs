@@ -3,6 +3,14 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { GEMINI_TTS_MODELS } from './gemini-tts-lab-core.mjs';
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.8-live';
+export const VOICE_LAB_STATIC_FILES = new Map([
+  ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
+  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
+  ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
+  ['/voice-design-presets.js', ['voice-design-presets.js', 'text/javascript; charset=utf-8']],
+  ['/capture-worklet.js', ['capture-worklet.js', 'text/javascript; charset=utf-8']],
+]);
 export const DEFAULT_LIVE_VOICES = Object.freeze([
   'Leda',
   'Aoede',

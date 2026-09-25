@@ -21,6 +21,7 @@ import {
   isAllowedBrowserRequest,
   requestTokenMatches,
   safeUpstreamError,
+  VOICE_LAB_STATIC_FILES,
   validateDeleteInput,
   validateDesignInput,
   validateLiveTokenInput,
@@ -41,14 +42,6 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-const staticFiles = new Map([
-  ['/', ['index.html', 'text/html; charset=utf-8']],
-  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
-  ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
-  ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
-  ['/capture-worklet.js', ['capture-worklet.js', 'text/javascript; charset=utf-8']],
-]);
-
 const server = createServer(async (request, response) => {
   securityHeaders(response);
   try {
@@ -59,8 +52,8 @@ const server = createServer(async (request, response) => {
       secFetchSite: request.headers['sec-fetch-site'],
     })) return json(response, 403, { error: 'This private lab is available only through its loopback SSH tunnel.' });
 
-    if (request.method === 'GET' && staticFiles.has(url.pathname)) {
-      const [file, contentType] = staticFiles.get(url.pathname);
+    if (request.method === 'GET' && VOICE_LAB_STATIC_FILES.has(url.pathname)) {
+      const [file, contentType] = VOICE_LAB_STATIC_FILES.get(url.pathname);
       const body = await readFile(path.join(STATIC_ROOT, file));
       response.writeHead(200, { 'content-type': contentType, 'content-length': body.length });
       return response.end(body);
