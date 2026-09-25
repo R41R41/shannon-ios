@@ -31,11 +31,13 @@ final class ShannonGeminiLiveTransport {
     private let playerNode = AVAudioPlayerNode()
     private let vad = ShannonGeminiLiveVADState()
     private let captureChunker = ShannonGeminiLiveAudioChunker()
+    private let outputRenderProbe = ShannonGeminiLiveOutputRenderProbe()
     private var urlSession: URLSession?
     private var socket: URLSessionWebSocketTask?
     private var outgoing: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
+    private var keepAliveSourceNode: AVAudioSourceNode?
     private var recordingMixerNode: AVAudioMixerNode?
     private var mutedCaptureMixerNode: AVAudioMixerNode?
     private var audioStarted = false
@@ -157,6 +159,7 @@ final class ShannonGeminiLiveTransport {
         urlSession?.invalidateAndCancel()
         urlSession = nil
         playerNode.stop()
+        audioEngine.stop()
         if let recordingMixerNode {
             recordingMixerNode.removeTap(onBus: 0)
             audioEngine.disconnectNodeInput(recordingMixerNode)
@@ -168,10 +171,14 @@ final class ShannonGeminiLiveTransport {
             audioEngine.disconnectNodeOutput(mutedCaptureMixerNode)
             audioEngine.detach(mutedCaptureMixerNode)
         }
+        if let keepAliveSourceNode {
+            audioEngine.disconnectNodeOutput(keepAliveSourceNode)
+            audioEngine.detach(keepAliveSourceNode)
+        }
+        keepAliveSourceNode = nil
         mutedCaptureMixerNode = nil
         recordingMixerNode = nil
         captureChunker.reset()
-        audioEngine.stop()
         audioStarted = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -207,6 +214,11 @@ final class ShannonGeminiLiveTransport {
               inputFormat.commonFormat == .pcmFormatFloat32 else {
             throw URLError(.cannotDecodeRawData)
         }
+        let deviceOutputFormat = audioEngine.outputNode.outputFormat(forBus: 0)
+        guard deviceOutputFormat.sampleRate > 0,
+              deviceOutputFormat.channelCount > 0 else {
+            throw URLError(.cannotDecodeRawData)
+        }
 
         let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -228,25 +240,42 @@ final class ShannonGeminiLiveTransport {
         )
         let recordingMixer = AVAudioMixerNode()
         let mutedCaptureMixer = AVAudioMixerNode()
-        mutedCaptureMixer.outputVolume = 0
+        let keepAliveSource = Self.makeKeepAliveSource(
+            format: deviceOutputFormat,
+            outputRenderProbe: outputRenderProbe
+        )
+        // A zero-volume mixer branch can be pruned by Voice Processing I/O on a
+        // physical iPhone. -120 dB remains below the output noise floor while
+        // keeping the microphone branch part of every render cycle.
+        mutedCaptureMixer.outputVolume = 0.000_001
 
         audioEngine.attach(playerNode)
+        audioEngine.attach(keepAliveSource)
         audioEngine.attach(recordingMixer)
         audioEngine.attach(mutedCaptureMixer)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
+        // PlayerNode has no buffers until Gemini speaks. A continuously rendered
+        // silent source keeps Voice Processing I/O advancing while the user talks.
+        audioEngine.connect(keepAliveSource, to: audioEngine.mainMixerNode, format: deviceOutputFormat)
         audioEngine.connect(input, to: recordingMixer, format: inputFormat)
         // A terminal AVAudioSinkNode branch is not pulled by Voice Processing I/O
         // on every physical-device route. Keep capture inside the rendered output
-        // graph so the microphone is guaranteed to advance, tap before muting, and
-        // silence the downstream mixer so local microphone audio never loops back.
+        // graph so the microphone is guaranteed to advance, tap before attenuation,
+        // and keep the downstream signal below the hardware output noise floor.
         audioEngine.connect(recordingMixer, to: mutedCaptureMixer, format: inputFormat)
         audioEngine.connect(mutedCaptureMixer, to: audioEngine.mainMixerNode, format: inputFormat)
+        audioEngine.connect(
+            audioEngine.mainMixerNode,
+            to: audioEngine.outputNode,
+            format: deviceOutputFormat
+        )
         recordingMixer.installTap(
             onBus: 0,
             bufferSize: 1_024,
             format: inputFormat,
             block: captureTap
         )
+        keepAliveSourceNode = keepAliveSource
         recordingMixerNode = recordingMixer
         mutedCaptureMixerNode = mutedCaptureMixer
         ShannonVoiceDiagnostics.shared.record(
@@ -255,7 +284,9 @@ final class ShannonGeminiLiveTransport {
                 "sample_rate": String(Int(inputFormat.sampleRate)),
                 "channels": String(inputFormat.channelCount),
                 "interleaved": String(inputFormat.isInterleaved),
-                "capture": "rendered_mixer_tap",
+                "capture": "driven_mixer_tap",
+                "capture_gain_db": "-120",
+                "output_sample_rate": String(Int(deviceOutputFormat.sampleRate)),
             ]
         )
         ShannonVoiceDiagnostics.shared.record("gemini.audio.tap.installed")
@@ -264,6 +295,23 @@ final class ShannonGeminiLiveTransport {
         ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.started")
         playerNode.play()
         ShannonVoiceDiagnostics.shared.record("gemini.audio.player.started")
+    }
+
+    /// AVAudioSourceNode is pulled on Core Audio's realtime I/O thread. Keep the
+    /// callback nonisolated so Swift never inserts a MainActor precondition there.
+    nonisolated private static func makeKeepAliveSource(
+        format: AVAudioFormat,
+        outputRenderProbe: ShannonGeminiLiveOutputRenderProbe
+    ) -> AVAudioSourceNode {
+        AVAudioSourceNode(format: format) { isSilence, _, _, outputData in
+            outputRenderProbe.markStarted()
+            isSilence.pointee = true
+            for buffer in UnsafeMutableAudioBufferListPointer(outputData) {
+                guard let data = buffer.mData else { continue }
+                memset(data, 0, Int(buffer.mDataByteSize))
+            }
+            return noErr
+        }
     }
 
     /// AVAudioEngine invokes this tap on Core Audio's realtime I/O thread.
@@ -336,6 +384,22 @@ final class ShannonGeminiLiveTransport {
         if !playerNode.isPlaying { playerNode.play() }
     }
 
+}
+
+private final class ShannonGeminiLiveOutputRenderProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didRecordStart = false
+
+    func markStarted() {
+        lock.lock()
+        let shouldRecord = !didRecordStart
+        didRecordStart = true
+        lock.unlock()
+        guard shouldRecord else { return }
+        Task.detached(priority: .utility) {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.output.render.started")
+        }
+    }
 }
 
 private final class ShannonGeminiLiveVADState: @unchecked Sendable {
