@@ -23,6 +23,11 @@ import {
   auditionScripts,
   auditionStyles,
 } from '../tools/gemini-voice-lab/voice-audition-presets.js';
+import {
+  liveProfile,
+  liveProfiles,
+  liveSystemInstruction,
+} from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 test('voice design presets are original, bounded, and uniquely addressable', () => {
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-design-presets.js'), [
@@ -31,6 +36,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
   ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-audition-presets.js'), [
     'voice-audition-presets.js',
+    'text/javascript; charset=utf-8',
+  ]);
+  assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-live-profiles.js'), [
+    'voice-live-profiles.js',
     'text/javascript; charset=utf-8',
   ]);
   assert.equal(voiceDesignPresets.length, 8);
@@ -49,6 +58,23 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
       }
     }
   }
+});
+
+test('Live profiles preserve all voice concepts and provide distinct bounded instructions', () => {
+  assert.equal(liveProfiles.length, 9);
+  assert.equal(new Set(liveProfiles.map(item => item.id)).size, liveProfiles.length);
+  for (const expected of voiceDesignPresets.map(item => item.id)) {
+    assert.ok(liveProfiles.some(item => item.id === expected), `missing Live profile: ${expected}`);
+  }
+  for (const item of liveProfiles) {
+    assert.ok(item.label.length > 0);
+    assert.ok(item.summary.length > 20);
+    const instruction = liveSystemInstruction(item.id);
+    assert.ok(instruction.length > 150 && instruction.length < 2_000);
+    assert.doesNotMatch(instruction, /過剰な演技や長い説明は避けて/u);
+  }
+  assert.equal(liveProfile('unknown').id, 'neutral');
+  assert.match(liveSystemInstruction('tsundere-leader'), /照れた時だけ/u);
 });
 
 test('audition presets provide Japanese emotion scripts and bounded turn styles', () => {
@@ -115,11 +141,12 @@ test('Live remains constrained to the audio model and accepts catalog or designe
   assert.equal(validateLiveTokenInput({ voice: 'ja-jp-assistant-7' }).voice, 'ja-jp-assistant-7');
   assert.equal(validateLiveTokenInput({ voice: 'voice_Custom' }).voice, 'voice_Custom');
   assert.throws(() => validateLiveTokenInput({ voice: '../bad' }), /identifier/u);
-  const setup = buildLiveSetupMessage({ voice: 'Aoede' });
+  const setup = buildLiveSetupMessage({ voice: 'Aoede', profile: 'tsundere-leader' });
   assert.equal(setup.setup.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Aoede');
   const customSetup = buildLiveSetupMessage({ voice: 'voice_Custom' });
   assert.equal(customSetup.setup.generationConfig.speechConfig.voiceConfig.voice, 'voice_Custom');
   assert.deepEqual(setup.setup.inputAudioTranscription, {});
+  assert.match(setup.setup.systemInstruction.parts[0].text, /鋭い語尾/u);
 });
 
 test('browser boundary accepts only loopback same-origin requests', () => {

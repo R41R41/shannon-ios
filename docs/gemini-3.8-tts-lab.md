@@ -60,7 +60,12 @@ Use the three areas in order:
    exact ID.
 3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
    interruption, and native-audio character with the voice selected in step 1 or
-   the stored Voice ID created in step 2.
+   the stored Voice ID created in step 2. Voice identity and acting are selected
+   independently: a neutral baseline plus eight Live profiles mirror the original
+   Voice Design concepts, so the same Voice ID can be compared with different
+   conversational timing, emotional contrast, and sentence endings. The transcript
+   marks each new voice/profile combination, and three fixed conversation topics
+   provide a repeatable comparison path.
 
 The lab intentionally does not make Live a prerequisite for voice selection.
 Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is

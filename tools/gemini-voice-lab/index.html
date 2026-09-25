@@ -177,6 +177,19 @@
             </select>
             <small>01で選んだ声と、02で作ったVoice IDも選べます。01の選択変更はここへ引き継がれます。</small>
           </label>
+          <label class="field">Live演技プロファイル
+            <select id="live-profile"></select>
+            <small>Voice IDは声質、プロファイルは会話中の感情・間・語尾を担当します。声を作り直さずに切り替えられます。</small>
+          </label>
+          <div id="live-profile-summary" class="profile-summary" aria-live="polite"></div>
+          <div class="live-checklist">
+            <strong>同条件で比べる話題</strong>
+            <ol>
+              <li>「今日ちょっと面白いことがあってさ」</li>
+              <li>「実は少し失敗して落ち込んでる」</li>
+              <li>「でも次は絶対うまくやる」</li>
+            </ol>
+          </div>
           <button id="live-toggle" class="primary" type="button"><span aria-hidden="true">●</span> 会話を始める</button>
           <p id="live-status" class="status" role="status" aria-live="polite">停止中 · 初回はブラウザとmacOSのマイク許可が必要です。音声は保存しません。</p>
           <div class="cost-note"><strong>料金目安</strong><span>入力 $0.005/分 + 出力 $0.018/分</span><small>2026-12-31までの表示基準。会話時間と発話量で変わります。</small></div>

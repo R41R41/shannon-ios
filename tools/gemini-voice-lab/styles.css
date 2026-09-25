@@ -115,6 +115,12 @@ button:disabled { cursor: not-allowed; opacity: .46; box-shadow: none; }
 
 .live-panel { position: relative; }
 .live-controls { display: grid; align-content: start; gap: 18px; }
+.profile-summary { display: grid; gap: 5px; padding: 14px 15px; border-radius: 14px; background: linear-gradient(115deg, color-mix(in srgb, var(--presence-a) 8%, var(--subtle)), color-mix(in srgb, var(--presence-b) 7%, var(--subtle))); border: 1px solid color-mix(in srgb, var(--presence-b) 18%, var(--border)); }
+.profile-summary strong { font-size: 13px; }
+.profile-summary span { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.live-checklist { padding: 14px 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--subtle); }
+.live-checklist strong { font-size: 12px; }
+.live-checklist ol { margin: 8px 0 0; padding-left: 22px; color: var(--muted); font-size: 12px; line-height: 1.75; }
 .transcript { min-height: 300px; background: #10141c; color: #eef8ff; border-radius: 20px; padding: 25px; overflow: hidden; position: relative; }
 .transcript > p { color: #8fa0b8; text-align: center; max-width: 280px; margin: 20px auto; line-height: 1.6; }
 .orb { width: 86px; height: 86px; margin: 10px auto 22px; border-radius: 31px; display: flex; align-items: center; justify-content: center; gap: 11px; background: radial-gradient(circle at 50% 80%, rgba(86, 128, 255, .22), transparent 58%), #151b26; box-shadow: inset 0 0 30px rgba(87, 178, 255, .12); }
@@ -124,6 +130,7 @@ button:disabled { cursor: not-allowed; opacity: .46; box-shadow: none; }
 .transcript li { font-size: 13px; line-height: 1.55; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .07); }
 .transcript li.user { margin-left: 28px; }
 .transcript li.model { margin-right: 28px; background: linear-gradient(115deg, rgba(58, 179, 255, .16), rgba(116, 87, 255, .17)); }
+.transcript li.session { margin: 8px 0 2px; padding: 7px 10px; border: 1px solid rgba(144, 223, 255, .2); background: transparent; color: #90dfff; text-align: center; font-size: 10px; font-weight: 720; letter-spacing: .04em; }
 .transcript li strong { display: block; color: #90dfff; font-size: 10px; letter-spacing: .08em; margin-bottom: 3px; }
 .cost-note { display: grid; gap: 4px; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--subtle); }
 .cost-note strong { font-size: 12px; }

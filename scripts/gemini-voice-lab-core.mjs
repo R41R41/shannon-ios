@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { GEMINI_TTS_MODELS } from './gemini-tts-lab-core.mjs';
+import { liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.8-live';
 export const VOICE_LAB_STATIC_FILES = new Map([
@@ -10,6 +11,7 @@ export const VOICE_LAB_STATIC_FILES = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/voice-audition-presets.js', ['voice-audition-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-design-presets.js', ['voice-design-presets.js', 'text/javascript; charset=utf-8']],
+  ['/voice-live-profiles.js', ['voice-live-profiles.js', 'text/javascript; charset=utf-8']],
   ['/capture-worklet.js', ['capture-worklet.js', 'text/javascript; charset=utf-8']],
 ]);
 export const DEFAULT_LIVE_VOICES = Object.freeze([
@@ -72,7 +74,7 @@ export function buildLiveTokenRequest({ expiresAt, newSessionExpiresAt }) {
   };
 }
 
-export function buildLiveSetupMessage({ voice }) {
+export function buildLiveSetupMessage({ voice, profile = 'neutral' }) {
   const selectedVoice = voiceIdentifier(voice);
   return {
     setup: {
@@ -85,7 +87,7 @@ export function buildLiveSetupMessage({ voice }) {
       },
       systemInstruction: {
         parts: [{
-          text: 'あなたはShannonの声を試聴する短時間の会話相手です。日本語で、自然で短い返答をしてください。声質を評価しやすいよう、過剰な演技や長い説明は避けてください。',
+          text: liveSystemInstruction(profile),
         }],
       },
       inputAudioTranscription: {},

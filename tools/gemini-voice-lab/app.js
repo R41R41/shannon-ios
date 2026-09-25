@@ -5,6 +5,7 @@ import {
   voiceDesignPrompt,
   voiceDesignVariantIsVerified,
 } from './voice-design-presets.js';
+import { liveProfile, liveProfiles, liveSystemInstruction } from './voice-live-profiles.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
@@ -41,13 +42,18 @@ const designResults = document.querySelector('#design-results');
 const designEmpty = document.querySelector('#design-empty');
 const liveToggle = document.querySelector('#live-toggle');
 const liveVoice = document.querySelector('#live-voice');
+const liveProfileSelect = document.querySelector('#live-profile');
+const liveProfileSummary = document.querySelector('#live-profile-summary');
 const liveStatus = document.querySelector('#live-status');
 const liveOrb = document.querySelector('#live-orb');
 const transcriptEmpty = document.querySelector('#transcript-empty');
 const transcriptList = document.querySelector('#transcript-list');
 
 sampleText.value = auditionScript('everyday').text;
+liveProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
+liveProfileSelect.value = 'tsundere-leader';
 applyDesignPreset(designPreset.value);
+updateLiveProfileSummary();
 updateTextCount();
 updateExperimentSummary();
 initialize();
@@ -100,6 +106,7 @@ document.querySelector('#clear-samples').addEventListener('click', clearSamples)
 sampleForm.addEventListener('submit', generateSample);
 designForm.addEventListener('submit', designVoice);
 liveToggle.addEventListener('click', () => state.live ? stopLive('停止しました。') : startLive());
+liveProfileSelect.addEventListener('change', updateLiveProfileSummary);
 window.addEventListener('beforeunload', () => {
   stopLive();
   for (const sample of state.samples) URL.revokeObjectURL(sample.url);
@@ -408,12 +415,13 @@ async function startLive() {
 
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url);
-    state.live = { socket, session, stream, context, source, capture, mute, ready: false, nextPlaybackTime: 0, sources: new Set() };
+    const profileId = liveProfileSelect.value;
+    state.live = { socket, session, profileId, stream, context, source, capture, mute, ready: false, nextPlaybackTime: 0, sources: new Set() };
     pendingStream = null;
     pendingContext = null;
     capture.port.onmessage = ({ data }) => sendMicrophoneChunk(data);
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify(liveSetup(session.model, session.voice)));
+      socket.send(JSON.stringify(liveSetup(session.model, session.voice, profileId)));
       setStatus(liveStatus, '接続済み · セッションを設定しています…');
     });
     socket.addEventListener('message', event => handleLiveMessage(event.data));
@@ -439,6 +447,7 @@ function sendMicrophoneChunk(buffer) {
 
 async function handleLiveMessage(data) {
   try {
+    if (!state.live) return;
     const text = data instanceof Blob ? await data.text() : String(data);
     const event = JSON.parse(text);
     if (event.setupComplete) {
@@ -447,8 +456,11 @@ async function handleLiveMessage(data) {
       liveToggle.innerHTML = '<span aria-hidden="true">■</span> 会話を止める';
       liveToggle.classList.add('secondary');
       liveVoice.disabled = true;
+      liveProfileSelect.disabled = true;
       liveOrb.classList.add('active');
-      setStatus(liveStatus, '会話中 · どう聞こえるか短く話しかけてください。', 'success');
+      const profile = liveProfile(state.live.profileId);
+      appendSessionMarker(`${voiceDisplayName(state.live.session.voice)} × ${profile.shortLabel}`);
+      setStatus(liveStatus, `会話中 · ${profile.shortLabel}で応答しています。`, 'success');
     }
     const content = event.serverContent;
     if (!content) return;
@@ -513,6 +525,7 @@ function stopLive(status, kind) {
   liveToggle.innerHTML = '<span aria-hidden="true">●</span> 会話を始める';
   liveToggle.classList.remove('secondary');
   liveVoice.disabled = false;
+  liveProfileSelect.disabled = false;
   liveOrb.classList.remove('active');
   if (status) setStatus(liveStatus, status, kind);
 }
@@ -522,7 +535,7 @@ function stopPlaybackFor(live) {
   live.sources.clear();
 }
 
-function liveSetup(model, voice) {
+function liveSetup(model, voice, profileId) {
   const voiceConfig = voice.startsWith('voice_')
     ? { voice }
     : { prebuiltVoiceConfig: { voiceName: voice } };
@@ -530,12 +543,21 @@ function liveSetup(model, voice) {
     setup: {
       model: `models/${model}`,
       generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig } },
-      systemInstruction: { parts: [{ text: 'あなたはShannonの声を試聴する短時間の会話相手です。日本語で、自然で短い返答をしてください。声質を評価しやすいよう、過剰な演技や長い説明は避けてください。' }] },
+      systemInstruction: { parts: [{ text: liveSystemInstruction(profileId) }] },
       inputAudioTranscription: {}, outputAudioTranscription: {},
       realtimeInputConfig: { automaticActivityDetection: { disabled: false, startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH', endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 80, silenceDurationMs: 600 }, activityHandling: 'START_OF_ACTIVITY_INTERRUPTS' },
       contextWindowCompression: { slidingWindow: {} },
     },
   };
+}
+
+function updateLiveProfileSummary() {
+  const profile = liveProfile(liveProfileSelect.value);
+  liveProfileSummary.innerHTML = `<strong>${escapeHTML(profile.shortLabel)}</strong><span>${escapeHTML(profile.summary)}</span>`;
+}
+
+function voiceDisplayName(id) {
+  return liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.textContent ?? id;
 }
 
 async function requestMicrophone() {
@@ -568,6 +590,15 @@ function appendTranscript(kind, speaker, text) {
     item.append(title, document.createTextNode(text));
     transcriptList.append(item);
   }
+  transcriptList.scrollTop = transcriptList.scrollHeight;
+}
+
+function appendSessionMarker(text) {
+  transcriptEmpty.classList.add('hidden');
+  const item = document.createElement('li');
+  item.className = 'session';
+  item.textContent = text;
+  transcriptList.append(item);
   transcriptList.scrollTop = transcriptList.scrollHeight;
 }
 
