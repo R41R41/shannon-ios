@@ -94,4 +94,17 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
             accuracy: 0.0001
         )
     }
+
+    func testAudioChunkerEmitsHundredMillisecondChunks() {
+        let chunker = ShannonGeminiLiveAudioChunker()
+        XCTAssertTrue(chunker.append(Data(repeating: 1, count: 1_200)).isEmpty)
+
+        let chunks = chunker.append(Data(repeating: 2, count: 5_600))
+        XCTAssertEqual(chunks.map(\.count), [3_200, 3_200])
+        XCTAssertEqual(chunks[0].prefix(1_200), Data(repeating: 1, count: 1_200))
+
+        chunker.reset()
+        XCTAssertTrue(chunker.append(Data(repeating: 3, count: 3_199)).isEmpty)
+        XCTAssertEqual(chunker.append(Data(repeating: 4, count: 1)).first?.count, 3_200)
+    }
 }

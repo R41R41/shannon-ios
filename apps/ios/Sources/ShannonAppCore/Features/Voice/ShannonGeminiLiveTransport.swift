@@ -18,12 +18,14 @@ final class ShannonGeminiLiveTransport {
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let vad = ShannonGeminiLiveVADState()
+    private let captureChunker = ShannonGeminiLiveAudioChunker()
     private var urlSession: URLSession?
     private var socket: URLSessionWebSocketTask?
     private var outgoing: AsyncStream<Data>.Continuation?
     private var sendTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
-    private var inputTapInstalled = false
+    private var recordingMixerNode: AVAudioMixerNode?
+    private var sinkNode: AVAudioSinkNode?
     private var audioStarted = false
     private var stopped = false
     private(set) var sentAudioSeconds: Double = 0
@@ -130,10 +132,18 @@ final class ShannonGeminiLiveTransport {
         urlSession?.invalidateAndCancel()
         urlSession = nil
         playerNode.stop()
-        if inputTapInstalled {
-            audioEngine.inputNode.removeTap(onBus: 0)
-            inputTapInstalled = false
+        if let sinkNode {
+            audioEngine.disconnectNodeInput(sinkNode)
+            audioEngine.detach(sinkNode)
         }
+        if let recordingMixerNode {
+            audioEngine.disconnectNodeInput(recordingMixerNode)
+            audioEngine.disconnectNodeOutput(recordingMixerNode)
+            audioEngine.detach(recordingMixerNode)
+        }
+        sinkNode = nil
+        recordingMixerNode = nil
+        captureChunker.reset()
         audioEngine.stop()
         audioStarted = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -155,8 +165,22 @@ final class ShannonGeminiLiveTransport {
         if !audioEngine.outputNode.isVoiceProcessingEnabled {
             try audioEngine.outputNode.setVoiceProcessingEnabled(true)
         }
-        let inputFormat = input.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+        let ioAudioUnit = audioEngine.outputNode.auAudioUnit
+        ioAudioUnit.isInputEnabled = true
+        ioAudioUnit.isOutputEnabled = true
+        input.isVoiceProcessingBypassed = false
+
+        // Voice Processing I/O exposes the physical microphone format on bus 1,
+        // even though the input node must be connected from its sole graph output.
+        // Reading bus 0 here can produce an active engine with silent capture on iPhone.
+        let inputFormat = input.outputFormat(forBus: 1)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0,
+              let captureFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: 16_000,
+                channels: 1,
+                interleaved: false
+              ) else {
             throw URLError(.cannotDecodeRawData)
         }
 
@@ -166,28 +190,42 @@ final class ShannonGeminiLiveTransport {
             channels: 1,
             interleaved: false
         )!
-        audioEngine.attach(playerNode)
-        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
-
         let outgoing = self.outgoing
         let vad = self.vad
+        let captureChunker = self.captureChunker
         let captureHandler = self.captureHandler
-        input.installTap(onBus: 0, bufferSize: 1_920, format: inputFormat) { buffer, _ in
-            guard let channel = buffer.floatChannelData?[0] else { return }
-            let samples = UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
-            let pcm = ShannonGeminiLivePCM.pcm16Mono16k(samples: samples, sampleRate: inputFormat.sampleRate)
-            guard !pcm.isEmpty else { return }
-            if let payload = try? ShannonGeminiLiveProtocol.audioMessage(pcm) {
-                outgoing?.yield(payload)
+        let sink = AVAudioSinkNode { _, frameCount, inputData in
+            let mutableInputData = UnsafeMutablePointer(mutating: inputData)
+            let buffers = UnsafeMutableAudioBufferListPointer(mutableInputData)
+            guard let data = buffers.first?.mData else { return noErr }
+            let samples = UnsafeBufferPointer(
+                start: data.assumingMemoryBound(to: Float.self),
+                count: Int(frameCount)
+            )
+            let pcm = ShannonGeminiLivePCM.pcm16Mono16k(samples: samples, sampleRate: 16_000)
+            for chunk in captureChunker.append(pcm) {
+                if let payload = try? ShannonGeminiLiveProtocol.audioMessage(chunk) {
+                    outgoing?.yield(payload)
+                }
             }
             let rms = ShannonGeminiLivePCM.rootMeanSquare(samples: samples)
             let transition = vad.consume(rms: rms, now: ProcessInfo.processInfo.systemUptime)
-            let capturedSeconds = Double(buffer.frameLength) / inputFormat.sampleRate
+            let capturedSeconds = Double(frameCount) / captureFormat.sampleRate
             Task { @MainActor in
                 captureHandler(rms, capturedSeconds, transition.speechStarted, transition.speechEnded)
             }
+            return noErr
         }
-        inputTapInstalled = true
+        let recordingMixer = AVAudioMixerNode()
+
+        audioEngine.attach(playerNode)
+        audioEngine.attach(recordingMixer)
+        audioEngine.attach(sink)
+        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
+        audioEngine.connect(input, to: recordingMixer, format: inputFormat)
+        audioEngine.connect(recordingMixer, to: sink, format: captureFormat)
+        recordingMixerNode = recordingMixer
+        sinkNode = sink
         audioEngine.prepare()
         try audioEngine.start()
         playerNode.play()

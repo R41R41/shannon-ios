@@ -196,3 +196,27 @@ public enum ShannonGeminiLivePCM {
         }
     }
 }
+
+final class ShannonGeminiLiveAudioChunker: @unchecked Sendable {
+    static let chunkByteCount = 1_600 * MemoryLayout<Int16>.size
+
+    private let lock = NSLock()
+    private var pending = Data()
+
+    func append(_ pcm: Data) -> [Data] {
+        guard !pcm.isEmpty else { return [] }
+        return lock.withLock {
+            pending.append(pcm)
+            var chunks: [Data] = []
+            while pending.count >= Self.chunkByteCount {
+                chunks.append(Data(pending.prefix(Self.chunkByteCount)))
+                pending.removeFirst(Self.chunkByteCount)
+            }
+            return chunks
+        }
+    }
+
+    func reset() {
+        lock.withLock { pending.removeAll(keepingCapacity: true) }
+    }
+}
