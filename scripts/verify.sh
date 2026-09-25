@@ -34,7 +34,7 @@ run_fast() {
   "$node_bin" scripts/check-xcode-workspace.mjs
   "$node_bin" scripts/check-app-icons.mjs
   "$node_bin" scripts/check-semantic-role-map.mjs
-  "$node_bin" --test scripts/gemini-tts-lab.test.mjs
+  "$node_bin" --test scripts/gemini-tts-lab.test.mjs scripts/gemini-voice-lab.test.mjs
   run_architecture
 }
 

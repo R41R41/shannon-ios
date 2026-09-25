@@ -30,6 +30,39 @@ GEMINI_API_KEY=...
 The key stays server/development-side. It must never be added to the iOS or macOS
 bundle, copied into logs, or committed.
 
+## Open the private browser lab
+
+The quickest listening loop is the private browser workbench. Its production
+process runs on Azure loopback and has no public URL. From the trusted Mac:
+
+```sh
+pnpm voice:gemini:web
+```
+
+This opens an SSH local-forward to `http://127.0.0.1:4322` and launches the
+default browser. Keep the terminal open while testing; closing it removes access.
+The permanent Gemini key remains in Azure's mode-0600 environment file.
+
+Use the three areas in order:
+
+1. **声を比較** — generate matched Flash-Lite / Flash samples, keep up to eight
+   in an in-memory A/B tray, and optionally download only the samples worth keeping.
+2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
+   one-year storage, quota, and cost. Deletion requires retyping the exact ID.
+3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
+   interruption, and native-audio character with a prebuilt voice.
+
+The lab intentionally does not make Live a prerequisite for voice selection.
+Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is
+useful after narrowing candidates because native audio can pace and color the same
+prebuilt voice differently from TTS. Custom `voice_...` identities are therefore
+tested in TTS unless equivalent Live support has been separately verified.
+
+The browser sends neither the API key nor ordinary TTS text/audio to Shannon's
+database. Samples use in-memory object URLs; Live uses a single-use token and browser
+echo cancellation, sends 16 kHz mono PCM, and plays 24 kHz PCM. No audio, transcript,
+message, token, or credential is logged or persisted by the lab.
+
 ## Discover Japanese voices
 
 ```sh

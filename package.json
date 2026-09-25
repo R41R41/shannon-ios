@@ -11,7 +11,9 @@
     "worker": "pnpm --filter @shannon/api worker",
     "auth": "pnpm --filter @shannon/api auth",
     "voice:gemini": "bash scripts/gemini-tts-lab.sh",
-    "voice:gemini:test": "bash scripts/gemini-tts-lab.sh __test"
+    "voice:gemini:test": "bash scripts/gemini-tts-lab.sh __test",
+    "voice:gemini:web": "bash scripts/gemini-voice-lab.sh",
+    "voice:gemini:web:test": "bash scripts/gemini-voice-lab.sh __test"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

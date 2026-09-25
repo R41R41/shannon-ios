@@ -1,0 +1,32 @@
+[Unit]
+Description=Shannon private Gemini voice listening lab
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-voice-lab
+Environment=NODE_ENV=production
+Environment=SHANNON_GEMINI_VOICE_LAB_PORT=4322
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node scripts/gemini-voice-lab-server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+[Install]
+WantedBy=multi-user.target

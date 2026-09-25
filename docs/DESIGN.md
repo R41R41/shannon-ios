@@ -10,6 +10,7 @@ This document is the entrypoint for the currently implemented Shannon design. It
 - Shared conversation, memory, settings, voice, organization, and task UI live by feature in `apps/ios/Sources/ShannonAppCore/Features`.
 - Mac composition lives by surface in `apps/macos-app/ShannonDesk/Features` (`Shell`, `Talk`, `Work`, `Development`, and `Settings`).
 - Shared semantic colors and presentation primitives live in `apps/ios/Sources/ShannonAppCore/DesignSystem`.
+- The private Gemini Voice Lab under `tools/gemini-voice-lab` is a browser-based operator surface for voice comparison. It shares Shannon's semantic roles and character presence, but does not replace an iPhone or Mac product screen.
 
 Platform-specific navigation and controls stay native. Shared state, DTOs, Markdown behavior, and semantic meaning may be reused; an iPhone or Mac layout is not treated as the other platform's template.
 
@@ -61,6 +62,8 @@ Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/
 [`docs/design/screens/ios/talk.yaml`](design/screens/ios/talk.yaml), and
 [`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml). The Mac development workspace is governed by
 [`docs/design/screens/macos/development.yaml`](design/screens/macos/development.yaml).
+The private browser listening workbench is governed by
+[`docs/design/screens/web/gemini-voice-lab.yaml`](design/screens/web/gemini-voice-lab.yaml).
 App naming and the three-level icon selector are governed by
 [`docs/design/screens/ios/settings.yaml`](design/screens/ios/settings.yaml) and
 [`docs/design/screens/macos/settings.yaml`](design/screens/macos/settings.yaml).

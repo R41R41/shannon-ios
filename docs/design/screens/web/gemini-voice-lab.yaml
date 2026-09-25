@@ -1,0 +1,43 @@
+schema_version: 1
+screen_id: shannon-web-gemini-voice-lab
+platform: web
+baseline_commit: c40eb9da36495c3730347ca164282ae417d4574b
+last_verified_at: 2026-09-25
+user_job: "iPhoneアプリを再配信せず、Shannonの日本語音声を同条件で比較し、必要な候補だけ会話でも確認する"
+primary_action: "同じ台本でモデル・声・話し方を選び、生成音声を比較トレイで聴き比べる"
+preserve:
+  - "Geminiの恒久APIキーをAzureのmode-0600秘密ファイルから出さない"
+  - "既存のiPhone音声モード、会話履歴、声設定をラボから変更しない"
+  - "通常の試聴音声、台本、Live音声、文字起こしをサーバーへ保存しない"
+  - "同じ台本を使う公平な比較と、モデル・声・スタイル・料金目安の識別を保つ"
+improve:
+  - "TTS比較を主導線にし、Live会話確認を任意の最終確認として分離する"
+  - "生成した最大8候補をタブ内だけの比較トレイへ並べ、個別保存と破棄を可能にする"
+  - "Voice Designの保存期間・課金・枠を明示し、確認後だけ作成する"
+  - "保存済みVoice IDの削除は正確なID再入力を要求する"
+  - "Liveは一回限りの短命トークン、ブラウザAEC、16kHz入力、24kHz出力を使う"
+  - "MacからSSHトンネルを開く一つのコマンドで、公開URLなしにアクセスできる"
+do_not_change:
+  - "ラボからShannonの本番Voice設定、会話、Memory、データベースへ書き込まない"
+  - "恒久APIキー、短命トークン、台本、音声、文字起こしをログへ書かない"
+  - "Voice Designの作成・削除を確認なしに実行しない"
+  - "TTSで選んだカスタムVoice IDがGemini Liveでも同じ音になると暗黙に約束しない"
+states:
+  loading: "声一覧と設定の取得中も既定候補と入力内容を保持し、実行操作だけを進行表示にする"
+  empty: "比較トレイ、Voice Design結果、Live文字起こしに次の一操作を短く示す"
+  error: "入力を保ち、機密を含まない上流エラーと再試行可能性を同じ領域に表示する"
+  offline: "SSHトンネルまたはAzureラボへ到達できないことを、Geminiの生成失敗と区別する"
+  conflict: "同じ種類の生成が実行中なら二重送信を拒否し、完了後の再試行を案内する"
+  selection: "選択中のモデル、声、台本、話し方を色だけでなく標準control状態と文言で示す"
+  generated: "音声時間、生成時間、概算料金を添えて比較トレイ先頭へ追加する"
+  live: "接続準備、会話中、停止、エラーを文言で示し、停止時にマイク・再生・WebSocketを閉じる"
+accessibility:
+  dynamic_type: "ブラウザ拡大と狭幅で1列に再配置し、入力・結果・Liveの順序を保つ"
+  voiceover: "入力ラベル、選択値、進行状態、話者付き文字起こし、破壊操作の対象IDを読み上げる"
+  target_size: "主要ボタンと選択操作を最低44 CSSピクセル相当にする"
+  focus: "見出し、モデル、声、台本、話し方、生成、結果、Design、Liveの順でキーボード移動できる"
+  reduce_motion: "状態をグローや動きだけに依存せず、文言と標準control状態を常に併用する"
+evidence:
+  current: []
+  approved: []
+  privacy: "架空の既定台本と空の比較状態だけを保存可能な証跡とし、実際の音声・文字起こし・Voice ID・トークンを含めない"
