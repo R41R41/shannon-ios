@@ -1,0 +1,107 @@
+import Foundation
+
+public extension ShannonAPIClientProtocol {
+    func transcribeVoice(
+        scopeKey: String,
+        recording: ShannonVoiceRecording
+    ) async throws -> ShannonVoiceTranscriptionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func synthesizeGeminiSpeech(
+        scopeKey: String,
+        text: String,
+        style: String? = nil
+    ) async throws -> ShannonGeminiSpeech {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        try await createGeminiLiveSession(scopeKey: scopeKey, threadId: threadId)
+    }
+
+    func createRealtimeVoiceCall(
+        scopeKey: String,
+        threadId: String?,
+        offerSDP: String,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonRealtimeVoiceCallDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func performLiveVoiceDelegation(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        try await performLiveVoiceDelegation(
+            scopeKey: scopeKey,
+            threadId: threadId,
+            transcript: transcript,
+            participantMode: participantMode
+        )
+    }
+
+    func analyzeVoiceCameraSnapshot(
+        scopeKey: String,
+        threadId: String?,
+        jpegData: Data
+    ) async throws -> ShannonVoiceVisionResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadVoiceIdentity(scopeKey: String) async throws -> ShannonVoiceIdentityResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func updateVoiceIdentity(
+        scopeKey: String,
+        mode: ShannonVoiceIdentityModeDTO,
+        selectedVoice: String?
+    ) async throws -> ShannonVoiceIdentityResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadVoicePreview(scopeKey: String, voice: String) async throws -> Data {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func loadRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func extendRealtimeVoiceAllowance(scopeKey: String) async throws -> ShannonRealtimeVoiceAllowanceDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+}

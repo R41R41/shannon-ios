@@ -14,7 +14,6 @@ extension ShannonConversationView {
             for: model.currentExpression,
             appearance: appIconAppearance(for: activeColorScheme)
         )
-        await voiceIdentityModel.reload()
     }
 
 #if DEBUG
@@ -33,6 +32,11 @@ extension ShannonConversationView {
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
             drawerProgress = 1
         }
+#if os(iOS)
+        if ShannonVoiceDesignPreview.isEnabled {
+            showsGeminiLiveVoice = true
+        }
+#endif
     }
 #endif
 
@@ -226,7 +230,8 @@ extension ShannonConversationView {
     func performVoicePrimaryAction() {
         composerIsFocused = false
         voiceModel.cancel()
-        showsVoiceModePicker = true
+        geminiLiveVoiceModel.stop()
+        showsGeminiLiveVoice = true
     }
 
     var composerHasSendableContent: Bool {

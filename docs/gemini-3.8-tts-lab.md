@@ -1,6 +1,6 @@
 # Gemini 3.8 TTS listening lab
 
-Status: listening harness plus opt-in iPhone turn-based production experiment; not the default voice provider
+Status: listening harness plus opt-in iPhone turn-based and native-audio Live experiments; not the default voice provider
 
 ## Purpose
 
@@ -29,6 +29,113 @@ GEMINI_API_KEY=...
 
 The key stays server/development-side. It must never be added to the iOS or macOS
 bundle, copied into logs, or committed.
+
+## Open the private browser lab
+
+The quickest listening loop is the private browser workbench. Its production
+process runs on Azure loopback and has no public URL. From the trusted Mac:
+
+```sh
+pnpm voice:gemini:web
+```
+
+This opens an SSH local-forward to `http://127.0.0.1:4322` and launches the
+default browser. Keep the terminal open while testing; closing it removes access.
+The permanent Gemini key remains in Azure's mode-0600 environment file.
+
+Use the four areas in order:
+
+1. **声を比較** — choose one Japanese emotion script and a short turn-level acting
+   direction, then generate Flash and Flash-Lite either once or three times each.
+   The in-memory A/B tray keeps up to eight samples with model, repetition, request
+   time, audio duration, and estimated cost, so identity stability is visible rather
+   than inferred from one lucky take.
+2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
+   one-year storage, quota, and cost. Nine editable original-character presets
+   cover translucent emotional Shannon, frank sunny energy, confident prickly
+   warmth, refined clarity, tender devotion, digital idol, reserved lower register,
+   and formal emotion that gradually opens. Each preset provides Japanese / English
+   and short / detailed design text for matched prompt-language experiments. Multiple
+   candidates remain visible in the current tab; deletion requires retyping each
+   exact ID.
+3. **Liveで会話確認** — optionally verify conversational cadence, server VAD,
+   interruption, and native-audio character with the voice selected in step 1 or
+   the stored Voice ID created in step 2. Voice identity and acting are selected
+   independently: a neutral baseline plus nine Live profiles mirror the original
+   Voice Design concepts plus Shannon's cheeky genius-maid persona, so the same Voice
+   ID can be compared with different conversational timing, emotional contrast, and
+   sentence endings. The transcript
+   marks each new voice/profile combination, and three fixed conversation topics
+   provide a repeatable comparison path.
+4. **作ったShannonの声で会話** — run a browser-only cascade with
+   `gemini-3.5-transcribe-live`, a selectable Flash-Lite / Flash text response,
+   and streaming Gemini 3.8 TTS. This is the path for judging the exact stored
+   Voice ID in conversation. The text response is streamed and split into at most
+   the model's intended one or two Japanese sentences: TTS for the first complete
+   sentence begins while the response model is still producing the next one. Each
+   sentence carries one hidden bounded emotion tag that is removed from the visible
+   transcript and speakable text, then mapped to a short TTS style layered over the
+   selected acting profile. It shows first-sentence, TTS-first-audio, and combined
+   final-transcript-to-first-audio latency for every turn. Full-duplex mode is enabled
+   by default: browser echo cancellation keeps microphone upload and transcription
+   active while Shannon speaks. Endpoint confirmation varies from 80–420 ms after the
+   transcriber result according to terminal punctuation and continuation cues. Initial
+   recognized speech first ducks Shannon's output; the confirmation window, release
+   window, and ducking level adapt to headset detection, browser AEC, current playout
+   level, and recent false positives. Sustained or finalized speech then aborts both
+   upstream HTTP generation and queued playback before starting the next turn, while an
+   unconfirmed detection restores the original volume. PCM playback uses a bounded
+   adaptive lead buffer and short per-chunk crossfades; the current endpoint delay,
+   interruption mode, buffer target, and underrun correction count remain visible.
+   A visible switch
+   restores the previous turn-taking behavior in environments where acoustic echo
+   remains strong.
+
+The `Shannon · ポンコツ天才メイド` path deliberately separates three controls:
+the stored Voice Design describes only permanent audible traits, the response model
+receives the character relationship and a small set of non-verbatim dialogue
+examples, and TTS receives one short energetic turn style. This keeps example lines
+from being read as instructions while preserving a lively, cheeky baseline in normal
+conversation. The browser prefers a stored voice named `Shannon Maid` for cascade
+testing without deleting or changing the previous `Shannon` voice.
+
+The lab intentionally does not make Live a prerequisite for voice selection.
+Matched TTS is faster, cheaper, and makes voice differences easier to hear. Live is
+useful after narrowing candidates because native audio can pace and color the same
+voice differently from TTS. The browser synchronizes the step-1 selection into the
+Live selector and adds a newly designed `voice_...` identity to both selectors.
+An actual `gemini-3.8-live` setup handshake was verified for an Extended Voice
+Library ID and a temporary prompted Voice ID on 2026-09-25; the temporary voice was
+deleted after its TTS and Live compatibility checks passed.
+
+The browser sends neither the API key nor ordinary TTS text/audio to Shannon's
+database. Samples use in-memory object URLs; Live and cascade transcription use
+single-use tokens and browser echo cancellation, send 16 kHz mono PCM, and play
+24 kHz PCM. The cascade's bounded text history exists only in the current tab. No
+audio, transcript, message, token, or credential is logged or persisted by the lab.
+
+The original deployed Azure smoke check on 2026-09-25 used stored voice
+`voice_8hj0yjm1cckv`. With the latency-first pair, response text completed in
+1.05 seconds and Flash-Lite TTS produced its first PCM chunk in another 1.04 seconds
+(about 2.1 seconds from finalized transcript to first audio, excluding the speech
+endpoint detector). That measurement predates sentence-level pipelining and remains a
+baseline rather than a current claim. These are one-run transport observations, not
+p50/p95 targets.
+
+All four prompt variants for the original eight built-in designs were verified
+against the real Voices API on 2026-09-25, and every successful smoke-test Voice ID
+was deleted immediately. The Japanese detailed variant of the Shannon maid design
+was successfully created on 2026-09-26 and retained as `Shannon Maid` for
+conversation testing. Numeric
+minor-age wording and negative phrases about imitating known voices were rejected by
+the safety filter, so the shipped presets express the same intended age impression
+through register, tempo, pitch movement, diction, and emotional delivery without
+sending those trigger phrases. A custom edit is labeled unverified. The billable
+smoke command is intentionally excluded from deterministic checks:
+
+```sh
+node scripts/gemini-voice-preset-smoke.mjs --confirm-billable --delete-successes --all-variants
+```
 
 ## Discover Japanese voices
 
@@ -107,6 +214,9 @@ pnpm voice:gemini -- design --store --preset shannon-calm
 
 The returned voice ID and preview WAV are saved locally. Use the exact ID with
 `sample --voice voice_...` to compare the same identity on both TTS models.
+The creation request deliberately omits `voice.model`; Gemini selects the current
+default supported Voice Design model and returns the actual creation model with the
+new voice. The resulting Voice ID is independent of the TTS model used later.
 
 Delete a discarded stored design only by repeating its exact ID:
 
@@ -154,6 +264,16 @@ sends the transcript through the ordinary Shannon text/history/tool lane, reques
 Live path remains available and unchanged. The Gemini key never enters the app, and
 neither source audio nor generated WAV is persisted by Shannon.
 
+The second experiment uses `Gemini 3.8 Live` rather than a TTS model. It sends
+16 kHz mono PCM from iPhone directly to Google's Live WebSocket and receives native
+24 kHz audio, input/output transcription, interruption, tool calls, and session
+resumption on the same connection. Azure authenticates the paired owner and mints a
+one-use ephemeral token whose field mask fixes `gemini-3.8-live` and AUDIO output;
+the permanent key remains in its mode-0600 secret file. The client retains local
+control of the selected Aoede voice, Shannon instruction, tool declaration, context
+compression, and resumption handle. Completed transcript pairs are persisted to the
+same Talk thread, while raw PCM is not retained.
+
 ## Cost comparison baseline
 
 Provider list prices used by the UI estimate are valid through 2026-12-31:
@@ -164,6 +284,8 @@ Provider list prices used by the UI estimate are valid through 2026-12-31:
 | Gemini 3.8 Flash TTS output | $0.00225 / 10 s | $0.0135 / output minute |
 | OpenAI `gpt-transcribe` input | $0.0045 / input minute | $0.00225 / 30 s input |
 | OpenAI GPT-Live active session | $0.05 / active minute | $0.05 / conversation minute, plus backend/tool calls |
+| Gemini 3.8 Live input audio | $0.005 / input minute | $0.0025 / 30 s input |
+| Gemini 3.8 Live output audio | $0.018 / output minute | $0.009 / 30 s output |
 
 For a one-minute turn cycle with 30 seconds of user speech and 30 seconds of Shannon
 speech, the Flash-Lite speech transport estimate is about $0.00675: $0.00225 for
@@ -171,9 +293,16 @@ transcription plus $0.0045 for Gemini audio output. Ordinary Shannon text-model 
 tool costs remain additional. Gemini TTS prices double on 2027-01-01, so the server's
 configurable 10-second estimate must be updated before then.
 
+For the same 30-second input plus 30-second output cycle, Gemini 3.8 Live is about
+$0.0115 before Shannon backend/tool calls. Unlike the Flash-Lite cascade, its native
+audio model performs the live conversation itself, so the cost and behavior are not
+directly interchangeable with transcription + ordinary Shannon text inference + TTS.
+
 ## Official references
 
 - [Gemini API text-to-speech guide](https://ai.google.dev/gemini-api/docs/speech-generation)
 - [Gemini 3.8 Flash TTS model](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash-tts)
 - [Voice design](https://ai.google.dev/gemini-api/docs/voice-design)
 - [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)
+- [Gemini 3.8 Live](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-live)
+- [Live API ephemeral tokens](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens)

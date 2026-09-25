@@ -63,14 +63,18 @@ extension ShannonAPIClient {
         return try JSONDecoder().decode(ShannonVoiceTranscriptionDTO.self, from: data)
     }
 
-    public func synthesizeGeminiSpeech(scopeKey: String, text: String) async throws -> ShannonGeminiSpeech {
+    public func synthesizeGeminiSpeech(
+        scopeKey: String,
+        text: String,
+        style: String? = nil
+    ) async throws -> ShannonGeminiSpeech {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/speech"))
         request.httpMethod = "POST"
         request.timeoutInterval = 75
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         authorize(&request, connection: connection)
-        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text))
+        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style))
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
@@ -91,6 +95,46 @@ extension ShannonAPIClient {
             durationSeconds: duration,
             estimatedCostUsd: cost
         )
+    }
+
+    public func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        try await createGeminiLiveSession(
+            scopeKey: scopeKey,
+            threadId: threadId,
+            participantMode: .owner
+        )
+    }
+
+    public func createGeminiLiveSession(
+        scopeKey: String,
+        threadId: String?,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/cascade/sessions"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(GeminiLiveSessionRequestDTO(
+            threadId: threadId,
+            participantMode: participantMode
+        ))
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        let result = try JSONDecoder().decode(ShannonGeminiLiveSessionDTO.self, from: data)
+        guard !result.token.isEmpty,
+              result.model == "gemini-3.5-transcribe-live",
+              !result.voice.isEmpty,
+              !result.threadId.isEmpty,
+              !result.instructions.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return result
     }
 
     public func createRealtimeVoiceCall(
@@ -164,7 +208,7 @@ extension ShannonAPIClient {
         deviceContext: ShannonVoiceDeviceContextDTO?
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
         let connection = currentConnection()
-        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/live/delegations"))
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/cascade/delegations"))
         request.httpMethod = "POST"
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -305,7 +349,7 @@ extension ShannonAPIClient {
         shannonTranscript: String
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
         let connection = currentConnection()
-        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/realtime/turns"))
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/cascade/turns"))
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "content-type")
@@ -325,4 +369,10 @@ extension ShannonAPIClient {
 
 private struct GeminiSpeechRequestDTO: Encodable {
     let text: String
+    let style: String?
+}
+
+private struct GeminiLiveSessionRequestDTO: Encodable {
+    let threadId: String?
+    let participantMode: ShannonVoiceParticipantMode
 }

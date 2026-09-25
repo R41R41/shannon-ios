@@ -138,7 +138,10 @@ export function dispatchLiveVoiceRequest(
   request: ApiRequest,
   dependencies: LiveVoiceDependencies,
 ): ApiResponse | Promise<ApiResponse> | null {
-  if (request.method !== 'POST' || request.path !== '/v1/voice/live/delegations') return null;
+  if (request.method !== 'POST' || ![
+    '/v1/voice/gemini/cascade/delegations',
+    '/v1/voice/live/delegations',
+  ].includes(request.path)) return null;
   if (!objectBody(request.body)) return badRequest('JSON object body is required');
   const scopeKey = request.body.scopeKey;
   if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');

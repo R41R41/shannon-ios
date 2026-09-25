@@ -45,11 +45,11 @@ extension ShannonConversationView {
                 }
 
                 Section("音声と情報") {
-                    settingsButton(
+                    ShannonSettingsRow(
                         title: "シャノンの声",
-                        detail: voiceIdentityModel.summary,
+                        detail: "Gemini · サーバーで設定",
                         symbol: "speaker.wave.2"
-                    ) { showsVoiceIdentity = true }
+                    )
                     settingsButton(
                         title: "情報源",
                         detail: worldSubscriptionModel.summary,
@@ -118,9 +118,6 @@ extension ShannonConversationView {
         }
         .sheet(isPresented: $showsVoiceDiagnostics) {
             ShannonVoiceDiagnosticsView()
-        }
-        .sheet(isPresented: $showsVoiceIdentity) {
-            ShannonVoiceIdentityView(model: voiceIdentityModel)
         }
         .sheet(isPresented: $showsWorldSubscriptions) {
             ShannonWorldSubscriptionView(model: worldSubscriptionModel)

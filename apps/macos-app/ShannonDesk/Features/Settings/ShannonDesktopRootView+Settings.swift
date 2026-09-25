@@ -30,34 +30,9 @@ extension ShannonDesktopRootView {
             }
 
             Section("シャノンの声") {
-                Picker("声", selection: voiceIdentitySelection) {
-                    Text("シャノンに任せる").tag("automatic")
-                    ForEach(voiceIdentity.response.candidates) { candidate in
-                        Text(candidate.name).tag(candidate.id)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(voiceIdentity.savingVoiceID != nil)
-
-                HStack {
-                    ForEach(voiceIdentity.response.candidates) { candidate in
-                        Button {
-                            Task { await voiceIdentity.togglePreview(candidate) }
-                        } label: {
-                            Label(
-                                candidate.name,
-                                systemImage: voiceIdentity.previewingVoiceID == candidate.id
-                                    ? "stop.fill" : "play.fill"
-                            )
-                        }
-                    }
-                }
-                Text("変更は次に始める音声会話から反映され、iPhoneと共有されます。")
+                LabeledContent("方式", value: "Gemini")
+                Text("声はShannonサーバー側のGemini設定から一貫して適用されます。")
                     .foregroundStyle(.secondary)
-                if let errorMessage = voiceIdentity.errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(Color.shannonDanger)
-                }
             }
 
             Section("情報源") {
@@ -83,7 +58,6 @@ extension ShannonDesktopRootView {
         .padding(24)
         .navigationTitle("設定")
         .task { await worldSubscriptions.reload() }
-        .onDisappear { voiceIdentity.stopPreview() }
     }
 
     var appVersionDescription: String {
@@ -92,22 +66,4 @@ extension ShannonDesktopRootView {
         return "\(version) (\(build))"
     }
 
-    var voiceIdentitySelection: Binding<String> {
-        Binding(
-            get: {
-                voiceIdentity.response.preference.mode == .automatic
-                    ? "automatic"
-                    : voiceIdentity.response.preference.selectedVoice ?? "automatic"
-            },
-            set: { value in
-                Task {
-                    if value == "automatic" {
-                        await voiceIdentity.selectAutomatic()
-                    } else if let candidate = voiceIdentity.response.candidates.first(where: { $0.id == value }) {
-                        await voiceIdentity.select(candidate)
-                    }
-                }
-            }
-        )
-    }
 }

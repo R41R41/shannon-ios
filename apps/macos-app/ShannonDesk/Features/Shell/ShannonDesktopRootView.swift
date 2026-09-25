@@ -140,9 +140,6 @@ public struct ShannonDesktopRootView: View {
                 await conversation.refreshInitiatives()
             }
             restoreSelectedTaskIfAvailable()
-            if !conversation.isDesignPreview {
-                await voiceIdentity.reload()
-            }
         }
         .task(id: connection.isConnected) {
             guard connection.isConnected, !conversation.isDesignPreview else { return }

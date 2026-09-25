@@ -198,7 +198,7 @@ private struct ShannonDesktopSettingsScene: View {
             }
             LabeledContent("接続", value: connection.statusLabel)
             LabeledContent("通信", value: connection.verificationLabel)
-            ShannonDesktopVoiceIdentitySettings(model: voiceIdentity)
+            LabeledContent("シャノンの声", value: "Gemini（サーバー設定）")
             Button("情報源（\(worldSubscriptions.summary)）") {
                 showsWorldSubscriptions = true
             }
@@ -215,9 +215,7 @@ private struct ShannonDesktopSettingsScene: View {
         .formStyle(.grouped)
         .padding(24)
         .frame(width: 540, height: 420)
-        .task { await voiceIdentity.reload() }
         .task { await worldSubscriptions.reload() }
-        .onDisappear { voiceIdentity.stopPreview() }
         .sheet(isPresented: $showsWorldSubscriptions) {
             ShannonWorldSubscriptionView(model: worldSubscriptions)
                 .frame(minWidth: 560, minHeight: 560)
@@ -225,62 +223,6 @@ private struct ShannonDesktopSettingsScene: View {
         .sheet(isPresented: $showsAppIconSettings) {
             ShannonAppIconSettingsView(model: appIcon)
         }
-    }
-}
-
-private struct ShannonDesktopVoiceIdentitySettings: View {
-    @Bindable var model: ShannonVoiceIdentityModel
-
-    var body: some View {
-        Picker("シャノンの声", selection: selection) {
-            Text("シャノンに任せる").tag("automatic")
-            ForEach(model.response.candidates) { candidate in
-                Text(candidate.name).tag(candidate.id)
-            }
-        }
-        .disabled(model.savingVoiceID != nil)
-
-        HStack {
-            Text("試聴")
-            Spacer()
-            ForEach(model.response.candidates) { candidate in
-                Button {
-                    Task { await model.togglePreview(candidate) }
-                } label: {
-                    Label(
-                        candidate.name,
-                        systemImage: model.previewingVoiceID == candidate.id ? "stop.fill" : "play.fill"
-                    )
-                }
-            }
-        }
-        Text("変更は次に始める音声会話から反映され、iPhoneと共有されます。")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        if let errorMessage = model.errorMessage {
-            Text(errorMessage)
-                .font(.caption)
-                .foregroundStyle(Color.shannonDanger)
-        }
-    }
-
-    private var selection: Binding<String> {
-        Binding(
-            get: {
-                model.response.preference.mode == .automatic
-                    ? "automatic"
-                    : model.response.preference.selectedVoice ?? "automatic"
-            },
-            set: { value in
-                Task {
-                    if value == "automatic" {
-                        await model.selectAutomatic()
-                    } else if let candidate = model.response.candidates.first(where: { $0.id == value }) {
-                        await model.select(candidate)
-                    }
-                }
-            }
-        )
     }
 }
 

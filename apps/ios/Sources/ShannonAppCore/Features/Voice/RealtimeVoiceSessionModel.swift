@@ -21,6 +21,8 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var inputState: ShannonVoiceInputState
     public private(set) var isSendingText = false
     public private(set) var textSendErrorMessage: String?
+    public internal(set) var microphoneLevel: Double = 0
+    public internal(set) var playbackLevel: Double = 0
 
     var transport: ShannonWebRTCVoiceTransport?
     var transcriptState = ShannonRealtimeVoiceTranscriptState()
@@ -69,6 +71,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         dailyRemainingSeconds = nil
         isSendingText = false
         textSendErrorMessage = nil
+        microphoneLevel = 0
+        playbackLevel = 0
         diagnostics.record("realtime.start.requested")
 
         let granted = await AVAudioApplication.requestRecordPermission()
@@ -129,6 +133,18 @@ public final class ShannonRealtimeVoiceSessionModel {
                 self?.fail("iPhoneの音声機能が再起動されました。もう一度つなぐと再開できます。")
             }
         }
+        transport.onMicrophoneLevel = { [weak self] level in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.microphoneLevel = Double(level)
+            }
+        }
+        transport.onPlaybackLevel = { [weak self] level in
+            Task { @MainActor in
+                guard self?.sessionGeneration == generation else { return }
+                self?.playbackLevel = Double(level)
+            }
+        }
 
         do {
             try transport.setInputPreference(inputState.preference)
@@ -166,6 +182,7 @@ public final class ShannonRealtimeVoiceSessionModel {
 
     public func toggleMute() {
         isMuted.toggle()
+        if isMuted { microphoneLevel = 0 }
         transport?.setMuted(isMuted)
     }
 
@@ -291,6 +308,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         isMuted = false
         isSendingText = false
         textSendErrorMessage = nil
+        microphoneLevel = 0
+        playbackLevel = 0
         sessionStartedAt = nil
         phase = .idle
         errorMessage = nil
@@ -461,6 +480,8 @@ public final class ShannonRealtimeVoiceSessionModel {
         performLiveDelegation = nil
         isMuted = false
         isSendingText = false
+        microphoneLevel = 0
+        playbackLevel = 0
         sessionStartedAt = nil
         phase = .failed
         errorMessage = message

@@ -52,6 +52,37 @@ public struct ShannonRealtimeVoiceCallDTO: Equatable, Sendable {
     }
 }
 
+public struct ShannonGeminiLiveSessionDTO: Codable, Equatable, Sendable {
+    public let token: String
+    public let model: String
+    public let voice: String
+    public let threadId: String
+    public let instructions: String
+    public let expiresAt: String
+    public let inputUsdPerMinute: Double
+    public let outputUsdPerMinute: Double
+
+    public init(
+        token: String,
+        model: String,
+        voice: String,
+        threadId: String,
+        instructions: String,
+        expiresAt: String,
+        inputUsdPerMinute: Double,
+        outputUsdPerMinute: Double
+    ) {
+        self.token = token
+        self.model = model
+        self.voice = voice
+        self.threadId = threadId
+        self.instructions = instructions
+        self.expiresAt = expiresAt
+        self.inputUsdPerMinute = inputUsdPerMinute
+        self.outputUsdPerMinute = outputUsdPerMinute
+    }
+}
+
 public struct ShannonRealtimeVoiceAllowanceDTO: Codable, Equatable, Sendable {
     public let dayKey: String
     public let baseAllowanceSeconds: Int

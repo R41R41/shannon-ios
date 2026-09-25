@@ -34,6 +34,7 @@ const requiredFiles = [
   'docs/design/screens/macos/development.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
+  'docs/design/screens/web/gemini-voice-lab.yaml',
   'scripts/check-xcode-workspace.mjs',
   'scripts/check-xcode-workspace.test.mjs',
   'scripts/xcode.sh',
@@ -100,6 +101,7 @@ const screenContracts = [
   'docs/design/screens/macos/development.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
+  'docs/design/screens/web/gemini-voice-lab.yaml',
 ];
 for (const path of screenContracts) {
   const screen = await text(path);

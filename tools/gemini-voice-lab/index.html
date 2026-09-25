@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="ShannonのGemini音声をアプリ配信なしで比較する私用ラボ">
+  <title>Shannon Voice Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Shannon Voice Lab トップ">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+      <span><strong>Shannon</strong><small>Voice Lab</small></span>
+    </a>
+    <div class="privacy-badge"><span aria-hidden="true">●</span> Private · 保存なし</div>
+  </header>
+
+  <div id="file-mode-notice" class="launch-notice hidden" role="alert">
+    <div>
+      <strong>このHTMLは直接実行できません</strong>
+      <span>秘密鍵をブラウザへ渡さないため、Voice LabはAzureへのSSHトンネル経由で動きます。</span>
+      <code>pnpm voice:gemini:web</code>
+    </div>
+    <a href="http://127.0.0.1:4322/">トンネル接続済みなら開く</a>
+  </div>
+  <div id="boot-error-notice" class="launch-notice error-notice hidden" role="alert">
+    <div><strong>Voice Labを読み込めませんでした</strong><span>ページを再読み込みしてください。直らない場合はトンネルを開き直してください。</span></div>
+  </div>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">VOICE IDENTITY WORKBENCH</p>
+      <h1>声を、聴きながら育てる。</h1>
+      <p>同じ日本語で声・モデル・話し方を揃えて比較できます。生成音声と台本はサーバーに保存されません。</p>
+    </section>
+
+    <nav class="section-tabs" aria-label="ラボ機能">
+      <a href="#compare">声を比較</a>
+      <a href="#design">声をデザイン</a>
+      <a href="#live">Liveで会話確認</a>
+      <a href="#cascade">Shannon音声で会話</a>
+    </nav>
+
+    <section id="compare" class="workspace" aria-labelledby="compare-title">
+      <div class="workspace-main">
+        <div class="section-heading">
+          <div><p class="step">01 · LISTEN</p><h2 id="compare-title">声を比較</h2></div>
+          <p>1回ごとに課金されます。音声はこのタブ内だけに残ります。</p>
+        </div>
+
+        <form id="sample-form" class="form-stack">
+          <fieldset>
+            <legend>モデル比較</legend>
+            <div class="segmented three-up">
+              <label><input type="radio" name="model-mode" value="both" checked><span>両方<small>おすすめ · A/B</small></span></label>
+              <label><input type="radio" name="model-mode" value="gemini-3.8-flash-tts"><span>Flash<small>品質優先</small></span></label>
+              <label><input type="radio" name="model-mode" value="gemini-3.8-flash-lite-tts"><span>Flash-Lite<small>速い · 安い</small></span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>同じ条件の生成回数</legend>
+            <div class="segmented">
+              <label><input type="radio" name="repetitions" value="1"><span>1回<small>すばやく確認</small></span></label>
+              <label><input type="radio" name="repetitions" value="3" checked><span>3回<small>声の安定性も確認</small></span></label>
+            </div>
+          </fieldset>
+
+          <label class="field">声
+            <select id="voice" name="voice" required aria-describedby="voice-help">
+              <option value="Leda">Leda</option><option value="Aoede">Aoede</option>
+              <option value="Zephyr">Zephyr</option><option value="Achernar">Achernar</option>
+            </select>
+            <small id="voice-help">日本語・会話向けの声をGoogleから取得します。</small>
+          </label>
+
+          <label class="field">台本
+            <select id="script-preset">
+              <option value="everyday">日常 · 自然な会話</option>
+              <option value="joy">喜び · はずむ反応</option>
+              <option value="prickly">強気 · 照れ隠し</option>
+              <option value="reassure">慰め · 静かな優しさ</option>
+              <option value="resolve">決意 · 凛とした芯</option>
+              <option value="pronunciation">固有名詞 · 明瞭さ</option>
+              <option value="range">感情レンジ · 1本で確認</option>
+              <option value="custom">自由入力</option>
+            </select>
+          </label>
+          <label class="field"><span class="sr-only">読み上げる日本語</span>
+            <textarea id="sample-text" name="text" rows="4" maxlength="5000" required></textarea>
+            <span class="counter"><output id="text-count">0</output> / 5,000</span>
+          </label>
+
+          <label class="field">話し方
+            <select id="style-preset">
+              <option value="plain">指定なし · 声そのもの</option>
+              <option value="anime-natural" selected>アニメ自然体 · おすすめ</option>
+              <option value="crystal-heroine">透明感ヒロイン · 優しく鮮やか</option>
+              <option value="sunny-spark">天真爛漫 · 快活で素直</option>
+              <option value="prickly-warm">ツンデレ調 · 強気から照れ</option>
+              <option value="tender-close">親密な優しさ · 静かな芯</option>
+              <option value="custom">自由入力</option>
+            </select>
+          </label>
+          <label id="custom-style-field" class="field hidden">話し方の自由入力
+            <input id="custom-style" maxlength="500" placeholder="例: airy, tender, subtly playful">
+          </label>
+
+          <div class="experiment-summary" id="experiment-summary" aria-live="polite"></div>
+          <button id="generate-button" class="primary" type="submit"><span aria-hidden="true">▶</span> 比較セットを生成</button>
+          <p id="sample-status" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <aside class="comparison" aria-labelledby="comparison-title">
+        <div class="aside-heading"><h3 id="comparison-title">比較トレイ</h3><button id="clear-samples" class="text-button" type="button">すべて消す</button></div>
+        <div id="sample-empty" class="empty-state"><span aria-hidden="true">♪</span><p>生成した声がここに並びます。</p><small>「両方 × 3回」なら、音質・速度・声のぶれを一度に比べられます。</small></div>
+        <ol id="sample-list" class="sample-list" aria-live="polite"></ol>
+      </aside>
+    </section>
+
+    <section id="design" class="panel" aria-labelledby="design-title">
+      <div class="section-heading">
+        <div><p class="step">02 · DESIGN</p><h2 id="design-title">Shannon専用の声をデザイン</h2></div>
+        <p>声の説明から新しいVoice IDを作ります。これはGoogle側に最長1年保存されます。</p>
+      </div>
+      <form id="design-form" class="design-grid">
+        <div class="form-stack">
+          <label class="field">声質プリセット
+            <select id="design-preset">
+              <option value="shannon-maid">Shannon · ポンコツ天才メイド</option>
+              <option value="shannon-crystal">シャノン本命 · 透明感ヒロイン</option>
+              <option value="sunny-fourteen">天真爛漫 · 竹を割った快活さ</option>
+              <option value="tsundere-leader">ツンデレ快活 · 強気なリーダー</option>
+              <option value="refined-translucent">上品な透明感 · 柔らかな知性</option>
+              <option value="devoted-tender">献身的で優しい · 静かな芯</option>
+              <option value="digital-idol">デジタルアイドル · 高く澄んだ輝き</option>
+              <option value="reserved-low-soft">控えめ低音 · 静かな照れと本音</option>
+              <option value="formal-awakening">凛とした清廉さ · 感情が花開く</option>
+              <option value="custom">自由入力</option>
+            </select>
+            <small id="design-preset-help">プリセットごとに実API確認状況を表示します。</small>
+          </label>
+          <div class="variant-grid">
+            <fieldset>
+              <legend>設計文の言語</legend>
+              <div class="segmented">
+                <label><input type="radio" name="prompt-language" value="ja" checked><span>日本語<small>意図を読みやすい</small></span></label>
+                <label><input type="radio" name="prompt-language" value="en"><span>英語<small>基準と比較</small></span></label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>設計文の密度</legend>
+              <div class="segmented">
+                <label><input type="radio" name="prompt-detail" value="short"><span>短文<small>特徴を絞る</small></span></label>
+                <label><input type="radio" name="prompt-detail" value="detailed" checked><span>詳細<small>演技幅まで指定</small></span></label>
+              </div>
+            </fieldset>
+          </div>
+          <label class="field">名前<input id="design-name" maxlength="100" value="Shannon bright"></label>
+          <label class="field">声の設計文
+            <textarea id="design-prompt" rows="9" maxlength="1000"></textarea>
+            <small>プリセットを選んだ後も自由に調整できます。文章を編集すると「自由入力」に切り替わります。</small>
+          </label>
+          <label class="check-row"><input id="confirm-store" type="checkbox"><span>このVoice IDがGoogleプロジェクトに保存され、API料金とカスタム音声枠を使うことを確認しました。</span></label>
+          <button id="design-button" class="secondary" type="submit" disabled>新しい声を作る</button>
+          <p id="design-status" class="status" role="status" aria-live="polite"></p>
+        </div>
+        <div id="design-results" class="design-results">
+          <div id="design-empty" class="design-result empty-state">
+          <span aria-hidden="true">✦</span><p>作った声のプレビューとVoice IDを表示します。</p>
+          <small>複数作っても、このタブ内で並べて管理できます。</small>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <section id="live" class="panel live-panel" aria-labelledby="live-title">
+      <div class="section-heading">
+        <div><p class="step">03 · LIVE CHECK</p><h2 id="live-title">Liveで会話確認</h2></div>
+        <p>TTSの声づくりとは別の最終確認です。会話の間、抑揚、割り込みを短時間だけ試します。</p>
+      </div>
+      <div class="live-grid">
+        <div class="live-controls">
+          <label class="field">Liveの声
+            <select id="live-voice">
+              <option>Leda</option><option>Aoede</option><option>Zephyr</option><option>Achernar</option>
+              <option>Laomedeia</option><option>Achird</option><option>Vindemiatrix</option><option>Sadachbia</option>
+            </select>
+            <small>01で選んだ声と、02で作ったVoice IDも選べます。01の選択変更はここへ引き継がれます。</small>
+          </label>
+          <label class="field">Live演技プロファイル
+            <select id="live-profile"></select>
+            <small>Voice IDは声質、プロファイルは会話中の感情・間・語尾を担当します。声を作り直さずに切り替えられます。</small>
+          </label>
+          <div id="live-profile-summary" class="profile-summary" aria-live="polite"></div>
+          <div class="live-checklist">
+            <strong>同条件で比べる話題</strong>
+            <ol>
+              <li>「今日ちょっと面白いことがあってさ」</li>
+              <li>「実は少し失敗して落ち込んでる」</li>
+              <li>「でも次は絶対うまくやる」</li>
+            </ol>
+          </div>
+          <button id="live-toggle" class="primary" type="button"><span aria-hidden="true">●</span> 会話を始める</button>
+          <p id="live-status" class="status" role="status" aria-live="polite">停止中 · 初回はブラウザとmacOSのマイク許可が必要です。音声は保存しません。</p>
+          <div class="cost-note"><strong>料金目安</strong><span>入力 $0.005/分 + 出力 $0.018/分</span><small>2026-12-31までの表示基準。会話時間と発話量で変わります。</small></div>
+        </div>
+        <div class="transcript" aria-label="Live文字起こし">
+          <div class="orb" id="live-orb" aria-hidden="true"><i></i><i></i></div>
+          <p id="transcript-empty">会話を始めると、確認用の文字起こしがここに表示されます。</p>
+          <ol id="transcript-list"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="cascade" class="panel cascade-panel" aria-labelledby="cascade-title">
+      <div class="section-heading">
+        <div><p class="step">04 · CASCADE CHECK</p><h2 id="cascade-title">作ったShannonの声で会話</h2></div>
+        <p>音声認識・返答生成・TTSを分け、Voice Designの声を保ったまま会話した時の遅延を測ります。</p>
+      </div>
+      <div class="cascade-grid">
+        <div class="cascade-controls">
+          <label class="field">Shannonの声
+            <select id="cascade-voice">
+              <option>Leda</option><option>Aoede</option><option>Zephyr</option><option>Achernar</option>
+            </select>
+            <small>Googleに保存したVoice IDをそのままTTSへ渡します。「Shannon」という作成済み音声があれば最初に選びます。</small>
+          </label>
+          <fieldset>
+            <legend>返答モデル</legend>
+            <div class="segmented">
+              <label><input type="radio" name="cascade-text-model" value="gemini-3.5-flash-lite" checked><span>Flash-Lite<small>応答速度優先</small></span></label>
+              <label><input type="radio" name="cascade-text-model" value="gemini-3.8-flash"><span>3.8 Flash<small>会話品質優先</small></span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>音声モデル</legend>
+            <div class="segmented">
+              <label><input type="radio" name="cascade-tts-model" value="gemini-3.8-flash-lite-tts" checked><span>Flash-Lite TTS<small>約1秒で先頭音</small></span></label>
+              <label><input type="radio" name="cascade-tts-model" value="gemini-3.8-flash-tts"><span>Flash TTS<small>演技品質優先</small></span></label>
+            </div>
+          </fieldset>
+          <label class="field">演技プロファイル
+            <select id="cascade-profile"></select>
+            <small>返答文の人格と、TTSの短い話し方指定へ同じプロファイルを使います。</small>
+          </label>
+          <div id="cascade-profile-summary" class="profile-summary" aria-live="polite"></div>
+          <label class="check-row barge-in-row">
+            <input id="cascade-barge-in" type="checkbox" checked>
+            <span><strong>Shannonの発話中も聞く</strong><small>イヤホン・AEC・反響量に合わせて確認時間と減音量を調整します。反響が強い環境ではOFFにできます。</small></span>
+          </label>
+          <div class="tuning-strip" aria-label="音声対話の自動調整">
+            <div><span>発話確定</span><output id="cascade-endpoint-tuning">自動 80–420ms</output></div>
+            <div><span>割り込み</span><output id="cascade-barge-tuning">環境を確認</output></div>
+            <div><span>再生バッファ</span><output id="cascade-playback-tuning">45ms · 補正0</output></div>
+          </div>
+          <div class="latency-strip" aria-label="直前のターンのレイテンシ">
+            <div><span>最初の文</span><output id="cascade-text-latency">—</output></div>
+            <div><span>TTS先頭</span><output id="cascade-tts-latency">—</output></div>
+            <div class="latency-total"><span>認識確定→先頭音</span><output id="cascade-total-latency">—</output></div>
+          </div>
+          <button id="cascade-toggle" class="primary" type="button"><span aria-hidden="true">●</span> カスケード会話を始める</button>
+          <p id="cascade-status" class="status" role="status" aria-live="polite">停止中 · 割り込みONではShannonの発話中も聞き続けます。</p>
+          <div class="cost-note"><strong>料金と確認項目</strong><span>最初の文からの再生、文ごとの演技、可変割り込み、再生補正</span><small>返答は原則1〜2文に分けてTTSへ送ります。TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
+        </div>
+        <div class="transcript cascade-transcript" aria-label="カスケード会話の文字起こし">
+          <div class="orb" id="cascade-orb" aria-hidden="true"><i></i><i></i></div>
+          <p id="cascade-transcript-empty">開始して話しかけると、認識結果・返答・実測時間がここに表示されます。</p>
+          <p id="cascade-interim" class="interim hidden" aria-live="polite"></p>
+          <ol id="cascade-transcript-list"></ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="guidance" aria-labelledby="guidance-title">
+      <h2 id="guidance-title">おすすめの使い分け</h2>
+      <div class="guidance-grid">
+        <article><strong>1</strong><h3>TTSで声を絞る</h3><p>同じ台本で声とスタイルを比較。速く、差が分かりやすい。</p></article>
+        <article><strong>2</strong><h3>Voice Designで個性を作る</h3><p>既存声で足りないときだけ、Shannonらしい声の設計文を調整。</p></article>
+        <article><strong>3</strong><h3>Liveで会話感を確認</h3><p>候補を実会話で試し、間・割り込み・自然さを最終確認。</p></article>
+        <article><strong>4</strong><h3>作った声で遅延を測る</h3><p>カスケード会話でVoice Designの再現性と、最初の音までの時間を確認。</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer>Shannon Voice Lab · Azure private loopback · Audio is not retained</footer>
+  <script src="./file-mode-guard.js"></script>
+</body>
+</html>

@@ -8,8 +8,30 @@ explicit release operation.
 - Secrets only: `/home/azureuser/.config/shannon-ios/api.env` (`0600`)
 - Isolated Node 24 runtime: `/home/azureuser/shannon-ios-runtime/bin/node`
 - Loopback API: `127.0.0.1:4319`
+- Optional private Gemini Voice Lab: `127.0.0.1:4322` (SSH tunnel only; no Nginx route)
 - Public HTTPS base: `https://sh4nnon.com/companion`
 - Services: `shannon-ios.service` (response lane) and `shannon-ios-worker.service` (background/sleep lane)
+
+## Optional private Gemini Voice Lab
+
+`shannon-gemini-voice-lab.service` runs the browser listening workbench from
+`/home/azureuser/shannon-voice-lab`. It reuses only `GEMINI_API_KEY` from the
+mode-0600 API environment file. It has no public Nginx location, binds only to
+loopback, writes no samples, transcripts, or tokens to disk, and does not access
+Shannon's database.
+
+From the trusted Mac, open an authenticated SSH tunnel and the default browser:
+
+```sh
+pnpm voice:gemini:web
+```
+
+Keep that terminal open while using the lab. Closing it removes browser access.
+Normal TTS samples live only as in-memory browser object URLs. Voice Design is the
+one explicit exception: after a confirmation checkbox, Google stores the resulting
+Voice ID in the API project for up to one year. Deletion requires the exact ID.
+Gemini Live receives a single-use, short-lived token; the permanent API key is never
+returned to the browser.
 
 ## Optional cloud Agent Host
 

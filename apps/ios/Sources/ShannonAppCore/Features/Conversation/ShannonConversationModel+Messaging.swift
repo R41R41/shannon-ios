@@ -50,8 +50,20 @@ extension ShannonConversationModel {
         return reply
     }
 
-    public func synthesizeGeminiSpeech(_ text: String) async throws -> ShannonGeminiSpeech {
-        try await client.synthesizeGeminiSpeech(scopeKey: scopeKey, text: text)
+    public func synthesizeGeminiSpeech(_ text: String, style: String? = nil) async throws -> ShannonGeminiSpeech {
+        try await client.synthesizeGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
+    }
+
+    public func createGeminiLiveSession(
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        let session = try await client.createGeminiLiveSession(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            participantMode: participantMode
+        )
+        if participantMode == .owner { selectedThreadId = session.threadId }
+        return session
     }
 
     public func createRealtimeVoiceCall(

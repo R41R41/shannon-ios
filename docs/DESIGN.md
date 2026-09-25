@@ -10,6 +10,7 @@ This document is the entrypoint for the currently implemented Shannon design. It
 - Shared conversation, memory, settings, voice, organization, and task UI live by feature in `apps/ios/Sources/ShannonAppCore/Features`.
 - Mac composition lives by surface in `apps/macos-app/ShannonDesk/Features` (`Shell`, `Talk`, `Work`, `Development`, and `Settings`).
 - Shared semantic colors and presentation primitives live in `apps/ios/Sources/ShannonAppCore/DesignSystem`.
+- The private Gemini Voice Lab under `tools/gemini-voice-lab` is a browser-based operator surface for voice comparison. It shares Shannon's semantic roles and character presence, but does not replace an iPhone or Mac product screen.
 
 Platform-specific navigation and controls stay native. Shared state, DTOs, Markdown behavior, and semantic meaning may be reused; an iPhone or Mac layout is not treated as the other platform's template.
 
@@ -39,7 +40,7 @@ Shannon uses the same role-based grammar as Aether and Voyager. UI code selects 
 
 The shared vocabulary does not make the three products visually identical. Shannon retains its own token values, intelligence gradient, native platform controls, spacing, shapes, and screen composition. Light and Dark values are resolved centrally by `ShannonDesignSystem.swift`; feature views must not introduce direct red, orange, or green status colors.
 
-Shannon's compact and historical avatars keep the existing expression artwork. The iPhone empty-conversation hero, dialogue mode, and realtime voice use the Waterlight Eye: a near-black soft rounded-square face with sphere-projected capsule eyes, 160% eye scale, and the `intelligenceSky → brandPresence → intelligenceDepth` gradient. Dialogue activity changes the eyes themselves for preparing, connecting, listening, thinking, speaking, working, searching, waiting, completion, and failure; operational text remains the semantic authority. Touch tracking is active only while the face is pressed. Tapping produces one interruptible surprise-to-bashful reaction and reveals semantic `characterBlush` cheeks. Reduce Motion removes spatial and repeating motion while preserving the state-specific eye shape and the bounded bashful still response. Task rows, message avatars, and Mac compact avatars keep their existing assets and behavior.
+Shannon's compact and historical avatars keep the existing expression artwork. The iPhone empty-conversation hero, dialogue mode, and realtime voice use the Waterlight Eye: a near-black soft rounded-square face with sphere-projected capsule eyes, 160% eye scale, and the `intelligenceSky → brandPresence → intelligenceDepth` gradient. Dialogue activity changes the eyes themselves for preparing, connecting, listening, thinking, speaking, working, searching, waiting, completion, and failure; operational text remains the semantic authority. Voice surfaces add a bottom-edge intelligence glow: OpenAI Live follows transient microphone and playback level, while Gemini uses the same listening, processing, and speaking states without retaining audio samples. Thinking is a bounded lateral scan. Reduce Motion removes the scan and repeating flow while preserving a static state-specific glow; Reduce Transparency and Increase Contrast adjust its rendering independently of the controls. Touch tracking is active only while the face is pressed. Tapping produces one interruptible surprise-to-bashful reaction and reveals semantic `characterBlush` cheeks. Reduce Motion removes spatial and repeating motion while preserving the state-specific eye shape and the bounded bashful still response. Task rows, message avatars, and Mac compact avatars keep their existing assets and behavior.
 
 ## Preserve
 
@@ -61,6 +62,8 @@ Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/
 [`docs/design/screens/ios/talk.yaml`](design/screens/ios/talk.yaml), and
 [`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml). The Mac development workspace is governed by
 [`docs/design/screens/macos/development.yaml`](design/screens/macos/development.yaml).
+The private browser listening workbench is governed by
+[`docs/design/screens/web/gemini-voice-lab.yaml`](design/screens/web/gemini-voice-lab.yaml).
 App naming and the three-level icon selector are governed by
 [`docs/design/screens/ios/settings.yaml`](design/screens/ios/settings.yaml) and
 [`docs/design/screens/macos/settings.yaml`](design/screens/macos/settings.yaml).

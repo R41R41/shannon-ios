@@ -19,6 +19,8 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var inputState = ShannonVoiceInputState()
     public private(set) var isSendingText = false
     public private(set) var textSendErrorMessage: String?
+    public private(set) var microphoneLevel: Double = 0
+    public private(set) var playbackLevel: Double = 0
     public var canSendText: Bool { false }
     public var pendingToolCount: Int { 0 }
 

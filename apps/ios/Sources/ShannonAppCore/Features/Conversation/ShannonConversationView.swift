@@ -11,22 +11,18 @@ public struct ShannonConversationView: View {
     @State var connectionModel: ShannonConnectionModel?
     @State var memoryModel: ShannonMemoryModel
     @State var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
-    @State var voiceIdentityModel: ShannonVoiceIdentityModel
     @State var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State var appIconModel = ShannonAppIconModel()
     @State var voiceModel = ShannonVoiceConversationModel()
-    @State var realtimeVoiceModel = ShannonRealtimeVoiceSessionModel()
+    @State var geminiLiveVoiceModel = ShannonGeminiLiveSessionModel()
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
     @State var showsAppIconSettings = false
     @State var showsAppearanceSettings = false
     @State var showsTestFlightDelivery = false
     @State var showsVoiceDiagnostics = false
-    @State var showsVoiceIdentity = false
     @State var showsWorldSubscriptions = false
-    @State var showsLiveVoice = false
-    @State var showsGeminiVoice = false
-    @State var showsVoiceModePicker = false
+    @State var showsGeminiLiveVoice = false
     @State var showsSettings = false
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var drawerProgress: CGFloat = 0
@@ -62,14 +58,12 @@ public struct ShannonConversationView: View {
         connectionModel: ShannonConnectionModel? = nil,
         memoryModel: ShannonMemoryModel = ShannonMemoryModel(),
         testFlightDeliveryModel: ShannonTestFlightDeliveryModel = ShannonTestFlightDeliveryModel(),
-        voiceIdentityModel: ShannonVoiceIdentityModel = ShannonVoiceIdentityModel(),
         worldSubscriptionModel: ShannonWorldSubscriptionModel = ShannonWorldSubscriptionModel()
     ) {
         _model = State(initialValue: model)
         _connectionModel = State(initialValue: connectionModel)
         _memoryModel = State(initialValue: memoryModel)
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
-        _voiceIdentityModel = State(initialValue: voiceIdentityModel)
         _worldSubscriptionModel = State(initialValue: worldSubscriptionModel)
     }
 
@@ -163,10 +157,8 @@ public struct ShannonConversationView: View {
         .onChange(of: scenePhase) {
             if scenePhase != .active {
                 voiceModel.cancel()
-                realtimeVoiceModel.stop()
-                voiceIdentityModel.stopPreview()
-                showsLiveVoice = false
-                showsGeminiVoice = false
+                geminiLiveVoiceModel.stop()
+                showsGeminiLiveVoice = false
             }
         }
 #if os(iOS)
@@ -184,12 +176,9 @@ public struct ShannonConversationView: View {
         }
 #if os(iOS)
         .modifier(ShannonVoicePresentationModifier(
-            showsLiveVoice: $showsLiveVoice,
-            showsGeminiVoice: $showsGeminiVoice,
-            showsVoiceModePicker: $showsVoiceModePicker,
+            isPresented: $showsGeminiLiveVoice,
             conversationModel: model,
-            voiceModel: voiceModel,
-            realtimeVoiceModel: realtimeVoiceModel,
+            geminiVoiceModel: geminiLiveVoiceModel,
             expression: model.currentExpression
         ))
         .fullScreenCover(isPresented: agentTaskRoomIsPresented) {

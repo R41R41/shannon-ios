@@ -8,8 +8,8 @@ extension ShannonConversationView {
     func handleSelectedPageChange() {
         composerIsFocused = false
         voiceModel.cancel()
-        realtimeVoiceModel.stop()
-        showsLiveVoice = false
+        geminiLiveVoiceModel.stop()
+        showsGeminiLiveVoice = false
         guard selectedPage == .memory else { return }
         Task { await memoryModel.reload() }
     }

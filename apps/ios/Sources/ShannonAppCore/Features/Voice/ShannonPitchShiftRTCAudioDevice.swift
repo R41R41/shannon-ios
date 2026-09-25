@@ -9,6 +9,8 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
     private let profile: ShannonRemoteVoicePitchProfile
     private let session = AVAudioSession.sharedInstance()
     private let lock = NSLock()
+    private let microphoneLevelSampler = ShannonVoiceAudioLevelSampler()
+    private let playbackLevelSampler = ShannonVoiceAudioLevelSampler()
 
     private var delegateStorage: RTCAudioDeviceDelegate?
     private var engine: AVAudioEngine?
@@ -29,6 +31,16 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
     init(profile: ShannonRemoteVoicePitchProfile) {
         self.profile = profile
         super.init()
+    }
+
+    var onMicrophoneLevel: (@Sendable (Float) -> Void)? {
+        get { microphoneLevelSampler.onLevel }
+        set { microphoneLevelSampler.onLevel = newValue }
+    }
+
+    var onPlaybackLevel: (@Sendable (Float) -> Void)? {
+        get { playbackLevelSampler.onLevel }
+        set { playbackLevelSampler.onLevel = newValue }
     }
 
     private var delegate: RTCAudioDeviceDelegate? {
@@ -66,6 +78,8 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
         shouldPlay = false
         shouldRecord = false
         interrupted = false
+        microphoneLevelSampler.reset()
+        playbackLevelSampler.reset()
         shutdownEngine()
         delegate = nil
         return true
@@ -234,6 +248,7 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
         }
 
         let deliver = delegate.deliverRecordedData
+        let microphoneLevelSampler = self.microphoneLevelSampler
         let render: RTCAudioDeviceRenderRecordedDataBlock = {
             _, _, _, frameCount, outputData, context in
             guard let context else { return kAudio_ParamError }
@@ -247,6 +262,7 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
             )
         }
         let sink = AVAudioSinkNode { timestamp, frameCount, inputData in
+            microphoneLevelSampler.receive(inputData, frameCount: frameCount, format: nativeFormat)
             var flags: AudioUnitRenderActionFlags = []
             var context = (Unmanaged.passUnretained(converter), UnsafePointer(inputData))
             return deliver(&flags, timestamp, 1, frameCount, nil, &context, render)
@@ -284,11 +300,19 @@ final class ShannonPitchShiftRTCAudioDevice: NSObject, RTCAudioDevice, @unchecke
         }
 
         let getPlayoutData = delegate.getPlayoutData
+        let playbackLevelSampler = self.playbackLevelSampler
         let source = AVAudioSourceNode(format: rtcFormat) {
             isSilence, timestamp, frameCount, outputData in
             var flags: AudioUnitRenderActionFlags = []
             let status = getPlayoutData(&flags, timestamp, 0, frameCount, outputData)
             isSilence.pointee = ObjCBool(flags.contains(.unitRenderAction_OutputIsSilence))
+            if status == noErr, !isSilence.pointee.boolValue {
+                playbackLevelSampler.receive(
+                    UnsafePointer(outputData),
+                    frameCount: frameCount,
+                    format: rtcFormat
+                )
+            }
             return status
         }
         let formatMixer = AVAudioMixerNode()

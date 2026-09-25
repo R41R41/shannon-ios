@@ -6,6 +6,7 @@ export const SHANNON_GEMINI_SPEECH_MAXIMUM_BYTES = 8 * 1024 * 1024;
 export interface GeminiSpeechRequest {
   scopeKey: string;
   text: string;
+  style?: string;
 }
 
 export interface GeminiSpeechResult {
@@ -81,6 +82,7 @@ export class GoogleGeminiSpeechGateway implements GeminiSpeechGateway {
 
   async synthesize(request: GeminiSpeechRequest): Promise<GeminiSpeechResult> {
     const text = normalizedSpeechText(request.text);
+    const style = optionalText(request.style ?? this.style, 500);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMilliseconds);
     let response: Response;
@@ -98,7 +100,7 @@ export class GoogleGeminiSpeechGateway implements GeminiSpeechGateway {
             content: [{
               type: 'text',
               text,
-              annotations: [{ type: 'speech_metadata', style: this.style }],
+              annotations: [{ type: 'speech_metadata', style }],
             }],
           }],
           response_format: { type: 'audio', mime_type: 'audio/wav', sample_rate: 24_000 },
