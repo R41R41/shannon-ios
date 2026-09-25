@@ -70,13 +70,24 @@ Use the four areas in order:
 4. **作ったShannonの声で会話** — run a browser-only cascade with
    `gemini-3.5-transcribe-live`, a selectable Flash-Lite / Flash text response,
    and streaming Gemini 3.8 TTS. This is the path for judging the exact stored
-   Voice ID in conversation. It shows response-text, TTS-first-audio, and combined
+   Voice ID in conversation. The text response is streamed and split into at most
+   the model's intended one or two Japanese sentences: TTS for the first complete
+   sentence begins while the response model is still producing the next one. Each
+   sentence carries one hidden bounded emotion tag that is removed from the visible
+   transcript and speakable text, then mapped to a short TTS style layered over the
+   selected acting profile. It shows first-sentence, TTS-first-audio, and combined
    final-transcript-to-first-audio latency for every turn. Full-duplex mode is enabled
    by default: browser echo cancellation keeps microphone upload and transcription
-   active while Shannon speaks. Initial recognized speech first ducks Shannon's output;
-   sustained or finalized speech then aborts both the active HTTP generation and queued
-   playback before starting the next turn, while an unconfirmed detection restores the
-   original volume. A visible switch
+   active while Shannon speaks. Endpoint confirmation varies from 80–420 ms after the
+   transcriber result according to terminal punctuation and continuation cues. Initial
+   recognized speech first ducks Shannon's output; the confirmation window, release
+   window, and ducking level adapt to headset detection, browser AEC, current playout
+   level, and recent false positives. Sustained or finalized speech then aborts both
+   upstream HTTP generation and queued playback before starting the next turn, while an
+   unconfirmed detection restores the original volume. PCM playback uses a bounded
+   adaptive lead buffer and short per-chunk crossfades; the current endpoint delay,
+   interruption mode, buffer target, and underrun correction count remain visible.
+   A visible switch
    restores the previous turn-taking behavior in environments where acoustic echo
    remains strong.
 
@@ -103,11 +114,13 @@ single-use tokens and browser echo cancellation, send 16 kHz mono PCM, and play
 24 kHz PCM. The cascade's bounded text history exists only in the current tab. No
 audio, transcript, message, token, or credential is logged or persisted by the lab.
 
-The deployed Azure smoke check on 2026-09-25 used stored voice
+The original deployed Azure smoke check on 2026-09-25 used stored voice
 `voice_8hj0yjm1cckv`. With the latency-first pair, response text completed in
 1.05 seconds and Flash-Lite TTS produced its first PCM chunk in another 1.04 seconds
 (about 2.1 seconds from finalized transcript to first audio, excluding the speech
-endpoint detector). These are one-run transport observations, not p50/p95 targets.
+endpoint detector). That measurement predates sentence-level pipelining and remains a
+baseline rather than a current claim. These are one-run transport observations, not
+p50/p95 targets.
 
 All four prompt variants for the original eight built-in designs were verified
 against the real Voices API on 2026-09-25, and every successful smoke-test Voice ID

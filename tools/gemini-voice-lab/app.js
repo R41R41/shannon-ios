@@ -7,11 +7,20 @@ import {
 } from './voice-design-presets.js';
 import { liveProfile, liveProfiles, liveSystemInstruction, liveTTSStyle } from './voice-live-profiles.js';
 import {
-  CASCADE_BARGE_RELEASE_MS,
+  CASCADE_PLAYBACK_LEAD_SECONDS,
+  adaptiveCascadeFinalizeDelay,
   cascadeBargeInAction,
+  cascadeBargeTuning,
+  nextCascadePlaybackLead,
   shouldRestoreCascadeVolume,
   shouldSendCascadeAudio,
 } from './cascade-audio-policy.js';
+import {
+  cascadeEmotionLabel,
+  cascadeEmotionStyle,
+  streamedTextFromGeminiEvent,
+  takeCascadeSpeechSegments,
+} from './cascade-response-stream.js';
 
 const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird', 'Vindemiatrix', 'Sadachbia'];
 const state = {
@@ -69,6 +78,9 @@ const cascadeInterim = document.querySelector('#cascade-interim');
 const cascadeTextLatency = document.querySelector('#cascade-text-latency');
 const cascadeTTSLatency = document.querySelector('#cascade-tts-latency');
 const cascadeTotalLatency = document.querySelector('#cascade-total-latency');
+const cascadeEndpointTuning = document.querySelector('#cascade-endpoint-tuning');
+const cascadeBargeTuningOutput = document.querySelector('#cascade-barge-tuning');
+const cascadePlaybackTuning = document.querySelector('#cascade-playback-tuning');
 
 sampleText.value = auditionScript('everyday').text;
 liveProfileSelect.replaceChildren(...liveProfiles.map(item => option(item.id, item.label)));
@@ -627,11 +639,17 @@ async function startCascade() {
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url);
     const profileId = cascadeProfileSelect.value;
+    const track = stream.getAudioTracks()[0];
+    const trackSettings = track?.getSettings?.() ?? {};
+    const audioTuning = cascadeBargeTuning({ trackLabel: track?.label, settings: trackSettings });
     state.cascade = {
       socket, session, profileId, stream, context, source, capture, mute, playbackGain,
       ready: false, busy: false, speaking: false, nextPlaybackTime: 0,
       sources: new Set(), controllers: new Set(), transcriptBuffer: '', finalizeTimer: null,
       activeTurn: null, turnSerial: 0, bargeInCandidate: null,
+      trackLabel: track?.label ?? '', trackSettings, audioTuning, falsePositiveCount: 0,
+      remoteLevel: 0, playbackLeadSeconds: CASCADE_PLAYBACK_LEAD_SECONDS,
+      playbackUnderruns: 0, playbackStarted: false, lastFinalizeDelay: null,
     };
     pendingStream = null;
     pendingContext = null;
@@ -666,7 +684,7 @@ function transcribeSetup(model) {
           startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
           endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
           prefixPaddingMs: 80,
-          silenceDurationMs: 450,
+          silenceDurationMs: 360,
         },
       },
     },
@@ -700,6 +718,7 @@ async function handleCascadeTranscription(data) {
       setCascadeControlsDisabled(true);
       cascadeOrb.classList.add('active');
       appendCascadeSessionMarker(`${cascadeVoice.options[cascadeVoice.selectedIndex]?.textContent ?? cascadeVoice.value} × ${liveProfile(cascade.profileId).shortLabel}`);
+      updateCascadeTuningOutputs(cascade);
       setStatus(cascadeStatus, '聞いています · 話し終わると返答を作ります。', 'success');
     }
     const content = event.serverContent;
@@ -713,9 +732,16 @@ async function handleCascadeTranscription(data) {
       cascade.transcriptBuffer = mergeStreamingText(cascade.transcriptBuffer, finalText);
       showCascadeInterim(cascade.transcriptBuffer);
       clearTimeout(cascade.finalizeTimer);
-      cascade.finalizeTimer = setTimeout(() => finalizeCascadeTranscript(cascade), 350);
+      const delay = adaptiveCascadeFinalizeDelay(cascade.transcriptBuffer);
+      cascade.lastFinalizeDelay = delay;
+      updateCascadeTuningOutputs(cascade);
+      cascade.finalizeTimer = setTimeout(() => finalizeCascadeTranscript(cascade), delay);
     }
-    if (content.turnComplete && cascade.transcriptBuffer.trim()) finalizeCascadeTranscript(cascade);
+    if (content.turnComplete && cascade.transcriptBuffer.trim()) {
+      cascade.lastFinalizeDelay = adaptiveCascadeFinalizeDelay(cascade.transcriptBuffer, { turnComplete: true });
+      updateCascadeTuningOutputs(cascade);
+      finalizeCascadeTranscript(cascade);
+    }
   } catch (error) {
     setStatus(cascadeStatus, `音声認識を処理できませんでした: ${message(error)}`, 'error');
   }
@@ -740,9 +766,19 @@ async function handleCascadeTurn(text, cascade) {
   cascade.busy = true;
   const finalizedAt = performance.now();
   appendCascadeTranscript('user', 'あなた', text);
-  setStatus(cascadeStatus, '返答を考えています…');
+  setStatus(cascadeStatus, '返答を考えています · 最初の文から話し始めます…');
   const controller = new AbortController();
-  const turn = { id: ++cascade.turnSerial, controller, transcriptItem: null, interrupted: false };
+  const turn = {
+    id: ++cascade.turnSerial,
+    controller,
+    transcriptItem: null,
+    interrupted: false,
+    responseText: '',
+    firstSentenceAt: null,
+    firstAudioAt: null,
+    speechChain: Promise.resolve(),
+    speechSegments: 0,
+  };
   cascade.activeTurn = turn;
   cascade.controllers.add(controller);
   try {
@@ -753,41 +789,24 @@ async function handleCascadeTurn(text, cascade) {
       history: state.cascadeHistory,
     }, { signal: controller.signal });
     if (!response.ok) throw await responseError(response);
-    const result = await response.json();
-    if (!isActiveCascadeTurn(cascade, turn)) return;
-    const responseReadyAt = performance.now();
-    cascadeTextLatency.textContent = formatDuration(Math.round(responseReadyAt - finalizedAt));
-    turn.transcriptItem = appendCascadeTranscript('model', 'Shannon', result.text);
-    state.cascadeHistory = [...state.cascadeHistory, { role: 'user', text }, { role: 'model', text: result.text }].slice(-12);
-    setStatus(cascadeStatus, 'Shannonの声を作っています…');
-
-    const speechResponse = await post('/api/cascade-speech', {
-      model: selectedCascadeModel('cascade-tts-model'),
-      voice: cascadeVoice.value,
-      text: result.text,
-      style: liveTTSStyle(cascade.profileId),
-    }, { signal: controller.signal });
-    if (!speechResponse.ok) throw await responseError(speechResponse);
-    cascade.speaking = true;
-    let firstAudioAt = null;
-    let audioChunks = 0;
-    for await (const event of browserServerSentEvents(speechResponse.body)) {
+    let responseBuffer = '';
+    for await (const event of browserServerSentEvents(response.body, 'Geminiの返答')) {
       if (!isActiveCascadeTurn(cascade, turn)) return;
-      for (const part of event?.candidates?.[0]?.content?.parts ?? []) {
-        if (!part?.inlineData?.data) continue;
-        if (!firstAudioAt) {
-          firstAudioAt = performance.now();
-          cascadeTTSLatency.textContent = formatDuration(Math.round(firstAudioAt - responseReadyAt));
-          cascadeTotalLatency.textContent = formatDuration(Math.round(firstAudioAt - finalizedAt));
-          setStatus(cascadeStatus, cascadeBargeIn.checked
-            ? 'Shannonが話しています · 話し始めると音量を下げ、発話が続くと割り込みます。'
-            : 'Shannonが話しています · 交互会話モードです。', 'success');
-        }
-        audioChunks += 1;
-        playCascadePCM24k(part.inlineData.data, cascade);
-      }
+      responseBuffer += streamedTextFromGeminiEvent(event);
+      const parsed = takeCascadeSpeechSegments(responseBuffer);
+      responseBuffer = parsed.remainder;
+      for (const segment of parsed.segments) enqueueCascadeSpeechSegment(segment, cascade, turn, finalizedAt);
     }
-    if (!firstAudioAt || audioChunks === 0) throw new Error('Gemini TTSから音声が返りませんでした');
+    const finalSegments = takeCascadeSpeechSegments(responseBuffer, { flush: true }).segments;
+    for (const segment of finalSegments) enqueueCascadeSpeechSegment(segment, cascade, turn, finalizedAt);
+    if (!turn.responseText) throw new Error('Geminiから読み上げ可能な返答が返りませんでした');
+    state.cascadeHistory = [
+      ...state.cascadeHistory,
+      { role: 'user', text },
+      { role: 'model', text: turn.responseText },
+    ].slice(-12);
+    await turn.speechChain;
+    if (!turn.firstAudioAt) throw new Error('Gemini TTSから音声が返りませんでした');
     const remainingMilliseconds = Math.max(0, (cascade.nextPlaybackTime - cascade.context.currentTime) * 1_000) + 160;
     await wait(remainingMilliseconds);
     if (isActiveCascadeTurn(cascade, turn)) setStatus(cascadeStatus, '聞いています · 続けて話しかけられます。', 'success');
@@ -806,12 +825,70 @@ async function handleCascadeTurn(text, cascade) {
   }
 }
 
+function enqueueCascadeSpeechSegment(segment, cascade, turn, finalizedAt) {
+  if (!isActiveCascadeTurn(cascade, turn)) return;
+  turn.speechSegments += 1;
+  turn.responseText += segment.text;
+  if (!turn.transcriptItem) turn.transcriptItem = appendCascadeTranscript('model', 'Shannon', turn.responseText);
+  else updateCascadeTranscript(turn.transcriptItem, turn.responseText);
+  if (!turn.firstSentenceAt) {
+    turn.firstSentenceAt = performance.now();
+    cascadeTextLatency.textContent = formatDuration(Math.round(turn.firstSentenceAt - finalizedAt));
+  }
+  const style = cascadeEmotionStyle(liveTTSStyle(cascade.profileId), segment.emotion);
+  turn.speechChain = turn.speechChain.then(() => speakCascadeSegment({
+    cascade,
+    turn,
+    segment,
+    style,
+    finalizedAt,
+  }));
+  turn.speechChain.catch(() => {});
+  setStatus(cascadeStatus, `文${turn.speechSegments}を音声化中 · ${cascadeEmotionLabel(segment.emotion)}`);
+}
+
+async function speakCascadeSegment({ cascade, turn, segment, style, finalizedAt }) {
+  if (!isActiveCascadeTurn(cascade, turn)) return;
+  const speechResponse = await post('/api/cascade-speech', {
+    model: selectedCascadeModel('cascade-tts-model'),
+    voice: cascadeVoice.value,
+    text: segment.text,
+    style,
+  }, { signal: turn.controller.signal });
+  if (!speechResponse.ok) throw await responseError(speechResponse);
+  cascade.speaking = true;
+  let audioChunks = 0;
+  for await (const event of browserServerSentEvents(speechResponse.body, 'Gemini TTS')) {
+    if (!isActiveCascadeTurn(cascade, turn)) return;
+    for (const part of event?.candidates?.[0]?.content?.parts ?? []) {
+      if (!part?.inlineData?.data) continue;
+      if (!turn.firstAudioAt) {
+        turn.firstAudioAt = performance.now();
+        cascadeTTSLatency.textContent = formatDuration(Math.round(turn.firstAudioAt - turn.firstSentenceAt));
+        cascadeTotalLatency.textContent = formatDuration(Math.round(turn.firstAudioAt - finalizedAt));
+      }
+      audioChunks += 1;
+      playCascadePCM24k(part.inlineData.data, cascade);
+      setStatus(cascadeStatus, cascadeBargeIn.checked
+        ? `Shannonが話しています · ${cascadeEmotionLabel(segment.emotion)} · 話せば割り込めます。`
+        : `Shannonが話しています · ${cascadeEmotionLabel(segment.emotion)} · 交互会話モードです。`, 'success');
+    }
+  }
+  if (audioChunks === 0) throw new Error('Gemini TTSから音声が返りませんでした');
+}
+
 function isActiveCascadeTurn(cascade, turn) {
   return state.cascade === cascade && cascade.activeTurn === turn && !turn.interrupted;
 }
 
 function handleCascadeBargeIn(cascade, interimText, finalText) {
   const now = performance.now();
+  cascade.audioTuning = cascadeBargeTuning({
+    trackLabel: cascade.trackLabel,
+    settings: cascade.trackSettings,
+    remoteLevel: cascade.remoteLevel,
+    falsePositiveCount: cascade.falsePositiveCount,
+  });
   const action = cascadeBargeInAction({
     bargeIn: cascadeBargeIn.checked,
     activeTurn: Boolean(cascade.activeTurn),
@@ -819,9 +896,12 @@ function handleCascadeBargeIn(cascade, interimText, finalText) {
     now,
     interimText,
     finalText,
+    confirmAfterMs: cascade.audioTuning.confirmAfterMs,
   });
   if (action === 'ignore') return;
   if (action === 'interrupt') {
+    cascade.falsePositiveCount = Math.max(0, cascade.falsePositiveCount - 1);
+    updateCascadeTuningOutputs(cascade);
     interruptCascadeTurn(cascade);
     return;
   }
@@ -832,7 +912,7 @@ function handleCascadeBargeIn(cascade, interimText, finalText) {
       lastHeardAt: now,
       releaseTimer: null,
     };
-    setCascadePlaybackGain(cascade, .18);
+    setCascadePlaybackGain(cascade, cascade.audioTuning.duckGain);
     setStatus(cascadeStatus, '話し声を確認中 · Shannonの音量を下げています…', 'success');
   } else if (cascade.bargeInCandidate) {
     cascade.bargeInCandidate.lastHeardAt = now;
@@ -849,16 +929,25 @@ function scheduleCascadeDuckRelease(cascade) {
     if (!shouldRestoreCascadeVolume({
       candidateLastHeardAt: candidate.lastHeardAt,
       now: performance.now(),
+      releaseAfterMs: cascade.audioTuning.releaseAfterMs,
     })) {
       scheduleCascadeDuckRelease(cascade);
       return;
     }
     clearCascadeBargeInCandidate(cascade, { restore: true });
+    cascade.falsePositiveCount = Math.min(4, cascade.falsePositiveCount + 1);
+    cascade.audioTuning = cascadeBargeTuning({
+      trackLabel: cascade.trackLabel,
+      settings: cascade.trackSettings,
+      remoteLevel: cascade.remoteLevel,
+      falsePositiveCount: cascade.falsePositiveCount,
+    });
+    updateCascadeTuningOutputs(cascade);
     if (!isActiveCascadeTurn(cascade, candidate.turn)) return;
     setStatus(cascadeStatus, cascade.speaking
       ? 'Shannonが話しています · 誤検知だったため音量を戻しました。'
       : '返答を考えています · 誤検知だったため処理を続けます。', 'success');
-  }, CASCADE_BARGE_RELEASE_MS);
+  }, cascade.audioTuning.releaseAfterMs);
 }
 
 function clearCascadeBargeInCandidate(cascade, { restore = false } = {}) {
@@ -899,6 +988,9 @@ function stopCascadePlayback(cascade) {
   for (const source of cascade.sources) { try { source.stop(); } catch {} }
   cascade.sources.clear();
   cascade.nextPlaybackTime = cascade.context.currentTime;
+  cascade.playbackStarted = false;
+  cascade.remoteLevel = 0;
+  updateCascadeTuningOutputs(cascade);
 }
 
 function playCascadePCM24k(encoded, cascade) {
@@ -907,15 +999,43 @@ function playCascadePCM24k(encoded, cascade) {
   const count = Math.floor(bytes.byteLength / 2);
   const buffer = cascade.context.createBuffer(1, count, 24_000);
   const channel = buffer.getChannelData(0);
-  for (let index = 0; index < count; index += 1) channel[index] = view.getInt16(index * 2, true) / 32768;
+  let energy = 0;
+  for (let index = 0; index < count; index += 1) {
+    const sample = view.getInt16(index * 2, true) / 32768;
+    channel[index] = sample;
+    energy += sample * sample;
+  }
+  const rms = Math.sqrt(energy / Math.max(1, count));
+  cascade.remoteLevel = cascade.remoteLevel * 0.72 + rms * 0.28;
   const source = cascade.context.createBufferSource();
+  const sourceGain = cascade.context.createGain();
   source.buffer = buffer;
-  source.connect(cascade.playbackGain);
+  source.connect(sourceGain).connect(cascade.playbackGain);
   cascade.sources.add(source);
-  source.addEventListener('ended', () => cascade.sources.delete(source));
-  const start = Math.max(cascade.context.currentTime + .025, cascade.nextPlaybackTime);
+  source.addEventListener('ended', () => {
+    cascade.sources.delete(source);
+    try { sourceGain.disconnect(); } catch {}
+  });
+  const now = cascade.context.currentTime;
+  const currentLeadSeconds = Math.max(0, cascade.nextPlaybackTime - now);
+  const underrun = cascade.playbackStarted && cascade.nextPlaybackTime < now + 0.008;
+  if (underrun) cascade.playbackUnderruns += 1;
+  cascade.playbackLeadSeconds = nextCascadePlaybackLead({
+    currentLeadSeconds,
+    targetSeconds: cascade.playbackLeadSeconds,
+    underrun,
+  });
+  const crossfade = Math.min(0.004, buffer.duration / 4);
+  const queuedStart = cascade.playbackStarted ? cascade.nextPlaybackTime - crossfade : cascade.nextPlaybackTime;
+  const start = Math.max(now + cascade.playbackLeadSeconds, queuedStart);
+  sourceGain.gain.setValueAtTime(0, start);
+  sourceGain.gain.linearRampToValueAtTime(1, start + crossfade);
+  sourceGain.gain.setValueAtTime(1, Math.max(start + crossfade, start + buffer.duration - crossfade));
+  sourceGain.gain.linearRampToValueAtTime(0, start + buffer.duration);
   source.start(start);
   cascade.nextPlaybackTime = start + buffer.duration;
+  cascade.playbackStarted = true;
+  updateCascadeTuningOutputs(cascade);
 }
 
 function stopCascade(status, kind) {
@@ -957,6 +1077,7 @@ function updateCascadeBargeInMode() {
   const cascade = state.cascade;
   if (!cascade) return;
   clearCascadeBargeInCandidate(cascade, { restore: true });
+  updateCascadeTuningOutputs(cascade);
   if (!cascade.activeTurn) {
     setStatus(cascadeStatus, '聞いています · 話し終わると返答を作ります。', 'success');
     return;
@@ -977,10 +1098,30 @@ function appendCascadeTranscript(kind, speaker, text) {
   item.className = kind;
   const title = document.createElement('strong');
   title.textContent = speaker;
-  item.append(title, document.createTextNode(text));
+  const content = document.createElement('span');
+  content.className = 'turn-text';
+  content.textContent = text;
+  item.append(title, content);
   cascadeTranscriptList.append(item);
   cascadeTranscriptList.scrollTop = cascadeTranscriptList.scrollHeight;
   return item;
+}
+
+function updateCascadeTranscript(item, text) {
+  const content = item?.querySelector('.turn-text');
+  if (content) content.textContent = text;
+  cascadeTranscriptList.scrollTop = cascadeTranscriptList.scrollHeight;
+}
+
+function updateCascadeTuningOutputs(cascade) {
+  if (!cascade) return;
+  cascadeEndpointTuning.textContent = cascade.lastFinalizeDelay === null
+    ? '自動 80–420ms'
+    : `${cascade.lastFinalizeDelay}ms`;
+  cascadeBargeTuningOutput.textContent = cascadeBargeIn.checked
+    ? `${cascade.audioTuning.mode} ${cascade.audioTuning.confirmAfterMs}ms`
+    : '交互会話';
+  cascadePlaybackTuning.textContent = `${Math.round(cascade.playbackLeadSeconds * 1_000)}ms · 補正${cascade.playbackUnderruns}`;
 }
 
 function markCascadeTranscriptInterrupted(item) {
@@ -1016,8 +1157,8 @@ function mergeStreamingText(current, incoming) {
   return `${current}${next}`;
 }
 
-async function* browserServerSentEvents(stream) {
-  if (!stream) throw new Error('Gemini TTSのストリームを開始できませんでした');
+async function* browserServerSentEvents(stream, label = 'Geminiのストリーム') {
+  if (!stream) throw new Error(`${label}を開始できませんでした`);
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let pending = '';
@@ -1037,7 +1178,7 @@ async function* browserServerSentEvents(stream) {
     }
     if (done) break;
   }
-  if (pending.trim() && !pending.includes('[DONE]')) throw new Error('Gemini TTSのストリームが途中で終了しました');
+  if (pending.trim() && !pending.includes('[DONE]')) throw new Error(`${label}が途中で終了しました`);
 }
 
 function voiceDisplayName(id) {

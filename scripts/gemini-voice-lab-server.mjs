@@ -19,7 +19,6 @@ import {
   buildLiveTokenRequest,
   buildTranscribeTokenRequest,
   createRequestToken,
-  generatedTextFromResponse,
   GEMINI_TRANSCRIBE_LIVE_MODEL,
   GEMINI_LIVE_MODEL,
   InputError,
@@ -185,14 +184,23 @@ const server = createServer(async (request, response) => {
         return await withOperation(response, 'cascade-response', async () => {
           const input = validateCascadeResponseInput(body);
           const started = performance.now();
-          const upstream = await geminiJSON(`/models/${input.model}:generateContent`, {
+          const upstream = await geminiFetch(`/models/${input.model}:streamGenerateContent?alt=sse`, {
             method: 'POST',
             body: buildCascadeResponseRequest(input),
+            signal: clientAbortSignal(request, response),
           });
-          const text = generatedTextFromResponse(upstream);
-          const elapsedMilliseconds = Math.round(performance.now() - started);
-          audit('cascade-response.completed', { model: input.model, elapsedMilliseconds });
-          json(response, 200, { text, model: input.model, elapsedMilliseconds });
+          response.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-store',
+            'x-accel-buffering': 'no',
+            'x-shannon-model': input.model,
+          });
+          for await (const chunk of upstream.body) response.write(chunk);
+          response.end();
+          audit('cascade-response.completed', {
+            model: input.model,
+            elapsedMilliseconds: Math.round(performance.now() - started),
+          });
         });
       }
       if (url.pathname === '/api/cascade-speech') {
@@ -202,6 +210,7 @@ const server = createServer(async (request, response) => {
           const upstream = await geminiFetch(`/models/${input.model}:streamGenerateContent?alt=sse`, {
             method: 'POST',
             body: buildCascadeSpeechRequest(input),
+            signal: clientAbortSignal(request, response),
           });
           response.writeHead(200, {
             'content-type': 'text/event-stream; charset=utf-8',
@@ -257,7 +266,8 @@ async function geminiJSON(resource, { method = 'GET', body, allowEmpty = false }
   catch { throw new Error('Gemini returned a non-JSON response'); }
 }
 
-async function geminiFetch(resource, { method = 'GET', body } = {}) {
+async function geminiFetch(resource, { method = 'GET', body, signal } = {}) {
+  const timeoutSignal = AbortSignal.timeout(120_000);
   const upstream = await fetch(`${API_ROOT}${resource}`, {
     method,
     headers: {
@@ -265,13 +275,23 @@ async function geminiFetch(resource, { method = 'GET', body } = {}) {
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(120_000),
+    signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
   });
   if (!upstream.ok) {
     const text = await upstream.text();
     throw new Error(`Gemini ${upstream.status}: ${safeUpstreamError(text)}`);
   }
   return upstream;
+}
+
+function clientAbortSignal(request, response) {
+  const controller = new AbortController();
+  const abort = () => {
+    if (!response.writableEnded && !controller.signal.aborted) controller.abort();
+  };
+  request.once('aborted', abort);
+  response.once('close', abort);
+  return controller.signal;
 }
 
 async function readJSON(request) {

@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { GEMINI_TTS_MODELS } from './gemini-tts-lab-core.mjs';
 import { liveConversationExamples, liveProfile, liveSystemInstruction } from '../tools/gemini-voice-lab/voice-live-profiles.js';
+import { CASCADE_EMOTION_IDS } from '../tools/gemini-voice-lab/cascade-response-stream.js';
 
 export const GEMINI_LIVE_MODEL = 'gemini-3.8-live';
 export const GEMINI_TRANSCRIBE_LIVE_MODEL = 'gemini-3.5-transcribe-live';
@@ -19,6 +20,7 @@ export const VOICE_LAB_STATIC_FILES = new Map([
   ['/voice-design-presets.js', ['voice-design-presets.js', 'text/javascript; charset=utf-8']],
   ['/voice-live-profiles.js', ['voice-live-profiles.js', 'text/javascript; charset=utf-8']],
   ['/cascade-audio-policy.js', ['cascade-audio-policy.js', 'text/javascript; charset=utf-8']],
+  ['/cascade-response-stream.js', ['cascade-response-stream.js', 'text/javascript; charset=utf-8']],
   ['/capture-worklet.js', ['capture-worklet.js', 'text/javascript; charset=utf-8']],
 ]);
 export const DEFAULT_LIVE_VOICES = Object.freeze([
@@ -137,7 +139,7 @@ export function buildTranscribeSetupMessage() {
           startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
           endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
           prefixPaddingMs: 80,
-          silenceDurationMs: 450,
+          silenceDurationMs: 360,
         },
       },
     },
@@ -150,7 +152,9 @@ export function buildCascadeResponseRequest({ model, text, history, profile }) {
     liveSystemInstruction(input.profile),
     'あなたはShannonです。上記の選択された人格を保ち、一般的なAIアシスタントの口調へ戻らないでください。',
     '返答は音声で読み上げます。原則1〜2文、80文字程度までで、最初の文から要点を答えてください。',
-    'Markdown、箇条書き、括弧書きの演技指示、プロフィール説明は使わないでください。',
+    `各文の先頭に、その文の演技を示すタグを1個だけ付けてください。許可タグ: ${CASCADE_EMOTION_IDS.map(id => `[[${id}]]`).join(' ')}`,
+    '例: [[proud]]当然です、天才AIですから！[[flustered]]べ、別に褒めてほしいわけじゃないですけど。',
+    'タグは読み上げ本文ではありません。Markdown、箇条書き、括弧書きの演技指示、プロフィール説明は使わないでください。',
   ].join('\n');
   return {
     systemInstruction: { parts: [{ text: instruction }] },
@@ -161,7 +165,7 @@ export function buildCascadeResponseRequest({ model, text, history, profile }) {
     ],
     generationConfig: {
       temperature: 0.8,
-      maxOutputTokens: 160,
+      maxOutputTokens: 220,
       ...(input.model === 'gemini-3.8-flash' ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
     },
   };

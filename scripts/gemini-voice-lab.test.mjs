@@ -21,12 +21,19 @@ import {
   VOICE_LAB_STATIC_FILES,
 } from './gemini-voice-lab-core.mjs';
 import {
-  CASCADE_BARGE_CONFIRM_MS,
-  CASCADE_BARGE_RELEASE_MS,
+  adaptiveCascadeFinalizeDelay,
   cascadeBargeInAction,
+  cascadeBargeTuning,
+  nextCascadePlaybackLead,
   shouldRestoreCascadeVolume,
   shouldSendCascadeAudio,
 } from '../tools/gemini-voice-lab/cascade-audio-policy.js';
+import {
+  cascadeEmotionStyle,
+  streamedTextFromGeminiEvent,
+  takeCascadeSpeechSegments,
+  visibleCascadeResponseText,
+} from '../tools/gemini-voice-lab/cascade-response-stream.js';
 import {
   voiceDesignPresets,
   voiceDesignPrompt,
@@ -66,6 +73,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
   ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/cascade-audio-policy.js'), [
     'cascade-audio-policy.js',
+    'text/javascript; charset=utf-8',
+  ]);
+  assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/cascade-response-stream.js'), [
+    'cascade-response-stream.js',
     'text/javascript; charset=utf-8',
   ]);
   assert.equal(voiceDesignPresets.length, 9);
@@ -125,7 +136,7 @@ test('cascade transcription is locked to Japanese streaming text', () => {
   const setup = buildTranscribeSetupMessage();
   assert.equal(setup.setup.model, `models/${GEMINI_TRANSCRIBE_LIVE_MODEL}`);
   assert.deepEqual(setup.setup.inputAudioTranscription.languageCodes, ['ja-JP']);
-  assert.equal(setup.setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs, 450);
+  assert.equal(setup.setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs, 360);
 });
 
 test('cascade full duplex ducks first and interrupts only after sustained or final speech', () => {
@@ -134,11 +145,46 @@ test('cascade full duplex ducks first and interrupts only after sustained or fin
   assert.equal(shouldSendCascadeAudio({ ready: false, socketOpen: true, activeTurn: false, bargeIn: true }), false);
   assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, now: 1_000, interimText: 'ちょっと' }), 'duck');
   assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, candidateStartedAt: 1_000, now: 1_200, interimText: 'ちょっと待って' }), 'hold');
-  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, candidateStartedAt: 1_000, now: 1_000 + CASCADE_BARGE_CONFIRM_MS, interimText: 'ちょっと待って' }), 'interrupt');
+  assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, candidateStartedAt: 1_000, now: 1_320, interimText: 'ちょっと待って' }), 'interrupt');
   assert.equal(cascadeBargeInAction({ bargeIn: true, activeTurn: true, now: 1_000, finalText: '止めて' }), 'interrupt');
   assert.equal(cascadeBargeInAction({ bargeIn: false, activeTurn: true, now: 1_000, finalText: '止めて' }), 'ignore');
-  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_000 + CASCADE_BARGE_RELEASE_MS - 1 }), false);
-  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_000 + CASCADE_BARGE_RELEASE_MS }), true);
+  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_849 }), false);
+  assert.equal(shouldRestoreCascadeVolume({ candidateLastHeardAt: 1_000, now: 1_850 }), true);
+});
+
+test('cascade endpointing, interruption, and playback adapt to the audio environment', () => {
+  assert.equal(adaptiveCascadeFinalizeDelay('分かりました。'), 80);
+  assert.equal(adaptiveCascadeFinalizeDelay('でも'), 420);
+  assert.equal(adaptiveCascadeFinalizeDelay('はい'), 360);
+  assert.equal(adaptiveCascadeFinalizeDelay('もう少し詳しく教えて'), 220);
+  assert.equal(adaptiveCascadeFinalizeDelay('途中', { turnComplete: true }), 0);
+
+  const headset = cascadeBargeTuning({ trackLabel: 'Rai AirPods', settings: { echoCancellation: true } });
+  const speaker = cascadeBargeTuning({ trackLabel: 'Built-in Microphone', settings: { echoCancellation: true } });
+  const guarded = cascadeBargeTuning({ remoteLevel: 0.3, falsePositiveCount: 2 });
+  assert.deepEqual(headset, { mode: 'イヤホン', confirmAfterMs: 180, releaseAfterMs: 620, duckGain: 0.34 });
+  assert.equal(speaker.mode, 'スピーカーAEC');
+  assert.equal(guarded.confirmAfterMs, 680);
+  assert.equal(guarded.duckGain, 0.08);
+  assert.equal(nextCascadePlaybackLead({ targetSeconds: 0.045, underrun: true }), 0.06);
+  assert.equal(nextCascadePlaybackLead({ currentLeadSeconds: 0.2, targetSeconds: 0.06 }), 0.055);
+});
+
+test('cascade response stream hides emotion tags and emits complete Japanese sentences', () => {
+  const first = takeCascadeSpeechSegments('[[proud]]当然です、天才AIですから！[[flus');
+  assert.deepEqual(first.segments, [{ emotion: 'proud', text: '当然です、天才AIですから！' }]);
+  assert.equal(first.remainder, '[[flus');
+  const second = takeCascadeSpeechSegments(`${first.remainder}tered]]べ、別に褒めてほしいわけじゃないですけど。`);
+  assert.deepEqual(second.segments, [{ emotion: 'flustered', text: 'べ、別に褒めてほしいわけじゃないですけど。' }]);
+  assert.equal(second.remainder, '');
+  assert.deepEqual(takeCascadeSpeechSegments('タグなしの予備動作', { flush: true }).segments, [
+    { emotion: 'neutral', text: 'タグなしの予備動作' },
+  ]);
+  assert.equal(visibleCascadeResponseText('[[bright]]やった！ [[tender]]ありがとう。'), 'やった！ ありがとう。');
+  assert.match(cascadeEmotionStyle('元気に。', 'tender'), /近く温かい/u);
+  assert.equal(streamedTextFromGeminiEvent({
+    candidates: [{ content: { parts: [{ text: '[[bright]]' }, { text: 'やった！' }] } }],
+  }), '[[bright]]やった！');
 });
 
 test('cascade response keeps a short history and uses the selected profile', () => {
@@ -154,7 +200,8 @@ test('cascade response keeps a short history and uses the selected profile', () 
   assert.deepEqual(request.contents.at(-1), { role: 'user', parts: [{ text: '今日はどうだった？' }] });
   assert.match(request.systemInstruction.parts[0].text, /鋭い語尾/u);
   assert.doesNotMatch(request.systemInstruction.parts[0].text, /親しみやすい相棒/u);
-  assert.equal(request.generationConfig.maxOutputTokens, 160);
+  assert.equal(request.generationConfig.maxOutputTokens, 220);
+  assert.match(request.systemInstruction.parts[0].text, /\[\[flustered\]\]/u);
   assert.throws(() => validateCascadeResponseInput({
     model: 'gemini-3.5-flash-lite', text: 'test', history: Array(13).fill({ role: 'user', text: 'x' }),
   }), /at most 12/u);

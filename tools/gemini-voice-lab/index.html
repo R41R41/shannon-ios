@@ -250,16 +250,21 @@
           <div id="cascade-profile-summary" class="profile-summary" aria-live="polite"></div>
           <label class="check-row barge-in-row">
             <input id="cascade-barge-in" type="checkbox" checked>
-            <span><strong>Shannonの発話中も聞く</strong><small>話し始めはShannonの音量を下げ、発話が続くと停止して割り込みます。反響が強い環境ではOFFにできます。</small></span>
+            <span><strong>Shannonの発話中も聞く</strong><small>イヤホン・AEC・反響量に合わせて確認時間と減音量を調整します。反響が強い環境ではOFFにできます。</small></span>
           </label>
+          <div class="tuning-strip" aria-label="音声対話の自動調整">
+            <div><span>発話確定</span><output id="cascade-endpoint-tuning">自動 80–420ms</output></div>
+            <div><span>割り込み</span><output id="cascade-barge-tuning">環境を確認</output></div>
+            <div><span>再生バッファ</span><output id="cascade-playback-tuning">45ms · 補正0</output></div>
+          </div>
           <div class="latency-strip" aria-label="直前のターンのレイテンシ">
-            <div><span>返答文</span><output id="cascade-text-latency">—</output></div>
+            <div><span>最初の文</span><output id="cascade-text-latency">—</output></div>
             <div><span>TTS先頭</span><output id="cascade-tts-latency">—</output></div>
             <div class="latency-total"><span>認識確定→先頭音</span><output id="cascade-total-latency">—</output></div>
           </div>
           <button id="cascade-toggle" class="primary" type="button"><span aria-hidden="true">●</span> カスケード会話を始める</button>
           <p id="cascade-status" class="status" role="status" aria-live="polite">停止中 · 割り込みONではShannonの発話中も聞き続けます。</p>
-          <div class="cost-note"><strong>料金と確認項目</strong><span>Voice IDの再現性、発話終了後の待ち時間、割り込み反応</span><small>TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
+          <div class="cost-note"><strong>料金と確認項目</strong><span>最初の文からの再生、文ごとの演技、可変割り込み、再生補正</span><small>返答は原則1〜2文に分けてTTSへ送ります。TTSはFlash-Lite $0.0015 / 10秒、Flash $0.00225 / 10秒。音声認識と返答モデルは別途課金です。音声・文字起こし・返答は保存しません。</small></div>
         </div>
         <div class="transcript cascade-transcript" aria-label="カスケード会話の文字起こし">
           <div class="orb" id="cascade-orb" aria-hidden="true"><i></i><i></i></div>

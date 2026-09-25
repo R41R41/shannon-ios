@@ -150,10 +150,11 @@ button:disabled { cursor: not-allowed; opacity: .46; box-shadow: none; }
 .transcript li.interrupted { opacity: .72; }
 .transcript li .turn-state { display: block; margin-top: 7px; color: #ffd28d; font-size: 10px; font-weight: 720; letter-spacing: .02em; }
 .cascade-transcript .interim { margin: 0 0 14px; padding: 10px 12px; border: 1px dashed rgba(144, 223, 255, .24); border-radius: 12px; color: #b7c8dc; text-align: left; font-size: 12px; }
-.latency-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.latency-strip > div { min-width: 0; display: grid; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 13px; background: var(--subtle); }
-.latency-strip span { color: var(--muted); font-size: 10px; line-height: 1.3; }
-.latency-strip output { color: var(--text); font-size: 16px; font-weight: 760; letter-spacing: -.02em; }
+.latency-strip, .tuning-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.latency-strip > div, .tuning-strip > div { min-width: 0; display: grid; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 13px; background: var(--subtle); }
+.latency-strip span, .tuning-strip span { color: var(--muted); font-size: 10px; line-height: 1.3; }
+.latency-strip output, .tuning-strip output { color: var(--text); font-size: 16px; font-weight: 760; letter-spacing: -.02em; }
+.tuning-strip output { font-size: 12px; line-height: 1.35; }
 .latency-strip .latency-total { border-color: color-mix(in srgb, var(--presence-b) 24%, var(--border)); background: linear-gradient(130deg, color-mix(in srgb, var(--presence-a) 7%, var(--subtle)), color-mix(in srgb, var(--presence-b) 6%, var(--subtle))); }
 .cost-note { display: grid; gap: 4px; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--subtle); }
 .cost-note strong { font-size: 12px; }
@@ -188,7 +189,7 @@ body > footer { text-align: center; border-top: 1px solid var(--border); padding
   .launch-notice { margin-inline: 14px; align-items: stretch; flex-direction: column; }
   .launch-notice a { justify-content: center; }
   .segmented, .segmented.three-up, .variant-grid { grid-template-columns: 1fr; }
-  .latency-strip { grid-template-columns: 1fr; }
+  .latency-strip, .tuning-strip { grid-template-columns: 1fr; }
 }
 @media (prefers-color-scheme: dark) {
   :root { --canvas: #0e131b; --surface: rgba(22, 29, 40, .9); --surface-strong: #1a2230; --subtle: #131b27; --text: #edf4ff; --muted: #9aa9bd; --border: #2a384b; --action: #5aa3ff; --action-strong: #3287ed; --danger: #ff8b84; --success: #62d8ae; --shadow: 0 22px 60px rgba(0, 0, 0, .3); }
