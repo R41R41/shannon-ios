@@ -24,6 +24,12 @@ run_api() {
   "$node_bin" node_modules/vitest/vitest.mjs run services/api/tests
 }
 
+run_cognition_eval() {
+  "$node_bin" node_modules/typescript/bin/tsc -p packages/cognition/tsconfig.json --noEmit
+  "$node_bin" node_modules/typescript/bin/tsc -p packages/evaluation/tsconfig.json --noEmit
+  "$node_bin" node_modules/vitest/vitest.mjs run packages/cognition/tests packages/evaluation/tests
+}
+
 run_architecture() {
   "$node_bin" scripts/check-architecture.mjs
 }
@@ -72,6 +78,7 @@ case "$target" in
   fast) run_fast ;;
   architecture) run_architecture ;;
   api) run_fast; run_api ;;
+  cognition-eval) run_fast; run_cognition_eval ;;
   ios) run_fast; run_ios ;;
   app) run_fast; run_app ;;
   mac) run_fast; run_macos_app ;;
@@ -82,13 +89,14 @@ case "$target" in
   all)
     run_fast
     run_api
+    run_cognition_eval
     run_ios
     run_app
     run_macos_app
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [fast|architecture|api|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [fast|architecture|api|cognition-eval|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac

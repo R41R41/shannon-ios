@@ -66,6 +66,7 @@ Codexを含む全開発経路では、同じ検証入口を使う。
 ```sh
 scripts/verify.sh fast
 scripts/verify.sh api
+scripts/verify.sh cognition-eval
 scripts/verify.sh ios
 scripts/verify.sh app
 scripts/verify.sh mac
@@ -74,6 +75,8 @@ scripts/verify.sh all
 ```
 
 `fast` は正本リンク、画面契約、横断fixture、責務境界を外部通信なしで検査する。`mac` はMac固有のユニットテストとDebugアプリを検証し、`mac-release` は署名なしのReleaseアプリを生成する。Mac固有UIは `apps/macos-app`、iPhone固有UIは `apps/ios-app`、両者で共有する状態・通信・Markdown処理は `apps/ios/Sources/ShannonAppCore` に置く。
+
+`cognition-eval` は自己改善研究の前提となるオフライン評価基盤だけを、合成データで検証する。`packages/evaluation` は `@shannon/cognition` の純粋な公開APIだけを呼び、SQLite、HTTP、LLM、Agent Host、本番会話へ接続しない。評価通過は変更の昇格・配布・自動承認を意味しない。
 
 別ターミナルで背景workerを起動する。APIは感情・想起・睡眠処理を待たない。
 

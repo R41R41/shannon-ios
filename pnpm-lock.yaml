@@ -23,6 +23,12 @@ importers:
 
   packages/cognition: {}
 
+  packages/evaluation:
+    dependencies:
+      '@shannon/cognition':
+        specifier: workspace:*
+        version: link:../cognition
+
   services/api:
     dependencies:
       '@shannon/cognition':

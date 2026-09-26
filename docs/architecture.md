@@ -291,6 +291,19 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
 | Pairing | device pairing records and device tokens |
 
+## Cognitive Evaluation Harness v0
+
+自己改善機能を本番経路へ導入する前段として、`packages/evaluation` に開発・CI専用の決定的評価Harnessを置く。合成scenarioを現在の `@shannon/cognition` 公開APIへ入力し、状態遷移、記憶境界、想起、感情、Intent選択、Prompt投影を再現・比較する。
+
+- 通常会話とFCA応答経路からHarnessを呼ばない。
+- SQLite、HTTP、LLM、Agent Hostへ接続せず、Runnerはファイルを書き込まない。
+- 実会話、scope key、credential、忘却済み情報をfixtureへ複製しない。
+- reportは評価証拠であり、`agent_tasks` の状態や昇格承認ではない。
+- 評価通過だけでmerge、push、配布、Capability拡大を行わない。
+- `scripts/verify.sh cognition-eval` は回帰、無効scenario、型不整合で非ゼロ終了する。
+
+Phase -1ではSkill生成、独自NN、Fine-tuning、人格学習、Shadow/Canary、自動ロールバック、本番DB migration、API/UI変更を行わない。
+
 ## Code ownership
 
 `Shannon.xcworkspace` is the sole interactive Xcode entry point. It owns the shared
@@ -317,6 +330,7 @@ Xcode; the Finder launcher delegates to that same path.
 - `services/api/**`: contracts, authentication, persistence, chat orchestration, background workers, Agent Host protocol, Aether/world integrations. Changes are integrated by the Shannon main task.
 - `docs/architecture.md`, `scripts/verify.sh`, database schema, and Shannon progress JSON are also Shannon main-task integration surfaces.
 - `packages/cognition`: pure shared-state and prompt-projection rules.
+- `packages/evaluation`: synthetic, offline characterization and comparison over the public cognition boundary; it does not own production state or side effects.
 - `deploy/macos`: launchd configuration for the local Agent Host.
 - `deploy/azure`: production services, optional isolated cloud Agent Host, and configuration examples.
 

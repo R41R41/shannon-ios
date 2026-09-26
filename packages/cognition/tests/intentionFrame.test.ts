@@ -33,7 +33,7 @@ describe('Shannon intention frame', () => {
     expect(prompt).toContain('Owner-visible plan proposal:');
     expect(prompt).toContain('2. 小さく改善する');
     expect(prompt).toContain('The plan is guidance, not proof');
-    expect(prompt).toContain('Only a verified action receipt');
+    expect(prompt).toContain('Verified work is authoritative for task progress');
     expect(prompt).not.toContain('chain of thought');
   });
 });
