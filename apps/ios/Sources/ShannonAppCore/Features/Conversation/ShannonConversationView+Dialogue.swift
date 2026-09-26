@@ -8,7 +8,10 @@ extension ShannonConversationView {
     func dialogueStage(_ palette: ShannonPalette) -> some View {
         GeometryReader { geometry in
             let keyboardScale: CGFloat = composerIsFocused ? 0.84 : 1
-            let faceSize = min(geometry.size.width * 0.70, 292) * keyboardScale
+            let hasReply = model.messages.contains(where: { $0.role == .shannon })
+            let faceScale: CGFloat = hasReply ? 0.44 : 0.70
+            let faceLimit: CGFloat = hasReply ? 190 : 292
+            let faceSize = min(geometry.size.width * faceScale, faceLimit) * keyboardScale
 
             ZStack(alignment: .top) {
                 LinearGradient(
@@ -37,7 +40,7 @@ extension ShannonConversationView {
                     .shadow(color: palette.brandPresence.opacity(0.14), radius: 28, y: 10)
                     .position(
                         x: geometry.size.width / 2,
-                        y: geometry.size.height * (composerIsFocused ? 0.60 : 0.62)
+                        y: geometry.size.height * (composerIsFocused ? 0.70 : 0.74)
                     )
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: composerIsFocused)
 
@@ -60,7 +63,7 @@ extension ShannonConversationView {
                             Text("あなた：\(userMessage.text)")
                                 .font(.caption)
                                 .foregroundStyle(palette.textSecondary)
-                                .lineLimit(1)
+                                .lineLimit(2)
                                 .padding(.horizontal, ShannonSpacing.medium)
                                 .frame(maxWidth: 330, minHeight: 30, alignment: .trailing)
                                 .background(.ultraThinMaterial, in: Capsule())
@@ -75,21 +78,21 @@ extension ShannonConversationView {
                         }
                         .transition(.opacity)
                     } else if let reply = model.messages.last(where: { $0.role == .shannon }) {
-                        ShannonDialogueBubble(palette: palette, isExpanded: dialogueIsExpanded) {
+                        ShannonDialogueBubble(
+                            palette: palette,
+                            isExpanded: dialogueIsExpanded,
+                            maxWidth: min(560, geometry.size.width - 32)
+                        ) {
                             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                                 ScrollView(dialogueIsExpanded ? .vertical : []) {
-                                    Text(reply.text)
-                                        .font(.body)
-                                        .lineSpacing(2)
-                                        .foregroundStyle(palette.textPrimary)
+                                    ShannonRichMarkdownText(source: reply.text, palette: palette)
                                         .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(
                                     maxHeight: dialogueIsExpanded
-                                        ? min(250, geometry.size.height * 0.34)
-                                        : (dynamicTypeSize.isAccessibilitySize ? 132 : 104)
+                                        ? min(360, geometry.size.height * 0.48)
+                                        : (dynamicTypeSize.isAccessibilitySize ? 180 : 156)
                                 )
 
                                 HStack(spacing: ShannonSpacing.extraSmall) {
@@ -123,12 +126,24 @@ extension ShannonConversationView {
                                             }
                                         }
                                         .font(.caption2.weight(.semibold))
-                                        .frame(minWidth: 30, minHeight: 30)
+                                        .frame(
+                                            minWidth: ShannonTouchTarget.minimum,
+                                            minHeight: ShannonTouchTarget.minimum
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundStyle(palette.textSecondary)
                                     .accessibilityLabel(dialogueDidCopy ? "コピーしました" : "シャノンの回答をコピー")
                                 }
+                                Button {
+                                    toggleDisplayMode()
+                                } label: {
+                                    Label("会話全体を読む", systemImage: "text.bubble")
+                                        .font(.caption.weight(.semibold))
+                                        .frame(minHeight: ShannonTouchTarget.minimum)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(palette.action)
                             }
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))

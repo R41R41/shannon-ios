@@ -3,6 +3,11 @@ import ShannonAppCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum DesktopSidebarSelection: Hashable {
+    case destination(DesktopDestination)
+    case thread(String)
+}
+
 extension ShannonDesktopRootView {
     var shannonActionColor: Color {
         .shannonAction(for: colorScheme)
@@ -20,6 +25,30 @@ extension ShannonDesktopRootView {
         ShannonDesktopWindowRestoration.destination(
             sceneRawValue: restoredDestinationRawValue,
             lastRawValue: lastDestinationRawValue
+        )
+    }
+
+    var sidebarSelection: Binding<DesktopSidebarSelection?> {
+        Binding(
+            get: {
+                if destination == .talk, let threadID = conversation.selectedThreadId {
+                    return .thread(threadID)
+                }
+                return .destination(destination)
+            },
+            set: { selection in
+                guard let selection else { return }
+                switch selection {
+                case let .destination(destination):
+                    selectDestination(destination)
+                case let .thread(threadID):
+                    Task {
+                        if let thread = conversation.threads.first(where: { $0.threadId == threadID }) {
+                            await openSidebarThread(thread)
+                        }
+                    }
+                }
+            }
         )
     }
 

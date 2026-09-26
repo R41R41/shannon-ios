@@ -8,7 +8,7 @@ extension ShannonDesktopRootView {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 ShannonAvatarView(expression: conversation.currentExpression, size: 28)
-                Text("Shannon")
+                Text("シャノン")
                     .font(.headline)
                 Spacer()
                 Button {
@@ -26,69 +26,26 @@ extension ShannonDesktopRootView {
             .padding(.top, 10)
             .padding(.bottom, 8)
 
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("トークを検索", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .focused($focusedControl, equals: .threadSearch)
-                    .onSubmit { openFirstSearchResult() }
-                    .onExitCommand {
-                        if searchText.isEmpty {
-                            focusedControl = nil
-                        } else {
-                            searchText = ""
-                        }
-                    }
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                        focusedControl = .threadSearch
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("検索を消去")
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .overlay(alignment: .bottom) { Divider() }
-            .padding(.bottom, 8)
-
-            List {
-                Section {
-                    DesktopSidebarButton(
+            List(selection: sidebarSelection) {
+                Section("ワークスペース") {
+                    sidebarDestinationRow(
                         title: "会話",
                         symbol: "bubble.left.and.bubble.right",
                         badge: conversation.unreadInitiativeCount,
-                        selected: destination == .talk
-                    ) { selectDestination(.talk) }
-                    DesktopSidebarButton(
+                        destination: .talk
+                    )
+                    sidebarDestinationRow(
                         title: "作業全体",
                         symbol: "point.3.connected.trianglepath.dotted",
                         badge: conversation.unreadAgentTaskCount,
-                        selected: destination == .work
-                    ) { selectDestination(.work) }
-                    DesktopSidebarButton(
+                        destination: .work
+                    )
+                    sidebarDestinationRow(
                         title: "頭の中",
                         symbol: "brain.head.profile",
                         badge: 0,
-                        selected: destination == .memory
-                    ) { selectDestination(.memory) }
-                    DesktopSidebarButton(
-                        title: "開発",
-                        symbol: "chevron.left.forwardslash.chevron.right",
-                        badge: workProjection.active.count,
-                        selected: destination == .development
-                    ) { selectDestination(.development) }
-                    DesktopSidebarButton(
-                        title: "Release Center",
-                        symbol: "shippingbox",
-                        badge: 0,
-                        selected: destination == .release
-                    ) { selectDestination(.release) }
+                        destination: .memory
+                    )
                 }
 
                 if !threadProjection.initiative.isEmpty {
@@ -113,18 +70,35 @@ extension ShannonDesktopRootView {
                             .padding(.vertical, 8)
                     }
                 }
+
+                Section("ツール") {
+                    sidebarDestinationRow(
+                        title: "開発",
+                        symbol: "chevron.left.forwardslash.chevron.right",
+                        badge: workProjection.active.count,
+                        destination: .development
+                    )
+                    sidebarDestinationRow(
+                        title: "Release Center",
+                        symbol: "shippingbox",
+                        badge: 0,
+                        destination: .release
+                    )
+                    sidebarDestinationRow(
+                        title: "設定",
+                        symbol: "gearshape",
+                        badge: 0,
+                        destination: .settings
+                    )
+                }
             }
             .listStyle(.sidebar)
+            .searchable(text: $searchText, placement: .sidebar, prompt: "トークを検索")
+            .desktopSearchFocused($isThreadSearchFocused)
+            .onSubmit(of: .search, openFirstSearchResult)
 
             Divider()
             VStack(spacing: 2) {
-                DesktopSidebarButton(
-                    title: "設定",
-                    symbol: "gearshape",
-                    badge: 0,
-                    selected: destination == .settings
-                ) { selectDestination(.settings) }
-
                 Button {
                     showsConnection = true
                 } label: {
@@ -146,37 +120,50 @@ extension ShannonDesktopRootView {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    func threadRow(_ thread: ChatThreadDTO, showsInitiativeSignal: Bool) -> some View {
-        Button {
-            Task { await openSidebarThread(thread) }
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(thread.title)
-                        .lineLimit(1)
-                    if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
-                        Text(context)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                Spacer(minLength: 4)
-                if showsInitiativeSignal {
-                    Image(systemName: "sparkles")
-                        .font(.caption2)
-                        .foregroundStyle(Color.accentColor)
-                        .accessibilityLabel("シャノンからの新しい話")
-                } else if thread.threadId == conversation.selectedThreadId {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 5, height: 5)
-                        .accessibilityHidden(true)
+    func sidebarDestinationRow(
+        title: String,
+        symbol: String,
+        badge: Int,
+        destination: DesktopDestination
+    ) -> some View {
+        Label {
+            HStack {
+                Text(title)
+                Spacer()
+                if badge > 0 {
+                    Text("\(badge)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
             }
-            .contentShape(Rectangle())
+        } icon: {
+            Image(systemName: symbol)
         }
-        .buttonStyle(.plain)
+        .tag(DesktopSidebarSelection.destination(destination))
+        .accessibilityValue(badge > 0 ? "未確認\(badge)件" : "")
+    }
+
+    func threadRow(_ thread: ChatThreadDTO, showsInitiativeSignal: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(thread.title)
+                    .lineLimit(1)
+                if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
+                    Text(context)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 4)
+            if showsInitiativeSignal {
+                Image(systemName: "sparkles")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("シャノンからの新しい話")
+            }
+        }
+        .tag(DesktopSidebarSelection.thread(thread.threadId))
         .contextMenu {
             Button("タイトルを変更") {
                 renameThread = thread

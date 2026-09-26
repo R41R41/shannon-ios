@@ -44,6 +44,30 @@ final class ShannonColorSystemTests: XCTestCase {
             contrastRatio(ShannonColorTokens.Dark.textPrimary, ShannonColorTokens.Dark.canvas),
             4.5
         )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Light.successTintText, ShannonColorTokens.Light.successTint),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Dark.successTintText, ShannonColorTokens.Dark.successTint),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Light.attentionTintText, ShannonColorTokens.Light.attentionTint),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Dark.attentionTintText, ShannonColorTokens.Dark.attentionTint),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Light.dangerTintText, ShannonColorTokens.Light.dangerTint),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(ShannonColorTokens.Dark.dangerTintText, ShannonColorTokens.Dark.dangerTint),
+            4.5
+        )
     }
 
     func testIntelligenceAndActionRemainDistinctMeanings() {

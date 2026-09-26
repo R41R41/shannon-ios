@@ -50,7 +50,7 @@ public struct ShannonDesktopRootView: View {
     @AppStorage("shannon.desktop.agent.hostPreference") var agentHostPreferenceRawValue = ShannonAgentRoutingPreference.auto.rawValue
     @AppStorage("shannon.desktop.agent.model") var selectedAgentModel = ""
     @AppStorage("shannon.desktop.agent.reasoning") var agentReasoningRawValue = ShannonAgentReasoningEffort.high.rawValue
-    @FocusState var focusedControl: ShannonDesktopFocusedControl?
+    @FocusState var isThreadSearchFocused: Bool
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) var reduceMotion

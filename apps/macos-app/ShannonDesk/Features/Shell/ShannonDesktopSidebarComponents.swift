@@ -1,6 +1,17 @@
 import AppKit
 import ShannonAppCore
 import SwiftUI
+
+extension View {
+    @ViewBuilder
+    func desktopSearchFocused(_ binding: FocusState<Bool>.Binding) -> some View {
+        if #available(macOS 15.0, *) {
+            searchFocused(binding)
+        } else {
+            self
+        }
+    }
+}
 import UniformTypeIdentifiers
 
 struct DesktopSidebarButton: View {
@@ -39,38 +50,33 @@ struct DesktopWorkStrip: View {
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 0) {
-                WorkStripValue(label: "目的", value: task.title)
-                Divider().frame(height: 30)
-                WorkStripValue(label: "いま", value: task.currentAction ?? task.summary)
-                Divider().frame(height: 30)
-                WorkStripValue(label: "次", value: ShannonDesktopWorkProjection.nextAction(for: task))
+            HStack(spacing: 10) {
+                Label(task.status.japaneseName, systemImage: task.status.symbolName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Divider().frame(height: 18)
+                Text(task.currentAction ?? task.summary)
+                    .font(.callout)
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text("次: \(ShannonDesktopWorkProjection.nextAction(for: task))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.tertiary)
-                    .padding(.trailing, 14)
             }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 38)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(Color(nsColor: .textBackgroundColor))
-    }
-}
-
-struct WorkStripValue: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-            Text(value)
-                .font(.caption)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "現在地、\(task.status.japaneseName)、\(task.currentAction ?? task.summary)。次、\(ShannonDesktopWorkProjection.nextAction(for: task))"
+        )
+        .accessibilityHint("詳細を開く")
     }
 }

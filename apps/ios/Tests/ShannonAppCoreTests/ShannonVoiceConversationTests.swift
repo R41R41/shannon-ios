@@ -2,6 +2,27 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonVoiceConversationTests: XCTestCase {
+    func testGeminiTextSendStatePreservesTheOriginalAfterFailure() {
+        var state = ShannonGeminiTextSendState.sending(text: "  原文をそのまま残す  ")
+
+        state.preservePendingText(message: "再試行できます")
+
+        XCTAssertEqual(
+            state,
+            .failed(text: "  原文をそのまま残す  ", message: "再試行できます")
+        )
+        XCTAssertEqual(state.failedText, "  原文をそのまま残す  ")
+        XCTAssertFalse(state.isSending)
+    }
+
+    func testGeminiTextSendStateIgnoresRepeatedFailureTransitions() {
+        var state = ShannonGeminiTextSendState.failed(text: "一度だけ送る", message: "最初の失敗")
+
+        state.preservePendingText(message: "重複した失敗")
+
+        XCTAssertEqual(state, .failed(text: "一度だけ送る", message: "最初の失敗"))
+    }
+
     func testVoiceGlowUsesTheActiveSpeakerAndKeepsThinkingMotionSemantic() {
         let quietListening = ShannonVoiceGlowDynamics.sample(
             phase: .listening,

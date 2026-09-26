@@ -107,7 +107,7 @@ extension ShannonDesktopRootView {
 
     func focusThreadSearch() {
         selectDestination(.talk)
-        focusedControl = .threadSearch
+        isThreadSearchFocused = true
     }
 
     func openFirstSearchResult() {

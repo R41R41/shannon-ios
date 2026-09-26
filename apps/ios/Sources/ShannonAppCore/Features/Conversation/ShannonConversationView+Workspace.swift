@@ -17,7 +17,7 @@ extension ShannonConversationView {
                 Image(systemName: "sidebar.left")
             }
             .accessibilityLabel("トークと画面を開く")
-            .accessibilityValue(model.totalBadgeCount > 0 ? "未確認(model.totalBadgeCount)件" : "未確認なし")
+            .accessibilityValue(model.totalBadgeCount > 0 ? "未確認\(model.totalBadgeCount)件" : "未確認なし")
             .overlay(alignment: .topTrailing) {
                 if model.totalBadgeCount > 0 {
                     Circle()

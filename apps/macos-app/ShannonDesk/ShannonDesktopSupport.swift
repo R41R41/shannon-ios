@@ -58,9 +58,6 @@ enum DesktopAuxiliaryPanel: String, CaseIterable, Hashable {
 struct ShannonDesktopWindowChromeState: Equatable {
     let showsInspector: Bool, auxiliaryPanel: DesktopAuxiliaryPanel
 }
-enum ShannonDesktopFocusedControl: Hashable {
-    case threadSearch
-}
 enum ShannonDesktopWindowRestoration {
     static let lastInspectorVisibleKey = "shannon.desktop.lastShowsInspector"
     static let lastAuxiliaryPanelKey = "shannon.desktop.lastAuxiliaryPanel"

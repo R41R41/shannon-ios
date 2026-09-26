@@ -126,13 +126,14 @@ struct ShannonTypingIndicator: View {
 struct ShannonDialogueBubble<Content: View>: View {
     let palette: ShannonPalette
     let isExpanded: Bool
+    var maxWidth: CGFloat = 350
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
             .padding(.horizontal, ShannonSpacing.large)
             .padding(.vertical, ShannonSpacing.medium)
-            .frame(maxWidth: 350, minHeight: 54, alignment: .leading)
+            .frame(maxWidth: maxWidth, minHeight: 54, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)

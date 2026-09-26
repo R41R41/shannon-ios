@@ -34,7 +34,11 @@ enum ShannonColorTokens {
         static let creationText: UInt = 0x3A2C00
         static let creationTint: UInt = 0xFFF5CC
         static let success: UInt = 0x34C759
+        static let successTint: UInt = 0xE8F7EC
+        static let successTintText: UInt = 0x146C2E
         static let attention: UInt = 0xFF8D28
+        static let attentionTint: UInt = 0xFFF0DC
+        static let attentionTintText: UInt = 0x7A3E00
         static let danger: UInt = 0xFF383C
         static let dangerTint: UInt = 0xFFE5E6
         static let dangerTintText: UInt = 0x5F0004
@@ -59,7 +63,11 @@ enum ShannonColorTokens {
         static let creationText: UInt = 0x2B2100
         static let creationTint: UInt = 0x3D3300
         static let success: UInt = 0x30D158
+        static let successTint: UInt = 0x12351D
+        static let successTintText: UInt = 0xA8F0BB
         static let attention: UInt = 0xFF9230
+        static let attentionTint: UInt = 0x3F2A0B
+        static let attentionTintText: UInt = 0xFFD29B
         static let danger: UInt = 0xFF4245
         static let dangerTint: UInt = 0x4A1517
         static let dangerTintText: UInt = 0xFFE5E6
@@ -92,7 +100,11 @@ struct ShannonPalette {
     let dangerTint: Color
     let onDangerTint: Color
     let success: Color
+    let successTint: Color
+    let onSuccessTint: Color
     let attention: Color
+    let attentionTint: Color
+    let onAttentionTint: Color
     let characterBlush: Color
 
     var intelligenceGradient: LinearGradient {
@@ -128,7 +140,11 @@ struct ShannonPalette {
         dangerTint: Color(hex: ShannonColorTokens.Light.dangerTint),
         onDangerTint: Color(hex: ShannonColorTokens.Light.dangerTintText),
         success: Color(hex: ShannonColorTokens.Light.success),
+        successTint: Color(hex: ShannonColorTokens.Light.successTint),
+        onSuccessTint: Color(hex: ShannonColorTokens.Light.successTintText),
         attention: Color(hex: ShannonColorTokens.Light.attention),
+        attentionTint: Color(hex: ShannonColorTokens.Light.attentionTint),
+        onAttentionTint: Color(hex: ShannonColorTokens.Light.attentionTintText),
         characterBlush: Color(hex: ShannonColorTokens.Light.characterBlush)
     )
 
@@ -157,7 +173,11 @@ struct ShannonPalette {
         dangerTint: Color(hex: ShannonColorTokens.Dark.dangerTint),
         onDangerTint: Color(hex: ShannonColorTokens.Dark.dangerTintText),
         success: Color(hex: ShannonColorTokens.Dark.success),
+        successTint: Color(hex: ShannonColorTokens.Dark.successTint),
+        onSuccessTint: Color(hex: ShannonColorTokens.Dark.successTintText),
         attention: Color(hex: ShannonColorTokens.Dark.attention),
+        attentionTint: Color(hex: ShannonColorTokens.Dark.attentionTint),
+        onAttentionTint: Color(hex: ShannonColorTokens.Dark.attentionTintText),
         characterBlush: Color(hex: ShannonColorTokens.Dark.characterBlush)
     )
 

@@ -20,6 +20,12 @@ public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
     }
 }
 
+public enum ShannonGeminiLiveFailureRecovery: Equatable, Sendable {
+    case reconnect
+    case openSettings
+    case updateRequired
+}
+
 @MainActor
 @Observable
 public final class ShannonGeminiLiveSessionModel {
@@ -29,6 +35,8 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var model = "gemini-3.5-transcribe-live"
     public private(set) var voice = "Shannon"
     public private(set) var errorMessage: String?
+    public private(set) var failureRecovery: ShannonGeminiLiveFailureRecovery?
+    public private(set) var textSendState: ShannonGeminiTextSendState = .idle
     public private(set) var audioLevel: Float = 0
     public private(set) var playbackLevel: Double = 0
     public private(set) var firstAudioLatencyMilliseconds: Int?
@@ -78,16 +86,17 @@ public final class ShannonGeminiLiveSessionModel {
         self.participantMode = participantMode
         resetMeasurements()
         errorMessage = nil
+        failureRecovery = nil
         phase = .requestingPermission
 
         guard ShannonVoiceUsageDescriptionPolicy.isPresent(
             Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription")
         ) else {
-            fail("音声機能の設定が不足しています。アプリを更新してください。")
+            fail("音声機能の設定が不足しています。アプリを更新してください。", recovery: .updateRequired)
             return
         }
         guard await AVAudioApplication.requestRecordPermission() else {
-            fail("設定でマイクを許可すると、音声で話せます。")
+            fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
             return
         }
 
@@ -111,11 +120,17 @@ public final class ShannonGeminiLiveSessionModel {
             try next.setInputPreference(inputState.preference)
             try await next.start()
         } catch {
-            fail("Gemini音声会話へ接続できませんでした。少し待ってもう一度お試しください。")
+            fail(
+                "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。",
+                recovery: .reconnect
+            )
         }
     }
 
     public func stop() {
+        textSendState.preservePendingText(
+            message: "音声会話を閉じたため送信を中断しました。入力は残しています。"
+        )
         responseTask?.cancel()
         finalizeTask?.cancel()
         duckRestoreTask?.cancel()
@@ -141,12 +156,30 @@ public final class ShannonGeminiLiveSessionModel {
         )
     }
 
-    public func sendText(_ text: String) {
+    @discardableResult
+    public func sendText(_ text: String) -> Bool {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        interruptResponse()
+        guard !value.isEmpty else { return false }
+        guard transport != nil, performDelegation != nil, synthesize != nil, phase != .failed else {
+            textSendState = .failed(
+                text: value,
+                message: "音声会話へ接続してから、もう一度送信してください。"
+            )
+            return false
+        }
+        guard !textSendState.isSending else { return false }
+        interruptResponse(preserveTextFailure: false)
         userTranscript = value
-        beginResponse(to: value)
+        textSendState = .sending(text: value)
+        beginResponse(to: value, textSubmission: value)
+        return true
+    }
+
+    @discardableResult
+    public func retryText() -> Bool {
+        guard let text = textSendState.failedText else { return false }
+        textSendState = .idle
+        return sendText(text)
     }
 
     public func selectInput(_ preference: ShannonVoiceInputPreference) {
@@ -199,7 +232,7 @@ public final class ShannonGeminiLiveSessionModel {
         case .sessionHandle:
             break
         case .goAway:
-            fail("Geminiとの接続が終了しました。もう一度開始してください。")
+            fail("Geminiとの接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
     }
 
@@ -248,8 +281,17 @@ public final class ShannonGeminiLiveSessionModel {
         beginResponse(to: text)
     }
 
-    private func beginResponse(to userText: String, committedUserText: String? = nil) {
-        guard let performDelegation, let synthesize else { return }
+    private func beginResponse(
+        to userText: String,
+        committedUserText: String? = nil,
+        textSubmission: String? = nil
+    ) {
+        guard let performDelegation, let synthesize else {
+            if let textSubmission {
+                textSendState = .failed(text: textSubmission, message: "送信を開始できませんでした。")
+            }
+            return
+        }
         responseTask?.cancel()
         responseStartedAt = ProcessInfo.processInfo.systemUptime
         firstAudioLatencyMilliseconds = nil
@@ -286,6 +328,11 @@ public final class ShannonGeminiLiveSessionModel {
                 playbackLevel = 0
                 phase = .listening
                 responseTask = nil
+                if let textSubmission,
+                   case let .sending(currentText) = textSendState,
+                   currentText == textSubmission {
+                    textSendState = .idle
+                }
                 if participantMode.allowsTranscriptPersistence, let commitTurn {
                     try? await commitTurn(committedUserText ?? userText, reply)
                 }
@@ -296,6 +343,12 @@ public final class ShannonGeminiLiveSessionModel {
                 playbackLevel = 0
                 phase = .listening
                 errorMessage = "返答の音声を作れませんでした。もう一度話しかけてください。"
+                if let textSubmission {
+                    textSendState = .failed(
+                        text: textSubmission,
+                        message: "返答を最後まで再生できませんでした。入力を残しています。"
+                    )
+                }
             }
         }
     }
@@ -309,7 +362,7 @@ public final class ShannonGeminiLiveSessionModel {
         }
         scheduleDuckRelease()
         if hasFinalText || now - (bargeCandidateStartedAt ?? now) >= 0.34 {
-            interruptResponse()
+            interruptResponse(preserveTextFailure: true)
         }
     }
 
@@ -322,8 +375,15 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    private func interruptResponse() {
+    private func interruptResponse(preserveTextFailure: Bool = true) {
         guard responseTask != nil else { return }
+        if preserveTextFailure,
+           case let .sending(text) = textSendState {
+            textSendState = .failed(
+                text: text,
+                message: "音声入力で応答を中断しました。必要なら同じ文を再送できます。"
+            )
+        }
         let now = ProcessInfo.processInfo.systemUptime
         if let started = bargeCandidateStartedAt {
             interruptionLatencyMilliseconds = Int(max(0, now - started) * 1_000)
@@ -366,13 +426,20 @@ public final class ShannonGeminiLiveSessionModel {
         didRecordFirstQueuedChunk = false
     }
 
-    private func fail(_ message: String) {
+    private func fail(
+        _ message: String,
+        recovery: ShannonGeminiLiveFailureRecovery = .reconnect
+    ) {
+        textSendState.preservePendingText(
+            message: "接続が切れたため送信を中断しました。入力は残しています。"
+        )
         responseTask?.cancel()
         responseTask = nil
         transport?.stop()
         transport = nil
         phase = .failed
         errorMessage = message
+        failureRecovery = recovery
     }
 }
 #endif
