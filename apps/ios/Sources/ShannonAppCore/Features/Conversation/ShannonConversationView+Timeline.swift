@@ -14,7 +14,7 @@ extension ShannonConversationView {
                             .tint(palette.action)
                             .foregroundStyle(palette.textSecondary)
                             .padding(.top, 72)
-                    } else if model.messages.isEmpty {
+                    } else if model.messages.isEmpty && model.unattachedSelectedThreadOrganizeSessions.isEmpty {
                         ShannonEmptyConversation()
                     }
 
@@ -43,34 +43,15 @@ extension ShannonConversationView {
                                 .id("agent-task-\(task.id.uuidString)")
                             }
                             if let session = model.organizeSession(sourceMessageID: message.id) {
-                                ShannonOrganizeSessionCard(
-                                    session: session,
-                                    isWorking: model.pendingOrganizeSessionIDs.contains(session.id),
-                                    error: model.organizeActionErrors[session.id],
-                                    taskCandidatesByItemID: model.voyagerTaskCandidatesByItemID,
-                                    projects: model.voyagerProjects,
-                                    pendingCatalogItemIDs: model.pendingVoyagerCatalogItemIDs,
-                                    catalogErrorsByItemID: model.voyagerCatalogErrorsByItemID,
-                                    decide: { itemID, decision, title, details, operation, target, projectIds in
-                                        Task {
-                                            await model.decideOrganizeItem(
-                                                sessionID: session.id, itemID: itemID,
-                                                decision: decision, title: title, details: details,
-                                                operation: operation, target: target, projectIds: projectIds
-                                            )
-                                        }
-                                    },
-                                    searchTasks: { itemID, query in
-                                        Task { await model.searchVoyagerTasks(itemID: itemID, query: query) }
-                                    },
-                                    loadProjects: { itemID in
-                                        Task { await model.loadVoyagerProjects(itemID: itemID) }
-                                    },
-                                    apply: { Task { await model.applyOrganizeSession(session.id) } }
-                                )
+                                ShannonConversationOrganizeCard(model: model, session: session)
                                 .id("organize-session-\(session.id)")
                             }
                         }
+                    }
+
+                    ForEach(model.unattachedSelectedThreadOrganizeSessions) { session in
+                        ShannonConversationOrganizeCard(model: model, session: session)
+                            .id("organize-session-\(session.id)")
                     }
 
                     ForEach(model.unattachedSelectedThreadAgentTasks) { task in

@@ -177,6 +177,7 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
       if (error instanceof Error && error.message === 'MEMORY_NOT_FOUND') {
         return { status: 404, body: { error: 'MEMORY_NOT_FOUND' } };
       }
+      if (error instanceof Error && error.message === 'MEMORY_COMMITMENT_REQUIRED') return badRequest('This action requires a commitment');
       throw error;
     }
   }

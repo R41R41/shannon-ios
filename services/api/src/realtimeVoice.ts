@@ -2,6 +2,7 @@ export interface RealtimeVoiceCallRequest {
   sdp: string;
   instructions: string;
   voice?: string;
+  enableClientTools?: boolean;
 }
 
 export interface RealtimeVoiceCallResult {
@@ -94,6 +95,7 @@ interface OpenAIRealtimeVoiceGatewayOptions {
   timeoutMilliseconds?: number;
   transcriptionModel?: string;
   voice?: string;
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 export class OpenAIRealtimeVoiceGateway {
@@ -104,15 +106,17 @@ export class OpenAIRealtimeVoiceGateway {
   private readonly timeoutMilliseconds: number;
   private readonly transcriptionModel: string;
   readonly defaultVoice: string;
+  private readonly reasoningEffort: 'low' | 'medium' | 'high';
 
   constructor(private readonly options: OpenAIRealtimeVoiceGatewayOptions) {
     if (!options.apiKey.trim()) throw new RealtimeVoiceError('VOICE_REALTIME_NOT_CONFIGURED');
-    this.model = validIdentifier(options.model ?? 'gpt-realtime-2.1-mini', 'SHANNON_VOICE_REALTIME_MODEL');
+    this.model = validIdentifier(options.model ?? 'gpt-realtime-2', 'SHANNON_VOICE_REALTIME_MODEL');
     this.transcriptionModel = validIdentifier(
       options.transcriptionModel ?? 'gpt-live-transcribe',
       'SHANNON_VOICE_REALTIME_TRANSCRIPTION_MODEL',
     );
     this.defaultVoice = validIdentifier(options.voice ?? 'marin', 'SHANNON_VOICE_REALTIME_VOICE');
+    this.reasoningEffort = options.reasoningEffort ?? 'low';
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/realtime/calls';
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMilliseconds = boundedInteger(options.timeoutMilliseconds, 5_000, 60_000, 30_000);
@@ -131,6 +135,23 @@ export class OpenAIRealtimeVoiceGateway {
       instructions: boundedInstructions(request.instructions),
       output_modalities: ['audio'],
       max_output_tokens: 700,
+      reasoning: { effort: this.reasoningEffort },
+      ...(request.enableClientTools ? {
+        tools: [{
+          type: 'function',
+          name: 'consult_shannon_backend',
+          description: 'Use for current web facts, exact time, device location, weather, transit, notes, tasks, relevant memory recall, explicit commitment changes, or note/task proposal requests. The backend validates separately supplied original user input. Never claim an external write succeeded without a receipt; proposals require the existing review/apply flow.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              request: { type: 'string', description: 'The complete user request in Japanese, including corrected names and constraints.' },
+            },
+            required: ['request'],
+          },
+        }],
+        tool_choice: 'auto',
+      } : {}),
       audio: {
         input: {
           noise_reduction: { type: 'near_field' },
@@ -339,8 +360,14 @@ export function createConfiguredRealtimeVoiceGateway(
     endpoint: environment.SHANNON_VOICE_REALTIME_ENDPOINT,
     transcriptionModel: environment.SHANNON_VOICE_REALTIME_TRANSCRIPTION_MODEL,
     voice: environment.SHANNON_VOICE_REALTIME_VOICE,
+    reasoningEffort: configuredReasoningEffort(environment.SHANNON_VOICE_REALTIME_REASONING_EFFORT),
     timeoutMilliseconds: optionalInteger(environment.SHANNON_VOICE_REALTIME_TIMEOUT_MS),
   });
+}
+
+function configuredReasoningEffort(value: string | undefined): 'low' | 'medium' | 'high' {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'medium' || normalized === 'high' ? normalized : 'low';
 }
 
 export function configuredVoiceEngine(

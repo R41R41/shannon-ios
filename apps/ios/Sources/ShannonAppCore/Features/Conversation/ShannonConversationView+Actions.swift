@@ -33,6 +33,12 @@ extension ShannonConversationView {
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
             drawerProgress = 1
         }
+#if os(iOS)
+        if ShannonVoiceDesignPreview.isEnabled {
+            realtimeVoiceModel.prepareDesignPreview()
+            showsLiveVoice = true
+        }
+#endif
     }
 #endif
 

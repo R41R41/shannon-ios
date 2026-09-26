@@ -55,6 +55,7 @@ extension ShannonConversationModel {
 
     public func performLiveVoiceDelegation(
         transcript: String,
+        userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> String {
         let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
@@ -73,10 +74,14 @@ extension ShannonConversationModel {
             deviceContext: ShannonVoiceDeviceContextDTO(
                 timeZoneIdentifier: TimeZone.current.identifier,
                 requestedLocation: requestedLocation,
-                location: location
+                location: location,
+                userUtterance: userUtterance
             )
         )
-        if participantMode == .owner { selectedThreadId = result.threadId }
+        if participantMode == .owner {
+            selectedThreadId = result.threadId
+            if let session = result.organizeSession { upsertOrganizeSession(session) }
+        }
         return result.reply
     }
 

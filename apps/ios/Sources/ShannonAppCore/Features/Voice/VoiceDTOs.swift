@@ -120,27 +120,37 @@ public struct ShannonVoiceDeviceContextDTO: Codable, Equatable, Sendable {
     public let timeZoneIdentifier: String
     public let requestedLocation: Bool
     public let location: ShannonVoiceDeviceLocationDTO?
+    public var userUtterance: ShannonVoiceUserUtteranceDTO? = nil
 
     public init(
         timeZoneIdentifier: String,
         requestedLocation: Bool,
-        location: ShannonVoiceDeviceLocationDTO?
+        location: ShannonVoiceDeviceLocationDTO?,
+        userUtterance: ShannonVoiceUserUtteranceDTO? = nil
     ) {
         self.timeZoneIdentifier = timeZoneIdentifier
         self.requestedLocation = requestedLocation
         self.location = location
+        self.userUtterance = userUtterance
     }
+}
+
+public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
+    public let id: String
+    public let text: String
 }
 
 public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendable {
     public let threadId: String
     public let model: String
     public let reply: String
+    public let organizeSession: ShannonOrganizeSessionDTO?
 
-    public init(threadId: String, model: String, reply: String) {
+    public init(threadId: String, model: String, reply: String, organizeSession: ShannonOrganizeSessionDTO? = nil) {
         self.threadId = threadId
         self.model = model
         self.reply = reply
+        self.organizeSession = organizeSession
     }
 }
 
@@ -231,6 +241,7 @@ public struct ShannonVoicePreviewRequestDTO: Codable, Equatable, Sendable {
 }
 
 public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
+    public var timeZone: String = TimeZone.current.identifier
     public let scopeKey: String
     public let threadId: String?
     public let userTranscript: String

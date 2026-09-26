@@ -41,6 +41,8 @@ The shared vocabulary does not make the three products visually identical. Shann
 
 Shannon's compact and historical avatars keep the existing expression artwork. The iPhone empty-conversation hero, dialogue mode, and realtime voice use the Waterlight Eye: a near-black soft rounded-square face with sphere-projected capsule eyes, 160% eye scale, and the `intelligenceSky → brandPresence → intelligenceDepth` gradient. Dialogue activity changes the eyes themselves for preparing, connecting, listening, thinking, speaking, working, searching, waiting, completion, and failure; operational text remains the semantic authority. Touch tracking is active only while the face is pressed. Tapping produces one interruptible surprise-to-bashful reaction and reveals semantic `characterBlush` cheeks. Reduce Motion removes spatial and repeating motion while preserving the state-specific eye shape and the bounded bashful still response. Task rows, message avatars, and Mac compact avatars keep their existing assets and behavior.
 
+Realtime voice also carries a decorative Waterlight edge glow at the bottom of the iPhone surface. Listening follows the microphone envelope, speaking follows remote playout, and thinking gathers into a restrained side-to-side beam. The glow uses the app-owned intelligence palette, never replaces the visible phase label or Waterlight Eye state, ignores hit testing and accessibility focus, and removes travel, flow, and repeated motion under Reduce Motion while retaining bounded level feedback.
+
 ## Preserve
 
 - Talk remains the primary surface, with Shannon messages visually distinct from the user's quieter bubbles.

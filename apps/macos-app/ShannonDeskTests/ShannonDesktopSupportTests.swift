@@ -206,6 +206,22 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
             ShannonDesktopWindowRestoration.auxiliaryPanel(sceneRawValue: "unknown", lastRawValue: "unknown"),
             .task
         )
+
+        let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
+            sceneInspectorRawValue: nil,
+            sceneAuxiliaryPanelRawValue: nil,
+            lastInspectorVisible: true,
+            lastAuxiliaryPanelRawValue: "outline"
+        )
+        let restoredChrome = ShannonDesktopWindowRestoration.windowChrome(
+            sceneInspectorRawValue: "visible",
+            sceneAuxiliaryPanelRawValue: "outline",
+            lastInspectorVisible: false,
+            lastAuxiliaryPanelRawValue: "task"
+        )
+        XCTAssertEqual(initialChrome, restoredChrome)
+        XCTAssertTrue(initialChrome.showsInspector)
+        XCTAssertEqual(initialChrome.auxiliaryPanel, .outline)
     }
 
     func testDevelopmentOptionsDiscardUnsupportedModelAndNormalizeReasoning() {
@@ -506,5 +522,19 @@ struct ShannonDesktopDevelopmentWorkspaceTests {
         #expect(store.summary == "検証後の変更")
         #expect(store.additions == 4)
         #expect(store.deletions == 1)
+    }
+
+    @Test
+    func largeDiffProjectionPreservesEveryLineWithStableIdentity() throws {
+        let diff = (0..<12_000).map { index in
+            index.isMultiple(of: 2) ? "+line \(index)" : "-line \(index)"
+        }.joined(separator: "\n") + "\n"
+
+        let lines = ShannonDesktopDiffProjection.lines(in: diff)
+
+        #expect(lines.count == 12_001)
+        #expect(lines.first == ShannonDesktopDiffLine(id: 0, text: "+line 0"))
+        #expect(lines[11_999] == ShannonDesktopDiffLine(id: 11_999, text: "-line 11999"))
+        #expect(lines.last == ShannonDesktopDiffLine(id: 12_000, text: ""))
     }
 }

@@ -348,7 +348,7 @@ async function handleRealtimeVoiceCall(
       return;
     }
     const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
-      clientDelegation: realtimeVoiceGateway.engine === 'live', participantMode,
+      clientDelegation: true, participantMode,
       brightVoice: scalarHeader(request.headers['x-shannon-voice-brightness']) === 'enabled',
     });
     const createdAt = now();
@@ -373,6 +373,7 @@ async function handleRealtimeVoiceCall(
       sdp: offer,
       instructions: session.instructions,
       voice: session.voice,
+      enableClientTools: realtimeVoiceGateway.engine === 'realtime',
     });
     upstreamCallCreated = true;
     response.writeHead(200, {
@@ -408,7 +409,6 @@ async function handleRealtimeVoiceCall(
     throw error;
   }
 }
-
 async function handleVoiceIdentityPreview(
   request: IncomingMessage,
   response: ServerResponse,

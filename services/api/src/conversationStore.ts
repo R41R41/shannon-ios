@@ -5,6 +5,7 @@ import type { ShannonTaskDecision } from './chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
 
 export interface ShannonExperience extends RecallCandidate {
+  timeZone?: string;
   userMessage: string;
   shannonReply: string;
 }
@@ -36,6 +37,7 @@ export interface StoredConversationMessage extends ShannonConversationItem {
 }
 
 export interface TurnPersistenceContext {
+  timeZone?: string;
   threadTitle?: string;
   threadSummary?: string;
   messageEmotion: ShannonMessageEmotion;
@@ -264,6 +266,7 @@ export class InMemoryConversationStore implements ConversationStore {
       shannonReply,
       summary: summarizeExperience(userMessage, shannonReply),
       observedAt,
+      ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
     });
     experiences.push(experience);
     this.experiences.set(scopeKey, experiences.slice(-this.maximumExperiences));

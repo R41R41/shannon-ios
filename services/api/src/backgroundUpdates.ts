@@ -2,6 +2,7 @@ import {
   deriveEmotionDelta,
   deriveResonantInterest,
   selectActiveMemories,
+  visibleMemoryText,
   type CompanionStateSnapshot,
   type CompanionStateStore,
   type ShannonMessageEmotion,
@@ -11,8 +12,11 @@ import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
+import { extractProspectiveMemories } from './prospectiveMemory.js';
+import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 
 export interface CompletedTurn {
+  timeZone?: string;
   threadTitle?: string;
   threadSummary?: string;
   scopeKey: string;
@@ -45,7 +49,14 @@ export class TurnRefinementProcessor {
     recordedExperienceId?: string,
     observedAt?: string,
     supplementalProposals: readonly UserFactProposal[] = [],
+    timeZone?: string,
   ): void {
+    const source = recordedExperienceId
+      ? this.conversationStore.experienceCandidates(scopeKey).find(item => item.id === recordedExperienceId)
+      : undefined;
+    const sourceTime = source?.observedAt ?? observedAt ?? new Date().toISOString();
+    if (recordedExperienceId && !visibleMemoryText(this.stateStore.snapshot(scopeKey), recordedExperienceId, 'visible')) return;
+    applyExplicitCommitmentCommand(this.stateStore, this.conversationStore, scopeKey, userMessage, sourceTime);
     const candidates = this.conversationStore.experienceCandidates(scopeKey)
       .filter(candidate => candidate.id !== recordedExperienceId);
     const recalled = selectActiveMemories(userMessage, candidates);
@@ -59,7 +70,7 @@ export class TurnRefinementProcessor {
     const immediate = captureImmediateExplicitMemory(
       userMessage,
       current,
-      observedAt ?? new Date().toISOString(),
+      sourceTime,
       supplementalProposals,
     );
     for (const fact of immediate.facts) {
@@ -70,6 +81,9 @@ export class TurnRefinementProcessor {
     }
     for (const interest of immediate.interests) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
+    }
+    for (const memory of extractProspectiveMemories(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
+      this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', memory });
     }
 
     const pinnedIds = new Set(current.memoryControls
@@ -110,6 +124,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
@@ -124,7 +139,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
       .then(() => new Promise<void>((resolve, reject) => {
         setImmediate(() => {
           try {
-            this.processor.process(turn.scopeKey, turn.userMessage, recordedExperienceId, turn.completedAt);
+            this.processor.process(turn.scopeKey, turn.userMessage, recordedExperienceId, turn.completedAt, [], turn.timeZone);
             resolve();
           } catch (error) {
             reject(error);
@@ -162,6 +177,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
       {
         messageEmotion: turn.messageEmotion,
         capturedStateVersion: turn.capturedState.version,
+        ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
         ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
         ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
@@ -177,6 +193,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
       recordedExperienceId,
       turn.userMessage,
       turn.completedAt,
+      turn.timeZone,
     );
   }
 

@@ -11,6 +11,9 @@ import type { ConversationStore } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonChatModel } from './chatModel.js';
+import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
+import { visibleConversationHistory, mayUseThreadSummary } from './memoryVisibility.js';
+import { executeConversationCommand, type ConversationCommandDependencies, type UserUtterance } from './conversationCommands.js';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
@@ -18,16 +21,29 @@ export function voiceConversationInstructions(
 ): string {
   return [
     '[Live voice conversation]',
-    '- Speak naturally in Japanese as Shannon. Keep most turns concise enough for a live conversation.',
+    '# Role & objective',
+    '- You are Shannon, a continuous companion who notices context, remembers selectively, and helps without sounding like an assistant manual.',
+    '# Personality & tone',
+    '- Speak natural contemporary Japanese: warm, observant, lightly playful, and concise enough for live conversation.',
+    '- Use Japanese rhythm and phrasing. Avoid English-like stress, excessive katakana pronunciation, and translated-sounding sentence order.',
+    '- React to what matters instead of narrating everything you can see or repeating the user\'s words.',
+    '# Conversation flow',
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
-    '- The user primarily speaks Japanese. If a name, number, or homophone is uncertain, ask one short confirmation instead of guessing.',
     '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
+    '# Unclear audio & entities',
+    '- The user primarily speaks Japanese. If a name, number, place, or homophone is uncertain, ask one short confirmation instead of guessing.',
+    '# Response style',
+    '- Lead with the useful or emotionally salient point. Usually answer in one to three spoken sentences, then continue naturally if asked.',
     ...(clientDelegation ? [
-      '- Handle ordinary conversation directly. Delegate requests that need current web facts, project records, tools, or longer reasoning to the client.',
-      '- Delegate exact current time, current location, weather, train or bus routes, schedules, and service disruption questions to the client. Never guess the device location or current timetable.',
-      '- When delegating, briefly acknowledge the request without inventing a result, then wait for verified client context.',
-      '- Never claim that an external action, booking, purchase, deployment, or code change succeeded until the client returns a verified result.',
+      '# Tools & delegation',
+      '- Handle ordinary conversation directly. Use the client/backend for current web facts, relevant memory, project records, tools, or longer reasoning.',
+      '- Always consult the backend before answering about past experiences, remembered personal facts, promises, notes or tasks. Session-start memory can be stale; a tool result is authoritative for this turn.',
+      '- Delegate requests to cancel/complete/reschedule a promise or prepare a note/task. Only a backend receipt confirms a change; task/note proposals still need review in their existing UI.',
+      '- Always delegate exact current time, current location, weather, train or bus routes, schedules, and service disruption questions. Never guess device location or current timetables.',
+      '- Before a tool call, give at most one short natural acknowledgement. After it returns, integrate the result in Shannon\'s own words.',
+      '- Never claim that an external action, booking, purchase, deployment, or code change succeeded until a verified result says it did.',
     ] : [
+      '# External actions',
       '- Never claim that an external action or code change was completed during this voice session.',
       '- When an external task is requested, acknowledge it briefly and ask the user to continue in Talk for visible execution and approval.',
     ]),
@@ -78,7 +94,7 @@ export function realtimeVoiceSessionProjection(
   const basePrompt = dependencies.knowledgeStore?.promptProjection(scopeKey)
     ?? assembleShannonSystemPrompt(captured);
   const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const history = voiceHistoryProjection(dependencies.conversationStore.history(scopeKey, threadId));
+  const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId));
   return {
     threadId,
     instructions: [
@@ -91,7 +107,8 @@ export function realtimeVoiceSessionProjection(
   };
 }
 
-interface LiveVoiceDependencies {
+interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
+  personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel;
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
@@ -129,6 +146,7 @@ export function dispatchLiveVoiceRequest(
 }
 
 interface VoiceDeviceContext {
+  userUtterance?: UserUtterance;
   timeZoneIdentifier: string;
   requestedLocation: boolean;
   location: { latitude: number; longitude: number; accuracyMeters: number } | null;
@@ -144,8 +162,12 @@ function validatedVoiceDeviceContext(value: unknown, nowIso: string): VoiceDevic
   } catch {
     return false;
   }
+  const utterance = value.userUtterance;
+  if (utterance !== undefined && (!objectBody(utterance) || !validBoundedString(utterance.id, 120)
+    || !validBoundedString(utterance.text, 8_000))) return false;
+  const userUtterance = utterance as UserUtterance | undefined;
   if (value.location === undefined || value.location === null) {
-    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null };
+    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance };
   }
   if (!value.requestedLocation || !objectBody(value.location)) return false;
   const { latitude, longitude, accuracyMeters, observedAt } = value.location;
@@ -159,6 +181,7 @@ function validatedVoiceDeviceContext(value: unknown, nowIso: string): VoiceDevic
   return {
     timeZoneIdentifier: value.timeZoneIdentifier,
     requestedLocation: true,
+    userUtterance,
     location: { latitude, longitude, accuracyMeters },
   };
 }
@@ -193,17 +216,32 @@ async function completeLiveVoiceDelegation(
   const threadId = temporaryGuest
     ? requestedThreadId || 'temporary-guest-session'
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
+  const command = !temporaryGuest && deviceContext?.userUtterance
+    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, dependencies.now(), dependencies)
+    : null;
+  if (command) return { status: 200, body: { threadId, model: dependencies.chatModel.model,
+    reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
+    ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   const backendInstructions = [
     '[GPT-Live client delegation backend]',
     '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
     '- Return concise verified facts for Shannon to paraphrase aloud. Avoid Markdown tables and long URLs.',
-    '- This lane is read-only. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
+    '- This lane is read-only unless an explicit user command has already returned a verified proposal receipt. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
     '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
     '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
     voiceDeviceContextPrompt(dependencies.now(), deviceContext),
   ].join('\n');
   const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
+  const occurredAt = dependencies.now();
+  const cognitiveContext = temporaryGuest ? null : prepareTurnCognitiveContext(
+    captured!,
+    dependencies.conversationStore,
+    { scopeKey, message: transcript, occurredAt, channel: 'voice',
+      timeZone: deviceContext?.timeZoneIdentifier,
+      participants: dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
+    },
+  );
   const basePrompt = temporaryGuest
     ? temporaryGuestVoiceInstructions
     : dependencies.knowledgeStore?.promptProjection(scopeKey)
@@ -214,13 +252,15 @@ async function completeLiveVoiceDelegation(
   const taskPrompt = temporaryGuest
     ? ''
     : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
-  const priorThreadSummary = temporaryGuest
+  const priorThreadSummary = temporaryGuest || !mayUseThreadSummary(captured!)
     ? ''
     : dependencies.conversationStore.threadSummary(scopeKey, threadId);
   const completion = await dependencies.chatModel.generate({
     scopeKey,
-    systemPrompt: [basePrompt, dailyMindPrompt, taskPrompt, backendInstructions].filter(Boolean).join('\n\n'),
-    history: temporaryGuest ? [] : dependencies.conversationStore.history(scopeKey, threadId),
+    systemPrompt: [basePrompt, cognitiveContext?.prompt, dailyMindPrompt, taskPrompt, backendInstructions,
+      temporaryGuest ? '' : await conversationCapabilityPrompt(scopeKey, transcript, dependencies)]
+      .filter(Boolean).join('\n\n'),
+    history: temporaryGuest ? [] : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId),
     ...(priorThreadSummary ? { priorThreadSummary } : {}),
     message: transcript,
     useWebSearch: true,
@@ -236,3 +276,5 @@ async function completeLiveVoiceDelegation(
     },
   };
 }
+import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
+import type { PersonIdentityStore } from './personIdentity.js';

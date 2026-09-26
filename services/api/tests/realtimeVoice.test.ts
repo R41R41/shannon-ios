@@ -46,7 +46,7 @@ describe('OpenAI realtime voice gateway', () => {
   it('keeps the standard API key server-side and creates a bounded live session', async () => {
     const gateway = new OpenAIRealtimeVoiceGateway({
       apiKey: 'server-key-only',
-      model: 'gpt-realtime-2.1-mini',
+      model: 'gpt-realtime-2',
       fetcher: async (input, init) => {
         expect(String(input)).toBe('https://api.openai.com/v1/realtime/calls');
         expect(init?.method).toBe('POST');
@@ -60,7 +60,8 @@ describe('OpenAI realtime voice gateway', () => {
         const session = JSON.parse(String(multipart.get('session'))) as Record<string, any>;
         expect(session).toMatchObject({
           type: 'realtime',
-          model: 'gpt-realtime-2.1-mini',
+          model: 'gpt-realtime-2',
+          reasoning: { effort: 'low' },
           output_modalities: ['audio'],
           audio: {
             input: {
@@ -73,6 +74,10 @@ describe('OpenAI realtime voice gateway', () => {
           },
         });
         expect(session.instructions).toContain('シャノン');
+        expect(session.tools).toEqual([expect.objectContaining({
+          type: 'function', name: 'consult_shannon_backend',
+        })]);
+        expect(session.tool_choice).toBe('auto');
         return new Response(answer, {
           status: 201,
           headers: { location: '/v1/realtime/calls/call_test_123' },
@@ -80,12 +85,14 @@ describe('OpenAI realtime voice gateway', () => {
       },
     });
 
-    await expect(gateway.createCall({ sdp: offer, instructions: 'あなたはシャノン。', voice: 'cedar' }))
+    await expect(gateway.createCall({
+      sdp: offer, instructions: 'あなたはシャノン。', voice: 'cedar', enableClientTools: true,
+    }))
       .resolves.toEqual({
         answerSdp: answer,
         callId: 'call_test_123',
         engine: 'realtime',
-        model: 'gpt-realtime-2.1-mini',
+        model: 'gpt-realtime-2',
       });
   });
 
@@ -102,7 +109,7 @@ describe('OpenAI realtime voice gateway', () => {
     await expect(gateway.createCall({ sdp: offer, instructions: 'test' })).resolves.toEqual({
       answerSdp: answer,
       engine: 'realtime',
-      model: 'gpt-realtime-2.1-mini',
+      model: 'gpt-realtime-2',
     });
   });
 

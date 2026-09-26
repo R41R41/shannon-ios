@@ -64,7 +64,18 @@ extension ShannonConversationModel {
 
     public func organizeSession(sourceMessageID: UUID) -> ShannonOrganizeSessionDTO? {
         organizeSessions.first { session in
-            session.commandThroughMessageId.flatMap(UUID.init(uuidString:)) == sourceMessageID
+            session.threadId == selectedThreadId && session.commandThroughMessageId.flatMap(UUID.init(uuidString:)) == sourceMessageID
         }
+    }
+
+    /// Voice proposals do not require a successfully archived spoken reply in
+    /// order to remain reviewable. Restored/older messages can also be absent.
+    public var unattachedSelectedThreadOrganizeSessions: [ShannonOrganizeSessionDTO] {
+        let messageIDs = Set(messages.map(\.id))
+        return organizeSessions.filter { session in
+            guard session.threadId == selectedThreadId else { return false }
+            guard let source = session.commandThroughMessageId.flatMap(UUID.init(uuidString:)) else { return true }
+            return !messageIDs.contains(source)
+        }.sorted { $0.createdAt < $1.createdAt }
     }
 }

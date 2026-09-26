@@ -136,7 +136,7 @@ public enum ShannonRealtimeVoiceTextError: Error, Equatable, Sendable {
 }
 
 public enum ShannonRealtimeVoiceCameraError: Error, Equatable, Sendable {
-    case liveSessionRequired
+    case sessionUnavailable
     case sessionEnded
 }
 
@@ -216,6 +216,7 @@ public enum ShannonRealtimeVoiceFailurePresentation {
 }
 
 public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
+    case correlated(ShannonRealtimePacket)
     case sessionReady
     case speechStarted
     case speechStopped
@@ -225,6 +226,7 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
     case outputTranscriptDone(String)
     case responseStarted
     case responseFinished(ShannonRealtimeVoiceUsage?)
+    case realtimeFunctionCall(callID: String, request: String)
     case liveInputTranscriptDelta(String, startMilliseconds: Int, endMilliseconds: Int)
     case liveOutputTranscriptDelta(String, startMilliseconds: Int, endMilliseconds: Int)
     case liveDelegationRequested(id: String, offsetMilliseconds: Int)
@@ -236,6 +238,7 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
         guard let value = try? JSONSerialization.jsonObject(with: data),
               let object = value as? [String: Any],
               let type = object["type"] as? String else { return nil }
+        if let packet = ShannonRealtimePacket.decode(object, type: type) { return .correlated(packet) }
         switch type {
         case "session.created", "session.updated", "session.started": return .sessionReady
         case "input_audio_buffer.speech_started": return .speechStarted
@@ -252,6 +255,19 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
         case "response.done":
             let response = object["response"] as? [String: Any]
             return .responseFinished(decodeUsage(response?["usage"]))
+        case "response.function_call_arguments.done":
+            guard object["name"] as? String == "consult_shannon_backend",
+                  let callID = object["call_id"] as? String,
+                  !callID.isEmpty,
+                  let arguments = object["arguments"] as? String,
+                  let argumentData = arguments.data(using: .utf8),
+                  let argumentObject = (try? JSONSerialization.jsonObject(with: argumentData)) as? [String: Any],
+                  let request = argumentObject["request"] as? String,
+                  !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return .realtimeFunctionCall(
+                callID: callID,
+                request: String(request.trimmingCharacters(in: .whitespacesAndNewlines).prefix(8_000))
+            )
         case "session.input_transcript.delta":
             return .liveInputTranscriptDelta(
                 object["delta"] as? String ?? "",
@@ -298,7 +314,7 @@ public enum ShannonRealtimeVoiceEvent: Equatable, Sendable {
         return 0
     }
 
-    private static func decodeUsage(_ value: Any?) -> ShannonRealtimeVoiceUsage? {
+    static func decodeUsage(_ value: Any?) -> ShannonRealtimeVoiceUsage? {
         guard let usage = value as? [String: Any] else { return nil }
         let inputDetails = usage["input_token_details"] as? [String: Any]
         let outputDetails = usage["output_token_details"] as? [String: Any]
@@ -399,50 +415,6 @@ public struct ShannonRealtimeVoiceTranscriptState: Equatable, Sendable {
     private func normalized(_ value: String, fallback: String) -> String {
         let preferred = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return preferred.isEmpty ? fallback.trimmingCharacters(in: .whitespacesAndNewlines) : preferred
-    }
-}
-
-enum ShannonLiveVoiceClientEvent {
-    static func realtimeTextTurn(content: String) throws -> [Data] {
-        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { throw EncodingError.invalidValue(
-            content,
-            .init(codingPath: [], debugDescription: "Realtime text input requires content")
-        ) }
-        let item: [String: Any] = [
-            "type": "conversation.item.create",
-            "event_id": "shannon-text-\(UUID().uuidString.lowercased())",
-            "item": [
-                "type": "message",
-                "role": "user",
-                "content": [[
-                    "type": "input_text",
-                    "text": String(normalized.prefix(8_000)),
-                ]],
-            ],
-        ]
-        let response: [String: Any] = [
-            "type": "response.create",
-            "event_id": "shannon-response-\(UUID().uuidString.lowercased())",
-        ]
-        return try [item, response].map { try JSONSerialization.data(withJSONObject: $0) }
-    }
-
-    static func commentary(delegationID: String?, content: String) throws -> Data {
-        let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard delegationID?.isEmpty != true, !normalized.isEmpty else { throw EncodingError.invalidValue(
-            content,
-            .init(codingPath: [], debugDescription: "Live commentary requires content")
-        ) }
-        let payload: [String: Any] = [
-            "type": "session.commentary.append",
-            "event_id": "shannon-result-\(UUID().uuidString.lowercased())",
-            "delegation_id": delegationID ?? NSNull(),
-            // Stay comfortably below the API's 500-token append ceiling even for
-            // mixed Japanese and URLs. The full result remains on Shannon's backend.
-            "content": String(normalized.prefix(800)),
-        ]
-        return try JSONSerialization.data(withJSONObject: payload)
     }
 }
 

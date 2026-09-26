@@ -61,11 +61,13 @@ export class SQLiteOrganizeStore implements OrganizeStore {
     const rows = this.database.prepare('SELECT session_id FROM organize_sessions WHERE scope_key=? AND thread_id=? ORDER BY created_at').all(scopeKey, threadId) as Array<{ session_id: string }>;
     return rows.flatMap(row => { const session = this.read(scopeKey, row.session_id); return session ? [session] : []; });
   }
-  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[] }, now: string): OrganizeSession {
+  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[]; requestKey?: string }, now: string): OrganizeSession {
     const memory = new InMemoryOrganizeStore();
     const session = memory.create(input, now);
     this.database.exec('BEGIN IMMEDIATE;');
     try {
+      const existing = this.read(input.scopeKey, session.id);
+      if (existing) { this.database.exec('COMMIT'); return existing; }
       this.database.prepare(`INSERT INTO organize_sessions
         (session_id,scope_key,thread_id,state,revision,source_message_ids_json,created_at,updated_at)
         VALUES(?,?,?,?,?,?,?,?)`).run(session.id, session.scopeKey, session.threadId, session.state, session.revision, JSON.stringify(session.sourceMessageIds), now, now);

@@ -2,6 +2,7 @@ import {
   memoryControlFor,
   memoryIdentifier,
   type CompanionStateStore,
+  type CompanionStateEvent,
   type MemoryControl,
   type MemoryKind,
   type MemoryStatus,
@@ -11,6 +12,8 @@ import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
 import type { PersonalityProfile } from './knowledgeStore.js';
 import type { WorldItem, WorldReader } from './worldStore.js';
 import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from './llmUsage.js';
+import { commitmentDeadline } from './commitmentTime.js';
+import type { CommitmentSleepReview } from './sleepCommitmentReview.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from './initiativeStore.js';
 import type { DailyMindFocus, DailyMindReader } from './dailyMind.js';
 
@@ -43,6 +46,7 @@ export interface MemoryItem {
   updatedAt: string;
   changeReason: string;
   evidence: readonly MemoryEvidence[];
+  commitment?: { status: 'pending' | 'completed' | 'dismissed'; dueAt?: string; dueDate?: string; dueHint?: string; timeZone?: string };
 }
 
 export interface SleepChange {
@@ -63,6 +67,7 @@ export interface SleepContradiction {
 }
 
 export interface SleepReport {
+  commitmentReview?: CommitmentSleepReview;
   dayKey: string;
   completedAt: string;
   learned: readonly SleepChange[];
@@ -102,7 +107,7 @@ export interface ActivityItem {
   occurredAt: string;
 }
 
-export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore';
+export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore' | 'complete' | 'dismiss';
 
 export interface MemoryMutation {
   memoryId: string;
@@ -151,6 +156,16 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const metadata = buildMetadata(events);
     const controls = new Map(state.memoryControls.map(control => [control.memoryId, control]));
     const items: MemoryItem[] = [];
+    for (const memory of state.prospectiveMemories) {
+      items.push({
+        ...buildItem({ id: memory.id, kind: 'experience', text: memory.summary,
+          observedAt: memory.createdAt, evidence: memory.evidence }, controls.get(memory.id)
+            ?? (memory.sourceExperienceId ? controls.get(memory.sourceExperienceId) : undefined), metadata.get(memory.id)),
+        updatedAt: controls.get(memory.id)?.updatedAt ?? memory.updatedAt,
+        commitment: { status: memory.status, dueAt: memory.dueAt, dueDate: memory.dueDate,
+          dueHint: memory.dueHint, timeZone: memory.timeZone },
+      });
+    }
 
     for (const fact of state.userFacts) {
       items.push(buildItem({
@@ -244,13 +259,37 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const state = this.stateStore.snapshot(scopeKey);
     const previous = memoryControlFor(state, item.id);
     const timestamp = this.now();
+    const events: CompanionStateEvent[] = [];
+    const promise = state.prospectiveMemories.find(memory => memory.id === item.id);
+    if ((mutation.action === 'complete' || mutation.action === 'dismiss') && !promise) {
+      throw new Error('MEMORY_COMMITMENT_REQUIRED');
+    }
     const control = actionControl(item, previous, mutation, timestamp);
-    this.stateStore.apply(scopeKey, { type: 'memory-control-upserted', control });
+    events.push({ type: 'memory-control-upserted', control });
+    if (promise && mutation.action === 'correct' && control.overrideText) {
+      const { dueAt: _at, dueDate: _date, dueHint: _hint, ...retained } = promise;
+      events.push({ type: 'prospective-memory-upserted', replace: true, memory: {
+        ...retained, summary: control.overrideText, updatedAt: timestamp,
+        ...commitmentDeadline(control.overrideText, timestamp, promise.timeZone),
+      } });
+    }
+    if (promise && ['complete', 'dismiss', 'forget', 'reject'].includes(mutation.action)) {
+      events.push({ type: 'prospective-memory-status-changed', memoryId: promise.id,
+        status: mutation.action === 'complete' ? 'completed' : 'dismissed' });
+    }
+    if (mutation.action === 'forget' || mutation.action === 'reject') {
+      const sourceID = promise?.sourceExperienceId ?? item.id;
+      const related = state.prospectiveMemories.filter(memory => memory.sourceExperienceId === sourceID);
+      for (const id of new Set([sourceID, ...related.map(memory => memory.id)])) {
+        events.push({ type: 'memory-control-upserted', control: { ...control, memoryId: id, kind: 'experience' } });
+        events.push({ type: 'prospective-memory-status-changed', memoryId: id, status: 'dismissed' });
+      }
+    }
     if (item.kind === 'user-fact' && mutation.action === 'correct' && control.overrideText) {
       this.knowledgeStore?.correctKnowledge(scopeKey, item.id, control.overrideText, timestamp);
     }
-    if (item.kind === 'experience' && control.status === 'active' && control.pinned) {
-      this.stateStore.apply(scopeKey, {
+    if (item.kind === 'experience' && !promise && control.status === 'active' && control.pinned) {
+      events.push({
         type: 'memory-activated',
         memory: {
           id: item.id,
@@ -260,6 +299,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
         },
       });
     }
+    this.stateStore.apply(scopeKey, { type: 'memory-transaction', events });
     return this.dashboard(scopeKey);
   }
 }

@@ -19,14 +19,17 @@ public final class ShannonRealtimeVoiceSessionModel {
     public private(set) var inputState = ShannonVoiceInputState()
     public private(set) var isSendingText = false
     public private(set) var textSendErrorMessage: String?
+    public private(set) var microphoneLevel: Double = 0
+    public private(set) var playbackLevel: Double = 0
     public var canSendText: Bool { false }
+    public var pendingToolCount: Int { 0 }
 
     public init() {}
 
     public func start(
         participantMode: ShannonVoiceParticipantMode,
         createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
+        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {}
 

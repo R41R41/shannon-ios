@@ -158,17 +158,21 @@ extension ShannonDesktopRootView {
         if restoredDestinationRawValue == nil {
             restoredDestinationRawValue = destination.rawValue
         }
-        showsInspector = ShannonDesktopWindowRestoration.inspectorVisible(
-            sceneRawValue: restoredInspectorRawValue,
-            lastValue: lastShowsInspector
+        let restoredChrome = ShannonDesktopWindowRestoration.windowChrome(
+            sceneInspectorRawValue: restoredInspectorRawValue,
+            sceneAuxiliaryPanelRawValue: restoredAuxiliaryPanelRawValue,
+            lastInspectorVisible: lastShowsInspector,
+            lastAuxiliaryPanelRawValue: lastAuxiliaryPanelRawValue
         )
+        var restorationTransaction = Transaction(animation: nil)
+        restorationTransaction.disablesAnimations = true
+        withTransaction(restorationTransaction) {
+            showsInspector = restoredChrome.showsInspector
+            auxiliaryPanel = restoredChrome.auxiliaryPanel
+        }
         if restoredInspectorRawValue == nil {
             restoredInspectorRawValue = showsInspector ? "visible" : "hidden"
         }
-        auxiliaryPanel = ShannonDesktopWindowRestoration.auxiliaryPanel(
-            sceneRawValue: restoredAuxiliaryPanelRawValue,
-            lastRawValue: lastAuxiliaryPanelRawValue
-        )
         if restoredAuxiliaryPanelRawValue == nil {
             restoredAuxiliaryPanelRawValue = auxiliaryPanel.rawValue
         }
