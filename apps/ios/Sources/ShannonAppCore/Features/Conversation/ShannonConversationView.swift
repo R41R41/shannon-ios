@@ -190,9 +190,10 @@ public struct ShannonConversationView: View {
                         participantMode: participantMode
                     )
                 },
-                performLiveDelegation: { transcript, participantMode in
+                performLiveDelegation: { transcript, utterance, participantMode in
                     try await model.performLiveVoiceDelegation(
                         transcript: transcript,
+                        userUtterance: utterance,
                         participantMode: participantMode
                     )
                 },

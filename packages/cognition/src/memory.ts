@@ -21,5 +21,21 @@ export function visibleMemoryText(
 ): string | null {
   const control = memoryControlFor(snapshot, memoryId);
   if (control && control.status !== 'active') return null;
+  const evidence = snapshot.userFacts.find(item => item.id === memoryId)?.evidence
+    ?? snapshot.relationships.find(item => item.id === memoryId)?.evidence;
+  if (evidence && !isMemoryEvidenceVisible(snapshot, evidence)) return null;
   return control?.overrideText || originalText;
+}
+
+export function isMemoryEvidenceVisible(snapshot: CompanionStateSnapshot, evidence: string): boolean {
+  const normalize = (value: string) => value.replace(/[\s。、]/gu, '');
+  const quote = normalize(evidence);
+  if (quote.length < 3) return true;
+  return !snapshot.prospectiveMemories.some(memory => {
+    const control = memoryControlFor(snapshot, memory.id);
+    const parent = memory.sourceExperienceId ? memoryControlFor(snapshot, memory.sourceExperienceId) : undefined;
+    if ((!control || control.status === 'active') && (!parent || parent.status === 'active')) return false;
+    const original = normalize(memory.evidence ?? memory.summary);
+    return original.length >= 3 && (original.includes(quote) || quote.includes(original));
+  });
 }

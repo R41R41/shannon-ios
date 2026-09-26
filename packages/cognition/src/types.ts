@@ -39,6 +39,20 @@ export interface RelationshipInsight {
   evidence?: string;
 }
 
+export interface ProspectiveMemory {
+  id: string;
+  summary: string;
+  status: 'pending' | 'completed' | 'dismissed';
+  createdAt: string;
+  updatedAt: string;
+  dueHint?: string;
+  dueAt?: string;
+  dueDate?: string;
+  timeZone?: string;
+  sourceExperienceId?: string;
+  evidence?: string;
+}
+
 export type MemoryKind = 'user-fact' | 'interest' | 'experience' | 'relationship';
 export type MemoryStatus = 'active' | 'forgotten' | 'rejected';
 export type MemoryLearningSource = 'conversation' | 'sleep';
@@ -64,14 +78,18 @@ export interface CompanionStateSnapshot {
   userFacts: readonly UserFact[];
   activeMemories: readonly ActiveMemory[];
   relationships: readonly RelationshipInsight[];
+  prospectiveMemories: readonly ProspectiveMemory[];
   memoryControls: readonly MemoryControl[];
 }
 
 export type CompanionStateEvent =
+  | { type: 'memory-transaction'; events: readonly CompanionStateEvent[] }
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
   | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }
   | { type: 'user-fact-upserted'; fact: UserFact; source?: MemoryLearningSource }
   | { type: 'relationship-upserted'; relationship: RelationshipInsight; source?: MemoryLearningSource }
+  | { type: 'prospective-memory-upserted'; memory: ProspectiveMemory; replace?: boolean }
+  | { type: 'prospective-memory-status-changed'; memoryId: string; status: ProspectiveMemory['status'] }
   | { type: 'memory-control-upserted'; control: MemoryControl }
   | { type: 'memory-activated'; memory: ActiveMemory }
   | { type: 'active-memories-replaced'; memories: readonly ActiveMemory[] }

@@ -8,7 +8,7 @@ public struct ShannonLiveVoiceView: View {
     @Bindable private var model: ShannonRealtimeVoiceSessionModel
     private let expression: ShannonExpressionDTO
     private let createCall: @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO
-    private let performLiveDelegation: @MainActor (String, ShannonVoiceParticipantMode) async throws -> String
+    private let performLiveDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String
     private let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let commitTurn: @MainActor (String, String) async throws -> Void
     private let dismiss: () -> Void
@@ -37,7 +37,7 @@ public struct ShannonLiveVoiceView: View {
         model: ShannonRealtimeVoiceSessionModel,
         expression: ShannonExpressionDTO,
         createCall: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> ShannonRealtimeVoiceCallDTO,
-        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceParticipantMode) async throws -> String,
+        performLiveDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         dismiss: @escaping () -> Void
@@ -82,8 +82,8 @@ public struct ShannonLiveVoiceView: View {
 
                         ZStack(alignment: .bottom) {
                             ShannonWaterlightEyeView(
-                                expression: expression,
-                                activity: model.phase.dialogueActivity,
+                                expression: embodiment.expression,
+                                activity: embodiment.activity,
                                 size: dynamicTypeSize.isAccessibilitySize ? 210 : 260
                             )
                             .frame(maxWidth: 440)
@@ -267,7 +267,7 @@ public struct ShannonLiveVoiceView: View {
                 Text("シャノン")
                     .font(.headline)
                 if !dynamicTypeSize.isAccessibilitySize {
-                    Text(model.phase.japaneseLabel)
+                    Text(embodiment.statusLabel)
                         .font(.caption)
                         .foregroundStyle(palette.textSecondary)
                 }
@@ -368,7 +368,7 @@ public struct ShannonLiveVoiceView: View {
             .accessibilityLabel("音声会話を終了")
 
 #if os(iOS)
-            if model.engine == .live && model.participantMode.allowsCameraSharing {
+            if model.participantMode.allowsCameraSharing {
                 Button {
                     showsPhotoSource = true
                 } label: {
@@ -492,5 +492,8 @@ public struct ShannonLiveVoiceView: View {
         case .thinking, .connecting, .requestingPermission: 0.10
         case .idle, .failed: 0.06
         }
+    }
+    private var embodiment: ShannonVoiceEmbodimentFrame {
+        .init(phase: model.phase, pendingTools: model.pendingToolCount, expression: expression)
     }
 }

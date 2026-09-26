@@ -59,6 +59,12 @@ struct ShannonMemoryDetailView: View {
             Text(item.text)
                 .font(.title2.weight(.semibold))
                 .textSelection(.enabled)
+            if let commitment = item.commitment {
+                Label(commitment.statusLabel, systemImage: "calendar.badge.clock")
+                    .font(.callout.weight(.medium))
+                Text("期限：\(commitment.dueAt.map(displayDate) ?? commitment.dueDate ?? commitment.dueHint ?? "未定")")
+                    .font(.callout).foregroundStyle(palette.textSecondary)
+            }
             if item.status != .active {
                 Label(item.status == .rejected ? "事実ではないと指定済み" : "忘れるよう指定済み",
                       systemImage: item.status == .rejected ? "xmark.seal.fill" : "eye.slash.fill")
@@ -124,6 +130,10 @@ struct ShannonMemoryDetailView: View {
     func actions(_ item: ShannonMemoryItemDTO, _ palette: ShannonPalette) -> some View {
         VStack(spacing: ShannonSpacing.small) {
             if item.status == .active {
+                if item.commitment?.status == "pending" {
+                    actionButton("約束を完了にする", symbol: "checkmark.circle", palette: palette) { perform(.complete) }
+                    actionButton("約束を取り消す", symbol: "calendar.badge.minus", palette: palette) { perform(.dismiss) }
+                }
                 actionButton(item.pinned ? "固定を外す" : "大切な記憶として固定",
                              symbol: item.pinned ? "pin.slash" : "pin.fill", palette: palette) {
                     perform(item.pinned ? .unpin : .pin)

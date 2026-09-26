@@ -11,6 +11,7 @@ import {
   projectEmotionReaction,
   restoreCompanionState,
   selectActiveMemories,
+  selectContextualMemories,
 } from '../src/index.js';
 
 describe('Shannon companion shared state', () => {
@@ -225,5 +226,22 @@ describe('Shannon companion shared state', () => {
     expect(recalled.map(memory => memory.id)).toEqual(['recent']);
     expect(deriveResonantInterest('創作の続きを考えたい', recalled)).toBe('創作');
     expect(deriveResonantInterest('天気の話', recalled)).toBeNull();
+  });
+
+  it('recalls from the current situation and explains each retrieval cue', () => {
+    const recalled = selectContextualMemories({
+      text: 'あの旅行の続き、どこに寄ろう？',
+      occurredAt: '2026-09-24T03:00:00.000Z',
+      participants: ['健太'],
+      locationLabels: ['浜松'],
+      goal: '友人と旅行を楽しむ',
+    }, [
+      { id: 'unrelated', summary: '自宅でSwiftのテストを書いた', observedAt: '2026-09-23T00:00:00.000Z' },
+      { id: 'trip', summary: '浜松で健太と雨の日の旅行先を相談した', observedAt: '2026-09-22T00:00:00.000Z' },
+    ]);
+
+    expect(recalled.map(memory => memory.id)).toEqual(['trip']);
+    expect(recalled[0]?.reasons).toEqual(expect.arrayContaining(['participant', 'location']));
+    expect(Object.isFrozen(recalled[0]?.reasons)).toBe(true);
   });
 });

@@ -95,6 +95,7 @@ export function consolidateProposals(
     const statement = normalize(proposal.statement).slice(0, 160);
     const evidence = normalize(proposal.evidence).slice(0, 240);
     if (!statement || !evidence || !source.includes(evidence)) continue;
+    if (isForgottenCommitmentEvidence(current, evidence)) continue;
     const id = memoryId(kind, statement);
     const control = current.memoryControls.find(item => item.memoryId === id);
     if (control && control.status !== 'active') continue;
@@ -207,3 +208,4 @@ export function extractOutputText(value: unknown): string {
     });
   }).join('').trim();
 }
+import { isForgottenCommitmentEvidence } from './memoryVisibility.js';

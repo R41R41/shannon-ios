@@ -101,7 +101,7 @@ export function validMemoryStatus(value: unknown): boolean {
 }
 
 export function validMemoryAction(value: unknown): value is MemoryAction {
-  return value === 'correct' || value === 'forget' || value === 'pin'
+  return value === 'complete' || value === 'dismiss' || value === 'correct' || value === 'forget' || value === 'pin'
     || value === 'unpin' || value === 'reject' || value === 'restore';
 }
 

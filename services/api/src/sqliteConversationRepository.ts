@@ -193,6 +193,7 @@ export class SQLiteConversationRepository implements ConversationStore {
         shannonReply: payload.shannonReply,
         summary: payload.summary,
         observedAt: row.observed_at,
+        ...(payload.timeZone ? { timeZone: payload.timeZone } : {}),
       })];
     }));
   }
@@ -216,6 +217,7 @@ export class SQLiteConversationRepository implements ConversationStore {
       userMessage,
       shannonReply,
       summary,
+      ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
       ...(context ? {
         capturedStateVersion: context.capturedStateVersion,
         messageEmotion: context.messageEmotion,

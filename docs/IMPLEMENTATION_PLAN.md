@@ -120,6 +120,12 @@ Next:
 
 The following are product ideas, not missing release work:
 
+- selectable voice-session microphone input (`Auto`, iPhone built-in microphone,
+  or a connected headset microphone), with the actual route shown and the
+  preferred input reapplied safely after route or interruption changes;
+- text composition and sending inside an active voice session, using the same
+  conversation context without ending or reconnecting the call and preserving
+  owner/guest history and memory boundaries;
 - background voice activation;
 - continuous camera/live-world conversation and person recognition;
 - Live2D runtime and animated widgets;

@@ -74,7 +74,7 @@ export interface OrganizeSession {
 export interface OrganizeStore {
   cursor(scopeKey: string, threadId: string): string | undefined;
   list(scopeKey: string, threadId: string): OrganizeSession[];
-  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[] }, now: string): OrganizeSession;
+  create(input: Pick<OrganizeSession, 'scopeKey' | 'threadId' | 'sourceMessageIds'> & { drafts: OrganizeTaskDraft[]; requestKey?: string }, now: string): OrganizeSession;
   get(scopeKey: string, sessionId: string): OrganizeSession | undefined;
   setCommandThrough(scopeKey: string, sessionId: string, messageId: string, now: string): OrganizeSession;
   decide(scopeKey: string, sessionId: string, itemId: string, expectedRevision: number, decision: OrganizeDecision, edit: Partial<OrganizeTaskDraft>, now: string): OrganizeSession;

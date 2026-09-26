@@ -1,4 +1,5 @@
 import type { CompanionStateSnapshot } from './types.js';
+import type { ContextualMemory, ShannonSituationSnapshot } from './runtime.js';
 import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.js';
 
 export const SHANNON_CORE_PROMPT = `あなたは「シャノン」という名前のAIである。
@@ -52,21 +53,30 @@ export function buildCompanionStatePrompt(
     const text = visibleMemoryText(snapshot, memory.id, memory.summary);
     return text ? [{ ...memory, summary: text, pinned: memoryControlFor(snapshot, memory.id)?.pinned === true }] : [];
   }).sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.relevance - left.relevance);
+  const prospectiveMemories = snapshot.prospectiveMemories
+    .filter(memory => memory.status === 'pending'
+      && visibleMemoryText(snapshot, memory.id, memory.summary)
+      && (!memory.sourceExperienceId || visibleMemoryText(snapshot, memory.sourceExperienceId, memory.summary)))
+    .sort((a, b) => (a.dueAt ?? a.dueDate ?? '9999').localeCompare(b.dueAt ?? b.dueDate ?? '9999'))
+    .slice(0, 8);
   return fitSections([
     `[Shannon shared state v${snapshot.version}]`,
+    fitSections([prospectiveMemories.length
+      ? `未完了の約束・未来記憶 (保存済み。外部実行の証拠ではない):\n${prospectiveMemories.map(memory => `- ${visibleMemoryText(snapshot, memory.id, memory.summary)} [発言=${memory.createdAt}; 期限=${memory.dueAt ?? memory.dueDate ?? memory.dueHint ?? '未定'}; TZ=${memory.timeZone ?? '不明'}]`).join('\n')}`
+      : '未完了の約束・未来記憶: なし'], Math.floor(maximumCharacters * 0.32)),
     `気質: 好奇心 ${fixed(snapshot.temperament.curiosity)} / 自発性 ${fixed(snapshot.temperament.initiative)} / 親密さ ${fixed(snapshot.temperament.closeness)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
     interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
     interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
-    facts.length
+    fitSections([facts.length
       ? `ユーザーについて分かっていること:\n${facts.map(fact => `- ${fact.statement} (確信 ${fixed(fact.confidence)})`).join('\n')}`
-      : 'ユーザーについて分かっていること: まだない',
-    relationships.length
+      : 'ユーザーについて分かっていること: まだない'], Math.floor(maximumCharacters * 0.22)),
+    fitSections([relationships.length
       ? `関係について分かっていること:\n${relationships.map(relationship => `- ${relationship.statement} (確信 ${fixed(relationship.confidence)})`).join('\n')}`
-      : '関係について分かっていること: まだない',
-    activeMemories.length
+      : '関係について分かっていること: まだない'], Math.floor(maximumCharacters * 0.14)),
+    fitSections([activeMemories.length
       ? `今、想起されている記憶:\n${activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
-      : '今、想起されている記憶: なし',
+      : '今、想起されている記憶: なし'], Math.floor(maximumCharacters * 0.14)),
   ], maximumCharacters);
 }
 
@@ -76,4 +86,27 @@ export function assembleShannonSystemPrompt(
 ): string {
   const statePrompt = buildCompanionStatePrompt(snapshot, options);
   return statePrompt ? `${SHANNON_CORE_PROMPT}\n\n${statePrompt}` : SHANNON_CORE_PROMPT;
+}
+
+export function buildTurnCognitivePrompt(
+  situation: ShannonSituationSnapshot,
+  memories: readonly ContextualMemory[],
+  maximumCharacters = 1_800,
+): string {
+  const situationLines = [
+    `channel=${situation.channel}`,
+    `occurred_at=${situation.occurredAt}`,
+    ...(situation.localTime ? [`local_time=${situation.localTime}`] : []),
+    ...(situation.locationLabels?.length ? [`location=${situation.locationLabels.join(' / ')}`] : []),
+    ...(situation.participants?.length ? [`participants=${situation.participants.join(' / ')}`] : []),
+    ...(situation.currentGoal ? [`current_goal=${situation.currentGoal}`] : []),
+  ];
+  return fitSections([
+    '[Current cognitive context — use before answering]',
+    `Situation: ${situationLines.join('; ')}`,
+    memories.length
+      ? `Relevant memories recalled for this exact turn (prefer over older active-memory projections):\n${memories.map(memory => `- ${memory.summary} (observed_at: ${memory.observedAt}; cue: ${memory.reasons.join(', ')})`).join('\n')}`
+      : 'Relevant memories recalled for this exact turn: none. Do not invent continuity.',
+    'Use recalled memories only when they naturally help. Do not recite them, expose retrieval mechanics, or pretend certainty beyond the evidence.',
+  ], Math.max(0, maximumCharacters));
 }

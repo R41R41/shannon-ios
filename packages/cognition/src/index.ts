@@ -11,6 +11,7 @@ export {
   SHANNON_CORE_PROMPT,
   assembleShannonSystemPrompt,
   buildCompanionStatePrompt,
+  buildTurnCognitivePrompt,
   type CompanionPromptOptions,
 } from './prompt.js';
 export {
@@ -25,8 +26,18 @@ export {
   deriveResonantInterest,
   scoreMemoryRelevance,
   selectActiveMemories,
+  selectContextualMemories,
   type RecallCandidate,
 } from './recall.js';
+export type {
+  ContextualMemory,
+  ShannonActionReceipt,
+  ShannonEmbodimentFrame,
+  ShannonExperienceChannel,
+  ShannonMemoryQuery,
+  ShannonRecallReason,
+  ShannonSituationSnapshot,
+} from './runtime.js';
 export type {
   ActiveMemory,
   CompanionStateEvent,
@@ -36,9 +47,10 @@ export type {
   MemoryKind,
   MemoryLearningSource,
   MemoryStatus,
+  ProspectiveMemory,
   RelationshipInsight,
   ShannonEmotion,
   ShannonTemperament,
   UserFact,
 } from './types.js';
-export { memoryIdentifier, visibleMemoryText, memoryControlFor } from './memory.js';
+export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible } from './memory.js';

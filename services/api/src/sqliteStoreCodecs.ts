@@ -4,7 +4,7 @@ import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.
 import type { ShannonSourceAttribution, StoredConversationMessage } from './conversationStore.js';
 
 export interface MessageRow { message_id: string; thread_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
-export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; }
+export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; }
 export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
@@ -102,7 +102,10 @@ export function parseBackgroundJobPayload(raw: string): BackgroundJobPayload {
   if (row.kind === 'turn-refinement'
     && typeof row.experienceId === 'string'
     && typeof row.userMessage === 'string') {
-    return { kind: row.kind, experienceId: row.experienceId, userMessage: row.userMessage };
+    return { kind: row.kind, experienceId: row.experienceId, userMessage: row.userMessage,
+      ...(typeof row.observedAt === 'string' && Number.isFinite(Date.parse(row.observedAt)) ? { observedAt: row.observedAt } : {}),
+      ...(typeof row.timeZone === 'string' ? { timeZone: row.timeZone } : {}),
+    };
   }
   if (row.kind === 'sleep-consolidation'
     && typeof row.dayKey === 'string'

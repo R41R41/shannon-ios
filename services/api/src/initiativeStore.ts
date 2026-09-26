@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { DailyMindFocus } from './dailyMind.js';
+import { dueCommitmentCandidate } from './commitmentInitiative.js';
 
 import {
   candidateScore,
@@ -135,6 +136,15 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         continue;
       }
       const state = parseState(scope.snapshot_json);
+      const promises = dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
+      considered += promises.length;
+      const promise = promises.find(candidate => !this.database.prepare(
+        'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
+      ).get(scope.scope_key, candidate.item_id));
+      if (promise) {
+        if (this.persistMessage(scope.scope_key, state, promise, null, null, dayKey, at)) sent += 1;
+        continue;
+      }
       const interest = firstInterest(state.interests);
       const dailyFocus = dailyFocuses.get(scope.scope_key) ?? null;
       if (dailyFocus && !dailyFocus.openingLine) {
@@ -162,8 +172,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         lastStop = 'nothing-worth-saying';
         continue;
       }
-      this.persistMessage(scope.scope_key, state, selected, interest, dailyFocus, dayKey, at);
-      sent += 1;
+      if (this.persistMessage(scope.scope_key, state, selected, interest, dailyFocus, dayKey, at)) sent += 1;
       lastStop = null;
     }
     this.secureFiles();
@@ -275,13 +284,15 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     dailyFocus: DailyMindFocus | null,
     dayKey: string,
     createdAt: string,
-  ): void {
+  ): boolean {
     const initiativeId = randomUUID();
     const threadId = this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
     const reason = dailyFocus?.reason
       ?? (interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。');
-    const content = dailyFocus?.openingLine
+    const content = candidate.source_id === 'commitment'
+      ? `「${truncate(candidate.title, 240)}」という約束が残っているよ。今、続ける？ もう済んでいたら、完了にできるよ。`
+      : dailyFocus?.openingLine
       ? `${dailyFocus.openingLine}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : interest
       ? `今日の関心の「${interest}」に近くて、これが少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
@@ -306,8 +317,15 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
 
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      this.database.prepare(`
-        INSERT INTO initiative_messages
+      if (candidate.source_id === 'commitment') {
+        const fresh = this.database.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scopeKey) as { snapshot_json: string } | undefined;
+        if (!fresh || !dueCommitmentCandidate(scopeKey, JSON.parse(fresh.snapshot_json), createdAt).some(item => item.item_id === candidate.item_id)) {
+          this.database.exec('ROLLBACK');
+          return false;
+        }
+      }
+      const inserted = this.database.prepare(`
+        INSERT OR IGNORE INTO initiative_messages
           (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
            content, expression, day_key, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -315,6 +333,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         initiativeId, scopeKey, threadId, candidate.item_id, candidate.source_title,
         candidate.url, content, expression, dayKey, createdAt,
       );
+      if (!inserted.changes) { this.database.exec('ROLLBACK'); return false; }
       this.database.prepare(`
         INSERT INTO conversation_messages
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
@@ -332,6 +351,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
         dailyMindDayKey: dailyFocus?.dayKey ?? null,
       }));
       this.database.exec('COMMIT');
+      return true;
     } catch (error) {
       if (this.database.isTransaction) this.database.exec('ROLLBACK');
       throw error;

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { isForgottenCommitmentEvidence } from './memoryVisibility.js';
+import { reviewCommitments, type CommitmentSleepReview } from './sleepCommitmentReview.js';
 import {
   memoryIdentifier,
   type CompanionStateSnapshot,
@@ -45,6 +47,7 @@ export interface SleepConsolidationOutcome {
   relationships: readonly RelationshipInsight[];
   interests: readonly string[];
   report: {
+    commitmentReview?: CommitmentSleepReview;
     learned: readonly SleepChange[];
     updated: readonly SleepChange[];
     interestChanges: readonly SleepChange[];
@@ -274,8 +277,9 @@ export async function consolidateSleepMemory(
   observedAt: string,
   context?: SleepAnalysisContext,
 ): Promise<SleepConsolidationOutcome> {
-  const proposals = await analyzer.analyze(messages, context);
-  const source = messages.map(message => normalize(message.content)).join('\n');
+  const visibleMessages = messages.filter(message => !isForgottenCommitmentEvidence(current, message.content));
+  const proposals = await analyzer.analyze(visibleMessages, context);
+  const source = visibleMessages.map(message => normalize(message.content)).join('\n');
   const consolidated = consolidateProposals(proposals, source, current, observedAt, 0.55);
   const facts = [...consolidated.facts];
   const relationships = [...consolidated.relationships];
@@ -289,6 +293,7 @@ export async function consolidateSleepMemory(
     const statement = normalize(proposal.statement).slice(0, 160);
     const evidence = normalize(proposal.evidence).slice(0, 240);
     if (!statement || !evidence || !source.includes(evidence)) continue;
+    if (isForgottenCommitmentEvidence(current, evidence)) continue;
     const id = memoryId(kind, statement);
     const control = current.memoryControls.find(item => item.memoryId === id);
     if (control && control.status !== 'active') {
@@ -322,6 +327,7 @@ export async function consolidateSleepMemory(
     relationships: Object.freeze(relationships.slice(0, 6)),
     interests: Object.freeze(interests.slice(0, 6)),
     report: Object.freeze({
+      commitmentReview: reviewCommitments(current, observedAt),
       learned: Object.freeze(learned), updated: Object.freeze(updated),
       interestChanges: Object.freeze(interestChanges), contradictions: Object.freeze(contradictions),
     }),

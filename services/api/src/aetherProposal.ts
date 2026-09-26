@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
 export type AetherProposalOperation = 'new-note' | 'append';
@@ -16,6 +16,7 @@ export interface AetherProposal {
 }
 
 export interface AetherProposalInput {
+  requestKey?: string;
   title?: string;
   content: string;
   reason?: string;
@@ -36,8 +37,17 @@ export class FileAetherProposalStore implements AetherProposalStore {
     this.directory = resolve(directory);
   }
 
-  create(_scopeKey: string, input: AetherProposalInput): AetherProposal {
+  create(scopeKey: string, input: AetherProposalInput): AetherProposal {
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    const requestHash = input.requestKey ? createHash('sha256').update(JSON.stringify([scopeKey, input.requestKey])).digest('hex') : undefined;
+    const inputHash = createHash('sha256').update(JSON.stringify([input.content, input.title, input.targetNoteId, input.expectedUpdatedAt])).digest('hex');
+    const receiptPath = requestHash ? join(this.directory, `.${requestHash}.receipt`) : undefined;
+    if (receiptPath && existsSync(receiptPath)) {
+      const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { status: string; inputHash: string; proposal: AetherProposal };
+      if (receipt.inputHash !== inputHash) throw new Error('AETHER_PROPOSAL_REQUEST_CONFLICT');
+      if (receipt.status !== 'published') throw new Error('AETHER_PROPOSAL_OUTCOME_UNKNOWN');
+      return receipt.proposal;
+    }
     const pendingCount = readdirSync(this.directory, { withFileTypes: true })
       .filter(item => item.isFile() && item.name.endsWith('.json')).length;
     if (pendingCount >= 100) throw new Error('AETHER_PROPOSAL_QUEUE_FULL');
@@ -59,8 +69,15 @@ export class FileAetherProposalStore implements AetherProposalStore {
     const finalPath = join(this.directory, `${proposal.id}.json`);
     const temporary = join(this.directory, `.${basename(finalPath)}.${process.pid}`);
     try {
+      // Reserve before publication. After a crash in the two-file handoff,
+      // fail closed rather than enqueue a second externally consumable proposal.
+      if (receiptPath) writeFileSync(receiptPath, JSON.stringify({ status: 'prepared', inputHash, proposal }), { flag: 'wx', mode: 0o600 });
       writeFileSync(temporary, `${JSON.stringify(proposal)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
       renameSync(temporary, finalPath);
+      if (receiptPath) {
+        writeFileSync(temporary, JSON.stringify({ status: 'published', inputHash, proposal }), { flag: 'wx', mode: 0o600 });
+        renameSync(temporary, receiptPath);
+      }
     } catch (error) {
       try { unlinkSync(temporary); } catch { /* Nothing was written. */ }
       throw error;

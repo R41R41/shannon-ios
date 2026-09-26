@@ -3,6 +3,8 @@ import {
   assembleShannonSystemPrompt,
   createInitialCompanionState,
   reduceCompanionState,
+  visibleMemoryText,
+  memoryIdentifier,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
   type CompanionStateStore,
@@ -25,6 +27,7 @@ import {
 } from './realtimeVoice.js';
 import { parseSnapshot } from './sqliteStoreCodecs.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
+import { isForgottenCommitmentEvidence } from './memoryVisibility.js';
 
 interface StateRow { snapshot_json: string; }
 interface KnowledgeAnswerRow { answer_id: string; question_key: string; category: string; question: string; answer: string; confidence: number; source: KnowledgeSource; confirmed: number; updated_at: string; }
@@ -56,10 +59,12 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
   }
 
   apply(scopeKey: string, event: CompanionStateEvent): CompanionStateSnapshot {
-    const current = this.snapshot(scopeKey);
-    const next = reduceCompanionState(current, event, this.context.now());
-    if (next === current) return current;
-    this.context.transaction(() => {
+    return this.context.transaction(() => {
+      // API and sleep worker share this database. Read only after obtaining
+      // the write lock so a later writer cannot overwrite a fresh correction.
+      const current = this.snapshot(scopeKey);
+      const next = reduceCompanionState(current, event, this.context.now());
+      if (next === current) return current;
       this.context.database.prepare(`
         UPDATE companion_states
         SET version = ?, updated_at = ?, snapshot_json = ?
@@ -74,9 +79,12 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
         this.synchronizeFact(scopeKey, event.fact, event.source ?? 'inference');
         this.context.insertActivity(scopeKey, 'knowledge', '知識を更新', event.fact.statement, next.updatedAt);
       }
+      if (event.type === 'memory-control-upserted' || event.type === 'memory-transaction') {
+        this.writePersonalityProfile(scopeKey, next, next.updatedAt);
+      }
       this.writePromptProjection(scopeKey, next);
+      return next;
     });
-    return next;
   }
 
   synchronizeFact(scopeKey: string, fact: CompanionStateSnapshot['userFacts'][number], source: KnowledgeSource): void {
@@ -418,7 +426,11 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
 
   writePromptProjection(scopeKey: string, state: CompanionStateSnapshot): void {
     const personality = this.personalityProfile(scopeKey);
-    const knowledge = this.knowledgeAnswers(scopeKey).slice(0, 80);
+    const knowledge = this.knowledgeAnswers(scopeKey).flatMap(item => {
+      const answer = visibleMemoryText(state, item.answerId, item.answer);
+      return answer && !item.evidence.some(evidence => isForgottenCommitmentEvidence(state, evidence.quote))
+        ? [{ ...item, answer }] : [];
+    }).slice(0, 80);
     const sections = [assembleShannonSystemPrompt(state)];
     if (knowledge.length) {
       sections.push(`[User knowledge]\n${knowledge.map(item => `- ${item.question}: ${item.answer} (confidence ${item.confidence.toFixed(2)}, source ${item.source})`).join('\n')}`);
@@ -439,12 +451,15 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
     const previous = this.context.database.prepare(`
       SELECT COALESCE(MAX(version), 0) AS version FROM personality_profiles WHERE scope_key = ?
     `).get(scopeKey) as unknown as { version: number };
-    const facts = state.userFacts.slice(0, 6).map(item => item.statement);
-    const relationships = state.relationships.slice(0, 4).map(item => item.statement);
+    const facts = state.userFacts.filter(item => !isForgottenCommitmentEvidence(state, item.evidence ?? ''))
+      .flatMap(item => visibleMemoryText(state, item.id, item.statement) ?? []).slice(0, 6);
+    const relationships = state.relationships.filter(item => !isForgottenCommitmentEvidence(state, item.evidence ?? ''))
+      .flatMap(item => visibleMemoryText(state, item.id, item.statement) ?? []).slice(0, 4);
+    const interests = state.interests.flatMap(item => visibleMemoryText(state, memoryIdentifier('interest', item), item) ?? []).slice(0, 8);
     const analysis = [
       facts.length ? `把握している特徴: ${facts.join('、')}` : '本人について断定できる特徴はまだ少ない。',
       relationships.length ? `好む関わり方: ${relationships.join('、')}` : '好む関わり方はまだ観察中。',
-      state.interests.length ? `最近の関心: ${state.interests.slice(0, 8).join('、')}` : '最近の関心はまだ定まっていない。',
+      interests.length ? `最近の関心: ${interests.join('、')}` : '最近の関心はまだ定まっていない。',
     ].join('\n');
     this.context.database.prepare(`UPDATE personality_profiles SET active = 0 WHERE scope_key = ?`).run(scopeKey);
     this.context.database.prepare(`
