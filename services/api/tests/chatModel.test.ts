@@ -3,6 +3,40 @@ import { OpenAIResponsesChatModel, createConfiguredChatModel } from '../src/chat
 import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
 
 describe('OpenAI Responses chat adapter', () => {
+  it('uses a compact unstructured response path for ordinary voice turns', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.text).toEqual({ verbosity: 'low' });
+      expect(body.text.format).toBeUndefined();
+      expect(body.max_output_tokens).toBe(480);
+      expect(body.tools).toBeUndefined();
+      expect(body.reasoning).toEqual({ effort: 'none' });
+      return new Response(JSON.stringify({ output_text: 'うん、今日はゆっくり話そう。' }));
+    });
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const result = await model.generateVoice({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '話そう',
+      useWebSearch: false, conversationClass: 'direct',
+    });
+    expect(result.reply).toBe('うん、今日はゆっくり話そう。');
+  });
+
+  it('adds bounded web tools and low reasoning only for complex skilled voice turns', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.reasoning).toEqual({ effort: 'low' });
+      expect(body.max_output_tokens).toBe(900);
+      expect(body.tools).toEqual([{ type: 'web_search', search_context_size: 'medium' }]);
+      expect(body.max_tool_calls).toBe(3);
+      return new Response(JSON.stringify({ output_text: '確認した結果だよ。' }));
+    });
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    await model.generateVoice({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '比較して',
+      useWebSearch: true, conversationClass: 'skill_complex',
+    });
+  });
+
   it('generates a separate short title from the first user message and assistant reply in one call', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));

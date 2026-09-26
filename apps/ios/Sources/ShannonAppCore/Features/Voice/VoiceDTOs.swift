@@ -171,17 +171,69 @@ public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
     public let text: String
 }
 
+public enum ShannonVoiceConversationClassDTO: String, Codable, Equatable, Sendable {
+    case noResponse = "no_response"
+    case greeting
+    case direct
+    case skillSimple = "skill_simple"
+    case skillComplex = "skill_complex"
+}
+
+public enum ShannonVoiceAffectDTO: String, Codable, Equatable, Sendable {
+    case neutral, bright, playful, caring, serious, apologetic, excited
+}
+
+public enum ShannonVoiceDeliveryDTO: String, Codable, Equatable, Sendable {
+    case conversational, quick, gentle, focused, energetic
+}
+
+public struct ShannonVoicePlanDTO: Codable, Equatable, Sendable {
+    public let shouldRespond: Bool
+    public let conversationClass: ShannonVoiceConversationClassDTO
+    public let affect: ShannonVoiceAffectDTO
+    public let delivery: ShannonVoiceDeliveryDTO
+    public let selectedSkills: [String]
+    public let decisionSource: String?
+    public let decisionLatencyMilliseconds: Int?
+
+    public init(
+        shouldRespond: Bool,
+        conversationClass: ShannonVoiceConversationClassDTO,
+        affect: ShannonVoiceAffectDTO,
+        delivery: ShannonVoiceDeliveryDTO,
+        selectedSkills: [String] = [],
+        decisionSource: String? = nil,
+        decisionLatencyMilliseconds: Int? = nil
+    ) {
+        self.shouldRespond = shouldRespond
+        self.conversationClass = conversationClass
+        self.affect = affect
+        self.delivery = delivery
+        self.selectedSkills = selectedSkills
+        self.decisionSource = decisionSource
+        self.decisionLatencyMilliseconds = decisionLatencyMilliseconds
+    }
+}
+
 public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendable {
     public let threadId: String
     public let model: String
     public let reply: String
     public let organizeSession: ShannonOrganizeSessionDTO?
+    public let voicePlan: ShannonVoicePlanDTO?
 
-    public init(threadId: String, model: String, reply: String, organizeSession: ShannonOrganizeSessionDTO? = nil) {
+    public init(
+        threadId: String,
+        model: String,
+        reply: String,
+        organizeSession: ShannonOrganizeSessionDTO? = nil,
+        voicePlan: ShannonVoicePlanDTO? = nil
+    ) {
         self.threadId = threadId
         self.model = model
         self.reply = reply
         self.organizeSession = organizeSession
+        self.voicePlan = voicePlan
     }
 }
 

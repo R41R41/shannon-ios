@@ -6,17 +6,25 @@ export interface ConversationReadCapabilities {
   voyagerCatalog?: VoyagerCatalog | null;
 }
 
+export interface ConversationCapabilitySelection {
+  aetherNotes?: boolean;
+  voyagerTasks?: boolean;
+}
+
 /** Identical, bounded read contract for text and voice. No implicit writes. */
 export function conversationCapabilityPrompt(
   scopeKey: string, message: string, dependencies: ConversationReadCapabilities,
+  selection: ConversationCapabilitySelection = { aetherNotes: true, voyagerTasks: true },
 ): string | Promise<string> {
   const sections: string[] = [];
-  try {
-    const notes = dependencies.aetherContext?.promptFor(scopeKey, message);
-    if (notes) sections.push(notes);
-    else if (/ノート|メモ|aether/iu.test(message)) sections.push('[Notes] No matching explicitly shared note projection. Do not claim to have read unshared notes.');
-  } catch { sections.push('[Notes] Projection unavailable. Do not invent note content.'); }
-  if (/(?:タスク|voyager|to.?do|やること)/iu.test(message)) {
+  if (selection.aetherNotes !== false) {
+    try {
+      const notes = dependencies.aetherContext?.promptFor(scopeKey, message);
+      if (notes) sections.push(notes);
+      else if (/ノート|メモ|aether/iu.test(message)) sections.push('[Notes] No matching explicitly shared note projection. Do not claim to have read unshared notes.');
+    } catch { sections.push('[Notes] Projection unavailable. Do not invent note content.'); }
+  }
+  if (selection.voyagerTasks !== false && /(?:タスク|voyager|to.?do|やること)/iu.test(message)) {
     return readTaskContext(message, dependencies, sections);
   }
   return sections.join('\n\n').slice(0, 6_000);

@@ -85,6 +85,18 @@ extension ShannonConversationModel {
         userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> String {
+        try await performLiveVoiceDelegationResponse(
+            transcript: transcript,
+            userUtterance: userUtterance,
+            participantMode: participantMode
+        ).reply
+    }
+
+    public func performLiveVoiceDelegationResponse(
+        transcript: String,
+        userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
+        participantMode: ShannonVoiceParticipantMode
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
         let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
 #if os(iOS)
         let location = requestedLocation
@@ -109,7 +121,7 @@ extension ShannonConversationModel {
             selectedThreadId = result.threadId
             if let session = result.organizeSession { upsertOrganizeSession(session) }
         }
-        return result.reply
+        return result
     }
 
     public func analyzeVoiceCameraSnapshot(jpegData: Data) async throws -> String {

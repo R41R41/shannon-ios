@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
 import type { WorldSubscription } from '../src/worldStore.js';
 
@@ -27,7 +27,57 @@ class RecordingChatModel implements ShannonChatModel {
   }
 }
 
+class VoiceAwareRecordingModel extends RecordingChatModel {
+  readonly voiceRequests: ShannonVoiceModelRequest[] = [];
+
+  async generateVoice(request: ShannonVoiceModelRequest) {
+    this.voiceRequests.push(request);
+    return { mode: this.mode, model: this.model, reply: `音声返答${this.voiceRequests.length}` };
+  }
+}
+
 describe('Shannon local API kernel', () => {
+  it('uses the lightweight voice model without web tools for a direct conversation', async () => {
+    const model = new VoiceAwareRecordingModel();
+    const api = createLocalApiKernel(() => '2026-09-15T00:00:00.000Z', { chatModel: model });
+    const result = await api.dispatch({
+      method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+        scopeKey: 'owner-a', transcript: '今日はのんびり話そう',
+      },
+    });
+    expect(result).toMatchObject({ status: 200, body: {
+      reply: '音声返答1', voicePlan: { conversationClass: 'direct', selectedSkills: [] },
+    } });
+    expect(model.voiceRequests).toHaveLength(1);
+    expect(model.voiceRequests[0]?.useWebSearch).toBe(false);
+    expect(model.requests).toHaveLength(0);
+  });
+
+  it('skips the reply model when the voice decision says no response is needed', async () => {
+    const model = new VoiceAwareRecordingModel();
+    const api = createLocalApiKernel(() => '2026-09-15T00:00:00.000Z', {
+      chatModel: model,
+      voiceDecision: { mode: 'jev', model: 'test-jev', decide: async () => ({
+        source: 'jev', shouldRespond: false, replyRequiredProbability: 0.08,
+        conversationClass: 'no_response', affect: 'neutral', delivery: 'conversational',
+        selectedSkills: [], skillScores: {
+          current_web: 0, conversation_memory: 0, daily_mind: 0, aether_notes: 0,
+          voyager_tasks: 0, agent_status: 0, device_context: 0,
+        }, elapsedMilliseconds: 72,
+      }) },
+    });
+    const result = await api.dispatch({
+      method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+        scopeKey: 'owner-a', transcript: 'うん',
+      },
+    });
+    expect(result).toMatchObject({ status: 200, body: {
+      reply: '', voicePlan: { shouldRespond: false, conversationClass: 'no_response' },
+    } });
+    expect(model.voiceRequests).toHaveLength(0);
+    expect(model.requests).toHaveLength(0);
+  });
+
   it('routes a GPT-Live client delegation through the read-only web backend', async () => {
     const model = new RecordingChatModel();
     model.webSources = [{ title: 'Weather source', url: 'https://example.com/weather' }];
@@ -44,13 +94,18 @@ describe('Shannon local API kernel', () => {
       },
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       status: 200,
       body: {
         threadId: 'thread-travel',
         model: 'test-model',
         reply: '返答1',
         webSources: [{ title: 'Weather source', url: 'https://example.com/weather' }],
+        voicePlan: {
+          shouldRespond: true,
+          conversationClass: 'skill_simple',
+          selectedSkills: ['current_web'],
+        },
       },
     });
     expect(model.requests).toHaveLength(1);
@@ -251,6 +306,7 @@ describe('Shannon local API kernel', () => {
         service: 'shannon-ios-api',
         mode: 'local',
         llm: { mode: 'local-stub', model: 'local-stub' },
+        voiceRouting: { mode: 'fallback', model: 'local-rules' },
         background: { mode: 'in-process' },
       },
     });

@@ -33,6 +33,12 @@ final class ShannonVoiceProposalContinuityTests: XCTestCase {
         let legacy = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self,
             from: Data(#"{"threadId":"old","model":"test","reply":"hello"}"#.utf8))
         XCTAssertNil(legacy.organizeSession)
+        XCTAssertNil(legacy.voicePlan)
+
+        let routed = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self,
+            from: Data(#"{"threadId":"new","model":"test","reply":"","voicePlan":{"shouldRespond":false,"conversationClass":"no_response","affect":"neutral","delivery":"conversational","selectedSkills":[],"decisionSource":"jev","decisionLatencyMilliseconds":84}}"#.utf8))
+        XCTAssertEqual(routed.voicePlan?.conversationClass, .noResponse)
+        XCTAssertEqual(routed.voicePlan?.shouldRespond, false)
     }
 }
 

@@ -36,6 +36,7 @@ import {
 } from './apiValidation.js';
 import { BackgroundUpdateCoordinator, type TurnBackgroundService } from './backgroundUpdates.js';
 import { LocalStubChatModel, type ShannonChatAttachment, type ShannonChatModel } from './chatModel.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from './voiceDecision.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
 import {
@@ -95,6 +96,7 @@ import {
 } from './voiceIdentity.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
+  voiceDecision?: VoiceDecisionGateway;
   stateStore?: CompanionStateStore;
   conversationStore?: ConversationStore;
   background?: TurnBackgroundService;
@@ -119,6 +121,7 @@ export interface ShannonApiKernelOptions {
 
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
+  private readonly voiceDecision: VoiceDecisionGateway;
   private readonly conversationStore: ConversationStore;
   private readonly background: TurnBackgroundService;
   private readonly memoryStore: ShannonMemoryStore;
@@ -145,6 +148,7 @@ export class ShannonApiKernel {
     options: ShannonApiKernelOptions = {},
   ) {
     this.chatModel = options.chatModel ?? new LocalStubChatModel();
+    this.voiceDecision = options.voiceDecision ?? new LocalVoiceDecisionGateway();
     this.conversationStore = options.conversationStore ?? new InMemoryConversationStore();
     this.background = options.background
       ?? new BackgroundUpdateCoordinator(this.stateStore, this.conversationStore);
@@ -195,6 +199,7 @@ export class ShannonApiKernel {
           service: 'shannon-ios-api',
           mode: 'local',
           llm: { mode: this.chatModel.mode, model: this.chatModel.model },
+          voiceRouting: { mode: this.voiceDecision.mode, model: this.voiceDecision.model },
           background: { mode: this.background.mode },
         },
       };
@@ -331,6 +336,7 @@ export class ShannonApiKernel {
 
     const liveVoiceResponse = dispatchLiveVoiceRequest(request, {
       chatModel: this.chatModel,
+      voiceDecision: this.voiceDecision,
       stateStore: this.stateStore,
       conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore,

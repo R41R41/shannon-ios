@@ -51,6 +51,15 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
             ["よし！", "任せてください。", "大丈夫？"]
         )
         XCTAssertTrue(ShannonGeminiCascadeSpeech.style(for: "やった！").contains("明るく弾む"))
+        let routed = ShannonVoicePlanDTO(
+            shouldRespond: true,
+            conversationClass: .skillSimple,
+            affect: .caring,
+            delivery: .gentle
+        )
+        let routedStyle = ShannonGeminiCascadeSpeech.style(for: "大丈夫？", plan: routed)
+        XCTAssertTrue(routedStyle.contains("近く温かな声"))
+        XCTAssertTrue(routedStyle.contains("少しゆっくり"))
         XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "そうだけど", turnComplete: false), 420)
         XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "はい。", turnComplete: false), 80)
     }

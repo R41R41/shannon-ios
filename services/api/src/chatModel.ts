@@ -51,6 +51,15 @@ export interface ShannonChatModelRequest {
   useWebSearch?: boolean;
 }
 
+export interface ShannonVoiceModelRequest {
+  scopeKey: string;
+  systemPrompt: string;
+  history: readonly ShannonConversationItem[];
+  message: string;
+  useWebSearch: boolean;
+  conversationClass: 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
+}
+
 export interface ShannonWebSource {
   title: string;
   url: string;
@@ -100,6 +109,7 @@ export interface ShannonChatModel {
   readonly mode: ShannonChatMode;
   readonly model: string;
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult>;
+  generateVoice?(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult>;
 }
 
 const LOCAL_REPLY = 'うん、聞いてるよ。LLMの鍵を設定すると、ここからShannonとして会話できるようになる。';
@@ -109,6 +119,10 @@ export class LocalStubChatModel implements ShannonChatModel {
   readonly model = 'local-stub';
 
   async generate(): Promise<ShannonChatModelResult> {
+    return { mode: this.mode, model: this.model, reply: LOCAL_REPLY };
+  }
+
+  async generateVoice(): Promise<ShannonChatModelResult> {
     return { mode: this.mode, model: this.model, reply: LOCAL_REPLY };
   }
 }
@@ -301,6 +315,63 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       taskDecision: structured.taskDecision,
       ...(structured.intentPlan ? { intentPlan: structured.intentPlan } : {}),
       ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
+    };
+  }
+
+  async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
+    const complex = request.conversationClass === 'skill_complex';
+    const response = await this.fetcher(this.endpoint, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.options.apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        instructions: [
+          request.systemPrompt,
+          '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。通常は1〜3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にする。',
+          ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+        ].join('\n\n'),
+        input: [
+          ...request.history.map(item => ({ role: item.role, content: item.content })),
+          { role: 'user', content: request.message },
+        ],
+        reasoning: { effort: complex ? 'low' : 'none' },
+        text: { verbosity: complex ? 'medium' : 'low' },
+        max_output_tokens: complex ? 900 : 480,
+        ...(request.useWebSearch ? {
+          tools: [{ type: 'web_search', search_context_size: complex ? 'medium' : 'low' }],
+          tool_choice: { type: 'web_search' },
+          include: ['web_search_call.action.sources'],
+          max_tool_calls: complex ? 3 : 2,
+        } : {}),
+        store: false,
+        prompt_cache_key: stableScopeIdentifier(request.scopeKey),
+        safety_identifier: stableScopeIdentifier(request.scopeKey),
+      }),
+      signal: AbortSignal.timeout(this.timeoutMilliseconds),
+    });
+    const raw = await response.text();
+    const json = parseJson(raw);
+    if (!response.ok) throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
+    const reply = extractOutputText(json).trim();
+    if (!reply) throw new Error('OPENAI_RESPONSE_EMPTY');
+    const usage = responseUsage(json);
+    this.options.usageStore?.recordLlmUsage({
+      scopeKey: request.scopeKey,
+      lane: 'chat',
+      model: this.model,
+      ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
+      occurredAt: this.options.now?.() ?? new Date().toISOString(),
+    });
+    const webSources = request.useWebSearch ? extractWebSources(json) : [];
+    return {
+      mode: this.mode,
+      model: this.model,
+      reply,
+      ...(webSources.length ? { webSources } : {}),
     };
   }
 }

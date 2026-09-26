@@ -17,7 +17,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     try await conversationModel.createGeminiLiveSession(participantMode: participantMode)
                 },
                 performDelegation: { request, utterance, participantMode in
-                    try await conversationModel.performLiveVoiceDelegation(
+                    try await conversationModel.performLiveVoiceDelegationResponse(
                         transcript: request,
                         userUtterance: utterance,
                         participantMode: participantMode

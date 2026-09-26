@@ -27,6 +27,27 @@ enum ShannonGeminiCascadeSpeech {
         return String("\(baseStyle) \(direction)".prefix(500))
     }
 
+    static func style(for text: String, plan: ShannonVoicePlanDTO?) -> String {
+        guard let plan else { return style(for: text) }
+        let affect: String = switch plan.affect {
+        case .neutral: "自然で気取らない感情。"
+        case .bright: "声に笑顔を含む明るさ。"
+        case .playful: "愛嬌のある軽い悪戯っぽさ。"
+        case .caring: "相手を気遣う近く温かな声。"
+        case .serious: "落ち着いた真剣さ。"
+        case .apologetic: "誠実で繊細な申し訳なさ。"
+        case .excited: "弾む喜びと高揚感。"
+        }
+        let delivery: String = switch plan.delivery {
+        case .conversational: "自然な会話のテンポで。"
+        case .quick: "短く軽快に、急かさず。"
+        case .gentle: "少しゆっくり、柔らかく。"
+        case .focused: "明瞭で歯切れよく、事実を聞き取りやすく。"
+        case .energetic: "生き生きしたテンポと抑揚で、叫ばずに。"
+        }
+        return String("明るく自然な日本語の会話。\(affect) \(delivery)".prefix(500))
+    }
+
     static func segments(_ text: String) -> [String] {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return [] }

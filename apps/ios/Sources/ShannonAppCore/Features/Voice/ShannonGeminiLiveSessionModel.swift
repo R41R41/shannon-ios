@@ -53,7 +53,7 @@ public final class ShannonGeminiLiveSessionModel {
     private var didRecordCaptureStart = false
     private var didRecordFirstQueuedChunk = false
     private var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
-    private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String)?
+    private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
     private var synthesize: (@MainActor (String, String?) async throws -> ShannonGeminiSpeech)?
     private var commitTurn: (@MainActor (String, String) async throws -> Void)?
 
@@ -68,7 +68,7 @@ public final class ShannonGeminiLiveSessionModel {
     public func start(
         participantMode: ShannonVoiceParticipantMode,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
-        performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String,
+        performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         synthesize: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeech,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {
@@ -295,12 +295,26 @@ public final class ShannonGeminiLiveSessionModel {
             guard let self else { return }
             do {
                 let utterance = ShannonVoiceUserUtteranceDTO(id: UUID().uuidString, text: userText)
-                let reply = try await performDelegation(userText, utterance, participantMode)
+                let response = try await performDelegation(userText, utterance, participantMode)
                 try Task.checkCancellation()
+                if response.voicePlan?.shouldRespond == false {
+                    phase = .listening
+                    responseTask = nil
+                    if let textSubmission,
+                       case let .sending(currentText) = textSendState,
+                       currentText == textSubmission {
+                        textSendState = .idle
+                    }
+                    return
+                }
+                let reply = response.reply
                 shannonTranscript = reply
                 var playbackDeadline = ProcessInfo.processInfo.systemUptime
                 for segment in ShannonGeminiCascadeSpeech.segments(reply) {
-                    let speech = try await synthesize(segment, ShannonGeminiCascadeSpeech.style(for: segment))
+                    let speech = try await synthesize(
+                        segment,
+                        ShannonGeminiCascadeSpeech.style(for: segment, plan: response.voicePlan)
+                    )
                     try Task.checkCancellation()
                     voice = speech.voice
                     if firstAudioLatencyMilliseconds == nil, let responseStartedAt {

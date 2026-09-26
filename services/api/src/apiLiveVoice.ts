@@ -13,11 +13,14 @@ import type { ConversationStore } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonChatModel } from './chatModel.js';
+import type { VoiceDecisionGateway, VoiceTurnDecision } from './voiceDecision.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
-import { visibleConversationHistory, mayUseThreadSummary } from './memoryVisibility.js';
+import { visibleConversationHistory } from './memoryVisibility.js';
 import { executeConversationCommand, type ConversationCommandDependencies, type UserUtterance } from './conversationCommands.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
+import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
+import type { PersonIdentityStore } from './personIdentity.js';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
@@ -135,6 +138,7 @@ export function realtimeVoiceSessionProjection(
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel;
+  voiceDecision: VoiceDecisionGateway;
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
   knowledgeStore: KnowledgeStore | null;
@@ -264,15 +268,38 @@ async function completeLiveVoiceDelegation(
       reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
+  const decision = await dependencies.voiceDecision.decide({
+    transcript,
+    participantMode,
+    requestedLocation: deviceContext?.requestedLocation ?? false,
+    hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
+  });
+  const voicePlan = voicePlanResponse(decision);
+  if (!decision.shouldRespond) {
+    return {
+      status: 200,
+      body: {
+        threadId,
+        model: dependencies.chatModel.model,
+        reply: '',
+        webSources: [],
+        voicePlan,
+      },
+    };
+  }
+  const selectedSkills = new Set(decision.selectedSkills);
   const backendInstructions = [
     '[GPT-Live client delegation backend]',
     '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
     '- Return concise verified facts for Shannon to paraphrase aloud. Avoid Markdown tables and long URLs.',
     '- This lane is read-only unless an explicit user command has already returned a verified proposal receipt. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
-    '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
-    '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
-    voiceDeviceContextPrompt(dependencies.now(), deviceContext),
+    ...(selectedSkills.has('current_web') ? [
+      '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
+      '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
+    ] : []),
+    ...(selectedSkills.has('device_context') || selectedSkills.has('current_web')
+      ? [voiceDeviceContextPrompt(dependencies.now(), deviceContext)] : []),
   ].join('\n');
   const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
   const provisionalIntent = temporaryGuest ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
@@ -286,29 +313,48 @@ async function completeLiveVoiceDelegation(
     },
   );
   const basePrompt = temporaryGuest
-    ? temporaryGuestVoiceInstructions
-    : dependencies.knowledgeStore?.promptProjection(scopeKey)
-      ?? assembleShannonSystemPrompt(captured!);
-  const dailyMindPrompt = temporaryGuest
+    ? [temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
+    : selectedSkills.has('conversation_memory')
+      ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
+      : voiceConversationInstructions(true);
+  const dailyMindPrompt = temporaryGuest || !selectedSkills.has('daily_mind')
     ? ''
     : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const taskPrompt = temporaryGuest
+  const taskPrompt = temporaryGuest || !selectedSkills.has('agent_status')
     ? ''
     : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
-  const priorThreadSummary = temporaryGuest || !mayUseThreadSummary(captured!)
+  const capabilityPrompt = temporaryGuest
     ? ''
-    : dependencies.conversationStore.threadSummary(scopeKey, threadId);
-  const completion = await dependencies.chatModel.generate({
+    : await conversationCapabilityPrompt(scopeKey, transcript, dependencies, {
+      aetherNotes: selectedSkills.has('aether_notes'),
+      voyagerTasks: selectedSkills.has('voyager_tasks'),
+    });
+  const includeCognitiveContext = !temporaryGuest && selectedSkills.has('conversation_memory');
+  const systemPrompt = [
+    basePrompt,
+    includeCognitiveContext ? cognitiveContext?.prompt : '',
+    dailyMindPrompt,
+    taskPrompt,
+    capabilityPrompt,
+    `[Jev voice route]\nConversation class: ${decision.conversationClass}. Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
+    backendInstructions,
+  ].filter(Boolean).join('\n\n');
+  const fullHistory = temporaryGuest ? []
+    : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId);
+  const historyLimit = selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
+  const modelRequest = {
     scopeKey,
-    systemPrompt: [basePrompt, cognitiveContext?.prompt, dailyMindPrompt, taskPrompt, backendInstructions,
-      temporaryGuest ? '' : await conversationCapabilityPrompt(scopeKey, transcript, dependencies)]
-      .filter(Boolean).join('\n\n'),
-    history: temporaryGuest ? [] : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId),
-    ...(priorThreadSummary ? { priorThreadSummary } : {}),
+    systemPrompt,
+    history: boundedVoiceHistory(fullHistory, historyLimit),
     message: transcript,
-    useWebSearch: true,
-    generateThreadTitle: false,
-  });
+    useWebSearch: selectedSkills.has('current_web'),
+    conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
+  };
+  const completion = provisionalIntent
+    ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
+    : dependencies.chatModel.generateVoice
+      ? await dependencies.chatModel.generateVoice(modelRequest)
+      : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
   if (!temporaryGuest && cognitiveContext) {
     recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
       threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
@@ -321,8 +367,29 @@ async function completeLiveVoiceDelegation(
       model: completion.model,
       reply: completion.reply.trim(),
       webSources: completion.webSources ?? [],
+      voicePlan,
     },
   };
 }
-import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
-import type { PersonIdentityStore } from './personIdentity.js';
+
+function boundedVoiceHistory(
+  history: readonly { role: 'user' | 'assistant'; content: string }[],
+  limit: number,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  return history.slice(-limit).map(item => ({
+    role: item.role,
+    content: Array.from(item.content.trim().replace(/\s+/gu, ' ')).slice(0, 600).join(''),
+  })).filter(item => item.content.length > 0);
+}
+
+function voicePlanResponse(decision: VoiceTurnDecision): Record<string, unknown> {
+  return {
+    shouldRespond: decision.shouldRespond,
+    conversationClass: decision.conversationClass,
+    affect: decision.affect,
+    delivery: decision.delivery,
+    selectedSkills: decision.selectedSkills,
+    decisionSource: decision.source,
+    decisionLatencyMilliseconds: decision.elapsedMilliseconds,
+  };
+}

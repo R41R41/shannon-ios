@@ -7,7 +7,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     @Bindable var model: ShannonGeminiLiveSessionModel
     private let expression: ShannonExpressionDTO
     private let createSession: @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO
-    private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String
+    private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let synthesize: @MainActor (String, String?) async throws -> ShannonGeminiSpeech
     private let commitTurn: @MainActor (String, String) async throws -> Void
@@ -35,7 +35,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         model: ShannonGeminiLiveSessionModel,
         expression: ShannonExpressionDTO,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
-        performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String,
+        performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         synthesize: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeech,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,

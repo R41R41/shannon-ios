@@ -10,6 +10,7 @@ import { createGeminiLiveRoute } from './serverGeminiLiveRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
+import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
 import { configuredAuthPepper, SQLiteDeviceAuthStore, type ShannonDevicePrincipal } from './deviceAuth.js';
 import { configuredDatabasePath, SQLiteShannonStore } from './sqliteStore.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -53,6 +54,7 @@ const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePa
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
+  voiceDecision: createConfiguredVoiceDecisionGateway(process.env),
   stateStore: persistentStore,
   conversationStore: persistentStore,
   background: backgroundDispatcher,

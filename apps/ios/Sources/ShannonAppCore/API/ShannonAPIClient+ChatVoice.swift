@@ -226,7 +226,9 @@ extension ShannonAPIClient {
             throw ShannonAPIError.rejected(status: http.statusCode)
         }
         let result = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self, from: data)
-        guard !result.threadId.isEmpty, !result.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !result.threadId.isEmpty,
+              !result.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || result.voicePlan?.shouldRespond == false else {
             throw ShannonAPIError.invalidResponse
         }
         return result
