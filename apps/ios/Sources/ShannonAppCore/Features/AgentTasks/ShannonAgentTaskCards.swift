@@ -82,30 +82,38 @@ struct ShannonAgentTaskCapsule: View {
     let open: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         Button(action: open) {
             HStack(spacing: ShannonSpacing.medium) {
-                ShannonAvatarView(expression: task.expression, size: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    if task.status == .waitingApproval {
-                        Label("許可が必要です", systemImage: "hand.raised.fill")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(palette.attention)
-                            .lineLimit(1)
-                    } else {
-                        Text(task.stageDescription)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(palette.textPrimary)
-                            .lineLimit(1)
+                ShannonAvatarView(expression: task.expression, size: dynamicTypeSize.isAccessibilitySize ? 30 : 36)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Text(task.status == .waitingApproval ? "許可が必要です" : task.stageDescription)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(task.status == .waitingApproval ? palette.attention : palette.textPrimary)
+                        .lineLimit(1)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if task.status == .waitingApproval {
+                            Label("許可が必要です", systemImage: "hand.raised.fill")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(palette.attention)
+                                .lineLimit(1)
+                        } else {
+                            Text(task.stageDescription)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(palette.textPrimary)
+                                .lineLimit(1)
+                        }
+                        Text(task.status == .waitingApproval
+                            ? "タップして内容を確認"
+                            : "\(task.stage.japaneseName) · シャノンの作業を見る")
+                            .font(.caption2)
+                            .foregroundStyle(palette.textSecondary)
                     }
-                    Text(task.status == .waitingApproval
-                        ? "タップして内容を確認"
-                        : "\(task.stage.japaneseName) · シャノンの作業を見る")
-                        .font(.caption2)
-                        .foregroundStyle(palette.textSecondary)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.up")

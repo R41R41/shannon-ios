@@ -18,6 +18,9 @@ extension ShannonConversationView {
 
 #if DEBUG
     func applyDesignPreviewLaunchState() {
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDialogue") {
+            displayMode = .dialogue
+        }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewWork") {
             selectedPage = .work
         }
@@ -29,8 +32,9 @@ extension ShannonConversationView {
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewSettings") {
             showsSettings = true
         }
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
-            drawerProgress = 1
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewThreadList")
+            || ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDrawer") {
+            showsThreadList = true
         }
 #if os(iOS)
         if ShannonVoiceDesignPreview.isEnabled {

@@ -73,6 +73,42 @@ for (const path of filesBelow(relative(root, apiDirectory), new Set(['.swift']))
   }
 }
 
+const conversationRoot = source(resolve(
+  root,
+  'apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView.swift',
+));
+const conversationWorkspace = source(resolve(
+  root,
+  'apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift',
+));
+const threadListSheet = source(resolve(
+  root,
+  'apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift',
+));
+
+for (const [label, text, requiredTokens] of [
+  ['iPhone conversation root', conversationRoot, ['NavigationStack', '.navigationTitle(', '.toolbar { workspaceToolbar }', '.sheet(isPresented: $showsThreadList)']],
+  ['iPhone Talk workspace', conversationWorkspace, ['switch selectedPage', '.safeAreaInset(edge: .bottom', '.background(.bar)']],
+  ['iPhone thread list', threadListSheet, ['NavigationStack', 'List {', '.searchable(', '.toolbar {']],
+]) {
+  for (const token of requiredTokens) {
+    if (!text.includes(token)) fail(`${label} must keep Apple-native ${token}`);
+  }
+}
+
+for (const legacyToken of ['drawerProgress', 'ShannonAppHeader', 'ShannonWorkspaceMotion']) {
+  if (conversationRoot.includes(legacyToken) || conversationWorkspace.includes(legacyToken) || threadListSheet.includes(legacyToken)) {
+    fail(`iPhone conversation navigation reintroduced legacy custom chrome ${legacyToken}`);
+  }
+}
+
+for (const legacyPath of [
+  'apps/ios/Sources/ShannonAppCore/ShannonWorkspaceMotion.swift',
+  'apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadDrawer.swift',
+]) {
+  if (existsSync(resolve(root, legacyPath))) fail(`${legacyPath} must remain replaced by native navigation`);
+}
+
 const macProject = source(resolve(root, 'apps/macos-app/ShannonDesk.xcodeproj/project.pbxproj'));
 for (const path of filesBelow('apps/macos-app/ShannonDesk', new Set(['.swift']))) {
   if (!macProject.includes(basename(path))) fail(`${projectPath(path)} is missing from the generated Mac project`);

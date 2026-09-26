@@ -1,6 +1,7 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+import UserNotifications
 #elseif canImport(AppKit)
 import AppKit
 #endif
@@ -20,39 +21,6 @@ extension ShannonConversationView {
         composerAttachmentError = nil
     }
 
-    func threadDrawerGesture(viewWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 10, coordinateSpace: .local)
-            .onChanged { value in
-                if !drawerDragIsActive {
-                    guard ShannonWorkspaceMotionPolicy.canBeginDrawerDrag(
-                        isTalkSelected: selectedPage == .talk,
-                        composerIsFocused: composerIsFocused,
-                        currentProgress: drawerProgress,
-                        viewWidth: viewWidth,
-                        startX: value.startLocation.x,
-                        translation: value.translation
-                    ) else { return }
-                    drawerDragStartProgress = drawerProgress
-                    drawerDragIsActive = true
-                }
-
-                drawerProgress = ShannonWorkspaceMotionPolicy.drawerProgress(
-                    from: drawerDragStartProgress,
-                    translation: value.translation.width,
-                    drawerWidth: drawerWidth(for: viewWidth)
-                )
-            }
-            .onEnded { value in
-                guard drawerDragIsActive else { return }
-                drawerDragIsActive = false
-                settleDrawer(open: ShannonWorkspaceMotionPolicy.shouldOpenDrawer(
-                    from: drawerDragStartProgress,
-                    predictedTranslation: value.predictedEndTranslation.width,
-                    drawerWidth: drawerWidth(for: viewWidth)
-                ))
-            }
-    }
-
     func settleWorkspace(on page: ShannonWorkspacePage) {
         let changed = page != selectedPage
         composerIsFocused = false
@@ -62,9 +30,9 @@ extension ShannonConversationView {
         if changed { ShannonHaptics.page() }
     }
 
-    func openThreadDrawer() {
+    func openThreadList() {
         composerIsFocused = false
-        settleDrawer(open: true)
+        showsThreadList = true
     }
 
     func createThreadFromHeader() {
@@ -73,30 +41,30 @@ extension ShannonConversationView {
         Task { await model.createThread(title: nil) }
     }
 
-    func openTalkFromDrawer() {
+    func openTalkFromThreadList() {
         settleWorkspace(on: .talk)
-        closeThreadDrawer()
+        closeThreadList()
         Task { await model.acknowledgeVisibleInitiatives() }
     }
 
-    func openMemoryFromDrawer() {
+    func openMemoryFromThreadList() {
         settleWorkspace(on: .memory)
-        closeThreadDrawer()
+        closeThreadList()
     }
 
-    func openWorkFromDrawer() {
+    func openWorkFromThreadList() {
         settleWorkspace(on: .work)
-        closeThreadDrawer()
+        closeThreadList()
         Task { await model.synchronizeAgentTasks() }
     }
 
-    func openSettingsFromDrawer() {
-        closeThreadDrawer()
+    func openSettingsFromThreadList() {
+        closeThreadList()
         openSettings()
     }
 
-    func openAgentTaskFromDrawer(_ id: UUID) {
-        closeThreadDrawer()
+    func openAgentTaskFromThreadList(_ id: UUID) {
+        closeThreadList()
         openAgentTask(id)
     }
 
@@ -106,14 +74,14 @@ extension ShannonConversationView {
         ShannonHaptics.page()
     }
 
-    func closeThreadDrawer() {
-        settleDrawer(open: false)
+    func closeThreadList() {
+        showsThreadList = false
     }
 
     func syncAppIconBadge(with count: Int) {
 #if canImport(UIKit)
         let clamped = min(max(0, count), 99)
-        UIApplication.shared.applicationIconBadgeNumber = clamped
+        Task { try? await UNUserNotificationCenter.current().setBadgeCount(clamped) }
 #endif
     }
 
@@ -125,15 +93,4 @@ extension ShannonConversationView {
         await appIconModel.updateAutomatically(for: model.currentExpression)
     }
 
-    func settleDrawer(open: Bool) {
-        let wasOpen = drawerProgress > 0.5
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.03)) {
-            drawerProgress = open ? 1 : 0
-        }
-        if open != wasOpen { ShannonHaptics.drawer() }
-    }
-
-    func drawerWidth(for viewWidth: CGFloat) -> CGFloat {
-        min(viewWidth * 0.80, 360)
-    }
 }
