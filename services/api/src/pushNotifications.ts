@@ -45,9 +45,9 @@ export class SQLitePushNotificationStore {
   constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString()) {
     this.database = new DatabaseSync(path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
 
       CREATE TABLE IF NOT EXISTS push_registrations (
         device_id TEXT PRIMARY KEY,

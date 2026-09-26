@@ -146,9 +146,9 @@ export class SQLiteVoiceIdentityStore implements ShannonVoiceIdentityStore {
   ) {
     this.database = new DatabaseSync(path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
 
       CREATE TABLE IF NOT EXISTS voice_identity_preferences (
         scope_key TEXT PRIMARY KEY,

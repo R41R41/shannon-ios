@@ -80,7 +80,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
 
   constructor(private readonly path: string, private readonly now: () => string = () => new Date().toISOString()) {
     this.database = new DatabaseSync(path);
-    this.database.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;');
+    this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS initiative_messages (
         initiative_id TEXT PRIMARY KEY,

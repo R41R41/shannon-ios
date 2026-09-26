@@ -69,9 +69,9 @@ export class SQLiteDeviceAuthStore {
     prepareDatabaseLocation(options.path);
     this.database = new DatabaseSync(options.path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
 
       CREATE TABLE IF NOT EXISTS device_pairing (
         singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

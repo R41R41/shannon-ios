@@ -199,7 +199,7 @@ export class SQLiteCognitiveIntentStore implements CognitiveIntentStore {
 
   constructor(private readonly path: string) {
     this.database = new DatabaseSync(path);
-    this.database.exec(`PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;
+    this.database.exec(`PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;
       CREATE TABLE IF NOT EXISTS cognitive_intents (
         intent_id TEXT PRIMARY KEY,
         scope_key TEXT NOT NULL,

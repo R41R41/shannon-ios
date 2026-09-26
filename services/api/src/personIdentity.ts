@@ -96,9 +96,9 @@ export class SQLitePersonIdentityStore implements PersonIdentityStore {
   constructor(path: string) {
     this.database = new DatabaseSync(path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
       PRAGMA foreign_keys = ON;
 
       CREATE TABLE IF NOT EXISTS people (

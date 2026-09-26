@@ -18,7 +18,7 @@ export class SQLiteStoreContext {
     this.maximumExperiences = positiveInteger(options.maximumExperiences ?? 1_000, 10_000);
     prepareDatabaseLocation(options.path);
     this.database = new DatabaseSync(options.path);
-    this.database.exec(`PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;`);
+    this.database.exec(`PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;`);
   }
 
   now(): string { return this.options.now(); }

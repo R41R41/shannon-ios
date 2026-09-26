@@ -59,10 +59,10 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     prepareDatabaseLocation(path);
     this.database = new DatabaseSync(path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA foreign_keys = ON;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
     `);
     migrateAgentTasks(this.database);
     secureDatabaseFiles(path);

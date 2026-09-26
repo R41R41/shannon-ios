@@ -76,9 +76,9 @@ export class SQLiteTestFlightDeliveryStore implements TestFlightDeliveryReader {
   constructor(private readonly path: string) {
     this.database = new DatabaseSync(path);
     this.database.exec(`
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA busy_timeout = 5000;
 
       CREATE TABLE IF NOT EXISTS testflight_delivery_runs (
         run_id TEXT PRIMARY KEY,
