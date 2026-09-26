@@ -56,6 +56,16 @@ export function parseDistributionState(text) {
   return { version: value.version, distributedAt: value.distributedAt };
 }
 
+export function distributionBelongsToRelease(state, expectedBuild, publishedAt) {
+  if (compareBuildVersions(state.version, expectedBuild) !== 0) return false;
+  const distributedTimestamp = Date.parse(state.distributedAt);
+  const publishedTimestamp = Date.parse(publishedAt);
+  if (!Number.isFinite(distributedTimestamp) || !Number.isFinite(publishedTimestamp)) {
+    throw new Error('Release timestamps must be valid ISO-8601 values');
+  }
+  return distributedTimestamp >= publishedTimestamp;
+}
+
 function toCamelCase(value) {
   return value.replace(/-([a-z])/gu, (_, character) => character.toUpperCase());
 }
@@ -96,6 +106,14 @@ function writeState(state) {
   writeFileSync(statePath, `${JSON.stringify({ recordedAt: new Date().toISOString(), ...state }, null, 2)}\n`, { mode: 0o600 });
 }
 
+function readState() {
+  try {
+    return JSON.parse(readFileSync(statePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 function prepare() {
   const repository = inspectRepository();
   console.log('1/2 Deterministic checks and Debug build');
@@ -120,6 +138,7 @@ function publish(options) {
   const result = {
     phase: 'published', outcome: 'passed', head: repository.head,
     push: remoteHead === repository.head ? 'already-current' : 'pushed',
+    publishedAt: new Date().toISOString(),
   };
   writeState(result);
   return result;
@@ -150,17 +169,28 @@ async function monitor(options) {
   const timeoutMinutes = positiveNumber(options.timeoutMinutes ?? '60', '--timeout-minutes');
   const pollSeconds = positiveNumber(options.pollSeconds ?? '30', '--poll-seconds');
   const host = options.azureHost ?? defaultAzureHost;
+  const localState = readState();
+  const publishedAt = options.publishedAt
+    ?? (localState?.phase === 'published' ? localState.publishedAt : null);
+  if (!publishedAt) {
+    throw new Error('--published-at is required unless monitor follows a recorded publish');
+  }
+  if (!Number.isFinite(Date.parse(publishedAt))) throw new Error('--published-at must be a valid ISO-8601 value');
   const deadline = Date.now() + timeoutMinutes * 60_000;
   while (Date.now() <= deadline) {
     const state = readAzureDistributionState(host);
     const comparison = compareBuildVersions(state.version, expectedBuild);
-    if (comparison === 0) {
-      const result = { phase: 'distributed', outcome: 'passed', expectedBuild, ...state };
+    if (distributionBelongsToRelease(state, expectedBuild, publishedAt)) {
+      const result = { phase: 'distributed', outcome: 'passed', expectedBuild, publishedAt, ...state };
       writeState(result);
       return result;
     }
     if (comparison > 0) throw new Error(`Build ${expectedBuild} was superseded by distributed build ${state.version}`);
-    console.log(`Waiting for Build ${expectedBuild}; latest distributed is ${state.version}`);
+    if (comparison === 0) {
+      console.log(`Waiting for a fresh Build ${expectedBuild}; existing distribution predates ${publishedAt}`);
+    } else {
+      console.log(`Waiting for Build ${expectedBuild}; latest distributed is ${state.version}`);
+    }
     await new Promise(resolvePromise => setTimeout(resolvePromise, pollSeconds * 1_000));
   }
   throw new Error(`Timed out waiting for TestFlight Build ${expectedBuild}`);
@@ -185,8 +215,8 @@ async function main() {
   if (command === 'run') {
     const prepared = prepare();
     assertExpectedHead(prepared.head, options.expectedHead);
-    publish(options);
-    return printResult(await monitor(options));
+    const publication = publish(options);
+    return printResult(await monitor({ ...options, publishedAt: publication.publishedAt }));
   }
   if (command === 'status') return console.log(readFileSync(statePath, 'utf8').trim());
   throw new Error('Usage: release-runner.mjs inspect|prepare|publish|monitor|run|status');

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   compareBuildVersions,
+  distributionBelongsToRelease,
   parseArguments,
   parseDistributionState,
   repositoryNameFromRemote,
@@ -34,6 +35,21 @@ test('accepts only a complete safe distributor projection', () => {
     lastDistributedBuildId: 'opaque-id', version: '31', distributedAt: '2026-09-06T00:00:00Z',
   })), { version: '31', distributedAt: '2026-09-06T00:00:00Z' });
   assert.throws(() => parseDistributionState('{}'), /incomplete/u);
+});
+
+test('accepts a distribution only when it belongs to the current publish', () => {
+  assert.equal(distributionBelongsToRelease({
+    version: '31', distributedAt: '2026-09-06T00:05:00Z',
+  }, '31', '2026-09-06T00:00:00Z'), true);
+  assert.equal(distributionBelongsToRelease({
+    version: '31', distributedAt: '2026-09-05T23:55:00Z',
+  }, '31', '2026-09-06T00:00:00Z'), false);
+  assert.equal(distributionBelongsToRelease({
+    version: '30', distributedAt: '2026-09-06T00:05:00Z',
+  }, '31', '2026-09-06T00:00:00Z'), false);
+  assert.throws(() => distributionBelongsToRelease({
+    version: '31', distributedAt: 'not-a-date',
+  }, '31', '2026-09-06T00:00:00Z'), /timestamps/u);
 });
 
 test('declares privacy purpose strings required by realtime voice dependencies', async () => {
