@@ -33,6 +33,7 @@
 		C0D3C0010000000000000014 /* ShannonDesktopDevelopmentResourceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000003 /* ShannonDesktopDevelopmentResourceViews.swift */; };
 		C0D3C0010000000000000015 /* ShannonDesktopDevelopmentExecutionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */; };
 		C0D3C0010000000000000016 /* ShannonDesktopRootView+DevelopmentResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */; };
+		C0D3C0010000000000000017 /* ShannonDesktopRootView+DevelopmentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3C0010000000000000006 /* ShannonDesktopRootView+DevelopmentState.swift */; };
 		D166573296293401302198D7 /* ShannonAppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9F0437F3D7E201CDA5082E14 /* ShannonAppCore */; };
 		E4432533E3AF6B533CF3BAC2 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFFCA8EC3B0679EC4C9C7D2E /* Cocoa.framework */; };
 		EB77BEE168AC44E6338A42C3 /* ShannonDesktopSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */; };
@@ -65,6 +66,7 @@
 		C0D3C0010000000000000003 /* ShannonDesktopDevelopmentResourceViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentResourceViews.swift; path = Features/Development/ShannonDesktopDevelopmentResourceViews.swift; sourceTree = "<group>"; };
 		C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShannonDesktopDevelopmentExecutionViews.swift; path = Features/Development/ShannonDesktopDevelopmentExecutionViews.swift; sourceTree = "<group>"; };
 		C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+DevelopmentResources.swift"; path = "Features/Development/ShannonDesktopRootView+DevelopmentResources.swift"; sourceTree = "<group>"; };
+		C0D3C0010000000000000006 /* ShannonDesktopRootView+DevelopmentState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+DevelopmentState.swift"; path = "Features/Development/ShannonDesktopRootView+DevelopmentState.swift"; sourceTree = "<group>"; };
 		DF0C060C67D2AE17F17099DA /* ShannonDesktopArtifactDocument.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopArtifactDocument.swift; sourceTree = "<group>"; };
 		E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "ShannonDesktopRootView+Actions.swift"; path = "Features/Shell/ShannonDesktopRootView+Actions.swift"; sourceTree = "<group>"; };
 		ED138C1D86162EB5236B0F6B /* ShannonDesktopSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShannonDesktopSupport.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				C0D3C0010000000000000004 /* ShannonDesktopDevelopmentExecutionViews.swift */,
 				C0D3C0010000000000000005 /* ShannonDesktopRootView+DevelopmentResources.swift */,
 				1542C942B1A49A56581AE58F /* ShannonDesktopRootView+Development.swift */,
+				C0D3C0010000000000000006 /* ShannonDesktopRootView+DevelopmentState.swift */,
 				C0D3C0010000000000000002 /* ShannonDesktopRootView+DevelopmentToolbar.swift */,
 				1D351662EBD90DD0C060EB46 /* ShannonDesktopRootView+Settings.swift */,
 				E1B0F4C380BA53227A6F8179 /* ShannonDesktopRootView+Actions.swift */,
@@ -284,6 +287,7 @@
 				C0D3C0010000000000000015 /* ShannonDesktopDevelopmentExecutionViews.swift in Sources */,
 				C0D3C0010000000000000016 /* ShannonDesktopRootView+DevelopmentResources.swift in Sources */,
 				4ACA8111DF7117D876DE8C3B /* ShannonDesktopRootView+Development.swift in Sources */,
+				C0D3C0010000000000000017 /* ShannonDesktopRootView+DevelopmentState.swift in Sources */,
 				C0D3C0010000000000000013 /* ShannonDesktopRootView+DevelopmentToolbar.swift in Sources */,
 				75CF76A3CB2229BFEF49972C /* ShannonDesktopRootView+Settings.swift in Sources */,
 				F0697C99B854C13BBA1968CA /* ShannonDesktopRootView+Actions.swift in Sources */,

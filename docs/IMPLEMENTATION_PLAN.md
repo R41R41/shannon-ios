@@ -1,19 +1,18 @@
 # Shannon implementation plan
 
-Revision: 2026-09-25 (cognitive-continuity slice)
-Status: current architecture roadmap; older release-build rows still require reconciliation
+Revision: 2026-09-26
+Status: current roadmap
 
 ## Goal
 
-Shannon is the conversation-first upper interface for user-directed Codex work. The
-iPhone and Mac clients must let the user request, follow, steer, approve, review,
-verify, and release development work without writing code. The local Mac is the
-preferred execution host. An isolated Azure host is the fallback when the Mac is
-unavailable; it is not presented as part of the user's Codex subscription.
+Shannon is the conversation-first upper interface for user-directed Codex work.
+The iPhone and Mac clients let the user request, follow, steer, approve, review,
+verify, and release development work without writing code. The local Mac remains
+the preferred execution host, with the isolated Azure host as an explicit fallback.
 
-Ordinary conversation, realtime voice, memory, background activity, Aether and
-Voyager integration, and development work keep their existing ownership and cost
-boundaries.
+Ordinary conversation, Gemini realtime voice, memory, background activity,
+Aether and Voyager integration, and development work keep their existing ownership,
+privacy, and cost boundaries.
 
 ## Status language
 
@@ -26,101 +25,63 @@ These terms are not interchangeable.
 
 ## Current snapshot
 
-| Area | Implemented | Deployed / distributed | Still required |
-| --- | --- | --- | --- |
-| Responsibility-oriented architecture | Complete; Swift and TypeScript production files are bounded and feature-owned | Accepted baseline before Build 50 was `a68bdf4`; Azure API and both Agent Hosts use that revision | Integrate the verified Build 50 candidate and keep architecture guards green |
-| iPhone work management | Project/host/model/reasoning selection, safe start gating, visible recent progress, steering, pause/resume/cancel, approval, changes, tests, pin/archive/search | iOS 0.1.0 (49) is VALID, INTERNAL_ONLY, and assigned to Shannon Internal; the post-audit source/tests/build are green as Build 51 | Build 51 TestFlight distribution and physical-device Smoke |
-| Mac development workspace | Native files, safe selected-file preview, full per-file diff, bounded streaming command/build output, Git/branch, build panes, repository provisioning, responsive execution selectors, and truthful finished states | Post-audit local build and 19 tests pass; the resource/output additions are prepared as Mac 0.1.0 (8) but not deployed | Deploy the compatible API and Agent Host, then complete Build 8 Archive, Upload, Processing, Assignment, Install, and Smoke |
-| Agent execution | Durable task/event/command state, restart recovery, local-first routing, explicit fixed-host behavior | Local and Cloud heartbeat; Aether, Shannon, and Voyager registered on both hosts | Harmless E2E on each host; background/restart recovery; approval E2E |
-| Arbitrary GitHub repository | HTTPS repository validation, host-owned clone, idempotent provisioning, no credential in request | API and both hosts deployed | UI E2E using a disposable or explicitly selected repository |
-| Release Center | Seven truthful gates and iPhone release request targets | Build 49 proves Xcode Cloud Archive through internal assignment | Build 50 Install/Smoke confirmation; Mac release path remains user-operated |
-| WebRTC symbols | Current framework and dSYM UUID match; Cloud copy is sandbox-safe | Xcode Cloud Build 49 passed the symbol phase | Confirm no symbol warning on later local Mac/iOS uploads |
-| Waterlight Eye | Empty-conversation iPhone hero, bounded reaction, semantic blush, Reduce Motion | Included in Build 49 | iPhone Light/Dark, repeated tap, interruption, Reduce Motion Smoke |
-| Goal continuity | Explicit goals, bounded plans, owner-visible cognitive receipts, exact goal↔Agent-task identity, verified host-event progress and tests, progress-aware next steps | Implemented locally; not yet deployed or distributed | Full API/iOS checks, deployment, distribution, then approve/pause/fail/complete device Smoke |
-| Bounded autonomy | World/commitment initiative plus goal/task continuation for stale goals, approvals, pauses, failures and completed work; original thread, quiet hours, 90-minute cooldown and one/day limit | Implemented locally; not yet deployed | Restart-safe Azure loop Smoke and notification/device verification |
-| Voice Identity | Marin/Cedar/Coral preview, selection, Azure persistence, iPhone/Mac sharing | API deployed and clients included in current builds | Physical-device preview, next-session application, cross-device sync Smoke |
-| Realtime 2 voice | Primary Realtime WebRTC engine (`gpt-realtime-2`, low reasoning, automatic `marin`), bounded backend tools, confirmed single camera snapshot, GPT-Live rollback, and iPhone remote-playout-only +200 cents finish | Realtime 2 source/config implemented locally; prior Azure Live rollout and camera/pitch smoke passed | Deploy Realtime 2 config, then physical-device Japanese speech, interruption, camera, web/time/location/transit, notes/tasks and rollback Smoke |
-| Live voice input and text | Same-session text composer plus persisted Auto/iPhone/external input preference, actual-route display, and route/interruption reapplication | Local branch only | Deterministic tests, iOS builds, then later physical-device route and conversation Smoke |
-| Aether/Voyager organization | Existing bounded Shannon proxy and explicit review flow remain implemented | Existing production flow preserved | Re-run adjacent Smoke after Build 50 |
-| Cross-app acceptance scenarios | Requirements are known | Not yet stored in Aether's current documentation | Aether-owned scenario document and links from its document index |
-| State-based UI audit | High-priority iPhone Talk/Work and Mac Talk/Development remediations are implemented; screen contracts were reconciled on 2026-09-15 | Existing safe Mac evidence retained; source guards, iOS 132 tests, Mac 19 tests, and both app builds pass | Current-release visual evidence for empty/loading/error/offline/permission, Light/Dark, larger text and Reduce Motion |
-| Shannon app icon | The audited 2026-09-16 L02/L06/L10 package is integrated byte-for-byte on iPhone and Mac, with L06 as the primary/default/fallback and the display name `シャノン` | Prepared as iOS 0.1.0 (54) and macOS 0.1.0 (9); checksum guard, selection compatibility tests, and unsigned builds are required before handoff | Select all three on device and verify Home Screen/Dock, Settings, notification, Spotlight, persistence, and L10's Waterlight eyes/full border |
+| Area | Current state | Remaining acceptance |
+| --- | --- | --- |
+| Architecture | Production files are responsibility-owned and remain under the 500-line ceiling. The iPhone voice/photo flow, Waterlight renderer, and Mac development state are split into focused files. | Keep the architecture guard green as features change. |
+| iPhone Talk and Work | Apple-native conversation navigation, thread search/list, task control, review, release status, attachments, and artifacts are implemented. | Install the newest TestFlight candidate and run physical-device Talk, Work, persistence, Light/Dark, Dynamic Type, and Reduce Motion Smoke. |
+| Mac Shannon Desk | Talk, Work, Development, repository/model selection, review, command/build output, attachments, and artifacts are implemented. | Run the current signed build on the target Mac and complete the same state-preservation and accessibility Smoke. |
+| Voice | Gemini-only realtime voice, same-session text, input-route display, interruption recovery, photo/camera sharing, guest mode, and bounded tool/delegation UI are implemented. | Verify Japanese speech, interruption/recovery, route changes, one confirmed image share, and existing-history preservation on the physical iPhone. |
+| Cognition | Deterministic evaluation harness and hardened recovery UI are implemented. | Treat holdouts, negative controls, Shannon-to-Codex end-to-end evaluation, and skill-promotion gates as future evaluation work, not release blockers. |
+| Apple delivery | iOS Build 79 is distributed to Shannon Internal. The commits after Build 79 are locally verified and will be carried by the next candidate. | Complete Archive, Upload, Processing, Assignment, Install, and Smoke for the exact next commit/build pair. |
+| Cross-app integration | Existing bounded Aether/Voyager review and organization flows are preserved. | Re-run one harmless Voyager organization flow and one Aether read-only flow during acceptance. |
 
-## Priority 0 — finish the current release
+## Current release work
 
-1. Distribute iOS 0.1.0 (51) from Shannon Internal without removing the existing app, and select the new `シャノン` icon once.
-2. Verify pairing, stored conversations, ordinary Talk, Realtime voice, Work,
-   Release Center, Waterlight Eye, appearance, and one Voyager organization flow.
-   After that baseline passes, enable Live on the server and verify natural audio,
-   interruption, read-only delegation, one confirmed camera snapshot, and rollback.
-3. Archive Mac 0.1.0 (6) with `ShannonDesk` and `Any Mac` / `Any Mac Device`.
-4. Validate, upload to App Store Connect, wait for Processing, and assign to
-   Shannon Internal.
-5. Install from TestFlight and verify existing state plus Talk, Work, Development,
-   repository selection, model selection, outline, attachments, and artifacts.
+1. Verify and commit the responsibility split without changing behavior.
+2. Push the exact reviewed `main` commit and publish the next iOS candidate through
+   the release runner.
+3. Record the exact commit/build identity and all seven gates in Shannon's owned
+   status file.
+4. Install from TestFlight on the owner's iPhone and perform the focused Smoke
+   described above. Install and physical-device Smoke require the owner's device.
+5. Run the current Mac build and complete its physical-device Smoke.
 
-## Priority 1 — prove Codex replacement behavior
+## Product acceptance scenarios
 
-Run these as durable Shannon tasks, not direct database fixtures:
+These are durable acceptance scenarios rather than unfinished implementation:
 
-1. **Local Shannon task** — request a harmless documented change, choose
-   `shannon-ios` and Local, inspect progress, send a follow-up, review the diff and
-   tests, then complete or cancel deliberately.
-2. **Local cross-app task** — repeat a read-only audit against Aether and Voyager,
-   proving the registered canonical repositories are used.
-3. **Approval task** — require a file or command approval, reject once, request
-   again, approve once, and verify stale approval cannot be reused.
-4. **Background recovery** — background the iPhone, reopen on Mac, restart the
-   selected Agent Host, and verify the same task resumes without duplication.
-5. **Cloud fallback** — with the Local Host deliberately unavailable, run a
-   harmless Shannon task on Cloud, confirm the task branch and review evidence,
-   and restore Local afterward. Explicit Local selection must fail visibly rather
-   than fall back.
-6. **Repository provisioning** — add one explicitly selected HTTPS GitHub
-   repository through the Mac UI, verify host-owned paths on Local and Cloud, and
-   ensure existing user checkouts remain untouched.
-7. **Release request** — request an iOS release from Shannon, verify the exact
-   commit/build identity, Xcode Cloud result, seven gates, and physical-device
-   confirmation. External integration and distribution retain explicit approval.
+1. **Local Shannon task** — make a harmless documented change, inspect progress,
+   steer it, review the diff/tests, and complete or cancel deliberately.
+2. **Cross-app task** — run a read-only Aether/Voyager audit and prove the canonical
+   repositories are used.
+3. **Approval task** — reject once, request again, approve once, and verify stale
+   approval cannot be reused.
+4. **Recovery** — background the iPhone, reopen on Mac, restart the selected host,
+   and verify the same task resumes without duplication.
+5. **Cloud fallback** — deliberately make Local unavailable, select Cloud, run a
+   harmless task, and restore Local. Explicit Local selection must fail visibly.
+6. **Repository provisioning** — add one explicitly selected HTTPS GitHub repository
+   and confirm host-owned paths do not alter existing user checkouts.
+7. **Release request** — request an iOS release from Shannon and verify the exact
+   commit/build identity plus all seven gates.
 
-Passing these scenarios is the threshold for saying that Shannon can replace the
-normal Codex workflow for this user's development style.
+## Review-fidelity roadmap
 
-## Priority 2 — strengthen review fidelity
-
-The first development UI is usable but does not yet expose all of Codex's review
-depth. Implement only the parts that improve a non-coding user's confidence:
-
-Completed locally on 2026-09-15:
-
-- Selected-file read-only preview with workspace, symlink, secret, binary, and size boundaries.
-- Full per-file diff navigation backed by a durable Agent Host request instead of the event preview.
-- Bounded streaming command/build output with explicit running, completed, and failed states; it remains a Codex instruction surface, not an unrestricted local shell.
-
-Next:
+The following are product improvements, not defects in the current release:
 
 1. Explicit branch, commit, push, pull-request, and integration proposals with
    operation-time approval and exact target identity.
 2. Build artifacts, logs, and release evidence linked to the durable task.
 3. Better task comparison and retrieval across project, host, branch, state, and
    date while preserving one authoritative event stream.
-
-## Priority 3 — complete cross-app and experiential validation
-
-1. Store the approved iPhone/Mac coding, Aether/Voyager integration, everyday
-   conversation, web research, proactive-action, and camera/live-world scenarios
-   in Aether's current document system.
-2. Execute the scenarios that are already possible and mark unavailable steps as
-   planned rather than simulated.
-3. Capture privacy-safe current screenshots for the four screen contracts.
-4. Audit VoiceOver, keyboard/focus, Dynamic Type, Reduce Motion, Reduce
-   Transparency, Increase Contrast, offline, conflict, and permission states.
-5. Decide whether a Mac Xcode Cloud workflow should remove the remaining manual
-   Archive/ASC step. Linux Cloud Agent Host never signs Apple apps itself.
+4. Broader VoiceOver, keyboard/focus, Dynamic Type, Reduce Transparency, Increase
+   Contrast, offline, conflict, and permission-state visual evidence.
+5. A decision on whether a Mac Xcode Cloud workflow should replace the remaining
+   user-operated Archive/App Store Connect path.
 
 ## Explicitly deferred
 
-The following are product ideas, not missing release work:
+The following are future product ideas and are not missing release work:
 
 - background voice activation;
 - continuous camera/live-world conversation and person recognition;
@@ -128,17 +89,14 @@ The following are product ideas, not missing release work:
 - autonomous source-code rewriting;
 - per-user fine-tuning or prediction-error training.
 
-They require separate privacy, battery, permission, cost, and interaction design
+They require separate privacy, battery, permission, cost, and interaction-design
 decisions before implementation.
 
 ## Completion definition
 
-Shannon reaches the current goal when:
-
-- the next accepted iOS candidate and Mac Build 8 pass all seven Apple release gates;
-- Priority 1 passes on physical iPhone and Mac with both Local and Cloud hosts;
-- the user can understand changes, commands, tests, approvals, Git target, and
-  release result without reading source code;
-- existing conversation, memory, pairing, and cross-app data survive every update;
-- the remaining review-fidelity gaps are either implemented or explicitly accepted
-  as unnecessary by the user.
+The current maintenance/release task is complete when the reviewed commit is on
+`origin/main`, the next iOS candidate reaches Shannon Internal, repository and
+status records contain no falsely active superseded work, and all checks that do
+not require the owner's physical devices pass. Install and physical-device Smoke
+remain explicitly pending until the owner performs them; they must never be
+reported as passed from build or simulator evidence alone.

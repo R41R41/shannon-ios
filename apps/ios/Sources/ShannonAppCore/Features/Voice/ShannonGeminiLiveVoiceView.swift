@@ -4,11 +4,11 @@ import SwiftUI
 import UIKit
 
 public struct ShannonGeminiLiveVoiceView: View {
-    @Bindable private var model: ShannonGeminiLiveSessionModel
+    @Bindable var model: ShannonGeminiLiveSessionModel
     private let expression: ShannonExpressionDTO
     private let createSession: @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO
     private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> String
-    private let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
+    let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let synthesize: @MainActor (String, String?) async throws -> ShannonGeminiSpeech
     private let commitTurn: @MainActor (String, String) async throws -> Void
     private let dismiss: () -> Void
@@ -20,15 +20,15 @@ public struct ShannonGeminiLiveVoiceView: View {
     @State private var typedMessage = ""
     @State private var showsParticipantModePicker = false
     @State private var showsPhotoSource = false
-    @State private var showsCamera = false
-    @State private var showsPhotoLibrary = false
-    @State private var selectedLibraryPhoto: PhotosPickerItem?
-    @State private var pendingCameraImage: UIImage?
-    @State private var pendingCameraData: Data?
-    @State private var pendingPhotoFromLibrary = false
-    @State private var cameraErrorMessage: String?
-    @State private var isSharingCameraSnapshot = false
-    @State private var isLoadingLibraryPhoto = false
+    @State var showsCamera = false
+    @State var showsPhotoLibrary = false
+    @State var selectedLibraryPhoto: PhotosPickerItem?
+    @State var pendingCameraImage: UIImage?
+    @State var pendingCameraData: Data?
+    @State var pendingPhotoFromLibrary = false
+    @State var cameraErrorMessage: String?
+    @State var isSharingCameraSnapshot = false
+    @State var isLoadingLibraryPhoto = false
     @FocusState private var composerIsFocused: Bool
 
     public init(
@@ -428,73 +428,5 @@ public struct ShannonGeminiLiveVoiceView: View {
         }
     }
 
-    private func clearPendingPhoto() {
-        pendingCameraImage = nil
-        pendingCameraData = nil
-        cameraErrorMessage = nil
-    }
-
-    private func choosePhotoAgain() {
-        clearPendingPhoto()
-        if pendingPhotoFromLibrary { showsPhotoLibrary = true } else { presentCamera() }
-    }
-
-    @MainActor
-    private func receiveCameraImage(_ image: UIImage) {
-        showsCamera = false
-        guard let snapshot = image.shannonCameraSnapshot() else {
-            cameraErrorMessage = "写真を共有用に準備できませんでした。撮り直してください。"
-            return
-        }
-        pendingCameraImage = snapshot.preview
-        pendingCameraData = snapshot.data
-        pendingPhotoFromLibrary = false
-        cameraErrorMessage = nil
-    }
-
-    @MainActor
-    private func receiveLibraryPhoto(_ item: PhotosPickerItem) async {
-        isLoadingLibraryPhoto = true
-        defer {
-            isLoadingLibraryPhoto = false
-            selectedLibraryPhoto = nil
-        }
-        do {
-            let photo = try await ShannonPhotoLibrarySelection.prepare(item)
-            guard model.participantMode.allowsCameraSharing else { return }
-            pendingCameraImage = photo.preview
-            pendingCameraData = photo.jpegData
-            pendingPhotoFromLibrary = true
-            cameraErrorMessage = nil
-        } catch {
-            cameraErrorMessage = (error as? LocalizedError)?.errorDescription
-                ?? "写真を読み込めませんでした。もう一度お試しください。"
-        }
-    }
-
-    @MainActor
-    private func presentCamera() {
-        cameraErrorMessage = nil
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            cameraErrorMessage = "この端末ではカメラを利用できません。実機でお試しください。"
-            return
-        }
-        showsCamera = true
-    }
-
-    private func shareCameraSnapshot(_ data: Data) {
-        guard !isSharingCameraSnapshot else { return }
-        isSharingCameraSnapshot = true
-        cameraErrorMessage = nil
-        Task { @MainActor in
-            defer { isSharingCameraSnapshot = false }
-            do {
-                try await model.shareCameraSnapshot(jpegData: data, analyze: analyzeCameraSnapshot)
-                clearPendingPhoto()
-            } catch {
-                cameraErrorMessage = "写真をシャノンへ共有できませんでした。もう一度お試しください。"
-            }
-        }
-    }
 }
 #endif
