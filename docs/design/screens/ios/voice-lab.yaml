@@ -1,0 +1,38 @@
+schema_version: 1
+screen_id: shannon-ios-voice-lab
+platform: ios
+baseline_commit: 53f64fc78045553f6326d13495d2041fd2bbeb5c
+last_verified_at: 2026-09-17
+user_job: "同じ日本語音源でShannonの声加工をA/Bし、数値と聴感を再現可能に記録する"
+primary_action: "同じPCMを聴きながらpitchとformantを連続調整し、候補値を比較する"
+preserve:
+  - "通常起動、会話状態、RealtimeのVADとbarge-in、音声routeと割り込み処理"
+  - "OFFを標準とし、Releaseへ実験設定を持ち込まない"
+improve:
+  - "pitch、formant、RVCを同じ固定文と保存WAVで切り替える"
+  - "pitchを10 cents、formantを0.1半音刻みで調整し、指を離した時に同じPCMを先頭から再生する"
+  - "pitchのみの実通話適用と、約100 msのバッファを使うformantの固定PCM比較を明確に区別する"
+  - "前処理時間とDSP遅延をpresetごとに表示する"
+  - "未接続のLive処理を有効と誤表示せずOFFへ戻す"
+do_not_change:
+  - "Realtime APIのセッション生成、テキスト、発話スタイル、会話記録"
+  - "許諾のない声モデルを読み込まない"
+states:
+  loading: "生成、DSP、RVC変換中は進行表示と重複操作防止を行う"
+  empty: "音源未準備を示し、固定文生成かWAV選択へ導く"
+  error: "現在の音源とpresetを保ち、安全なエラー文で再試行できる"
+  offline: "端末内presetは使え、RVC endpointがない場合だけ該当presetを失敗させる"
+  conflict: "再生中の変更は停止後に新しいpresetを先頭から再生する"
+  selection: "選択中presetをチェックとVoiceOver traitで示す"
+  tuning: "調整中は数値を即時更新し、指を離すか明示再生した時だけDSP処理して先頭から聴かせる"
+accessibility:
+  dynamic_type: "説明と固定文を複数行表示し、Form全体をスクロール可能にする"
+  voiceover: "音源、preset、選択状態、処理時間、エラーを読み上げる"
+  adjustable: "pitchとformantは名前、現在値、刻み、試聴タイミングを読み上げる標準Sliderにする"
+  target_size: "再生と停止を44ポイント以上にする"
+  focus: "音源、preset、設定、再生、結果の順序を保つ"
+  reduce_motion: "音声比較の状態をアニメーションだけで示さない"
+evidence:
+  current: []
+  approved: []
+  privacy: "固定合成音声か明示承認されたWAVのみを使い、実会話PCMを保存しない"

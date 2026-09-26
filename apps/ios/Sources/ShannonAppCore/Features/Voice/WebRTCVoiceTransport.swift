@@ -33,7 +33,20 @@ final class ShannonWebRTCVoiceTransport: NSObject, @unchecked Sendable {
         iceGatheringEvents = iceGatheringEventPair.stream
         iceGatheringEventContinuation = iceGatheringEventPair.continuation
         RTCInitializeSSL()
+        #if DEBUG
+        let livePreset = ShannonVoiceLabLiveSettings.preset
+        if livePreset.kind == .appleTimePitch {
+            factory = RTCPeerConnectionFactory(
+                encoderFactory: RTCDefaultVideoEncoderFactory(),
+                decoderFactory: RTCDefaultVideoDecoderFactory(),
+                audioDevice: ShannonVoiceLabRTCAudioDevice(preset: livePreset)
+            )
+        } else {
+            factory = RTCPeerConnectionFactory()
+        }
+        #else
         factory = RTCPeerConnectionFactory()
+        #endif
         super.init()
         installAudioSessionObservers()
     }
@@ -267,11 +280,221 @@ extension ShannonWebRTCVoiceTransport: RTCPeerConnectionDelegate {
         dataChannel.delegate = self
     }
 }
-
 extension ShannonWebRTCVoiceTransport: RTCDataChannelDelegate {
     func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
         onEvent?(buffer.data)
     }
 }
+#if DEBUG
+/// Debug-only WebRTC audio device which inserts Apple audio units in remote
+/// playout while leaving the data channel and session state machine unchanged.
+final class ShannonVoiceLabRTCAudioDevice: NSObject, RTCAudioDevice, @unchecked Sendable {
+    private let preset: ShannonVoiceLabPreset
+    private let session = AVAudioSession.sharedInstance()
+    private let lock = NSLock()
+    private var delegateStorage: RTCAudioDeviceDelegate?
+    private var engine: AVAudioEngine?
+    private var sourceNode: AVAudioSourceNode?
+    private var sinkNode: AVAudioSinkNode?
+    private var recorderConverter: ShannonVoiceLabAudioConverter?
+    private var shouldPlay = false
+    private var shouldRecord = false
+    private var inputFormat: AVAudioFormat?
+    private var outputFormat: AVAudioFormat?
+    init(preset: ShannonVoiceLabPreset) { self.preset = preset; super.init() }
+    private var delegate: RTCAudioDeviceDelegate? {
+        get { lock.withLock { delegateStorage } }
+        set { lock.withLock { delegateStorage = newValue } }
+    }
+    var deviceInputSampleRate: Double { inputFormat?.sampleRate ?? session.sampleRate }
+    var inputIOBufferDuration: TimeInterval { session.ioBufferDuration }
+    var inputNumberOfChannels: Int { Int(inputFormat?.channelCount ?? 1) }
+    var inputLatency: TimeInterval { session.inputLatency }
+    var deviceOutputSampleRate: Double { outputFormat?.sampleRate ?? session.sampleRate }
+    var outputIOBufferDuration: TimeInterval { session.ioBufferDuration }
+    var outputNumberOfChannels: Int { Int(outputFormat?.channelCount ?? 1) }
+    var outputLatency: TimeInterval { session.outputLatency }
+    var isInitialized: Bool { delegate != nil }
+    var isPlayoutInitialized: Bool { isInitialized }
+    var isRecordingInitialized: Bool { isInitialized }
+    var isPlaying: Bool { shouldPlay }
+    var isRecording: Bool { shouldRecord }
+    func initialize(with delegate: RTCAudioDeviceDelegate) -> Bool {
+        guard self.delegate == nil else { return false }
+        self.delegate = delegate
+        return true
+    }
+    func terminateDevice() -> Bool {
+        shouldPlay = false
+        shouldRecord = false
+        shutdownEngine()
+        delegate = nil
+        return true
+    }
+    func initializePlayout() -> Bool { isPlayoutInitialized }
+    func initializeRecording() -> Bool { isRecordingInitialized }
+    func startPlayout() -> Bool { shouldPlay = true; return updateEngine() }
+    func stopPlayout() -> Bool { shouldPlay = false; return updateEngine() }
+    func startRecording() -> Bool { shouldRecord = true; return updateEngine() }
+    func stopRecording() -> Bool { shouldRecord = false; return updateEngine() }
+    private func updateEngine() -> Bool {
+        guard let delegate, shouldPlay || shouldRecord else {
+            shutdownEngine()
+            return true
+        }
+        shutdownEngine()
+        let engine = AVAudioEngine()
+        do {
+            if !engine.outputNode.isVoiceProcessingEnabled {
+                try engine.outputNode.setVoiceProcessingEnabled(true)
+            }
+        } catch {
+            return false
+        }
+        if shouldRecord, !configureRecording(engine: engine, delegate: delegate) {
+            return false
+        }
+        if shouldPlay, !configurePlayout(engine: engine, delegate: delegate) {
+            return false
+        }
+        engine.prepare()
+        do {
+            try engine.start()
+            self.engine = engine
+            return true
+        } catch {
+            shutdownEngine(engine)
+            return false
+        }
+    }
+    private func configureRecording(
+        engine: AVAudioEngine,
+        delegate: RTCAudioDeviceDelegate
+    ) -> Bool {
+        let nativeFormat = engine.inputNode.outputFormat(forBus: 1)
+        guard nativeFormat.sampleRate > 0, nativeFormat.channelCount > 0,
+              let rtcFormat = AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: nativeFormat.sampleRate,
+                channels: nativeFormat.channelCount,
+                interleaved: true
+              ),
+              let converter = ShannonVoiceLabAudioConverter(from: nativeFormat, to: rtcFormat) else {
+            return false
+        }
+        let deliver = delegate.deliverRecordedData
+        let render: RTCAudioDeviceRenderRecordedDataBlock = {
+            _, _, _, frameCount, outputData, context in
+            guard let context else { return kAudio_ParamError }
+            let values = context.assumingMemoryBound(
+                to: (Unmanaged<ShannonVoiceLabAudioConverter>, UnsafePointer<AudioBufferList>).self
+            ).pointee
+            return values.0.takeUnretainedValue().convert(
+                frameCount: frameCount,
+                from: values.1,
+                to: outputData
+            )
+        }
+        let sink = AVAudioSinkNode { timestamp, frameCount, inputData in
+            var flags: AudioUnitRenderActionFlags = []
+            var context = (Unmanaged.passUnretained(converter), UnsafePointer(inputData))
+            return deliver(&flags, timestamp, 1, frameCount, nil, &context, render)
+        }
+        engine.attach(sink)
+        engine.connect(engine.inputNode, to: sink, format: nativeFormat)
+        inputFormat = rtcFormat
+        recorderConverter = converter
+        sinkNode = sink
+        return true
+    }
+    private func configurePlayout(
+        engine: AVAudioEngine,
+        delegate: RTCAudioDeviceDelegate
+    ) -> Bool {
+        let nativeFormat = engine.outputNode.outputFormat(forBus: 0)
+        guard nativeFormat.sampleRate > 0, nativeFormat.channelCount > 0,
+              let rtcFormat = AVAudioFormat(
+                commonFormat: .pcmFormatInt16,
+                sampleRate: nativeFormat.sampleRate,
+                channels: nativeFormat.channelCount,
+                interleaved: true
+              ) else {
+            return false
+        }
+        let getPlayoutData = delegate.getPlayoutData
+        let source = AVAudioSourceNode(format: rtcFormat) {
+            isSilence, timestamp, frameCount, outputData in
+            var flags: AudioUnitRenderActionFlags = []
+            let status = getPlayoutData(&flags, timestamp, 0, frameCount, outputData)
+            isSilence.pointee = ObjCBool(flags.contains(.unitRenderAction_OutputIsSilence))
+            return status
+        }
+        let converterMixer = AVAudioMixerNode()
+        let timePitch = AVAudioUnitTimePitch()
+        let equalizer = AVAudioUnitEQ(numberOfBands: 2)
+        configure(equalizer: equalizer)
+        timePitch.pitch = preset.pitchCents
+        timePitch.rate = preset.rate
+        equalizer.globalGain = preset.outputGainDB
+        engine.attach(source)
+        engine.attach(converterMixer)
+        engine.attach(timePitch)
+        engine.attach(equalizer)
+        engine.connect(source, to: converterMixer, format: rtcFormat)
+        engine.connect(converterMixer, to: timePitch, format: nativeFormat)
+        engine.connect(timePitch, to: equalizer, format: nativeFormat)
+        engine.connect(equalizer, to: engine.mainMixerNode, format: nativeFormat)
+        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nativeFormat)
+        outputFormat = rtcFormat
+        sourceNode = source
+        return true
+    }
+    private func configure(equalizer: AVAudioUnitEQ) {
+        let high = equalizer.bands[0]
+        high.filterType = .highShelf
+        high.frequency = 3_200
+        high.bandwidth = 0.7
+        high.gain = 1.2
+        high.bypass = false
+        let low = equalizer.bands[1]
+        low.filterType = .lowShelf
+        low.frequency = 180
+        low.bandwidth = 0.7
+        low.gain = -0.8
+        low.bypass = false
+    }
+    private func shutdownEngine(_ specificEngine: AVAudioEngine? = nil) {
+        let target = specificEngine ?? engine
+        target?.stop()
+        target?.reset()
+        if specificEngine == nil {
+            engine = nil
+            sourceNode = nil
+            sinkNode = nil
+            recorderConverter = nil
+        }
+    }
+}
+private final class ShannonVoiceLabAudioConverter: @unchecked Sendable {
+    private var converter: AudioConverterRef?
+    init?(from: AVAudioFormat, to: AVAudioFormat) {
+        guard from.sampleRate == to.sampleRate,
+              AudioConverterNew(from.streamDescription, to.streamDescription, &converter) == noErr else {
+            return nil
+        }
+    }
+    deinit {
+        if let converter { AudioConverterDispose(converter) }
+    }
+    func convert(
+        frameCount: AVAudioFrameCount,
+        from: UnsafePointer<AudioBufferList>,
+        to: UnsafeMutablePointer<AudioBufferList>
+    ) -> OSStatus {
+        guard let converter else { return kAudio_ParamError }
+        return AudioConverterConvertComplexBuffer(converter, frameCount, from, to)
+    }
+}
+#endif
 #endif

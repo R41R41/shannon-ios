@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Shannon Voice Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">SHANNON · LOCAL VOICE TOOL</p>
+        <h1>Voice Lab</h1>
+        <p class="lede">自然さを残した6感情を、PitchとFormantでその場で追い込む。</p>
+      </div>
+      <div class="privacy-pill" aria-label="音声はこのMac内だけで処理されます">
+        <span class="status-dot" aria-hidden="true"></span>
+        このMac内だけ
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="音声調整ワークスペース">
+      <article class="panel source-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step">01 · SOURCE</p>
+            <h2>元の声</h2>
+          </div>
+          <span id="sourceMeta" class="meta">読み込み中</span>
+        </div>
+
+        <div id="voicePicker" class="voice-picker" hidden>
+          <div class="picker-heading"><strong>OpenAI Voice</strong><span id="voiceCount">読み込み中</span></div>
+          <div id="voiceTabs" class="voice-tabs" role="tablist" aria-label="OpenAI音声を選択"></div>
+        </div>
+
+        <div id="emotionPicker" class="emotion-picker" hidden>
+          <div class="picker-heading"><strong>Emotion</strong><span>中間演技</span></div>
+          <div id="emotionTabs" class="emotion-tabs" role="tablist" aria-label="感情を選択"></div>
+          <div class="emotion-copy">
+            <strong id="emotionDirection"></strong>
+            <p id="emotionText"></p>
+          </div>
+        </div>
+
+        <label class="drop-zone" id="dropZone" for="fileInput">
+          <span class="drop-icon" aria-hidden="true">＋</span>
+          <span><strong>WAVを選ぶ</strong> またはここへドロップ</span>
+          <span class="hint">PCM16 · mono / stereo · 20 MBまで</span>
+        </label>
+        <input id="fileInput" class="visually-hidden" type="file" accept="audio/wav,.wav">
+
+        <div class="audio-block">
+          <div class="audio-label">
+            <span>ORIGINAL</span>
+            <span id="sourceName">未選択</span>
+          </div>
+          <audio id="sourceAudio" controls preload="metadata"></audio>
+        </div>
+      </article>
+
+      <article class="panel tuning-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step">02 · TUNE</p>
+            <h2>声の輪郭</h2>
+          </div>
+          <button id="offButton" class="quiet-button" type="button">OFFに戻す</button>
+        </div>
+
+        <div class="control-group">
+          <div class="control-line">
+            <label for="pitch">Pitch</label>
+            <div class="number-wrap">
+              <input id="pitchNumber" type="number" min="-300" max="400" step="10" value="200" aria-label="Pitch cents">
+              <span>cents</span>
+            </div>
+          </div>
+          <input id="pitch" type="range" min="-300" max="400" step="10" value="200">
+          <div class="range-ends" aria-hidden="true"><span>−300</span><span>0</span><span>+400</span></div>
+          <p class="control-note">声全体の高さ。+100 centsで1半音上がります。</p>
+        </div>
+
+        <div class="control-group">
+          <div class="control-line">
+            <label for="formant">Formant</label>
+            <div class="number-wrap">
+              <input id="formantNumber" type="number" min="-3" max="3" step="0.1" value="0" aria-label="Formant semitones">
+              <span>半音</span>
+            </div>
+          </div>
+          <input id="formant" type="range" min="-3" max="3" step="0.1" value="0">
+          <div class="range-ends" aria-hidden="true"><span>−3.0</span><span>0</span><span>+3.0</span></div>
+          <p class="control-note">声道の長さの印象。Pitchとは独立して変えられます。</p>
+        </div>
+
+        <div class="action-row">
+          <button id="resetButton" class="secondary-button" type="button">候補値へ戻す</button>
+          <button id="renderButton" class="primary-button" type="button">
+            <span aria-hidden="true">▶</span> この値を聴く
+          </button>
+        </div>
+        <label class="auto-row">
+          <input id="autoPreview" type="checkbox" checked>
+          <span>スライダーを離したら自動で試聴</span>
+        </label>
+      </article>
+    </section>
+
+    <section class="panel result-panel" aria-labelledby="resultTitle">
+      <div class="panel-heading result-heading">
+        <div>
+          <p class="step">03 · LISTEN</p>
+          <h2 id="resultTitle">A/Bを聴く</h2>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite">音源を準備しています</div>
+      </div>
+
+      <div class="listen-grid">
+        <div class="result-copy">
+          <p id="presetLabel" class="preset-label">Pitch +200 · Formant +0.0</p>
+          <p class="result-note">同じPCMを毎回先頭から再生します。フォルマントDSP固有のバッファ遅延は約100 msです。</p>
+          <dl class="metrics">
+            <div><dt>前処理</dt><dd id="processingMetric">—</dd></div>
+            <div><dt>DSP遅延</dt><dd id="latencyMetric">—</dd></div>
+            <div><dt>処理場所</dt><dd>このMac</dd></div>
+          </dl>
+        </div>
+        <div class="audio-block processed-block">
+          <div class="audio-label"><span>TRANSFORMED</span><span id="processedMeta">未生成</span></div>
+          <audio id="processedAudio" controls preload="metadata"></audio>
+          <div class="ab-row">
+            <button id="playOriginal" class="secondary-button" type="button">A · Original</button>
+            <button id="playProcessed" class="primary-button" type="button">B · Transformed</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="history-section" aria-labelledby="historyTitle">
+      <div class="history-heading">
+        <div>
+          <p class="step">RECENT</p>
+          <h2 id="historyTitle">最近の試聴</h2>
+        </div>
+        <button id="clearHistory" class="quiet-button" type="button">消去</button>
+      </div>
+      <div id="historyEmpty" class="empty-history">試聴すると値と処理時間をここに残します。</div>
+      <ol id="historyList" class="history-list"></ol>
+    </section>
+
+    <footer>
+      ブラウザとローカルDSPの間だけで処理します。会話PCMや調整値をサーバーへ保存しません。
+    </footer>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

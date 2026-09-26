@@ -1,0 +1,33 @@
+schema_version: 1
+screen_id: shannon-macos-voice-lab-web
+platform: macos-web
+baseline_commit: 53f64fc78045553f6326d13495d2041fd2bbeb5c
+last_verified_at: 2026-09-18
+user_job: "このMacのブラウザでRealtime音声のpitchとformantを細かく動かし、その場で同じPCMを聴き比べる"
+primary_action: "スライダーを離して変換後の声を自動再生する"
+preserve:
+  - "既存のSignalsmith DSP、同一PCM比較、処理時間とDSP遅延の実測"
+  - "iOS Voice Lab、Realtime通話、RVC実験、通常のShannon起動"
+change:
+  - "MacのloopbackブラウザをVoice Labの主操作面にする"
+  - "WAV選択、数値入力、Pitch 10 cents刻み、Formant 0.1半音刻みを同じ画面に置く"
+do_not_change:
+  - "音声を外部へ送信または保存しない"
+  - "フォルマント変換を実通話へ接続済みと表示しない"
+states:
+  loading: "既定WAVまたは変換結果の読込中をaria-liveと処理中表示で伝える"
+  empty: "WAV選択とドラッグ領域を主導線として示す"
+  error: "選択値と元音源を保ち、WAV形式または処理エラーを同じstatus領域へ示す"
+  offline: "インターネット不要で127.0.0.1だけを使う"
+  conflict: "古い変換応答は連番で破棄し、最後に指定した値だけを再生する"
+  populated: "Original、Transformed、前処理時間、DSP遅延、最近の試聴を表示する"
+accessibility:
+  keyboard: "range、number、button、audioを標準Tab順序で操作できる"
+  screen_reader: "各入力の単位、処理状態、A/B、実測値をラベルまたはaria-liveで伝える"
+  target_size: "主要ボタンを44ポイント以上にする"
+  contrast: "Light/Dark双方でテキストと操作をsemantic roleに沿って区別する"
+  reduce_motion: "処理中以外の装飾アニメーションを使わず、spinnerも静止相当に短縮できる"
+evidence:
+  current: []
+  approved: []
+  privacy: "選択WAVはブラウザから127.0.0.1の一時処理へ渡すだけで、ディスクや外部サービスへ保存しない"

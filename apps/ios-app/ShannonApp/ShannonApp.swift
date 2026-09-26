@@ -62,74 +62,86 @@ struct ShannonApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ShannonConversationView(
-                model: conversationModel,
-                connectionModel: connectionModel,
-                memoryModel: memoryModel,
-                testFlightDeliveryModel: testFlightDeliveryModel,
-                voiceIdentityModel: voiceIdentityModel,
-                worldSubscriptionModel: worldSubscriptionModel
-            )
-                .onOpenURL { url in
-                    Task { await connectionModel.connect(using: url) }
-                }
-                .onChange(of: scenePhase) {
-                    guard scenePhase == .active, !conversationModel.isDesignPreview else { return }
-                    Task {
-                        await conversationModel.synchronizeAgentTasks()
-                        await refreshInitiativesAndBadge()
-                        await configureRemoteNotifications()
-                        await registerPendingPushToken()
-                    }
-                }
-                .onChange(of: connectionModel.status) {
-                    guard connectionModel.isConnected else { return }
-                    Task { await registerPendingPushToken() }
-                }
-                .onChange(of: conversationModel.totalBadgeCount) {
-                    updateApplicationBadge(conversationModel.totalBadgeCount)
-                }
-#if os(iOS)
-                .onReceive(NotificationCenter.default.publisher(for: .shannonPushTokenReceived)) { notification in
-                    guard let token = notification.object as? String else { return }
-                    pendingPushToken = token
-                    Task { await registerPendingPushToken() }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .shannonInitiativeNotificationOpened)) { notification in
-                    guard let threadId = notification.object as? String else { return }
-                    Task { await conversationModel.openInitiativeThread(threadId) }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .shannonAgentTaskNotificationOpened)) { notification in
-                    guard let taskID = notification.object as? UUID else { return }
-                    Task { await conversationModel.openAgentTaskNotification(taskID) }
-                }
-                .task {
-                    guard !conversationModel.isDesignPreview else { return }
-                    if let url = ShannonAppDelegate.takePendingConnectionURL() {
-                        await connectionModel.connect(using: url)
-                    } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
-                        await connectionModel.pair(code: code)
-                    }
-                    await configureRemoteNotifications()
-                    if let token = ShannonAppDelegate.takePendingDeviceToken() {
-                        pendingPushToken = token
-                        await registerPendingPushToken()
-                    }
-                    if let threadId = ShannonAppDelegate.takePendingInitiativeThreadID() {
-                        await conversationModel.openInitiativeThread(threadId)
-                    }
-                    if let taskID = ShannonAppDelegate.takePendingAgentTaskID() {
-                        await conversationModel.openAgentTaskNotification(taskID)
-                    }
-                    if ShannonAppDelegate.takePendingTestFlightDeliveryOpen() {
-                        NotificationCenter.default.post(
-                            name: .shannonTestFlightDeliveryNotificationOpened,
-                            object: nil
-                        )
-                    }
-                }
+#if DEBUG && os(iOS)
+            if ProcessInfo.processInfo.arguments.contains("-ShannonVoiceLab") {
+                ShannonVoiceLabView()
+            } else {
+                conversationContent
+            }
+#else
+            conversationContent
 #endif
         }
+    }
+
+    private var conversationContent: some View {
+        ShannonConversationView(
+            model: conversationModel,
+            connectionModel: connectionModel,
+            memoryModel: memoryModel,
+            testFlightDeliveryModel: testFlightDeliveryModel,
+            voiceIdentityModel: voiceIdentityModel,
+            worldSubscriptionModel: worldSubscriptionModel
+        )
+        .onOpenURL { url in
+            Task { await connectionModel.connect(using: url) }
+        }
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active, !conversationModel.isDesignPreview else { return }
+            Task {
+                await conversationModel.synchronizeAgentTasks()
+                await refreshInitiativesAndBadge()
+                await configureRemoteNotifications()
+                await registerPendingPushToken()
+            }
+        }
+        .onChange(of: connectionModel.status) {
+            guard connectionModel.isConnected else { return }
+            Task { await registerPendingPushToken() }
+        }
+        .onChange(of: conversationModel.totalBadgeCount) {
+            updateApplicationBadge(conversationModel.totalBadgeCount)
+        }
+#if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: .shannonPushTokenReceived)) { notification in
+            guard let token = notification.object as? String else { return }
+            pendingPushToken = token
+            Task { await registerPendingPushToken() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .shannonInitiativeNotificationOpened)) { notification in
+            guard let threadId = notification.object as? String else { return }
+            Task { await conversationModel.openInitiativeThread(threadId) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .shannonAgentTaskNotificationOpened)) { notification in
+            guard let taskID = notification.object as? UUID else { return }
+            Task { await conversationModel.openAgentTaskNotification(taskID) }
+        }
+        .task {
+            guard !conversationModel.isDesignPreview else { return }
+            if let url = ShannonAppDelegate.takePendingConnectionURL() {
+                await connectionModel.connect(using: url)
+            } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
+                await connectionModel.pair(code: code)
+            }
+            await configureRemoteNotifications()
+            if let token = ShannonAppDelegate.takePendingDeviceToken() {
+                pendingPushToken = token
+                await registerPendingPushToken()
+            }
+            if let threadId = ShannonAppDelegate.takePendingInitiativeThreadID() {
+                await conversationModel.openInitiativeThread(threadId)
+            }
+            if let taskID = ShannonAppDelegate.takePendingAgentTaskID() {
+                await conversationModel.openAgentTaskNotification(taskID)
+            }
+            if ShannonAppDelegate.takePendingTestFlightDeliveryOpen() {
+                NotificationCenter.default.post(
+                    name: .shannonTestFlightDeliveryNotificationOpened,
+                    object: nil
+                )
+            }
+        }
+#endif
     }
 
     private func refreshInitiativesAndBadge() async {
