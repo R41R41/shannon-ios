@@ -20,12 +20,6 @@ public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
     }
 }
 
-public enum ShannonGeminiLiveFailureRecovery: Equatable, Sendable {
-    case reconnect
-    case openSettings
-    case updateRequired
-}
-
 @MainActor
 @Observable
 public final class ShannonGeminiLiveSessionModel {
@@ -441,5 +435,34 @@ public final class ShannonGeminiLiveSessionModel {
         errorMessage = message
         failureRecovery = recovery
     }
+
+#if DEBUG
+    func prepareDesignPreview() {
+        let arguments = ProcessInfo.processInfo.arguments
+        participantMode = arguments.contains("-ShannonPreviewVoiceGuest") ? .guest : .owner
+        userTranscript = "シャノン、今日の予定を一緒に整理して"
+        shannonTranscript = "もちろん。まず優先したいことから確認しよう。"
+        audioLevel = 0.34
+        playbackLevel = 0.58
+        errorMessage = nil
+        failureRecovery = nil
+        textSendState = .idle
+        if arguments.contains("-ShannonPreviewVoiceFailed") {
+            phase = .failed
+            errorMessage = "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+            failureRecovery = .reconnect
+            textSendState = .failed(
+                text: "続きはテキストで送って",
+                message: "テキストを送信できませんでした。入力は保持されています。"
+            )
+        } else if arguments.contains("-ShannonPreviewVoiceReconnecting") {
+            phase = .reconnecting
+        } else if arguments.contains("-ShannonPreviewVoiceListening") {
+            phase = .listening
+        } else {
+            phase = .speaking
+        }
+    }
+#endif
 }
 #endif

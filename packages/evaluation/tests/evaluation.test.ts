@@ -42,6 +42,15 @@ describe('Cognitive Evaluation Harness v0', () => {
     expect(reversed.scenarioSetFingerprint).toBe(first.scenarioSetFingerprint);
   });
 
+  it('changes the scenario-set fingerprint when a scenario definition changes', () => {
+    const first = runCognitiveEvaluation(coreScenarios.slice(0, 1), context);
+    const changed = runCognitiveEvaluation([{
+      ...coreScenarios[0],
+      description: `${coreScenarios[0]!.description} changed`,
+    }], context);
+    expect(changed.scenarioSetFingerprint).not.toBe(first.scenarioSetFingerprint);
+  });
+
   it('rejects malformed fixtures and unknown expectation types', () => {
     const malformed = { schemaVersion: 1, id: 'malformed', input: { now: 'not-a-date' }, expected: [] };
     const unknown = {
@@ -51,6 +60,27 @@ describe('Cognitive Evaluation Harness v0', () => {
     const report = runCognitiveEvaluation([malformed, unknown], context);
     expect(report.status).toBe('invalid');
     expect(report.totals.invalid).toBe(2);
+  });
+
+  it.each([
+    ['selected-memory-ids', { type: 'selected-memory-ids', value: ['valid', 3] }],
+    ['excluded-memory-ids', { type: 'excluded-memory-ids', value: 'memory-1' }],
+    ['primary-intent-id', { type: 'primary-intent-id', value: 3 }],
+    ['state-equals', { type: 'state-equals' }],
+    ['number-in-range', { type: 'number-in-range', path: 'emotion.valence', minimum: 2, maximum: 1 }],
+    ['text-includes', { type: 'text-includes', value: false }],
+    ['text-excludes', { type: 'text-excludes' }],
+    ['collection-limit', { type: 'collection-limit', path: 'state.activeMemories', maximum: -1 }],
+  ])('marks malformed %s expectation payloads invalid without throwing', (_type, expectation) => {
+    const scenario = {
+      ...coreScenarios[0],
+      id: `malformed-${_type}`,
+      expected: [expectation],
+    };
+    expect(() => runCognitiveEvaluation([scenario], context)).not.toThrow();
+    const report = runCognitiveEvaluation([scenario], context);
+    expect(report.status).toBe('invalid');
+    expect(report.totals).toEqual({ passed: 0, failed: 0, invalid: 1 });
   });
 
   it('rejects duplicate scenario IDs', () => {
@@ -79,6 +109,32 @@ describe('Cognitive Evaluation Harness v0', () => {
       ...candidate, results: [{ ...candidate.results[1]!, status: 'passed' }],
     });
     expect(improved.improvements).toEqual([candidate.results[1]!.scenarioId]);
+  });
+
+  it('fails closed when the same scenario status has a different result fingerprint', () => {
+    const baseline = runCognitiveEvaluation(coreScenarios.slice(0, 1), context);
+    const candidate = structuredClone(baseline);
+    candidate.implementationRevision = 'candidate';
+    candidate.results = [{ ...candidate.results[0]!, fingerprint: 'changed-result' }];
+
+    const comparison = compareCognitiveEvaluationReports(baseline, candidate);
+    expect(comparison.unchanged).toEqual([]);
+    expect(comparison.incomparable).toEqual([baseline.results[0]!.scenarioId]);
+  });
+
+  it('fails closed when scenario-set fingerprints differ', () => {
+    const baseline = runCognitiveEvaluation(coreScenarios.slice(0, 2), context);
+    const candidate = {
+      ...structuredClone(baseline),
+      implementationRevision: 'candidate',
+      scenarioSetFingerprint: 'changed-scenario-set',
+    };
+
+    const comparison = compareCognitiveEvaluationReports(baseline, candidate);
+    expect(comparison.unchanged).toEqual([]);
+    expect(comparison.regressions).toEqual([]);
+    expect(comparison.improvements).toEqual([]);
+    expect(comparison.incomparable).toEqual(baseline.results.map(result => result.scenarioId).sort());
   });
 
   it('does not copy scenario input, conversations, or credentials into reports', () => {

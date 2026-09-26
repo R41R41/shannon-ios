@@ -38,8 +38,8 @@ export function runCognitiveEvaluation(
     invalid: results.filter(result => result.status === 'invalid').length,
   };
   const status = totals.invalid > 0 ? 'invalid' : totals.failed > 0 ? 'failed' : 'passed';
-  const scenarioSetFingerprint = stableFingerprint(results
-    .map(result => `${result.scenarioId}:${result.fingerprint}`).sort());
+  const scenarioSetFingerprint = stableFingerprint(candidates
+    .map(candidate => stableFingerprint(candidate)).sort());
   return {
     schemaVersion: 1,
     implementationRevision: context.implementationRevision,

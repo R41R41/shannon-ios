@@ -20,6 +20,16 @@ export function compareCognitiveEvaluationReports(
   const regressions: string[] = [];
   const improvements: string[] = [];
   const incomparable: string[] = [];
+  if (baseline.scenarioSetFingerprint !== candidate.scenarioSetFingerprint) {
+    return {
+      baselineRevision: baseline.implementationRevision,
+      candidateRevision: candidate.implementationRevision,
+      unchanged,
+      regressions,
+      improvements,
+      incomparable: ids,
+    };
+  }
   for (const id of ids) {
     const before = baselineResults.get(id);
     const after = candidateResults.get(id);
@@ -29,6 +39,8 @@ export function compareCognitiveEvaluationReports(
       regressions.push(id);
     } else if (before.status === 'failed' && after.status === 'passed') {
       improvements.push(id);
+    } else if (before.fingerprint !== after.fingerprint) {
+      incomparable.push(id);
     } else {
       unchanged.push(id);
     }

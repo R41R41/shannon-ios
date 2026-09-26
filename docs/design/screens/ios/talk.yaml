@@ -3,6 +3,7 @@ screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
 last_verified_at: 2026-09-26
+verification_scope: "iOS 26.5 SimulatorのDEBUG design fixtureでLight/Dark、接続失敗・再接続・入力再試行、Accessibility Extra Large Text、Reduce Motionを確認。物理iPhoneは未確認"
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -74,7 +75,8 @@ evidence:
     - "docs/screenshots/shannon-ios-dialogue-native-light-v2.png"
     - "docs/screenshots/shannon-ios-dialogue-native-dark-v2.png"
     - "docs/screenshots/shannon-ios-thread-list-native-light-v2.png"
-    - "docs/screenshots/shannon-ios-voice-guest-light-v54.png"
-    - "docs/screenshots/shannon-ios-voice-guest-dark-v54.png"
+    - "docs/screenshots/shannon-ios-gemini-voice-listening-light-v1.png"
+    - "docs/screenshots/shannon-ios-gemini-voice-error-dark-v1.png"
+    - "docs/screenshots/shannon-ios-gemini-voice-reconnecting-accessibility-reduce-motion-light-v1.png"
   approved: []
   privacy: "カメラを連続・自動・バックグラウンドで取得しない。ユーザーが撮影またはライブラリで選び、プレビューで承認した1枚だけを縮小・再エンコードして共有する。写真本体は会話履歴へ保存せず、表示履歴には写真共有の印だけを残す。ゲストモードは所有者の履歴・記憶・タスクをモデルへ渡さず、字幕を会話履歴や個人記憶へ保存しない。Geminiの永久APIキーはAzureの0600秘密ファイルだけに置き、端末へはgemini-3.5-transcribe-liveとTEXT出力に固定した1回限りの短寿命トークンだけを渡す。録音PCMと生成音声は履歴へ保存せず、アプリが非アクティブになるか画面を閉じると録音と再生を停止する"

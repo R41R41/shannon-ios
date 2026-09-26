@@ -156,6 +156,9 @@ public struct ShannonGeminiLiveVoiceView: View {
         .task {
             guard !didStart else { return }
             didStart = true
+#if DEBUG
+            if ShannonVoiceDesignPreview.isEnabled { model.prepareDesignPreview(); return }
+#endif
             await start(.owner)
         }
         .onDisappear { model.stop() }
@@ -271,13 +274,11 @@ public struct ShannonGeminiLiveVoiceView: View {
     }
 
     private func status(_ palette: ShannonPalette) -> some View {
-        VStack(spacing: 4) {
-            Text(model.phase.japaneseLabel).font(.title3.weight(.semibold))
-            Text("自然に話しかけてください。途中で遮っても大丈夫です。")
-                .font(.footnote)
-                .foregroundStyle(palette.textSecondary)
-                .multilineTextAlignment(.center)
-        }
+        ShannonGeminiLiveStatusView(
+            phase: model.phase,
+            failureRecovery: model.failureRecovery,
+            palette: palette
+        )
     }
 
     private var composer: some View {
@@ -412,7 +413,6 @@ public struct ShannonGeminiLiveVoiceView: View {
             commitTurn: commitTurn
         )
     }
-
     private func switchParticipantMode(to mode: ShannonVoiceParticipantMode) {
         guard mode != model.participantMode else { return }
         clearPendingPhoto()

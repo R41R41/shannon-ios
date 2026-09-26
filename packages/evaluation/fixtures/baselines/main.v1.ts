@@ -42,7 +42,7 @@ const resultFingerprints = {
 export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze({
   schemaVersion: 1,
   implementationRevision: 'ac7397cacd0f914bcda356f8bead2f5feedd9f4a',
-  scenarioSetFingerprint: 'f6ee3b30',
+  scenarioSetFingerprint: 'dd793f68',
   status: 'passed',
   generatedAt: '2026-09-26T00:00:00.000Z',
   results: Object.freeze(Object.entries(resultFingerprints).map(([scenarioId, fingerprint]) => Object.freeze({

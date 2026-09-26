@@ -61,11 +61,6 @@ export interface CognitiveEvaluationOutput {
 const categories = new Set<CognitiveScenarioCategory>([
   'state-transition', 'memory-visibility', 'recall', 'affect', 'intent-selection', 'prompt-projection',
 ]);
-const expectationTypes = new Set<CognitiveExpectation['type']>([
-  'selected-memory-ids', 'excluded-memory-ids', 'primary-intent-id', 'state-equals',
-  'number-in-range', 'text-includes', 'text-excludes', 'collection-limit',
-]);
-
 export function isCognitiveEvaluationScenario(value: unknown): value is CognitiveEvaluationScenario {
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
@@ -74,6 +69,48 @@ export function isCognitiveEvaluationScenario(value: unknown): value is Cognitiv
     || !row.input || typeof row.input !== 'object' || !Array.isArray(row.expected)) return false;
   const input = row.input as Record<string, unknown>;
   if (typeof input.now !== 'string' || !Number.isFinite(Date.parse(input.now))) return false;
-  return row.expected.every(item => item && typeof item === 'object'
-    && expectationTypes.has((item as Record<string, unknown>).type as CognitiveExpectation['type']));
+  return row.expected.every(isCognitiveExpectation);
+}
+
+function isCognitiveExpectation(value: unknown): value is CognitiveExpectation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const expectation = value as Record<string, unknown>;
+  switch (expectation.type) {
+    case 'selected-memory-ids':
+    case 'excluded-memory-ids':
+      return isStringArray(expectation.value);
+    case 'primary-intent-id':
+      return expectation.value === null || typeof expectation.value === 'string';
+    case 'state-equals':
+      return isPath(expectation.path)
+        && Object.hasOwn(expectation, 'value')
+        && expectation.value !== undefined;
+    case 'number-in-range':
+      return isPath(expectation.path)
+        && isFiniteNumber(expectation.minimum)
+        && isFiniteNumber(expectation.maximum)
+        && expectation.minimum <= expectation.maximum;
+    case 'text-includes':
+    case 'text-excludes':
+      return typeof expectation.value === 'string';
+    case 'collection-limit':
+      return isPath(expectation.path)
+        && Number.isInteger(expectation.maximum)
+        && isFiniteNumber(expectation.maximum)
+        && expectation.maximum >= 0;
+    default:
+      return false;
+  }
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+function isPath(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
