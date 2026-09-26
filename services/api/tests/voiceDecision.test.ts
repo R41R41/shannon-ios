@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createConfiguredVoiceDecisionGateway,
   JevVoiceDecisionGateway,
   LocalVoiceDecisionGateway,
+  OpenAIVoiceDecisionGateway,
   VOICE_SKILLS,
 } from '../src/voiceDecision.js';
 
@@ -39,7 +41,7 @@ describe('Jev voice decision routing', () => {
     });
 
     const decision = await gateway.decide({
-      transcript: 'ノートとタスクを確認して', participantMode: 'owner',
+      scopeKey: 'owner-a', transcript: 'ノートとタスクを確認して', participantMode: 'owner',
       requestedLocation: false, hasFreshLocation: false,
     });
 
@@ -58,7 +60,7 @@ describe('Jev voice decision routing', () => {
     })));
     const gateway = new JevVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
     const decision = await gateway.decide({
-      transcript: 'うん', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
+      scopeKey: 'owner-a', transcript: 'うん', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
     });
     expect(decision.shouldRespond).toBe(false);
     expect(decision.conversationClass).toBe('no_response');
@@ -70,16 +72,58 @@ describe('Jev voice decision routing', () => {
       fetcher: vi.fn(async () => { throw new Error('offline'); }) as typeof fetch,
     });
     const current = await gateway.decide({
-      transcript: '今日の天気を調べて', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
+      scopeKey: 'owner-a', transcript: '今日の天気を調べて', participantMode: 'owner', requestedLocation: false, hasFreshLocation: false,
     });
     expect(current.source).toBe('fallback');
     expect(current.selectedSkills).toContain('current_web');
 
     const guest = await new LocalVoiceDecisionGateway().decide({
-      transcript: 'AetherのメモとVoyagerのタスクを見せて', participantMode: 'guest',
+      scopeKey: 'guest-session', transcript: 'AetherのメモとVoyagerのタスクを見せて', participantMode: 'guest',
       requestedLocation: false, hasFreshLocation: false,
     });
     expect(guest.selectedSkills).not.toContain('aether_notes');
     expect(guest.selectedSkills).not.toContain('voyager_tasks');
+  });
+});
+
+describe('OpenAI voice decision compatibility routing', () => {
+  it('uses a lightweight structured-output model while Jev is unavailable', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as Record<string, any>;
+      expect(request.model).toBe('gpt-5.6-luna');
+      expect(request.reasoning).toEqual({ effort: 'none' });
+      expect(request.store).toBe(false);
+      expect(request.text.format.schema.properties.skillScores.required).toEqual(VOICE_SKILLS);
+      return new Response(JSON.stringify({
+        output_text: JSON.stringify({
+          replyRequiredProbability: 0.94,
+          conversationClass: 'skill_simple',
+          affect: 'caring',
+          delivery: 'gentle',
+          skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [
+            skill, skill === 'conversation_memory' || skill === 'daily_mind' ? 0.8 : 0.1,
+          ])),
+        }),
+      }));
+    });
+    const gateway = new OpenAIVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: '前の話も踏まえて考えて', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+
+    expect(decision.source).toBe('openai');
+    expect(decision.selectedSkills).toEqual(['conversation_memory', 'daily_mind']);
+    expect(decision.affect).toBe('caring');
+    expect(decision.delivery).toBe('gentle');
+  });
+
+  it('prefers Jev when configured, otherwise OpenAI, then deterministic rules', () => {
+    expect(createConfiguredVoiceDecisionGateway({
+      TYPESAFE_API_KEY: 'jev-key', OPENAI_API_KEY: 'openai-key',
+    }).mode).toBe('jev');
+    expect(createConfiguredVoiceDecisionGateway({ OPENAI_API_KEY: 'openai-key' }).mode).toBe('openai');
+    expect(createConfiguredVoiceDecisionGateway({}).mode).toBe('fallback');
   });
 });

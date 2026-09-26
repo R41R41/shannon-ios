@@ -16,6 +16,30 @@ public extension ShannonAPIClientProtocol {
         throw ShannonAPIError.invalidResponse
     }
 
+    func streamGeminiSpeech(
+        scopeKey: String,
+        text: String,
+        style: String? = nil
+    ) async throws -> ShannonGeminiSpeechStream {
+        let speech = try await synthesizeGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
+        let wav = try ShannonGeminiWAV.parse(speech.audio)
+        let rate = speech.durationSeconds > 0
+            ? speech.estimatedCostUsd / speech.durationSeconds * 10
+            : 0
+        return ShannonGeminiSpeechStream(
+            model: speech.model,
+            voice: speech.voice,
+            sampleRate: wav.sampleRate,
+            channels: wav.channels,
+            bitsPerSample: wav.bitsPerSample,
+            outputUsdPerTenSeconds: rate,
+            chunks: AsyncThrowingStream { continuation in
+                continuation.yield(wav.pcm)
+                continuation.finish()
+            }
+        )
+    }
+
     func createGeminiLiveSession(
         scopeKey: String,
         threadId: String?

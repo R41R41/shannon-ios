@@ -97,6 +97,107 @@ extension ShannonAPIClient {
         )
     }
 
+    public func streamGeminiSpeech(
+        scopeKey: String,
+        text: String,
+        style: String? = nil
+    ) async throws -> ShannonGeminiSpeechStream {
+        let connection = currentConnection()
+        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/speech/stream"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 75
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        authorize(&request, connection: connection)
+        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style))
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
+        if http.statusCode == 404 || http.statusCode == 405 {
+            return try await legacyGeminiSpeechStream(scopeKey: scopeKey, text: text, style: style)
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw ShannonAPIError.rejected(status: http.statusCode)
+        }
+        guard http.value(forHTTPHeaderField: "content-type")?.lowercased().hasPrefix("audio/l16") == true,
+              let model = http.value(forHTTPHeaderField: "x-shannon-gemini-model"),
+              let voice = http.value(forHTTPHeaderField: "x-shannon-gemini-voice"),
+              let sampleRate = http.value(forHTTPHeaderField: "x-shannon-audio-sample-rate").flatMap(Int.init),
+              let channels = http.value(forHTTPHeaderField: "x-shannon-audio-channels").flatMap(Int.init),
+              let bits = http.value(forHTTPHeaderField: "x-shannon-audio-bits-per-sample").flatMap(Int.init),
+              let costRate = http.value(forHTTPHeaderField: "x-shannon-output-usd-per-10-seconds").flatMap(Double.init),
+              sampleRate == 24_000,
+              channels == 1,
+              bits == 16,
+              costRate >= 0
+        else { throw ShannonAPIError.invalidResponse }
+        return ShannonGeminiSpeechStream(
+            model: model,
+            voice: voice,
+            sampleRate: sampleRate,
+            channels: channels,
+            bitsPerSample: bits,
+            outputUsdPerTenSeconds: costRate,
+            chunks: Self.bufferedGeminiPCM(bytes)
+        )
+    }
+
+    private func legacyGeminiSpeechStream(
+        scopeKey: String,
+        text: String,
+        style: String?
+    ) async throws -> ShannonGeminiSpeechStream {
+        let speech = try await synthesizeGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
+        let wav = try ShannonGeminiWAV.parse(speech.audio)
+        let costRate = speech.durationSeconds > 0
+            ? speech.estimatedCostUsd / speech.durationSeconds * 10
+            : 0
+        return ShannonGeminiSpeechStream(
+            model: speech.model,
+            voice: speech.voice,
+            sampleRate: wav.sampleRate,
+            channels: wav.channels,
+            bitsPerSample: wav.bitsPerSample,
+            outputUsdPerTenSeconds: costRate,
+            chunks: AsyncThrowingStream { continuation in
+                continuation.yield(wav.pcm)
+                continuation.finish()
+            }
+        )
+    }
+
+    private static func bufferedGeminiPCM(
+        _ bytes: URLSession.AsyncBytes
+    ) -> AsyncThrowingStream<Data, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var buffer = Data()
+                buffer.reserveCapacity(4_800)
+                var totalBytes = 0
+                do {
+                    for try await byte in bytes {
+                        try Task.checkCancellation()
+                        buffer.append(byte)
+                        totalBytes += 1
+                        guard totalBytes <= 8 * 1_024 * 1_024 else {
+                            throw URLError(.dataLengthExceedsMaximum)
+                        }
+                        if buffer.count >= 4_800 {
+                            continuation.yield(buffer)
+                            buffer.removeAll(keepingCapacity: true)
+                        }
+                    }
+                    guard totalBytes > 0, buffer.count % 2 == 0 else {
+                        throw ShannonAPIError.invalidResponse
+                    }
+                    if !buffer.isEmpty { continuation.yield(buffer) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in task.cancel() }
+        }
+    }
+
     public func createGeminiLiveSession(
         scopeKey: String,
         threadId: String?

@@ -11,6 +11,7 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`）
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
 - `POST /v1/voice/gemini/speech`（ペアリング済み端末のShannon返答を、サーバー側Gemini 3.8 TTSで24 kHz WAVへ変換）
+- `POST /v1/voice/gemini/speech/stream`（同じ返答を24 kHz mono PCMとして生成中からchunked転送）
 - `GET /v1/voice/identity` / `POST /v1/voice/identity`（scopeごとの声選択を取得・保存）
 - `POST /v1/voice/identity/preview`（ペアリング済み端末だけが固定日本語文を試聴。1日12回まで）
 - `POST /v1/voice/realtime/calls`（保存済みの声を新しいRealtimeセッションへ適用）
@@ -55,7 +56,7 @@ OpenAIキーがある場合、睡眠分析はResponses APIのstrict JSON Schema�
 
 音声入力は会話とは別の`voice`費用レーンで記録する。1リクエストは60秒・5 MiBまで、既定の日次上限は`$0.10`。APIは音声をファイルへ保存せず、OpenAIへの文字起こし要求が終わるとメモリから破棄する。上限は`SHANNON_VOICE_DAILY_BUDGET_USD`で変更できる。
 
-Gemini試験モードは、同じ文字起こしと通常のShannonテキスト会話を通した返答だけを`POST /v1/voice/gemini/speech`へ渡すターン制カスケードである。GeminiキーはAzureだけに置き、iPhoneへ返さない。既定は`gemini-3.8-flash-lite-tts`と`Leda`で、モデル、声、短いスタイル指示、timeout、10秒単価見積りを`SHANNON_GEMINI_TTS_*`で変更できる。本文は8,000文字、返却WAVは8 MiB・180秒までに制限し、音声本文やWAVは保存しない。見積りは`voice`費用レーンへ記録するが、文字起こしと通常チャットの費用はそれぞれの既存記録に分かれる。
+Gemini試験モードは、同じ文字起こしと通常のShannonテキスト会話を通した返答だけをGemini TTSへ渡すターン制カスケードである。現行iPhoneは`/stream`から24 kHz mono・16-bit little-endian PCMを生成中に受け取り、100 ms単位で再生キューへ追加する。WAV一括endpointは旧クライアント互換として残す。GeminiキーはAzureだけに置き、iPhoneへ返さない。既定は`gemini-3.8-flash-lite-tts`と`Leda`で、モデル、声、短いスタイル指示、timeout、10秒単価見積りを`SHANNON_GEMINI_TTS_*`で変更できる。本文は8,000文字、音声は8 MiBまでに制限し、音声本文・PCM・WAVは保存しない。見積りは`voice`費用レーンへ記録するが、文字起こし、軽量音声ルーター、通常チャットの費用は同じレーン内でも個別callとして記録する。
 
 Realtime音声は通話作成の成功単位をSQLiteへ永続予約し、日本時間の日次上限をAPI側で強制する。1回はiPhone側の上限と同じ10分として保守的に予約し、既定は1日60分。上流で通話作成に失敗した予約は取り消し、成功した予約はAPI再起動後も残る。上限は`SHANNON_VOICE_REALTIME_DAILY_MINUTES`で10〜1440分の範囲に変更でき、超過後もテキスト会話は使える。
 

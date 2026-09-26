@@ -67,6 +67,49 @@ describe('Gemini speech gateway', () => {
     await expect(gateway.synthesize({ scopeKey: 'owner-a', text: 'こんにちは' }))
       .rejects.toMatchObject({ code: 'GEMINI_SPEECH_FAILED' });
   });
+
+  it('streams raw 24 kHz PCM chunks and records usage only after completion', async () => {
+    const usage = new RecordingUsageStore();
+    const first = Buffer.alloc(2_400, 1);
+    const second = Buffer.alloc(2_400, 2);
+    const sse = [
+      `data: ${JSON.stringify({ event_type: 'step.delta', delta: { type: 'audio', data: first.toString('base64') } })}\n\n`,
+      `data: ${JSON.stringify({ event_type: 'step.delta', delta: { type: 'audio', data: second.toString('base64') } })}\n\n`,
+      `data: ${JSON.stringify({ event_type: 'interaction.completed' })}\n\n`,
+    ].join('');
+    const encoded = new TextEncoder().encode(sse);
+    const gateway = new GoogleGeminiSpeechGateway({
+      apiKey: 'server-key-only',
+      usageStore: usage,
+      fetcher: async (_input, init) => {
+        const request = JSON.parse(String(init?.body)) as Record<string, any>;
+        expect(request.stream).toBe(true);
+        expect(request.response_format).toMatchObject({ mime_type: 'audio/l16', sample_rate: 24_000 });
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoded.slice(0, 73));
+            controller.enqueue(encoded.slice(73));
+            controller.close();
+          },
+        }), { headers: { 'content-type': 'text/event-stream' } });
+      },
+    });
+
+    const result = await gateway.stream({ scopeKey: 'owner-a', text: 'ストリームで話して' });
+    expect(result).toMatchObject({
+      contentType: 'audio/l16', sampleRate: 24_000, channels: 1, bitsPerSample: 16,
+      model: 'gemini-3.8-flash-lite-tts', voice: 'Leda',
+    });
+    expect(usage.events).toHaveLength(0);
+    const received: Buffer[] = [];
+    for await (const chunk of result.chunks) received.push(Buffer.from(chunk));
+    expect(Buffer.concat(received)).toEqual(Buffer.concat([first, second]));
+    expect(usage.events).toEqual([
+      expect.objectContaining({
+        scopeKey: 'owner-a', lane: 'voice', outputTokens: 3, estimatedCostUsd: 0.000015,
+      }),
+    ]);
+  });
 });
 
 class RecordingUsageStore implements LlmUsageStore {

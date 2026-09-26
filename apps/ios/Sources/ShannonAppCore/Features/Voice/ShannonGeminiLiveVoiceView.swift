@@ -9,7 +9,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private let createSession: @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO
     private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
-    private let synthesize: @MainActor (String, String?) async throws -> ShannonGeminiSpeech
+    private let streamSpeech: @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
     private let commitTurn: @MainActor (String, String) async throws -> Void
     private let dismiss: () -> Void
 
@@ -37,7 +37,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
-        synthesize: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeech,
+        streamSpeech: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         dismiss: @escaping () -> Void
     ) {
@@ -46,7 +46,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         self.createSession = createSession
         self.performDelegation = performDelegation
         self.analyzeCameraSnapshot = analyzeCameraSnapshot
-        self.synthesize = synthesize
+        self.streamSpeech = streamSpeech
         self.commitTurn = commitTurn
         self.dismiss = dismiss
     }
@@ -409,7 +409,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             participantMode: mode,
             createSession: createSession,
             performDelegation: performDelegation,
-            synthesize: synthesize,
+            streamSpeech: streamSpeech,
             commitTurn: commitTurn
         )
     }

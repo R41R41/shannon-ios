@@ -104,6 +104,34 @@ public struct ShannonGeminiSpeech: Equatable, Sendable {
     }
 }
 
+public struct ShannonGeminiSpeechStream: Sendable {
+    public let model: String
+    public let voice: String
+    public let sampleRate: Int
+    public let channels: Int
+    public let bitsPerSample: Int
+    public let outputUsdPerTenSeconds: Double
+    public let chunks: AsyncThrowingStream<Data, Error>
+
+    public init(
+        model: String,
+        voice: String,
+        sampleRate: Int = 24_000,
+        channels: Int = 1,
+        bitsPerSample: Int = 16,
+        outputUsdPerTenSeconds: Double,
+        chunks: AsyncThrowingStream<Data, Error>
+    ) {
+        self.model = model
+        self.voice = voice
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bitsPerSample = bitsPerSample
+        self.outputUsdPerTenSeconds = outputUsdPerTenSeconds
+        self.chunks = chunks
+    }
+}
+
 public enum ShannonVoiceRecordingPolicy {
     public static let maximumDuration: TimeInterval = 60
     public static let maximumBytes = 5 * 1_024 * 1_024

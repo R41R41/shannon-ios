@@ -88,10 +88,13 @@ pnpm worker
 
 Gemini音声は、[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスと、
 iPhoneの単一の音声会話で評価できる。iPhoneは16 kHz PCMを`gemini-3.5-transcribe-live`へ連続送信し、
-通常のShannon返答を文単位でGemini 3.8 TTSへ渡して、設定済みのカスタム音声を24 kHz WAVで再生する。
+通常のShannon返答を文単位でGemini 3.8 TTSへ渡し、設定済みのカスタム音声を24 kHz raw PCMで
+生成途中からストリーミング再生する。旧クライアント用のWAV一括endpointも互換経路として残す。
 発話中も認識を続け、割り込み候補では音量を下げ、音声が確定した時点で生成と再生を中断する。Azureは
 永続APIキーを`0600`の秘密ファイルだけに保持し、端末へ返すのは1回限りの短寿命認識トークンだけである。
 OpenAIの音声通話と音声選択UIは廃止し、通常のテキスト会話モデルとは独立して音声プロバイダーをGeminiへ一本化した。
+音声ターンの分類・複数スキル採点・感情・読み方は、TypeSafeキーがない間は軽量な
+`gpt-5.6-luna`のstrict structured outputで判定し、キー設定後は同じ契約のJevへ自動的に切り替わる。
 
 別のターミナルでiOSコアを検証する。
 

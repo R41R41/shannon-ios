@@ -1,3 +1,6 @@
+import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from './llmUsage.js';
+
 export const VOICE_SKILLS = [
   'current_web',
   'conversation_memory',
@@ -14,6 +17,7 @@ export type VoiceDelivery = 'conversational' | 'quick' | 'gentle' | 'focused' | 
 export type VoiceConversationClass = 'no_response' | 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
 
 export interface VoiceDecisionInput {
+  scopeKey: string;
   transcript: string;
   participantMode: 'owner' | 'guest';
   requestedLocation: boolean;
@@ -21,7 +25,7 @@ export interface VoiceDecisionInput {
 }
 
 export interface VoiceTurnDecision {
-  source: 'jev' | 'fallback';
+  source: 'jev' | 'openai' | 'fallback';
   shouldRespond: boolean;
   replyRequiredProbability: number;
   conversationClass: VoiceConversationClass;
@@ -33,7 +37,7 @@ export interface VoiceTurnDecision {
 }
 
 export interface VoiceDecisionGateway {
-  readonly mode: 'jev' | 'fallback';
+  readonly mode: 'jev' | 'openai' | 'fallback';
   readonly model: string;
   decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision>;
 }
@@ -69,6 +73,122 @@ export class LocalVoiceDecisionGateway implements VoiceDecisionGateway {
 
   async decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision> {
     return localDecision(input, this.skillThreshold, 0);
+  }
+}
+
+export interface OpenAIVoiceDecisionOptions {
+  apiKey: string;
+  endpoint?: string;
+  model?: string;
+  timeoutMilliseconds?: number;
+  skillThreshold?: number;
+  fetcher?: typeof fetch;
+  nowMilliseconds?: () => number;
+  usageStore?: LlmUsageStore;
+}
+
+export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
+  readonly mode = 'openai' as const;
+  readonly model: string;
+  private readonly endpoint: string;
+  private readonly timeoutMilliseconds: number;
+  private readonly skillThreshold: number;
+  private readonly fetcher: typeof fetch;
+  private readonly nowMilliseconds: () => number;
+
+  constructor(private readonly options: OpenAIVoiceDecisionOptions) {
+    if (!options.apiKey.trim()) throw new Error('OPENAI_API_KEY is required');
+    this.model = validModel(options.model ?? 'gpt-5.6-luna');
+    this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
+    this.timeoutMilliseconds = options.timeoutMilliseconds ?? 1_200;
+    this.skillThreshold = boundedProbability(options.skillThreshold, 0.55);
+    this.fetcher = options.fetcher ?? fetch;
+    this.nowMilliseconds = options.nowMilliseconds ?? Date.now;
+  }
+
+  async decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision> {
+    const startedAt = this.nowMilliseconds();
+    try {
+      const response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          instructions: [
+            'You are Shannon\'s low-latency voice turn router. Return only the requested structured decision.',
+            'Score every capability independently from 0 to 1. A score means the capability is materially required for an accurate and useful reply, not merely related.',
+            'Use no_response only for noise, abandoned fragments, or acknowledgements where silence is clearly natural. Choose the cheapest sufficient conversation class and a natural spoken affect and delivery.',
+            ...VOICE_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`),
+          ].join('\n'),
+          input: JSON.stringify({
+            utterance: input.transcript.slice(0, 8_000),
+            participant_mode: input.participantMode,
+            requested_location: input.requestedLocation,
+            has_fresh_location: input.hasFreshLocation,
+          }),
+          reasoning: { effort: 'none' },
+          text: {
+            verbosity: 'low',
+            format: {
+              type: 'json_schema',
+              name: 'shannon_voice_decision',
+              strict: true,
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  replyRequiredProbability: { type: 'number', minimum: 0, maximum: 1 },
+                  conversationClass: {
+                    type: 'string', enum: ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'],
+                  },
+                  affect: {
+                    type: 'string', enum: ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'],
+                  },
+                  delivery: {
+                    type: 'string', enum: ['conversational', 'quick', 'gentle', 'focused', 'energetic'],
+                  },
+                  skillScores: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: Object.fromEntries(VOICE_SKILLS.map(skill => [skill, {
+                      type: 'number', minimum: 0, maximum: 1,
+                    }])),
+                    required: [...VOICE_SKILLS],
+                  },
+                },
+                required: ['replyRequiredProbability', 'conversationClass', 'affect', 'delivery', 'skillScores'],
+              },
+            },
+          },
+          max_output_tokens: 500,
+          store: false,
+          prompt_cache_key: stableScopeIdentifier(input.scopeKey),
+          safety_identifier: stableScopeIdentifier(input.scopeKey),
+        }),
+        signal: AbortSignal.timeout(this.timeoutMilliseconds),
+      });
+      const raw = await response.text();
+      const envelope = parseJson(raw);
+      if (!response.ok) throw new Error(`OPENAI_VOICE_ROUTER_${response.status}`);
+      const decision = parsedOpenAIDecision(
+        extractOutputText(envelope), input, this.skillThreshold, this.nowMilliseconds() - startedAt,
+      );
+      const usage = responseUsage(envelope);
+      this.options.usageStore?.recordLlmUsage({
+        scopeKey: input.scopeKey,
+        lane: 'voice',
+        model: this.model,
+        ...usage,
+        estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
+        occurredAt: new Date().toISOString(),
+      });
+      return decision;
+    } catch {
+      return localDecision(input, this.skillThreshold, this.nowMilliseconds() - startedAt);
+    }
   }
 }
 
@@ -179,17 +299,68 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
 
 export function createConfiguredVoiceDecisionGateway(
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  usageStore?: LlmUsageStore,
 ): VoiceDecisionGateway {
-  const skillThreshold = optionalProbability(environment.SHANNON_JEV_SKILL_THRESHOLD) ?? 0.55;
-  const apiKey = environment.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) return new LocalVoiceDecisionGateway(skillThreshold);
-  return new JevVoiceDecisionGateway({
-    apiKey,
+  const skillThreshold = optionalProbability(
+    environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
+  ) ?? 0.55;
+  const jevApiKey = environment.TYPESAFE_API_KEY?.trim();
+  if (jevApiKey) return new JevVoiceDecisionGateway({
+    apiKey: jevApiKey,
     endpoint: environment.SHANNON_JEV_ENDPOINT?.trim() || undefined,
     model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-1.13.0',
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
   });
+  const openAIApiKey = environment.OPENAI_API_KEY?.trim();
+  if (openAIApiKey) return new OpenAIVoiceDecisionGateway({
+    apiKey: openAIApiKey,
+    endpoint: environment.SHANNON_VOICE_ROUTER_ENDPOINT?.trim() || undefined,
+    model: environment.SHANNON_VOICE_ROUTER_MODEL?.trim() || 'gpt-5.6-luna',
+    timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_VOICE_ROUTER_TIMEOUT_MS) ?? 1_200,
+    skillThreshold,
+    usageStore,
+  });
+  return new LocalVoiceDecisionGateway(skillThreshold);
+}
+
+function parsedOpenAIDecision(
+  outputText: string,
+  input: VoiceDecisionInput,
+  skillThreshold: number,
+  elapsedMilliseconds: number,
+): VoiceTurnDecision {
+  const parsed = parseJson(outputText);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('OPENAI_VOICE_ROUTER_INVALID');
+  }
+  const value = parsed as Record<string, unknown>;
+  const rawScores = value.skillScores;
+  if (!rawScores || typeof rawScores !== 'object' || Array.isArray(rawScores)) {
+    throw new Error('OPENAI_VOICE_ROUTER_INVALID');
+  }
+  const scoreValues = rawScores as Record<string, unknown>;
+  const skillScores = emptySkillScores();
+  for (const skill of VOICE_SKILLS) skillScores[skill] = probabilityValue(scoreValues[skill]);
+  applyMandatorySkillFloors(skillScores, input);
+  const replyRequiredProbability = probabilityValue(value.replyRequiredProbability);
+  const conversationClass = directChoiceValue(value.conversationClass,
+    ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'] as const);
+  const affect = directChoiceValue(value.affect,
+    ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'] as const);
+  const delivery = directChoiceValue(value.delivery,
+    ['conversational', 'quick', 'gentle', 'focused', 'energetic'] as const);
+  return {
+    source: 'openai',
+    shouldRespond: !(conversationClass === 'no_response' && replyRequiredProbability < 0.4),
+    replyRequiredProbability,
+    conversationClass,
+    affect,
+    delivery,
+    selectedSkills: selectedSkills(skillScores, skillThreshold, input.participantMode),
+    skillScores,
+    elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
+  };
 }
 
 function parsedJevDecision(
@@ -293,11 +464,23 @@ function noulValue(value: unknown): number {
   return probability;
 }
 
+function probabilityValue(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error('VOICE_DECISION_PROBABILITY_INVALID');
+  }
+  return value;
+}
+
 function choiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
   if (!value || typeof value !== 'object') throw new Error('JEV_RESPONSE_INVALID');
   const choice = (value as { choice?: unknown }).choice;
   if (typeof choice !== 'string' || !allowed.includes(choice)) throw new Error('JEV_RESPONSE_INVALID');
   return choice as T[number];
+}
+
+function directChoiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
+  if (typeof value !== 'string' || !allowed.includes(value)) throw new Error('VOICE_DECISION_CHOICE_INVALID');
+  return value as T[number];
 }
 
 function optionalProbability(value: string | undefined): number | undefined {

@@ -20,6 +20,7 @@ public protocol ShannonChatServing: Sendable {
 public protocol ShannonVoiceServing: Sendable {
     func transcribeVoice(scopeKey: String, recording: ShannonVoiceRecording) async throws -> ShannonVoiceTranscriptionDTO
     func synthesizeGeminiSpeech(scopeKey: String, text: String, style: String?) async throws -> ShannonGeminiSpeech
+    func streamGeminiSpeech(scopeKey: String, text: String, style: String?) async throws -> ShannonGeminiSpeechStream
     func createGeminiLiveSession(scopeKey: String, threadId: String?) async throws -> ShannonGeminiLiveSessionDTO
     func createGeminiLiveSession(
         scopeKey: String,

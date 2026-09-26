@@ -18,8 +18,20 @@ export interface GeminiSpeechResult {
   estimatedCostUsd: number;
 }
 
+export interface GeminiSpeechStreamResult {
+  contentType: 'audio/l16';
+  sampleRate: 24_000;
+  channels: 1;
+  bitsPerSample: 16;
+  model: string;
+  voice: string;
+  outputUsdPerTenSeconds: number;
+  chunks: AsyncIterable<Uint8Array>;
+}
+
 export interface GeminiSpeechGateway {
   synthesize(request: GeminiSpeechRequest): Promise<GeminiSpeechResult>;
+  stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult>;
 }
 
 export type GeminiSpeechFailureCode =
@@ -145,6 +157,115 @@ export class GoogleGeminiSpeechGateway implements GeminiSpeechGateway {
       estimatedCostUsd,
     });
   }
+
+  async stream(request: GeminiSpeechRequest, signal?: AbortSignal): Promise<GeminiSpeechStreamResult> {
+    const text = normalizedSpeechText(request.text);
+    const style = optionalText(request.style ?? this.style, 500);
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener('abort', abortFromCaller, { once: true });
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMilliseconds);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', abortFromCaller);
+    };
+
+    let response: Response;
+    try {
+      response = await this.fetcher(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-goog-api-key': this.options.apiKey,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          input: [{
+            type: 'user_input',
+            content: [{
+              type: 'text',
+              text,
+              annotations: [{ type: 'speech_metadata', style }],
+            }],
+          }],
+          response_format: { type: 'audio', mime_type: 'audio/l16', sample_rate: 24_000 },
+          generation_config: { speech_config: [{ voice: this.voice }] },
+          stream: true,
+        }),
+        signal: controller.signal,
+      });
+    } catch {
+      cleanup();
+      throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    }
+    if (!response.ok) {
+      const responseText = await response.text();
+      cleanup();
+      throw new GeminiSpeechError(
+        'GEMINI_SPEECH_FAILED',
+        response.status,
+        safeUpstreamCode(responseText),
+      );
+    }
+    if (!response.body) {
+      cleanup();
+      throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    }
+
+    return Object.freeze({
+      contentType: 'audio/l16' as const,
+      sampleRate: 24_000 as const,
+      channels: 1 as const,
+      bitsPerSample: 16 as const,
+      model: this.model,
+      voice: this.voice,
+      outputUsdPerTenSeconds: this.outputUsdPerTenSeconds,
+      chunks: this.streamingAudioChunks(response.body, request.scopeKey, text, cleanup),
+    });
+  }
+
+  private async *streamingAudioChunks(
+    body: ReadableStream<Uint8Array>,
+    scopeKey: string,
+    text: string,
+    cleanup: () => void,
+  ): AsyncGenerator<Uint8Array> {
+    let totalBytes = 0;
+    let completed = false;
+    try {
+      for await (const chunk of geminiSSEAudioChunks(body)) {
+        totalBytes += chunk.byteLength;
+        if (totalBytes > SHANNON_GEMINI_SPEECH_MAXIMUM_BYTES) {
+          throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+        }
+        yield chunk;
+      }
+      if (totalBytes <= 0 || totalBytes % 2 !== 0) {
+        throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+      }
+      completed = true;
+    } finally {
+      cleanup();
+      if (completed) this.recordUsage(scopeKey, text, totalBytes / 48_000);
+    }
+  }
+
+  private recordUsage(scopeKey: string, text: string, durationSeconds: number): void {
+    const estimatedCostUsd = roundUsd(durationSeconds / 10 * this.outputUsdPerTenSeconds);
+    const audioTokens = Math.max(1, Math.round(durationSeconds * 25));
+    this.options.usageStore?.recordLlmUsage({
+      scopeKey,
+      lane: 'voice',
+      model: this.model,
+      inputTokens: Math.max(1, Math.ceil(text.length / 4)),
+      cachedInputTokens: 0,
+      outputTokens: audioTokens,
+      totalTokens: Math.max(1, Math.ceil(text.length / 4)) + audioTokens,
+      estimatedCostUsd,
+      occurredAt: this.now().toISOString(),
+    });
+  }
 }
 
 export function createConfiguredGeminiSpeechGateway(
@@ -195,6 +316,74 @@ function decodedAudio(responseText: string): Uint8Array {
     throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
   }
   return audio;
+}
+
+async function* geminiSSEAudioChunks(body: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let eventLines: string[] = [];
+  const processEvent = (): Uint8Array | null => {
+    const data = eventLines
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n');
+    eventLines = [];
+    if (!data || data === '[DONE]') return null;
+    let value: unknown;
+    try {
+      value = JSON.parse(data) as unknown;
+    } catch {
+      throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    }
+    const event = record(value);
+    if (event?.event_type === 'error') throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    const delta = record(event?.delta);
+    if (event?.event_type !== 'step.delta' || delta?.type !== 'audio') return null;
+    const encoded = delta.data;
+    if (typeof encoded !== 'string' || !encoded || !validBase64(encoded)) {
+      throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    }
+    const audio = Buffer.from(encoded, 'base64');
+    if (!audio.length || audio.length % 2 !== 0) throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+    return audio;
+  };
+
+  try {
+    while (true) {
+      const next = await reader.read();
+      pending += decoder.decode(next.value, { stream: !next.done });
+      let newline = pending.indexOf('\n');
+      while (newline >= 0) {
+        let line = pending.slice(0, newline);
+        pending = pending.slice(newline + 1);
+        if (line.endsWith('\r')) line = line.slice(0, -1);
+        if (line === '') {
+          const audio = processEvent();
+          if (audio) yield audio;
+        } else if (!line.startsWith(':')) {
+          eventLines.push(line);
+        }
+        newline = pending.indexOf('\n');
+      }
+      if (next.done) break;
+    }
+    if (pending.endsWith('\r')) pending = pending.slice(0, -1);
+    if (pending) eventLines.push(pending);
+    if (eventLines.length) {
+      const audio = processEvent();
+      if (audio) yield audio;
+    }
+  } catch (error) {
+    if (error instanceof GeminiSpeechError) throw error;
+    throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function validBase64(value: string): boolean {
+  return value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value);
 }
 
 function interactionAudioData(value: unknown): string | undefined {

@@ -54,7 +54,7 @@ public final class ShannonGeminiLiveSessionModel {
     private var didRecordFirstQueuedChunk = false
     private var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
     private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
-    private var synthesize: (@MainActor (String, String?) async throws -> ShannonGeminiSpeech)?
+    private var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
     private var commitTurn: (@MainActor (String, String) async throws -> Void)?
 
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
@@ -69,13 +69,13 @@ public final class ShannonGeminiLiveSessionModel {
         participantMode: ShannonVoiceParticipantMode,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
-        synthesize: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeech,
+        streamSpeech: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void
     ) async {
         stop()
         self.createSession = createSession
         self.performDelegation = performDelegation
-        self.synthesize = synthesize
+        self.streamSpeech = streamSpeech
         self.commitTurn = commitTurn
         self.participantMode = participantMode
         resetMeasurements()
@@ -140,12 +140,12 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     public func retry() async {
-        guard let createSession, let performDelegation, let synthesize, let commitTurn else { return }
+        guard let createSession, let performDelegation, let streamSpeech, let commitTurn else { return }
         await start(
             participantMode: participantMode,
             createSession: createSession,
             performDelegation: performDelegation,
-            synthesize: synthesize,
+            streamSpeech: streamSpeech,
             commitTurn: commitTurn
         )
     }
@@ -154,7 +154,7 @@ public final class ShannonGeminiLiveSessionModel {
     public func sendText(_ text: String) -> Bool {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return false }
-        guard transport != nil, performDelegation != nil, synthesize != nil, phase != .failed else {
+        guard transport != nil, performDelegation != nil, streamSpeech != nil, phase != .failed else {
             textSendState = .failed(
                 text: value,
                 message: "音声会話へ接続してから、もう一度送信してください。"
@@ -280,7 +280,7 @@ public final class ShannonGeminiLiveSessionModel {
         committedUserText: String? = nil,
         textSubmission: String? = nil
     ) {
-        guard let performDelegation, let synthesize else {
+        guard let performDelegation, let streamSpeech else {
             if let textSubmission {
                 textSendState = .failed(text: textSubmission, message: "送信を開始できませんでした。")
             }
@@ -311,23 +311,37 @@ public final class ShannonGeminiLiveSessionModel {
                 shannonTranscript = reply
                 var playbackDeadline = ProcessInfo.processInfo.systemUptime
                 for segment in ShannonGeminiCascadeSpeech.segments(reply) {
-                    let speech = try await synthesize(
+                    let speech = try await streamSpeech(
                         segment,
                         ShannonGeminiCascadeSpeech.style(for: segment, plan: response.voicePlan)
                     )
                     try Task.checkCancellation()
                     voice = speech.voice
-                    if firstAudioLatencyMilliseconds == nil, let responseStartedAt {
-                        firstAudioLatencyMilliseconds = Int(
-                            (ProcessInfo.processInfo.systemUptime - responseStartedAt) * 1_000
-                        )
+                    guard speech.sampleRate == 24_000,
+                          speech.channels == 1,
+                          speech.bitsPerSample == 16 else {
+                        throw ShannonAPIError.invalidResponse
                     }
-                    let duration = try transport?.scheduleSpeech(speech) ?? speech.durationSeconds
-                    outputAudioSeconds += duration
-                    ttsCostUsd += speech.estimatedCostUsd
-                    playbackLevel = 0.55
-                    phase = .speaking
-                    playbackDeadline = max(playbackDeadline, ProcessInfo.processInfo.systemUptime) + duration
+                    var segmentDuration = 0.0
+                    for try await chunk in speech.chunks {
+                        try Task.checkCancellation()
+                        guard !chunk.isEmpty, chunk.count % 2 == 0 else {
+                            throw ShannonAPIError.invalidResponse
+                        }
+                        if firstAudioLatencyMilliseconds == nil, let responseStartedAt {
+                            firstAudioLatencyMilliseconds = Int(
+                                (ProcessInfo.processInfo.systemUptime - responseStartedAt) * 1_000
+                            )
+                        }
+                        let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
+                        segmentDuration += duration
+                        outputAudioSeconds += duration
+                        playbackLevel = 0.55
+                        phase = .speaking
+                        playbackDeadline = max(playbackDeadline, ProcessInfo.processInfo.systemUptime) + duration
+                    }
+                    guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
+                    ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
                     updateCost()
                 }
                 let remaining = max(0, playbackDeadline - ProcessInfo.processInfo.systemUptime)

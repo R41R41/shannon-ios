@@ -54,6 +54,10 @@ extension ShannonConversationModel {
         try await client.synthesizeGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
     }
 
+    public func streamGeminiSpeech(_ text: String, style: String? = nil) async throws -> ShannonGeminiSpeechStream {
+        try await client.streamGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
+    }
+
     public func createGeminiLiveSession(
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonGeminiLiveSessionDTO {

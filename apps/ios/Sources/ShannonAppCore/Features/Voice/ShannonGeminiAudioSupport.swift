@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 
 enum ShannonGeminiWAV {
@@ -55,6 +54,7 @@ enum ShannonGeminiWAV {
     }
 }
 
+#if os(iOS)
 final class ShannonGeminiLiveOutputRenderProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var didRecordStart = false

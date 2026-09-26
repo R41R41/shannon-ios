@@ -54,7 +54,7 @@ const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePa
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
-  voiceDecision: createConfiguredVoiceDecisionGateway(process.env),
+  voiceDecision: createConfiguredVoiceDecisionGateway(process.env, persistentStore),
   stateStore: persistentStore,
   conversationStore: persistentStore,
   background: backgroundDispatcher,
@@ -159,8 +159,13 @@ const server = createServer(async (request, response) => {
       await handleVoiceTranscription(request, response, principal);
       return;
     }
-    if (url.pathname === '/v1/voice/gemini/speech') {
-      await geminiSpeechRoute(request, response, principal);
+    if (url.pathname === '/v1/voice/gemini/speech' || url.pathname === '/v1/voice/gemini/speech/stream') {
+      await geminiSpeechRoute(
+        request,
+        response,
+        principal,
+        url.pathname.endsWith('/stream') ? 'stream' : 'unary',
+      );
       return;
     }
     if (url.pathname === '/v1/voice/gemini/cascade/sessions') {

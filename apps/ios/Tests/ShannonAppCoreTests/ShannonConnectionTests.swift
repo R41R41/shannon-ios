@@ -459,6 +459,58 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(speech.estimatedCostUsd, 0.0001875)
     }
 
+    func testAPIClientStreamsGeminiPCMWithoutWaitingForAWAV() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "s", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL,
+            token: bearer,
+            deviceID: "device-gemini-stream",
+            scopeKey: "owner-from-server",
+            displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let pcm = Data(repeating: 7, count: 9_600)
+        let session = stubSession { request in
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://shannon.example/companion/v1/voice/gemini/speech/stream"
+            )
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-goog-api-key"))
+            guard let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: [
+                    "content-type": "audio/l16;rate=24000;channels=1",
+                    "x-shannon-gemini-model": "gemini-3.8-flash-lite-tts",
+                    "x-shannon-gemini-voice": "Leda",
+                    "x-shannon-audio-sample-rate": "24000",
+                    "x-shannon-audio-channels": "1",
+                    "x-shannon-audio-bits-per-sample": "16",
+                    "x-shannon-output-usd-per-10-seconds": "0.0015",
+                ]
+            ) else { throw ShannonAPIError.invalidResponse }
+            return (response, pcm)
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+
+        let stream = try await client.streamGeminiSpeech(
+            scopeKey: "untrusted-client-scope",
+            text: "すぐ話して"
+        )
+        var chunks: [Data] = []
+        for try await chunk in stream.chunks { chunks.append(chunk) }
+
+        XCTAssertEqual(stream.model, "gemini-3.8-flash-lite-tts")
+        XCTAssertEqual(stream.voice, "Leda")
+        XCTAssertEqual(stream.sampleRate, 24_000)
+        XCTAssertEqual(chunks.map(\.count), [4_800, 4_800])
+        XCTAssertEqual(chunks.reduce(into: Data(), { $0.append($1) }), pcm)
+    }
+
     func testAPIClientCreatesRealtimeCallAndCommitsTheVisibleTranscript() async throws {
         let previousBrightness = UserDefaults.standard.object(
             forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey

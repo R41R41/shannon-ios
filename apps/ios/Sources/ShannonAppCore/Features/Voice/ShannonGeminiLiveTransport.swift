@@ -161,8 +161,17 @@ final class ShannonGeminiLiveTransport {
         guard wav.sampleRate == 24_000, wav.channels == 1, wav.bitsPerSample == 16 else {
             throw URLError(.cannotDecodeRawData)
         }
-        play(wav.pcm)
+        try play(wav.pcm)
         return speech.durationSeconds
+    }
+
+    @discardableResult
+    func schedulePCM(_ pcm: Data) throws -> Double {
+        guard !pcm.isEmpty, pcm.count % MemoryLayout<Int16>.size == 0 else {
+            throw URLError(.cannotDecodeRawData)
+        }
+        try play(pcm)
+        return Double(pcm.count) / 48_000
     }
 
     func stop() {
@@ -416,8 +425,8 @@ final class ShannonGeminiLiveTransport {
         outgoing?.yield(.init(data: data, kind: .control, audioByteCount: 0))
     }
 
-    private func play(_ pcm: Data) {
-        guard pcm.count >= 2 else { return }
+    private func play(_ pcm: Data) throws {
+        guard pcm.count >= 2 else { throw URLError(.cannotDecodeRawData) }
         let frameCount = pcm.count / MemoryLayout<Int16>.size
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -427,7 +436,7 @@ final class ShannonGeminiLiveTransport {
         ), let buffer = AVAudioPCMBuffer(
             pcmFormat: format,
             frameCapacity: AVAudioFrameCount(frameCount)
-        ), let destination = buffer.int16ChannelData?[0] else { return }
+        ), let destination = buffer.int16ChannelData?[0] else { throw URLError(.cannotDecodeRawData) }
         pcm.withUnsafeBytes { raw in
             guard let source = raw.baseAddress else { return }
             memcpy(destination, source, frameCount * MemoryLayout<Int16>.size)

@@ -26,8 +26,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                 analyzeCameraSnapshot: { data in
                     try await conversationModel.analyzeVoiceCameraSnapshot(jpegData: data)
                 },
-                synthesize: { text, style in
-                    try await conversationModel.synthesizeGeminiSpeech(text, style: style)
+                streamSpeech: { text, style in
+                    try await conversationModel.streamGeminiSpeech(text, style: style)
                 },
                 commitTurn: { user, shannon in
                     try await conversationModel.commitRealtimeVoiceTurn(

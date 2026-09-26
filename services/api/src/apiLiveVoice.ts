@@ -269,6 +269,7 @@ async function completeLiveVoiceDelegation(
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
   const decision = await dependencies.voiceDecision.decide({
+    scopeKey,
     transcript,
     participantMode,
     requestedLocation: deviceContext?.requestedLocation ?? false,
@@ -336,7 +337,7 @@ async function completeLiveVoiceDelegation(
     dailyMindPrompt,
     taskPrompt,
     capabilityPrompt,
-    `[Jev voice route]\nConversation class: ${decision.conversationClass}. Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
+    `[Voice route]\nConversation class: ${decision.conversationClass}. Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
     backendInstructions,
   ].filter(Boolean).join('\n\n');
   const fullHistory = temporaryGuest ? []
