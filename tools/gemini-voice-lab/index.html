@@ -63,18 +63,38 @@
           <fieldset>
             <legend>同じ条件の生成回数</legend>
             <div class="segmented">
-              <label><input type="radio" name="repetitions" value="1"><span>1回<small>すばやく確認</small></span></label>
-              <label><input type="radio" name="repetitions" value="3" checked><span>3回<small>声の安定性も確認</small></span></label>
+              <label><input type="radio" name="repetitions" value="1" checked><span>1回<small>すばやく確認</small></span></label>
+              <label><input type="radio" name="repetitions" value="3"><span>3回<small>声の安定性も確認</small></span></label>
             </div>
           </fieldset>
 
-          <label class="field">声
-            <select id="voice" name="voice" required aria-describedby="voice-help">
-              <option value="Leda">Leda</option><option value="Aoede">Aoede</option>
-              <option value="Zephyr">Zephyr</option><option value="Achernar">Achernar</option>
-            </select>
-            <small id="voice-help">日本語・会話向けの声をGoogleから取得します。</small>
-          </label>
+          <fieldset class="voice-picker-fieldset">
+            <legend>声 <span id="voice-count">1 / 4</span></legend>
+            <label class="field"><span class="sr-only">声を絞り込む</span>
+              <input id="voice-filter" type="search" placeholder="声の名前で絞り込む" autocomplete="off">
+            </label>
+            <div id="voice-options" class="voice-options" role="group" aria-describedby="voice-help">
+              <label><input type="checkbox" value="Leda" checked><span>Leda</span></label>
+              <label><input type="checkbox" value="Aoede"><span>Aoede</span></label>
+              <label><input type="checkbox" value="Zephyr"><span>Zephyr</span></label>
+              <label><input type="checkbox" value="Achernar"><span>Achernar</span></label>
+            </div>
+            <small id="voice-help">Googleの日本語対応候補から最大4つを選び、同じ条件で比較します。</small>
+          </fieldset>
+
+          <fieldset class="effect-tuning">
+            <legend>ブラウザ内の声加工</legend>
+            <div class="effect-presets" aria-label="加工プリセット"></div>
+            <label class="range-field">
+              <span>高さ <output id="pitch-output">+325 cent</output></span>
+              <input id="pitch-cents" type="range" min="0" max="600" step="25" value="325">
+            </label>
+            <label class="range-field">
+              <span>ロボ感 <output id="robot-output">14%</output></span>
+              <input id="robot-amount" type="range" min="0" max="50" step="1" value="14">
+            </label>
+            <small>生成音はそのまま保持し、加工だけをこのブラウザで掛け直します。再生成・追加課金なしで調整でき、保存されるWAVにも反映されます。</small>
+          </fieldset>
 
           <label class="field">台本
             <select id="script-preset">
@@ -116,7 +136,7 @@
 
       <aside class="comparison" aria-labelledby="comparison-title">
         <div class="aside-heading"><h3 id="comparison-title">比較トレイ</h3><button id="clear-samples" class="text-button" type="button">すべて消す</button></div>
-        <div id="sample-empty" class="empty-state"><span aria-hidden="true">♪</span><p>生成した声がここに並びます。</p><small>「両方 × 3回」なら、音質・速度・声のぶれを一度に比べられます。</small></div>
+        <div id="sample-empty" class="empty-state"><span aria-hidden="true">♪</span><p>生成した声がここに並びます。</p><small>声を最大4つ選び、高さとロボ感を再生成なしで聴き比べられます。</small></div>
         <ol id="sample-list" class="sample-list" aria-live="polite"></ol>
       </aside>
     </section>

@@ -47,6 +47,14 @@ import {
   auditionStyles,
 } from '../tools/gemini-voice-lab/voice-audition-presets.js';
 import {
+  encodeMonoFloat32WAV,
+  decodePCM16WAV,
+  normalizeVoiceEffects,
+  pitchRatioFromCents,
+  processVoiceEffects,
+  voiceEffectPresets,
+} from '../tools/gemini-voice-lab/voice-effects.js';
+import {
   liveConversationExamples,
   liveProfile,
   liveProfiles,
@@ -65,6 +73,10 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
   ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-audition-presets.js'), [
     'voice-audition-presets.js',
+    'text/javascript; charset=utf-8',
+  ]);
+  assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-effects.js'), [
+    'voice-effects.js',
     'text/javascript; charset=utf-8',
   ]);
   assert.deepEqual(VOICE_LAB_STATIC_FILES.get('/voice-live-profiles.js'), [
@@ -100,6 +112,32 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
       }
     }
   }
+});
+
+test('browser voice effects keep tuning bounded and emit playable mono WAV', () => {
+  assert.equal(voiceEffectPresets.length, 4);
+  assert.deepEqual(normalizeVoiceEffects({ pitchCents: 999, robotAmount: -1 }), {
+    pitchCents: 600,
+    robotAmount: 0,
+  });
+  assert.ok(Math.abs(pitchRatioFromCents(600) - Math.sqrt(2)) < 1e-10);
+  const source = Float32Array.from({ length: 2_400 }, (_, index) => Math.sin(index / 12) * 0.5);
+  const dry = processVoiceEffects(source, 24_000);
+  assert.deepEqual(dry, source);
+  const processed = processVoiceEffects(source, 24_000, { pitchCents: 325, robotAmount: 0.14 });
+  assert.equal(processed.length, source.length + 960);
+  assert.ok(processed.some((sample, index) => Math.abs(sample - (source[index] ?? 0)) > 0.01));
+  assert.ok(processed.every(sample => Number.isFinite(sample) && Math.abs(sample) <= 0.981));
+  const wav = encodeMonoFloat32WAV(processed, 24_000);
+  const view = new DataView(wav);
+  assert.equal(new TextDecoder().decode(new Uint8Array(wav, 0, 4)), 'RIFF');
+  assert.equal(new TextDecoder().decode(new Uint8Array(wav, 8, 4)), 'WAVE');
+  assert.equal(view.getUint16(22, true), 1);
+  assert.equal(view.getUint32(24, true), 24_000);
+  assert.equal(view.getUint32(40, true), processed.length * 2);
+  const decoded = decodePCM16WAV(wav);
+  assert.equal(decoded.sampleRate, 24_000);
+  assert.equal(decoded.samples.length, processed.length);
 });
 
 test('Live profiles preserve all voice concepts and provide distinct bounded instructions', () => {

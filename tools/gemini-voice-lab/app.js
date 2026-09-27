@@ -1,5 +1,12 @@
 import { auditionJobs, auditionScript, auditionScripts, auditionStyle } from './voice-audition-presets.js';
 import {
+  decodePCM16WAV,
+  encodeMonoFloat32WAV,
+  normalizeVoiceEffects,
+  processVoiceEffects,
+  voiceEffectPresets,
+} from './voice-effects.js';
+import {
   voiceDesignPresets,
   voiceDesignPrompt,
   voiceDesignVariantIsVerified,
@@ -26,14 +33,24 @@ const knownVoices = ['Leda', 'Aoede', 'Zephyr', 'Achernar', 'Laomedeia', 'Achird
 const state = {
   config: null,
   samples: [],
+  voices: knownVoices.map(id => ({ id, label: id, type: 'prebuilt' })),
+  selectedVoiceIds: new Set(['Leda']),
   designedVoices: [],
   live: null,
   cascade: null,
   cascadeHistory: [],
 };
+let effectRenderTimer;
 
 const sampleForm = document.querySelector('#sample-form');
-const voiceSelect = document.querySelector('#voice');
+const voiceFilter = document.querySelector('#voice-filter');
+const voiceOptions = document.querySelector('#voice-options');
+const voiceCount = document.querySelector('#voice-count');
+const pitchCents = document.querySelector('#pitch-cents');
+const pitchOutput = document.querySelector('#pitch-output');
+const robotAmount = document.querySelector('#robot-amount');
+const robotOutput = document.querySelector('#robot-output');
+const effectPresets = document.querySelector('.effect-presets');
 const scriptPreset = document.querySelector('#script-preset');
 const sampleText = document.querySelector('#sample-text');
 const textCount = document.querySelector('#text-count');
@@ -91,6 +108,9 @@ applyDesignPreset(designPreset.value);
 updateLiveProfileSummary();
 updateCascadeProfileSummary();
 updateTextCount();
+renderEffectPresets();
+renderVoiceOptions();
+updateEffectLabels();
 updateExperimentSummary();
 initialize();
 
@@ -105,14 +125,14 @@ sampleText.addEventListener('input', () => {
   updateTextCount();
   updateExperimentSummary();
 });
-voiceSelect.addEventListener('change', () => {
-  if (liveVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
-    liveVoice.value = voiceSelect.value;
-  }
-  if (cascadeVoice.querySelector(`option[value="${CSS.escape(voiceSelect.value)}"]`)) {
-    cascadeVoice.value = voiceSelect.value;
-  }
-});
+voiceFilter.addEventListener('input', renderVoiceOptions);
+voiceOptions.addEventListener('change', updateSelectedVoices);
+for (const input of [pitchCents, robotAmount]) {
+  input.addEventListener('input', () => {
+    updateEffectLabels();
+    scheduleSampleReprocessing();
+  });
+}
 stylePreset.addEventListener('change', () => {
   customStyleField.classList.toggle('hidden', stylePreset.value !== 'custom');
   if (stylePreset.value === 'custom') customStyle.focus();
@@ -152,7 +172,7 @@ cascadeBargeIn.addEventListener('change', updateCascadeBargeInMode);
 window.addEventListener('beforeunload', () => {
   stopLive();
   stopCascade();
-  for (const sample of state.samples) URL.revokeObjectURL(sample.url);
+  for (const sample of state.samples) if (sample.url) URL.revokeObjectURL(sample.url);
   for (const voice of state.designedVoices) URL.revokeObjectURL(voice.url);
 });
 
@@ -176,35 +196,87 @@ async function loadVoices() {
       const label = String(item.display_name ?? item.displayName ?? item.name ?? id);
       voices.set(id, { id, label, type: String(item.type ?? '') });
     }
-    const selected = voiceSelect.value;
     const liveSelected = liveVoice.value;
     const cascadeSelected = cascadeVoice.value;
-    voiceSelect.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
+    state.voices = [...voices.values()];
+    state.selectedVoiceIds = new Set([...state.selectedVoiceIds].filter(id => voices.has(id)));
+    if (!state.selectedVoiceIds.size) state.selectedVoiceIds.add(voices.has('Leda') ? 'Leda' : state.voices[0]?.id);
+    renderVoiceOptions();
     liveVoice.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
     cascadeVoice.replaceChildren(...[...voices.values()].map(({ id, label, type }) => option(id, voiceLabel(id, label, type))));
-    if (voices.has(selected)) voiceSelect.value = selected;
-    else voiceSelect.value = 'Leda';
     if (voices.has(liveSelected)) liveVoice.value = liveSelected;
-    else liveVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
+    else liveVoice.value = firstSelectedVoice() ?? 'Aoede';
     const shannon = [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon maid')
       ?? [...voices.values()].find(item => item.label.trim().toLowerCase() === 'shannon');
     if (shannon) cascadeVoice.value = shannon.id;
     else if (voices.has(cascadeSelected)) cascadeVoice.value = cascadeSelected;
-    else cascadeVoice.value = voices.has(voiceSelect.value) ? voiceSelect.value : 'Aoede';
+    else cascadeVoice.value = firstSelectedVoice() ?? 'Aoede';
   } catch (error) {
     setStatus(sampleStatus, `声一覧は既定候補を使います: ${message(error)}`);
   }
 }
 
+function renderVoiceOptions() {
+  const query = voiceFilter.value.trim().toLocaleLowerCase('ja');
+  const visible = state.voices.filter(({ id, label }) => `${label} ${id}`.toLocaleLowerCase('ja').includes(query));
+  if (!visible.length) {
+    const empty = document.createElement('p');
+    empty.className = 'no-results';
+    empty.textContent = '一致する声がありません。';
+    voiceOptions.replaceChildren(empty);
+  } else {
+    voiceOptions.replaceChildren(...visible.map(({ id, label, type }) => {
+      const row = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = id;
+      input.checked = state.selectedVoiceIds.has(id);
+      const text = document.createElement('span');
+      text.textContent = voiceLabel(id, label, type);
+      row.append(input, text);
+      return row;
+    }));
+  }
+  updateVoiceCount();
+}
+
+function updateSelectedVoices(event) {
+  const input = event.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  if (input.checked && state.selectedVoiceIds.size >= 4 && !state.selectedVoiceIds.has(input.value)) {
+    input.checked = false;
+    setStatus(sampleStatus, '一度に比較できる声は4つまでです。', 'error');
+    return;
+  }
+  if (input.checked) state.selectedVoiceIds.add(input.value);
+  else state.selectedVoiceIds.delete(input.value);
+  updateVoiceCount();
+  updateExperimentSummary();
+  const primary = firstSelectedVoice();
+  if (primary && liveVoice.querySelector(`option[value="${CSS.escape(primary)}"]`)) liveVoice.value = primary;
+  if (primary && cascadeVoice.querySelector(`option[value="${CSS.escape(primary)}"]`)) cascadeVoice.value = primary;
+}
+
+function updateVoiceCount() {
+  voiceCount.textContent = `${state.selectedVoiceIds.size} / 4`;
+}
+
+function firstSelectedVoice() { return state.selectedVoiceIds.values().next().value ?? null; }
+
 async function generateSample(event) {
   event.preventDefault();
   if (!state.config) return;
+  const selectedVoices = [...state.selectedVoiceIds];
+  if (!selectedVoices.length) {
+    setStatus(sampleStatus, '比較する声を1つ以上選んでください。', 'error');
+    return;
+  }
   generateButton.disabled = true;
   const form = new FormData(sampleForm);
   const modelMode = form.get('model-mode');
   const repetitions = Number(form.get('repetitions')) || 1;
-  const jobs = auditionJobs(modelMode, repetitions);
-  const voice = voiceSelect.value;
+  const modelJobs = auditionJobs(modelMode, repetitions);
+  const jobs = selectedVoices.flatMap(voice => modelJobs.map(job => ({ ...job, voice })));
   const selectedStyle = stylePreset.value === 'custom' ? null : auditionStyle(stylePreset.value);
   const style = stylePreset.value === 'custom' ? customStyle.value : selectedStyle?.value ?? '';
   const script = auditionScript(scriptPreset.value);
@@ -213,30 +285,32 @@ async function generateSample(event) {
   let failures = 0;
   let totalCost = 0;
   for (const job of jobs) {
-    setStatus(sampleStatus, `${completed + failures + 1} / ${jobs.length} を生成中 · ${shortModelName(job.model)} ${job.run}/${repetitions}`);
+    setStatus(sampleStatus, `${completed + failures + 1} / ${jobs.length} を生成中 · ${job.voice} · ${shortModelName(job.model)} ${job.run}/${repetitions}`);
     try {
-      const response = await post('/api/sample', { model: job.model, voice, text: sampleText.value, style });
+      const response = await post('/api/sample', { model: job.model, voice: job.voice, text: sampleText.value, style });
       if (!response.ok) throw await responseError(response);
       const blob = await response.blob();
       const durationMilliseconds = Number(response.headers.get('x-shannon-duration-ms')) || 0;
       const elapsedMilliseconds = Number(response.headers.get('x-shannon-elapsed-ms')) || 0;
       totalCost += ttsCost(job.model, durationMilliseconds);
-      state.samples.unshift({
-        id: crypto.randomUUID(), batchId, model: job.model, voice, style,
+      const sample = {
+        id: crypto.randomUUID(), batchId, model: job.model, voice: job.voice, style,
         styleName: stylePreset.value === 'custom' ? '自由入力' : selectedStyle?.label,
-        scriptName: script?.label ?? '自由入力', text: sampleText.value, blob,
-        url: URL.createObjectURL(blob), durationMilliseconds, elapsedMilliseconds,
+        scriptName: script?.label ?? '自由入力', text: sampleText.value, sourceBlob: blob,
+        url: null, durationMilliseconds, elapsedMilliseconds,
         run: job.run, repetitions,
-      });
+      };
+      await prepareSampleAudio(sample);
+      state.samples.unshift(sample);
       completed += 1;
-      while (state.samples.length > 8) {
+      while (state.samples.length > 24) {
         const removed = state.samples.pop();
-        URL.revokeObjectURL(removed.url);
+        if (removed.url) URL.revokeObjectURL(removed.url);
       }
       renderSamples();
     } catch (error) {
       failures += 1;
-      setStatus(sampleStatus, `${shortModelName(job.model)} ${job.run}/${repetitions} を生成できませんでした: ${message(error)}`, 'error');
+      setStatus(sampleStatus, `${job.voice} · ${shortModelName(job.model)} ${job.run}/${repetitions} を生成できませんでした: ${message(error)}`, 'error');
     }
   }
   generateButton.disabled = false;
@@ -254,14 +328,14 @@ function renderSamples() {
     const audio = document.createElement('audio');
     audio.controls = true;
     audio.preload = 'metadata';
-    audio.src = sample.url;
+    if (sample.url) audio.src = sample.url;
     const footer = document.createElement('footer');
     const metrics = document.createElement('span');
-    metrics.textContent = `${formatDuration(sample.durationMilliseconds)} · 生成${formatDuration(sample.elapsedMilliseconds)} · 約${usd(ttsCost(sample.model, sample.durationMilliseconds))}`;
+    metrics.textContent = `${formatDuration(sample.durationMilliseconds)} · 生成${formatDuration(sample.elapsedMilliseconds)} · ${effectDescription(sample.effects)} · 約${usd(ttsCost(sample.model, sample.durationMilliseconds))}`;
     const actions = document.createElement('span');
     const download = document.createElement('a');
-    download.href = sample.url;
-    download.download = `shannon-${safeFilename(sample.voice)}-${shortModel.toLowerCase()}.wav`;
+    download.href = sample.url ?? '#';
+    download.download = `shannon-${safeFilename(sample.voice)}-${shortModel.toLowerCase()}-${effectFilename(sample.effects)}.wav`;
     download.textContent = '保存';
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -277,27 +351,89 @@ function renderSamples() {
 function removeSample(id) {
   const index = state.samples.findIndex(sample => sample.id === id);
   if (index < 0) return;
-  URL.revokeObjectURL(state.samples[index].url);
+  if (state.samples[index].url) URL.revokeObjectURL(state.samples[index].url);
   state.samples.splice(index, 1);
   renderSamples();
 }
 
 function clearSamples() {
-  for (const sample of state.samples) URL.revokeObjectURL(sample.url);
+  for (const sample of state.samples) if (sample.url) URL.revokeObjectURL(sample.url);
   state.samples = [];
   renderSamples();
   setStatus(sampleStatus, '比較トレイを空にしました。');
+}
+
+async function prepareSampleAudio(sample) {
+  if (!sample.sourceSamples) {
+    const decoded = decodePCM16WAV(await sample.sourceBlob.arrayBuffer());
+    sample.sourceSamples = decoded.samples;
+    sample.sampleRate = decoded.sampleRate;
+  }
+  const effects = currentEffectSettings();
+  const processed = processVoiceEffects(sample.sourceSamples, sample.sampleRate, effects);
+  const wav = encodeMonoFloat32WAV(processed, sample.sampleRate);
+  if (sample.url) URL.revokeObjectURL(sample.url);
+  sample.url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+  sample.effects = effects;
+  sample.processedDurationMilliseconds = Math.round(processed.length / sample.sampleRate * 1_000);
+}
+
+function scheduleSampleReprocessing() {
+  clearTimeout(effectRenderTimer);
+  effectRenderTimer = setTimeout(async () => {
+    try {
+      for (const sample of state.samples) await prepareSampleAudio(sample);
+      renderSamples();
+      if (state.samples.length) setStatus(sampleStatus, '高さとロボ感を、生成済みサンプルへ掛け直しました。', 'success');
+    } catch (error) {
+      setStatus(sampleStatus, `音声加工を更新できませんでした: ${message(error)}`, 'error');
+    }
+  }, 120);
+}
+
+function renderEffectPresets() {
+  effectPresets.replaceChildren(...voiceEffectPresets.map(preset => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.effectPreset = preset.id;
+    button.textContent = preset.label;
+    button.addEventListener('click', () => {
+      pitchCents.value = String(preset.pitchCents);
+      robotAmount.value = String(Math.round(preset.robotAmount * 100));
+      updateEffectLabels();
+      scheduleSampleReprocessing();
+    });
+    return button;
+  }));
+}
+
+function currentEffectSettings() {
+  return normalizeVoiceEffects({
+    pitchCents: Number(pitchCents.value),
+    robotAmount: Number(robotAmount.value) / 100,
+  });
+}
+
+function updateEffectLabels() {
+  const effects = currentEffectSettings();
+  pitchOutput.value = `${effects.pitchCents > 0 ? '+' : ''}${Math.round(effects.pitchCents)} cent`;
+  robotOutput.value = `${Math.round(effects.robotAmount * 100)}%`;
+  for (const button of effectPresets.querySelectorAll('button')) {
+    const preset = voiceEffectPresets.find(item => item.id === button.dataset.effectPreset);
+    button.classList.toggle('active', preset?.pitchCents === effects.pitchCents && preset?.robotAmount === effects.robotAmount);
+  }
 }
 
 function updateExperimentSummary() {
   const form = new FormData(sampleForm);
   const models = form.get('model-mode') === 'both' ? 2 : 1;
   const repetitions = Number(form.get('repetitions')) || 1;
-  const calls = models * repetitions;
+  const voices = state.selectedVoiceIds.size;
+  const calls = models * repetitions * voices;
   const style = stylePreset.value === 'custom'
     ? (customStyle.value.trim() ? '自由入力の演技' : '演技指定なし')
     : auditionStyle(stylePreset.value)?.label ?? '演技指定なし';
-  experimentSummary.innerHTML = `<strong>${calls}件を順番に生成</strong> · ${models === 2 ? 'Flash / Flash-Lite' : '1モデル'} × ${repetitions}回 · ${escapeHTML(style)}`;
+  experimentSummary.innerHTML = `<strong>${calls}件を順番に生成</strong> · ${voices}声 × ${models === 2 ? 'Flash / Flash-Lite' : '1モデル'} × ${repetitions}回 · ${escapeHTML(style)} · 加工は再課金なし`;
 }
 
 async function designVoice(event) {
@@ -412,7 +548,11 @@ async function deleteDesignedVoice(localId, input, button) {
   try {
     const response = await post('/api/delete', { id, confirm: id });
     if (!response.ok) throw await responseError(response);
-    voiceSelect.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
+    state.voices = state.voices.filter(item => item.id !== id);
+    state.selectedVoiceIds.delete(id);
+    if (!state.selectedVoiceIds.size && state.voices.some(item => item.id === 'Leda')) state.selectedVoiceIds.add('Leda');
+    renderVoiceOptions();
+    updateExperimentSummary();
     liveVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     cascadeVoice.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     if (liveVoice.value === id) liveVoice.value = 'Aoede';
@@ -435,11 +575,15 @@ function selectedDesignVariant() {
 }
 
 function addDesignedVoiceOption(id, name) {
-  for (const select of [voiceSelect, liveVoice, cascadeVoice]) {
+  state.voices = [{ id, label: name, type: 'prompted' }, ...state.voices.filter(item => item.id !== id)];
+  state.selectedVoiceIds = new Set([id]);
+  voiceFilter.value = '';
+  renderVoiceOptions();
+  updateExperimentSummary();
+  for (const select of [liveVoice, cascadeVoice]) {
     select.querySelector(`option[value="${CSS.escape(id)}"]`)?.remove();
     select.prepend(option(id, `${name} · 作成した声`));
   }
-  voiceSelect.value = id;
   liveVoice.value = id;
   cascadeVoice.value = id;
 }
@@ -1267,6 +1411,15 @@ function formatDuration(milliseconds) { return milliseconds >= 1_000 ? `${(milli
 function wait(milliseconds) { return new Promise(resolve => setTimeout(resolve, milliseconds)); }
 function ttsCost(model, durationMilliseconds) { return Math.ceil(durationMilliseconds / 10_000) * (model.includes('lite') ? .0015 : .00225); }
 function usd(value) { return `$${value.toFixed(value < .01 ? 4 : 3)}`; }
+function effectDescription(effects = {}) {
+  const value = normalizeVoiceEffects(effects);
+  if (!value.pitchCents && !value.robotAmount) return '原音';
+  return `高さ+${Math.round(value.pitchCents)} · ロボ${Math.round(value.robotAmount * 100)}%`;
+}
+function effectFilename(effects = {}) {
+  const value = normalizeVoiceEffects(effects);
+  return `pitch-${Math.round(value.pitchCents)}-robot-${Math.round(value.robotAmount * 100)}`;
+}
 function styleLabel(style) { return style.length > 26 ? `${style.slice(0, 26)}…` : style; }
 function safeFilename(value) { return String(value).replace(/[^A-Za-z0-9._-]+/gu, '-').slice(0, 70); }
 function escapeHTML(value) { const span = document.createElement('span'); span.textContent = value; return span.innerHTML; }

@@ -1,6 +1,6 @@
 # Gemini 3.8 TTS listening lab
 
-Status: listening harness plus opt-in iPhone turn-based and native-audio Live experiments; not the default voice provider
+Status: private listening workbench for the production Gemini cascade voice
 
 ## Purpose
 
@@ -45,11 +45,16 @@ The permanent Gemini key remains in Azure's mode-0600 environment file.
 
 Use the four areas in order:
 
-1. **声を比較** — choose one Japanese emotion script and a short turn-level acting
-   direction, then generate Flash and Flash-Lite either once or three times each.
-   The in-memory A/B tray keeps up to eight samples with model, repetition, request
-   time, audio duration, and estimated cost, so identity stability is visible rather
-   than inferred from one lucky take.
+1. **声を比較** — choose up to four Gemini voices, one Japanese emotion script,
+   and a short turn-level acting direction, then generate Flash and Flash-Lite either
+   once or three times each. The exact number of billable generation calls is shown
+   before submission. The in-memory A/B tray keeps up to 24 samples with voice,
+   model, repetition, request time, audio duration, and estimated cost, so identity
+   stability is visible rather than inferred from one lucky take. Each generated WAV
+   retains its unmodified PCM in the tab. Pitch (0–600 cents) and a bounded
+   ring-modulation / short-comb “robot” texture (0–50%) can then be reapplied locally
+   to every sample without another API call. The player and downloaded WAV use the
+   current browser effect settings.
 2. **声をデザイン** — create a persistent Voice ID only after acknowledging its
    one-year storage, quota, and cost. Nine editable original-character presets
    cover translucent emotional Shannon, frank sunny energy, confident prickly
@@ -109,10 +114,16 @@ Library ID and a temporary prompted Voice ID on 2026-09-25; the temporary voice 
 deleted after its TTS and Live compatibility checks passed.
 
 The browser sends neither the API key nor ordinary TTS text/audio to Shannon's
-database. Samples use in-memory object URLs; Live and cascade transcription use
+database. Original and processed samples use in-memory buffers and object URLs;
+changing pitch or robot texture never calls Gemini. Live and cascade transcription use
 single-use tokens and browser echo cancellation, send 16 kHz mono PCM, and play
 24 kHz PCM. The cascade's bounded text history exists only in the current tab. No
 audio, transcript, message, token, or credential is logged or persisted by the lab.
+
+The browser effect is an audition aid, not a claim that the iPhone already uses the
+same DSP. A chosen setting must be ported to the native cascade playout path and pass
+the physical-device AEC, barge-in, route-change, clarity, and latency gates before it
+becomes Shannon's production sound.
 
 The original deployed Azure smoke check on 2026-09-25 used stored voice
 `voice_8hj0yjm1cckv`. With the latency-first pair, response text completed in
