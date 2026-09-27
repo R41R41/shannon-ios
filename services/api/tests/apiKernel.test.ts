@@ -872,6 +872,7 @@ describe('Shannon local API kernel', () => {
     expect(session.instructions).toContain('[Live voice conversation]');
     expect(session.instructions).toContain('primarily speaks Japanese');
     expect(session.instructions).toContain('slightly clumsy maid AI');
+    expect(session.instructions).toContain('katakana first-person pronoun ボク');
     expect(session.instructions).toContain('conversation partner is ライ');
 
     const brightSession = api.realtimeVoiceSession('owner-a', threadId, { brightVoice: true });

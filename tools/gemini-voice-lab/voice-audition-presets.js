@@ -12,7 +12,7 @@ export const auditionScripts = Object.freeze([
   Object.freeze({
     id: 'prickly',
     label: '強気 · 照れ隠し',
-    text: 'もう、そんな無茶して。別に心配してたわけじゃないけど……<short pause> 次はちゃんと私にも相談しなさいよね。',
+    text: 'もう、そんな無茶して。別に心配してたわけじゃないけど……<short pause> 次はちゃんとボクにも相談しなさいよね。',
   }),
   Object.freeze({
     id: 'reassure',
@@ -22,7 +22,7 @@ export const auditionScripts = Object.freeze([
   Object.freeze({
     id: 'resolve',
     label: '決意 · 凛とした芯',
-    text: '大丈夫。怖くても、一歩ずつなら進める。私も一緒に考えるから、ここから立て直そう。',
+    text: '大丈夫。怖くても、一歩ずつなら進める。ボクも一緒に考えるから、ここから立て直そう。',
   }),
   Object.freeze({
     id: 'pronunciation',
@@ -32,7 +32,7 @@ export const auditionScripts = Object.freeze([
   Object.freeze({
     id: 'range',
     label: '感情レンジ · 1本で確認',
-    text: '<gasp> えっ、本当に？ すごい！ <giggle> ……でも、ちょっとだけ心配したんだからね。<short pause> うん。もう大丈夫。次は私と一緒に進もう。',
+    text: '<gasp> えっ、本当に？ すごい！ <giggle> ……でも、ちょっとだけ心配したんだからね。<short pause> うん。もう大丈夫。次はボクと一緒に進もう。',
   }),
 ]);
 

@@ -31,6 +31,9 @@ final class ShannonGeminiLiveTransport {
     private let inputStateHandler: InputStateHandler
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let playbackFormatMixerNode = AVAudioMixerNode()
+    private let pitchNode = AVAudioUnitTimePitch()
+    private let voiceEffectProfile = ShannonGeminiVoiceEffectPolicy.profile()
     private let vad = ShannonGeminiLiveVADState()
     private let captureChunker = ShannonGeminiLiveAudioChunker()
     private let outputRenderProbe = ShannonGeminiLiveOutputRenderProbe()
@@ -142,6 +145,8 @@ final class ShannonGeminiLiveTransport {
     func discardPlayback() {
         playerNode.stop()
         playerNode.reset()
+        playbackFormatMixerNode.reset()
+        pitchNode.reset()
         if audioEngine.isRunning { playerNode.play() }
     }
 
@@ -315,9 +320,16 @@ final class ShannonGeminiLiveTransport {
             outputRenderProbe: outputRenderProbe
         )
 
+        pitchNode.pitch = voiceEffectProfile.pitchCents
+        pitchNode.rate = 1
+        pitchNode.bypass = voiceEffectProfile.pitchCents == 0
         audioEngine.attach(playerNode)
+        audioEngine.attach(playbackFormatMixerNode)
+        audioEngine.attach(pitchNode)
         audioEngine.attach(keepAliveSource)
-        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: outputFormat)
+        audioEngine.connect(playerNode, to: playbackFormatMixerNode, format: outputFormat)
+        audioEngine.connect(playbackFormatMixerNode, to: pitchNode, format: deviceOutputFormat)
+        audioEngine.connect(pitchNode, to: audioEngine.mainMixerNode, format: deviceOutputFormat)
         // PlayerNode has no buffers until Gemini speaks. A continuously rendered
         // silent source keeps Voice Processing I/O advancing while the user talks.
         audioEngine.connect(keepAliveSource, to: audioEngine.mainMixerNode, format: deviceOutputFormat)
@@ -347,6 +359,8 @@ final class ShannonGeminiLiveTransport {
                 "capture": "voice_processing_input_tap",
                 "monitoring": "disconnected",
                 "output_sample_rate": String(Int(deviceOutputFormat.sampleRate)),
+                "playout_pitch_cents": String(Int(voiceEffectProfile.pitchCents)),
+                "playout_robot_amount": String(voiceEffectProfile.robotAmount),
             ]
         )
         ShannonVoiceDiagnostics.shared.record("gemini.audio.tap.installed")

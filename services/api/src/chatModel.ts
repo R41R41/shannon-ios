@@ -10,6 +10,7 @@ import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
   INTENT_PLAN_INSTRUCTIONS,
+  SHANNON_PERSONA_INSTRUCTIONS,
   SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
   THREAD_SUMMARY_INSTRUCTIONS,
   THREAD_TITLE_INSTRUCTIONS,
@@ -162,7 +163,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
+        instructions: [request.systemPrompt, SHANNON_PERSONA_INSTRUCTIONS, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
           ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
           ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
           GENERATED_ARTIFACT_INSTRUCTIONS,
@@ -330,6 +331,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         model: this.model,
         instructions: [
           request.systemPrompt,
+          SHANNON_PERSONA_INSTRUCTIONS,
           '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。通常は1〜3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にする。',
           ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
         ].join('\n\n'),

@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Shannon remote voice brightness")
 struct ShannonRemoteVoicePitchTests {
-    @Test("new installs raise only remote playout by 200 cents")
+    @Test("new installs raise only remote playout by 50 cents")
     func defaultBrightStyle() throws {
         let suiteName = "ShannonRemoteVoicePitchTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -13,7 +13,7 @@ struct ShannonRemoteVoicePitchTests {
         #expect(ShannonRemoteVoicePitchPolicy.isEnabled(defaults: defaults))
         #expect(ShannonRemoteVoicePitchPolicy.headerValue(defaults: defaults) == "enabled")
         #expect(ShannonRemoteVoicePitchPolicy.profile(for: .remotePlayout, defaults: defaults) ==
-            ShannonRemoteVoicePitchProfile(pitchCents: 200, outputGainDecibels: -1))
+            ShannonRemoteVoicePitchProfile(pitchCents: 50, outputGainDecibels: 0))
         #expect(ShannonRemoteVoicePitchPolicy.profile(for: .microphoneInput, defaults: defaults) == nil)
     }
 

@@ -20,8 +20,8 @@ public enum ShannonRemoteVoicePitchPolicy {
     public static let enabledHeaderValue = "enabled"
     public static let disabledHeaderValue = "disabled"
     public static let productionProfile = ShannonRemoteVoicePitchProfile(
-        pitchCents: 200,
-        outputGainDecibels: -1
+        pitchCents: 50,
+        outputGainDecibels: 0
     )
 
     public static func isEnabled(defaults: UserDefaults = .standard) -> Bool {

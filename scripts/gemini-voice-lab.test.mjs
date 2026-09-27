@@ -116,6 +116,9 @@ test('voice design presets are original, bounded, and uniquely addressable', () 
 
 test('browser voice effects keep tuning bounded and emit playable mono WAV', () => {
   assert.equal(voiceEffectPresets.length, 4);
+  assert.deepEqual(voiceEffectPresets.find(item => item.id === 'production'), {
+    id: 'production', label: '採用値 · +50', pitchCents: 50, robotAmount: 0,
+  });
   assert.deepEqual(normalizeVoiceEffects({ pitchCents: 999, robotAmount: -1 }), {
     pitchCents: 600,
     robotAmount: 0,
@@ -151,6 +154,7 @@ test('Live profiles preserve all voice concepts and provide distinct bounded ins
     assert.ok(item.summary.length > 20);
     const instruction = liveSystemInstruction(item.id);
     assert.ok(instruction.length > 150 && instruction.length < 2_000);
+    assert.match(instruction, /一人称は必ずカタカナの「ボク」/u);
     assert.ok(liveTTSStyle(item.id).length > 20 && liveTTSStyle(item.id).length <= 500);
     assert.doesNotMatch(instruction, /過剰な演技や長い説明は避けて/u);
   }
@@ -158,6 +162,7 @@ test('Live profiles preserve all voice concepts and provide distinct bounded ins
   assert.match(liveSystemInstruction('tsundere-leader'), /照れた時だけ/u);
   assert.match(liveSystemInstruction('shannon-maid'), /話し相手はあなたを開発した「ライ」/u);
   assert.match(liveSystemInstruction('shannon-maid'), /例文はそのまま反復せず/u);
+  assert.doesNotMatch(liveProfile('shannon-maid').instruction, /私(?:の方|がそば|に任せ)/u);
   assert.match(liveTTSStyle('shannon-maid'), /声に笑顔/u);
   assert.deepEqual(liveConversationExamples('shannon-maid').map(turn => turn.role), ['user', 'model', 'user', 'model']);
   assert.equal(liveConversationExamples('neutral').length, 0);

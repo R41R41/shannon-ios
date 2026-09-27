@@ -1,6 +1,6 @@
 export const voiceEffectPresets = Object.freeze([
   Object.freeze({ id: 'dry', label: '原音', pitchCents: 0, robotAmount: 0 }),
-  Object.freeze({ id: 'bright', label: '少し高く', pitchCents: 250, robotAmount: 0 }),
+  Object.freeze({ id: 'production', label: '採用値 · +50', pitchCents: 50, robotAmount: 0 }),
   Object.freeze({ id: 'digital', label: '明るい電子感', pitchCents: 325, robotAmount: 0.14 }),
   Object.freeze({ id: 'robot', label: '高めロボ', pitchCents: 425, robotAmount: 0.28 }),
 ]);

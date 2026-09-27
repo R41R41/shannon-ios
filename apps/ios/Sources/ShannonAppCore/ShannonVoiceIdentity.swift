@@ -271,7 +271,7 @@ public struct ShannonVoiceIdentityView: View {
                             Text("明るい声に調整")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(palette.textPrimary)
-                            Text("声の種類は変えず、2半音高くします")
+                            Text("声の種類は変えず、半音の半分だけ高くします")
                                 .font(.caption)
                                 .foregroundStyle(palette.textSecondary)
                         }
@@ -280,7 +280,7 @@ public struct ShannonVoiceIdentityView: View {
                 } header: {
                     Text("リアルタイム音声の仕上げ")
                 } footer: {
-                    Text("次の音声会話から、選択中の声を+200 centsで再生します。マイク入力は加工しません。")
+                    Text("次の音声会話から、選択中の声を+50 centsで再生します。ロボ加工やマイク入力の加工はしません。")
                 }
 
                 Section {

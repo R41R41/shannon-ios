@@ -11,6 +11,7 @@ describe('OpenAI Responses chat adapter', () => {
       expect(body.max_output_tokens).toBe(480);
       expect(body.tools).toBeUndefined();
       expect(body.reasoning).toEqual({ effort: 'none' });
+      expect(body.instructions).toContain('カタカナの「ボク」');
       return new Response(JSON.stringify({ output_text: 'うん、今日はゆっくり話そう。' }));
     });
     const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
@@ -45,6 +46,7 @@ describe('OpenAI Responses chat adapter', () => {
       expect(body.text.format.schema.required).toContain('intentPlan');
       expect(body.instructions).toContain('シャノン側のreplyの両方');
       expect(body.instructions).toContain('後からトークを探して再開する');
+      expect(body.instructions).toContain('カタカナの「ボク」');
       expect(body.input).toEqual([{ role: 'user', content: '週末は京都に行きたい' }]);
       return new Response(JSON.stringify({ output_text: JSON.stringify({
         reply: '庭園を巡るのはどうかな。', threadTitle: '「京都の庭園巡り」',
