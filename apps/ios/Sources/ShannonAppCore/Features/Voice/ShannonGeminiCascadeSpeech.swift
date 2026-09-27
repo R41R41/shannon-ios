@@ -74,3 +74,55 @@ enum ShannonGeminiCascadeSpeech {
         return value.count <= 3 ? 360 : 220
     }
 }
+
+@MainActor
+enum ShannonGeminiSpeechPipeline {
+    typealias StreamSpeech = @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
+    typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream) async throws -> Void
+
+    static func play(
+        segments: [String],
+        style: @MainActor (String) -> String,
+        streamSpeech: @escaping StreamSpeech,
+        consumeSpeech: @escaping ConsumeSpeech
+    ) async throws {
+        guard let first = segments.first else { return }
+        let speech = try await streamSpeech(first, style(first))
+        try await play(
+            speech,
+            at: segments.startIndex,
+            segments: segments,
+            style: style,
+            streamSpeech: streamSpeech,
+            consumeSpeech: consumeSpeech
+        )
+    }
+
+    private static func play(
+        _ speech: ShannonGeminiSpeechStream,
+        at index: Int,
+        segments: [String],
+        style: @MainActor (String) -> String,
+        streamSpeech: @escaping StreamSpeech,
+        consumeSpeech: @escaping ConsumeSpeech
+    ) async throws {
+        let nextIndex = segments.index(after: index)
+        guard nextIndex < segments.endIndex else {
+            try await consumeSpeech(speech)
+            return
+        }
+
+        let nextText = segments[nextIndex]
+        async let prefetched = streamSpeech(nextText, style(nextText))
+        try await consumeSpeech(speech)
+        let nextSpeech = try await prefetched
+        try await play(
+            nextSpeech,
+            at: nextIndex,
+            segments: segments,
+            style: style,
+            streamSpeech: streamSpeech,
+            consumeSpeech: consumeSpeech
+        )
+    }
+}

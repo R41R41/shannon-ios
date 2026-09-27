@@ -10,13 +10,36 @@ import { readJson, sendJson } from './serverHttp.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 
+export class SpeechScopeConcurrencyLimiter {
+  private readonly active = new Map<string, number>();
+
+  constructor(private readonly maximumConcurrentRequests = 2) {
+    if (!Number.isInteger(maximumConcurrentRequests) || maximumConcurrentRequests < 1) {
+      throw new Error('maximumConcurrentRequests must be a positive integer');
+    }
+  }
+
+  acquire(scopeKey: string): boolean {
+    const count = this.active.get(scopeKey) ?? 0;
+    if (count >= this.maximumConcurrentRequests) return false;
+    this.active.set(scopeKey, count + 1);
+    return true;
+  }
+
+  release(scopeKey: string): void {
+    const count = this.active.get(scopeKey) ?? 0;
+    if (count <= 1) this.active.delete(scopeKey);
+    else this.active.set(scopeKey, count - 1);
+  }
+}
+
 export function createGeminiSpeechRoute(
   environment: Readonly<Record<string, string | undefined>>,
   usageStore: LlmUsageStore,
   consumeAllowance: ConsumeAllowance,
 ) {
   const gateway = createConfiguredGeminiSpeechGateway(environment, usageStore);
-  const activeScopes = new Set<string>();
+  const activeScopes = new SpeechScopeConcurrencyLimiter(2);
 
   return async function handleGeminiSpeech(
     request: IncomingMessage,
@@ -35,11 +58,10 @@ export function createGeminiSpeechRoute(
     if (!consumeAllowance(principal.deviceId)) {
       return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
     }
-    if (activeScopes.has(principal.scopeKey)) {
+    if (!activeScopes.acquire(principal.scopeKey)) {
       return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。' });
     }
 
-    activeScopes.add(principal.scopeKey);
     try {
       const body = await readJson(request, 32 * 1024);
       const values = body && typeof body === 'object' && !Array.isArray(body)
@@ -84,7 +106,7 @@ export function createGeminiSpeechRoute(
         message: status === 400 ? '読み上げる文章が不正です。' : 'Gemini音声を生成できませんでした。',
       });
     } finally {
-      activeScopes.delete(principal.scopeKey);
+      activeScopes.release(principal.scopeKey);
     }
   };
 }

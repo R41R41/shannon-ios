@@ -310,13 +310,13 @@ public final class ShannonGeminiLiveSessionModel {
                 let reply = response.reply
                 shannonTranscript = reply
                 var playbackDeadline = ProcessInfo.processInfo.systemUptime
-                for segment in ShannonGeminiCascadeSpeech.segments(reply) {
-                    let speech = try await streamSpeech(
-                        segment,
-                        ShannonGeminiCascadeSpeech.style(for: segment, plan: response.voicePlan)
-                    )
+                try await ShannonGeminiSpeechPipeline.play(
+                    segments: ShannonGeminiCascadeSpeech.segments(reply),
+                    style: { ShannonGeminiCascadeSpeech.style(for: $0, plan: response.voicePlan) },
+                    streamSpeech: streamSpeech
+                ) { [self] speech in
                     try Task.checkCancellation()
-                    voice = speech.voice
+                    self.voice = speech.voice
                     guard speech.sampleRate == 24_000,
                           speech.channels == 1,
                           speech.bitsPerSample == 16 else {
@@ -328,21 +328,21 @@ public final class ShannonGeminiLiveSessionModel {
                         guard !chunk.isEmpty, chunk.count % 2 == 0 else {
                             throw ShannonAPIError.invalidResponse
                         }
-                        if firstAudioLatencyMilliseconds == nil, let responseStartedAt {
-                            firstAudioLatencyMilliseconds = Int(
+                        if self.firstAudioLatencyMilliseconds == nil, let responseStartedAt = self.responseStartedAt {
+                            self.firstAudioLatencyMilliseconds = Int(
                                 (ProcessInfo.processInfo.systemUptime - responseStartedAt) * 1_000
                             )
                         }
-                        let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
+                        let duration = try self.transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
                         segmentDuration += duration
-                        outputAudioSeconds += duration
-                        playbackLevel = 0.55
-                        phase = .speaking
+                        self.outputAudioSeconds += duration
+                        self.playbackLevel = 0.55
+                        self.phase = .speaking
                         playbackDeadline = max(playbackDeadline, ProcessInfo.processInfo.systemUptime) + duration
                     }
                     guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
-                    ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
-                    updateCost()
+                    self.ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
+                    self.updateCost()
                 }
                 let remaining = max(0, playbackDeadline - ProcessInfo.processInfo.systemUptime)
                 try await Task.sleep(for: .seconds(remaining))
