@@ -6,6 +6,7 @@ import {
   normalizedSpeechText,
 } from './geminiSpeech.js';
 import type { LlmUsageStore } from './llmUsage.js';
+import type { GeminiSpeechGateway } from './geminiSpeech.js';
 import { readJson, sendJson } from './serverHttp.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
@@ -111,19 +112,20 @@ export function createGeminiSpeechRoute(
   };
 }
 
-async function streamSpeech(
+export async function streamSpeech(
   request: IncomingMessage,
   response: ServerResponse,
-  gateway: NonNullable<ReturnType<typeof createConfiguredGeminiSpeechGateway>>,
+  gateway: Pick<GeminiSpeechGateway, 'stream'>,
   speechRequest: { scopeKey: string; text: string; style?: string },
 ): Promise<void> {
   const controller = new AbortController();
+  let iterator: AsyncIterator<Uint8Array> | undefined;
   const abort = () => controller.abort();
   request.once('aborted', abort);
   response.once('close', abort);
   try {
     const stream = await gateway.stream(speechRequest, controller.signal);
-    const iterator = stream.chunks[Symbol.asyncIterator]();
+    iterator = stream.chunks[Symbol.asyncIterator]();
     const first = await iterator.next();
     if (first.done) throw new GeminiSpeechError('GEMINI_SPEECH_FAILED');
     response.writeHead(200, {
@@ -146,9 +148,16 @@ async function streamSpeech(
       await writeChunk(response, next.value);
     }
     if (!controller.signal.aborted) response.end();
+  } catch (error) {
+    // Caller cancellation (barge-in/closing the session) is not a provider failure.
+    // Provider timeouts use a separate gateway controller and still propagate.
+    if (!controller.signal.aborted) throw error;
   } finally {
     request.off('aborted', abort);
     response.off('close', abort);
+    try { await iterator?.return?.(); } catch (error) {
+      if (!controller.signal.aborted) throw error;
+    }
   }
 }
 

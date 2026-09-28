@@ -31,6 +31,7 @@ final class ShannonGeminiLiveTransport {
     private let inputStateHandler: InputStateHandler
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let playbackDrain = ShannonVoicePlaybackDrain()
     private let playbackFormatMixerNode = AVAudioMixerNode()
     private let pitchNode = AVAudioUnitTimePitch()
     private let voiceEffectProfile = ShannonGeminiVoiceEffectPolicy.profile()
@@ -143,6 +144,7 @@ final class ShannonGeminiLiveTransport {
     }
 
     func discardPlayback() {
+        playbackDrain.cancel()
         playerNode.stop()
         playerNode.reset()
         playbackFormatMixerNode.reset()
@@ -179,8 +181,13 @@ final class ShannonGeminiLiveTransport {
         return Double(pcm.count) / 48_000
     }
 
+    func waitForPlayback() async throws {
+        try await playbackDrain.wait()
+    }
+
     func stop() {
         guard !stopped else { return }
+        playbackDrain.cancel()
         stopped = true
         outgoing?.finish()
         outgoing = nil
@@ -457,7 +464,10 @@ final class ShannonGeminiLiveTransport {
         }
         buffer.frameLength = AVAudioFrameCount(frameCount)
         receivedAudioSeconds += Double(frameCount) / 24_000
-        playerNode.scheduleBuffer(buffer)
+        let ticket = playbackDrain.schedule()
+        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor in self?.playbackDrain.played(ticket) }
+        }
         if !playerNode.isPlaying { playerNode.play() }
     }
 

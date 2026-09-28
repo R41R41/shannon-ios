@@ -45,8 +45,15 @@ extension ShannonAPIClient {
             throw ShannonAPIError.invalidResponse
         }
 
-        var completed: ShannonLiveVoiceDelegationResponseDTO?
-        for try await line in bytes.lines {
+        return try await ShannonVoiceStreamReader.read(lines: bytes.lines, onSegment: onSegment)
+    }
+}
+
+enum ShannonVoiceStreamReader {
+    static func read<Lines: AsyncSequence>(
+        lines: Lines, onSegment: ShannonVoiceSegmentHandler
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO where Lines.Element == String {
+        for try await line in lines {
             try Task.checkCancellation()
             guard !line.isEmpty else { continue }
             let event = try JSONDecoder().decode(
@@ -61,17 +68,19 @@ extension ShannonAPIClient {
                       !text.isEmpty else { throw ShannonAPIError.invalidResponse }
                 await onSegment(text, event.voicePlan)
             case .completed:
-                completed = event.response
+                // Completion is the protocol boundary. A later EOF/reset must not
+                // turn an already completed (and possibly spoken) reply into failure.
+                guard let completed = event.response,
+                      !completed.threadId.isEmpty,
+                      !completed.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || completed.voicePlan?.shouldRespond == false else {
+                    throw ShannonAPIError.invalidResponse
+                }
+                return completed
             case .error:
                 throw ShannonAPIError.rejected(status: event.status ?? 502)
             }
         }
-        guard let completed,
-              !completed.threadId.isEmpty,
-              !completed.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || completed.voicePlan?.shouldRespond == false else {
-            throw ShannonAPIError.invalidResponse
-        }
-        return completed
+        throw ShannonAPIError.invalidResponse
     }
 }

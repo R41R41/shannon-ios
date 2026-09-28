@@ -1,7 +1,8 @@
 import Foundation
 
 /// Input survives cancellation of output. A response acknowledges only its frozen
-/// prefix after playback, never inputs which arrived while that response was running.
+/// prefix once a complete answer is visible, never inputs which arrived while
+/// that response was running. Audio delivery is tracked independently.
 struct ShannonPendingVoiceTurns: Sendable {
     struct Turn: Equatable, Sendable {
         let id: UUID

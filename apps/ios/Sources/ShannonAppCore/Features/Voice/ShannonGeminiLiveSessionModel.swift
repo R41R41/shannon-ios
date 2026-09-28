@@ -36,7 +36,8 @@ public final class ShannonGeminiLiveSessionModel {
     private var duckRestoreTask: Task<Void, Never>?
     private var bargeCandidateStartedAt: TimeInterval?
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
-    var responsePlaybackDeadline: TimeInterval = 0
+    var responseDelivery = ShannonVoiceResponseDelivery()
+    var responseCommitTask: Task<Bool, Never>?
     var ttsCostUsd: Double = 0
     private var didRecordCaptureStart = false
     private var didRecordFirstQueuedChunk = false
@@ -332,6 +333,10 @@ public final class ShannonGeminiLiveSessionModel {
 
     private func interruptResponse() {
         guard responseTask != nil else { return }
+        ShannonVoiceDiagnostics.shared.record("gemini.response.interrupted",
+            sessionID: responseGenerationID?.uuidString,
+            metadata: ["reply_complete": String(responseDelivery.response != nil),
+                "pending_input_count": String(pendingTurns.turns.count)])
         // Typed input is still pending, not failed: the next response includes it.
         let now = ProcessInfo.processInfo.systemUptime
         if let started = bargeCandidateStartedAt {
@@ -397,7 +402,24 @@ public final class ShannonGeminiLiveSessionModel {
         errorMessage = nil
         failureRecovery = nil
         textSendState = .idle
-        if arguments.contains("-ShannonPreviewVoiceFailed") {
+        if arguments.contains("-ShannonPreviewVoiceAudioFailed") {
+            phase = .listening
+            var fixtureLedger = ShannonPendingVoiceTurns()
+            fixtureLedger.append(rawText: userTranscript, text: userTranscript, source: .speech)
+            if let batch = fixtureLedger.batch() {
+                do {
+                    try responseDelivery.complete(.init(threadId: "synthetic-preview", model: "synthetic",
+                        reply: shannonTranscript), batch: batch, ledger: &fixtureLedger)
+                } catch { preconditionFailure("Invalid synthetic voice preview") }
+            }
+            errorMessage = responseDelivery.failureMessage
+        } else if arguments.contains("-ShannonPreviewVoicePartialFailed") {
+            phase = .listening
+            responseDelivery = ShannonVoiceResponseDelivery()
+            responseDelivery.scheduledAudio(seconds: 1)
+            shannonTranscript = "まず優先したいことから……"
+            errorMessage = responseDelivery.failureMessage
+        } else if arguments.contains("-ShannonPreviewVoiceFailed") {
             phase = .failed
             errorMessage = "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
             failureRecovery = .reconnect

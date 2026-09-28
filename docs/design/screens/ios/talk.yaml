@@ -3,7 +3,7 @@ screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
 last_verified_at: 2026-09-29
-verification_scope: "iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。今回のマイク・写真・人物の実タップSmoke、Reduce Motion実表示、実機音声Smokeは未確認（以前のReduce Motion証跡は履歴）"
+verification_scope: "iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92ではLightの音声のみ失敗、Darkの生成途中失敗の通知が折り返され、入力欄と重ならないことを確認。今回のマイク・写真・人物の実タップSmoke、Reduce Motion実表示、実機音声Smokeは未確認（以前のReduce Motion証跡は履歴）"
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -56,7 +56,7 @@ states:
   gemini_listening: "連続入力中の音量と参加者の字幕を示し、短い無音後に通常のShannon返答へ進む"
   gemini_processing: "調査、通常のShannon返答、文単位の音声生成を考えていますとして示す"
   gemini_speaking: "Shannonの返答字幕、認識モデル、カスタム声、費用見積りを示し、割り込みを受け付ける"
-  gemini_error: "認識・返答・音声生成の失敗を安全に示し、同じ画面から明示的な再試行へ戻れる"
+  gemini_error: "認識・返答生成・途中で止まった生成・音声のみの失敗を区別する。全文完成後の音声失敗は返答を画面と履歴に残し、同じ入力の再生成を要求しない。全文未完成なら入力を保持し、追加発話や再送へ戻れる"
   camera_preview: "撮影画像、撮り直す、共有を同時に示し、自動送信しない"
   library_preview: "写真ライブラリから選んだ画像をプレビューし、選び直す・外す・共有するを明示する"
   library_error: "読み込み・画像認識・送信に失敗しても音声セッションを維持し、テキスト対話では再試行可能な写真を保持する"
@@ -74,6 +74,8 @@ accessibility:
   reduce_motion: "入力欄とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形を保つ。小さな音量表示も静止させる"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-voice-audio-error-light-v1.png"
+    - "docs/screenshots/shannon-ios-voice-partial-error-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-controls-listening-light-v2.png"
     - "docs/screenshots/shannon-ios-voice-controls-keyboard-dark-v2.png"
     - "docs/screenshots/shannon-ios-voice-controls-guest-accessibility-light-v2.png"

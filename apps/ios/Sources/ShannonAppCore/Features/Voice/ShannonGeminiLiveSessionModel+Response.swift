@@ -2,7 +2,7 @@
 import Foundation
 
 extension ShannonGeminiLiveSessionModel {
-    /// Cancellation owns output only. The ledger owns inputs until a response is heard.
+    /// Cancellation owns output only. Only a complete, visible answer handles input.
     func beginResponse() {
         guard let performStreamingDelegation, let streamSpeech else { return }
         guard let batch = pendingTurns.batch() else {
@@ -17,7 +17,10 @@ extension ShannonGeminiLiveSessionModel {
         latencyMeasurements.startResponse()
         shannonTranscript = ""
         errorMessage = nil
-        responsePlaybackDeadline = ProcessInfo.processInfo.systemUptime
+        responseDelivery = ShannonVoiceResponseDelivery()
+        let previousCommit = responseCommitTask
+        ShannonVoiceDiagnostics.shared.record("gemini.response.started", sessionID: generation.uuidString,
+            metadata: ["input_count": String(batch.turns.count)])
         phase = .thinking
         responseTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -30,7 +33,13 @@ extension ShannonGeminiLiveSessionModel {
                 }
             )
             defer { coordinator.cancel() }
+            var failureStage = "generation"
+            var commit: Task<Bool, Never>?
             do {
+                // A completed reply's history write belongs to the session, not
+                // playback. Barge-in cannot cancel it or erase context for this turn.
+                if let previousCommit { _ = await previousCommit.value }
+                try requireCurrentResponse(generation)
                 // Authorization remains the last actual utterance, never an LLM reconstruction.
                 let utterance = ShannonVoiceUserUtteranceDTO(
                     id: batch.id.uuidString, text: batch.turns[batch.turns.count - 1].text,
@@ -44,50 +53,70 @@ extension ShannonGeminiLiveSessionModel {
                     await coordinator.enqueue(segment, plan: plan)
                 }
                 try requireCurrentResponse(generation)
-                if response.voicePlan?.shouldRespond != false {
-                    guard !response.reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                        throw ShannonAPIError.invalidResponse
+                try responseDelivery.complete(response, batch: batch, ledger: &pendingTurns)
+                shannonTranscript = response.reply
+                textSendState = .idle
+                latencyMeasurements.recordServerMetrics(response.voiceMetrics)
+                handleDelegationResponse?(response)
+                ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,
+                    metadata: ["acknowledged_input_count": String(batch.turns.count)])
+                if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
+                    let task = Task { @MainActor in
+                        do {
+                            try await commitTurn(batch.rawText, response.reply)
+                            return true
+                        } catch {
+                            ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed",
+                                sessionID: generation.uuidString)
+                            return false
+                        }
                     }
+                    commit = task
+                    responseCommitTask = task
+                }
+                if response.voicePlan?.shouldRespond != false {
+                    failureStage = "synthesis_stream"
                     try await coordinator.finish()
                     try requireCurrentResponse(generation)
-                    let remaining = max(0, responsePlaybackDeadline - ProcessInfo.processInfo.systemUptime)
-                    try await Task.sleep(for: .seconds(remaining))
+                    failureStage = "playback"
+                    try await transport?.waitForPlayback()
                     try requireCurrentResponse(generation)
+                    ShannonVoiceDiagnostics.shared.record("gemini.response.playback.completed",
+                        sessionID: generation.uuidString)
                 }
-                latencyMeasurements.recordServerMetrics(response.voiceMetrics)
-                shannonTranscript = response.reply
-                pendingTurns.acknowledge(batch)
+                if let commit {
+                    let saved = await commit.value
+                    try requireCurrentResponse(generation)
+                    if !saved { errorMessage = "返答はできていますが、会話履歴を保存できませんでした。" }
+                }
                 playbackLevel = 0
                 phase = .listening
                 responseTask = nil
                 responseGenerationID = nil
                 textSendState = .idle
-                handleDelegationResponse?(response)
-                if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
-                    do {
-                        try await commitTurn(batch.rawText, response.reply)
-                    } catch {
-                        // Do not overwrite a newer response's state after this await.
-                        if responseGenerationID == nil {
-                            errorMessage = "返答は完了しましたが、会話履歴を保存できませんでした。"
-                        }
-                    }
-                }
                 if responseGenerationID == nil, !pendingTurns.turns.isEmpty, transport != nil {
                     beginResponse()
                 }
             } catch is CancellationError {
-                // A replacement response or reconnect will reuse the unacknowledged inputs.
+                ShannonVoiceDiagnostics.shared.record("gemini.response.cancelled", sessionID: generation.uuidString)
+                // Only unfinished generation is reused. Completed text stays in history.
                 return
             } catch {
                 guard responseGenerationID == generation else { return }
+                ShannonVoiceDiagnostics.shared.record("gemini.response.failed", sessionID: generation.uuidString,
+                    metadata: ["stage": failureStage,
+                        "category": ShannonVoiceResponseDelivery.errorCategory(error),
+                        "reply_complete": String(responseDelivery.response != nil),
+                        "scheduled_audio_ms": String(Int(responseDelivery.scheduledAudioSeconds * 1_000)),
+                        "pending_input_count": String(pendingTurns.turns.count)])
                 transport?.discardPlayback()
                 responseTask = nil
                 responseGenerationID = nil
                 playbackLevel = 0
                 phase = .listening
-                errorMessage = "返答を作れませんでした。入力は保持しています。続けて話すか再送してください。"
-                if let text = batch.turns.last(where: { $0.source == .typed })?.text {
+                errorMessage = responseDelivery.failureMessage
+                if responseDelivery.response == nil,
+                   let text = batch.turns.last(where: { $0.source == .typed })?.text {
                     textSendState = .failed(text: text, message: "入力を保持しています。次の発話にも引き継ぎます。")
                 }
             }
@@ -120,7 +149,7 @@ extension ShannonGeminiLiveSessionModel {
             outputAudioSeconds += duration
             playbackLevel = 0.55
             phase = .speaking
-            responsePlaybackDeadline = max(responsePlaybackDeadline, ProcessInfo.processInfo.systemUptime) + duration
+            responseDelivery.scheduledAudio(seconds: duration)
         }
         guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
         ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
