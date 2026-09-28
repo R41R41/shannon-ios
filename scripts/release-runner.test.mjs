@@ -82,3 +82,13 @@ test('pins the first WebRTC release with official dSYMs and includes them in arc
   assert.doesNotMatch(symbolScript, /ditto "\$source_dsym" "\$destination_dsym"/u);
   assert.doesNotMatch(symbolScript, /mv "\$staged_dsym" "\$destination_dsym"/u);
 });
+
+test('bounds symbol download retries including TLS resets without bypassing verification', async () => {
+  const script = await readFile(new URL('./copy-webrtc-dsym.sh', import.meta.url), 'utf8');
+  assert.match(script, /--retry 3 --retry-all-errors/u);
+  assert.match(script, /--connect-timeout 20 --max-time 120 --retry-max-time 180/u);
+  assert.match(script, /--output "\$downloaded_archive" "\$symbols_url"/u);
+  assert.match(script, /actual_checksum="\$\(checksum "\$downloaded_archive"\)"/u);
+  assert.match(script, /WebRTC dSYM checksum mismatch/u);
+  assert.match(script, /WebRTC framework and dSYM UUIDs do not match/u);
+});

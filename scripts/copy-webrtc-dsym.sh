@@ -60,7 +60,10 @@ if [ -z "${SHANNON_WEBRTC_DSYM_ARCHIVE:-}" ]; then
   if [ ! -f "$symbols_archive" ] || [ "$(checksum "$symbols_archive")" != "$symbols_sha256" ]; then
     downloaded_archive="$work_directory/WebRTC-M152-dSYM.zip"
     echo "Downloading WebRTC ${webrtc_version} symbols for the archive"
-    /usr/bin/curl --fail --location --retry 3 --silent --show-error \
+    # Cloud can reset TLS while fetching this idempotent public asset. Retry all
+    # transfer failures into a file, with bounded attempts, then verify as usual.
+    /usr/bin/curl --fail --location --retry 3 --retry-all-errors \
+      --connect-timeout 20 --max-time 120 --retry-max-time 180 --silent --show-error \
       --output "$downloaded_archive" "$symbols_url"
     actual_checksum="$(checksum "$downloaded_archive")"
     if [ "$actual_checksum" != "$symbols_sha256" ]; then
