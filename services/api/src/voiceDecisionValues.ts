@@ -1,6 +1,6 @@
 import {
   mandatorySkillPatterns, VOICE_SKILLS,
-  type VoiceDecisionInput, type VoiceSkill,
+  type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
 } from './voiceDecisionContract.js';
 
 export function applyMandatorySkillFloors(
@@ -30,6 +30,31 @@ export function selectedSkills(
   ]);
   return VOICE_SKILLS.filter(skill => scores[skill] >= threshold
     && !(participantMode === 'guest' && privateSkills.has(skill)));
+}
+
+export function normalizedConversationClass(
+  value: VoiceConversationClass,
+  replyRequiredProbability: number,
+  skills: readonly VoiceSkill[],
+  transcript: string,
+): VoiceConversationClass {
+  if (acknowledgementOnly(transcript)) return 'no_response';
+  if (value === 'no_response' && replyRequiredProbability >= 0.4) {
+    return skills.length ? 'skill_simple' : 'direct';
+  }
+  if (skills.length && value === 'direct') return 'skill_simple';
+  return value;
+}
+
+export function shouldRespondToTurn(
+  conversationClass: VoiceConversationClass,
+): boolean {
+  return conversationClass !== 'no_response';
+}
+
+function acknowledgementOnly(transcript: string): boolean {
+  return /^(?:うん|はい|へえ|なるほど|そうなんだ|ふーん|了解|わかった|オッケー|ok)[。！!…]*$/iu
+    .test(transcript.trim());
 }
 
 export function noulValue(value: unknown): number {

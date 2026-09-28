@@ -9,7 +9,7 @@ import {
 import {
   affectIntensityValue, applyMandatorySkillFloors, boundedProbability, choiceValue,
   directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
-  probabilityValue, selectedSkills,
+  normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
 
 export {
@@ -23,7 +23,7 @@ export class LocalVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode = 'fallback' as const;
   readonly model = 'local-rules';
 
-  constructor(private readonly skillThreshold = 0.55) {}
+  constructor(private readonly skillThreshold = 0.85) {}
 
   async decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision> {
     return localDecision(input, this.skillThreshold, 0);
@@ -55,7 +55,7 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
     this.model = validModel(options.model ?? 'gpt-5.6-luna');
     this.endpoint = options.endpoint ?? 'https://api.openai.com/v1/responses';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 1_200;
-    this.skillThreshold = boundedProbability(options.skillThreshold, 0.55);
+    this.skillThreshold = boundedProbability(options.skillThreshold, 0.85);
     this.fetcher = options.fetcher ?? fetch;
     this.nowMilliseconds = options.nowMilliseconds ?? Date.now;
   }
@@ -180,7 +180,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
     this.endpoint = options.endpoint ?? 'https://api.typesafe.ai/v1/systemone';
     this.model = options.model ?? 'jev-latest';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 900;
-    this.skillThreshold = boundedProbability(options.skillThreshold, 0.55);
+    this.skillThreshold = boundedProbability(options.skillThreshold, 0.85);
     this.fetcher = options.fetcher ?? fetch;
     this.nowMilliseconds = options.nowMilliseconds ?? Date.now;
   }
@@ -298,7 +298,7 @@ export function createConfiguredVoiceDecisionGateway(
 ): VoiceDecisionGateway {
   const skillThreshold = optionalProbability(
     environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
-  ) ?? 0.55;
+  ) ?? 0.85;
   const openAIApiKey = environment.OPENAI_API_KEY?.trim();
   const openAIFallback = openAIApiKey ? new OpenAIVoiceDecisionGateway({
     apiKey: openAIApiKey,
@@ -342,7 +342,7 @@ function parsedOpenAIDecision(
   applyMandatorySkillFloors(skillScores, input);
   const replyRequiredProbability = probabilityValue(value.replyRequiredProbability);
   const solutionWantedProbability = probabilityValue(value.solutionWantedProbability);
-  const conversationClass = directChoiceValue(value.conversationClass,
+  const rawConversationClass = directChoiceValue(value.conversationClass,
     ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'] as const);
   const latencyClass = directChoiceValue(value.latencyClass,
     ['under_1s', 'under_3s', 'under_10s', 'over_10s'] as const);
@@ -351,12 +351,16 @@ function parsedOpenAIDecision(
   const affectIntensity = probabilityValue(value.affectIntensity);
   const delivery = directChoiceValue(value.delivery,
     ['conversational', 'quick', 'gentle', 'focused', 'energetic'] as const);
+  const selected = selectedSkills(skillScores, skillThreshold, input.participantMode);
+  const conversationClass = normalizedConversationClass(
+    rawConversationClass, replyRequiredProbability, selected, input.transcript,
+  );
   return {
     source: 'openai',
-    shouldRespond: !(conversationClass === 'no_response' && replyRequiredProbability < 0.4),
+    shouldRespond: shouldRespondToTurn(conversationClass),
     replyRequiredProbability, solutionWantedProbability, conversationClass, latencyClass,
     affect, affectIntensity, delivery,
-    selectedSkills: selectedSkills(skillScores, skillThreshold, input.participantMode),
+    selectedSkills: selected,
     skillScores,
     elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
@@ -379,7 +383,7 @@ function parsedJevDecision(
   applyMandatorySkillFloors(skillScores, input);
   const replyRequiredProbability = noulValue(answerMap.reply_required);
   const solutionWantedProbability = noulValue(answerMap.solution_wanted);
-  const conversationClass = choiceValue(answerMap.conversation_class, [
+  const rawConversationClass = choiceValue(answerMap.conversation_class, [
     'no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex',
   ] as const);
   const latencyClass = choiceValue(answerMap.latency_class, [
@@ -392,11 +396,15 @@ function parsedJevDecision(
   const delivery = choiceValue(answerMap.delivery, [
     'conversational', 'quick', 'gentle', 'focused', 'energetic',
   ] as const);
-  const shouldRespond = !(conversationClass === 'no_response' && replyRequiredProbability < 0.4);
+  const selected = selectedSkills(skillScores, skillThreshold, input.participantMode);
+  const conversationClass = normalizedConversationClass(
+    rawConversationClass, replyRequiredProbability, selected, input.transcript,
+  );
+  const shouldRespond = shouldRespondToTurn(conversationClass);
   return {
     source: 'jev', shouldRespond, replyRequiredProbability, solutionWantedProbability,
     conversationClass, latencyClass, affect, affectIntensity, delivery,
-    selectedSkills: selectedSkills(skillScores, skillThreshold, input.participantMode),
+    selectedSkills: selected,
     skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
 }

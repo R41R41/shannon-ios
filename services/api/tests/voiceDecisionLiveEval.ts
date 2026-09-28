@@ -3,10 +3,26 @@ import { voiceDecisionEvaluationCases } from './voiceDecisionEvaluationCases.js'
 
 const apiKey = process.env.TYPESAFE_API_KEY?.trim();
 if (!apiKey) throw new Error('TYPESAFE_API_KEY is required for the live voice-router evaluation');
+const skillThreshold = Number(process.env.SHANNON_VOICE_SKILL_THRESHOLD ?? '0.85');
+if (!Number.isFinite(skillThreshold) || skillThreshold < 0 || skillThreshold > 1) {
+  throw new Error('SHANNON_VOICE_SKILL_THRESHOLD must be between 0 and 1');
+}
 
-const gateway = new JevVoiceDecisionGateway({ apiKey, timeoutMilliseconds: 1_200 });
+const gateway = new JevVoiceDecisionGateway({ apiKey, timeoutMilliseconds: 1_200, skillThreshold });
 const latencies: number[] = [];
 const failures: string[] = [];
+const failureDetails: Array<{
+  id: string;
+  source: string;
+  shouldRespond: boolean;
+  conversationClass: string;
+  latencyClass: string;
+  selectedSkills: readonly string[];
+  missingSkills: readonly string[];
+  unexpectedSkills: readonly string[];
+  skillScores: Readonly<Record<string, number>>;
+  checks: Readonly<Record<string, boolean>>;
+}> = [];
 
 for (const testCase of voiceDecisionEvaluationCases) {
   const decision = await gateway.decide({
@@ -18,12 +34,30 @@ for (const testCase of voiceDecisionEvaluationCases) {
   });
   latencies.push(decision.elapsedMilliseconds);
   const missingSkills = testCase.expectedSkills.filter(skill => !decision.selectedSkills.includes(skill));
-  const passed = decision.source === 'jev'
-    && decision.shouldRespond === testCase.shouldRespond
-    && testCase.expectedClasses.includes(decision.conversationClass)
-    && testCase.expectedLatency.includes(decision.latencyClass)
-    && missingSkills.length === 0;
-  if (!passed) failures.push(testCase.id);
+  const unexpectedSkills = decision.selectedSkills.filter(skill => !testCase.expectedSkills.includes(skill));
+  const checks = {
+    source: decision.source === 'jev',
+    response: decision.shouldRespond === testCase.shouldRespond,
+    conversationClass: testCase.expectedClasses.includes(decision.conversationClass),
+    latencyClass: testCase.expectedLatency.includes(decision.latencyClass),
+    skills: missingSkills.length === 0 && unexpectedSkills.length === 0,
+  };
+  const passed = Object.values(checks).every(Boolean);
+  if (!passed) {
+    failures.push(testCase.id);
+    failureDetails.push({
+      id: testCase.id,
+      source: decision.source,
+      shouldRespond: decision.shouldRespond,
+      conversationClass: decision.conversationClass,
+      latencyClass: decision.latencyClass,
+      selectedSkills: decision.selectedSkills,
+      missingSkills,
+      unexpectedSkills,
+      skillScores: decision.skillScores,
+      checks,
+    });
+  }
 }
 
 latencies.sort((left, right) => left - right);
@@ -31,8 +65,10 @@ const percentile = (fraction: number): number => latencies[Math.ceil(latencies.l
 const passRate = (voiceDecisionEvaluationCases.length - failures.length) / voiceDecisionEvaluationCases.length;
 console.log(JSON.stringify({
   cases: voiceDecisionEvaluationCases.length,
+  skillThreshold,
   passRate,
   failedCaseIDs: failures,
+  failureDetails,
   latencyMilliseconds: { p50: percentile(0.5), p95: percentile(0.95), maximum: percentile(1) },
 }, null, 2));
 

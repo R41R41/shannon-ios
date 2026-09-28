@@ -73,6 +73,40 @@ describe('Jev voice decision routing', () => {
     expect(decision.conversationClass).toBe('no_response');
   });
 
+  it('normalizes inconsistent Jev class answers without silencing meaningful turns', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      answers: jevAnswers({
+        reply_required: { type: 'noul', noul: 0.9 },
+        conversation_class: { type: 'choice', choice: 'no_response' },
+        skill__daily_mind: { type: 'noul', noul: 0.9 },
+      }),
+    })));
+    const gateway = new JevVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: '今日は何を考えてたの？', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    expect(decision.shouldRespond).toBe(true);
+    expect(decision.conversationClass).toBe('skill_simple');
+    expect(decision.selectedSkills).toContain('daily_mind');
+  });
+
+  it('treats a bounded standalone acknowledgement as no-response even when Jev overcalls it', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      answers: jevAnswers({
+        reply_required: { type: 'noul', noul: 0.9 },
+        conversation_class: { type: 'choice', choice: 'direct' },
+      }),
+    })));
+    const gateway = new JevVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: 'うん', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    expect(decision.shouldRespond).toBe(false);
+    expect(decision.conversationClass).toBe('no_response');
+  });
+
   it('falls back without losing mandatory current-information routing or exposing owner skills to guests', async () => {
     const gateway = new JevVoiceDecisionGateway({
       apiKey: 'test-only',
@@ -111,7 +145,7 @@ describe('OpenAI voice decision compatibility routing', () => {
           affectIntensity: 0.68,
           delivery: 'gentle',
           skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [
-            skill, skill === 'conversation_memory' || skill === 'daily_mind' ? 0.8 : 0.1,
+            skill, skill === 'conversation_memory' || skill === 'daily_mind' ? 0.9 : 0.1,
           ])),
         }),
       }));
