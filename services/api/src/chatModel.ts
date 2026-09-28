@@ -111,6 +111,11 @@ export interface ShannonChatModel {
   readonly model: string;
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult>;
   generateVoice?(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult>;
+  generateVoiceStreaming?(
+    request: ShannonVoiceModelRequest,
+    onTextDelta: (delta: string) => void | Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<ShannonChatModelResult>;
 }
 
 const LOCAL_REPLY = 'うん、聞いてるよ。LLMの鍵を設定すると、ここからShannonとして会話できるようになる。';
@@ -320,38 +325,13 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
   }
 
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
-    const complex = request.conversationClass === 'skill_complex';
     const response = await this.fetcher(this.endpoint, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.options.apiKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model: this.model,
-        instructions: [
-          request.systemPrompt,
-          SHANNON_PERSONA_INSTRUCTIONS,
-          '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。通常は1〜3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にする。',
-          ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
-        ].join('\n\n'),
-        input: [
-          ...request.history.map(item => ({ role: item.role, content: item.content })),
-          { role: 'user', content: request.message },
-        ],
-        reasoning: { effort: complex ? 'low' : 'none' },
-        text: { verbosity: complex ? 'medium' : 'low' },
-        max_output_tokens: complex ? 900 : 480,
-        ...(request.useWebSearch ? {
-          tools: [{ type: 'web_search', search_context_size: complex ? 'medium' : 'low' }],
-          tool_choice: { type: 'web_search' },
-          include: ['web_search_call.action.sources'],
-          max_tool_calls: complex ? 3 : 2,
-        } : {}),
-        store: false,
-        prompt_cache_key: stableScopeIdentifier(request.scopeKey),
-        safety_identifier: stableScopeIdentifier(request.scopeKey),
-      }),
+      body: JSON.stringify(this.voiceRequestPayload(request)),
       signal: AbortSignal.timeout(this.timeoutMilliseconds),
     });
     const raw = await response.text();
@@ -375,6 +355,126 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       reply,
       ...(webSources.length ? { webSources } : {}),
     };
+  }
+
+  async generateVoiceStreaming(
+    request: ShannonVoiceModelRequest,
+    onTextDelta: (delta: string) => void | Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<ShannonChatModelResult> {
+    const timeout = AbortSignal.timeout(this.timeoutMilliseconds);
+    const response = await this.fetcher(this.endpoint, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.options.apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ...this.voiceRequestPayload(request), stream: true }),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    if (!response.ok || !response.body) {
+      const raw = await response.text();
+      throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(parseJson(raw))}`);
+    }
+
+    let reply = '';
+    let completedEnvelope: unknown;
+    for await (const event of responseSSEEvents(response.body)) {
+      const value = event && typeof event === 'object' && !Array.isArray(event)
+        ? event as Record<string, unknown>
+        : {};
+      if (value.type === 'response.output_text.delta' && typeof value.delta === 'string') {
+        reply += value.delta;
+        await onTextDelta(value.delta);
+      } else if (value.type === 'response.output_text.done' && !reply && typeof value.text === 'string') {
+        reply = value.text;
+        await onTextDelta(value.text);
+      } else if (value.type === 'response.completed') {
+        completedEnvelope = value.response;
+      } else if (value.type === 'error' || value.type === 'response.failed') {
+        throw new Error('OPENAI_RESPONSE_STREAM_FAILED');
+      }
+    }
+    reply = reply.trim();
+    if (!reply || !completedEnvelope) throw new Error('OPENAI_RESPONSE_STREAM_INCOMPLETE');
+    const usage = responseUsage(completedEnvelope);
+    this.options.usageStore?.recordLlmUsage({
+      scopeKey: request.scopeKey,
+      lane: 'chat',
+      model: this.model,
+      ...usage,
+      estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
+      occurredAt: this.options.now?.() ?? new Date().toISOString(),
+    });
+    const webSources = request.useWebSearch ? extractWebSources(completedEnvelope) : [];
+    return {
+      mode: this.mode,
+      model: this.model,
+      reply,
+      ...(webSources.length ? { webSources } : {}),
+    };
+  }
+
+  private voiceRequestPayload(request: ShannonVoiceModelRequest): Record<string, unknown> {
+    const complex = request.conversationClass === 'skill_complex';
+    const maximumOutputTokens = request.conversationClass === 'greeting' ? 180
+      : request.conversationClass === 'direct' ? 320
+        : complex ? 900 : 480;
+    return {
+      model: this.model,
+      instructions: [
+        request.systemPrompt,
+        SHANNON_PERSONA_INSTRUCTIONS,
+        '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。',
+        ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+      ].join('\n\n'),
+      input: [
+        ...request.history.map(item => ({ role: item.role, content: item.content })),
+        { role: 'user', content: request.message },
+      ],
+      reasoning: { effort: complex ? 'low' : 'none' },
+      text: { verbosity: complex ? 'medium' : 'low' },
+      max_output_tokens: maximumOutputTokens,
+      ...(request.useWebSearch ? {
+        tools: [{ type: 'web_search', search_context_size: complex ? 'medium' : 'low' }],
+        tool_choice: { type: 'web_search' },
+        include: ['web_search_call.action.sources'],
+        max_tool_calls: complex ? 3 : 2,
+      } : {}),
+      store: false,
+      prompt_cache_key: stableScopeIdentifier(request.scopeKey),
+      safety_identifier: stableScopeIdentifier(request.scopeKey),
+    };
+  }
+}
+
+async function* responseSSEEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const blocks = pending.split(/\r?\n\r?\n/u);
+      pending = blocks.pop() ?? '';
+      for (const block of blocks) {
+        const data = block.split(/\r?\n/u)
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.slice(5).trimStart())
+          .join('\n');
+        if (!data || data === '[DONE]') continue;
+        yield parseJson(data);
+      }
+      if (done) break;
+    }
+    const data = pending.split(/\r?\n/u)
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n');
+    if (data && data !== '[DONE]') yield parseJson(data);
+  } finally {
+    reader.releaseLock();
   }
 }
 

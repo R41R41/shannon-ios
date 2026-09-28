@@ -23,6 +23,14 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                         participantMode: participantMode
                     )
                 },
+                performStreamingDelegation: { request, utterance, participantMode, onSegment in
+                    try await conversationModel.performLiveVoiceDelegationStreamingResponse(
+                        transcript: request,
+                        userUtterance: utterance,
+                        participantMode: participantMode,
+                        onSegment: onSegment
+                    )
+                },
                 analyzeCameraSnapshot: { data in
                     try await conversationModel.analyzeVoiceCameraSnapshot(jpegData: data)
                 },

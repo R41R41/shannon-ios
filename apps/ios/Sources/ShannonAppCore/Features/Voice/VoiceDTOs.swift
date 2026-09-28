@@ -237,6 +237,33 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     }
 }
 
+public enum ShannonLiveVoiceStreamEventTypeDTO: String, Codable, Equatable, Sendable {
+    case plan
+    case segment
+    case completed
+    case error
+}
+
+public struct ShannonLiveVoiceStreamEventDTO: Codable, Equatable, Sendable {
+    public let type: ShannonLiveVoiceStreamEventTypeDTO
+    public let text: String?
+    public let voicePlan: ShannonVoicePlanDTO?
+    public let response: ShannonLiveVoiceDelegationResponseDTO?
+    public let status: Int?
+}
+
+public typealias ShannonVoiceSegmentHandler = @MainActor @Sendable (
+    _ text: String,
+    _ voicePlan: ShannonVoicePlanDTO?
+) async -> Void
+
+public typealias ShannonVoiceStreamingDelegation = @MainActor (
+    _ text: String,
+    _ utterance: ShannonVoiceUserUtteranceDTO?,
+    _ participantMode: ShannonVoiceParticipantMode,
+    _ onSegment: ShannonVoiceSegmentHandler
+) async throws -> ShannonLiveVoiceDelegationResponseDTO
+
 public struct ShannonVoiceVisionResponseDTO: Codable, Equatable, Sendable {
     public let threadId: String
     public let model: String

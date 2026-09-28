@@ -21,6 +21,15 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         XCTAssertEqual(generation["responseModalities"] as? [String], ["TEXT"])
         let transcription = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
         XCTAssertEqual(transcription["languageCodes"] as? [String], ["ja-JP"])
+        XCTAssertEqual(
+            transcription["customVocabulary"] as? [String],
+            [
+                "シャノン", "ライ",
+                "Aether", "エーテル",
+                "Voyager", "ボイジャー",
+                "Syzygy", "Jev", "Minebot", "Codex", "SwiftUI", "TestFlight",
+            ]
+        )
         let realtime = try XCTUnwrap(setup["realtimeInputConfig"] as? [String: Any])
         let detection = try XCTUnwrap(realtime["automaticActivityDetection"] as? [String: Any])
         XCTAssertEqual(detection["silenceDurationMs"] as? Int, 360)

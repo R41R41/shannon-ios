@@ -12,6 +12,7 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
 - `POST /v1/voice/gemini/speech`（ペアリング済み端末のShannon返答を、サーバー側Gemini 3.8 TTSで24 kHz WAVへ変換）
 - `POST /v1/voice/gemini/speech/stream`（同じ返答を24 kHz mono PCMとして生成中からchunked転送）
+- `POST /v1/voice/gemini/cascade/delegations/stream`（音声向けLLM返答を文単位のNDJSONで転送し、最初の文からTTSを開始）
 - `GET /v1/voice/identity` / `POST /v1/voice/identity`（scopeごとの声選択を取得・保存）
 - `POST /v1/voice/identity/preview`（ペアリング済み端末だけが固定日本語文を試聴。1日12回まで）
 - `POST /v1/voice/realtime/calls`（保存済みの声を新しいRealtimeセッションへ適用）

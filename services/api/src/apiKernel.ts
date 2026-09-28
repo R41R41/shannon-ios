@@ -16,6 +16,7 @@ import { dispatchVoiceTurn } from './apiVoiceTurns.js';
 import {
   dispatchLiveVoiceRequest,
   realtimeVoiceSessionProjection,
+  type LiveVoiceStreamObserver,
   type VoiceParticipantMode,
 } from './apiLiveVoice.js';
 import {
@@ -190,6 +191,10 @@ export class ShannonApiKernel {
     });
   }
 
+  async streamLiveVoiceDelegation(request: ApiRequest, observer: LiveVoiceStreamObserver): Promise<ApiResponse> {
+    const response = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies(), observer);
+    return response ? await response : { status: 404, body: { error: 'NOT_FOUND' } };
+  }
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
     if (request.method === 'GET' && request.path === '/health') {
       return {
@@ -334,20 +339,7 @@ export class ShannonApiKernel {
     });
     if (dataResponse) return dataResponse;
 
-    const liveVoiceResponse = dispatchLiveVoiceRequest(request, {
-      chatModel: this.chatModel,
-      voiceDecision: this.voiceDecision,
-      stateStore: this.stateStore,
-      conversationStore: this.conversationStore,
-      knowledgeStore: this.knowledgeStore,
-      dailyMind: this.dailyMind,
-      agentTasks: this.agentTasks,
-      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
-      aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
-      personIdentities: this.personIdentities,
-      cognitiveIntents: this.cognitiveIntents,
-      now: this.now,
-    });
+    const liveVoiceResponse = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies());
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore,
@@ -485,12 +477,21 @@ export class ShannonApiKernel {
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }
+
+  private liveVoiceDependencies() {
+    return {
+      chatModel: this.chatModel, voiceDecision: this.voiceDecision,
+      stateStore: this.stateStore, conversationStore: this.conversationStore,
+      knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, agentTasks: this.agentTasks,
+      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
+      aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
+      personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
+    };
+  }
   waitForBackground(scopeKey: string): Promise<void> {
     return this.background.waitForIdle(scopeKey);
   }
-
 }
-
 export function createLocalApiKernel(
   now: CompanionClock = () => new Date().toISOString(),
   options: ShannonApiKernelOptions = {},

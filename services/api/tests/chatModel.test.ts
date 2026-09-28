@@ -8,7 +8,7 @@ describe('OpenAI Responses chat adapter', () => {
       const body = JSON.parse(String(init?.body));
       expect(body.text).toEqual({ verbosity: 'low' });
       expect(body.text.format).toBeUndefined();
-      expect(body.max_output_tokens).toBe(480);
+      expect(body.max_output_tokens).toBe(320);
       expect(body.tools).toBeUndefined();
       expect(body.reasoning).toEqual({ effort: 'none' });
       expect(body.instructions).toContain('カタカナの「ボク」');
@@ -20,6 +20,34 @@ describe('OpenAI Responses chat adapter', () => {
       useWebSearch: false, conversationClass: 'direct',
     });
     expect(result.reply).toBe('うん、今日はゆっくり話そう。');
+  });
+
+  it('streams voice text deltas before the completed response arrives', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"聞こえてるよ。"}\n\n'));
+        controller.enqueue(encoder.encode('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"ここにいるよ。"}\n\n'));
+        controller.enqueue(encoder.encode('event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":12,"output_tokens":8}}}\n\n'));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      },
+    });
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.stream).toBe(true);
+      return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const deltas: string[] = [];
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+
+    const result = await model.generateVoiceStreaming({
+      scopeKey: 'owner', systemPrompt: 'system', history: [], message: '聞こえる？',
+      useWebSearch: false, conversationClass: 'greeting',
+    }, delta => { deltas.push(delta); });
+
+    expect(deltas).toEqual(['聞こえてるよ。', 'ここにいるよ。']);
+    expect(result.reply).toBe('聞こえてるよ。ここにいるよ。');
   });
 
   it('adds bounded web tools and low reasoning only for complex skilled voice turns', async () => {

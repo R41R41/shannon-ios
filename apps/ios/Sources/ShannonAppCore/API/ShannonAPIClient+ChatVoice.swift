@@ -335,6 +335,7 @@ extension ShannonAPIClient {
         return result
     }
 
+
     public func analyzeVoiceCameraSnapshot(
         scopeKey: String,
         threadId: String?,

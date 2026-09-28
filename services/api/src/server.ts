@@ -7,6 +7,7 @@ import { createPairingRoute } from './serverPairingRoute.js';
 import { createConfiguredVoiceVisionGateway } from './voiceVision.js';
 import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './serverGeminiLiveRoute.js';
+import { createLiveVoiceStreamRoute } from './serverLiveVoiceStreamRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
@@ -101,6 +102,9 @@ const geminiSpeechRoute = createGeminiSpeechRoute(
 const geminiLiveRoute = createGeminiLiveRoute(
   process.env, kernel, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
 );
+const liveVoiceStreamRoute = createLiveVoiceStreamRoute(
+  kernel, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+);
 const server = createServer(async (request, response) => {
   try {
     if (request.method !== 'GET' && request.method !== 'POST') {
@@ -170,6 +174,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === '/v1/voice/gemini/cascade/sessions') {
       await geminiLiveRoute(request, response, principal);
+      return;
+    }
+    if (url.pathname === '/v1/voice/gemini/cascade/delegations/stream') {
+      await liveVoiceStreamRoute(request, response, principal);
       return;
     }
     if (url.pathname === '/v1/voice/vision/snapshots') {

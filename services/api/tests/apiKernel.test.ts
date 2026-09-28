@@ -36,6 +36,20 @@ class VoiceAwareRecordingModel extends RecordingChatModel {
   }
 }
 
+class StreamingVoiceRecordingModel extends VoiceAwareRecordingModel {
+  readonly streamingVoiceRequests: ShannonVoiceModelRequest[] = [];
+
+  async generateVoiceStreaming(
+    request: ShannonVoiceModelRequest,
+    onTextDelta: (delta: string) => void | Promise<void>,
+  ) {
+    this.streamingVoiceRequests.push(request);
+    await onTextDelta('最初の文です。');
+    await onTextDelta('次の文です。');
+    return { mode: this.mode, model: this.model, reply: '最初の文です。次の文です。' };
+  }
+}
+
 describe('Shannon local API kernel', () => {
   it('uses the lightweight voice model without web tools for a direct conversation', async () => {
     const model = new VoiceAwareRecordingModel();
@@ -50,7 +64,31 @@ describe('Shannon local API kernel', () => {
     } });
     expect(model.voiceRequests).toHaveLength(1);
     expect(model.voiceRequests[0]?.useWebSearch).toBe(false);
+    expect(model.voiceRequests[0]?.systemPrompt).toContain('short malformed fragment');
+    expect(model.voiceRequests[0]?.systemPrompt).toContain('Do not automatically append a question');
     expect(model.requests).toHaveLength(0);
+  });
+
+  it('streams ordinary voice deltas after routing without waiting for the completed reply', async () => {
+    const model = new StreamingVoiceRecordingModel();
+    const api = createLocalApiKernel(() => '2026-09-15T00:00:00.000Z', { chatModel: model });
+    const plans: Array<Record<string, unknown>> = [];
+    const deltas: string[] = [];
+
+    const result = await api.streamLiveVoiceDelegation({
+      method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+        scopeKey: 'owner-a', transcript: '聞こえる？',
+      },
+    }, {
+      onPlan: plan => { plans.push(plan); },
+      onTextDelta: delta => { deltas.push(delta); },
+    });
+
+    expect(result).toMatchObject({ status: 200, body: { reply: '最初の文です。次の文です。' } });
+    expect(plans).toEqual([expect.objectContaining({ shouldRespond: true })]);
+    expect(deltas).toEqual(['最初の文です。', '次の文です。']);
+    expect(model.streamingVoiceRequests).toHaveLength(1);
+    expect(model.voiceRequests).toHaveLength(0);
   });
 
   it('skips the reply model when the voice decision says no response is needed', async () => {

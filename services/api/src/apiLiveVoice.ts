@@ -50,8 +50,10 @@ export function voiceConversationInstructions(
     '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
     '# Unclear audio & entities',
     '- The user primarily speaks Japanese. If a name, number, place, or homophone is uncertain, ask one short confirmation instead of guessing.',
+    '- If the transcript is a short malformed fragment or does not form a plausible utterance, do not pretend to understand it. Ask one brief confirmation such as「もう一度だけお願いします」。',
     '# Response style',
     '- Lead with the useful or emotionally salient point. Usually answer in one to three spoken sentences, then continue naturally if asked.',
+    '- For greetings, hearing checks, and ordinary direct conversation, prefer one or two short sentences. Do not automatically append a question or invitation to every reply.',
     ...(clientDelegation ? [
       '# Tools & delegation',
       '- Handle ordinary conversation directly. Use the client/backend for current web facts, relevant memory, project records, tools, or longer reasoning.',
@@ -149,9 +151,16 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   cognitiveIntents: CognitiveIntentStore;
 }
 
+export interface LiveVoiceStreamObserver {
+  readonly signal?: AbortSignal;
+  onPlan(plan: Record<string, unknown>): void | Promise<void>;
+  onTextDelta(delta: string): void | Promise<void>;
+}
+
 export function dispatchLiveVoiceRequest(
   request: ApiRequest,
   dependencies: LiveVoiceDependencies,
+  observer?: LiveVoiceStreamObserver,
 ): ApiResponse | Promise<ApiResponse> | null {
   if (request.method !== 'POST' || ![
     '/v1/voice/gemini/cascade/delegations',
@@ -176,6 +185,7 @@ export function dispatchLiveVoiceRequest(
     participantMode,
     deviceContext,
     dependencies,
+    observer,
   );
 }
 
@@ -245,6 +255,7 @@ async function completeLiveVoiceDelegation(
   participantMode: VoiceParticipantMode,
   deviceContext: VoiceDeviceContext | null,
   dependencies: LiveVoiceDependencies,
+  observer?: LiveVoiceStreamObserver,
 ): Promise<ApiResponse> {
   const temporaryGuest = participantMode === 'guest';
   const threadId = temporaryGuest
@@ -277,6 +288,7 @@ async function completeLiveVoiceDelegation(
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
   const voicePlan = voicePlanResponse(decision);
+  await observer?.onPlan(voicePlan);
   if (!decision.shouldRespond) {
     return {
       status: 200,
@@ -354,6 +366,12 @@ async function completeLiveVoiceDelegation(
   };
   const completion = provisionalIntent
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
+    : observer && dependencies.chatModel.generateVoiceStreaming
+      ? await dependencies.chatModel.generateVoiceStreaming(
+        modelRequest,
+        delta => observer.onTextDelta(delta),
+        observer.signal,
+      )
     : dependencies.chatModel.generateVoice
       ? await dependencies.chatModel.generateVoice(modelRequest)
       : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });

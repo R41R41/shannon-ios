@@ -11,6 +11,12 @@ public enum ShannonGeminiLiveServerEvent: Equatable, Sendable {
 
 public enum ShannonGeminiLiveProtocol {
     public static let endpoint = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
+    public static let customVocabulary = [
+        "シャノン", "ライ",
+        "Aether", "エーテル",
+        "Voyager", "ボイジャー",
+        "Syzygy", "Jev", "Minebot", "Codex", "SwiftUI", "TestFlight",
+    ]
 
     public static func webSocketURL(token: String) throws -> URL {
         guard var components = URLComponents(string: endpoint), !token.isEmpty else {
@@ -30,7 +36,10 @@ public enum ShannonGeminiLiveProtocol {
             "generationConfig": [
                 "responseModalities": ["TEXT"],
             ],
-            "inputAudioTranscription": ["languageCodes": ["ja-JP"]],
+            "inputAudioTranscription": [
+                "languageCodes": ["ja-JP"],
+                "customVocabulary": customVocabulary,
+            ],
             "realtimeInputConfig": [
                 "automaticActivityDetection": [
                     "disabled": false,

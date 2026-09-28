@@ -128,6 +128,40 @@ extension ShannonConversationModel {
         return result
     }
 
+    public func performLiveVoiceDelegationStreamingResponse(
+        transcript: String,
+        userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
+        participantMode: ShannonVoiceParticipantMode,
+        onSegment: ShannonVoiceSegmentHandler
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
+#if os(iOS)
+        let location = requestedLocation
+            ? await ShannonVoiceLocationProvider.shared.currentLocation()
+            : nil
+#else
+        let location: ShannonVoiceDeviceLocationDTO? = nil
+#endif
+        let result = try await client.performLiveVoiceDelegationStreaming(
+            scopeKey: scopeKey,
+            threadId: selectedThreadId,
+            transcript: transcript,
+            participantMode: participantMode,
+            deviceContext: ShannonVoiceDeviceContextDTO(
+                timeZoneIdentifier: TimeZone.current.identifier,
+                requestedLocation: requestedLocation,
+                location: location,
+                userUtterance: userUtterance
+            ),
+            onSegment: onSegment
+        )
+        if participantMode == .owner {
+            selectedThreadId = result.threadId
+            if let session = result.organizeSession { upsertOrganizeSession(session) }
+        }
+        return result
+    }
+
     public func analyzeVoiceCameraSnapshot(jpegData: Data) async throws -> String {
         let result = try await client.analyzeVoiceCameraSnapshot(
             scopeKey: scopeKey,

@@ -8,6 +8,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private let expression: ShannonExpressionDTO
     private let createSession: @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO
     private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO
+    private let performStreamingDelegation: ShannonVoiceStreamingDelegation
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let streamSpeech: @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
     private let commitTurn: @MainActor (String, String) async throws -> Void
@@ -36,6 +37,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         expression: ShannonExpressionDTO,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
+        performStreamingDelegation: @escaping ShannonVoiceStreamingDelegation,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         streamSpeech: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
@@ -45,6 +47,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         self.expression = expression
         self.createSession = createSession
         self.performDelegation = performDelegation
+        self.performStreamingDelegation = performStreamingDelegation
         self.analyzeCameraSnapshot = analyzeCameraSnapshot
         self.streamSpeech = streamSpeech
         self.commitTurn = commitTurn
@@ -409,6 +412,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             participantMode: mode,
             createSession: createSession,
             performDelegation: performDelegation,
+            performStreamingDelegation: performStreamingDelegation,
             streamSpeech: streamSpeech,
             commitTurn: commitTurn
         )

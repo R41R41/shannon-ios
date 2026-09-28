@@ -76,53 +76,72 @@ enum ShannonGeminiCascadeSpeech {
 }
 
 @MainActor
-enum ShannonGeminiSpeechPipeline {
+final class ShannonGeminiStreamingSpeechCoordinator {
     typealias StreamSpeech = @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
     typealias ConsumeSpeech = @MainActor (ShannonGeminiSpeechStream) async throws -> Void
 
-    static func play(
-        segments: [String],
-        style: @MainActor (String) -> String,
+    private let style: @MainActor (String, ShannonVoicePlanDTO?) -> String
+    private let streamSpeech: StreamSpeech
+    private let consumeSpeech: ConsumeSpeech
+    private var tail: Task<Void, Error>?
+    private var speechTasks: [UUID: Task<ShannonGeminiSpeechStream, Error>] = [:]
+    private var playbackTasks: [UUID: Task<Void, Error>] = [:]
+    private var activeCount = 0
+    private var isCancelled = false
+    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(
+        style: @escaping @MainActor (String, ShannonVoicePlanDTO?) -> String,
         streamSpeech: @escaping StreamSpeech,
         consumeSpeech: @escaping ConsumeSpeech
-    ) async throws {
-        guard let first = segments.first else { return }
-        let speech = try await streamSpeech(first, style(first))
-        try await play(
-            speech,
-            at: segments.startIndex,
-            segments: segments,
-            style: style,
-            streamSpeech: streamSpeech,
-            consumeSpeech: consumeSpeech
-        )
+    ) {
+        self.style = style
+        self.streamSpeech = streamSpeech
+        self.consumeSpeech = consumeSpeech
     }
 
-    private static func play(
-        _ speech: ShannonGeminiSpeechStream,
-        at index: Int,
-        segments: [String],
-        style: @MainActor (String) -> String,
-        streamSpeech: @escaping StreamSpeech,
-        consumeSpeech: @escaping ConsumeSpeech
-    ) async throws {
-        let nextIndex = segments.index(after: index)
-        guard nextIndex < segments.endIndex else {
-            try await consumeSpeech(speech)
-            return
+    func enqueue(_ text: String, plan: ShannonVoicePlanDTO?) async {
+        while activeCount >= 2, !isCancelled {
+            guard !Task.isCancelled else { return }
+            await withCheckedContinuation { slotWaiters.append($0) }
         }
+        guard !isCancelled, !Task.isCancelled else { return }
 
-        let nextText = segments[nextIndex]
-        async let prefetched = streamSpeech(nextText, style(nextText))
-        try await consumeSpeech(speech)
-        let nextSpeech = try await prefetched
-        try await play(
-            nextSpeech,
-            at: nextIndex,
-            segments: segments,
-            style: style,
-            streamSpeech: streamSpeech,
-            consumeSpeech: consumeSpeech
-        )
+        activeCount += 1
+        let identifier = UUID()
+        let speechTask = Task { @MainActor [streamSpeech, style] in
+            try await streamSpeech(text, style(text, plan))
+        }
+        speechTasks[identifier] = speechTask
+        let previous = tail
+        let playbackTask = Task { @MainActor [weak self, consumeSpeech] in
+            defer { self?.complete(identifier) }
+            if let previous { try await previous.value }
+            let speech = try await speechTask.value
+            try await consumeSpeech(speech)
+        }
+        playbackTasks[identifier] = playbackTask
+        tail = playbackTask
+    }
+
+    func finish() async throws {
+        try await tail?.value
+    }
+
+    func cancel() {
+        guard !isCancelled else { return }
+        isCancelled = true
+        for task in speechTasks.values { task.cancel() }
+        for task in playbackTasks.values { task.cancel() }
+        let waiters = slotWaiters
+        slotWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    private func complete(_ identifier: UUID) {
+        speechTasks.removeValue(forKey: identifier)
+        playbackTasks.removeValue(forKey: identifier)
+        activeCount = max(0, activeCount - 1)
+        if !slotWaiters.isEmpty { slotWaiters.removeFirst().resume() }
     }
 }

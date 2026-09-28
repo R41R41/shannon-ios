@@ -46,6 +46,14 @@ public protocol ShannonVoiceServing: Sendable {
         participantMode: ShannonVoiceParticipantMode,
         deviceContext: ShannonVoiceDeviceContextDTO?
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO
+    func performLiveVoiceDelegationStreaming(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?,
+        onSegment: ShannonVoiceSegmentHandler
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO
     func analyzeVoiceCameraSnapshot(
         scopeKey: String,
         threadId: String?,

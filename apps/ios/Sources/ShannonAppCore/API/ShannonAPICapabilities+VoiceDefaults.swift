@@ -88,6 +88,27 @@ public extension ShannonAPIClientProtocol {
         )
     }
 
+    func performLiveVoiceDelegationStreaming(
+        scopeKey: String,
+        threadId: String?,
+        transcript: String,
+        participantMode: ShannonVoiceParticipantMode,
+        deviceContext: ShannonVoiceDeviceContextDTO?,
+        onSegment: ShannonVoiceSegmentHandler
+    ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        let response = try await performLiveVoiceDelegation(
+            scopeKey: scopeKey,
+            threadId: threadId,
+            transcript: transcript,
+            participantMode: participantMode,
+            deviceContext: deviceContext
+        )
+        for segment in ShannonGeminiCascadeSpeech.segments(response.reply) {
+            await onSegment(segment, response.voicePlan)
+        }
+        return response
+    }
+
     func analyzeVoiceCameraSnapshot(
         scopeKey: String,
         threadId: String?,
