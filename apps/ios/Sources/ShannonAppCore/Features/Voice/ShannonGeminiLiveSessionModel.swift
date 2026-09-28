@@ -5,16 +5,16 @@ import Observation
 @MainActor
 @Observable
 public final class ShannonGeminiLiveSessionModel {
-    public private(set) var phase: ShannonGeminiLivePhase = .idle
+    public internal(set) var phase: ShannonGeminiLivePhase = .idle
     public private(set) var userTranscript = ""
-    public private(set) var shannonTranscript = ""
+    public internal(set) var shannonTranscript = ""
     public private(set) var model = "gemini-3.5-transcribe-live"
-    public private(set) var voice = "Shannon"
-    public private(set) var errorMessage: String?
+    public internal(set) var voice = "Shannon"
+    public internal(set) var errorMessage: String?
     public private(set) var failureRecovery: ShannonGeminiLiveFailureRecovery?
-    public private(set) var textSendState: ShannonGeminiTextSendState = .idle
+    public internal(set) var textSendState: ShannonGeminiTextSendState = .idle
     public private(set) var audioLevel: Float = 0
-    public private(set) var playbackLevel: Double = 0
+    public internal(set) var playbackLevel: Double = 0
     public var firstAudioLatencyMilliseconds: Int? { latencyMeasurements.firstAudioMilliseconds }
     public var firstTextLatencyMilliseconds: Int? { latencyMeasurements.firstTextMilliseconds }
     public var firstTTSByteLatencyMilliseconds: Int? { latencyMeasurements.firstTTSByteMilliseconds }
@@ -22,27 +22,30 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var interruptionLatencyMilliseconds: Int?
     public private(set) var estimatedCostUsd: Double = 0
     public private(set) var inputAudioSeconds: Double = 0
-    public private(set) var outputAudioSeconds: Double = 0
+    public internal(set) var outputAudioSeconds: Double = 0
     public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public private(set) var inputState: ShannonVoiceInputState
     private var session: ShannonGeminiLiveSessionDTO?
-    private var transport: ShannonGeminiLiveTransport?
+    private var sessionGenerationID: UUID?
+    var transport: ShannonGeminiLiveTransport?
+    var pendingTurns = ShannonPendingVoiceTurns()
+    var responseGenerationID: UUID?
     private var turnAssembler = ShannonVoiceTurnAssembler()
-    private var responseTask: Task<Void, Never>?
+    var responseTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
     private var bargeCandidateStartedAt: TimeInterval?
-    private var latencyMeasurements = ShannonVoiceLatencyMeasurements()
-    private var responsePlaybackDeadline: TimeInterval = 0
-    private var ttsCostUsd: Double = 0
+    var latencyMeasurements = ShannonVoiceLatencyMeasurements()
+    var responsePlaybackDeadline: TimeInterval = 0
+    var ttsCostUsd: Double = 0
     private var didRecordCaptureStart = false
     private var didRecordFirstQueuedChunk = false
     private var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
     private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
-    private var performStreamingDelegation: ShannonVoiceStreamingDelegation?
-    private var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
-    private var commitTurn: (@MainActor (String, String) async throws -> Void)?
-    private var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
+    var performStreamingDelegation: ShannonVoiceStreamingDelegation?
+    var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
+    var commitTurn: (@MainActor (String, String) async throws -> Void)?
+    var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
@@ -52,6 +55,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     public func start(
         participantMode: ShannonVoiceParticipantMode,
+        preservePendingInput: Bool = false,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         performStreamingDelegation: @escaping ShannonVoiceStreamingDelegation,
@@ -59,7 +63,12 @@ public final class ShannonGeminiLiveSessionModel {
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     ) async {
+        let retained = preservePendingInput && self.participantMode == participantMode
+            ? pendingTurns : ShannonPendingVoiceTurns()
         stop()
+        pendingTurns = retained
+        let generation = UUID()
+        sessionGenerationID = generation
         self.createSession = createSession
         self.performDelegation = performDelegation
         self.performStreamingDelegation = performStreamingDelegation
@@ -68,6 +77,7 @@ public final class ShannonGeminiLiveSessionModel {
         self.handleDelegationResponse = handleDelegationResponse
         self.participantMode = participantMode
         resetMeasurements()
+        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
         errorMessage = nil
         failureRecovery = nil
         phase = .requestingPermission
@@ -78,7 +88,9 @@ public final class ShannonGeminiLiveSessionModel {
             fail("音声機能の設定が不足しています。アプリを更新してください。", recovery: .updateRequired)
             return
         }
-        guard await AVAudioApplication.requestRecordPermission() else {
+        let permitted = await AVAudioApplication.requestRecordPermission()
+        guard sessionGenerationID == generation else { return }
+        guard permitted else {
             fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
             return
         }
@@ -86,23 +98,31 @@ public final class ShannonGeminiLiveSessionModel {
         phase = .connecting
         do {
             let created = try await createSession(participantMode)
+            guard sessionGenerationID == generation else { return }
             session = created
             model = created.model
             voice = created.voice
             let next = ShannonGeminiLiveTransport(
                 session: created,
-                eventHandler: { [weak self] event in self?.handle(event) },
+                eventHandler: { [weak self] event in
+                    guard self?.sessionGenerationID == generation else { return }
+                    self?.handle(event)
+                },
                 captureHandler: { [weak self] rms, seconds, started, ended, chunks in
+                    guard self?.sessionGenerationID == generation else { return }
                     self?.handleCapture(rms: rms, seconds: seconds, started: started, ended: ended, chunks: chunks)
                 },
                 inputStateHandler: { [weak self] state in
+                    guard self?.sessionGenerationID == generation else { return }
                     self?.inputState = state
                 }
             )
             transport = next
             try next.setInputPreference(inputState.preference)
             try await next.start()
+            if sessionGenerationID != generation { next.stop() }
         } catch {
+            guard sessionGenerationID == generation else { return }
             fail(
                 "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。",
                 recovery: .reconnect
@@ -118,11 +138,14 @@ public final class ShannonGeminiLiveSessionModel {
         finalizeTask?.cancel()
         duckRestoreTask?.cancel()
         responseTask = nil
+        responseGenerationID = nil
+        pendingTurns.reset()
         finalizeTask = nil
         duckRestoreTask = nil
         transport?.stop()
         transport = nil
         session = nil
+        sessionGenerationID = nil
         phase = .idle
         audioLevel = 0
         playbackLevel = 0
@@ -133,6 +156,7 @@ public final class ShannonGeminiLiveSessionModel {
               let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
         await start(
             participantMode: participantMode,
+            preservePendingInput: true,
             createSession: createSession,
             performDelegation: performDelegation,
             performStreamingDelegation: performStreamingDelegation,
@@ -146,6 +170,10 @@ public final class ShannonGeminiLiveSessionModel {
     public func sendText(_ text: String) -> Bool {
         let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return false }
+        guard value.utf16.count <= 8_000 else {
+            textSendState = .failed(text: value, message: "入力が長すぎます。短く分けて送信してください。")
+            return false
+        }
         guard transport != nil, performDelegation != nil, streamSpeech != nil, phase != .failed else {
             textSendState = .failed(
                 text: value,
@@ -153,17 +181,23 @@ public final class ShannonGeminiLiveSessionModel {
             )
             return false
         }
-        guard !textSendState.isSending else { return false }
-        interruptResponse(preserveTextFailure: false)
-        userTranscript = value
+        interruptResponse()
+        pendingTurns.append(rawText: value, text: value, source: .typed)
+        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
         textSendState = .sending(text: value)
-        beginResponse(to: value, textSubmission: value)
+        beginResponse()
         return true
     }
 
     @discardableResult
     public func retryText() -> Bool {
         guard let text = textSendState.failedText else { return false }
+        if pendingTurns.turns.contains(where: { $0.source == .typed && $0.text == text }),
+           transport != nil, phase != .failed {
+            textSendState = .sending(text: text)
+            beginResponse()
+            return true
+        }
         textSendState = .idle
         return sendText(text)
     }
@@ -192,11 +226,15 @@ public final class ShannonGeminiLiveSessionModel {
         analyze: @escaping @MainActor (Data) async throws -> String
     ) async throws {
         guard participantMode.allowsCameraSharing else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
+        let generation = sessionGenerationID
         let description = try await analyze(jpegData)
-        beginResponse(
-            to: "いま共有した写真を見て、会話の流れに合わせて短くコメントして。画像の内容: \(description)",
-            committedUserText: "写真を共有しました。"
-        )
+        guard sessionGenerationID == generation, participantMode.allowsCameraSharing,
+              transport != nil else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
+        interruptResponse()
+        pendingTurns.append(rawText: "写真を共有しました。",
+            text: "いま共有した写真を見て、会話の流れに合わせて短くコメントして。画像の内容: \(description)",
+            source: .camera)
+        beginResponse()
     }
 
     private func handle(_ event: ShannonGeminiLiveServerEvent) {
@@ -206,11 +244,11 @@ public final class ShannonGeminiLiveSessionModel {
         case let .interimInputTranscript(text):
             let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty else { return }
-            userTranscript = turnAssembler.preview(interim: value)
+            userTranscript = previewInput(turnAssembler.preview(interim: value))
             handleBargeIn(hasFinalText: false)
         case let .inputTranscript(text):
             turnAssembler.appendFinal(text)
-            userTranscript = turnAssembler.finalText
+            userTranscript = previewInput(turnAssembler.finalText)
             handleBargeIn(hasFinalText: true)
             scheduleFinalization(turnComplete: false)
         case .turnComplete:
@@ -220,6 +258,10 @@ public final class ShannonGeminiLiveSessionModel {
         case .goAway:
             fail("Geminiとの接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
+    }
+
+    private func previewInput(_ current: String) -> String {
+        (pendingTurns.turns.map(\.rawText) + [current]).joined(separator: "\n")
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
@@ -262,131 +304,10 @@ public final class ShannonGeminiLiveSessionModel {
         guard let envelope = turnAssembler.finish() else { return }
         ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
         userTranscript = envelope.normalizedText
-        beginResponse(to: envelope.normalizedText, committedUserText: envelope.rawText)
+        pendingTurns.append(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText, source: .speech)
+        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
+        beginResponse()
     }
-
-    private func beginResponse(
-        to userText: String,
-        committedUserText: String? = nil,
-        textSubmission: String? = nil
-    ) {
-        guard let performStreamingDelegation, let streamSpeech else {
-            if let textSubmission {
-                textSendState = .failed(text: textSubmission, message: "送信を開始できませんでした。")
-            }
-            return
-        }
-        responseTask?.cancel()
-        latencyMeasurements.startResponse()
-        shannonTranscript = ""
-        responsePlaybackDeadline = ProcessInfo.processInfo.systemUptime
-        phase = .thinking
-        responseTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            let coordinator = ShannonGeminiStreamingSpeechCoordinator(
-                style: { ShannonGeminiCascadeSpeech.style(for: $0, plan: $1) },
-                streamSpeech: streamSpeech,
-                consumeSpeech: { [weak self] speech in
-                    guard let self else { throw CancellationError() }
-                    try await self.consumeResponseSpeech(speech)
-                }
-            )
-            defer { coordinator.cancel() }
-            do {
-                let utterance = ShannonVoiceUserUtteranceDTO(id: UUID().uuidString, text: userText)
-                let response = try await performStreamingDelegation(
-                    userText,
-                    utterance,
-                    participantMode
-                ) { [weak self] segment, plan in
-                    guard let self, !Task.isCancelled else { return }
-                    self.latencyMeasurements.recordFirstText(plan: plan)
-                    self.shannonTranscript += segment
-                    await coordinator.enqueue(segment, plan: plan)
-                }
-                try Task.checkCancellation()
-                if response.voicePlan?.shouldRespond == false {
-                    phase = .listening
-                    responseTask = nil
-                    if let textSubmission,
-                       case let .sending(currentText) = textSendState,
-                       currentText == textSubmission {
-                        textSendState = .idle
-                    }
-                    return
-                }
-                let reply = response.reply
-                try await coordinator.finish()
-                self.latencyMeasurements.recordServerMetrics(response.voiceMetrics)
-                shannonTranscript = reply
-                let remaining = max(0, responsePlaybackDeadline - ProcessInfo.processInfo.systemUptime)
-                try await Task.sleep(for: .seconds(remaining))
-                try Task.checkCancellation()
-                playbackLevel = 0
-                phase = .listening
-                responseTask = nil
-                if let textSubmission,
-                   case let .sending(currentText) = textSendState,
-                   currentText == textSubmission {
-                    textSendState = .idle
-                }
-                if participantMode.allowsTranscriptPersistence, let commitTurn {
-                    try? await commitTurn(committedUserText ?? userText, reply)
-                }
-                handleDelegationResponse?(response)
-            } catch is CancellationError {
-                return
-            } catch {
-                transport?.discardPlayback()
-                responseTask = nil
-                playbackLevel = 0
-                phase = .listening
-                errorMessage = "返答の音声を作れませんでした。もう一度話しかけてください。"
-                if let textSubmission {
-                    textSendState = .failed(
-                        text: textSubmission,
-                        message: "返答を最後まで再生できませんでした。入力を残しています。"
-                    )
-                }
-            }
-        }
-    }
-
-    private func consumeResponseSpeech(_ speech: ShannonGeminiSpeechStream) async throws {
-        try Task.checkCancellation()
-        voice = speech.voice
-        guard speech.sampleRate == 24_000,
-              speech.channels == 1,
-              speech.bitsPerSample == 16 else {
-            throw ShannonAPIError.invalidResponse
-        }
-        var segmentDuration = 0.0
-        var receivedFirstChunk = false
-        for try await chunk in speech.chunks {
-            try Task.checkCancellation()
-            guard !chunk.isEmpty, chunk.count % 2 == 0 else {
-                throw ShannonAPIError.invalidResponse
-            }
-            if !receivedFirstChunk {
-                receivedFirstChunk = true
-                latencyMeasurements.recordFirstTTSByte(requestStartedAt: speech.requestStartedAtUptime)
-            }
-            latencyMeasurements.recordFirstAudio()
-            let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
-            segmentDuration += duration
-            outputAudioSeconds += duration
-            playbackLevel = 0.55
-            phase = .speaking
-            responsePlaybackDeadline = max(
-                responsePlaybackDeadline,
-                ProcessInfo.processInfo.systemUptime
-            ) + duration
-        }
-        guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
-        ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
-        updateCost()
-    }
-
     private func handleBargeIn(hasFinalText: Bool) {
         guard responseTask != nil else { return }
         let now = ProcessInfo.processInfo.systemUptime
@@ -396,7 +317,7 @@ public final class ShannonGeminiLiveSessionModel {
         }
         scheduleDuckRelease()
         if hasFinalText || now - (bargeCandidateStartedAt ?? now) >= 0.34 {
-            interruptResponse(preserveTextFailure: true)
+            interruptResponse()
         }
     }
 
@@ -409,21 +330,16 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    private func interruptResponse(preserveTextFailure: Bool = true) {
+    private func interruptResponse() {
         guard responseTask != nil else { return }
-        if preserveTextFailure,
-           case let .sending(text) = textSendState {
-            textSendState = .failed(
-                text: text,
-                message: "音声入力で応答を中断しました。必要なら同じ文を再送できます。"
-            )
-        }
+        // Typed input is still pending, not failed: the next response includes it.
         let now = ProcessInfo.processInfo.systemUptime
         if let started = bargeCandidateStartedAt {
             interruptionLatencyMilliseconds = Int(max(0, now - started) * 1_000)
         }
         responseTask?.cancel()
         responseTask = nil
+        responseGenerationID = nil
         duckRestoreTask?.cancel()
         duckRestoreTask = nil
         transport?.discardPlayback()
@@ -433,7 +349,7 @@ public final class ShannonGeminiLiveSessionModel {
         phase = .listening
     }
 
-    private func updateCost() {
+    func updateCost() {
         estimatedCostUsd = inputAudioSeconds / 60 * (session?.inputUsdPerMinute ?? 0) + ttsCostUsd
     }
 
@@ -461,8 +377,10 @@ public final class ShannonGeminiLiveSessionModel {
         )
         responseTask?.cancel()
         responseTask = nil
+        responseGenerationID = nil
         transport?.stop()
         transport = nil
+        sessionGenerationID = nil
         phase = .failed
         errorMessage = message
         failureRecovery = recovery

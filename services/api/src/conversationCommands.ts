@@ -7,7 +7,11 @@ import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent } from './conversationReference.js';
 import { ShannonMemoryService } from './memoryService.js';
 
-export interface UserUtterance { id: string; text: string }
+export interface UserUtterance {
+  id: string; text: string;
+  source?: 'speech' | 'typed' | 'camera';
+  rawText?: string;
+}
 export interface ConversationCommandDependencies {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   organizeStore?: OrganizeStore; aetherProposals?: AetherProposalStore;

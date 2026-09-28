@@ -20,6 +20,7 @@ export function voicePlanResponse(
     waitingPhrase: voiceWaitingPhrase(decision),
     decisionSource: decision.source,
     decisionLatencyMilliseconds: decision.elapsedMilliseconds,
+    transcriptReliabilityProbability: decision.transcriptReliabilityProbability ?? null,
   };
 }
 

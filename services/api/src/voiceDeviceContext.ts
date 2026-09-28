@@ -20,7 +20,9 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
   }
   const utterance = value.userUtterance;
   if (utterance !== undefined && (!objectBody(utterance) || !validBoundedString(utterance.id, 120)
-    || !validBoundedString(utterance.text, 8_000))) return false;
+    || !validBoundedString(utterance.text, 8_000)
+    || (utterance.source !== undefined && !['speech', 'typed', 'camera'].includes(String(utterance.source)))
+    || (utterance.rawText !== undefined && !validBoundedString(utterance.rawText, 12_000)))) return false;
   const userUtterance = utterance as UserUtterance | undefined;
   if (value.location === undefined || value.location === null) {
     return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance };

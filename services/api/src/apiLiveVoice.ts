@@ -25,6 +25,7 @@ import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import { voicePlanResponse } from './voiceEmotionPlan.js';
+import { transcriptNeedsInterpretation, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import {
   buildConversationOrchestrationPrompt,
   observeConversationTurn,
@@ -64,7 +65,7 @@ export function voiceConversationInstructions(
     '- Vary the reaction naturally: proud delight after success, hurried bravado after a mistake, quiet reluctance when jealous, and close warmth when caring. Do not repeat a stock catchphrase or explain the character profile.',
     '# Conversation flow',
     '- Listen through pauses. Do not rush, lecture, or repeatedly summarize what the user just said.',
-    '- If the user interrupts, stop and listen. Treat the newest utterance as the current turn.',
+    '- If the user interrupts, stop and listen. Keep unanswered earlier input; combine additions and apply explicit corrections in chronological order.',
     '# Unclear audio & entities',
     '- The user primarily speaks Japanese. If a name, number, place, or homophone is uncertain, ask one short confirmation instead of guessing.',
     '- If the transcript is a short malformed fragment or does not form a plausible utterance, do not pretend to understand it. Ask one brief confirmation such as「もう一度だけお願いします」。',
@@ -222,13 +223,27 @@ async function completeLiveVoiceDelegation(
     ? requestedThreadId || 'temporary-guest-session'
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
   const occurredAt = dependencies.now();
-  let orchestrationState = temporaryGuest ? null : observeConversationTurn({
+  const routingState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
+  const routingHistory = temporaryGuest ? []
+    : visibleConversationHistory(routingState!, dependencies.conversationStore, scopeKey, threadId);
+  const rawTranscript = deviceContext?.userUtterance?.rawText ?? transcript;
+  let decision = await dependencies.voiceDecision.decide({
+    scopeKey, transcript, rawTranscript, participantMode,
+    context: boundedVoiceHistory(routingHistory, 4),
+    requestedLocation: deviceContext?.requestedLocation ?? false,
+    hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
+  });
+  const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance);
+  if (uncertainTranscript && !decision.shouldRespond) {
+    decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
+  }
+  let orchestrationState = temporaryGuest || uncertainTranscript ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
-  const command = !temporaryGuest && deviceContext?.userUtterance
+  const command = !temporaryGuest && !uncertainTranscript && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })
@@ -253,13 +268,6 @@ async function completeLiveVoiceDelegation(
       reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
-  const decision = await dependencies.voiceDecision.decide({
-    scopeKey,
-    transcript,
-    participantMode,
-    requestedLocation: deviceContext?.requestedLocation ?? false,
-    hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
-  });
   const previousExpressiveEmotion = temporaryGuest
     ? undefined
     : dependencies.stateStore.snapshot(scopeKey).expressiveEmotion;
@@ -301,8 +309,9 @@ async function completeLiveVoiceDelegation(
     ...(selectedSkills.has('device_context') || selectedSkills.has('current_web')
       ? [voiceDeviceContextPrompt(dependencies.now(), deviceContext)] : []),
   ].join('\n');
+  // Refresh after the classifier await so a concurrent forget/hide is respected.
   const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const provisionalIntent = temporaryGuest ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
+  const provisionalIntent = temporaryGuest || uncertainTranscript ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
   const cognitiveContext = temporaryGuest ? null : prepareTurnCognitiveContext(
     captured!,
     dependencies.conversationStore,
@@ -348,6 +357,7 @@ async function completeLiveVoiceDelegation(
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion),
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     backendInstructions,
+    voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
   const fullHistory = temporaryGuest ? []
     : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId);
@@ -423,7 +433,7 @@ async function completeLiveVoiceDelegation(
     }, provisionalIntent ? completion.intentPlan : undefined);
   }
   let uiBlocks: Array<Record<string, unknown>> | undefined;
-  if (!temporaryGuest && completion.taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
+  if (!temporaryGuest && !uncertainTranscript && completion.taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
         orchestrationState, completion.taskProposal.goal, occurredAt,

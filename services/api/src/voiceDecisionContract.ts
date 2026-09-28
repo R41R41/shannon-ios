@@ -21,6 +21,8 @@ export interface VoiceDecisionInput {
   participantMode: 'owner' | 'guest';
   requestedLocation: boolean;
   hasFreshLocation: boolean;
+  context?: readonly { role: 'user' | 'assistant'; content: string }[];
+  rawTranscript?: string;
 }
 
 export interface VoiceTurnDecision {
@@ -36,6 +38,8 @@ export interface VoiceTurnDecision {
   selectedSkills: readonly VoiceSkill[];
   skillScores: Readonly<Record<VoiceSkill, number>>;
   elapsedMilliseconds: number;
+  /** Semantic/context reliability, NOT an acoustic ASR confidence. */
+  transcriptReliabilityProbability?: number;
 }
 
 export interface VoiceDecisionGateway {

@@ -169,6 +169,15 @@ public struct ShannonVoiceDeviceContextDTO: Codable, Equatable, Sendable {
 public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
     public let id: String
     public let text: String
+    public let source: ShannonVoiceUtteranceSource?
+    public let rawText: String?
+
+    public init(id: String, text: String, source: ShannonVoiceUtteranceSource? = nil, rawText: String? = nil) {
+        self.id = id
+        self.text = text
+        self.source = source
+        self.rawText = rawText
+    }
 }
 
 public enum ShannonVoiceConversationClassDTO: String, Codable, Equatable, Sendable {
