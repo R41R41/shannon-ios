@@ -45,6 +45,9 @@ export function createLiveVoiceStreamRoute(
           voicePlan = plan;
           startStream(response);
           await writeEvent(response, { type: 'plan', voicePlan: plan });
+          if (typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
+            await writeEvent(response, { type: 'segment', text: plan.waitingPhrase, voicePlan: plan });
+          }
         },
         onTextDelta: async delta => {
           receivedDelta = true;

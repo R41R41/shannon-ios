@@ -97,7 +97,8 @@ describe('Shannon local API kernel', () => {
       chatModel: model,
       voiceDecision: { mode: 'jev', model: 'test-jev', decide: async () => ({
         source: 'jev', shouldRespond: false, replyRequiredProbability: 0.08,
-        conversationClass: 'no_response', affect: 'neutral', delivery: 'conversational',
+        solutionWantedProbability: 0.1, conversationClass: 'no_response', latencyClass: 'under_1s',
+        affect: 'neutral', affectIntensity: 0.2, delivery: 'conversational',
         selectedSkills: [], skillScores: {
           current_web: 0, conversation_memory: 0, daily_mind: 0, aether_notes: 0,
           voyager_tasks: 0, agent_status: 0, device_context: 0,
@@ -143,6 +144,7 @@ describe('Shannon local API kernel', () => {
           shouldRespond: true,
           conversationClass: 'skill_simple',
           selectedSkills: ['current_web'],
+          waitingPhrase: 'ちょっと最新の情報を調べてみますね。',
         },
       },
     });

@@ -1,0 +1,82 @@
+import {
+  mandatorySkillPatterns, VOICE_SKILLS,
+  type VoiceDecisionInput, type VoiceSkill,
+} from './voiceDecisionContract.js';
+
+export function applyMandatorySkillFloors(
+  scores: Record<VoiceSkill, number>,
+  input: VoiceDecisionInput,
+): void {
+  for (const skill of VOICE_SKILLS) {
+    if (mandatorySkillPatterns[skill]?.test(input.transcript)) scores[skill] = Math.max(scores[skill], 1);
+  }
+  if (input.requestedLocation) scores.device_context = 1;
+  if (input.participantMode === 'guest') {
+    scores.conversation_memory = 0;
+    scores.daily_mind = 0;
+    scores.aether_notes = 0;
+    scores.voyager_tasks = 0;
+    scores.agent_status = 0;
+  }
+}
+
+export function selectedSkills(
+  scores: Readonly<Record<VoiceSkill, number>>,
+  threshold: number,
+  participantMode: VoiceDecisionInput['participantMode'],
+): VoiceSkill[] {
+  const privateSkills = new Set<VoiceSkill>([
+    'conversation_memory', 'daily_mind', 'aether_notes', 'voyager_tasks', 'agent_status',
+  ]);
+  return VOICE_SKILLS.filter(skill => scores[skill] >= threshold
+    && !(participantMode === 'guest' && privateSkills.has(skill)));
+}
+
+export function noulValue(value: unknown): number {
+  if (!value || typeof value !== 'object') throw new Error('JEV_RESPONSE_INVALID');
+  const probability = (value as { noul?: unknown }).noul;
+  if (typeof probability !== 'number' || !Number.isFinite(probability) || probability < 0 || probability > 1) {
+    throw new Error('JEV_RESPONSE_INVALID');
+  }
+  return probability;
+}
+
+export function probabilityValue(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error('VOICE_DECISION_PROBABILITY_INVALID');
+  }
+  return value;
+}
+
+export function choiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
+  if (!value || typeof value !== 'object') throw new Error('JEV_RESPONSE_INVALID');
+  const choice = (value as { choice?: unknown }).choice;
+  if (typeof choice !== 'string' || !allowed.includes(choice)) throw new Error('JEV_RESPONSE_INVALID');
+  return choice as T[number];
+}
+
+export function directChoiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
+  if (typeof value !== 'string' || !allowed.includes(value)) throw new Error('VOICE_DECISION_CHOICE_INVALID');
+  return value as T[number];
+}
+
+export function affectIntensityValue(value: unknown): number {
+  const intensity = choiceValue(value, ['subtle', 'moderate', 'strong'] as const);
+  return intensity === 'subtle' ? 0.25 : intensity === 'moderate' ? 0.6 : 0.9;
+}
+
+export function optionalProbability(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined;
+}
+
+export function optionalPositiveInteger(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+export function boundedProbability(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
+}

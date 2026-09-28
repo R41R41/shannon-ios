@@ -257,6 +257,7 @@ async function completeLiveVoiceDelegation(
   dependencies: LiveVoiceDependencies,
   observer?: LiveVoiceStreamObserver,
 ): Promise<ApiResponse> {
+  const turnStartedAt = performance.now();
   const temporaryGuest = participantMode === 'guest';
   const threadId = temporaryGuest
     ? requestedThreadId || 'temporary-guest-session'
@@ -301,6 +302,7 @@ async function completeLiveVoiceDelegation(
       },
     };
   }
+  const contextStartedAt = performance.now();
   const selectedSkills = new Set(decision.selectedSkills);
   const backendInstructions = [
     '[GPT-Live client delegation backend]',
@@ -350,7 +352,15 @@ async function completeLiveVoiceDelegation(
     dailyMindPrompt,
     taskPrompt,
     capabilityPrompt,
-    `[Voice route]\nConversation class: ${decision.conversationClass}. Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
+    [
+      '[Voice route]',
+      `Conversation class: ${decision.conversationClass}. Expected latency: ${decision.latencyClass}.`,
+      `Selected capabilities: ${decision.selectedSkills.join(', ') || 'none'}.`,
+      `Concrete-solution probability: ${decision.solutionWantedProbability.toFixed(2)}.`,
+      decision.solutionWantedProbability < 0.4
+        ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
+        : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
+    ].join('\n'),
     backendInstructions,
   ].filter(Boolean).join('\n\n');
   const fullHistory = temporaryGuest ? []
@@ -364,17 +374,25 @@ async function completeLiveVoiceDelegation(
     useWebSearch: selectedSkills.has('current_web'),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
+  const modelStartedAt = performance.now();
+  const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
+  let firstModelTokenMilliseconds: number | undefined;
   const completion = provisionalIntent
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? await dependencies.chatModel.generateVoiceStreaming(
         modelRequest,
-        delta => observer.onTextDelta(delta),
+        delta => {
+          firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
+          return observer.onTextDelta(delta);
+        },
         observer.signal,
       )
     : dependencies.chatModel.generateVoice
       ? await dependencies.chatModel.generateVoice(modelRequest)
       : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
+  const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
+  firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   if (!temporaryGuest && cognitiveContext) {
     recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
       threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
@@ -388,6 +406,13 @@ async function completeLiveVoiceDelegation(
       reply: completion.reply.trim(),
       webSources: completion.webSources ?? [],
       voicePlan,
+      voiceMetrics: {
+        decisionMilliseconds: decision.elapsedMilliseconds,
+        contextMilliseconds,
+        firstModelTokenMilliseconds,
+        modelCompleteMilliseconds,
+        turnToModelCompleteMilliseconds: Math.max(0, Math.round(performance.now() - turnStartedAt)),
+      },
     },
   };
 }
@@ -405,11 +430,31 @@ function boundedVoiceHistory(
 function voicePlanResponse(decision: VoiceTurnDecision): Record<string, unknown> {
   return {
     shouldRespond: decision.shouldRespond,
+    replyRequiredProbability: decision.replyRequiredProbability,
+    solutionWantedProbability: decision.solutionWantedProbability,
     conversationClass: decision.conversationClass,
+    latencyClass: decision.latencyClass,
     affect: decision.affect,
+    affectIntensity: decision.affectIntensity,
     delivery: decision.delivery,
     selectedSkills: decision.selectedSkills,
+    skillScores: decision.skillScores,
+    waitingPhrase: voiceWaitingPhrase(decision),
     decisionSource: decision.source,
     decisionLatencyMilliseconds: decision.elapsedMilliseconds,
   };
+}
+
+function voiceWaitingPhrase(decision: VoiceTurnDecision): string | undefined {
+  if (decision.latencyClass === 'under_1s' || decision.latencyClass === 'under_3s') return undefined;
+  if (decision.latencyClass === 'over_10s') {
+    return '少し時間がかかりそうなので、順番に確認しますね。';
+  }
+  const skills = new Set(decision.selectedSkills);
+  if (skills.has('aether_notes') && skills.has('voyager_tasks')) return 'AetherとVoyagerを確認してみますね。';
+  if (skills.has('aether_notes')) return 'Aetherを見てみますね。';
+  if (skills.has('voyager_tasks')) return 'Voyagerのタスクを確認しますね。';
+  if (skills.has('agent_status')) return '作業の進み具合を確認してきますね。';
+  if (skills.has('current_web')) return 'ちょっと最新の情報を調べてみますね。';
+  return '少し確認してみますね。';
 }

@@ -1,69 +1,23 @@
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from './llmUsage.js';
+import {
+  emptySkillScores, skillInstructions, VOICE_SKILLS,
+  type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
+  type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
+  type VoiceSkill, type VoiceTurnDecision,
+} from './voiceDecisionContract.js';
+import {
+  affectIntensityValue, applyMandatorySkillFloors, boundedProbability, choiceValue,
+  directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
+  probabilityValue, selectedSkills,
+} from './voiceDecisionValues.js';
 
-export const VOICE_SKILLS = [
-  'current_web',
-  'conversation_memory',
-  'daily_mind',
-  'aether_notes',
-  'voyager_tasks',
-  'agent_status',
-  'device_context',
-] as const;
-
-export type VoiceSkill = typeof VOICE_SKILLS[number];
-export type VoiceAffect = 'neutral' | 'bright' | 'playful' | 'caring' | 'serious' | 'apologetic' | 'excited';
-export type VoiceDelivery = 'conversational' | 'quick' | 'gentle' | 'focused' | 'energetic';
-export type VoiceConversationClass = 'no_response' | 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
-
-export interface VoiceDecisionInput {
-  scopeKey: string;
-  transcript: string;
-  participantMode: 'owner' | 'guest';
-  requestedLocation: boolean;
-  hasFreshLocation: boolean;
-}
-
-export interface VoiceTurnDecision {
-  source: 'jev' | 'openai' | 'fallback';
-  shouldRespond: boolean;
-  replyRequiredProbability: number;
-  conversationClass: VoiceConversationClass;
-  affect: VoiceAffect;
-  delivery: VoiceDelivery;
-  selectedSkills: readonly VoiceSkill[];
-  skillScores: Readonly<Record<VoiceSkill, number>>;
-  elapsedMilliseconds: number;
-}
-
-export interface VoiceDecisionGateway {
-  readonly mode: 'jev' | 'openai' | 'fallback';
-  readonly model: string;
-  decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision>;
-}
-
-const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
-  current_web: 'Does answering this utterance require current or externally verified web information, such as weather, news, schedules, transit, opening hours, prices, or current public facts?',
-  conversation_memory: 'Does answering well require the owner\'s remembered preferences, prior experiences, promises, relationships, or earlier conversation context?',
-  daily_mind: 'Would Shannon\'s current daily reflection or ongoing personal context materially improve this reply?',
-  aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether?',
-  voyager_tasks: 'Does the utterance ask to find, inspect, discuss, or update tasks or to-do items stored in Voyager?',
-  agent_status: 'Does the utterance ask about the status, completion, failure, approval, or progress of Codex or agent work?',
-  device_context: 'Does answering require the device\'s current local time, timezone, or one-time location?',
-};
-
-const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>>> = {
-  current_web: /(?:最新|天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート)/iu,
-  conversation_memory: /(?:覚えて|前に|以前|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的|続き|踏まえて|今まで)/iu,
-  aether_notes: /(?:aether|ノート|メモ)/iu,
-  voyager_tasks: /(?:voyager|タスク|to.?do|やること)/iu,
-  agent_status: /(?:(?:codex|エージェント).{0,20}(?:進捗|状況|完了|失敗|承認待ち)|(?:作業|実装|ビルド|デプロイ).{0,12}(?:進捗|状況|完了|終わった|どうなった|承認待ち))/iu,
-  device_context: /(?:ここから|現在地|近く|周辺|いま何時|今何時|今日は何日|今日は何曜日)/iu,
-};
-
-const emptySkillScores = (): Record<VoiceSkill, number> => Object.fromEntries(
-  VOICE_SKILLS.map(skill => [skill, 0]),
-) as Record<VoiceSkill, number>;
+export {
+  VOICE_SKILLS,
+  type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
+  type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
+  type VoiceSkill, type VoiceTurnDecision,
+} from './voiceDecisionContract.js';
 
 export class LocalVoiceDecisionGateway implements VoiceDecisionGateway {
   readonly mode = 'fallback' as const;
@@ -121,6 +75,7 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
             'You are Shannon\'s low-latency voice turn router. Return only the requested structured decision.',
             'Score every capability independently from 0 to 1. A score means the capability is materially required for an accurate and useful reply, not merely related.',
             'Use no_response only for noise, abandoned fragments, or acknowledgements where silence is clearly natural. Choose the cheapest sufficient conversation class and a natural spoken affect and delivery.',
+            'Estimate whether the speaker wants a concrete solution, and how long a useful spoken answer will take to begin.',
             ...VOICE_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`),
           ].join('\n'),
           input: JSON.stringify({
@@ -141,12 +96,17 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
                 additionalProperties: false,
                 properties: {
                   replyRequiredProbability: { type: 'number', minimum: 0, maximum: 1 },
+                  solutionWantedProbability: { type: 'number', minimum: 0, maximum: 1 },
                   conversationClass: {
                     type: 'string', enum: ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'],
+                  },
+                  latencyClass: {
+                    type: 'string', enum: ['under_1s', 'under_3s', 'under_10s', 'over_10s'],
                   },
                   affect: {
                     type: 'string', enum: ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'],
                   },
+                  affectIntensity: { type: 'number', minimum: 0, maximum: 1 },
                   delivery: {
                     type: 'string', enum: ['conversational', 'quick', 'gentle', 'focused', 'energetic'],
                   },
@@ -159,7 +119,10 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
                     required: [...VOICE_SKILLS],
                   },
                 },
-                required: ['replyRequiredProbability', 'conversationClass', 'affect', 'delivery', 'skillScores'],
+                required: [
+                  'replyRequiredProbability', 'solutionWantedProbability', 'conversationClass',
+                  'latencyClass', 'affect', 'affectIntensity', 'delivery', 'skillScores',
+                ],
               },
             },
           },
@@ -200,6 +163,7 @@ export interface JevVoiceDecisionOptions {
   skillThreshold?: number;
   fetcher?: typeof fetch;
   nowMilliseconds?: () => number;
+  fallbackGateway?: VoiceDecisionGateway;
 }
 
 export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
@@ -241,6 +205,14 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
             false: 'Silence is the most natural response.',
           },
         }],
+        ['solution_wanted', {
+          type: 'noul',
+          instructions: 'Does the speaker primarily want a concrete answer, recommendation, plan, action, or problem solution rather than emotional presence or casual companionship?',
+          criteria: {
+            true: 'A solution or concrete outcome is the main need.',
+            false: 'Empathy, companionship, playful conversation, or simply being heard is the main need.',
+          },
+        }],
         ['conversation_class', {
           type: 'choice',
           instructions: 'Classify the cheapest sufficient response path for this utterance.',
@@ -261,12 +233,31 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
             excited: 'Celebratory or strongly enthusiastic.',
           },
         }],
+        ['affect_intensity', {
+          type: 'choice',
+          instructions: 'Choose how strongly the primary emotion should be expressed. Prefer subtle unless the utterance clearly supports more.',
+          criteria: {
+            subtle: 'A light emotional tint within ordinary conversation.',
+            moderate: 'Clearly audible emotion without dominating the content.',
+            strong: 'A rare, unmistakable emotional performance justified by the moment.',
+          },
+        }],
         ['delivery', {
           type: 'choice',
           instructions: 'Choose the spoken delivery that best fits the utterance and likely reply.',
           criteria: {
             conversational: 'Ordinary natural conversation.', quick: 'Brief and brisk.', gentle: 'Softer and slower.',
             focused: 'Clear and deliberate for facts or instructions.', energetic: 'Lively tempo and larger pitch movement.',
+          },
+        }],
+        ['latency_class', {
+          type: 'choice',
+          instructions: 'Estimate time until a useful spoken answer can begin, including selected skills and reasoning.',
+          criteria: {
+            under_1s: 'Tiny social or deterministic response.',
+            under_3s: 'Direct generation or one very fast lookup.',
+            under_10s: 'Skill retrieval or moderate synthesis.',
+            over_10s: 'Complex multi-step work, broad research, or external action.',
           },
         }],
       ]);
@@ -292,6 +283,10 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
       if (!response.ok) throw new Error(`JEV_RESPONSE_${response.status}`);
       return parsedJevDecision(body, input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     } catch {
+      if (this.options.fallbackGateway) {
+        const fallback = await this.options.fallbackGateway.decide(input);
+        return { ...fallback, elapsedMilliseconds: Math.max(0, Math.round(this.nowMilliseconds() - startedAt)) };
+      }
       return localDecision(input, this.skillThreshold, this.nowMilliseconds() - startedAt);
     }
   }
@@ -304,6 +299,15 @@ export function createConfiguredVoiceDecisionGateway(
   const skillThreshold = optionalProbability(
     environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD,
   ) ?? 0.55;
+  const openAIApiKey = environment.OPENAI_API_KEY?.trim();
+  const openAIFallback = openAIApiKey ? new OpenAIVoiceDecisionGateway({
+    apiKey: openAIApiKey,
+    endpoint: environment.SHANNON_VOICE_ROUTER_ENDPOINT?.trim() || undefined,
+    model: environment.SHANNON_VOICE_ROUTER_MODEL?.trim() || 'gpt-5.6-luna',
+    timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_VOICE_ROUTER_TIMEOUT_MS) ?? 1_200,
+    skillThreshold,
+    usageStore,
+  }) : undefined;
   const jevApiKey = environment.TYPESAFE_API_KEY?.trim();
   if (jevApiKey) return new JevVoiceDecisionGateway({
     apiKey: jevApiKey,
@@ -311,16 +315,9 @@ export function createConfiguredVoiceDecisionGateway(
     model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-latest',
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
+    fallbackGateway: openAIFallback,
   });
-  const openAIApiKey = environment.OPENAI_API_KEY?.trim();
-  if (openAIApiKey) return new OpenAIVoiceDecisionGateway({
-    apiKey: openAIApiKey,
-    endpoint: environment.SHANNON_VOICE_ROUTER_ENDPOINT?.trim() || undefined,
-    model: environment.SHANNON_VOICE_ROUTER_MODEL?.trim() || 'gpt-5.6-luna',
-    timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_VOICE_ROUTER_TIMEOUT_MS) ?? 1_200,
-    skillThreshold,
-    usageStore,
-  });
+  if (openAIFallback) return openAIFallback;
   return new LocalVoiceDecisionGateway(skillThreshold);
 }
 
@@ -344,19 +341,21 @@ function parsedOpenAIDecision(
   for (const skill of VOICE_SKILLS) skillScores[skill] = probabilityValue(scoreValues[skill]);
   applyMandatorySkillFloors(skillScores, input);
   const replyRequiredProbability = probabilityValue(value.replyRequiredProbability);
+  const solutionWantedProbability = probabilityValue(value.solutionWantedProbability);
   const conversationClass = directChoiceValue(value.conversationClass,
     ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'] as const);
+  const latencyClass = directChoiceValue(value.latencyClass,
+    ['under_1s', 'under_3s', 'under_10s', 'over_10s'] as const);
   const affect = directChoiceValue(value.affect,
     ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'] as const);
+  const affectIntensity = probabilityValue(value.affectIntensity);
   const delivery = directChoiceValue(value.delivery,
     ['conversational', 'quick', 'gentle', 'focused', 'energetic'] as const);
   return {
     source: 'openai',
     shouldRespond: !(conversationClass === 'no_response' && replyRequiredProbability < 0.4),
-    replyRequiredProbability,
-    conversationClass,
-    affect,
-    delivery,
+    replyRequiredProbability, solutionWantedProbability, conversationClass, latencyClass,
+    affect, affectIntensity, delivery,
     selectedSkills: selectedSkills(skillScores, skillThreshold, input.participantMode),
     skillScores,
     elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
@@ -379,18 +378,24 @@ function parsedJevDecision(
   }
   applyMandatorySkillFloors(skillScores, input);
   const replyRequiredProbability = noulValue(answerMap.reply_required);
+  const solutionWantedProbability = noulValue(answerMap.solution_wanted);
   const conversationClass = choiceValue(answerMap.conversation_class, [
     'no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex',
+  ] as const);
+  const latencyClass = choiceValue(answerMap.latency_class, [
+    'under_1s', 'under_3s', 'under_10s', 'over_10s',
   ] as const);
   const affect = choiceValue(answerMap.affect, [
     'neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited',
   ] as const);
+  const affectIntensity = affectIntensityValue(answerMap.affect_intensity);
   const delivery = choiceValue(answerMap.delivery, [
     'conversational', 'quick', 'gentle', 'focused', 'energetic',
   ] as const);
   const shouldRespond = !(conversationClass === 'no_response' && replyRequiredProbability < 0.4);
   return {
-    source: 'jev', shouldRespond, replyRequiredProbability, conversationClass, affect, delivery,
+    source: 'jev', shouldRespond, replyRequiredProbability, solutionWantedProbability,
+    conversationClass, latencyClass, affect, affectIntensity, delivery,
     selectedSkills: selectedSkills(skillScores, skillThreshold, input.participantMode),
     skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
@@ -421,80 +426,17 @@ function localDecision(
     : affect === 'excited' ? 'energetic'
       : selected.length > 0 ? 'focused'
         : greeting ? 'quick' : 'conversational';
+  const solutionWanted = /(?:どうすれば|方法|教えて|調べて|実装|作って|直して|お願い|してほしい|できますか)/u.test(text);
+  const latencyClass: VoiceLatencyClass = acknowledgementOnly || greeting ? 'under_1s'
+    : conversationClass === 'direct' ? 'under_3s'
+      : conversationClass === 'skill_simple' ? 'under_10s' : 'over_10s';
+  const affectIntensity = affect === 'neutral' ? 0.2 : affect === 'excited' ? 0.85 : 0.55;
   return {
     source: 'fallback', shouldRespond: !acknowledgementOnly,
     replyRequiredProbability: acknowledgementOnly ? 0.1 : 0.9,
-    conversationClass, affect, delivery, selectedSkills: selected, skillScores,
+    solutionWantedProbability: solutionWanted ? 0.9 : 0.25,
+    conversationClass, latencyClass, affect, affectIntensity, delivery,
+    selectedSkills: selected, skillScores,
     elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
-}
-
-function applyMandatorySkillFloors(scores: Record<VoiceSkill, number>, input: VoiceDecisionInput): void {
-  for (const skill of VOICE_SKILLS) {
-    if (mandatorySkillPatterns[skill]?.test(input.transcript)) scores[skill] = Math.max(scores[skill], 1);
-  }
-  if (input.requestedLocation) scores.device_context = 1;
-  if (input.participantMode === 'guest') {
-    scores.conversation_memory = 0;
-    scores.daily_mind = 0;
-    scores.aether_notes = 0;
-    scores.voyager_tasks = 0;
-    scores.agent_status = 0;
-  }
-}
-
-function selectedSkills(
-  scores: Readonly<Record<VoiceSkill, number>>,
-  threshold: number,
-  participantMode: VoiceDecisionInput['participantMode'],
-): VoiceSkill[] {
-  const privateSkills = new Set<VoiceSkill>([
-    'conversation_memory', 'daily_mind', 'aether_notes', 'voyager_tasks', 'agent_status',
-  ]);
-  return VOICE_SKILLS.filter(skill => scores[skill] >= threshold
-    && !(participantMode === 'guest' && privateSkills.has(skill)));
-}
-
-function noulValue(value: unknown): number {
-  if (!value || typeof value !== 'object') throw new Error('JEV_RESPONSE_INVALID');
-  const probability = (value as { noul?: unknown }).noul;
-  if (typeof probability !== 'number' || !Number.isFinite(probability) || probability < 0 || probability > 1) {
-    throw new Error('JEV_RESPONSE_INVALID');
-  }
-  return probability;
-}
-
-function probabilityValue(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
-    throw new Error('VOICE_DECISION_PROBABILITY_INVALID');
-  }
-  return value;
-}
-
-function choiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
-  if (!value || typeof value !== 'object') throw new Error('JEV_RESPONSE_INVALID');
-  const choice = (value as { choice?: unknown }).choice;
-  if (typeof choice !== 'string' || !allowed.includes(choice)) throw new Error('JEV_RESPONSE_INVALID');
-  return choice as T[number];
-}
-
-function directChoiceValue<const T extends readonly string[]>(value: unknown, allowed: T): T[number] {
-  if (typeof value !== 'string' || !allowed.includes(value)) throw new Error('VOICE_DECISION_CHOICE_INVALID');
-  return value as T[number];
-}
-
-function optionalProbability(value: string | undefined): number | undefined {
-  if (!value?.trim()) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined;
-}
-
-function optionalPositiveInteger(value: string | undefined): number | undefined {
-  if (!value?.trim()) return undefined;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function boundedProbability(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
 }

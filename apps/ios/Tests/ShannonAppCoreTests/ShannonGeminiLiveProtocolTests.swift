@@ -69,8 +69,95 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         let routedStyle = ShannonGeminiCascadeSpeech.style(for: "大丈夫？", plan: routed)
         XCTAssertTrue(routedStyle.contains("近く温かな声"))
         XCTAssertTrue(routedStyle.contains("少しゆっくり"))
-        XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "そうだけど", turnComplete: false), 420)
-        XCTAssertEqual(ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(for: "はい。", turnComplete: false), 80)
+    }
+
+    func testTurnAssemblerMergesCumulativeAndOverlappingFinalSegments() throws {
+        var assembler = ShannonVoiceTurnAssembler()
+        assembler.appendFinal("明日は晴れ")
+        assembler.appendFinal("晴れです。")
+
+        let envelope = try XCTUnwrap(assembler.finish())
+        XCTAssertEqual(envelope.rawText, "明日は晴れです。")
+        XCTAssertEqual(envelope.segments.map(\.text), ["明日は晴れ", "晴れです。"])
+        XCTAssertTrue(envelope.alternatives.isEmpty)
+        XCTAssertTrue(envelope.confidenceSpans.isEmpty)
+    }
+
+    func testTurnAssemblerNormalizesRegisteredVocabularyWithoutChangingRawText() throws {
+        var assembler = ShannonVoiceTurnAssembler()
+        assembler.appendFinal("エーテルとボイジャーをジェブでつないで")
+
+        let envelope = try XCTUnwrap(assembler.finish())
+        XCTAssertEqual(envelope.rawText, "エーテルとボイジャーをジェブでつないで")
+        XCTAssertEqual(envelope.normalizedText, "AetherとVoyagerをJevでつないで")
+    }
+
+    func testTurnAssemblerKeepsInterimOutOfFinalProvenance() throws {
+        let start = Date(timeIntervalSince1970: 100)
+        var assembler = ShannonVoiceTurnAssembler()
+        XCTAssertEqual(assembler.preview(interim: "シャノン、明日", receivedAt: start), "シャノン、明日")
+        assembler.appendFinal("シャノン、明日は？", receivedAt: start.addingTimeInterval(0.2))
+
+        let envelope = try XCTUnwrap(assembler.finish(endedAt: start.addingTimeInterval(0.3)))
+        XCTAssertEqual(envelope.addressee, "shannon")
+        XCTAssertEqual(envelope.segments.count, 1)
+        XCTAssertEqual(envelope.startedAt, start)
+    }
+
+    func testTurnAssemblerLinksExplicitCorrectionToPreviousTurn() throws {
+        var assembler = ShannonVoiceTurnAssembler()
+        assembler.appendFinal("明日の予定を見て")
+        let original = try XCTUnwrap(assembler.finish())
+        assembler.appendFinal("違う、今日の予定を見て")
+        let correction = try XCTUnwrap(assembler.finish())
+
+        XCTAssertEqual(correction.correctionOf, original.id)
+    }
+
+    func testTurnAssemblerAdaptsFinalizationDelayToUtteranceShape() {
+        var assembler = ShannonVoiceTurnAssembler()
+        assembler.appendFinal("そうだけど")
+        XCTAssertEqual(assembler.finalizationDelayMilliseconds(turnComplete: false), 420)
+        XCTAssertEqual(assembler.finalizationDelayMilliseconds(turnComplete: true), 0)
+
+        _ = assembler.finish()
+        assembler.appendFinal("はい。")
+        XCTAssertEqual(assembler.finalizationDelayMilliseconds(turnComplete: false), 80)
+    }
+
+    func testSpokenTextKeepsDisplayWordingButUsesNaturalPronunciations() {
+        XCTAssertEqual(
+            ShannonGeminiCascadeSpeech.spokenText(
+                for: "AetherとVoyager、確認しますね！੧(❛□❛✿)"
+            ),
+            "エーテルとボイジャー、確認しますね！"
+        )
+        XCTAssertEqual(
+            ShannonGeminiCascadeSpeech.spokenText(for: "さすがボクです笑"),
+            "さすがボクですふふっ"
+        )
+    }
+
+    func testLatencyMeasurementsKeepDecisionTextAndTTSStagesSeparate() {
+        let plan = ShannonVoicePlanDTO(
+            shouldRespond: true,
+            conversationClass: .skillSimple,
+            latencyClass: .underTenSeconds,
+            affect: .serious,
+            affectIntensity: 0.6,
+            delivery: .focused,
+            decisionLatencyMilliseconds: 84
+        )
+        var measurements = ShannonVoiceLatencyMeasurements()
+        measurements.startResponse(now: 10)
+        measurements.recordFirstText(plan: plan, now: 10.25)
+        measurements.recordFirstTTSByte(requestStartedAt: 10.25, now: 10.5)
+        measurements.recordFirstAudio(now: 10.8)
+
+        XCTAssertEqual(measurements.decisionMilliseconds, 84)
+        XCTAssertEqual(measurements.firstTextMilliseconds, 250)
+        XCTAssertEqual(measurements.firstTTSByteMilliseconds, 250)
+        XCTAssertEqual(measurements.firstAudioMilliseconds, 800)
     }
 
     func testPCMResamplesToSixteenKilohertzAndClamps() {

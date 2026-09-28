@@ -11,9 +11,12 @@ function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unk
   return {
     ...Object.fromEntries(VOICE_SKILLS.map(skill => [`skill__${skill}`, { type: 'noul', noul: 0.1 }])),
     reply_required: { type: 'noul', noul: 0.9 },
+    solution_wanted: { type: 'noul', noul: 0.7 },
     conversation_class: { type: 'choice', choice: 'direct', confidence: 0.9, probabilities: {} },
     affect: { type: 'choice', choice: 'bright', confidence: 0.8, probabilities: {} },
+    affect_intensity: { type: 'choice', choice: 'moderate', confidence: 0.8, probabilities: {} },
     delivery: { type: 'choice', choice: 'quick', confidence: 0.8, probabilities: {} },
+    latency_class: { type: 'choice', choice: 'under_3s', confidence: 0.8, probabilities: {} },
     ...overrides,
   };
 }
@@ -49,7 +52,10 @@ describe('Jev voice decision routing', () => {
     expect(decision.source).toBe('jev');
     expect(decision.selectedSkills).toEqual(['aether_notes', 'voyager_tasks']);
     expect(decision.affect).toBe('bright');
+    expect(decision.affectIntensity).toBe(0.6);
     expect(decision.delivery).toBe('quick');
+    expect(decision.latencyClass).toBe('under_3s');
+    expect(decision.solutionWantedProbability).toBe(0.7);
   });
 
   it('suppresses speech only when both the class and reply probability agree', async () => {
@@ -98,8 +104,11 @@ describe('OpenAI voice decision compatibility routing', () => {
       return new Response(JSON.stringify({
         output_text: JSON.stringify({
           replyRequiredProbability: 0.94,
+          solutionWantedProbability: 0.82,
           conversationClass: 'skill_simple',
+          latencyClass: 'under_10s',
           affect: 'caring',
+          affectIntensity: 0.68,
           delivery: 'gentle',
           skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [
             skill, skill === 'conversation_memory' || skill === 'daily_mind' ? 0.8 : 0.1,
@@ -117,7 +126,42 @@ describe('OpenAI voice decision compatibility routing', () => {
     expect(decision.source).toBe('openai');
     expect(decision.selectedSkills).toEqual(['conversation_memory', 'daily_mind']);
     expect(decision.affect).toBe('caring');
+    expect(decision.affectIntensity).toBe(0.68);
     expect(decision.delivery).toBe('gentle');
+    expect(decision.latencyClass).toBe('under_10s');
+    expect(decision.solutionWantedProbability).toBe(0.82);
+  });
+
+  it('falls through Jev to the lightweight structured router before local rules', async () => {
+    const openAIFetcher = vi.fn(async () => new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        replyRequiredProbability: 0.9,
+        solutionWantedProbability: 0.2,
+        conversationClass: 'direct',
+        latencyClass: 'under_3s',
+        affect: 'playful',
+        affectIntensity: 0.4,
+        delivery: 'conversational',
+        skillScores: Object.fromEntries(VOICE_SKILLS.map(skill => [skill, 0.1])),
+      }),
+    })));
+    const fallback = new OpenAIVoiceDecisionGateway({
+      apiKey: 'openai-test', fetcher: openAIFetcher as typeof fetch,
+    });
+    const gateway = new JevVoiceDecisionGateway({
+      apiKey: 'jev-test',
+      fetcher: vi.fn(async () => { throw new Error('jev unavailable'); }) as typeof fetch,
+      fallbackGateway: fallback,
+    });
+
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: 'なんとなく話したい', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+
+    expect(decision.source).toBe('openai');
+    expect(decision.solutionWantedProbability).toBe(0.2);
+    expect(openAIFetcher).toHaveBeenCalledOnce();
   });
 
   it('prefers Jev when configured, otherwise OpenAI, then deterministic rules', () => {

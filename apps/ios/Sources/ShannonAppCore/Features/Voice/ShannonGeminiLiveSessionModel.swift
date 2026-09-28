@@ -16,7 +16,10 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var textSendState: ShannonGeminiTextSendState = .idle
     public private(set) var audioLevel: Float = 0
     public private(set) var playbackLevel: Double = 0
-    public private(set) var firstAudioLatencyMilliseconds: Int?
+    public var firstAudioLatencyMilliseconds: Int? { latencyMeasurements.firstAudioMilliseconds }
+    public var firstTextLatencyMilliseconds: Int? { latencyMeasurements.firstTextMilliseconds }
+    public var firstTTSByteLatencyMilliseconds: Int? { latencyMeasurements.firstTTSByteMilliseconds }
+    public var decisionLatencyMilliseconds: Int? { latencyMeasurements.decisionMilliseconds }
     public private(set) var interruptionLatencyMilliseconds: Int?
     public private(set) var estimatedCostUsd: Double = 0
     public private(set) var inputAudioSeconds: Double = 0
@@ -26,12 +29,12 @@ public final class ShannonGeminiLiveSessionModel {
 
     private var session: ShannonGeminiLiveSessionDTO?
     private var transport: ShannonGeminiLiveTransport?
-    private var transcriptBuffer = ""
+    private var turnAssembler = ShannonVoiceTurnAssembler()
     private var responseTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
     private var bargeCandidateStartedAt: TimeInterval?
-    private var responseStartedAt: TimeInterval?
+    private var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     private var responsePlaybackDeadline: TimeInterval = 0
     private var ttsCostUsd: Double = 0
     private var didRecordCaptureStart = false
@@ -203,11 +206,11 @@ public final class ShannonGeminiLiveSessionModel {
         case let .interimInputTranscript(text):
             let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty else { return }
-            userTranscript = transcriptBuffer.isEmpty ? value : transcriptBuffer + value
+            userTranscript = turnAssembler.preview(interim: value)
             handleBargeIn(hasFinalText: false)
         case let .inputTranscript(text):
-            transcriptBuffer = mergedTranscript(transcriptBuffer, text)
-            userTranscript = transcriptBuffer
+            turnAssembler.appendFinal(text)
+            userTranscript = turnAssembler.finalText
             handleBargeIn(hasFinalText: true)
             scheduleFinalization(turnComplete: false)
         case .turnComplete:
@@ -243,25 +246,23 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     private func scheduleFinalization(turnComplete: Bool) {
-        guard !transcriptBuffer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard turnAssembler.hasFinalText else { return }
         finalizeTask?.cancel()
-        let delay = ShannonGeminiCascadeSpeech.finalizeDelayMilliseconds(
-            for: transcriptBuffer,
-            turnComplete: turnComplete
-        )
+        let delay = turnAssembler.finalizationDelayMilliseconds(turnComplete: turnComplete)
+        ShannonVoiceTurnDiagnostics.recordFinalizationScheduled(delay: delay, turnComplete: turnComplete)
         finalizeTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(delay)) } catch { return }
-            self?.finalizeTranscript()
+            self?.finalizeTranscript(turnComplete: turnComplete)
         }
     }
 
-    private func finalizeTranscript() {
+    private func finalizeTranscript(turnComplete: Bool) {
         finalizeTask?.cancel()
         finalizeTask = nil
-        let text = transcriptBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-        transcriptBuffer = ""
-        guard !text.isEmpty else { return }
-        beginResponse(to: text)
+        guard let envelope = turnAssembler.finish() else { return }
+        ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
+        userTranscript = envelope.normalizedText
+        beginResponse(to: envelope.normalizedText, committedUserText: envelope.rawText)
     }
 
     private func beginResponse(
@@ -276,8 +277,7 @@ public final class ShannonGeminiLiveSessionModel {
             return
         }
         responseTask?.cancel()
-        responseStartedAt = ProcessInfo.processInfo.systemUptime
-        firstAudioLatencyMilliseconds = nil
+        latencyMeasurements.startResponse()
         shannonTranscript = ""
         responsePlaybackDeadline = ProcessInfo.processInfo.systemUptime
         phase = .thinking
@@ -300,6 +300,7 @@ public final class ShannonGeminiLiveSessionModel {
                     participantMode
                 ) { [weak self] segment, plan in
                     guard let self, !Task.isCancelled else { return }
+                    self.latencyMeasurements.recordFirstText(plan: plan)
                     self.shannonTranscript += segment
                     await coordinator.enqueue(segment, plan: plan)
                 }
@@ -316,6 +317,7 @@ public final class ShannonGeminiLiveSessionModel {
                 }
                 let reply = response.reply
                 try await coordinator.finish()
+                self.latencyMeasurements.recordServerMetrics(response.voiceMetrics)
                 shannonTranscript = reply
                 let remaining = max(0, responsePlaybackDeadline - ProcessInfo.processInfo.systemUptime)
                 try await Task.sleep(for: .seconds(remaining))
@@ -358,16 +360,17 @@ public final class ShannonGeminiLiveSessionModel {
             throw ShannonAPIError.invalidResponse
         }
         var segmentDuration = 0.0
+        var receivedFirstChunk = false
         for try await chunk in speech.chunks {
             try Task.checkCancellation()
             guard !chunk.isEmpty, chunk.count % 2 == 0 else {
                 throw ShannonAPIError.invalidResponse
             }
-            if firstAudioLatencyMilliseconds == nil, let responseStartedAt {
-                firstAudioLatencyMilliseconds = Int(
-                    (ProcessInfo.processInfo.systemUptime - responseStartedAt) * 1_000
-                )
+            if !receivedFirstChunk {
+                receivedFirstChunk = true
+                latencyMeasurements.recordFirstTTSByte(requestStartedAt: speech.requestStartedAtUptime)
             }
+            latencyMeasurements.recordFirstAudio()
             let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
             segmentDuration += duration
             outputAudioSeconds += duration
@@ -436,12 +439,12 @@ public final class ShannonGeminiLiveSessionModel {
     private func resetMeasurements() {
         userTranscript = ""
         shannonTranscript = ""
-        transcriptBuffer = ""
+        turnAssembler.reset()
         inputAudioSeconds = 0
         outputAudioSeconds = 0
         ttsCostUsd = 0
         estimatedCostUsd = 0
-        firstAudioLatencyMilliseconds = nil
+        latencyMeasurements.reset()
         interruptionLatencyMilliseconds = nil
         playbackLevel = 0
         didRecordCaptureStart = false

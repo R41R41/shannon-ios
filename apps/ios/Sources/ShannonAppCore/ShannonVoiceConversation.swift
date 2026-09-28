@@ -111,6 +111,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
     public let channels: Int
     public let bitsPerSample: Int
     public let outputUsdPerTenSeconds: Double
+    public let requestStartedAtUptime: TimeInterval?
     public let chunks: AsyncThrowingStream<Data, Error>
 
     public init(
@@ -120,6 +121,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
         channels: Int = 1,
         bitsPerSample: Int = 16,
         outputUsdPerTenSeconds: Double,
+        requestStartedAtUptime: TimeInterval? = nil,
         chunks: AsyncThrowingStream<Data, Error>
     ) {
         self.model = model
@@ -128,6 +130,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
         self.channels = channels
         self.bitsPerSample = bitsPerSample
         self.outputUsdPerTenSeconds = outputUsdPerTenSeconds
+        self.requestStartedAtUptime = requestStartedAtUptime
         self.chunks = chunks
     }
 }

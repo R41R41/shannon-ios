@@ -109,6 +109,7 @@ extension ShannonAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         authorize(&request, connection: connection)
         request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style))
+        let requestStartedAtUptime = ProcessInfo.processInfo.systemUptime
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         if http.statusCode == 404 || http.statusCode == 405 {
@@ -136,6 +137,7 @@ extension ShannonAPIClient {
             channels: channels,
             bitsPerSample: bits,
             outputUsdPerTenSeconds: costRate,
+            requestStartedAtUptime: requestStartedAtUptime,
             chunks: Self.bufferedGeminiPCM(bytes)
         )
     }

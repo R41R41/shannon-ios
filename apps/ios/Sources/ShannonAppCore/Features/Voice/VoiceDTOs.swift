@@ -187,29 +187,54 @@ public enum ShannonVoiceDeliveryDTO: String, Codable, Equatable, Sendable {
     case conversational, quick, gentle, focused, energetic
 }
 
+public enum ShannonVoiceLatencyClassDTO: String, Codable, Equatable, Sendable {
+    case underOneSecond = "under_1s"
+    case underThreeSeconds = "under_3s"
+    case underTenSeconds = "under_10s"
+    case overTenSeconds = "over_10s"
+}
+
 public struct ShannonVoicePlanDTO: Codable, Equatable, Sendable {
     public let shouldRespond: Bool
+    public let replyRequiredProbability: Double?
+    public let solutionWantedProbability: Double?
     public let conversationClass: ShannonVoiceConversationClassDTO
+    public let latencyClass: ShannonVoiceLatencyClassDTO?
     public let affect: ShannonVoiceAffectDTO
+    public let affectIntensity: Double?
     public let delivery: ShannonVoiceDeliveryDTO
     public let selectedSkills: [String]
+    public let skillScores: [String: Double]?
+    public let waitingPhrase: String?
     public let decisionSource: String?
     public let decisionLatencyMilliseconds: Int?
 
     public init(
         shouldRespond: Bool,
+        replyRequiredProbability: Double? = nil,
+        solutionWantedProbability: Double? = nil,
         conversationClass: ShannonVoiceConversationClassDTO,
+        latencyClass: ShannonVoiceLatencyClassDTO? = nil,
         affect: ShannonVoiceAffectDTO,
+        affectIntensity: Double? = nil,
         delivery: ShannonVoiceDeliveryDTO,
         selectedSkills: [String] = [],
+        skillScores: [String: Double]? = nil,
+        waitingPhrase: String? = nil,
         decisionSource: String? = nil,
         decisionLatencyMilliseconds: Int? = nil
     ) {
         self.shouldRespond = shouldRespond
+        self.replyRequiredProbability = replyRequiredProbability
+        self.solutionWantedProbability = solutionWantedProbability
         self.conversationClass = conversationClass
+        self.latencyClass = latencyClass
         self.affect = affect
+        self.affectIntensity = affectIntensity
         self.delivery = delivery
         self.selectedSkills = selectedSkills
+        self.skillScores = skillScores
+        self.waitingPhrase = waitingPhrase
         self.decisionSource = decisionSource
         self.decisionLatencyMilliseconds = decisionLatencyMilliseconds
     }
@@ -221,20 +246,31 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     public let reply: String
     public let organizeSession: ShannonOrganizeSessionDTO?
     public let voicePlan: ShannonVoicePlanDTO?
+    public let voiceMetrics: ShannonVoiceServerMetricsDTO?
 
     public init(
         threadId: String,
         model: String,
         reply: String,
         organizeSession: ShannonOrganizeSessionDTO? = nil,
-        voicePlan: ShannonVoicePlanDTO? = nil
+        voicePlan: ShannonVoicePlanDTO? = nil,
+        voiceMetrics: ShannonVoiceServerMetricsDTO? = nil
     ) {
         self.threadId = threadId
         self.model = model
         self.reply = reply
         self.organizeSession = organizeSession
         self.voicePlan = voicePlan
+        self.voiceMetrics = voiceMetrics
     }
+}
+
+public struct ShannonVoiceServerMetricsDTO: Codable, Equatable, Sendable {
+    public let decisionMilliseconds: Int
+    public let contextMilliseconds: Int
+    public let firstModelTokenMilliseconds: Int
+    public let modelCompleteMilliseconds: Int
+    public let turnToModelCompleteMilliseconds: Int?
 }
 
 public enum ShannonLiveVoiceStreamEventTypeDTO: String, Codable, Equatable, Sendable {

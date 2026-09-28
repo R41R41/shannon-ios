@@ -17,12 +17,4 @@ public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
         }
     }
 }
-
-func mergedTranscript(_ current: String, _ next: String) -> String {
-    let incoming = next.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !incoming.isEmpty else { return current }
-    if incoming == current || current.hasSuffix(incoming) { return current }
-    if incoming.hasPrefix(current) { return incoming }
-    return current.isEmpty ? incoming : current + incoming
-}
 #endif

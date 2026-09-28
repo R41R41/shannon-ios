@@ -45,7 +45,12 @@ enum ShannonGeminiCascadeSpeech {
         case .focused: "明瞭で歯切れよく、事実を聞き取りやすく。"
         case .energetic: "生き生きしたテンポと抑揚で、叫ばずに。"
         }
-        return String("明るく自然な日本語の会話。\(affect) \(delivery)".prefix(500))
+        let intensity = switch plan.affectIntensity ?? 0.5 {
+        case ..<0.4: "感情はごく自然ににじませる程度に。"
+        case 0.4..<0.75: "感情をはっきり伝えるが、内容を邪魔しない強さで。"
+        default: "この瞬間にふさわしい強い感情を、わざとらしくならない範囲で明確に。"
+        }
+        return String("明るく自然な日本語の会話。\(affect) \(intensity) \(delivery)".prefix(500))
     }
 
     static func segments(_ text: String) -> [String] {
@@ -66,13 +71,31 @@ enum ShannonGeminiCascadeSpeech {
         return result
     }
 
-    static func finalizeDelayMilliseconds(for text: String, turnComplete: Bool) -> Int {
-        if turnComplete { return 0 }
-        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.range(of: #"[。！？!?][」』）】”\"]?$"#, options: .regularExpression) != nil { return 80 }
-        if value.range(of: #"(?:[、…]|けど|から|ので|でも|だが|ながら|つつ)$"#, options: .regularExpression) != nil { return 420 }
-        return value.count <= 3 ? 360 : 220
+    static func spokenText(for displayText: String) -> String {
+        let pronunciations = [
+            ("Aether", "エーテル"), ("Voyager", "ボイジャー"), ("Syzygy", "シジジー"),
+            ("Jev", "ジェブ"), ("Minebot", "マインボット"), ("Codex", "コーデックス"),
+            ("SwiftUI", "スウィフトユーアイ"), ("TestFlight", "テストフライト"),
+        ]
+        var spoken = pronunciations.reduce(displayText) { value, pronunciation in
+            value.replacingOccurrences(of: pronunciation.0, with: pronunciation.1)
+        }
+        for kaomoji in ["（^人^）", "(^人^)", "੧(❛□❛✿)"] {
+            spoken = spoken.replacingOccurrences(of: kaomoji, with: "")
+        }
+        spoken = String(spoken.filter { character in
+            !character.unicodeScalars.contains { $0.properties.isEmojiPresentation }
+        })
+        spoken = spoken.replacingOccurrences(
+            of: #"(?:\^人\^|❛[^\n]{0,8}✿|\(笑\)|ｗ{2,})"#,
+            with: "",
+            options: .regularExpression
+        )
+        spoken = spoken.replacingOccurrences(of: #"笑(?=[。！？!?\s]|$)"#, with: "ふふっ", options: .regularExpression)
+        return spoken.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
 }
 
 @MainActor
@@ -101,6 +124,8 @@ final class ShannonGeminiStreamingSpeechCoordinator {
     }
 
     func enqueue(_ text: String, plan: ShannonVoicePlanDTO?) async {
+        let spokenText = ShannonGeminiCascadeSpeech.spokenText(for: text)
+        guard !spokenText.isEmpty else { return }
         while activeCount >= 2, !isCancelled {
             guard !Task.isCancelled else { return }
             await withCheckedContinuation { slotWaiters.append($0) }
@@ -110,7 +135,7 @@ final class ShannonGeminiStreamingSpeechCoordinator {
         activeCount += 1
         let identifier = UUID()
         let speechTask = Task { @MainActor [streamSpeech, style] in
-            try await streamSpeech(text, style(text, plan))
+            try await streamSpeech(spokenText, style(text, plan))
         }
         speechTasks[identifier] = speechTask
         let previous = tail
