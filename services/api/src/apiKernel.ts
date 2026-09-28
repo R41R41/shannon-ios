@@ -13,6 +13,7 @@ import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
 import { dispatchVoiceTurn } from './apiVoiceTurns.js';
+import { dispatchPreferenceRequest } from './apiPreferenceRoutes.js';
 import {
   dispatchLiveVoiceRequest,
   realtimeVoiceSessionProjection,
@@ -68,6 +69,14 @@ import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
 import { SQLitePersonIdentityStore, type PersonIdentityStore } from './personIdentity.js';
 import {
+  InMemoryConversationOrchestrationStore,
+  buildConversationOrchestrationPrompt,
+  observeConversationTurn,
+  recordConversationProposal,
+  recordConversationReceipt,
+  type ConversationOrchestrationStore,
+} from './conversationOrchestration.js';
+import {
   extractExplicitUserIntent,
   InMemoryCognitiveIntentStore,
   type CognitiveIntentStore,
@@ -90,10 +99,7 @@ import {
 } from './organize.js';
 import {
   InMemoryVoiceIdentityStore,
-  isShannonRealtimeVoiceId,
-  type ShannonVoiceIdentityMode,
   type ShannonVoiceIdentityStore,
-  voiceIdentityResponse,
 } from './voiceIdentity.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
@@ -118,6 +124,7 @@ export interface ShannonApiKernelOptions {
   personIdentities?: PersonIdentityStore;
   worldSubscriptions?: WorldSubscriptionReader;
   cognitiveIntents?: CognitiveIntentStore;
+  conversationOrchestration?: ConversationOrchestrationStore;
 }
 
 export class ShannonApiKernel {
@@ -142,6 +149,7 @@ export class ShannonApiKernel {
   private readonly personIdentities: PersonIdentityStore;
   private readonly worldSubscriptions: WorldSubscriptionReader | null;
   private readonly cognitiveIntents: CognitiveIntentStore;
+  private readonly conversationOrchestration: ConversationOrchestrationStore;
 
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -173,6 +181,7 @@ export class ShannonApiKernel {
     this.personIdentities = options.personIdentities ?? new SQLitePersonIdentityStore(':memory:');
     this.worldSubscriptions = options.worldSubscriptions ?? null;
     this.cognitiveIntents = options.cognitiveIntents ?? new InMemoryCognitiveIntentStore();
+    this.conversationOrchestration = options.conversationOrchestration ?? new InMemoryConversationOrchestrationStore();
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -196,53 +205,16 @@ export class ShannonApiKernel {
     return response ? await response : { status: 404, body: { error: 'NOT_FOUND' } };
   }
   async dispatch(request: ApiRequest): Promise<ApiResponse> {
-    if (request.method === 'GET' && request.path === '/health') {
-      return {
-        status: 200,
-        body: {
-          ok: true,
-          service: 'shannon-ios-api',
-          mode: 'local',
-          llm: { mode: this.chatModel.mode, model: this.chatModel.model },
-          voiceRouting: { mode: this.voiceDecision.mode, model: this.voiceDecision.model },
-          background: { mode: this.background.mode },
-        },
-      };
-    }
+    const preferenceResponse = dispatchPreferenceRequest(request, {
+      chatModel: this.chatModel, voiceDecision: this.voiceDecision, background: this.background,
+      voiceIdentity: this.voiceIdentity, now: this.now,
+    });
+    if (preferenceResponse) return preferenceResponse;
 
     if (request.method === 'GET' && request.path === '/v1/state') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
       return { status: 200, body: this.stateStore.snapshot(scopeKey) };
-    }
-
-    if (request.method === 'GET' && request.path === '/v1/voice/identity') {
-      const scopeKey = request.query?.get('scopeKey');
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return { status: 200, body: voiceIdentityResponse(this.voiceIdentity.read(scopeKey)) };
-    }
-
-    if (request.method === 'POST' && request.path === '/v1/voice/identity') {
-      if (!objectBody(request.body)) return badRequest('JSON object body is required');
-      const scopeKey = request.body.scopeKey;
-      const mode = request.body.mode;
-      const selectedVoice = request.body.selectedVoice;
-      const supportedVoice = isShannonRealtimeVoiceId(selectedVoice) ? selectedVoice : null;
-      if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      if (mode !== 'automatic' && mode !== 'manual') return badRequest('mode is invalid');
-      if (mode === 'automatic' && selectedVoice !== undefined && selectedVoice !== null) {
-        return badRequest('selectedVoice must be empty in automatic mode');
-      }
-      if (mode === 'manual' && !supportedVoice) {
-        return badRequest('selectedVoice is invalid');
-      }
-      const preference = this.voiceIdentity.save(
-        scopeKey,
-        mode as ShannonVoiceIdentityMode,
-        mode === 'manual' ? supportedVoice : null,
-        this.now(),
-      );
-      return { status: 200, body: voiceIdentityResponse(preference) };
     }
 
     if (request.method === 'GET' && request.path === '/v1/conversation') {
@@ -362,13 +334,24 @@ export class ShannonApiKernel {
       }
       const message = body.message.trim();
       const threadId = this.conversationStore.threadId(body.scopeKey, body.threadId?.trim());
-      const explicitCommand = executeConversationCommand(body.scopeKey, threadId,
-        { id: randomUUID(), text: message }, this.now(), {
-          stateStore: this.stateStore, conversationStore: this.conversationStore,
-          organizeStore: this.organizeStore, aetherProposals: this.aetherProposals,
-        });
-      const captured = this.stateStore.snapshot(body.scopeKey);
       const occurredAt = this.now();
+      let orchestrationState = observeConversationTurn({
+        previous: this.conversationOrchestration.read(body.scopeKey, threadId),
+        scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: 'owner',
+        tasks: this.agentTasks.list(body.scopeKey),
+      });
+      if (orchestrationState) orchestrationState = this.conversationOrchestration.save(orchestrationState);
+      const explicitCommand = executeConversationCommand(body.scopeKey, threadId,
+        { id: randomUUID(), text: message }, occurredAt, {
+          stateStore: this.stateStore, conversationStore: this.conversationStore,
+          organizeStore: this.organizeStore, aetherProposals: this.aetherProposals, agentTasks: this.agentTasks,
+        });
+      if (orchestrationState && explicitCommand?.receipt) {
+        orchestrationState = this.conversationOrchestration.save(
+          recordConversationReceipt(orchestrationState, explicitCommand.receipt),
+        );
+      }
+      const captured = this.stateStore.snapshot(body.scopeKey);
       const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
       const cognitiveContext = prepareTurnCognitiveContext(captured, this.conversationStore, {
         scopeKey: body.scopeKey, message, occurredAt, channel: 'text',
@@ -385,6 +368,7 @@ export class ShannonApiKernel {
       const dailyMindPrompt = this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '';
       const systemPrompt = [
         basePrompt, cognitiveContext.prompt, dailyMindPrompt, capabilityPrompt,
+        buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),
         agentTaskPromptProjection(this.agentTasks.list(body.scopeKey), threadId),
       ].filter(Boolean).join('\n\n');
       if (explicitCommand || isOrganizeCommand(message)) {
@@ -464,9 +448,14 @@ export class ShannonApiKernel {
         threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
       }, provisionalIntent ? completion.intentPlan : undefined);
       if (completion.taskProposal && !suppressAgentTaskProposal) {
+        if (orchestrationState) {
+          orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
+            orchestrationState, completion.taskProposal.goal, occurredAt,
+          ));
+        }
         response.uiBlocks = [{
           type: 'agent_task_proposal',
-          proposalId: randomUUID(),
+          proposalId: orchestrationState?.resumeToken ?? randomUUID(),
           ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),
           ...completion.taskProposal,
         }];
@@ -486,6 +475,7 @@ export class ShannonApiKernel {
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
+      conversationOrchestration: this.conversationOrchestration,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> {

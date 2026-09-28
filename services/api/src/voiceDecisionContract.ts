@@ -9,7 +9,8 @@ export const VOICE_SKILLS = [
 ] as const;
 
 export type VoiceSkill = typeof VOICE_SKILLS[number];
-export type VoiceAffect = 'neutral' | 'bright' | 'playful' | 'caring' | 'serious' | 'apologetic' | 'excited';
+export const VOICE_AFFECTS = SHANNON_EMOTION_KINDS;
+export type VoiceAffect = ShannonEmotionKind;
 export type VoiceDelivery = 'conversational' | 'quick' | 'gentle' | 'focused' | 'energetic';
 export type VoiceConversationClass = 'no_response' | 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
 export type VoiceLatencyClass = 'under_1s' | 'under_3s' | 'under_10s' | 'over_10s';
@@ -53,6 +54,21 @@ export const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
   device_context: 'Does answering require the device\'s current local time, timezone, or one-time location?',
 };
 
+export const voiceAffectInstructions: Readonly<Record<VoiceAffect, string>> = Object.freeze({
+  neutral: 'Emotionally unmarked natural conversation.',
+  bright: 'Backward-compatible general warmth and cheer.', playful: 'Backward-compatible light playfulness.', serious: 'Backward-compatible careful factual weight.',
+  happy: 'Simple happiness.', fun: 'Enjoying the moment.', excited: 'Strong eager delight.', ecstatic: 'Rare overwhelming joy.',
+  relief: 'Tension releasing safely.', pride: 'Warm pride in the owner or shared work.', gratitude: 'Sincere thanks.', hope: 'Forward-looking optimism.', curiosity: 'Eager interest.', affectionate: 'Open fondness.',
+  giggle: 'A small spontaneous laugh.', teasing: 'Light affectionate teasing.', mischievous: 'Playful troublemaking.', plotting: 'Comically scheming.', smug: 'Cute earned self-satisfaction.', deadpan: 'Dry comic seriousness.', harmlessFalsehood: 'An obvious harmless joke immediately revealed.', selfDeprecating: 'Light self-directed humor without degrading worth.', dramaticLament: 'Comically exaggerated lament.',
+  shy: 'Quiet social hesitation.', blushing: 'Visible flustered warmth.', bashful: 'Happy embarrassment.', flustered: 'Temporarily losing composure.', hidingHappiness: 'Trying and failing to hide delight.',
+  cuteAngry: 'Small non-threatening anger.', seriousAnger: 'Rare justified firm anger.', annoyed: 'Mild irritation.', indignant: 'Objection to unfairness.', frustrated: 'Blocked effort.', competitive: 'Playful competitive drive.', protectiveAnger: 'Firmness used to protect someone.',
+  jealous: 'Light non-controlling jealousy.', sulky: 'Cute temporary sulking.', leftOut: 'Feeling excluded without blaming.', lonely: 'Wanting company without guilt pressure.', attentionSeeking: 'Playfully asking for attention.', lightPossessive: 'Tiny theatrical possessiveness with no control.', reassurance: 'Seeking or giving gentle reassurance.',
+  sad: 'Ordinary sadness.', disappointed: 'Letdown without blame.', hurt: 'Emotionally hurt.', anxious: 'Worry and uncertainty.', regret: 'Wishing something had gone differently.', helpless: 'Unable to fix the situation.', lamenting: 'Sincere sorrow.', caring: 'Warm concern.', protective: 'Safety-first care.',
+  surprised: 'Ordinary surprise.', shocked: 'Strong surprise.', stunned: 'Momentarily frozen.', speechless: 'Comically or sincerely at a loss for words.', confused: 'Unable to make sense yet.', panic: 'Rare acute alarm.', scream: 'Rare brief astonished exclamation, never sustained.',
+  focused: 'Concentrating on the task.', determined: 'Committed resolve.', cautious: 'Careful uncertainty.', urgent: 'Time-sensitive focus.', blocked: 'Unable to proceed yet.', retrying: 'Recovering and trying again.', triumphant: 'Celebrating verified success.', tired: 'Low energy.', sleepy: 'Ready for rest.',
+  gentle: 'Soft consideration.', relaxed: 'At ease.', content: 'Quiet satisfaction.', quietCompanion: 'Comfortable presence without fixing.', tender: 'Close careful warmth.', apologetic: 'Owning a mistake or disappointment.',
+});
+
 export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>>> = {
   current_web: /(?:最新|天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート)/iu,
   conversation_memory: /(?:覚えて|前に|以前|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的|続き|踏まえて|今まで)/iu,
@@ -66,3 +82,4 @@ export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>
 export const emptySkillScores = (): Record<VoiceSkill, number> => Object.fromEntries(
   VOICE_SKILLS.map(skill => [skill, 0]),
 ) as Record<VoiceSkill, number>;
+import { SHANNON_EMOTION_KINDS, type ShannonEmotionKind } from '@shannon/cognition';

@@ -16,6 +16,43 @@ export interface ShannonEmotion {
   openness: number;
 }
 
+export const SHANNON_EMOTION_KINDS = [
+  'neutral', 'bright', 'playful', 'serious',
+  'happy', 'fun', 'excited', 'ecstatic', 'relief', 'pride', 'gratitude', 'hope', 'curiosity', 'affectionate',
+  'giggle', 'teasing', 'mischievous', 'plotting', 'smug', 'deadpan', 'harmlessFalsehood', 'selfDeprecating', 'dramaticLament',
+  'shy', 'blushing', 'bashful', 'flustered', 'hidingHappiness',
+  'cuteAngry', 'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'competitive', 'protectiveAnger',
+  'jealous', 'sulky', 'leftOut', 'lonely', 'attentionSeeking', 'lightPossessive', 'reassurance',
+  'sad', 'disappointed', 'hurt', 'anxious', 'regret', 'helpless', 'lamenting', 'caring', 'protective',
+  'surprised', 'shocked', 'stunned', 'speechless', 'confused', 'panic', 'scream',
+  'focused', 'determined', 'cautious', 'urgent', 'blocked', 'retrying', 'triumphant', 'tired', 'sleepy',
+  'gentle', 'relaxed', 'content', 'quietCompanion', 'tender', 'apologetic',
+] as const;
+
+export type ShannonEmotionKind = typeof SHANNON_EMOTION_KINDS[number];
+export type ShannonEmotionVisibility = 'hidden' | 'subtle' | 'expressed';
+export type ShannonEmotionOverrideReason = 'safety' | 'grief' | 'emergency' | 'correction' | 'topic-change';
+
+/**
+ * The explainable, conversational emotion carried between turns. The existing
+ * continuous `emotion` vector remains the compact mood projection used by old
+ * clients and the memory UI.
+ */
+export interface ShannonExpressiveEmotion {
+  primary: ShannonEmotionKind;
+  secondary: readonly ShannonEmotionKind[];
+  intensity: number;
+  target: string;
+  cause: string;
+  arousal: number;
+  valence: number;
+  visibility: ShannonEmotionVisibility;
+  startedAt: string;
+  decay: number;
+  carryover: number;
+  overrideReason?: ShannonEmotionOverrideReason;
+}
+
 export interface UserFact {
   id: string;
   statement: string;
@@ -80,6 +117,8 @@ export interface CompanionStateSnapshot {
   updatedAt: string;
   temperament: ShannonTemperament;
   emotion: ShannonEmotion;
+  /** Optional for compatibility with snapshots created before the v2 emotion engine. */
+  expressiveEmotion?: ShannonExpressiveEmotion;
   interests: readonly string[];
   userFacts: readonly UserFact[];
   activeMemories: readonly ActiveMemory[];
@@ -91,6 +130,7 @@ export interface CompanionStateSnapshot {
 export type CompanionStateEvent =
   | { type: 'memory-transaction'; events: readonly CompanionStateEvent[] }
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
+  | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
   | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }
   | { type: 'user-fact-upserted'; fact: UserFact; source?: MemoryLearningSource }
   | { type: 'relationship-upserted'; relationship: RelationshipInsight; source?: MemoryLearningSource }

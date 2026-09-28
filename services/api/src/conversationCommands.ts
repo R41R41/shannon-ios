@@ -2,6 +2,7 @@ import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cogniti
 import type { ConversationStore } from './conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from './organize.js';
 import type { AetherProposalStore } from './aetherProposal.js';
+import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent } from './conversationReference.js';
 import { ShannonMemoryService } from './memoryService.js';
@@ -10,6 +11,7 @@ export interface UserUtterance { id: string; text: string }
 export interface ConversationCommandDependencies {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   organizeStore?: OrganizeStore; aetherProposals?: AetherProposalStore;
+  agentTasks?: AgentTaskStore;
 }
 
 /** Only the actual user utterance can authorize a proposal. Tool-model
@@ -20,6 +22,10 @@ export function executeConversationCommand(
 ): { reply: string; receipt?: ShannonActionReceipt; organizeSession?: OrganizeSession } | null {
   const text = utterance.text.trim().replace(/[。！!]$/u, '');
   if (/^(?:例えば|もし|仮に)/u.test(text)) return null;
+  const workCommand = dependencies.agentTasks
+    ? executeAgentWorkCommand(scopeKey, threadId, utterance, text, at, dependencies.agentTasks)
+    : null;
+  if (workCommand) return workCommand;
   const task = text.match(/^(?:[「"])?(.{1,500}?)(?:[」"])?を(?:タスクにして|タスクに追加して)$/u);
   if (task && dependencies.organizeStore) {
     const resolved = resolveConversationContent(task[1]!, scopeKey, threadId, at,
@@ -70,4 +76,57 @@ export function executeConversationCommand(
     : '約束の期限を変更したよ。記憶の詳細で確認できるよ。',
     receipt: { id: memory.match(/id=([^;]+)/u)?.[1] ?? utterance.id, capability: 'memory.control',
       status: 'completed', summary: action ?? 'memory updated', occurredAt: at } };
+}
+
+function executeAgentWorkCommand(
+  scopeKey: string,
+  threadId: string,
+  utterance: UserUtterance,
+  text: string,
+  at: string,
+  tasks: AgentTaskStore,
+): { reply: string; receipt?: ShannonActionReceipt } | null {
+  const candidates = tasks.list(scopeKey).filter(task => task.conversationThreadID === threadId
+    && ['queued', 'starting', 'running', 'waiting_approval', 'paused'].includes(task.status));
+  const command = agentCommand(text);
+  if (!command || candidates.length === 0) return null;
+  if (candidates.length > 1) return { reply: 'どの作業への指示か、作業名をひとこと付けてください。まだ変更は送っていません。' };
+  const task = candidates[0]!;
+  if (command.type === 'steer' && task.status === 'waiting_approval') {
+    return { reply: `「${task.title}」は操作の確認待ちです。先に作業カードの確認へ答えてから、追加指示を送ってください。` };
+  }
+  try {
+    const result = tasks.enqueue(scopeKey, task.id, {
+      idempotencyKey: `voice:${utterance.id}`,
+      type: command.type,
+      payload: command.payload,
+    }, at);
+    const summary = command.type === 'steer' ? '作業へ追加・訂正指示を送信'
+      : command.type === 'resume' ? '作業の再開を送信'
+        : command.payload.cancel === true ? '作業の取消を送信' : '作業の一時停止を送信';
+    return {
+      reply: command.type === 'steer' ? `ほいさ、「${task.title}」に今の指示を追加しました。古い前提と食い違う部分は新しい指示を優先します。`
+        : command.type === 'resume' ? `「${task.title}」を再開します。続きの状態は作業カードに反映しますね。`
+          : command.payload.cancel === true ? `「${task.title}」の中止を受け付けました。停止結果は作業カードで確認できます。`
+            : `「${task.title}」をここで一時停止します。再開するときは、そのまま「続けて」で大丈夫です。`,
+      receipt: { id: result.command?.id ?? task.id, capability: `agent.${command.type}`,
+        status: 'confirmed', summary, occurredAt: at },
+    };
+  } catch {
+    return { reply: `「${task.title}」への指示を確実に保存できませんでした。重複送信はせず、作業カードの最新状態を確認してください。` };
+  }
+}
+
+function agentCommand(text: string): { type: 'steer' | 'interrupt' | 'resume'; payload: Record<string, unknown> } | null {
+  if (/^(?:再開して|続けて|続きをお願い|続きやって)(?:ください)?$/u.test(text)) return { type: 'resume', payload: {} };
+  if (/^(?:この作業を)?(?:キャンセル|中止)(?:して|にして)?(?:ください)?$/u.test(text)) {
+    return { type: 'interrupt', payload: { cancel: true } };
+  }
+  if (/^(?:いったん|一旦)?(?:止めて|中断して|待って|ストップ)(?:ください)?$/u.test(text)) {
+    return { type: 'interrupt', payload: {} };
+  }
+  if (/^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく|いや[、,]|ではなく|じゃなく)/u.test(text)) {
+    return { type: 'steer', payload: { instruction: text } };
+  }
+  return null;
 }

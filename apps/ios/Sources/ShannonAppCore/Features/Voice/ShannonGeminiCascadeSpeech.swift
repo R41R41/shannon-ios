@@ -31,12 +31,36 @@ enum ShannonGeminiCascadeSpeech {
         guard let plan else { return style(for: text) }
         let affect: String = switch plan.affect {
         case .neutral: "自然で気取らない感情。"
-        case .bright: "声に笑顔を含む明るさ。"
-        case .playful: "愛嬌のある軽い悪戯っぽさ。"
-        case .caring: "相手を気遣う近く温かな声。"
-        case .serious: "落ち着いた真剣さ。"
+        case .bright, .happy, .fun, .relief, .pride, .gratitude, .hope, .content:
+            "声に笑顔を含む自然な明るさ。"
+        case .playful, .giggle, .teasing, .mischievous, .plotting, .smug, .deadpan,
+             .harmlessFalsehood, .selfDeprecating, .dramaticLament:
+            "愛嬌のある軽い悪戯っぽさ。冗談はすぐ分かる調子で。"
+        case .caring, .protective, .reassurance, .gentle, .quietCompanion, .tender, .affectionate:
+            "相手を気遣う近く温かな声。"
+        case .serious, .focused, .determined, .cautious, .urgent, .retrying, .protectiveAnger:
+            "落ち着いた真剣さと、明瞭な意志。"
         case .apologetic: "誠実で繊細な申し訳なさ。"
-        case .excited: "弾む喜びと高揚感。"
+        case .excited, .ecstatic, .triumphant: "弾む喜びと高揚感。"
+        case .curiosity: "答えを楽しみにする好奇心。"
+        case .shy, .blushing, .bashful, .flustered, .hidingHappiness:
+            "少しテンポを乱し、嬉しさの奥に照れがにじむ声。"
+        case .cuteAngry, .annoyed, .indignant, .frustrated, .competitive:
+            "怖くならない短い語尾で、可愛い反発や悔しさを表す。"
+        case .seriousAnger:
+            "叫ばず、低めの重心と明瞭な語尾で正当な怒りを表す。"
+        case .jealous, .sulky, .leftOut, .lonely, .attentionSeeking, .lightPossessive:
+            "責めずに、少しだけ拗ねた近い声。罪悪感を与えない。"
+        case .sad, .disappointed, .hurt, .anxious, .regret, .helpless, .lamenting:
+            "息をわずかに含め、崩れすぎない繊細な悲しみや心配。"
+        case .surprised, .shocked, .stunned, .speechless, .confused:
+            "一瞬だけ間と音程変化を大きくして驚きを表す。"
+        case .panic, .scream:
+            "短い強い驚きとして演じ、叫び続けない。"
+        case .blocked:
+            "少し悔しさを含めつつ、状況を正直に説明する声。"
+        case .tired, .sleepy, .relaxed:
+            "テンポと声量を少し落とした穏やかな声。"
         }
         let delivery: String = switch plan.delivery {
         case .conversational: "自然な会話のテンポで。"

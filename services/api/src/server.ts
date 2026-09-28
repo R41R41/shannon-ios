@@ -39,6 +39,7 @@ import {
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
+import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -52,6 +53,7 @@ const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persisten
 const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
+const conversationOrchestrationStore = new SQLiteConversationOrchestrationStore(configuredDatabasePath());
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel: createConfiguredChatModel(process.env, persistentStore),
@@ -82,6 +84,7 @@ const kernel = createLocalApiKernel(now, {
   personIdentities: personIdentityStore,
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
+  conversationOrchestration: conversationOrchestrationStore,
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);
 const port = parsePort(process.env.SHANNON_API_PORT);
@@ -257,6 +260,7 @@ function shutdown(): void {
     dailyMindStore.close();
     organizeStore.close();
     cognitiveIntentStore.close();
+    conversationOrchestrationStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

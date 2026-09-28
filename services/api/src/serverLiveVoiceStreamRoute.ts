@@ -32,6 +32,7 @@ export function createLiveVoiceStreamRoute(
     response.once('close', abort);
     const segmenter = new SpokenSentenceSegmenter();
     let voicePlan: Record<string, unknown> | undefined;
+    let receivedPlan = false;
     let receivedDelta = false;
     try {
       const body = bindScope(await readJson(request, 64 * 1024), principal.scopeKey);
@@ -42,10 +43,12 @@ export function createLiveVoiceStreamRoute(
       }, {
         signal: controller.signal,
         onPlan: async plan => {
+          const firstPlan = !receivedPlan;
+          receivedPlan = true;
           voicePlan = plan;
           startStream(response);
           await writeEvent(response, { type: 'plan', voicePlan: plan });
-          if (typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
+          if (firstPlan && typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
             await writeEvent(response, { type: 'segment', text: plan.waitingPhrase, voicePlan: plan });
           }
         },

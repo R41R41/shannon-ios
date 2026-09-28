@@ -9,6 +9,12 @@ import type {
   RelationshipInsight,
   UserFact,
 } from './types.js';
+import {
+  INITIAL_SHANNON_EXPRESSIVE_EMOTION,
+  normalizeShannonExpressiveEmotion,
+  restoreShannonExpressiveEmotion,
+  sameShannonExpressiveEmotion,
+} from './emotionState.js';
 
 export const INITIAL_SHANNON_TEMPERAMENT: Readonly<ShannonTemperament> = Object.freeze({
   curiosity: 0.65,
@@ -146,6 +152,7 @@ export function createInitialCompanionState(scopeKey: string, nowIso: string): C
     updatedAt: nowIso,
     temperament: { ...INITIAL_SHANNON_TEMPERAMENT },
     emotion: { ...INITIAL_SHANNON_EMOTION },
+    expressiveEmotion: { ...INITIAL_SHANNON_EXPRESSIVE_EMOTION, startedAt: nowIso },
     interests: [],
     userFacts: [],
     activeMemories: [],
@@ -176,6 +183,12 @@ export function reduceCompanionState(
       if (event.delta.openness !== undefined) emotion.openness = clamp(emotion.openness + event.delta.openness, 0, 1);
       if (sameEmotion(emotion, current.emotion)) return current;
       next = { ...current, emotion };
+      break;
+    }
+    case 'expressive-emotion-updated': {
+      const expressiveEmotion = normalizeShannonExpressiveEmotion(event.emotion);
+      if (current.expressiveEmotion && sameShannonExpressiveEmotion(expressiveEmotion, current.expressiveEmotion)) return current;
+      next = { ...current, expressiveEmotion };
       break;
     }
     case 'interest-observed': {
@@ -347,6 +360,10 @@ export function restoreCompanionState(
     arousal: restoredNumber(emotionRow?.arousal, initial.emotion.arousal, 0, 1),
     openness: restoredNumber(emotionRow?.openness, initial.emotion.openness, 0, 1),
   };
+  const expressiveEmotion = restoreShannonExpressiveEmotion(
+    row.expressiveEmotion,
+    initial.expressiveEmotion!,
+  );
   const interests = Array.isArray(row.interests)
     ? [...new Set(row.interests.map(value => restoredText(value, 120)).filter(Boolean))].slice(0, MAX_INTERESTS)
     : [];
@@ -434,6 +451,7 @@ export function restoreCompanionState(
     updatedAt: restoredTimestamp(row.updatedAt, nowIso),
     temperament,
     emotion,
+    expressiveEmotion,
     interests,
     userFacts,
     activeMemories,
@@ -446,6 +464,9 @@ export function restoreCompanionState(
 export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionStateSnapshot {
   const temperament = Object.freeze({ ...snapshot.temperament });
   const emotion = Object.freeze({ ...snapshot.emotion });
+  const expressiveEmotion = snapshot.expressiveEmotion
+    ? normalizeShannonExpressiveEmotion(snapshot.expressiveEmotion)
+    : undefined;
   const interests = Object.freeze([...snapshot.interests]);
   const userFacts = Object.freeze(snapshot.userFacts.map(item => Object.freeze({ ...item })));
   const activeMemories = Object.freeze(snapshot.activeMemories.map(item => Object.freeze({ ...item })));
@@ -453,6 +474,7 @@ export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionState
   const prospectiveMemories = Object.freeze(snapshot.prospectiveMemories.map(item => Object.freeze({ ...item })));
   const memoryControls = Object.freeze(snapshot.memoryControls.map(item => Object.freeze({ ...item })));
   return Object.freeze({
-    ...snapshot, temperament, emotion, interests, userFacts, activeMemories, relationships, prospectiveMemories, memoryControls,
+    ...snapshot, temperament, emotion, ...(expressiveEmotion ? { expressiveEmotion } : {}),
+    interests, userFacts, activeMemories, relationships, prospectiveMemories, memoryControls,
   });
 }

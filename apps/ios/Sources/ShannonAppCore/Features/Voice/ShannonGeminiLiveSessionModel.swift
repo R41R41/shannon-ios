@@ -2,7 +2,6 @@
 import Foundation
 import Observation
 @preconcurrency import AVFoundation
-
 @MainActor
 @Observable
 public final class ShannonGeminiLiveSessionModel {
@@ -26,7 +25,6 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var outputAudioSeconds: Double = 0
     public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public private(set) var inputState: ShannonVoiceInputState
-
     private var session: ShannonGeminiLiveSessionDTO?
     private var transport: ShannonGeminiLiveTransport?
     private var turnAssembler = ShannonVoiceTurnAssembler()
@@ -44,9 +42,8 @@ public final class ShannonGeminiLiveSessionModel {
     private var performStreamingDelegation: ShannonVoiceStreamingDelegation?
     private var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
     private var commitTurn: (@MainActor (String, String) async throws -> Void)?
-
+    private var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
-
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
         let preference = stored.flatMap(ShannonVoiceInputPreference.init(rawValue:)) ?? .automatic
@@ -59,7 +56,8 @@ public final class ShannonGeminiLiveSessionModel {
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         performStreamingDelegation: @escaping ShannonVoiceStreamingDelegation,
         streamSpeech: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream,
-        commitTurn: @escaping @MainActor (String, String) async throws -> Void
+        commitTurn: @escaping @MainActor (String, String) async throws -> Void,
+        handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     ) async {
         stop()
         self.createSession = createSession
@@ -67,6 +65,7 @@ public final class ShannonGeminiLiveSessionModel {
         self.performStreamingDelegation = performStreamingDelegation
         self.streamSpeech = streamSpeech
         self.commitTurn = commitTurn
+        self.handleDelegationResponse = handleDelegationResponse
         self.participantMode = participantMode
         resetMeasurements()
         errorMessage = nil
@@ -131,14 +130,15 @@ public final class ShannonGeminiLiveSessionModel {
 
     public func retry() async {
         guard let createSession, let performDelegation, let performStreamingDelegation,
-              let streamSpeech, let commitTurn else { return }
+              let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
         await start(
             participantMode: participantMode,
             createSession: createSession,
             performDelegation: performDelegation,
             performStreamingDelegation: performStreamingDelegation,
             streamSpeech: streamSpeech,
-            commitTurn: commitTurn
+            commitTurn: commitTurn,
+            handleDelegationResponse: handleDelegationResponse
         )
     }
 
@@ -333,6 +333,7 @@ public final class ShannonGeminiLiveSessionModel {
                 if participantMode.allowsTranscriptPersistence, let commitTurn {
                     try? await commitTurn(committedUserText ?? userText, reply)
                 }
+                handleDelegationResponse?(response)
             } catch is CancellationError {
                 return
             } catch {

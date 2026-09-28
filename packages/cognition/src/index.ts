@@ -24,6 +24,13 @@ export {
   type ShannonMessageEmotion,
 } from './expression.js';
 export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';
+export {
+  INITIAL_SHANNON_EXPRESSIVE_EMOTION,
+  buildExpressiveEmotionPrompt,
+  isShannonEmotionKind,
+  resolveShannonEmotionState,
+  type ResolveShannonEmotionInput,
+} from './emotionState.js';
 export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,
@@ -57,7 +64,12 @@ export type {
   ProspectiveMemory,
   RelationshipInsight,
   ShannonEmotion,
+  ShannonEmotionKind,
+  ShannonEmotionOverrideReason,
+  ShannonEmotionVisibility,
+  ShannonExpressiveEmotion,
   ShannonTemperament,
   UserFact,
 } from './types.js';
+export { SHANNON_EMOTION_KINDS } from './types.js';
 export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';

@@ -12,6 +12,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
     private let streamSpeech: @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream
     private let commitTurn: @MainActor (String, String) async throws -> Void
+    private let handleDelegationResponse: @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     private let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -41,6 +42,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         streamSpeech: @escaping @MainActor (String, String?) async throws -> ShannonGeminiSpeechStream,
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
+        handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void,
         dismiss: @escaping () -> Void
     ) {
         self.model = model
@@ -51,6 +53,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         self.analyzeCameraSnapshot = analyzeCameraSnapshot
         self.streamSpeech = streamSpeech
         self.commitTurn = commitTurn
+        self.handleDelegationResponse = handleDelegationResponse
         self.dismiss = dismiss
     }
 
@@ -414,7 +417,8 @@ public struct ShannonGeminiLiveVoiceView: View {
             performDelegation: performDelegation,
             performStreamingDelegation: performStreamingDelegation,
             streamSpeech: streamSpeech,
-            commitTurn: commitTurn
+            commitTurn: commitTurn,
+            handleDelegationResponse: handleDelegationResponse
         )
     }
     private func switchParticipantMode(to mode: ShannonVoiceParticipantMode) {

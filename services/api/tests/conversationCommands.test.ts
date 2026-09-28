@@ -10,6 +10,7 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { extractProspectiveMemories } from '../src/prospectiveMemory.js';
 import { reconcileSleepOutcome, reviewCommitments } from '../src/sleepCommitmentReview.js';
 import { resolveCommitmentCommand } from '../src/commitmentCommands.js';
+import { InMemoryAgentTaskStore } from '../src/agentTaskStore.js';
 
 const dirs: string[] = [];
 const at = '2026-09-24T12:00:00.000Z';
@@ -108,5 +109,28 @@ describe('voice capability authority and receipts', () => {
       expect(resolveCommitmentCommand(state.snapshot('owner'), text), text).toBeNull();
     }
     expect(resolveCommitmentCommand(state.snapshot('owner'), '写真整理の約束は完了したよ')).toMatchObject({ mutation: { action: 'complete' } });
+  });
+
+  it('steers, pauses, and resumes the one running task from explicit voice utterances', async () => {
+    const tasks = new InMemoryAgentTaskStore();
+    const created = tasks.create('owner', { idempotencyKey: 'start', conversationThreadID: 'thread',
+      title: 'Minebot音声対応', goal: 'Minebotへ音声会話を追加', summary: '準備中' }, at).task;
+    tasks.claim('mac', at);
+    tasks.recordHostEvents('mac', [{ eventId: 'started', taskId: created.id, type: 'started', title: '開始',
+      occurredAt: at, payload: { currentAction: '実装中' } }], at);
+    const api = createLocalApiKernel(() => at, { agentTasks: tasks });
+    const body = (id: string, text: string) => ({ scopeKey: 'owner', threadId: 'thread', transcript: text,
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
+        userUtterance: { id, text } } });
+
+    const steer = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: body('u1', 'あと、Voyagerのタスクも完了にして') });
+    expect(steer).toMatchObject({ status: 200, body: { receipt: { capability: 'agent.steer', status: 'confirmed' } } });
+    expect(tasks.get('owner', created.id)).toMatchObject({ status: 'running', currentAction: 'あと、Voyagerのタスクも完了にして' });
+
+    await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: body('u2', 'いったん止めて') });
+    expect(tasks.get('owner', created.id)?.status).toBe('paused');
+    await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: body('u3', '続けて') });
+    expect(tasks.get('owner', created.id)?.status).toBe('starting');
   });
 });

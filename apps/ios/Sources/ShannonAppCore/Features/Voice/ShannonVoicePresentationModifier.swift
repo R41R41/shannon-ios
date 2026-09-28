@@ -43,6 +43,16 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                         shannonTranscript: shannon
                     )
                 },
+                handleDelegationResponse: { response in
+                    if let session = response.organizeSession {
+                        conversationModel.upsertOrganizeSession(session)
+                    }
+                    conversationModel.installAgentTaskProposals(
+                        response.uiBlocks ?? [],
+                        threadID: response.threadId,
+                        sourceMessageID: UUID()
+                    )
+                },
                 dismiss: { isPresented = false }
             )
         }

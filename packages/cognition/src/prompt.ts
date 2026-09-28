@@ -67,6 +67,9 @@ export function buildCompanionStatePrompt(
       : '未完了の約束・未来記憶: なし'], Math.floor(maximumCharacters * 0.32)),
     `気質: 好奇心 ${fixed(snapshot.temperament.curiosity)} / 自発性 ${fixed(snapshot.temperament.initiative)} / 親密さ ${fixed(snapshot.temperament.closeness)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
+    snapshot.expressiveEmotion
+      ? `会話感情: ${snapshot.expressiveEmotion.primary} / 強度 ${fixed(snapshot.expressiveEmotion.intensity)} / 対象 ${snapshot.expressiveEmotion.target} / 理由 ${snapshot.expressiveEmotion.cause} / 表出 ${snapshot.expressiveEmotion.visibility}`
+      : '',
     interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
     interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
     fitSections([facts.length

@@ -1,7 +1,7 @@
 import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from './chatModelSupport.js';
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from './llmUsage.js';
 import {
-  emptySkillScores, skillInstructions, VOICE_SKILLS,
+  emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, voiceAffectInstructions,
   type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
   type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
   type VoiceSkill, type VoiceTurnDecision,
@@ -13,7 +13,7 @@ import {
 } from './voiceDecisionValues.js';
 
 export {
-  VOICE_SKILLS,
+  VOICE_AFFECTS, VOICE_SKILLS,
   type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
   type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
   type VoiceSkill, type VoiceTurnDecision,
@@ -103,9 +103,7 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
                   latencyClass: {
                     type: 'string', enum: ['under_1s', 'under_3s', 'under_10s', 'over_10s'],
                   },
-                  affect: {
-                    type: 'string', enum: ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'],
-                  },
+                  affect: { type: 'string', enum: [...VOICE_AFFECTS] },
                   affectIntensity: { type: 'number', minimum: 0, maximum: 1 },
                   delivery: {
                     type: 'string', enum: ['conversational', 'quick', 'gentle', 'focused', 'energetic'],
@@ -228,9 +226,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
           type: 'choice',
           instructions: 'Choose the primary emotional performance for Shannon\'s spoken reply.',
           criteria: {
-            neutral: 'Natural and emotionally unmarked.', bright: 'Warm and cheerful.', playful: 'Teasing or mischievous.',
-            caring: 'Gentle concern or affection.', serious: 'Careful, factual, or weighty.', apologetic: 'Owning a mistake or disappointment.',
-            excited: 'Celebratory or strongly enthusiastic.',
+            ...voiceAffectInstructions,
           },
         }],
         ['affect_intensity', {
@@ -346,8 +342,7 @@ function parsedOpenAIDecision(
     ['no_response', 'greeting', 'direct', 'skill_simple', 'skill_complex'] as const);
   const latencyClass = directChoiceValue(value.latencyClass,
     ['under_1s', 'under_3s', 'under_10s', 'over_10s'] as const);
-  const affect = directChoiceValue(value.affect,
-    ['neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited'] as const);
+  const affect = directChoiceValue(value.affect, VOICE_AFFECTS);
   const affectIntensity = probabilityValue(value.affectIntensity);
   const delivery = directChoiceValue(value.delivery,
     ['conversational', 'quick', 'gentle', 'focused', 'energetic'] as const);
@@ -389,9 +384,7 @@ function parsedJevDecision(
   const latencyClass = choiceValue(answerMap.latency_class, [
     'under_1s', 'under_3s', 'under_10s', 'over_10s',
   ] as const);
-  const affect = choiceValue(answerMap.affect, [
-    'neutral', 'bright', 'playful', 'caring', 'serious', 'apologetic', 'excited',
-  ] as const);
+  const affect = choiceValue(answerMap.affect, VOICE_AFFECTS);
   const affectIntensity = affectIntensityValue(answerMap.affect_intensity);
   const delivery = choiceValue(answerMap.delivery, [
     'conversational', 'quick', 'gentle', 'focused', 'energetic',

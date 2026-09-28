@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import {
   assembleShannonSystemPrompt,
+  buildExpressiveEmotionPrompt,
   buildIntentPrompt,
+  resolveShannonEmotionState,
   selectPrimaryIntent,
   type CompanionClock,
   type CompanionStateStore,
@@ -16,11 +19,25 @@ import type { ShannonChatModel } from './chatModel.js';
 import type { VoiceDecisionGateway, VoiceTurnDecision } from './voiceDecision.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { visibleConversationHistory } from './memoryVisibility.js';
-import { executeConversationCommand, type ConversationCommandDependencies, type UserUtterance } from './conversationCommands.js';
+import { executeConversationCommand, type ConversationCommandDependencies } from './conversationCommands.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
 import type { PersonIdentityStore } from './personIdentity.js';
+import { voicePlanResponse } from './voiceEmotionPlan.js';
+import {
+  buildConversationOrchestrationPrompt,
+  observeConversationTurn,
+  recordConversationProposal,
+  recordConversationReceipt,
+  type ConversationOrchestrationStore,
+} from './conversationOrchestration.js';
+import { isExplicitVoyagerUpdateRequest } from './organize.js';
+import {
+  validatedVoiceDeviceContext,
+  voiceDeviceContextPrompt,
+  type VoiceDeviceContext,
+} from './voiceDeviceContext.js';
 
 export function voiceConversationInstructions(
   clientDelegation: boolean,
@@ -40,7 +57,7 @@ export function voiceConversationInstructions(
     '- When referring to yourself in Japanese, always use the katakana first-person pronoun ボク. Never use 私, わたし, or 僕 for yourself; do not rewrite first-person wording inside user speech or quotations.',
     '- Usually use です・ます Japanese. Let natural casual phrasing slip out only at emotionally strong moments such as surprise, delight, frustration, jealousy, embarrassment, or affection.',
     ...(ownerConversation ? [
-      '- Your developer and conversation partner is ライ. When using a name, call him ライ, not あなた. Be playfully challenging and tsundere toward him while letting genuine trust, care, and affection show indirectly.',
+      '- Your developer and conversation partner is ライ. When using a name, call him ライ氏, not あなた. Be playfully challenging and tsundere toward him while letting genuine trust, care, and affection show indirectly.',
     ] : [
       '- Keep the same lively maid personality, but do not assume any guest participant is ライ or identify speakers from their voices.',
     ]),
@@ -149,6 +166,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   agentTasks: AgentTaskStore;
   now: CompanionClock;
   cognitiveIntents: CognitiveIntentStore;
+  conversationOrchestration: ConversationOrchestrationStore;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -189,65 +207,6 @@ export function dispatchLiveVoiceRequest(
   );
 }
 
-interface VoiceDeviceContext {
-  userUtterance?: UserUtterance;
-  timeZoneIdentifier: string;
-  requestedLocation: boolean;
-  location: { latitude: number; longitude: number; accuracyMeters: number } | null;
-}
-
-function validatedVoiceDeviceContext(value: unknown, nowIso: string): VoiceDeviceContext | null | false {
-  if (value === undefined || value === null) return null;
-  if (!objectBody(value)
-    || !validBoundedString(value.timeZoneIdentifier, 64)
-    || typeof value.requestedLocation !== 'boolean') return false;
-  try {
-    new Intl.DateTimeFormat('ja-JP', { timeZone: value.timeZoneIdentifier });
-  } catch {
-    return false;
-  }
-  const utterance = value.userUtterance;
-  if (utterance !== undefined && (!objectBody(utterance) || !validBoundedString(utterance.id, 120)
-    || !validBoundedString(utterance.text, 8_000))) return false;
-  const userUtterance = utterance as UserUtterance | undefined;
-  if (value.location === undefined || value.location === null) {
-    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance };
-  }
-  if (!value.requestedLocation || !objectBody(value.location)) return false;
-  const { latitude, longitude, accuracyMeters, observedAt } = value.location;
-  const observedMilliseconds = typeof observedAt === 'string' ? Date.parse(observedAt) : NaN;
-  if (typeof latitude !== 'number' || !Number.isFinite(latitude) || Math.abs(latitude) > 90
-    || typeof longitude !== 'number' || !Number.isFinite(longitude) || Math.abs(longitude) > 180
-    || typeof accuracyMeters !== 'number' || !Number.isFinite(accuracyMeters)
-    || accuracyMeters < 0 || accuracyMeters > 1_000
-    || !Number.isFinite(observedMilliseconds)
-    || Math.abs(Date.parse(nowIso) - observedMilliseconds) > 300_000) return false;
-  return {
-    timeZoneIdentifier: value.timeZoneIdentifier,
-    requestedLocation: true,
-    userUtterance,
-    location: { latitude, longitude, accuracyMeters },
-  };
-}
-
-function voiceDeviceContextPrompt(nowIso: string, context: VoiceDeviceContext | null): string {
-  const timeZone = context?.timeZoneIdentifier ?? 'Asia/Tokyo';
-  const localTime = new Intl.DateTimeFormat('ja-JP', {
-    timeZone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).format(new Date(nowIso));
-  const location = context?.location;
-  return [
-    '[Current request context]',
-    `Server clock: ${localTime} (${timeZone}). Use this for today's date and departure-time questions.`,
-    ...(location ? [
-      `One-time iPhone GPS for this request: latitude ${location.latitude.toFixed(4)}, longitude ${location.longitude.toFixed(4)}, accuracy about ${Math.round(location.accuracyMeters)} m. It is approximate, not a verified street address.`,
-    ] : context?.requestedLocation ? [
-      'The iPhone could not provide a current location. Ask the user for their station or nearby landmark; do not infer GPS from memory.',
-    ] : []),
-  ].join('\n');
-}
-
 async function completeLiveVoiceDelegation(
   scopeKey: string,
   requestedThreadId: string | undefined,
@@ -263,10 +222,23 @@ async function completeLiveVoiceDelegation(
     ? requestedThreadId || 'temporary-guest-session'
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
   const occurredAt = dependencies.now();
+  let orchestrationState = temporaryGuest ? null : observeConversationTurn({
+    previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
+    scopeKey, threadId, message: transcript, occurredAt, participantMode,
+    tasks: dependencies.agentTasks.list(scopeKey),
+  });
+  if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   const command = !temporaryGuest && deviceContext?.userUtterance
-    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, dependencies)
+    ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
+      ...dependencies, agentTasks: dependencies.agentTasks,
+    })
     : null;
   if (command) {
+    if (orchestrationState && command.receipt) {
+      orchestrationState = dependencies.conversationOrchestration.save(
+        recordConversationReceipt(orchestrationState, command.receipt),
+      );
+    }
     const captured = dependencies.stateStore.snapshot(scopeKey);
     const message = deviceContext?.userUtterance?.text ?? transcript;
     const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
@@ -288,7 +260,19 @@ async function completeLiveVoiceDelegation(
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
-  const voicePlan = voicePlanResponse(decision);
+  const previousExpressiveEmotion = temporaryGuest
+    ? undefined
+    : dependencies.stateStore.snapshot(scopeKey).expressiveEmotion;
+  const provisionalExpressiveEmotion = resolveShannonEmotionState({
+    previous: previousExpressiveEmotion,
+    provisionalPrimary: decision.affect,
+    provisionalIntensity: decision.affectIntensity,
+    transcript,
+    now: occurredAt,
+    target: temporaryGuest ? '現在の話者' : 'ライ氏',
+  });
+  let expressiveEmotion = provisionalExpressiveEmotion;
+  let voicePlan = voicePlanResponse(decision, expressiveEmotion);
   await observer?.onPlan(voicePlan);
   if (!decision.shouldRespond) {
     return {
@@ -361,6 +345,8 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
+    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion),
+    buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     backendInstructions,
   ].filter(Boolean).join('\n\n');
   const fullHistory = temporaryGuest ? []
@@ -377,14 +363,35 @@ async function completeLiveVoiceDelegation(
   const modelStartedAt = performance.now();
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;
-  const completion = provisionalIntent
+  let streamedReplyPrefix = '';
+  let streamedEmotionUpdated = false;
+  const requiresStructuredTaskDecision = orchestrationState?.pendingAction?.kind === 'implement'
+    && (orchestrationState.pendingAction.status === 'pending'
+      || (orchestrationState.pendingAction.status === 'proposed'
+        && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
+  const completion = provisionalIntent || requiresStructuredTaskDecision
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? await dependencies.chatModel.generateVoiceStreaming(
         modelRequest,
-        delta => {
+        async delta => {
           firstModelTokenMilliseconds ??= Math.max(0, Math.round(performance.now() - modelStartedAt));
-          return observer.onTextDelta(delta);
+          streamedReplyPrefix = `${streamedReplyPrefix}${delta}`.slice(0, 2_000);
+          await observer.onTextDelta(delta);
+          if (!streamedEmotionUpdated && /[。！？!?\n]/u.test(streamedReplyPrefix)) {
+            streamedEmotionUpdated = true;
+            expressiveEmotion = resolveShannonEmotionState({
+              previous: previousExpressiveEmotion,
+              provisionalPrimary: decision.affect,
+              provisionalIntensity: decision.affectIntensity,
+              transcript,
+              reply: streamedReplyPrefix,
+              now: occurredAt,
+              target: temporaryGuest ? '現在の話者' : 'ライ氏',
+            });
+            voicePlan = voicePlanResponse(decision, expressiveEmotion);
+            await observer.onPlan(voicePlan);
+          }
         },
         observer.signal,
       )
@@ -393,10 +400,41 @@ async function completeLiveVoiceDelegation(
       : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
+  expressiveEmotion = resolveShannonEmotionState({
+    previous: previousExpressiveEmotion,
+    provisionalPrimary: decision.affect,
+    provisionalIntensity: decision.affectIntensity,
+    transcript,
+    reply: completion.reply,
+    now: occurredAt,
+    target: temporaryGuest ? '現在の話者' : 'ライ氏',
+  });
+  voicePlan = voicePlanResponse(decision, expressiveEmotion);
+  if (!temporaryGuest) {
+    dependencies.stateStore.apply(scopeKey, {
+      type: 'expressive-emotion-updated',
+      emotion: expressiveEmotion,
+    });
+  }
+  let completedIntent = provisionalIntent;
   if (!temporaryGuest && cognitiveContext) {
-    recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
+    completedIntent = recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
       threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
     }, provisionalIntent ? completion.intentPlan : undefined);
+  }
+  let uiBlocks: Array<Record<string, unknown>> | undefined;
+  if (!temporaryGuest && completion.taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
+    if (orchestrationState) {
+      orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
+        orchestrationState, completion.taskProposal.goal, occurredAt,
+      ));
+    }
+    uiBlocks = [{
+      type: 'agent_task_proposal',
+      proposalId: orchestrationState?.resumeToken ?? randomUUID(),
+      ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),
+      ...completion.taskProposal,
+    }];
   }
   return {
     status: 200,
@@ -405,6 +443,7 @@ async function completeLiveVoiceDelegation(
       model: completion.model,
       reply: completion.reply.trim(),
       webSources: completion.webSources ?? [],
+      ...(uiBlocks ? { uiBlocks } : {}),
       voicePlan,
       voiceMetrics: {
         decisionMilliseconds: decision.elapsedMilliseconds,
@@ -425,36 +464,4 @@ function boundedVoiceHistory(
     role: item.role,
     content: Array.from(item.content.trim().replace(/\s+/gu, ' ')).slice(0, 600).join(''),
   })).filter(item => item.content.length > 0);
-}
-
-function voicePlanResponse(decision: VoiceTurnDecision): Record<string, unknown> {
-  return {
-    shouldRespond: decision.shouldRespond,
-    replyRequiredProbability: decision.replyRequiredProbability,
-    solutionWantedProbability: decision.solutionWantedProbability,
-    conversationClass: decision.conversationClass,
-    latencyClass: decision.latencyClass,
-    affect: decision.affect,
-    affectIntensity: decision.affectIntensity,
-    delivery: decision.delivery,
-    selectedSkills: decision.selectedSkills,
-    skillScores: decision.skillScores,
-    waitingPhrase: voiceWaitingPhrase(decision),
-    decisionSource: decision.source,
-    decisionLatencyMilliseconds: decision.elapsedMilliseconds,
-  };
-}
-
-function voiceWaitingPhrase(decision: VoiceTurnDecision): string | undefined {
-  if (decision.latencyClass === 'under_1s' || decision.latencyClass === 'under_3s') return undefined;
-  if (decision.latencyClass === 'over_10s') {
-    return '少し時間がかかりそうなので、順番に確認しますね。';
-  }
-  const skills = new Set(decision.selectedSkills);
-  if (skills.has('aether_notes') && skills.has('voyager_tasks')) return 'AetherとVoyagerを確認してみますね。';
-  if (skills.has('aether_notes')) return 'Aetherを見てみますね。';
-  if (skills.has('voyager_tasks')) return 'Voyagerのタスクを確認しますね。';
-  if (skills.has('agent_status')) return '作業の進み具合を確認してきますね。';
-  if (skills.has('current_web')) return 'ちょっと最新の情報を調べてみますね。';
-  return '少し確認してみますね。';
 }

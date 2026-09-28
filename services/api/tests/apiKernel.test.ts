@@ -85,10 +85,32 @@ describe('Shannon local API kernel', () => {
     });
 
     expect(result).toMatchObject({ status: 200, body: { reply: '最初の文です。次の文です。' } });
-    expect(plans).toEqual([expect.objectContaining({ shouldRespond: true })]);
+    expect(plans).toHaveLength(2);
+    expect(plans[0]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
+    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { cause: '生成した応答の内容と会話文脈' } });
     expect(deltas).toEqual(['最初の文です。', '次の文です。']);
     expect(model.streamingVoiceRequests).toHaveLength(1);
+    expect(model.streamingVoiceRequests[0]?.systemPrompt).toContain('Current expressive emotion');
     expect(model.voiceRequests).toHaveLength(0);
+  });
+
+  it('returns one stable visible task proposal for an implementation request and its additions', async () => {
+    const model = new RecordingChatModel();
+    model.taskProposal = { title: 'Minebot音声対応', goal: 'Minebotへ音声会話を実装する', projectHint: 'minebot' };
+    model.taskDecision = { disposition: 'propose', reason: '明示的な実装依頼' };
+    const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', { chatModel: model });
+    const first = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+      scopeKey: 'owner-a', threadId: 'thread-work', transcript: 'これをMinebotにも実装して',
+    } });
+    const addition = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: {
+      scopeKey: 'owner-a', threadId: 'thread-work', transcript: 'あと、Voyagerのタスクも完了にして',
+    } });
+    const firstBlock = (first.body as { uiBlocks: Array<{ proposalId: string }> }).uiBlocks[0]!;
+    const additionBlock = (addition.body as { uiBlocks: Array<{ proposalId: string }> }).uiBlocks[0]!;
+    expect(firstBlock.proposalId).toBeTruthy();
+    expect(additionBlock.proposalId).toBe(firstBlock.proposalId);
+    expect(model.requests[1]?.systemPrompt).toContain('addedRequirements=あと、Voyagerのタスクも完了にして');
+    expect(model.requests).toHaveLength(2);
   });
 
   it('skips the reply model when the voice decision says no response is needed', async () => {

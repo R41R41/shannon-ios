@@ -180,7 +180,16 @@ public enum ShannonVoiceConversationClassDTO: String, Codable, Equatable, Sendab
 }
 
 public enum ShannonVoiceAffectDTO: String, Codable, Equatable, Sendable {
-    case neutral, bright, playful, caring, serious, apologetic, excited
+    case neutral, bright, playful, serious
+    case happy, fun, excited, ecstatic, relief, pride, gratitude, hope, curiosity, affectionate
+    case giggle, teasing, mischievous, plotting, smug, deadpan, harmlessFalsehood, selfDeprecating, dramaticLament
+    case shy, blushing, bashful, flustered, hidingHappiness
+    case cuteAngry, seriousAnger, annoyed, indignant, frustrated, competitive, protectiveAnger
+    case jealous, sulky, leftOut, lonely, attentionSeeking, lightPossessive, reassurance
+    case sad, disappointed, hurt, anxious, regret, helpless, lamenting, caring, protective
+    case surprised, shocked, stunned, speechless, confused, panic, scream
+    case focused, determined, cautious, urgent, blocked, retrying, triumphant, tired, sleepy
+    case gentle, relaxed, content, quietCompanion, tender, apologetic
 }
 
 public enum ShannonVoiceDeliveryDTO: String, Codable, Equatable, Sendable {
@@ -245,6 +254,7 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     public let model: String
     public let reply: String
     public let organizeSession: ShannonOrganizeSessionDTO?
+    public let uiBlocks: [ShannonUIBlockDTO]?
     public let voicePlan: ShannonVoicePlanDTO?
     public let voiceMetrics: ShannonVoiceServerMetricsDTO?
 
@@ -253,6 +263,7 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
         model: String,
         reply: String,
         organizeSession: ShannonOrganizeSessionDTO? = nil,
+        uiBlocks: [ShannonUIBlockDTO]? = nil,
         voicePlan: ShannonVoicePlanDTO? = nil,
         voiceMetrics: ShannonVoiceServerMetricsDTO? = nil
     ) {
@@ -260,6 +271,7 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
         self.model = model
         self.reply = reply
         self.organizeSession = organizeSession
+        self.uiBlocks = uiBlocks
         self.voicePlan = voicePlan
         self.voiceMetrics = voiceMetrics
     }

@@ -69,6 +69,34 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         let routedStyle = ShannonGeminiCascadeSpeech.style(for: "大丈夫？", plan: routed)
         XCTAssertTrue(routedStyle.contains("近く温かな声"))
         XCTAssertTrue(routedStyle.contains("少しゆっくり"))
+        let bashful = ShannonVoicePlanDTO(
+            shouldRespond: true,
+            conversationClass: .direct,
+            affect: .bashful,
+            affectIntensity: 0.7,
+            delivery: .conversational
+        )
+        XCTAssertTrue(
+            ShannonGeminiCascadeSpeech.style(for: "そ、そんなこと言われると照れます。", plan: bashful)
+                .contains("嬉しさの奥に照れ")
+        )
+    }
+
+    func testDelegationResponseDecodesVisibleAgentTaskProposal() throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "threadId": "thread-work",
+            "model": "test-model",
+            "reply": "作業案を出しました。",
+            "uiBlocks": [[
+                "type": "agent_task_proposal",
+                "proposalId": "8EA464F4-969D-4E93-81C9-1810A209BC5A",
+                "title": "Minebot音声対応",
+                "goal": "Minebotへ音声会話を実装する",
+            ]],
+        ])
+        let response = try JSONDecoder().decode(ShannonLiveVoiceDelegationResponseDTO.self, from: data)
+        XCTAssertEqual(response.uiBlocks?.first?.type, "agent_task_proposal")
+        XCTAssertEqual(response.uiBlocks?.first?.title, "Minebot音声対応")
     }
 
     func testTurnAssemblerMergesCumulativeAndOverlappingFinalSegments() throws {
