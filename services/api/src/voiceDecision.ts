@@ -214,7 +214,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
   constructor(private readonly options: JevVoiceDecisionOptions) {
     if (!options.apiKey.trim()) throw new Error('TYPESAFE_API_KEY is required');
     this.endpoint = options.endpoint ?? 'https://api.typesafe.ai/v1/systemone';
-    this.model = options.model ?? 'jev-1.13.0';
+    this.model = options.model ?? 'jev-latest';
     this.timeoutMilliseconds = options.timeoutMilliseconds ?? 900;
     this.skillThreshold = boundedProbability(options.skillThreshold, 0.55);
     this.fetcher = options.fetcher ?? fetch;
@@ -308,7 +308,7 @@ export function createConfiguredVoiceDecisionGateway(
   if (jevApiKey) return new JevVoiceDecisionGateway({
     apiKey: jevApiKey,
     endpoint: environment.SHANNON_JEV_ENDPOINT?.trim() || undefined,
-    model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-1.13.0',
+    model: environment.SHANNON_JEV_MODEL?.trim() || 'jev-latest',
     timeoutMilliseconds: optionalPositiveInteger(environment.SHANNON_JEV_TIMEOUT_MS) ?? 900,
     skillThreshold,
   });

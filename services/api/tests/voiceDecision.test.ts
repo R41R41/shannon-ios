@@ -26,7 +26,7 @@ describe('Jev voice decision routing', () => {
         .toEqual(VOICE_SKILLS.map(skill => `skill__${skill}`).sort());
       expect(VOICE_SKILLS.every(skill => request.questions[`skill__${skill}`].type === 'noul')).toBe(true);
       return new Response(JSON.stringify({
-        model: 'jev-1.13.0',
+        model: 'jev-latest',
         answers: jevAnswers({
           skill__aether_notes: { type: 'noul', noul: 0.72 },
           skill__voyager_tasks: { type: 'noul', noul: 0.61 },
@@ -39,6 +39,7 @@ describe('Jev voice decision routing', () => {
     const gateway = new JevVoiceDecisionGateway({
       apiKey: 'test-only', fetcher: fetcher as typeof fetch, skillThreshold: 0.6,
     });
+    expect(gateway.model).toBe('jev-latest');
 
     const decision = await gateway.decide({
       scopeKey: 'owner-a', transcript: 'ノートとタスクを確認して', participantMode: 'owner',
