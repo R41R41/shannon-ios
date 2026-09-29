@@ -20,12 +20,16 @@ extension ShannonGeminiLiveSessionModel {
         responseDelivery = ShannonVoiceResponseDelivery()
         let previousCommit = responseCommitTask
         ShannonVoiceDiagnostics.shared.record("gemini.response.started", sessionID: generation.uuidString,
-            metadata: ["input_count": String(batch.turns.count)])
+            metadata: ["input_count": String(batch.turns.count), "tts_provider": speechProvider.rawValue])
         phase = .thinking
         responseTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let coordinator = ShannonGeminiStreamingSpeechCoordinator(
-                style: { ShannonGeminiCascadeSpeech.style(for: $0, plan: $1) },
+                style: { [provider = self.speechProvider] text, plan in
+                    provider == .gemini
+                        ? ShannonGeminiCascadeSpeech.style(for: text, plan: plan)
+                        : ShannonElevenCascadeSpeech.style(for: text, plan: plan)
+                },
                 streamSpeech: streamSpeech,
                 consumeSpeech: { [weak self] speech in
                     guard let self else { throw CancellationError() }
@@ -48,7 +52,13 @@ extension ShannonGeminiLiveSessionModel {
                 let response = try await performStreamingDelegation(batch.text, utterance, mode) {
                     [weak self] segment, plan in
                     guard let self, self.responseGenerationID == generation, !Task.isCancelled else { return }
+                    let firstText = self.latencyMeasurements.firstTextMilliseconds == nil
                     self.latencyMeasurements.recordFirstText(plan: plan)
+                    if firstText, let milliseconds = self.latencyMeasurements.firstTextMilliseconds {
+                        ShannonVoiceDiagnostics.shared.record("voice.turn.first_text", sessionID: generation.uuidString,
+                            metadata: ["provider": self.speechProvider.rawValue,
+                                       "response_ms": String(milliseconds)])
+                    }
                     self.shannonTranscript += segment
                     await coordinator.enqueue(segment, plan: plan)
                 }
@@ -81,6 +91,18 @@ extension ShannonGeminiLiveSessionModel {
                     failureStage = "playback"
                     try await transport?.waitForPlayback()
                     try requireCurrentResponse(generation)
+                    if let firstAudio = latencyMeasurements.firstAudioMilliseconds,
+                       let firstTTSByte = latencyMeasurements.firstTTSByteMilliseconds {
+                        let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime -
+                            (latencyMeasurements.responseStartedAt ?? ProcessInfo.processInfo.systemUptime)) * 1_000)
+                        ShannonVoiceDiagnostics.shared.record("voice.turn.measurement.completed",
+                            sessionID: generation.uuidString,
+                            metadata: ["provider": speechProvider.rawValue, "source": batch.source.rawValue,
+                                       "first_text_ms": String(latencyMeasurements.firstTextMilliseconds ?? -1),
+                                       "first_tts_pcm_ms": String(firstTTSByte),
+                                       "first_audio_queued_ms": String(firstAudio),
+                                       "playback_complete_ms": String(elapsed)])
+                    }
                     ShannonVoiceDiagnostics.shared.record("gemini.response.playback.completed",
                         sessionID: generation.uuidString)
                 }
@@ -142,9 +164,19 @@ extension ShannonGeminiLiveSessionModel {
             if !receivedFirstChunk {
                 receivedFirstChunk = true
                 latencyMeasurements.recordFirstTTSByte(requestStartedAt: speech.requestStartedAtUptime)
+                if let milliseconds = latencyMeasurements.firstTTSByteMilliseconds {
+                    ShannonVoiceDiagnostics.shared.record("voice.turn.first_tts_pcm", sessionID: generation.uuidString,
+                        metadata: ["provider": speechProvider.rawValue, "request_ms": String(milliseconds)])
+                }
             }
-            latencyMeasurements.recordFirstAudio()
             let duration = try transport?.schedulePCM(chunk) ?? Double(chunk.count) / 48_000
+            let firstAudio = latencyMeasurements.firstAudioMilliseconds == nil
+            latencyMeasurements.recordFirstAudio()
+            if firstAudio, let milliseconds = latencyMeasurements.firstAudioMilliseconds {
+                ShannonVoiceDiagnostics.shared.record("voice.turn.first_audio_queued", sessionID: generation.uuidString,
+                    metadata: ["provider": speechProvider.rawValue, "response_ms": String(milliseconds),
+                               "first_text_ms": String(latencyMeasurements.firstTextMilliseconds ?? -1)])
+            }
             segmentDuration += duration
             outputAudioSeconds += duration
             playbackLevel = 0.55
@@ -152,6 +184,7 @@ extension ShannonGeminiLiveSessionModel {
             responseDelivery.scheduledAudio(seconds: duration)
         }
         guard segmentDuration > 0 else { throw ShannonAPIError.invalidResponse }
+        if !speech.costEstimateAvailable { ttsCostEstimateAvailable = false }
         ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
         updateCost()
     }

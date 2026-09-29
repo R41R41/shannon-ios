@@ -82,6 +82,25 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
     }
 
+    func testElevenActingTagsFollowTheSameVoicePlan() {
+        let bright = ShannonVoicePlanDTO(
+            shouldRespond: true, conversationClass: .direct,
+            affect: .bright, delivery: .conversational
+        )
+        let playful = ShannonVoicePlanDTO(
+            shouldRespond: true, conversationClass: .direct,
+            affect: .playful, delivery: .quick
+        )
+        XCTAssertEqual(
+            ShannonElevenCascadeSpeech.style(for: "おかえり", plan: bright),
+            "[bright, warm conversational voice, smiling tone]"
+        )
+        XCTAssertEqual(
+            ShannonElevenCascadeSpeech.style(for: "ふふ、任せて", plan: playful),
+            "[playful, lightly mischievous, quick conversational delivery]"
+        )
+    }
+
     func testDelegationResponseDecodesVisibleAgentTaskProposal() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "threadId": "thread-work",

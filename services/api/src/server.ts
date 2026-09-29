@@ -166,7 +166,9 @@ const server = createServer(async (request, response) => {
       await handleVoiceTranscription(request, response, principal);
       return;
     }
-    if (url.pathname === '/v1/voice/gemini/speech' || url.pathname === '/v1/voice/gemini/speech/stream') {
+    if (url.pathname === '/v1/voice/gemini/speech' ||
+        url.pathname === '/v1/voice/gemini/speech/stream' ||
+        url.pathname === '/v1/voice/speech/stream') {
       await geminiSpeechRoute(
         request,
         response,

@@ -3,6 +3,7 @@ import SwiftUI
 #if os(iOS)
 struct ShannonVoicePresentationModifier: ViewModifier {
     @Binding var isPresented: Bool
+    let speechProvider: ShannonSpeechProvider
 
     let conversationModel: ShannonConversationModel
     let geminiVoiceModel: ShannonGeminiLiveSessionModel
@@ -13,6 +14,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             ShannonGeminiLiveVoiceView(
                 model: geminiVoiceModel,
                 expression: expression,
+                speechProvider: speechProvider,
                 createSession: { participantMode in
                     try await conversationModel.createGeminiLiveSession(participantMode: participantMode)
                 },
@@ -35,7 +37,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     try await conversationModel.analyzeVoiceCameraSnapshot(jpegData: data)
                 },
                 streamSpeech: { text, style in
-                    try await conversationModel.streamGeminiSpeech(text, style: style)
+                    try await conversationModel.streamSpeech(text, style: style, provider: speechProvider)
                 },
                 commitTurn: { user, shannon in
                     try await conversationModel.commitRealtimeVoiceTurn(

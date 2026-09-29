@@ -6,6 +6,7 @@ import UIKit
 public struct ShannonGeminiLiveVoiceView: View {
     @Bindable var model: ShannonGeminiLiveSessionModel
     private let expression: ShannonExpressionDTO
+    private let speechProvider: ShannonSpeechProvider
     private let createSession: @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO
     private let performDelegation: @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO
     private let performStreamingDelegation: ShannonVoiceStreamingDelegation
@@ -36,6 +37,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     public init(
         model: ShannonGeminiLiveSessionModel,
         expression: ShannonExpressionDTO,
+        speechProvider: ShannonSpeechProvider = .gemini,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
         performStreamingDelegation: @escaping ShannonVoiceStreamingDelegation,
@@ -47,6 +49,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     ) {
         self.model = model
         self.expression = expression
+        self.speechProvider = speechProvider
         self.createSession = createSession
         self.performDelegation = performDelegation
         self.performStreamingDelegation = performStreamingDelegation
@@ -254,7 +257,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("シャノンと音声会話").font(.headline)
             if !dynamicTypeSize.isAccessibilitySize {
-                Text("Gemini · \(model.inputState.activeInputLabel)")
+                Text("\(speechProvider.japaneseName) · \(model.inputState.activeInputLabel)")
                     .font(.caption)
                     .foregroundStyle(palette.textSecondary)
                     .lineLimit(1)
@@ -397,10 +400,17 @@ public struct ShannonGeminiLiveVoiceView: View {
         VStack(spacing: 5) {
             Text("\(model.model) · \(model.voice)")
             HStack(spacing: ShannonSpacing.medium) {
-                if let latency = model.firstAudioLatencyMilliseconds { Label("応答 \(latency) ms", systemImage: "timer") }
+                if let latency = model.firstAudioLatencyMilliseconds { Label("再生キュー \(latency) ms", systemImage: "timer") }
                 if let latency = model.interruptionLatencyMilliseconds { Label("割込 \(latency) ms", systemImage: "waveform.badge.minus") }
             }
-            Text("今回の音声 約$\(model.estimatedCostUsd.formatted(.number.precision(.fractionLength(5))))")
+            if let latency = model.firstTTSByteLatencyMilliseconds {
+                Text("TTS要求から最初のPCM \(latency) ms")
+            }
+            if model.ttsCostEstimateAvailable {
+                Text("今回の音声 約$\(model.estimatedCostUsd.formatted(.number.precision(.fractionLength(5))))")
+            } else {
+                Text("今回の音声費用 · ElevenLabs分は未計上")
+            }
         }
         .font(.caption.monospacedDigit())
         .foregroundStyle(palette.textSecondary)
@@ -411,6 +421,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private func start(_ mode: ShannonVoiceParticipantMode) async {
         await model.start(
             participantMode: mode,
+            speechProvider: speechProvider,
             createSession: createSession,
             performDelegation: performDelegation,
             performStreamingDelegation: performStreamingDelegation,

@@ -73,3 +73,22 @@ describe('Gemini streaming cancellation and cleanup', () => {
     expect(closed).toBe(true);
   });
 });
+
+it('returns provider-labelled Eleven PCM without exposing the private voice ID in headers', async () => {
+  const request = new EventEmitter() as IncomingMessage;
+  let headers: Record<string, string> = {};
+  const response = Object.assign(new EventEmitter(), {
+    writeHead: (_status: number, values: Record<string, string>) => { headers = values; },
+    write: () => true, end: () => undefined,
+  }) as unknown as ServerResponse;
+  await streamSpeech(request, response, { stream: async () => ({
+    contentType: 'audio/l16', sampleRate: 24_000, channels: 1, bitsPerSample: 16,
+    model: 'eleven_v4_turbo', voice: 'private-voice-id', outputUsdPerTenSeconds: 0,
+    chunks: (async function* () { yield new Uint8Array([1, 2]); })(),
+  }) }, { scopeKey: 'synthetic-owner', text: 'おかえり' }, 'eleven');
+  expect(headers['x-shannon-voice-engine']).toBe('eleven');
+  expect(headers['x-shannon-voice-model']).toBe('eleven_v4_turbo');
+  expect(headers['x-shannon-voice-name']).toBe('Shannon Clone 02');
+  expect(headers['x-shannon-gemini-voice']).toBeUndefined();
+  expect(JSON.stringify(headers)).not.toContain('private-voice-id');
+});

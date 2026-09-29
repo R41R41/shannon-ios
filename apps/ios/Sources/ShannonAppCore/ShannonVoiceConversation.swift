@@ -111,6 +111,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
     public let channels: Int
     public let bitsPerSample: Int
     public let outputUsdPerTenSeconds: Double
+    public let costEstimateAvailable: Bool
     public let requestStartedAtUptime: TimeInterval?
     public let chunks: AsyncThrowingStream<Data, Error>
 
@@ -121,6 +122,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
         channels: Int = 1,
         bitsPerSample: Int = 16,
         outputUsdPerTenSeconds: Double,
+        costEstimateAvailable: Bool = true,
         requestStartedAtUptime: TimeInterval? = nil,
         chunks: AsyncThrowingStream<Data, Error>
     ) {
@@ -130,6 +132,7 @@ public struct ShannonGeminiSpeechStream: Sendable {
         self.channels = channels
         self.bitsPerSample = bitsPerSample
         self.outputUsdPerTenSeconds = outputUsdPerTenSeconds
+        self.costEstimateAvailable = costEstimateAvailable
         self.requestStartedAtUptime = requestStartedAtUptime
         self.chunks = chunks
     }

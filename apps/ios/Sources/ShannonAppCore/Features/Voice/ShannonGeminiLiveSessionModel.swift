@@ -24,6 +24,8 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var inputAudioSeconds: Double = 0
     public internal(set) var outputAudioSeconds: Double = 0
     public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
+    public private(set) var speechProvider: ShannonSpeechProvider = .gemini
+    public internal(set) var ttsCostEstimateAvailable = true
     public private(set) var inputState: ShannonVoiceInputState
     private var session: ShannonGeminiLiveSessionDTO?
     private var sessionGenerationID: UUID?
@@ -56,6 +58,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     public func start(
         participantMode: ShannonVoiceParticipantMode,
+        speechProvider: ShannonSpeechProvider = .gemini,
         preservePendingInput: Bool = false,
         createSession: @escaping @MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO,
         performDelegation: @escaping @MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO,
@@ -77,6 +80,7 @@ public final class ShannonGeminiLiveSessionModel {
         self.commitTurn = commitTurn
         self.handleDelegationResponse = handleDelegationResponse
         self.participantMode = participantMode
+        self.speechProvider = speechProvider
         resetMeasurements()
         userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
         errorMessage = nil
@@ -157,6 +161,7 @@ public final class ShannonGeminiLiveSessionModel {
               let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
         await start(
             participantMode: participantMode,
+            speechProvider: speechProvider,
             preservePendingInput: true,
             createSession: createSession,
             performDelegation: performDelegation,
@@ -365,6 +370,7 @@ public final class ShannonGeminiLiveSessionModel {
         inputAudioSeconds = 0
         outputAudioSeconds = 0
         ttsCostUsd = 0
+        ttsCostEstimateAvailable = true
         estimatedCostUsd = 0
         latencyMeasurements.reset()
         interruptionLatencyMilliseconds = nil

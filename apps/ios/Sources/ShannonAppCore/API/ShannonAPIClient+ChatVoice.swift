@@ -102,25 +102,38 @@ extension ShannonAPIClient {
         text: String,
         style: String? = nil
     ) async throws -> ShannonGeminiSpeechStream {
+        try await streamSpeech(scopeKey: scopeKey, text: text, style: style, provider: .gemini)
+    }
+
+    public func streamSpeech(
+        scopeKey: String,
+        text: String,
+        style: String?,
+        provider: ShannonSpeechProvider
+    ) async throws -> ShannonGeminiSpeechStream {
         let connection = currentConnection()
-        var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/speech/stream"))
+        let path = provider == .gemini ? "/v1/voice/gemini/speech/stream" : "/v1/voice/speech/stream"
+        var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = "POST"
         request.timeoutInterval = 75
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         authorize(&request, connection: connection)
-        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style))
+        request.httpBody = try JSONEncoder().encode(GeminiSpeechRequestDTO(text: text, style: style, provider: provider))
         let requestStartedAtUptime = ProcessInfo.processInfo.systemUptime
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
-        if http.statusCode == 404 || http.statusCode == 405 {
+        if provider == .gemini && (http.statusCode == 404 || http.statusCode == 405) {
             return try await legacyGeminiSpeechStream(scopeKey: scopeKey, text: text, style: style)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw ShannonAPIError.rejected(status: http.statusCode)
         }
+        let modelHeader = provider == .gemini ? "x-shannon-gemini-model" : "x-shannon-voice-model"
+        let voiceHeader = provider == .gemini ? "x-shannon-gemini-voice" : "x-shannon-voice-name"
         guard http.value(forHTTPHeaderField: "content-type")?.lowercased().hasPrefix("audio/l16") == true,
-              let model = http.value(forHTTPHeaderField: "x-shannon-gemini-model"),
-              let voice = http.value(forHTTPHeaderField: "x-shannon-gemini-voice"),
+              (provider == .gemini || http.value(forHTTPHeaderField: "x-shannon-voice-engine") == provider.rawValue),
+              let model = http.value(forHTTPHeaderField: modelHeader),
+              let voice = http.value(forHTTPHeaderField: voiceHeader),
               let sampleRate = http.value(forHTTPHeaderField: "x-shannon-audio-sample-rate").flatMap(Int.init),
               let channels = http.value(forHTTPHeaderField: "x-shannon-audio-channels").flatMap(Int.init),
               let bits = http.value(forHTTPHeaderField: "x-shannon-audio-bits-per-sample").flatMap(Int.init),
@@ -137,6 +150,7 @@ extension ShannonAPIClient {
             channels: channels,
             bitsPerSample: bits,
             outputUsdPerTenSeconds: costRate,
+            costEstimateAvailable: http.value(forHTTPHeaderField: "x-shannon-cost-estimate-available") != "false",
             requestStartedAtUptime: requestStartedAtUptime,
             chunks: Self.bufferedGeminiPCM(bytes)
         )
@@ -476,6 +490,7 @@ extension ShannonAPIClient {
 private struct GeminiSpeechRequestDTO: Encodable {
     let text: String
     let style: String?
+    var provider: ShannonSpeechProvider? = nil
 }
 
 private struct GeminiLiveSessionRequestDTO: Encodable {

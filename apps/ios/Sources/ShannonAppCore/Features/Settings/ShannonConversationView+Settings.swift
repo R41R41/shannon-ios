@@ -45,11 +45,15 @@ extension ShannonConversationView {
                 }
 
                 Section("音声と情報") {
-                    ShannonSettingsRow(
-                        title: "シャノンの声",
-                        detail: "Gemini · サーバーで設定",
-                        symbol: "speaker.wave.2"
-                    )
+                    Picker("シャノンの読み上げ", selection: $speechProviderRawValue) {
+                        ForEach(ShannonSpeechProvider.allCases) { provider in
+                            Text(provider.japaneseName).tag(provider.rawValue)
+                        }
+                    }
+                    .accessibilityHint("次に開始する音声会話から適用します")
+                    Text("Geminiで作った声／ElevenLabsのShannonクローンを切り替えます。次の通話から適用されます。")
+                        .font(.footnote)
+                        .foregroundStyle(palette.textSecondary)
                     settingsButton(
                         title: "情報源",
                         detail: worldSubscriptionModel.summary,
@@ -75,7 +79,7 @@ extension ShannonConversationView {
                 Section("詳細") {
                     settingsButton(
                         title: "音声診断",
-                        detail: "クラッシュ直前の処理を確認・コピー",
+                        detail: "音声の処理時間を確認・コピー",
                         symbol: "waveform.badge.magnifyingglass"
                     ) { showsVoiceDiagnostics = true }
                 }

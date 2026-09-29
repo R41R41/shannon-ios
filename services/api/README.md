@@ -59,6 +59,8 @@ OpenAIキーがある場合、睡眠分析はResponses APIのstrict JSON Schema�
 
 Gemini試験モードは、同じ文字起こしと通常のShannonテキスト会話を通した返答だけをGemini TTSへ渡すターン制カスケードである。現行iPhoneは`/stream`から24 kHz mono・16-bit little-endian PCMを生成中に受け取り、100 ms単位で再生キューへ追加する。WAV一括endpointは旧クライアント互換として残す。GeminiキーはAzureだけに置き、iPhoneへ返さない。既定は`gemini-3.8-flash-lite-tts`と`Leda`で、モデル、声、短いスタイル指示、timeout、10秒単価見積りを`SHANNON_GEMINI_TTS_*`で変更できる。本文は8,000文字、音声は8 MiBまでに制限し、音声本文・PCM・WAVは保存しない。見積りは`voice`費用レーンへ記録するが、文字起こし、軽量音声ルーター、通常チャットの費用は同じレーン内でも個別callとして記録する。
 
+設定で選ぶElevenLabs v4 Turboも同じ会話・PCM再生経路を使い、`POST /v1/voice/speech/stream`の`provider: "eleven"`で固定モデル・固定Shannonクローン声へ送る。`ELEVENLABS_API_KEY`と`SHANNON_ELEVEN_TTS_VOICE_ID`はAzureのmode-0600環境ファイルだけに置く。音声IDとキーはiPhoneへ渡さず、演技指定は角括弧の音声タグだけを許す。既存Gemini endpoint／古いクライアントは従来どおりGeminiを使用する。ElevenLabsの費用見積りは未計上と明示する。診断ログは本文・音声を保存せず、成功した各ターンについてプロバイダー、入力種別、返答処理開始から最初の文／PCM再生キュー投入まで、TTS要求から最初のPCMまでをミリ秒で記録する。再生キュー投入は実際に耳へ届く時刻ではない。
+
 Realtime音声は通話作成の成功単位をSQLiteへ永続予約し、日本時間の日次上限をAPI側で強制する。1回はiPhone側の上限と同じ10分として保守的に予約し、既定は1日60分。上流で通話作成に失敗した予約は取り消し、成功した予約はAPI再起動後も残る。上限は`SHANNON_VOICE_REALTIME_DAILY_MINUTES`で10〜1440分の範囲に変更でき、超過後もテキスト会話は使える。
 
 Voice Identityは`marin`、`cedar`、`coral`の3候補だけを公開する。未選択時は`SHANNON_VOICE_REALTIME_VOICE`が候補内ならそれを使い、それ以外は`marin`へ安全に戻る。選択は`voice_identity_preferences`へscope分離して保存し、進行中の音声を差し替えず次回のRealtime call作成時に読む。試聴は既定`gpt-4o-mini-tts`へサーバー固定文だけを送り、音声・本文を永続化しない。モデルとendpointは`SHANNON_VOICE_PREVIEW_MODEL`、`SHANNON_VOICE_PREVIEW_ENDPOINT`で変更できる。

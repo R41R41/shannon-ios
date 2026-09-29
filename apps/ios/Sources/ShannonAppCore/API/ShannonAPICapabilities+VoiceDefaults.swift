@@ -1,6 +1,16 @@
 import Foundation
 
 public extension ShannonAPIClientProtocol {
+    func streamSpeech(
+        scopeKey: String,
+        text: String,
+        style: String?,
+        provider: ShannonSpeechProvider
+    ) async throws -> ShannonGeminiSpeechStream {
+        guard provider == .gemini else { throw ShannonAPIError.invalidResponse }
+        return try await streamGeminiSpeech(scopeKey: scopeKey, text: text, style: style)
+    }
+
     func transcribeVoice(
         scopeKey: String,
         recording: ShannonVoiceRecording

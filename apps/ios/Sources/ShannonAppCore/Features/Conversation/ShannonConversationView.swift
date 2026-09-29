@@ -44,6 +44,7 @@ public struct ShannonConversationView: View {
 #endif
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
+    @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
@@ -139,6 +140,7 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .modifier(ShannonVoicePresentationModifier(
             isPresented: $showsGeminiLiveVoice,
+            speechProvider: ShannonSpeechProvider(rawValue: speechProviderRawValue) ?? .gemini,
             conversationModel: model,
             geminiVoiceModel: geminiLiveVoiceModel,
             expression: model.currentExpression

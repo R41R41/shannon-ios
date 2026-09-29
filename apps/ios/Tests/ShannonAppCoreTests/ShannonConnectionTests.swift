@@ -511,6 +511,51 @@ final class ShannonConnectionTests: XCTestCase {
         XCTAssertEqual(chunks.reduce(into: Data(), { $0.append($1) }), pcm)
     }
 
+    func testAPIClientSelectsElevenStreamWithoutSendingProviderCredentials() async throws {
+        let baseURL = URL(string: "https://shannon.example/companion")!
+        let bearer = String(repeating: "e", count: 43)
+        let store = MemoryConnectionStore(credential: ShannonConnectionCredential(
+            baseURL: baseURL, token: bearer, deviceID: "device-eleven-stream",
+            scopeKey: "owner-from-server", displayName: "Test iPhone",
+            expiresAt: Date(timeIntervalSinceNow: 3_600)
+        ))
+        let pcm = Data(repeating: 5, count: 4_800)
+        let session = stubSession { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://shannon.example/companion/v1/voice/speech/stream")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "authorization"), "Bearer \(bearer)")
+            XCTAssertNil(request.value(forHTTPHeaderField: "xi-api-key"))
+            let body = try XCTUnwrap(requestBody(request))
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: String])
+            XCTAssertEqual(json["provider"], "eleven")
+            XCTAssertEqual(json["style"], "[bright, warm conversational voice]")
+            let response = try XCTUnwrap(HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [
+                    "content-type": "audio/l16;rate=24000;channels=1",
+                    "x-shannon-voice-engine": "eleven",
+                    "x-shannon-voice-model": "eleven_v4_turbo",
+                    "x-shannon-voice-name": "Shannon clone",
+                    "x-shannon-audio-sample-rate": "24000",
+                    "x-shannon-audio-channels": "1",
+                    "x-shannon-audio-bits-per-sample": "16",
+                    "x-shannon-output-usd-per-10-seconds": "0",
+                    "x-shannon-cost-estimate-available": "false",
+                ]
+            ))
+            return (response, pcm)
+        }
+        let client = ShannonAPIClient(baseURL: baseURL, connectionStore: store, session: session)
+        let stream = try await client.streamSpeech(
+            scopeKey: "untrusted-client-scope", text: "おかえり", style: "[bright, warm conversational voice]",
+            provider: .eleven
+        )
+        var chunks: [Data] = []
+        for try await chunk in stream.chunks { chunks.append(chunk) }
+        XCTAssertEqual(stream.model, "eleven_v4_turbo")
+        XCTAssertEqual(stream.voice, "Shannon clone")
+        XCTAssertFalse(stream.costEstimateAvailable)
+        XCTAssertEqual(chunks, [pcm])
+    }
+
     func testAPIClientCreatesRealtimeCallAndCommitsTheVisibleTranscript() async throws {
         let previousBrightness = UserDefaults.standard.object(
             forKey: ShannonRemoteVoicePitchPolicy.enabledDefaultsKey
