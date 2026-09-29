@@ -93,11 +93,23 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "おかえり", plan: bright),
-            "[bright, warm conversational voice, smiling tone]"
+            "[anime character] [cheerfully]"
         )
         XCTAssertEqual(
             ShannonElevenCascadeSpeech.style(for: "ふふ、任せて", plan: playful),
-            "[playful, lightly mischievous, quick conversational delivery]"
+            "[anime character] [mischievously] [briskly]"
+        )
+        let caring = ShannonVoicePlanDTO(
+            shouldRespond: true, conversationClass: .direct,
+            affect: .caring, delivery: .gentle
+        )
+        XCTAssertEqual(
+            ShannonElevenCascadeSpeech.style(for: "大丈夫？", plan: caring),
+            "[anime character] [reassuringly] [calmly]"
+        )
+        XCTAssertEqual(
+            ShannonElevenCascadeSpeech.style(for: "今日はどうしたの？", plan: nil),
+            "[anime character]"
         )
     }
 

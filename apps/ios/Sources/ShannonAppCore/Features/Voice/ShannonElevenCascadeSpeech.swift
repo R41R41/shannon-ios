@@ -1,49 +1,54 @@
 import Foundation
 
 enum ShannonElevenCascadeSpeech {
+    private static let characterTag = "[anime character]"
+
     static func style(for text: String, plan: ShannonVoicePlanDTO?) -> String {
         guard let plan else {
             if text.contains("ふふ") || text.contains("任せて") || text.contains("天才") {
-                return "[playful, lightly mischievous, quick conversational delivery]"
+                return "\(characterTag) [mischievously]"
             }
             if text.contains("ありがとう") || text.contains("おかえり") || text.contains("！") {
-                return "[bright, warm conversational voice, smiling tone]"
+                return "\(characterTag) [cheerfully]"
             }
-            return "[warm, natural conversational voice]"
+            return characterTag
         }
-        let affect: String = switch plan.affect {
-        case .neutral: "warm, natural conversational voice"
+        let affect: String? = switch plan.affect {
+        case .neutral: nil
         case .bright, .happy, .fun, .relief, .pride, .gratitude, .hope, .content,
              .excited, .ecstatic, .triumphant:
-            "bright, warm conversational voice, smiling tone"
+            "[cheerfully]"
         case .playful, .giggle, .teasing, .mischievous, .plotting, .smug, .deadpan,
              .harmlessFalsehood, .selfDeprecating, .dramaticLament:
-            "playful, lightly mischievous, quick conversational delivery"
+            "[mischievously]"
         case .caring, .protective, .reassurance, .gentle, .quietCompanion, .tender, .affectionate:
-            "gentle, close and reassuring"
+            "[reassuringly]"
         case .serious, .focused, .determined, .cautious, .urgent, .retrying, .protectiveAnger,
              .blocked:
-            "focused, clear and sincere"
+            "[confidently]"
         case .apologetic, .sad, .disappointed, .hurt, .anxious, .regret, .helpless, .lamenting:
-            "soft, sincere and slightly wistful"
+            "[somberly]"
         case .curiosity, .surprised, .shocked, .stunned, .speechless, .confused:
-            "curious, lightly surprised"
+            "[curiously]"
         case .shy, .blushing, .bashful, .flustered, .hidingHappiness,
              .jealous, .sulky, .leftOut, .lonely, .attentionSeeking, .lightPossessive:
-            "shy, warm and lightly playful"
+            "[bashfully]"
         case .cuteAngry, .annoyed, .indignant, .frustrated, .competitive,
              .seriousAnger, .panic, .scream:
-            "firm, clear and expressive without shouting"
+            "[firmly]"
         case .tired, .sleepy, .relaxed:
-            "soft, relaxed and unhurried"
+            "[calmly]"
         }
-        let delivery: String = switch plan.delivery {
-        case .conversational: ""
-        case .quick: "quick conversational delivery"
-        case .gentle: "gentle pacing"
-        case .focused: "crisp articulation"
-        case .energetic: "lively pacing"
+        let delivery: String? = switch plan.delivery {
+        case .conversational: nil
+        case .quick: "[briskly]"
+        case .gentle: "[calmly]"
+        case .focused: "[clearly]"
+        case .energetic: "[energetically]"
         }
-        return "[\(affect)\(delivery.isEmpty || affect.contains(delivery) ? "" : ", \(delivery)")]"
+        var tags = [characterTag]
+        if let affect { tags.append(affect) }
+        if let delivery, !tags.contains(delivery) { tags.append(delivery) }
+        return tags.joined(separator: " ")
     }
 }
