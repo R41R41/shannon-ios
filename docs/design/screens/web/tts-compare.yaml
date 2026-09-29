@@ -1,0 +1,38 @@
+schema_version: 1
+screen_id: shannon-web-tts-compare
+platform: web
+baseline_commit: 00c210213662b4fbc3b3571128afe9e82dbccf61
+last_verified_at: "2026-09-30"
+user_job: "同じ日本語を現在のGemini音声とEleven v4 Turboで聴き比べ、TTSの待ち時間を実測する"
+primary_action: "A/Bを順にストリーミング試聴する、または反復して中央値とp95を測る"
+preserve:
+  - "現在のGeminiモデル・声・演技設定を比較の初期値にする"
+  - "同じAzure経路、24 kHz PCM、100 ms共通バッファで条件を揃える"
+  - "キー、本文、音声をログ・永続ファイルへ保存しない"
+improve:
+  - "両モデルの試聴と上流・端末・再生予約の段階別遅延を一画面へ並べる"
+  - "繰り返しの順序を交互にし、失敗を成功統計へ含めない"
+  - "生成と再生を即時停止し、成功した結果は再試聴できる"
+do_not_change:
+  - "iPhoneアプリ、本番API、会話・記憶・DB、採用声、既存Voice Lab"
+states:
+  loading: "接続確認中・生成中・受信再生中を文言で表示する"
+  empty: "共通の架空台本と試聴方法を示す"
+  error: "片方の失敗を明示し、他方の成功音声を保持する"
+  offline: "起動用commandまたは接続の再試行を案内する"
+  conflict: "生成中は設定と追加生成をロックし、停止は常に操作可能にする"
+  selection: "モデル・声・台本・回数・演技は標準control状態で示す"
+accessibility:
+  dynamic_type: "ブラウザ拡大と狭幅では1列へ配置する"
+  voiceover: "全入力へlabel、状態へlive region、音声へ話者と回数を付ける"
+  target_size: "主要操作は最低44 CSS px"
+  focus: "設定・台本・試聴・停止・結果・保存の順にキーボード移動できる"
+  reduce_motion: "繰り返す装飾アニメーションを用いず状態を文言で伝える"
+evidence:
+  current:
+    - "scripts/tts-compare.test.mjs: 14 synthetic/provider boundary tests passed"
+    - "verify.sh fast and git diff --check passed"
+    - "Chrome dark visual and accessibility-tree inspection; real Gemini streaming playback passed"
+    - "ElevenLabs live generation, light/narrow layouts and VoiceOver interaction remain unverified"
+  approved: []
+  privacy: "保存証跡は架空台本と合成結果のみ。実Voice ID、キー、生成音声は保存しない"

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>シャノン · 声の比較</title><link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/" aria-label="シャノン 声の比較"><span class="eye" aria-hidden="true"><i></i><i></i></span><span>シャノン <small>VOICE LAB</small></span></a><span class="private">プライベートデモ</span></header>
+  <main>
+    <div class="intro"><p class="eyebrow">GEMINI × ELEVENLABS</p><h1>声と、返事の速さを比べる。</h1><p>同じ言葉を、ふたつの声で。話し始めの待ち時間も、耳で確かめる。</p></div>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section class="providers" aria-label="比較する声">
+      <article class="provider" id="gemini-card">
+        <div class="provider-head"><span class="letter">A</span><div><h2>Gemini</h2><p>今のシャノンの設定</p></div><span class="badge" id="gemini-state">接続確認中</span></div>
+        <label for="gemini-model">モデル</label><select id="gemini-model"><option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS</option><option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS</option></select>
+        <label for="gemini-voice">声</label><input id="gemini-voice" list="gemini-voices" autocomplete="off" placeholder="接続後に現在の声を表示"><datalist id="gemini-voices"></datalist>
+        <button class="subtle" id="gemini-try" disabled>この声だけ試聴</button>
+      </article>
+      <article class="provider" id="eleven-card">
+        <div class="provider-head"><span class="letter">B</span><div><h2>ElevenLabs</h2><p>新しい会話用の候補</p></div><span class="badge" id="eleven-state">未接続</span></div>
+        <label for="eleven-model">モデル</label><select id="eleven-model"><option value="eleven_v4_turbo">Eleven v4 Turbo · 会話向け</option><option value="eleven_v4">Eleven v4 · 通常版</option></select>
+        <label for="eleven-voice">声</label><input id="eleven-voice" list="eleven-voices" autocomplete="off" placeholder="声を選ぶ、またはVoice IDを入力"><datalist id="eleven-voices"></datalist>
+        <div class="provider-actions"><button class="subtle" id="connect">ElevenLabsに接続</button><button class="subtle" id="eleven-try" disabled>この声だけ試聴</button></div>
+      </article>
+    </section>
+    <section class="script-panel" aria-labelledby="script-heading">
+      <div class="section-head"><h2 id="script-heading">同じ文章で、聴く</h2><span id="character-count">0文字</span></div>
+      <div class="presets" aria-label="試聴する文章"><button type="button" data-preset="short" aria-pressed="false">短い相槌</button><button type="button" data-preset="daily" aria-pressed="true">日常会話</button><button type="button" data-preset="warm" aria-pressed="false">慰め</button><button type="button" data-preset="names" aria-pressed="false">固有名詞</button><button type="button" data-preset="long" aria-pressed="false">長めの返答</button></div>
+      <label class="visually-hidden" for="script">共通の読み上げ文章</label><textarea id="script" maxlength="1000" rows="3">ライ氏、おかえり。今日もお疲れさま。ボクに話したいこと、ある？</textarea>
+      <details class="acting"><summary>話し方を調整</summary><div class="acting-grid"><label for="gemini-style">Geminiの演技指示<textarea id="gemini-style" rows="3" maxlength="500"></textarea></label><label for="eleven-tag">ElevenLabsの演技タグ<select id="eleven-tag"><option value="">タグなし</option><option value="[warm]">[warm] · あたたかく</option><option value="[excited]">[excited] · 嬉しそうに</option><option value="[whispers]">[whispers] · 小声で</option></select><small>タグは文章の先頭に付けて送信します。</small></label></div></details>
+      <div class="run-settings"><label for="repetitions">各モデルの測定回数<select id="repetitions"><option value="1">1回 · 試聴</option><option value="3">3回 · 速度測定</option><option value="10">10回 · 速度測定</option></select></label><p id="call-count">合計2回の音声生成。プロバイダーの利用料が発生します。</p></div>
+      <div class="run-actions"><button class="primary" id="compare" disabled>A → Bで聴き比べる</button><button class="secondary" id="stop" hidden>生成・再生を停止</button><span id="run-status" role="status" aria-live="polite">声を接続すると比較できます</span></div>
+    </section>
+    <section class="results" aria-labelledby="results-heading">
+      <div class="section-head"><h2 id="results-heading">今回の比較</h2><button id="export" class="subtle" disabled>測定結果を保存</button></div>
+      <p id="comparison-description" class="muted">生成した音声と実測値がここに並びます。再試聴に追加の生成は不要です。</p>
+      <div id="result-summary" class="summary-grid"></div>
+      <div id="samples" class="samples"><div class="empty">まずは日常会話を、1回ずつ。<span>速さだけでなく、語尾や間の自然さも聴いてみてください。</span></div></div>
+    </section>
+    <footer><p id="route-description">同じサーバー・24 kHz PCM・100 msの共通再生バッファで比較します。声は無加工です。</p><p>ここで測るのは文章を音声にする時間です。音声認識、返答生成、iPhoneの実機遅延は含みません。ElevenLabsは毎回接続し、接続時間も別に記録します。</p><p>音声と文章はこのタブ内だけに保持します。APIキーはサーバーの一時メモリに保持し、30分間使わないと失効します。</p></footer>
+  </main>
+  <dialog id="connection-dialog" aria-labelledby="connection-title">
+    <form id="connection-form"><div class="dialog-head"><h2 id="connection-title">ElevenLabsに接続</h2><button class="icon-button" type="button" id="close-dialog" aria-label="接続画面を閉じる">×</button></div><p>APIキーを入力して、比較に使う声を選びます。</p><label for="api-key">ElevenLabs APIキー</label><input id="api-key" type="password" autocomplete="off" spellcheck="false" required minlength="12"><small>このデモの接続だけに使います。入力欄は接続後に消去します。</small><p id="connection-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="disconnect">接続を解除</button><button type="submit" class="primary" id="submit-key">接続する</button></div></form>
+  </dialog>
+</body>
+</html>

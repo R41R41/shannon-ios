@@ -2,6 +2,8 @@
 
 ## Current authority
 
+- Private Gemini / ElevenLabs TTS comparison demo: [`tts-compare-demo.md`](tts-compare-demo.md)
+
 - Product policy and canonical index: [`../README.md`](../README.md)
 - Architecture: [`architecture.md`](architecture.md)
 - Design and evidence: [`DESIGN.md`](DESIGN.md)
