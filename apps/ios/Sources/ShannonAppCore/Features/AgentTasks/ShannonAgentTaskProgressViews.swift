@@ -150,25 +150,6 @@ struct AgentTaskActivityIndicator: View {
     }
 }
 
-struct AgentTaskPlanRow: View {
-    let item: ShannonAgentPlanItem
-    let palette: ShannonPalette
-
-    var body: some View {
-        HStack(spacing: ShannonSpacing.medium) {
-            Image(systemName: item.status.symbolName)
-                .foregroundStyle(item.status == .pending ? palette.borderStrong : palette.action)
-                .frame(width: 22)
-            Text(item.title)
-                .font(.body)
-                .foregroundStyle(item.status == .pending ? palette.textSecondary : palette.textPrimary)
-            Spacer()
-        }
-        .frame(minHeight: ShannonTouchTarget.minimum)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 struct AgentTaskTimelineRow: View {
     let event: ShannonAgentTimelineEvent
     let showsConnector: Bool

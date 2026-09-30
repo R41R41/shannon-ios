@@ -30,3 +30,54 @@ SOFTWARE.
 
 The bloub repository states that the MIT license covers its code, not the third-party
 visual design it studies, and that it is not affiliated with or endorsed by x.ai.
+
+## Swift Pieces
+
+Shannon adapts selected SwiftUI components from
+[Swift Pieces](https://github.com/Saivion/SwiftPieces) by Saivion Hayes, read from
+`registry/swift/<category>/<Name>.swift` at version 2.0.0. No Swift Pieces package, CLI,
+MCP server, or unmodified component file is included. Each adapted component was rewritten
+into Shannon's own types, semantic colors, copy, and ownership boundaries, and each source file
+names the component it derives from:
+
+| Swift Pieces component | Shannon source |
+| --- | --- |
+| `ai/CodeBlock` | `apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonCodeSyntax.swift`, `ShannonCodeBlock.swift`; `apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopCodeBlock.swift` |
+| `ai/ThinkingState` | `apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonThinkingState.swift` |
+| `lists/StatusTimeline` | `apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskPlanTimelineView.swift`; `apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopPlanTimeline.swift` |
+| `sheets/PermissionSheet` | `apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonPermissionPrimer.swift` |
+| `ai/PromptChips` | `apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPromptSuggestions.swift` |
+
+The components are used only as part of the Shannon application. The Commons Clause
+condition below prohibits selling, sublicensing, or redistributing the components themselves,
+alone, in a bundle, or as a ported version; do not extract these files into a shared UI
+package, component library, or template for distribution.
+
+MIT + Commons Clause License Condition v1.0
+
+Copyright (c) 2026 Saivion Hayes
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, and distribute the Software **as part of
+an application, website, or product**, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+Commons Clause Restriction:
+
+You may use this Software, including for any commercial purpose, **so long as
+you do not sell, sublicense, or redistribute the components themselves, whether
+alone, in a bundle, or as a ported version.**
+
+No Warranty:
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -29,6 +29,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             }
         }
         .sheet(isPresented: $isPresented, onDismiss: {
+            // Minimizing while the microphone explanation waits must not strand the call.
+            if geminiVoiceModel.microphonePrimerPhase == .explain { endCall() }
             if let taskToOpen {
                 self.taskToOpen = nil
                 openTask(taskToOpen)

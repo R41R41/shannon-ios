@@ -109,11 +109,40 @@ extension ShannonConversationView {
                     .padding(.horizontal, ShannonSpacing.medium)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+#if os(iOS)
+                if showsPromptSuggestions {
+                    ShannonPromptChipRow(suggestions: promptSuggestions, palette: palette) { suggestion in
+                        model.draft = suggestion.text
+                        composerIsFocused = true
+                    }
+                    .transition(.opacity)
+                }
+#endif
                 composer(palette)
             }
             .background(.bar)
         }
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
+    }
+
+    /// Empty scroll-mode conversation with nothing typed yet.
+    var showsPromptSuggestions: Bool {
+        displayMode == .scroll
+            && !model.isLoadingHistory
+            && model.messages.isEmpty
+            && model.unattachedSelectedThreadOrganizeSessions.isEmpty
+            && model.draft.isEmpty
+    }
+
+    var promptSuggestions: [ShannonPromptSuggestions.Suggestion] {
+        ShannonPromptSuggestions.make(
+            dailyMindTopic: memoryModel.dashboard?.dailyMind?.topic,
+            activeTaskTitles: model.agentTasks
+                .filter { $0.status.isActive && !$0.isArchived }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .map(\.title),
+            interests: model.state?.interests ?? []
+        )
     }
 }

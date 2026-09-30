@@ -119,6 +119,15 @@ struct ShannonAgentTaskRoomView: View {
                         AgentTaskStageProgressView(task: task, palette: palette)
                     }
 
+                    if !task.plan.isEmpty {
+                        AgentTaskSection(title: "計画", symbol: "list.bullet.clipboard", palette: palette) {
+                            Text(ShannonAgentPlanTimeline.summary(for: task))
+                                .font(.caption)
+                                .foregroundStyle(palette.textSecondary)
+                            AgentTaskPlanTimelineView(task: task, palette: palette)
+                        }
+                    }
+
                     if let command = task.latestCommandActivity {
                         AgentTaskCommandActivityCard(event: command, palette: palette)
                     }
@@ -142,37 +151,23 @@ struct ShannonAgentTaskRoomView: View {
                         }
                     }
 
-                    if !task.plan.isEmpty || !task.timeline.isEmpty {
+                    if !task.timeline.isEmpty {
                         DisclosureGroup(isExpanded: $showsDetailedProgress) {
-                            VStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                                if !task.plan.isEmpty {
-                                    AgentTaskSection(title: "計画の詳細", symbol: "list.bullet.clipboard", palette: palette) {
-                                        VStack(spacing: 0) {
-                                            ForEach(task.plan) { item in
-                                                AgentTaskPlanRow(item: item, palette: palette)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !task.timeline.isEmpty {
-                                    AgentTaskSection(title: "作業記録", symbol: "clock.arrow.circlepath", palette: palette) {
-                                        VStack(spacing: 0) {
-                                            let sortedEvents = task.timeline.sorted(by: { $0.sequence < $1.sequence })
-                                            ForEach(sortedEvents) { event in
-                                                AgentTaskTimelineRow(
-                                                    event: event,
-                                                    showsConnector: event.id != sortedEvents.last?.id,
-                                                    palette: palette
-                                                )
-                                            }
-                                        }
+                            AgentTaskSection(title: "作業記録", symbol: "clock.arrow.circlepath", palette: palette) {
+                                VStack(spacing: 0) {
+                                    let sortedEvents = task.timeline.sorted(by: { $0.sequence < $1.sequence })
+                                    ForEach(sortedEvents) { event in
+                                        AgentTaskTimelineRow(
+                                            event: event,
+                                            showsConnector: event.id != sortedEvents.last?.id,
+                                            palette: palette
+                                        )
                                     }
                                 }
                             }
                             .padding(.top, ShannonSpacing.medium)
                         } label: {
-                            Label("計画と全作業記録を表示", systemImage: "list.bullet")
+                            Label("全作業記録を表示", systemImage: "list.bullet")
                                 .font(.callout.weight(.semibold))
                                 .foregroundStyle(palette.textSecondary)
                         }

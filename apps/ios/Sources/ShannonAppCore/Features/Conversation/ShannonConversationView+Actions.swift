@@ -29,6 +29,7 @@ extension ShannonConversationView {
             selectedPage = .work
             selectedAgentTaskID = task.id
         }
+        applySwiftPiecesPreviewState()
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewSettings") {
             showsSettings = true
         }
@@ -46,6 +47,10 @@ extension ShannonConversationView {
                     task.projectHint = "Minebot"
                     model.upsertAgentTask(task)
                 }
+            }
+            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewCameraPrimer") {
+                voiceWorkspace.cameraPrimerPhase = ProcessInfo.processInfo.arguments.contains("-ShannonPreviewPrimerDenied")
+                    ? .denied : .explain
             }
             showsGeminiLiveVoice = true
         }

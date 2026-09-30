@@ -2,8 +2,8 @@ schema_version: 1
 screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
-last_verified_at: 2026-09-29
-verification_scope: "既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
+last_verified_at: 2026-09-30
+verification_scope: "2026-09-30〜10-01（Swift Pieces取り込み）: iOS 27.0 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで、返信コード（Dark、Light）、返信待ち（Light、Reduce Motionで光が静止）、空の会話の話題候補（Light、Accessibility Extra LargeのDark）、マイク説明シート（Light、Accessibility Extra Large）、拒否済み（Dark）、カメラ説明シート（Light）を表示確認。大きい文字の返信コードと返信待ちはスクロール位置の都合で画面外となり未確認。コピー・展開・チップ選択・説明シートの続けるの実タップ、VoiceOver実読み上げ、実機のシステム許可ダイアログは未確認。以前の記録: 既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -44,6 +44,12 @@ improve:
   - "音声画面の『小さく』と『終了』を区別し、他のトーク・作業・頭の中・設定を開いても通話を継続する"
   - "小型通話バーから状態・参加者・詳細への復帰・終了を直接操作できる"
   - "本人音声の実装案から内容・実行環境の確認と明示的な開始へ進める。提案と実行中を混同せず、ゲストには表示しない"
+  - "返信内のコードは言語ラベル、コピー（押すと「コピー済み」）、テキスト選択、横スクロールを持つ。15行以上は最初の12行で折りたたみ「残りN行を表示」で展開し、展開後は「折りたたむ」で戻せる"
+  - "コードの構文色は字句ベースでSwift・JS/TS・Python・Shell・JSON・YAML・SQL等に限り、未知の言語は色なしで表示する。色はShannonの意味色から解決し、面は外観に従う読書面を使う"
+  - "テキスト返信待ちは54ptの表情アバター、「考えている…」、返信と同じ形の3本の行バー、1秒以降の経過秒で示す。行バーの光はintelligenceSkyで流れ、Reduce Motionでは止める"
+  - "空のスクロール表示の会話では、入力欄の上に横スクロールの話題候補を最大4件出す。選ぶと入力欄に文が入るだけで送信しない。候補は読み込み済みの今日の関心・進行中の作業・興味から作り、無ければ固定の3件にする。新しいAPIやモデル呼び出しはしない"
+  - "Gemini音声のマイク許可が未決定の時だけ、システム確認の直前に説明シートを出す（割り込める・録音データを保存しない・終了でいつでも止まる）。システム確認は説明シートの「続ける」をタップした時に出る"
+  - "マイクまたはカメラが拒否済みの時は、同じ説明シートが設定アプリへの案内に切り替わる。音声中の写真撮影もカメラ未決定時は同じ部品で説明してから確認する"
 do_not_change:
   - "会話、作業、記憶の正本と同期規則"
   - "ユーザー確認前に外部アプリへ書き込まない境界"
@@ -71,15 +77,28 @@ states:
   voice_input_level: "実マイク入力に小さな5本のバーで反応し、処理・発話時は静止する。状態文言とWaterlight Eyeを置き換えない"
   voice_minimized: "開始トークに紐づいた通話を継続し、閲覧中の別トークへ履歴や写真を混入させない。未送信文と写真プレビューは再展開しても保持する"
   voice_background: "明示的に開始した通話は他アプリ表示中もマイクと再生を継続する。戻ると同じ通話バーから詳細と終了へ進める。電話等の音声割り込みを尊重し、再開できないときは再接続を示す"
+  reply_code: "言語名またはコード、コピー操作、必要時の展開操作を示す。コピー済みは約1.6秒で元に戻り、文言とシンボルでも伝える"
+  text_waiting: "返信待ちの表情アバター、考えている…、行バー、経過秒を示す。経過秒は最初の1秒は出さない"
+  empty_suggestions: "空の会話かつ入力が空の間だけ話題候補を示し、入力を始めたら隠す"
+  permission_primer: "説明・確認中・拒否済みの3状態。確認中は操作を無効にし、拒否済みは設定を開くと閉じるを示す。説明中の「今はしない」は待機中の通話を終える"
   voice_implementation_review: "音声の実装案から既存の確認・設定・開始画面へ進む。画面を開いただけではAgent Hostに送らない"
 accessibility:
   dynamic_type: "複数行入力、添付名、生成物名は必要に応じて伸長または安全に省略する。アクセシビリティ文字サイズでは対話の補助ラベルと作業通知の副文を省き、回答・Waterlight Eye・入力操作を優先する"
-  voiceover: "入力、添付、Web検索、音声会話開始、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、ライブラリ選択、選び直し、写真共有、チャットアイコン選択の役割を個別に読み上げる"
+  voiceover: "返信内コードは『〈言語〉のコード、N行』として含まれるコピー・展開操作へ個別に到達できる。返信待ちは『シャノンが考えています』と経過秒を値で伝える。話題候補は入力欄に入れるだけで送信しないことをヒントで伝える。入力、添付、Web検索、音声会話開始、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、ライブラリ選択、選び直し、写真共有、チャットアイコン選択の役割を個別に読み上げる"
   target_size: "主要操作のヒット領域を44ポイント以上にする"
   focus: "入力中にTextFieldを破棄せず、会話外の明示操作ではキーボードを閉じて最初のタップをその操作へ渡す"
-  reduce_motion: "入力欄とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形を保つ。小さな音量表示も静止させる"
+  reduce_motion: "入力欄とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形を保つ。小さな音量表示も静止させる。返信待ちの行バーの光は止め、文言と経過秒で待機中を伝える。コードの展開、話題候補の出現、説明シートの項目表示は移動なしの短い切替にする"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-reply-code-dark-v1.png"
+    - "docs/screenshots/shannon-ios-thinking-state-light-v1.png"
+    - "docs/screenshots/shannon-ios-thinking-state-reduce-motion-light-v1.png"
+    - "docs/screenshots/shannon-ios-prompt-chips-light-v1.png"
+    - "docs/screenshots/shannon-ios-prompt-chips-accessibility-dark-v1.png"
+    - "docs/screenshots/shannon-ios-microphone-primer-light-v1.png"
+    - "docs/screenshots/shannon-ios-microphone-primer-accessibility-light-v1.png"
+    - "docs/screenshots/shannon-ios-microphone-primer-denied-dark-v1.png"
+    - "docs/screenshots/shannon-ios-camera-primer-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-audio-error-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-partial-error-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-controls-listening-light-v2.png"

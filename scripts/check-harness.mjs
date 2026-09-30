@@ -32,6 +32,7 @@ const requiredFiles = [
   'docs/design/semantic-role-map.v1.json',
   'docs/design/screens/macos/talk.yaml',
   'docs/design/screens/macos/development.yaml',
+  'docs/design/screens/macos/work.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
   'docs/design/screens/web/gemini-voice-lab.yaml',
@@ -99,6 +100,7 @@ for (const phrase of ['codex/shannon/<work-id>', 'active', 'waiting', 'integrate
 const screenContracts = [
   'docs/design/screens/macos/talk.yaml',
   'docs/design/screens/macos/development.yaml',
+  'docs/design/screens/macos/work.yaml',
   'docs/design/screens/ios/talk.yaml',
   'docs/design/screens/ios/work.yaml',
   'docs/design/screens/web/gemini-voice-lab.yaml',

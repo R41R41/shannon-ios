@@ -22,6 +22,7 @@ final class ShannonVoiceWorkspaceState {
     var cameraErrorMessage: String?
     var isSharingCameraSnapshot = false
     var isLoadingLibraryPhoto = false
+    var cameraPrimerPhase: ShannonPermissionPrimerPhase?
 
     func clearPhoto() {
         showsPhotoSource = false
@@ -33,6 +34,7 @@ final class ShannonVoiceWorkspaceState {
         cameraErrorMessage = nil
         isSharingCameraSnapshot = false
         isLoadingLibraryPhoto = false
+        cameraPrimerPhase = nil
     }
 }
 

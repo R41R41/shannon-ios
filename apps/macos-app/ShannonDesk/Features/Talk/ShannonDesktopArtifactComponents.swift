@@ -308,14 +308,8 @@ struct DesktopMarkdownView: View {
                 Text(ShannonMessageMarkdown.render(text))
                     .foregroundStyle(.secondary)
             }
-        case .code(let text):
-            ScrollView(.horizontal) {
-                Text(text)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(12)
-            }
-            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+        case .code(let text, let language):
+            DesktopCodeBlockView(code: text, language: language)
         case .divider:
             Divider()
         case .paragraph(let text):

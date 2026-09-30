@@ -11,7 +11,9 @@ public enum ShannonMessageMarkdown {
         case bullet(String)
         case numbered(marker: String, text: String)
         case quote(String)
-        case code(String)
+        /// A fenced code block. `language` is the normalized fence info word
+        /// (for example `swift` from `` ```swift title ``), or `nil` when absent.
+        case code(String, language: String? = nil)
         case divider
         case paragraph(String)
     }
@@ -67,6 +69,7 @@ public enum ShannonMessageMarkdown {
         var result: [Block] = []
         var paragraphLines: [String] = []
         var codeLines: [String] = []
+        var codeLanguage: String?
         var insideCode = false
 
         func flushParagraph() {
@@ -76,8 +79,9 @@ public enum ShannonMessageMarkdown {
         }
 
         func flushCode() {
-            result.append(.code(codeLines.joined(separator: "\n")))
+            result.append(.code(codeLines.joined(separator: "\n"), language: codeLanguage))
             codeLines.removeAll(keepingCapacity: true)
+            codeLanguage = nil
         }
 
         let normalized = source.replacingOccurrences(of: "\r\n", with: "\n")
@@ -86,7 +90,11 @@ public enum ShannonMessageMarkdown {
 
             if line.hasPrefix("```") {
                 flushParagraph()
-                if insideCode { flushCode() }
+                if insideCode {
+                    flushCode()
+                } else {
+                    codeLanguage = fenceLanguage(from: line)
+                }
                 insideCode.toggle()
                 continue
             }
@@ -134,6 +142,20 @@ public enum ShannonMessageMarkdown {
         flushParagraph()
         if insideCode || !codeLines.isEmpty { flushCode() }
         return result
+    }
+
+    /// Reads the first info-string word after an opening fence. Only a short,
+    /// identifier-like word is accepted so arbitrary prose never becomes a label.
+    static func fenceLanguage(from line: String) -> String? {
+        let info = line.drop { $0 == "`" }.trimmingCharacters(in: .whitespaces)
+        guard let word = info.split(whereSeparator: { $0 == " " || $0 == "{" || $0 == "," }).first else {
+            return nil
+        }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "+#-_."))
+        guard word.count <= 24,
+              word.unicodeScalars.allSatisfy({ $0.isASCII && allowed.contains($0) })
+        else { return nil }
+        return word.lowercased()
     }
 
     private static func attributedRange(

@@ -210,10 +210,7 @@ extension ShannonDesktopRootView {
 
                         if !task.plan.isEmpty {
                             DesktopInspectorSection(title: "計画") {
-                                ForEach(task.plan) { item in
-                                    Label(item.title, systemImage: item.status.symbolName)
-                                        .foregroundStyle(item.status == .pending ? .secondary : .primary)
-                                }
+                                DesktopPlanTimelineView(task: task)
                             }
                         }
 

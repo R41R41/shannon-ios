@@ -11,7 +11,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private let switchParticipantMode: (ShannonVoiceParticipantMode) -> Void
     private let openTask: (UUID) -> Void
     private let minimize: () -> Void
-    private let end: () -> Void
+    let end: () -> Void
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
 
     @Environment(\.colorScheme) private var colorScheme
@@ -66,6 +66,11 @@ public struct ShannonGeminiLiveVoiceView: View {
         .fullScreenCover(isPresented: $workspace.showsCamera) {
             ShannonVoiceCameraPicker(onCapture: receiveCameraImage, onCancel: { workspace.showsCamera = false })
                 .ignoresSafeArea()
+        }
+        .sheet(item: permissionPrimerKind) { kind in
+            permissionPrimerSheet(kind)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
         .photosPicker(isPresented: $workspace.showsPhotoLibrary, selection: $workspace.selectedLibraryPhoto, matching: .images)
         .onChange(of: workspace.selectedLibraryPhoto) {

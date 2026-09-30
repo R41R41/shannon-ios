@@ -1,6 +1,6 @@
 # Shannon design authority
 
-Revision: 2026-09-14
+Revision: 2026-09-30
 
 This document is the entrypoint for the currently implemented Shannon design. It records ownership and evidence; it does not propose a redesign.
 
@@ -43,6 +43,20 @@ The shared vocabulary does not make the three products visually identical. Shann
 
 Shannon's compact and historical avatars keep the existing expression artwork. The iPhone empty-conversation hero, dialogue mode, and realtime voice use the Waterlight Eye: a near-black soft rounded-square face with sphere-projected capsule eyes, 160% eye scale, and the `intelligenceSky → brandPresence → intelligenceDepth` gradient. Dialogue activity changes the eyes themselves for preparing, connecting, listening, thinking, speaking, working, searching, waiting, completion, and failure; operational text remains the semantic authority. The Gemini voice surface keeps microphone, photo and participant controls visible with labels; large accessibility text stacks them. Its multiline native composer uses a keyboard-aware safe-area dock. A compact input-level glyph replaces the bottom spotlight and progress-like line; only real microphone level drives it, with no synthetic thinking sweep. Reduce Motion keeps this glyph still; operational phase text and the eye remain authoritative. Touch tracking is active only while the face is pressed. Tapping produces one interruptible surprise-to-bashful reaction and reveals semantic `characterBlush` cheeks. Reduce Motion removes spatial and repeating motion while preserving the state-specific eye shape and the bounded bashful still response. Task rows, message avatars, and Mac compact avatars keep their existing assets and behavior.
 
+## Adapted external components
+
+Shannon may adapt an external SwiftUI component only by reading its source and rewriting the needed part into Shannon's own types, copy, semantic roles, and ownership boundaries (`DesignSystem` for shared presentation, `Features` for product behavior, and the Mac app for Mac expression). No external component package, CLI, MCP server, or unmodified component file is added. Each adapted file names its source and license, and `THIRD_PARTY_NOTICES.md` holds the license text and the source-to-file map. Swift Pieces components are MIT + Commons Clause: they remain inside the Shannon app and are never extracted into a shared or distributed UI package.
+
+Current Swift Pieces adaptations and their Shannon behavior:
+
+- **Reply code** (`ShannonCodeBlock`, `DesktopCodeBlockView`): language label, copy that becomes “コピー済み”, collapse after 12 lines when at least 15 lines exist, continuous text selection, horizontal scroll, and a shallow lexical highlighter over Shannon semantic roles. Unknown languages stay uncolored. The Markdown `.code` block carries the optional fence language.
+- **Text waiting** (`ShannonTypingIndicator`): the 54 pt expression avatar, “考えている…”, reply-shaped line bars with an `intelligenceSky` sheen, and elapsed seconds after the first second. Reduce Motion stops the sheen.
+- **Plan timeline** (`AgentTaskPlanTimelineView`, `DesktopPlanTimelineView`): driven only by plan item status through `ShannonAgentPlanTimeline`; running-step details come from durable command events, the latest timeline event, and test results. The five-stage progress view remains.
+- **Permission primer** (`ShannonPermissionPrimerSheet`): shown for the Gemini voice microphone and in-call camera only when authorization is undetermined, immediately before the system request that runs on the user's tap, and reused for the denied state with a Settings route. The photo library uses the out-of-process `PhotosPicker`, which asks for no permission, so it has no primer.
+- **Empty-conversation suggestions** (`ShannonPromptChipRow`): up to four chips above the composer from already-loaded daily focus, active tasks, and interests, otherwise three fixed prompts. Choosing one fills the composer and never sends.
+
+Motion and haptic defaults for these components: press feedback is immediate and releases with a non-bouncing spring (`bounce: 0`); expansion uses a 0.35 s damped spring or a 0.15 s ease-out under Reduce Motion; no node pulses or celebratory scaling. Haptics accompany only a user-initiated result (copy success, chip selection); background progress such as a completed plan step is silent.
+
 ## Preserve
 
 - Talk remains the primary surface, with Shannon messages visually distinct from the user's quieter bubbles.
@@ -61,7 +75,9 @@ Current safe screenshots live in `docs/screenshots/`. Concept art under `design/
 
 Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/screens/macos/talk.yaml),
 [`docs/design/screens/ios/talk.yaml`](design/screens/ios/talk.yaml), and
-[`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml). The Mac development workspace is governed by
+[`docs/design/screens/ios/work.yaml`](design/screens/ios/work.yaml). The Mac work inspector is governed by
+[`docs/design/screens/macos/work.yaml`](design/screens/macos/work.yaml).
+The Mac development workspace is governed by
 [`docs/design/screens/macos/development.yaml`](design/screens/macos/development.yaml).
 The private browser listening workbench is governed by
 [`docs/design/screens/web/gemini-voice-lab.yaml`](design/screens/web/gemini-voice-lab.yaml).

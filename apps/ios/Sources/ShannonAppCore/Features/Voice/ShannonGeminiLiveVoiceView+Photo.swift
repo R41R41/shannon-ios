@@ -1,4 +1,5 @@
 #if os(iOS)
+@preconcurrency import AVFoundation
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -60,7 +61,71 @@ extension ShannonGeminiLiveVoiceView {
             workspace.cameraErrorMessage = "この端末ではカメラを利用できません。実機でお試しください。"
             return
         }
-        workspace.showsCamera = true
+        switch ShannonMediaPermission.currentCamera() {
+        case .granted: workspace.showsCamera = true
+        case .undetermined: workspace.cameraPrimerPhase = .explain
+        case .denied: workspace.cameraPrimerPhase = .denied
+        }
+    }
+
+    /// Runs the real camera request from the primer's continue button.
+    @MainActor
+    func confirmCameraPrimer() {
+        guard workspace.cameraPrimerPhase == .explain else { return }
+        workspace.cameraPrimerPhase = .requesting
+        Task { @MainActor in
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            guard workspace.cameraPrimerPhase == .requesting else { return }
+            if granted {
+                workspace.cameraPrimerPhase = nil
+                workspace.showsCamera = true
+            } else {
+                workspace.cameraPrimerPhase = .denied
+            }
+        }
+    }
+
+    var permissionPrimerKind: Binding<ShannonVoicePermissionPrimerKind?> {
+        Binding(
+            get: {
+                if model.microphonePrimerPhase != nil { return .microphone }
+                if workspace.cameraPrimerPhase != nil { return .camera }
+                return nil
+            },
+            set: { value in
+                guard value == nil else { return }
+                closePermissionPrimer()
+            }
+        )
+    }
+
+    func closePermissionPrimer() {
+        if let phase = model.microphonePrimerPhase {
+            // Declining the explanation ends the call that is waiting for the microphone.
+            if phase == .explain { end() } else if phase == .denied { model.dismissMicrophonePrimer() }
+        } else if workspace.cameraPrimerPhase != .requesting {
+            workspace.cameraPrimerPhase = nil
+        }
+    }
+
+    @ViewBuilder
+    func permissionPrimerSheet(_ kind: ShannonVoicePermissionPrimerKind) -> some View {
+        switch kind {
+        case .microphone:
+            ShannonPermissionPrimerSheet(
+                content: kind.content,
+                phase: model.microphonePrimerPhase ?? .explain,
+                allow: model.confirmMicrophonePrimer,
+                notNow: closePermissionPrimer
+            )
+        case .camera:
+            ShannonPermissionPrimerSheet(
+                content: kind.content,
+                phase: workspace.cameraPrimerPhase ?? .explain,
+                allow: confirmCameraPrimer,
+                notNow: closePermissionPrimer
+            )
+        }
     }
 
     func shareCameraSnapshot(_ data: Data) {

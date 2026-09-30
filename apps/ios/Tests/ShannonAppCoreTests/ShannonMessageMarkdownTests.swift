@@ -70,9 +70,31 @@ final class ShannonMessageMarkdownTests: XCTestCase {
             .bullet("一つ目"),
             .numbered(marker: "2.", text: "二つ目"),
             .quote("補足"),
-            .code("let value = 42"),
+            .code("let value = 42", language: "swift"),
             .divider,
         ])
+    }
+
+    func testCodeFenceLanguageIsOptionalAndSourceCompatible() {
+        XCTAssertEqual(ShannonMessageMarkdown.blocks(from: "```\nplain\n```"), [.code("plain")])
+        XCTAssertEqual(ShannonMessageMarkdown.Block.code("x"), .code("x", language: nil))
+        XCTAssertEqual(
+            ShannonMessageMarkdown.blocks(from: "```TypeScript title=\"a.ts\"\nconst a = 1\n```"),
+            [.code("const a = 1", language: "typescript")]
+        )
+    }
+
+    func testRejectsProseAsCodeFenceLanguage() {
+        XCTAssertNil(ShannonMessageMarkdown.fenceLanguage(from: "```"))
+        XCTAssertNil(ShannonMessageMarkdown.fenceLanguage(from: "```日本語"))
+        XCTAssertEqual(ShannonMessageMarkdown.fenceLanguage(from: "```c++"), "c++")
+    }
+
+    func testUnclosedCodeFenceKeepsLanguage() {
+        XCTAssertEqual(
+            ShannonMessageMarkdown.blocks(from: "```bash\nls -la"),
+            [.code("ls -la", language: "bash")]
+        )
     }
 
     func testKeepsConsecutivePlainLinesInOneParagraph() {

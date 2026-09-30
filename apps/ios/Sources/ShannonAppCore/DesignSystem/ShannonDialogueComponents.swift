@@ -60,19 +60,8 @@ struct ShannonRichMarkdownText: View {
             }
             .padding(.vertical, 2)
 
-        case .code(let text):
-            ScrollView(.horizontal) {
-                Text(text)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(palette.textPrimary)
-                    .padding(ShannonSpacing.medium)
-                    .textSelection(.enabled)
-            }
-            .scrollIndicators(.hidden)
-            .background(
-                palette.subtleSurface,
-                in: RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous)
-            )
+        case .code(let text, let language):
+            ShannonCodeBlock(code: text, language: language, palette: palette)
 
         case .divider:
             Divider()
@@ -92,34 +81,6 @@ struct ShannonRichMarkdownText: View {
         case 2: .title3.weight(.bold)
         default: .headline
         }
-    }
-}
-
-struct ShannonTypingIndicator: View {
-    let expression: ShannonExpressionDTO
-
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        let palette = ShannonPalette.resolve(colorScheme)
-
-        HStack(alignment: .bottom, spacing: ShannonSpacing.small) {
-            ShannonChatAvatarView(expression: expression, size: 54)
-            HStack(spacing: ShannonSpacing.small) {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(palette.action)
-                Text("考えている…")
-                    .font(.callout)
-                    .foregroundStyle(palette.textSecondary)
-            }
-            .padding(.horizontal, ShannonSpacing.large)
-            .frame(minHeight: ShannonTouchTarget.minimum)
-            .background(palette.elevatedSurface, in: Capsule())
-            Spacer()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("シャノンが考えています")
     }
 }
 

@@ -118,7 +118,7 @@ struct ShannonMessageRow: View {
                 userMessage(palette)
             }
         }
-        .accessibilityElement(children: message.artifacts.isEmpty ? .combine : .contain)
+        .accessibilityElement(children: containsInteractiveContent ? .contain : .combine)
         .accessibilityLabel(accessibilityLabel)
         .sensoryFeedback(.success, trigger: didCopy)
         .contextMenu {
@@ -274,6 +274,11 @@ struct ShannonMessageRow: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(palette.danger)
         }
+    }
+
+    /// Artifacts and code blocks carry their own controls, so VoiceOver must reach them.
+    var containsInteractiveContent: Bool {
+        !message.artifacts.isEmpty || (message.role == .shannon && message.text.contains("```"))
     }
 
     var accessibilityLabel: String {

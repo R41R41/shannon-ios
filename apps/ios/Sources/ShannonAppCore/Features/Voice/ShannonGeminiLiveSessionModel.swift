@@ -27,8 +27,12 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var speechProvider: ShannonSpeechProvider = .gemini
     public internal(set) var ttsCostEstimateAvailable = true
     public private(set) var inputState: ShannonVoiceInputState
+    public internal(set) var microphonePrimerPhase: ShannonPermissionPrimerPhase?
+    var microphonePrimerContinuation: CheckedContinuation<Bool, Never>?
+    var microphonePermission: @MainActor () -> ShannonMediaPermission = ShannonMediaPermission.currentMicrophone
+    var requestMicrophonePermission: @MainActor () async -> Bool = { await AVAudioApplication.requestRecordPermission() }
     private var session: ShannonGeminiLiveSessionDTO?
-    private var sessionGenerationID: UUID?
+    private(set) var sessionGenerationID: UUID?
     var transport: ShannonGeminiLiveTransport?
     var pendingTurns = ShannonPendingVoiceTurns()
     var responseGenerationID: UUID?
@@ -93,12 +97,15 @@ public final class ShannonGeminiLiveSessionModel {
             fail("音声機能の設定が不足しています。アプリを更新してください。", recovery: .updateRequired)
             return
         }
-        let permitted = await AVAudioApplication.requestRecordPermission()
+        guard await passMicrophonePrimer(generation: generation) else { return }
+        let permitted = await requestMicrophonePermission()
         guard sessionGenerationID == generation else { return }
         guard permitted else {
+            microphonePrimerPhase = .denied
             fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings)
             return
         }
+        microphonePrimerPhase = nil
 
         phase = .connecting
         do {
@@ -136,6 +143,8 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     public func stop() {
+        resolveMicrophonePrimer(proceed: false)
+        microphonePrimerPhase = nil
         textSendState.preservePendingText(
             message: "音声会話を閉じたため送信を中断しました。入力は残しています。"
         )
@@ -379,7 +388,7 @@ public final class ShannonGeminiLiveSessionModel {
         didRecordFirstQueuedChunk = false
     }
 
-    private func fail(
+    func fail(
         _ message: String,
         recovery: ShannonGeminiLiveFailureRecovery = .reconnect
     ) {
@@ -408,6 +417,13 @@ public final class ShannonGeminiLiveSessionModel {
         errorMessage = nil
         failureRecovery = nil
         textSendState = .idle
+        if arguments.contains("-ShannonPreviewMicrophonePrimer") {
+            phase = .requestingPermission
+            let denied = arguments.contains("-ShannonPreviewPrimerDenied")
+            microphonePrimerPhase = denied ? .denied : .explain
+            if denied { fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings) }
+            return
+        }
         if arguments.contains("-ShannonPreviewVoiceAudioFailed") {
             phase = .listening
             var fixtureLedger = ShannonPendingVoiceTurns()

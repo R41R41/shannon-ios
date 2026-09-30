@@ -2,7 +2,8 @@ schema_version: 1
 screen_id: shannon-macos-talk
 platform: macos
 baseline_commit: e21033582dca6254d213040440ad50536b05de19
-last_verified_at: 2026-09-26
+last_verified_at: 2026-09-30
+verification_scope: "2026-09-30の返信コード追加はShannonDeskのDebugビルドとShannonDeskTests（19件）で確認。Mac実画面の表示とコピー操作は未確認"
 user_job: "シャノンとの会話を読み、入力し、添付やWeb調査を伴う返答を同じトークで継続する"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -20,6 +21,8 @@ improve:
   - "現在のShannonはWaterlight Eyeの視線・瞬き・表情変化で静かに存在を示す"
   - "サイドバーは標準Listの選択、標準検索、ワークスペースとツールの区分で、会話・作業・記憶・開発・Release Center・設定を欠落なく移動できる"
   - "作業の未確認件数は色だけでなく数値と読み上げで示し、一覧の主情報量を圧迫しない"
+  - "返信内のコードはiPhoneと同じ言語ラベル、コピー（NSPasteboard、押すと「コピー済み」）、15行以上の折りたたみと『残りN行を表示』、テキスト選択、横スクロールを持つ。操作はポインター向けの標準borderlessボタンで示す"
+  - "構文色はShannonAppCoreの共通字句規則と意味色を使い、未知の言語は色なしで表示する"
 do_not_change:
   - "会話、記憶、作業の正本と同期規則"
   - "ユーザー確認前にVoyagerやAetherへ書き込まない境界"
