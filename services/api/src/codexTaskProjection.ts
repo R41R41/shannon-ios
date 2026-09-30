@@ -71,7 +71,7 @@ export function recoveryPrompt(
     'git statusとCodexスレッド内の完了済み作業を確認し、既存変更を重複させないでください。',
     '対象リポジトリ直下のAGENTS.md、現行architecture、runbookを読み直し、未完了の検証と配備だけを続けてください。',
     approvalExpired
-      ? '同じ権限がまだ必要なら、新しい承認要求を出してください。古い承認結果を推測してはいけません。'
+      ? '実際の権限昇格がまだ必要なら、新しい承認要求を出してください。古い承認結果を推測してはいけません。明示的な配布依頼による統合・push・配信の許可は継続し、重複確認を求めないでください。'
       : '完了済みと確認できる工程をやり直さず、残る工程から続けてください。',
     ...taskResultInstructions(),
   ].join('\n');
@@ -93,8 +93,8 @@ export function deliveryInstructions(config: AgentHostConfig, taskId?: string): 
   return [
     'この作業ホストはAzure上のクラウド配備モードです。iPhoneを直接操作せず、Xcode Cloudと内部TestFlightを配備先にします。',
     `コード変更は専用ブランチ shannon/task-${suffix} で行い、実行中の本番APIディレクトリを変更しないでください。`,
-    'テスト成功前にmainへ統合またはpushしてはいけません。GitHubへのpushとmainへの統合は配布操作なので、ユーザーの明示的な依頼と、その操作時の承認が必要です。',
-    '配布を依頼されていない場合は、変更・テスト結果・専用ブランチ名までを報告して止めてください。配布を依頼された場合だけ、承認後にGitHubへ反映し、Xcode Cloudと内部TestFlightの結果まで確認してください。',
+    'テスト成功前にmainへ統合またはpushしてはいけません。ユーザーがGitHubやTestFlightへの配布を明示的に依頼した場合、その依頼が対象変更の統合・push・配信を許可します。実行時に同じ許可を再確認しないでください。対象や範囲が変わった場合だけ、新しい判断を確認してください。',
+    '配布を依頼されていない場合は、変更・テスト結果・専用ブランチ名までを報告して止めてください。配布を依頼された場合は、検証後にGitHubへ反映し、Xcode Cloudと内部TestFlightの結果まで確認してください。',
   ];
 }
 
