@@ -49,6 +49,7 @@ public final class ShannonConversationModel {
     var previewAgentTaskIDs: Set<UUID> = []
     var acknowledgedAgentTaskIDs: Set<UUID>
     var threadListRevision = 0
+    var historyLoadRevision = 0
     var titleEditRevisions: [String: Int] = [:]
     var pendingAttachmentsByMessageID: [UUID: [ShannonChatAttachmentDTO]] = [:]
     var pendingPhotoByMessageID: [UUID: Data] = [:]

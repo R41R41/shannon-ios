@@ -9,8 +9,6 @@ extension ShannonConversationView {
     func handleSelectedPageChange() {
         composerIsFocused = false
         voiceModel.cancel()
-        geminiLiveVoiceModel.stop()
-        showsGeminiLiveVoice = false
         guard selectedPage == .memory else { return }
         Task { await memoryModel.reload() }
     }

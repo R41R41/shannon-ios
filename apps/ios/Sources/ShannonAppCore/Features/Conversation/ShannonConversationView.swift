@@ -37,6 +37,7 @@ public struct ShannonConversationView: View {
     @State var composerIsSubmitting = false
     @State var composerAttachmentError: String?
 #if os(iOS)
+    @State var voiceWorkspace = ShannonVoiceWorkspaceState()
     @State var composerPhoto: ShannonPreparedPhoto?
     @State var composerPhotoPickerItem: PhotosPickerItem?
     @State var composerIsPickingPhoto = false
@@ -67,19 +68,7 @@ public struct ShannonConversationView: View {
 
     public var body: some View {
         let activeColorScheme = resolvedColorScheme
-        let palette = ShannonPalette.resolve(activeColorScheme)
-
-        NavigationStack {
-            workspaceContent(palette)
-                .navigationTitle(workspaceNavigationTitle)
-#if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-#endif
-                .toolbar { workspaceToolbar }
-        }
-        .background { palette.canvas.ignoresSafeArea() }
-        .foregroundStyle(palette.textPrimary)
-        .tint(palette.action)
+        workspaceWithPresentations
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)
@@ -106,52 +95,17 @@ public struct ShannonConversationView: View {
                 voiceModel.cancel()
                 geminiLiveVoiceModel.stop()
                 showsGeminiLiveVoice = false
+#if os(iOS)
+                voiceWorkspace.connectionRequestID = nil
+                voiceWorkspace.threadContext = nil
+                voiceWorkspace.clearPhoto()
+#endif
             }
-        }
-#if os(iOS)
-        .fullScreenCover(isPresented: $showsSettings) {
-            settingsSheet
-        }
-#else
-        .sheet(isPresented: $showsSettings) {
-            settingsSheet
-        }
-#endif
-        .sheet(isPresented: $showsThreadList) {
-            ShannonThreadListSheet(
-                model: model,
-                selectedThreadId: model.selectedThreadId,
-                openTalk: openTalkFromThreadList,
-                openWork: openWorkFromThreadList,
-                openMemory: openMemoryFromThreadList,
-                openSettings: openSettingsFromThreadList,
-                openAgentTask: openAgentTaskFromThreadList,
-                close: closeThreadList
-            )
-#if os(iOS)
-            .presentationDetents([.large])
-#endif
         }
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
             showsSettings = true
             showsTestFlightDelivery = true
         }
-#if os(iOS)
-        .modifier(ShannonVoicePresentationModifier(
-            isPresented: $showsGeminiLiveVoice,
-            conversationModel: model,
-            geminiVoiceModel: geminiLiveVoiceModel,
-            expression: model.currentExpression
-        ))
-        .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
-            agentTaskRoom
-        }
-#else
-        .sheet(isPresented: agentTaskRoomIsPresented) {
-            agentTaskRoom
-                .frame(minWidth: 520, minHeight: 680)
-        }
-#endif
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
             await pollAgentTasksWhileActive()
         }
@@ -170,8 +124,73 @@ public struct ShannonConversationView: View {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
 #if DEBUG
-        .onAppear {
-            applyDesignPreviewLaunchState()
+        .onAppear { applyDesignPreviewLaunchState() }
+#endif
+    }
+
+    private var workspaceShell: some View {
+        let palette = ShannonPalette.resolve(resolvedColorScheme)
+        return NavigationStack {
+            workspaceContent(palette)
+                .navigationTitle(workspaceNavigationTitle)
+#if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+#endif
+                .toolbar { workspaceToolbar }
+        }
+        .background { palette.canvas.ignoresSafeArea() }
+        .foregroundStyle(palette.textPrimary)
+        .tint(palette.action)
+    }
+
+    private var workspaceWithPresentations: some View {
+        workspaceShell
+#if os(iOS)
+        .fullScreenCover(isPresented: $showsSettings) {
+            settingsSheet
+                .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
+                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
+        }
+#else
+        .sheet(isPresented: $showsSettings) {
+            settingsSheet
+        }
+#endif
+        .sheet(isPresented: $showsThreadList) {
+            ShannonThreadListSheet(
+                model: model,
+                selectedThreadId: model.selectedThreadId,
+                openTalk: openTalkFromThreadList,
+                openWork: openWorkFromThreadList,
+                openMemory: openMemoryFromThreadList,
+                openSettings: openSettingsFromThreadList,
+                openAgentTask: openAgentTaskFromThreadList,
+                close: closeThreadList
+            )
+#if os(iOS)
+            .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
+                conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
+            .presentationDetents([.large])
+#endif
+        }
+#if os(iOS)
+        .modifier(ShannonVoicePresentationModifier(
+            isPresented: $showsGeminiLiveVoice,
+            workspace: voiceWorkspace,
+            conversationModel: model,
+            geminiVoiceModel: geminiLiveVoiceModel,
+            expression: model.currentExpression,
+            openTask: openAgentTask
+        ))
+        .fullScreenCover(isPresented: agentTaskRoomIsPresented) {
+            agentTaskRoom
+                .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
+                    conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
+        }
+#else
+        .sheet(isPresented: agentTaskRoomIsPresented) {
+            agentTaskRoom
+                .frame(minWidth: 520, minHeight: 680)
         }
 #endif
     }

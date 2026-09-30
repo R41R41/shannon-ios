@@ -131,18 +131,25 @@ extension ShannonConversationModel {
     }
 
     public func reloadConversation(threadId: String? = nil) async {
+        historyLoadRevision += 1
+        let revision = historyLoadRevision
+        let selectionAtStart = selectedThreadId
         isLoadingHistory = true
-        defer { isLoadingHistory = false }
+        defer { if revision == historyLoadRevision { isLoadingHistory = false } }
 
         do {
             let response = try await client.loadConversation(scopeKey: scopeKey, threadId: threadId)
+            guard revision == historyLoadRevision, selectedThreadId == selectionAtStart else { return }
             selectedThreadId = response.threadId
             messages = response.messages.compactMap(Self.conversationMessage)
             state = response.state
-            organizeSessions = (try? await client.loadOrganizeSessions(
+            let sessions = (try? await client.loadOrganizeSessions(
                 scopeKey: scopeKey, threadId: response.threadId
             )) ?? []
+            guard revision == historyLoadRevision, selectedThreadId == response.threadId else { return }
+            organizeSessions = sessions
             await loadThreads(force: true)
+            guard revision == historyLoadRevision, selectedThreadId == response.threadId else { return }
 
             if let selected = threads.firstIndex(where: { $0.threadId == response.threadId }) {
                 let thread = threads.remove(at: selected)
@@ -162,6 +169,7 @@ extension ShannonConversationModel {
             cacheCurrentHistory()
             persistDisplayCache()
         } catch {
+            guard revision == historyLoadRevision, selectedThreadId == selectionAtStart else { return }
             if messages.isEmpty {
                 errorMessage = "以前の会話を読み込めませんでした。新しい会話はそのまま始められます。"
             }

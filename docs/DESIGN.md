@@ -65,6 +65,8 @@ Representative contracts include [`docs/design/screens/macos/talk.yaml`](design/
 [`docs/design/screens/macos/development.yaml`](design/screens/macos/development.yaml).
 The private browser listening workbench is governed by
 [`docs/design/screens/web/gemini-voice-lab.yaml`](design/screens/web/gemini-voice-lab.yaml).
+The iPhone call minimization, pinned conversation, and implementation-review flow
+is governed by [`docs/design/voice-workspace.md`](design/voice-workspace.md).
 App naming and the three-level icon selector are governed by
 [`docs/design/screens/ios/settings.yaml`](design/screens/ios/settings.yaml) and
 [`docs/design/screens/macos/settings.yaml`](design/screens/macos/settings.yaml).
