@@ -10,6 +10,7 @@
     "test:llm-agent-task": "tsx --env-file-if-exists=../../.env tests/agentTaskProposalLiveEval.ts",
     "test:llm-daily-mind": "tsx --env-file-if-exists=../../.env tests/dailyMindLiveEval.ts",
     "test:llm-voice-router": "tsx --env-file-if-exists=../../.env tests/voiceDecisionLiveEval.ts",
+    "test:llm-memory-recall": "tsx --env-file-if-exists=../../.env tests/memoryRecallLiveEval.ts",
     "dev": "tsx --env-file-if-exists=../../.env src/server.ts",
     "worker": "tsx --env-file-if-exists=../../.env src/worker.ts",
     "worker:world": "tsx --env-file-if-exists=../../.env src/worldWorker.ts",

@@ -329,6 +329,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 - reportは評価証拠であり、`agent_tasks` の状態や昇格承認ではない。
 - 評価通過だけでmerge、push、配布、Capability拡大を行わない。
 - `scripts/verify.sh cognition-eval` は回帰、無効scenario、型不整合で非ゼロ終了する。
+- Memory V2の決定的シナリオ（全文検索、意味検索の失敗時の合流、知識の安全装置）は `packages/evaluation/fixtures/scenarios/memory.v2.ts` に置く。実モデルでの30問比較（合成データ、現行方式との正答率・出典・応答時間・費用）は課金を伴うため `pnpm --filter @shannon/api test:llm-memory-recall` で明示的に実行する時だけ動く。
 
 Phase -1ではSkill生成、独自NN、Fine-tuning、人格学習、Shadow/Canary、自動ロールバック、本番DB migration、API/UI変更を行わない。
 
