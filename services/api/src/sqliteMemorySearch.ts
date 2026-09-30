@@ -36,7 +36,7 @@ export function migrateMemorySearchIndex(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS memory_search_documents (
       doc_id INTEGER PRIMARY KEY,
-      source_kind TEXT NOT NULL CHECK (source_kind IN ('experience', 'thread')),
+      source_kind TEXT NOT NULL CHECK (source_kind IN ('experience', 'thread', 'knowledge')),
       source_id TEXT NOT NULL,
       scope_key TEXT NOT NULL,
       thread_id TEXT,

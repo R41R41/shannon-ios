@@ -251,7 +251,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
     const row = this.context.database.prepare(`
       SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
       FROM llm_usage_events
-      WHERE lane = 'sleep' AND substr(occurred_at, 1, 7) = ?
+      WHERE lane IN ('sleep', 'memory_background') AND substr(occurred_at, 1, 7) = ?
     `).get(monthKey) as unknown as { cost: number };
     return Number(row.cost);
   }
@@ -260,7 +260,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
     const row = this.context.database.prepare(`
       SELECT COALESCE(SUM(estimated_cost_usd), 0) AS cost
       FROM llm_usage_events
-      WHERE lane = 'sleep' AND date(datetime(occurred_at, '+9 hours')) = ?
+      WHERE lane IN ('sleep', 'memory_background') AND date(datetime(occurred_at, '+9 hours')) = ?
     `).get(dayKey) as unknown as { cost: number };
     return Number(row.cost);
   }

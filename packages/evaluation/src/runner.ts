@@ -5,6 +5,7 @@ import {
   createInitialCompanionState,
   projectEmotionReaction,
   reduceCompanionState,
+  mergeSemanticMemories,
   restoreCompanionState,
   searchMemoryDocuments,
   selectContextualMemories,
@@ -87,6 +88,11 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
   if (input.memorySearch) output.selectedMemoryIDs = searchMemoryDocuments(
     input.memorySearch.query, input.memorySearch.documents, input.memorySearch.limit,
   ).map(document => document.id);
+  if (input.semanticRecall) output.selectedMemoryIDs = mergeSemanticMemories(
+    selectContextualMemories(input.semanticRecall.query, input.semanticRecall.candidates),
+    // The production contract: a failed or timed-out semantic stage contributes nothing.
+    input.semanticRecall.status === 'used' ? input.semanticRecall.hits : [],
+  ).map(memory => memory.id);
   if (input.intents) output.primaryIntentID = selectPrimaryIntent(
     input.intents.message, input.intents.threadId, input.intents.values, input.now,
   )?.id ?? null;

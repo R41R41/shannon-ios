@@ -27,18 +27,20 @@ import { SQLiteConversationRepository } from './sqliteConversationRepository.js'
 import { SQLiteStoreContext, secureDatabaseFiles } from './sqliteStoreContext.js';
 import { SQLiteStoreMigrator } from './sqliteMigrations.js';
 import { SQLiteMemorySearchRepository, type MemorySearchHit } from './sqliteMemorySearch.js';
+import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 export interface PersistedExperienceEvent { sequence: number; id: string; scopeKey: string; type: string; observedAt: string; payload: unknown; }
 export interface SQLiteShannonStoreOptions { path: string; now: CompanionClock; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number; }
 
-export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore {
+export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex {
   private readonly context: SQLiteStoreContext;
   private readonly companion: SQLiteCompanionRepository;
   private readonly conversations: SQLiteConversationRepository;
   private readonly jobs: SQLiteBackgroundJobRepository;
   private readonly memorySearch: SQLiteMemorySearchRepository;
+  private readonly embeddings: SQLiteMemoryEmbeddingIndex;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -47,6 +49,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
+    this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     secureDatabaseFiles(options.path);
   }
 
@@ -86,6 +89,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
   searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit); }
+  embeddingScopes() { return this.embeddings.embeddingScopes(); }
+  pendingEmbeddingSources(scopeKey: string, model: string, stateVersion: number, limit: number) { return this.embeddings.pendingEmbeddingSources(scopeKey, model, stateVersion, limit); }
+  storeEmbedding(source: PendingEmbeddingSource, model: string, vector: Float32Array, stateVersion: number, updatedAt: string) { this.embeddings.storeEmbedding(source, model, vector, stateVersion, updatedAt); }
+  withholdEmbedding(source: PendingEmbeddingSource, model: string, stateVersion: number, updatedAt: string) { this.embeddings.withholdEmbedding(source, model, stateVersion, updatedAt); }
+  embeddingCandidates(scopeKey: string, model: string, limit: number) { return this.embeddings.embeddingCandidates(scopeKey, model, limit); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
   ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }

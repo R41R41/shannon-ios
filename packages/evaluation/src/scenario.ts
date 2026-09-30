@@ -3,6 +3,7 @@ import type {
   CompanionStateSnapshot,
   MemorySearchDocument,
   RecallCandidate,
+  SemanticRecallHit,
   ShannonCognitiveFrame,
   ShannonIntent,
   ShannonMemoryQuery,
@@ -14,6 +15,7 @@ export type CognitiveScenarioCategory =
   | 'memory-visibility'
   | 'recall'
   | 'memory-search'
+  | 'semantic-fallback'
   | 'affect'
   | 'intent-selection'
   | 'prompt-projection';
@@ -36,6 +38,13 @@ export interface CognitiveEvaluationInput {
   affect?: { message: string };
   recall?: { query: ShannonMemoryQuery; candidates: readonly RecallCandidate[]; maximum?: number };
   memorySearch?: { query: string; documents: readonly MemorySearchDocument[]; limit?: number };
+  /** Deterministic recall followed by a semantic stage that succeeded, failed, or timed out. */
+  semanticRecall?: {
+    query: ShannonMemoryQuery;
+    candidates: readonly RecallCandidate[];
+    status: 'used' | 'failed' | 'timeout';
+    hits: readonly SemanticRecallHit[];
+  };
   intents?: { message: string; threadId: string; values: readonly ShannonIntent[] };
   prompt?:
     | { kind: 'state'; snapshot?: CompanionStateSnapshot; maximumCharacters?: number }
@@ -62,7 +71,7 @@ export interface CognitiveEvaluationOutput {
 }
 
 const categories = new Set<CognitiveScenarioCategory>([
-  'state-transition', 'memory-visibility', 'recall', 'memory-search', 'affect', 'intent-selection', 'prompt-projection',
+  'state-transition', 'memory-visibility', 'recall', 'memory-search', 'semantic-fallback', 'affect', 'intent-selection', 'prompt-projection',
 ]);
 export function isCognitiveEvaluationScenario(value: unknown): value is CognitiveEvaluationScenario {
   if (!value || typeof value !== 'object') return false;

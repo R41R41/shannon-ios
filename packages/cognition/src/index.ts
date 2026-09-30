@@ -49,6 +49,11 @@ export {
   type MemorySearchDocument,
   type MemorySearchPlan,
 } from './memorySearch.js';
+export {
+  mergeSemanticMemories,
+  needsSemanticMemoryRecall,
+  type SemanticRecallHit,
+} from './semanticRecall.js';
 export type {
   ContextualMemory,
   ShannonActionReceipt,

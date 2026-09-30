@@ -11,6 +11,8 @@ public final class ShannonConversationModel {
     public internal(set) var selectedThreadId: String?
     public internal(set) var state: CompanionStateDTO?
     public internal(set) var isSending = false
+    /// True while a pending text reply includes a memory search (FTS, and semantic recall when enabled).
+    public internal(set) var isSearchingMemory = false
     public internal(set) var isLoadingHistory = false
     public internal(set) var isLoadingThreads = false
     public internal(set) var errorMessage: String?

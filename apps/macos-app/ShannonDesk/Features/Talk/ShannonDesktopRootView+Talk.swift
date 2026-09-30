@@ -83,7 +83,7 @@ extension ShannonDesktopRootView {
                             HStack(spacing: 8) {
                                 ShannonAvatarView(expression: .thinking, size: 26)
                                 ProgressView().controlSize(.small)
-                                Text("考えています").foregroundStyle(.secondary)
+                                Text(conversation.isSearchingMemory ? "記憶を探しています" : "考えています").foregroundStyle(.secondary)
                             }
                         }
                     }

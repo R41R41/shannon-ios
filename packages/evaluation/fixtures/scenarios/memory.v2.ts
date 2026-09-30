@@ -23,7 +23,30 @@ const documents = [
   { id: 'thread:trip', text: '旅行計画 沖縄旅行に変更した', observedAt: '2026-09-23T00:00:00.000Z' },
 ] as const;
 
+const recallCandidates = [
+  { id: 'exp-photo', summary: '写真を整理する手順を決めた', observedAt: '2026-09-21T00:00:00.000Z' },
+  { id: 'exp-bread', summary: '朝食にパンを食べた', observedAt: '2026-09-22T00:00:00.000Z' },
+] as const;
+const semanticHits = [
+  { id: 'exp-trip', summary: '旅行計画は沖縄にする', observedAt: '2026-09-01T00:00:00.000Z', relevance: 0.9 },
+  { id: 'exp-weak', summary: '関係の薄い記録', observedAt: '2026-09-02T00:00:00.000Z', relevance: 0.2 },
+] as const;
+const photoQuery = { text: '写真の整理と旅の予定どうなったっけ', occurredAt: now } as const;
+
 export const memoryV2Scenarios: readonly CognitiveEvaluationScenario[] = [
+  scenario('semantic-used-appends-after-deterministic', 'semantic-fallback',
+    { semanticRecall: { query: photoQuery, candidates: recallCandidates, status: 'used', hits: semanticHits } },
+    [{ type: 'selected-memory-ids', value: ['exp-photo', 'exp-trip'] }]),
+  scenario('semantic-failure-returns-deterministic-only', 'semantic-fallback',
+    { semanticRecall: { query: photoQuery, candidates: recallCandidates, status: 'failed', hits: semanticHits } },
+    [{ type: 'selected-memory-ids', value: ['exp-photo'] }]),
+  scenario('semantic-timeout-returns-deterministic-only', 'semantic-fallback',
+    { semanticRecall: { query: photoQuery, candidates: recallCandidates, status: 'timeout', hits: semanticHits } },
+    [{ type: 'selected-memory-ids', value: ['exp-photo'] }]),
+  scenario('semantic-cannot-displace-deterministic', 'semantic-fallback',
+    { semanticRecall: { query: photoQuery, candidates: recallCandidates, status: 'used',
+      hits: [{ id: 'exp-photo', summary: '別の要約で上書きを試みる', observedAt: now, relevance: 1 }] } },
+    [{ type: 'selected-memory-ids', value: ['exp-photo'] }]),
   scenario('memory-search-long-japanese-term', 'memory-search',
     { memorySearch: { query: '音声待機文ってどう決めたっけ', documents } },
     [{ type: 'selected-memory-ids', value: ['exp-voice'] }]),

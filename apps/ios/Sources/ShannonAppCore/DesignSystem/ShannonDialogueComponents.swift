@@ -97,6 +97,7 @@ struct ShannonRichMarkdownText: View {
 
 struct ShannonTypingIndicator: View {
     let expression: ShannonExpressionDTO
+    var isSearchingMemory = false
 
     @Environment(\.colorScheme) var colorScheme
 
@@ -109,7 +110,7 @@ struct ShannonTypingIndicator: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(palette.action)
-                Text("考えている…")
+                Text(isSearchingMemory ? "記憶を探しています…" : "考えている…")
                     .font(.callout)
                     .foregroundStyle(palette.textSecondary)
             }
@@ -119,7 +120,7 @@ struct ShannonTypingIndicator: View {
             Spacer()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("シャノンが考えています")
+        .accessibilityLabel(isSearchingMemory ? "シャノンが記憶を探しています" : "シャノンが考えています")
     }
 }
 

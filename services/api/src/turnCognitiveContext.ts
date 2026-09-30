@@ -96,11 +96,38 @@ export function prepareTurnCognitiveContext(
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
-      // KnowledgeStore projections may not yet contain the commitment extension.
-      buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200 }),
-    ].join('\n\n'),
+    prompt: turnPrompt(snapshot, situation, memories, frame),
   });
+}
+
+/** Rebuilds the read-only turn slice after a later recall stage added candidates. */
+export function withRecalledMemories(
+  context: TurnCognitiveContext,
+  snapshot: CompanionStateSnapshot,
+  memories: readonly ContextualMemory[],
+  supplementalPrompt = '',
+): TurnCognitiveContext {
+  const frame: ShannonCognitiveFrame = Object.freeze({
+    ...context.frame, recalledMemoryIDs: Object.freeze(memories.map(memory => memory.id)),
+  });
+  return Object.freeze({
+    situation: context.situation,
+    memories: Object.freeze([...memories]),
+    frame,
+    prompt: [turnPrompt(snapshot, context.situation, memories, frame), supplementalPrompt].filter(Boolean).join('\n\n'),
+  });
+}
+
+function turnPrompt(
+  snapshot: CompanionStateSnapshot,
+  situation: ShannonSituationSnapshot,
+  memories: readonly ContextualMemory[],
+  frame: ShannonCognitiveFrame,
+): string {
+  return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
+    // KnowledgeStore projections may not yet contain the commitment extension.
+    buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200 }),
+  ].join('\n\n');
 }
 
 /**

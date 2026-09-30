@@ -1,4 +1,5 @@
-export type LlmUsageLane = 'chat' | 'sleep' | 'voice';
+/** `memory` is response-path recall; `memory_background` shares the monthly background budget with `sleep`. */
+export type LlmUsageLane = 'chat' | 'sleep' | 'voice' | 'memory' | 'memory_background';
 
 export interface LlmUsageEvent {
   scopeKey: string;
@@ -85,6 +86,8 @@ export function configuredBackgroundBudgetUsd(
 
 function modelPrices(model: string): { input: number; output: number } {
   if (model.startsWith('gpt-5.6-luna')) return { input: 0.2, output: 1.2 };
+  if (model.startsWith('text-embedding-3-small')) return { input: 0.02, output: 0 };
+  if (model.startsWith('text-embedding-3-large')) return { input: 0.13, output: 0 };
   if (model.startsWith('gpt-5.6-terra')) return { input: 2, output: 12 };
   if (model.startsWith('gpt-5.6-sol')) return { input: 4, output: 20 };
   // Fail-safe estimate for unknown future models; deliberately not optimistic.

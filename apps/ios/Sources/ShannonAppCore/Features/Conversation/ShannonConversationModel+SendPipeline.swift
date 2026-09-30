@@ -12,6 +12,8 @@ extension ShannonConversationModel {
     ) async -> String? {
         errorMessage = nil
         isSending = true
+        isSearchingMemory = ShannonMemoryRecallCue.matches(text)
+        defer { isSearchingMemory = false }
         let titleRevisionsAtSend = titleEditRevisions
 
         do {

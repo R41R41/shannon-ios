@@ -64,7 +64,7 @@ extension ShannonConversationView {
                     }
 
                     if model.isSending {
-                        ShannonTypingIndicator(expression: model.currentExpression)
+                        ShannonTypingIndicator(expression: model.currentExpression, isSearchingMemory: model.isSearchingMemory)
                             .id("shannon-is-typing")
                     }
 

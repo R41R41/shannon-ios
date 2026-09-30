@@ -386,7 +386,7 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 16 });
     database.close();
   });
 
@@ -537,7 +537,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 16 });
     expect(database.prepare("PRAGMA table_info('conversation_threads')").all())
       .toContainEqual(expect.objectContaining({ name: 'summary' }));
     database.close();
@@ -567,7 +567,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 16 });
     expect(database.prepare("PRAGMA table_info('realtime_voice_session_reservations')").all())
       .toContainEqual(expect.objectContaining({ name: 'reserved_seconds' }));
     database.close();
