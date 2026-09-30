@@ -9,7 +9,10 @@ export function createLiveVoiceStreamRoute(
   kernel: ShannonApiKernel,
   consumeAllowance: ConsumeAllowance,
 ) {
-  const activeScopes = new Set<string>();
+  // A disconnected caller must not hold the owner's next turn while an
+  // upstream model call is still unwinding. Tokens keep an older request's
+  // finally block from releasing a newer request's lease.
+  const activeScopes = new Map<string, symbol>();
 
   return async function handleLiveVoiceStream(
     request: IncomingMessage,
@@ -25,9 +28,17 @@ export function createLiveVoiceStreamRoute(
       return sendJson(response, 429, { error: 'BUSY', message: 'いま返答を考えています。' });
     }
 
-    activeScopes.add(principal.scopeKey);
+    const scopeKey = principal.scopeKey;
+    const lease = Symbol('live-voice-turn');
+    activeScopes.set(scopeKey, lease);
+    const release = () => {
+      if (activeScopes.get(scopeKey) === lease) activeScopes.delete(scopeKey);
+    };
     const controller = new AbortController();
-    const abort = () => controller.abort();
+    const abort = () => {
+      controller.abort();
+      release();
+    };
     request.once('aborted', abort);
     response.once('close', abort);
     const segmenter = new SpokenSentenceSegmenter();
@@ -43,6 +54,7 @@ export function createLiveVoiceStreamRoute(
       }, {
         signal: controller.signal,
         onPlan: async plan => {
+          if (controller.signal.aborted) return;
           const firstPlan = !receivedPlan;
           receivedPlan = true;
           voicePlan = plan;
@@ -53,6 +65,7 @@ export function createLiveVoiceStreamRoute(
           }
         },
         onTextDelta: async delta => {
+          if (controller.signal.aborted) return;
           receivedDelta = true;
           for (const segment of segmenter.append(delta)) {
             startStream(response);
@@ -60,6 +73,7 @@ export function createLiveVoiceStreamRoute(
           }
         },
       });
+      if (controller.signal.aborted) return;
 
       if (apiResponse.status < 200 || apiResponse.status >= 300) {
         if (!response.headersSent) return sendJson(response, apiResponse.status, apiResponse.body);
@@ -96,7 +110,7 @@ export function createLiveVoiceStreamRoute(
     } finally {
       request.off('aborted', abort);
       response.off('close', abort);
-      activeScopes.delete(principal.scopeKey);
+      release();
     }
   };
 }
