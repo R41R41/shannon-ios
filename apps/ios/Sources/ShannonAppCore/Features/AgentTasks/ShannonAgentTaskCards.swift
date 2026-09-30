@@ -34,15 +34,13 @@ struct ShannonAgentTaskCardView: View {
 
             switch task.status {
             case .proposed:
-                HStack(spacing: ShannonSpacing.small) {
-                    Button("設定して始める", action: open)
+                ShannonButtonRow {
+                    Button(action: open) { ShannonButtonLabel("設定して始める") }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                    Button("今はやめる", action: cancel)
+                    Button(action: cancel) { ShannonButtonLabel("今はやめる") }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .frame(maxWidth: .infinity)
                 }
             case .cancelled:
                 EmptyView()

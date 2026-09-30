@@ -25,6 +25,25 @@ public enum ShannonAgentApprovalKind: String, Codable, Equatable, Sendable {
     }
 }
 
+/// Which approval choices use hold-to-confirm. Frequent one-off command and file
+/// approvals stay a single tap; widening scope (for the whole task) or granting
+/// external access or permissions needs a hold, or a tap followed by confirmation.
+/// Declining is always a single tap.
+public enum ShannonAgentApprovalScope: Equatable, Sendable {
+    case once
+    case session
+}
+
+extension ShannonAgentApprovalKind {
+    public func requiresHoldToConfirm(_ scope: ShannonAgentApprovalScope) -> Bool {
+        switch (self, scope) {
+        case (_, .session): true
+        case (.network, .once), (.permission, .once): true
+        case (.command, .once), (.fileChange, .once): false
+        }
+    }
+}
+
 public struct ShannonAgentApproval: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let externalRequestID: String

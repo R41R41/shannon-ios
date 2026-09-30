@@ -23,34 +23,59 @@ struct AgentTaskApprovalCard: View {
                     .foregroundStyle(palette.textSecondary)
             }
             VStack(spacing: ShannonSpacing.small) {
-                Button(action: acceptOnce) {
+                if isSubmitting {
                     HStack(spacing: ShannonSpacing.small) {
-                        if isSubmitting { ProgressView().controlSize(.small).tint(palette.onAction) }
-                        Text(isSubmitting ? "送信中…" : "今回だけ許可")
+                        ProgressView().controlSize(.small)
+                        Text("送信中…").lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                } else if approval.kind.requiresHoldToConfirm(.once) {
+                    ShannonHoldToConfirmButton(
+                        title: "今回だけ許可",
+                        prominence: .prominent,
+                        confirmationTitle: "今回だけ\(approval.kind.japaneseName)を許可しますか？",
+                        confirmationMessage: approval.title,
+                        confirmActionTitle: "今回だけ許可",
+                        action: acceptOnce
+                    )
+                } else {
+                    Button(action: acceptOnce) { ShannonButtonLabel("今回だけ許可") }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(isSubmitting)
-                HStack(spacing: ShannonSpacing.small) {
-                    Button("この作業中", action: acceptForSession)
+                ShannonButtonRow {
+                    ShannonHoldToConfirmButton(
+                        title: "この作業中",
+                        prominence: .standard,
+                        confirmationTitle: "この作業が終わるまで\(approval.kind.japaneseName)を許可しますか？",
+                        confirmationMessage: "この作業が終わるまで有効です。",
+                        confirmActionTitle: "この作業中は許可",
+                        action: acceptForSession
+                    )
+                    Button(action: decline) { ShannonButtonLabel("許可しない") }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                        .disabled(isSubmitting)
-                    Button("許可しない", action: decline)
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                        .disabled(isSubmitting)
                 }
+                Text(holdHint)
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .disabled(isSubmitting)
         }
         .padding(ShannonSpacing.large)
         .background(palette.elevatedSurface, in: RoundedRectangle(cornerRadius: ShannonShape.large))
         .overlay { RoundedRectangle(cornerRadius: ShannonShape.large).stroke(palette.attention.opacity(0.35)) }
         .accessibilityElement(children: .contain)
+    }
+}
+
+extension AgentTaskApprovalCard {
+    var holdHint: String {
+        let target = approval.kind.requiresHoldToConfirm(.once) ? "許可ボタン" : "「この作業中」"
+        return "\(target)は長押しで決定します。タップすると確認してから決定します。"
     }
 }
 

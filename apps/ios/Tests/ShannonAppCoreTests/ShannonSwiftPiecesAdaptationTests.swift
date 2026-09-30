@@ -139,3 +139,23 @@ final class ShannonPromptSuggestionsTests: XCTestCase {
         XCTAssertFalse(suggestions.contains { $0.text.contains("料理") })
     }
 }
+
+final class ShannonHoldToConfirmPolicyTests: XCTestCase {
+    func testFrequentOneOffApprovalsStayTapWhileScopeWideningNeedsHold() {
+        XCTAssertFalse(ShannonAgentApprovalKind.command.requiresHoldToConfirm(.once))
+        XCTAssertFalse(ShannonAgentApprovalKind.fileChange.requiresHoldToConfirm(.once))
+        XCTAssertTrue(ShannonAgentApprovalKind.network.requiresHoldToConfirm(.once))
+        XCTAssertTrue(ShannonAgentApprovalKind.permission.requiresHoldToConfirm(.once))
+        for kind in [ShannonAgentApprovalKind.command, .fileChange, .network, .permission] {
+            XCTAssertTrue(kind.requiresHoldToConfirm(.session))
+        }
+    }
+
+    func testHoldProgressIsBoundedAndIdleWithoutPress() {
+        let start = Date(timeIntervalSince1970: 10)
+        XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: nil, now: start), 0)
+        XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: start, now: start.addingTimeInterval(0.3)), 0.5, accuracy: 0.001)
+        XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: start, now: start.addingTimeInterval(5)), 1)
+        XCTAssertEqual(ShannonHoldToConfirm.progress(startedAt: start, now: start.addingTimeInterval(-1)), 0)
+    }
+}

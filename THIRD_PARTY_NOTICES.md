@@ -47,6 +47,7 @@ names the component it derives from:
 | `lists/StatusTimeline` | `apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskPlanTimelineView.swift`; `apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopPlanTimeline.swift` |
 | `sheets/PermissionSheet` | `apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonPermissionPrimer.swift` |
 | `ai/PromptChips` | `apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPromptSuggestions.swift` |
+| `controls/HoldToConfirm` | `apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift` |
 
 The components are used only as part of the Shannon application. The Commons Clause
 condition below prohibits selling, sublicensing, or redistributing the components themselves,

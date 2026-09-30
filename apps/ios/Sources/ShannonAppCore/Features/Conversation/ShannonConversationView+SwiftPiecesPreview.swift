@@ -25,6 +25,7 @@ extension ShannonConversationView {
                 model.isSending = true
             }
         }
+        applyApprovalPreviewState(arguments)
         if arguments.contains("-ShannonPreviewPlanTimeline"),
            var task = model.agentTasks.first(where: { $0.status == .running }) {
             task.plan = task.plan.enumerated().map { index, item in
@@ -34,6 +35,27 @@ extension ShannonConversationView {
             selectedPage = .work
             selectedAgentTaskID = task.id
         }
+    }
+
+    /// Opens a synthetic approval with the plan and history cleared so the card is on screen.
+    func applyApprovalPreviewState(_ arguments: [String]) {
+        guard arguments.contains("-ShannonPreviewApproval") || arguments.contains("-ShannonPreviewApprovalCommand") else {
+            return
+        }
+        var task = ShannonAgentTaskFixtures.waitingApproval(threadID: model.selectedThreadId ?? "design-preview")
+        task.title = "接続テストを実行"
+        task.plan = []
+        task.timeline = []
+        if arguments.contains("-ShannonPreviewApprovalCommand"), var approval = task.pendingApproval {
+            approval.kind = .command
+            approval.title = "テストを実行していい？"
+            approval.reason = "変更したファイルの単体テストだけを実行します。"
+            approval.resource = "swift test --filter ShannonCodeSyntaxTests"
+            task.pendingApproval = approval
+        }
+        model.upsertAgentTask(task)
+        selectedPage = .work
+        selectedAgentTaskID = task.id
     }
 
     static let previewCodeReply = """
