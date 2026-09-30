@@ -229,6 +229,8 @@ Runtime configuration uses all three of `SHANNON_VOYAGER_INTEGRATION_URL`, `SHAN
 
 Shannon reads only a bounded, purpose-built Aether context projection. Proposed changes are written to Aether's proposal inbox for review; Shannon does not directly rewrite Aether's canonical data.
 
+The section-level search contract `syzygy.aether-knowledge-search.v1` (Syzygy hub `contracts/knowledge/`) has a read-only consumer adapter in `aetherKnowledgeSearch.ts`, verified against the shared fixtures in `services/api/tests/fixtures/aether-knowledge-search-v1/`. Only a fixture-backed fake exists; Aether's provider is not implemented and nothing on the response path calls it yet. Shannon persists only document ID, version, section ID, and decision ID from a hit, never the excerpt.
+
 Text and voice use the same bounded read projection. A supported explicit owner voice command can enqueue a note proposal. A durable request receipt prevents a retry from recreating the inbox file after Aether has consumed it; an ambiguous interrupted publication fails closed and asks the user to inspect the inbox. No consumer-side contract or canonical note format is changed.
 
 ## World and initiative

@@ -1,0 +1,21 @@
+{
+  "contract": "syzygy.aether-knowledge-search.v1",
+  "kind": "response",
+  "access": "read-only",
+  "generatedAt": "2026-09-30T12:00:00Z",
+  "results": [
+    {
+      "documentId": "doc-fixture-voice-policy",
+      "version": 3,
+      "sectionId": "sec-waiting-phrase",
+      "resourceType": "decision",
+      "decisionId": "dec-fixture-001",
+      "title": "合成：音声応答の方針",
+      "headingPath": ["合成：音声応答の方針", "待機文"],
+      "excerpt": "合成データ。三秒を超える見込みのターンでは、先に短い待機文を流す。",
+      "score": 0.82,
+      "updatedAt": "2026-09-29T08:30:00Z",
+      "href": "aether://documents/doc-fixture-voice-policy#sec-waiting-phrase"
+    }
+  ]
+}
