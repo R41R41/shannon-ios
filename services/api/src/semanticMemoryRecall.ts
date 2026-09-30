@@ -5,7 +5,7 @@ import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandid
 
 export interface SemanticMemoryConfig {
   enabled: boolean;
-  /** Upper bound on rewrite + embed + rerank calls in one turn. */
+  /** Upper bound on model calls in one turn: rewrite, embed, rerank (at most 3 here) plus knowledge-tree navigation. */
   maximumModelCallsPerTurn: number;
   timeoutMilliseconds: number;
   scanLimit: number;
@@ -17,7 +17,7 @@ export interface SemanticMemoryConfig {
 
 export const DEFAULT_SEMANTIC_MEMORY_CONFIG: SemanticMemoryConfig = Object.freeze({
   enabled: true,
-  maximumModelCallsPerTurn: 3,
+  maximumModelCallsPerTurn: 4,
   timeoutMilliseconds: 4_000,
   scanLimit: 5_000,
   rerankCandidates: 12,
@@ -59,6 +59,10 @@ export class SemanticMemoryRecall {
     private readonly nowMilliseconds: () => number = () => performance.now(),
   ) {}
 
+  get maximumModelCallsPerTurn(): number { return this.config.maximumModelCallsPerTurn; }
+  get timeoutMilliseconds(): number { return this.config.timeoutMilliseconds; }
+  get modelGateway(): MemoryModelGateway | null { return this.gateway; }
+
   get available(): boolean {
     return this.config.enabled && Boolean(this.gateway && this.index) && this.config.maximumModelCallsPerTurn >= 1;
   }
@@ -74,7 +78,7 @@ export class SemanticMemoryRecall {
     const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
     const gateway = this.gateway;
     try {
-      const budget = this.config.maximumModelCallsPerTurn;
+      const budget = Math.min(3, this.config.maximumModelCallsPerTurn);
       const rewrites = budget >= 3 ? (modelCalls += 1, await gateway.rewriteQuery(input.scopeKey, input.query, signal)) : [];
       signal.throwIfAborted();
       const queries = [input.query, ...rewrites].slice(0, 4);
@@ -129,7 +133,7 @@ export function configuredSemanticMemoryConfig(
   return Object.freeze({
     ...DEFAULT_SEMANTIC_MEMORY_CONFIG,
     enabled: environment.SHANNON_MEMORY_SEMANTIC_ENABLED?.trim() !== 'false',
-    maximumModelCallsPerTurn: integer(environment.SHANNON_MEMORY_MAX_MODEL_CALLS_PER_TURN, 3, 0, 3),
+    maximumModelCallsPerTurn: integer(environment.SHANNON_MEMORY_MAX_MODEL_CALLS_PER_TURN, 4, 0, 4),
     timeoutMilliseconds: integer(environment.SHANNON_MEMORY_SEMANTIC_TIMEOUT_MS, 4_000, 200, 15_000),
     scanLimit: integer(environment.SHANNON_MEMORY_SEMANTIC_SCAN_LIMIT, 5_000, 50, 50_000),
   });

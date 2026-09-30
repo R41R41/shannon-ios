@@ -349,6 +349,7 @@ export class ShannonApiKernel {
         { id: randomUUID(), text: message }, occurredAt, {
           stateStore: this.stateStore, conversationStore: this.conversationStore,
           organizeStore: this.organizeStore, aetherProposals: this.aetherProposals, agentTasks: this.agentTasks,
+          cognitiveIntents: this.cognitiveIntents, memoryRecall: this.memoryRecall,
         });
       if (orchestrationState && explicitCommand?.receipt) {
         orchestrationState = this.conversationOrchestration.save(

@@ -54,6 +54,26 @@ export {
   needsSemanticMemoryRecall,
   type SemanticRecallHit,
 } from './semanticRecall.js';
+export {
+  SHANNON_KNOWLEDGE_LIMITS,
+  buildShannonKnowledgePrompt,
+  flattenKnowledgeHeadings,
+  isForgetCitedMemoriesCommand,
+  isMemoryInquiry,
+  knowledgeExcerpt,
+  normalizeKnowledgeDraft,
+  parseKnowledgeHeadingTree,
+  selectKnowledgeSections,
+  selectRelevantKnowledge,
+  usableShannonKnowledge,
+  type AetherDecisionReference,
+  type KnowledgeDraft,
+  type KnowledgeDraftRejection,
+  type KnowledgeHeadingNode,
+  type KnowledgePromptItem,
+  type ShannonKnowledgeDocument,
+  type ShannonKnowledgeStatus,
+} from './shannonKnowledge.js';
 export type {
   ContextualMemory,
   ShannonActionReceipt,

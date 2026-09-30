@@ -6,6 +6,9 @@ import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent } from './conversationReference.js';
 import { ShannonMemoryService } from './memoryService.js';
+import { forgetCitedMemories } from './memoryForgetCommand.js';
+import type { CognitiveIntentStore } from './cognitiveIntent.js';
+import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 
 export interface UserUtterance {
   id: string; text: string;
@@ -16,6 +19,7 @@ export interface ConversationCommandDependencies {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   organizeStore?: OrganizeStore; aetherProposals?: AetherProposalStore;
   agentTasks?: AgentTaskStore;
+  cognitiveIntents?: CognitiveIntentStore; memoryRecall?: TurnMemoryRecall | null;
 }
 
 /** Only the actual user utterance can authorize a proposal. Tool-model
@@ -70,6 +74,8 @@ export function executeConversationCommand(
       receipt: { id: resolved.sourceExperienceId, capability: 'memory.control', status: 'completed',
         summary: '参照元の会話の記憶を固定', occurredAt: at } };
   }
+  const forgotten = forgetCitedMemories(scopeKey, threadId, text, at, dependencies);
+  if (forgotten) return forgotten;
   const memory = applyExplicitCommitmentCommand(dependencies.stateStore, dependencies.conversationStore, scopeKey, text, at);
   if (!memory) return null;
   if (!memory.startsWith('[Verified')) return { reply: memory };

@@ -27,6 +27,8 @@ import { SQLiteConversationRepository } from './sqliteConversationRepository.js'
 import { SQLiteStoreContext, secureDatabaseFiles } from './sqliteStoreContext.js';
 import { SQLiteStoreMigrator } from './sqliteMigrations.js';
 import { SQLiteMemorySearchRepository, type MemorySearchHit } from './sqliteMemorySearch.js';
+import { SQLiteShannonKnowledgeStore, type ShannonKnowledgeStore } from './sqliteShannonKnowledge.js';
+import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
@@ -34,13 +36,14 @@ const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shann
 export interface PersistedExperienceEvent { sequence: number; id: string; scopeKey: string; type: string; observedAt: string; payload: unknown; }
 export interface SQLiteShannonStoreOptions { path: string; now: CompanionClock; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number; }
 
-export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex {
+export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
   private readonly context: SQLiteStoreContext;
   private readonly companion: SQLiteCompanionRepository;
   private readonly conversations: SQLiteConversationRepository;
   private readonly jobs: SQLiteBackgroundJobRepository;
   private readonly memorySearch: SQLiteMemorySearchRepository;
   private readonly embeddings: SQLiteMemoryEmbeddingIndex;
+  private readonly shannonKnowledge: SQLiteShannonKnowledgeStore;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -50,6 +53,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
+    this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
     secureDatabaseFiles(options.path);
   }
 
@@ -94,6 +98,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   storeEmbedding(source: PendingEmbeddingSource, model: string, vector: Float32Array, stateVersion: number, updatedAt: string) { this.embeddings.storeEmbedding(source, model, vector, stateVersion, updatedAt); }
   withholdEmbedding(source: PendingEmbeddingSource, model: string, stateVersion: number, updatedAt: string) { this.embeddings.withholdEmbedding(source, model, stateVersion, updatedAt); }
   embeddingCandidates(scopeKey: string, model: string, limit: number) { return this.embeddings.embeddingCandidates(scopeKey, model, limit); }
+  listShannonKnowledge(scopeKey: string, options?: { includeRetired?: boolean }) { return this.shannonKnowledge.listShannonKnowledge(scopeKey, options); }
+  createShannonKnowledge(scopeKey: string, draft: KnowledgeDraft, at: string, reason: string) { return this.shannonKnowledge.createShannonKnowledge(scopeKey, draft, at, reason); }
+  updateShannonKnowledge(scopeKey: string, id: string, expectedVersion: number, draft: KnowledgeDraft, at: string, reason: string) { return this.shannonKnowledge.updateShannonKnowledge(scopeKey, id, expectedVersion, draft, at, reason); }
+  retireShannonKnowledge(scopeKey: string, id: string, reason: string, at: string, evidence?: readonly string[]) { return this.shannonKnowledge.retireShannonKnowledge(scopeKey, id, reason, at, evidence); }
+  experienceObservedAt(scopeKey: string, ids: readonly string[]) { return this.shannonKnowledge.experienceObservedAt(scopeKey, ids); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
   ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }

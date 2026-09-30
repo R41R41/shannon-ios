@@ -106,9 +106,10 @@ export function withRecalledMemories(
   snapshot: CompanionStateSnapshot,
   memories: readonly ContextualMemory[],
   supplementalPrompt = '',
+  additionalRecalledIds: readonly string[] = [],
 ): TurnCognitiveContext {
   const frame: ShannonCognitiveFrame = Object.freeze({
-    ...context.frame, recalledMemoryIDs: Object.freeze(memories.map(memory => memory.id)),
+    ...context.frame, recalledMemoryIDs: Object.freeze([...new Set([...memories.map(memory => memory.id), ...additionalRecalledIds])]),
   });
   return Object.freeze({
     situation: context.situation,
@@ -145,7 +146,7 @@ function fullTextCandidates(
   const hits = conversationStore.searchMemory?.(input.scopeKey, input.message) ?? [];
   const threadSummariesAllowed = mayUseThreadSummary(snapshot);
   return hits.filter(hit => !known.has(hit.id) && (hit.kind === 'experience'
-    || (threadSummariesAllowed && hit.threadId !== input.threadId)))
+    || (hit.kind === 'thread' && threadSummariesAllowed && hit.threadId !== input.threadId)))
     .map(hit => ({
       id: hit.id,
       summary: hit.kind === 'thread' ? `[別の会話の要約] ${hit.summary}` : hit.summary,

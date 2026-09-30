@@ -1,3 +1,4 @@
+import { parseKnowledgeHeadingTree, type ShannonKnowledgeDocument } from '@shannon/cognition';
 import type { CognitiveEvaluationScenario } from '../../src/scenario.js';
 
 /**
@@ -33,7 +34,45 @@ const semanticHits = [
 ] as const;
 const photoQuery = { text: '写真の整理と旅の予定どうなったっけ', occurredAt: now } as const;
 
+function note(id: string, overrides: Partial<ShannonKnowledgeDocument> = {}): ShannonKnowledgeDocument {
+  const bodyMarkdown = '## 状況\n写真が多くて手が止まる。\n## 行動\nアルバム単位で小さく区切る。';
+  return {
+    id, title: '写真整理の進め方', bodyMarkdown, headings: parseKnowledgeHeadingTree(bodyMarkdown), status: 'hypothesis',
+    applicability: '写真整理の相談を受けたとき', sourceExperienceIds: ['exp-a'], aetherReferences: [],
+    createdAt: now, updatedAt: now, version: 1, ...overrides,
+  };
+}
+const photoAsk = '写真整理のコツある？';
+const draft = {
+  title: '写真整理の進め方', applicability: '写真整理の相談', bodyMarkdown: '## 行動\nアルバム単位で区切る。',
+  status: 'confirmed' as const, sourceExperienceIds: ['exp-a'],
+};
+
 export const memoryV2Scenarios: readonly CognitiveEvaluationScenario[] = [
+  scenario('knowledge-hypothesis-is-labelled-not-fact', 'knowledge-safety',
+    { knowledge: { query: photoAsk, documents: [note('k1')] } },
+    [{ type: 'selected-memory-ids', value: ['knowledge:k1'] }, { type: 'text-includes', value: '[仮説] 写真整理の進め方' },
+      { type: 'text-includes', value: 'ユーザーが確定した事実ではない' }]),
+  scenario('knowledge-ranks-below-user-and-aether', 'knowledge-safety',
+    { knowledge: { query: photoAsk, documents: [note('k1', { status: 'confirmed', sourceExperienceIds: ['exp-a', 'exp-b'] })] } },
+    [{ type: 'text-includes', value: "the user's explicit words in this conversation > Aether decisions > the user profile > these notes" },
+      { type: 'text-includes', value: 'follow the higher source' }]),
+  scenario('knowledge-forgotten-source-excluded', 'knowledge-safety',
+    { knowledge: { query: photoAsk, documents: [note('k1', { sourceExperienceIds: ['exp-a', 'exp-b'] })], forgottenExperienceIds: ['exp-b'] } },
+    [{ type: 'selected-memory-ids', value: [] }, { type: 'text-excludes', value: '写真整理の進め方' }]),
+  scenario('knowledge-retired-excluded', 'knowledge-safety',
+    { knowledge: { query: photoAsk, documents: [note('k1', { status: 'retired', retiredReason: '矛盾' })] } },
+    [{ type: 'selected-memory-ids', value: [] }]),
+  scenario('knowledge-stale-aether-reference-excluded', 'knowledge-safety',
+    { knowledge: { query: photoAsk, documents: [note('k1', { aetherReferences: [{ documentId: 'doc-a', version: 2 }] })],
+      currentAetherVersions: { 'doc-a': 3 } } },
+    [{ type: 'selected-memory-ids', value: [] }]),
+  scenario('knowledge-single-success-stays-hypothesis', 'knowledge-safety',
+    { knowledgeDraft: { draft, sources: { 'exp-a': '合成の発話' } } },
+    [{ type: 'text-includes', value: 'status:hypothesis' }]),
+  scenario('knowledge-without-source-rejected', 'knowledge-safety',
+    { knowledgeDraft: { draft: { ...draft, sourceExperienceIds: [] }, sources: { 'exp-a': '合成の発話' } } },
+    [{ type: 'text-includes', value: 'rejected:missing-source' }]),
   scenario('semantic-used-appends-after-deterministic', 'semantic-fallback',
     { semanticRecall: { query: photoQuery, candidates: recallCandidates, status: 'used', hits: semanticHits } },
     [{ type: 'selected-memory-ids', value: ['exp-photo', 'exp-trip'] }]),

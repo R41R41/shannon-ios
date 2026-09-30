@@ -282,9 +282,12 @@ async function completeLiveVoiceDelegation(
       participants: dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
-  const cognitiveContext = deterministicContext && semanticMemoryTurn && dependencies.memoryRecall
+  const complexTurn = decision.conversationClass === 'skill_complex';
+  const recalled = deterministicContext && dependencies.memoryRecall
+    && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured!, threadId,
-      memoryTurn: true, ...(observer?.signal ? { signal: observer.signal } : {}) }) : deterministicContext;
+      memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
+  const cognitiveContext = recalled ?? deterministicContext;
   const basePrompt = temporaryGuest
     ? [temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
     : [
@@ -309,7 +312,7 @@ async function completeLiveVoiceDelegation(
   const includeCognitiveContext = !temporaryGuest && selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
-    includeCognitiveContext ? cognitiveContext?.prompt : '',
+    includeCognitiveContext ? cognitiveContext?.prompt : complexTurn ? recalled?.knowledgePrompt : '',
     dailyMindPrompt,
     taskPrompt,
     capabilityPrompt,

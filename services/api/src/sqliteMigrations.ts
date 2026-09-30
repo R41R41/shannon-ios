@@ -7,8 +7,9 @@ import type { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
 import { migrateMemorySearchIndex } from './sqliteMemorySearch.js';
 import { migrateMemoryEmbeddings } from './sqliteMemoryEmbeddings.js';
+import { migrateShannonKnowledge } from './sqliteShannonKnowledge.js';
 
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
 
 export class SQLiteStoreMigrator {
@@ -126,6 +127,7 @@ export class SQLiteStoreMigrator {
       if (previousVersion < 14) this.repairMemoryProjections();
       if (previousVersion < 15) migrateMemorySearchIndex(this.context.database);
       if (previousVersion < 16) migrateMemoryEmbeddings(this.context.database);
+      if (previousVersion < 17) migrateShannonKnowledge(this.context.database);
       this.context.database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     });
   }

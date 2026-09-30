@@ -11,6 +11,9 @@ export interface MemoryModelGateway {
   /** Scores each candidate ID against the query; IDs outside the input are ignored. */
   rerank(scopeKey: string, query: string, candidates: readonly { id: string; text: string }[], signal?: AbortSignal):
     Promise<readonly { id: string; relevance: number }[]>;
+  /** PageIndex-style navigation: choose the heading nodes of one long document worth reading. */
+  selectSections(scopeKey: string, query: string, outline: readonly { id: string; path: string; preview: string }[], signal?: AbortSignal):
+    Promise<readonly string[]>;
 }
 
 export interface OpenAIMemoryModelOptions {
@@ -101,6 +104,20 @@ export class OpenAIMemoryModelGateway implements MemoryModelGateway {
     });
   }
 
+  async selectSections(scopeKey: string, query: string, outline: readonly { id: string; path: string; preview: string }[], signal?: AbortSignal) {
+    if (!outline.length) return [];
+    const output = await this.structured(scopeKey, 'shannon_knowledge_navigation', [
+      'You navigate the heading tree of one of Shannon\'s long internal notes. Pick at most three node ids whose sections are needed to help with the owner\'s current message.',
+      'Prefer the most specific heading that contains the needed procedure or lesson. Return an empty list if none is needed.',
+      untrusted,
+    ].join('\n'), { query: query.slice(0, 2_000), outline: outline.slice(0, 80).map(node => ({ id: node.id, path: node.path.slice(0, 200), preview: node.preview.slice(0, 160) })) }, {
+      type: 'object', additionalProperties: false, required: ['nodeIds'],
+      properties: { nodeIds: { type: 'array', items: { type: 'string' } } },
+    }, signal) as { nodeIds?: unknown };
+    const known = new Set(outline.map(node => node.id));
+    return Array.isArray(output.nodeIds) ? output.nodeIds.filter((id): id is string => typeof id === 'string' && known.has(id)).slice(0, 3) : [];
+  }
+
   private async structured(scopeKey: string, name: string, instructions: string, input: unknown, schema: unknown, signal?: AbortSignal): Promise<unknown> {
     const response = await this.fetcher(this.options.responsesEndpoint ?? 'https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -139,7 +156,8 @@ export class DeterministicMemoryModelGateway implements MemoryModelGateway {
 
   constructor(private readonly behavior: {
     rewrites?: Readonly<Record<string, readonly string[]>>;
-    fail?: 'embed' | 'rewrite' | 'rerank';
+    sections?: readonly string[];
+    fail?: 'embed' | 'rewrite' | 'rerank' | 'navigate';
     delayMilliseconds?: number;
   } = {}) {}
 
@@ -168,7 +186,12 @@ export class DeterministicMemoryModelGateway implements MemoryModelGateway {
     });
   }
 
-  private async step(name: 'embed' | 'rewrite' | 'rerank', signal?: AbortSignal): Promise<void> {
+  async selectSections(_scopeKey: string, _query: string, outline: readonly { id: string }[], signal?: AbortSignal) {
+    await this.step('navigate', signal);
+    return (this.behavior.sections ?? outline.slice(0, 1).map(node => node.id)).filter(id => outline.some(node => node.id === id));
+  }
+
+  private async step(name: 'embed' | 'rewrite' | 'rerank' | 'navigate', signal?: AbortSignal): Promise<void> {
     this.calls.push(name);
     if (this.behavior.delayMilliseconds) {
       await new Promise<void>((resolve, reject) => {

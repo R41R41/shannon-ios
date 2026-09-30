@@ -17,6 +17,8 @@ export interface BackgroundWorkerOptions {
   now?: () => Date;
   reportError?: (code: string) => void;
   minimumSleepMessages?: number;
+  /** Shannon knowledge building piggybacks on each completed sleep batch; its failure never fails the batch. */
+  knowledgeConsolidator?: { consolidate(scopeKey: string, startAt: string, endAt: string): Promise<unknown> };
 }
 
 export class ShannonBackgroundWorker {
@@ -28,6 +30,7 @@ export class ShannonBackgroundWorker {
   private readonly now: () => Date;
   private readonly reportError: (code: string) => void;
   private readonly minimumSleepMessages: number;
+  private readonly knowledgeConsolidator: BackgroundWorkerOptions['knowledgeConsolidator'];
   private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
 
@@ -46,6 +49,7 @@ export class ShannonBackgroundWorker {
     this.now = options.now ?? (() => new Date());
     this.reportError = options.reportError ?? (code => console.error('Shannon worker job failed', code));
     this.minimumSleepMessages = Math.max(1, Math.trunc(options.minimumSleepMessages ?? 3));
+    this.knowledgeConsolidator = options.knowledgeConsolidator;
   }
 
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
@@ -93,6 +97,11 @@ export class ShannonBackgroundWorker {
       { scopeKey: job.scopeKey, occurredAt: completedAt },
     );
     this.jobStore.applySleepOutcome(job, this.workerId, completedAt, outcome);
+    try {
+      await this.knowledgeConsolidator?.consolidate(job.scopeKey, job.payload.startAt, job.payload.endAt);
+    } catch (error) {
+      this.reportError(`KNOWLEDGE_CONSOLIDATION_${safeErrorCode(error)}`);
+    }
   }
 
   private enqueueDueSleep(now: Date): void {

@@ -8,7 +8,7 @@ import {
 
 /** One searchable source row. Thread hits are prefixed so they never collide with experience IDs. */
 export interface MemorySearchHit {
-  kind: 'experience' | 'thread';
+  kind: 'experience' | 'thread' | 'knowledge';
   id: string;
   sourceId: string;
   threadId?: string;
@@ -127,7 +127,7 @@ function supportsTrigramFts(database: DatabaseSync): boolean {
   }
 }
 
-interface DocumentRow { source_kind: 'experience' | 'thread'; source_id: string; thread_id: string | null; observed_at: string; body: string; }
+interface DocumentRow { source_kind: 'experience' | 'thread' | 'knowledge'; source_id: string; thread_id: string | null; observed_at: string; body: string; }
 
 /**
  * Read-only, deterministic search used by the response path. It performs no
@@ -172,7 +172,7 @@ export class SQLiteMemorySearchRepository implements MemorySearchSource {
       .filter(row => !(row.thread_id && archived.has(row.thread_id)))
       .map(row => Object.freeze({
         kind: row.source_kind,
-        id: row.source_kind === 'thread' ? `thread:${row.source_id}` : row.source_id,
+        id: row.source_kind === 'experience' ? row.source_id : `${row.source_kind}:${row.source_id}`,
         sourceId: row.source_id,
         ...(row.thread_id ? { threadId: row.thread_id } : {}),
         summary: row.body,

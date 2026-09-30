@@ -211,7 +211,7 @@ export class SQLiteMemoryEmbeddingIndex implements MemoryEmbeddingIndex {
     `).all(scopeKey, model, Math.max(1, Math.floor(limit))) as unknown as CandidateRow[];
     return Object.freeze(rows.map(row => Object.freeze({
       kind: row.source_kind,
-      id: row.source_kind === 'thread' ? `thread:${row.source_id}` : row.source_id,
+      id: row.source_kind === 'experience' ? row.source_id : `${row.source_kind}:${row.source_id}`,
       sourceId: row.source_id,
       ...(row.thread_id ? { threadId: row.thread_id } : {}),
       summary: row.body,
