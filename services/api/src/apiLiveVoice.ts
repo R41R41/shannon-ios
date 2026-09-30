@@ -90,9 +90,7 @@ export function voiceConversationInstructions(
     ]),
   ].join('\n');
 }
-
 export type VoiceParticipantMode = 'owner' | 'guest';
-
 const temporaryGuestVoiceInstructions = [
   '[Temporary guest voice session]',
   '- More than one person may be speaking. Do not identify, name, or distinguish speakers from their voices.',
@@ -100,7 +98,6 @@ const temporaryGuestVoiceInstructions = [
   '- Do not refer to or infer the owner\'s memories, prior conversations, tasks, relationships, or private state.',
   '- Do not claim that this conversation or any participant detail will be remembered after the session ends.',
 ].join('\n');
-
 interface VoiceSessionDependencies {
   stateStore: CompanionStateStore;
   conversationStore: ConversationStore;
@@ -236,6 +233,7 @@ async function completeLiveVoiceDelegation(
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
+  observer?.signal?.throwIfAborted();
   const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance);
   const confirmedImplementationRequest = temporaryGuest || uncertainTranscript ? null
     : confirmedVoiceImplementationRequest(transcript, routingHistory,
@@ -288,6 +286,7 @@ async function completeLiveVoiceDelegation(
   let expressiveEmotion = provisionalExpressiveEmotion;
   let voicePlan = voicePlanResponse(decision, expressiveEmotion);
   await observer?.onPlan(voicePlan);
+  observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
     return {
       status: 200,
@@ -351,6 +350,7 @@ async function completeLiveVoiceDelegation(
       aetherNotes: selectedSkills.has('aether_notes'),
       voyagerTasks: selectedSkills.has('voyager_tasks'),
     });
+  observer?.signal?.throwIfAborted();
   const includeCognitiveContext = !temporaryGuest && selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
@@ -424,6 +424,7 @@ async function completeLiveVoiceDelegation(
     : dependencies.chatModel.generateVoice
       ? await dependencies.chatModel.generateVoice(modelRequest)
       : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
+  observer?.signal?.throwIfAborted();
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
   const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? {
