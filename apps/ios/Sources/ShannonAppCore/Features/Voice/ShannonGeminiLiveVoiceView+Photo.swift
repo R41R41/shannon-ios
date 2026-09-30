@@ -5,70 +5,80 @@ import UIKit
 
 extension ShannonGeminiLiveVoiceView {
     func clearPendingPhoto() {
-        pendingCameraImage = nil
-        pendingCameraData = nil
-        cameraErrorMessage = nil
+        workspace.pendingCameraImage = nil
+        workspace.pendingCameraData = nil
+        workspace.cameraErrorMessage = nil
     }
 
     func choosePhotoAgain() {
         clearPendingPhoto()
-        if pendingPhotoFromLibrary { showsPhotoLibrary = true } else { presentCamera() }
+        if workspace.pendingPhotoFromLibrary { workspace.showsPhotoLibrary = true } else { presentCamera() }
     }
 
     @MainActor
     func receiveCameraImage(_ image: UIImage) {
-        showsCamera = false
+        workspace.showsCamera = false
+        guard model.participantMode.allowsCameraSharing, workspace.threadContext != nil else { return }
         guard let snapshot = image.shannonCameraSnapshot() else {
-            cameraErrorMessage = "写真を共有用に準備できませんでした。撮り直してください。"
+            workspace.cameraErrorMessage = "写真を共有用に準備できませんでした。撮り直してください。"
             return
         }
-        pendingCameraImage = snapshot.preview
-        pendingCameraData = snapshot.data
-        pendingPhotoFromLibrary = false
-        cameraErrorMessage = nil
+        workspace.pendingCameraImage = snapshot.preview
+        workspace.pendingCameraData = snapshot.data
+        workspace.pendingPhotoFromLibrary = false
+        workspace.cameraErrorMessage = nil
     }
 
     @MainActor
     func receiveLibraryPhoto(_ item: PhotosPickerItem) async {
-        isLoadingLibraryPhoto = true
+        guard let context = workspace.threadContext, model.participantMode.allowsCameraSharing else { return }
+        workspace.isLoadingLibraryPhoto = true
         defer {
-            isLoadingLibraryPhoto = false
-            selectedLibraryPhoto = nil
+            if workspace.threadContext === context {
+                workspace.isLoadingLibraryPhoto = false
+                workspace.selectedLibraryPhoto = nil
+            }
         }
         do {
             let photo = try await ShannonPhotoLibrarySelection.prepare(item)
-            guard model.participantMode.allowsCameraSharing else { return }
-            pendingCameraImage = photo.preview
-            pendingCameraData = photo.jpegData
-            pendingPhotoFromLibrary = true
-            cameraErrorMessage = nil
+            guard workspace.threadContext === context, model.participantMode.allowsCameraSharing else { return }
+            workspace.pendingCameraImage = photo.preview
+            workspace.pendingCameraData = photo.jpegData
+            workspace.pendingPhotoFromLibrary = true
+            workspace.cameraErrorMessage = nil
         } catch {
-            cameraErrorMessage = (error as? LocalizedError)?.errorDescription
+            guard workspace.threadContext === context else { return }
+            workspace.cameraErrorMessage = (error as? LocalizedError)?.errorDescription
                 ?? "写真を読み込めませんでした。もう一度お試しください。"
         }
     }
 
     @MainActor
     func presentCamera() {
-        cameraErrorMessage = nil
+        workspace.cameraErrorMessage = nil
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            cameraErrorMessage = "この端末ではカメラを利用できません。実機でお試しください。"
+            workspace.cameraErrorMessage = "この端末ではカメラを利用できません。実機でお試しください。"
             return
         }
-        showsCamera = true
+        workspace.showsCamera = true
     }
 
     func shareCameraSnapshot(_ data: Data) {
-        guard !isSharingCameraSnapshot else { return }
-        isSharingCameraSnapshot = true
-        cameraErrorMessage = nil
+        guard !workspace.isSharingCameraSnapshot, let context = workspace.threadContext else { return }
+        workspace.isSharingCameraSnapshot = true
+        workspace.cameraErrorMessage = nil
         Task { @MainActor in
-            defer { isSharingCameraSnapshot = false }
+            guard workspace.threadContext === context else { return }
+            defer {
+                if workspace.threadContext === context { workspace.isSharingCameraSnapshot = false }
+            }
             do {
                 try await model.shareCameraSnapshot(jpegData: data, analyze: analyzeCameraSnapshot)
+                guard workspace.threadContext === context else { return }
                 clearPendingPhoto()
             } catch {
-                cameraErrorMessage = "写真をシャノンへ共有できませんでした。もう一度お試しください。"
+                guard workspace.threadContext === context else { return }
+                workspace.cameraErrorMessage = "写真をシャノンへ共有できませんでした。もう一度お試しください。"
             }
         }
     }

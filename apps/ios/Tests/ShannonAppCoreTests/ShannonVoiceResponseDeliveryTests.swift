@@ -118,6 +118,43 @@ struct ShannonVoiceResponseDeliveryTests {
         }
     }
 
+    @Test func repeatedCorrectionsAndLateCallbacksNeverLeakCompletedInput() async throws {
+        var ledger = ShannonPendingVoiceTurns()
+        let drain = ShannonVoicePlaybackDrain()
+        for index in 0..<1_000 {
+            let request = "合成依頼\(index)"
+            let correction = "合成訂正\(index)"
+            ledger.append(rawText: request, text: request, source: .speech)
+            let cancelled = try #require(ledger.batch())
+            ledger.append(rawText: correction, text: correction, source: .typed)
+            let replacement = try #require(ledger.batch())
+            #expect(replacement.text == "\(request)\n\(correction)")
+            var delivery = ShannonVoiceResponseDelivery()
+            try delivery.complete(Self.answer, batch: replacement, ledger: &ledger)
+            // A stale request completion cannot consume a later user turn.
+            ledger.append(rawText: "次の話", text: "次の話", source: .speech)
+            ledger.acknowledge(cancelled)
+            #expect(ledger.batch()?.text == "次の話")
+            let obsolete = drain.schedule()
+            drain.cancel()
+            let current = drain.schedule()
+            var finished = false
+            let wait = Task { @MainActor in
+                try await drain.wait(timeout: .seconds(1))
+                finished = true
+            }
+            await Task.yield()
+            drain.played(obsolete)
+            await Task.yield()
+            #expect(!finished)
+            drain.played(current)
+            try await wait.value
+            #expect(finished)
+            ledger.acknowledge(try #require(ledger.batch()))
+            #expect(ledger.turns.isEmpty)
+        }
+    }
+
     private static let answer = ShannonLiveVoiceDelegationResponseDTO(
         threadId: "thread", model: "test", reply: "できました。")
 }

@@ -157,6 +157,31 @@ describe('Shannon local API kernel', () => {
     expect(model.requests[0]?.systemPrompt).toContain('[Confirmed implementation clarification]');
   });
 
+  it('shows a proposal for a confirmed skill improvement even when the assistant calls it a development task', async () => {
+    const model = new VoiceAwareRecordingModel();
+    const conversationStore = new InMemoryConversationStore();
+    const request = 'シャノンの位置情報取得スキルをもっと高精度にしたい。「今東小金井駅のスターバックスにいますね」くらいの精度。';
+    conversationStore.appendTurn('owner-a', 'thread-work', request,
+      '開発タスクとして提案を出せますが、まず「現在地から駅・店舗名まで特定する機能を追加」で進めてよいですか？',
+      '2026-09-28T11:59:00.000Z');
+    const gateway = new LocalVoiceDecisionGateway();
+    const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', {
+      chatModel: model, conversationStore,
+      voiceDecision: { mode: 'jev', model: 'test', decide: async input => ({
+        ...await gateway.decide(input), transcriptReliabilityProbability: 0.96,
+      }) },
+    });
+    const result = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: { scopeKey: 'owner-a', threadId: 'thread-work', transcript: '良いです。お願いします。',
+        deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false,
+          userUtterance: { id: 'u1', text: '良いです。お願いします。',
+            rawText: '良いです。お願いします。', source: 'speech' } } } });
+    expect(result).toMatchObject({ status: 200, body: {
+      uiBlocks: [{ type: 'agent_task_proposal', goal: request }],
+      reply: expect.stringContaining('画面に出しました'),
+    } });
+  });
+
   it('does not promote an uncertain acknowledgement or a different prior question into an implementation proposal', async () => {
     for (const [priorReply, score, observedAt] of [
       ['現在時刻と現在地を取得するスキルの実装提案を出して進めてよいですか？', 0.4, '2026-09-28T11:59:00.000Z'],

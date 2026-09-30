@@ -128,15 +128,16 @@ export function confirmedVoiceImplementationRequest(
   if (storedUser?.role !== 'user' || storedUser.content !== history.at(-2)?.content
     || storedAssistant?.role !== 'assistant' || storedAssistant.content !== history.at(-1)?.content
     || !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 10 * 60_000) return null;
-  const acknowledgement = message.replace(/[\s、。.!！?？]/gu, '');
-  if (!/^(?:はい|うん|ええ|そうです)?(?:それで)?(?:進めて(?:良い|いい)(?:です)?|進めてください|お願いします|やって(?:ください)?|作って(?:ください)?|それで(?:良い|いい)です)$/u.test(acknowledgement)) {
+  const acknowledgement = message.replace(/[\s、。,.!！?？]/gu, '');
+  if (!/^(?:(?:はい|うん|ええ|そうです|良いです|いいです)(?:それで)?)?(?:進めて(?:良い|いい)(?:です)?|進めてください|お願いします|やって(?:ください)?|作って(?:ください)?|それで(?:良い|いい)です)$/u.test(acknowledgement)) {
     return null;
   }
   const assistant = history.at(-1);
   const user = history.at(-2);
   if (assistant?.role !== 'assistant' || user?.role !== 'user') return null;
-  if (classifyAction(user.content) !== 'implement') return null;
-  if (!/(?:実装提案|作業提案|機能追加の提案)/u.test(assistant.content)
+  if (classifyAction(user.content) !== 'implement'
+    && !/(?:スキル|機能|アプリ|実装|精度).*(?:追加|改善|高精度にしたい|作りたい|できるようにしたい)/u.test(user.content)) return null;
+  if (!/(?:実装提案|作業提案|機能追加の提案|開発タスクとして提案)/u.test(assistant.content)
     || !/(?:進めて(?:よい|良い|いい)|出して(?:よい|良い|いい)|作成して(?:よい|良い|いい)|提案して(?:よい|良い|いい))/u.test(assistant.content)
     || !/[?？]/u.test(assistant.content)) return null;
   return compact(user.content, 1_000);
