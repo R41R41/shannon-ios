@@ -6,6 +6,7 @@ import {
   projectEmotionReaction,
   reduceCompanionState,
   restoreCompanionState,
+  searchMemoryDocuments,
   selectContextualMemories,
   selectPrimaryIntent,
 } from '@shannon/cognition';
@@ -83,6 +84,9 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
   if (input.recall) output.selectedMemoryIDs = selectContextualMemories(
     input.recall.query, input.recall.candidates, input.recall.maximum,
   ).map(memory => memory.id);
+  if (input.memorySearch) output.selectedMemoryIDs = searchMemoryDocuments(
+    input.memorySearch.query, input.memorySearch.documents, input.memorySearch.limit,
+  ).map(document => document.id);
   if (input.intents) output.primaryIntentID = selectPrimaryIntent(
     input.intents.message, input.intents.threadId, input.intents.values, input.now,
   )?.id ?? null;

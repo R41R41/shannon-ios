@@ -386,7 +386,7 @@ describe('SQLite Shannon persistence', () => {
     store.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
     database.close();
   });
 
@@ -522,7 +522,8 @@ describe('SQLite Shannon persistence', () => {
     first.close();
 
     const legacy = new DatabaseSync(path);
-    legacy.exec('ALTER TABLE conversation_threads DROP COLUMN summary; PRAGMA user_version = 9;');
+    // A real v9 database predates the v15 search triggers that reference the summary column.
+    legacy.exec('DROP TRIGGER memory_search_thread_insert; DROP TRIGGER memory_search_thread_update; ALTER TABLE conversation_threads DROP COLUMN summary; PRAGMA user_version = 9;');
     legacy.close();
 
     const migrated = new SQLiteShannonStore({ path, now: sequenceClock() });
@@ -536,7 +537,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
     expect(database.prepare("PRAGMA table_info('conversation_threads')").all())
       .toContainEqual(expect.objectContaining({ name: 'summary' }));
     database.close();
@@ -566,7 +567,7 @@ describe('SQLite Shannon persistence', () => {
     migrated.close();
 
     const database = new DatabaseSync(path);
-    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 14 });
+    expect(database.prepare('PRAGMA user_version').get()).toEqual({ user_version: 15 });
     expect(database.prepare("PRAGMA table_info('realtime_voice_session_reservations')").all())
       .toContainEqual(expect.objectContaining({ name: 'reserved_seconds' }));
     database.close();

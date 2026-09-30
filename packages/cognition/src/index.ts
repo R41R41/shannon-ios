@@ -39,6 +39,16 @@ export {
   selectContextualMemories,
   type RecallCandidate,
 } from './recall.js';
+export {
+  MAXIMUM_MEMORY_SEARCH_TERMS,
+  buildMemorySearchPlan,
+  isEmptyMemorySearchPlan,
+  memorySearchMatchExpression,
+  scoreMemorySearchText,
+  searchMemoryDocuments,
+  type MemorySearchDocument,
+  type MemorySearchPlan,
+} from './memorySearch.js';
 export type {
   ContextualMemory,
   ShannonActionReceipt,

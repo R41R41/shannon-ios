@@ -26,6 +26,7 @@ import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
 import { SQLiteConversationRepository } from './sqliteConversationRepository.js';
 import { SQLiteStoreContext, secureDatabaseFiles } from './sqliteStoreContext.js';
 import { SQLiteStoreMigrator } from './sqliteMigrations.js';
+import { SQLiteMemorySearchRepository, type MemorySearchHit } from './sqliteMemorySearch.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -37,6 +38,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   private readonly companion: SQLiteCompanionRepository;
   private readonly conversations: SQLiteConversationRepository;
   private readonly jobs: SQLiteBackgroundJobRepository;
+  private readonly memorySearch: SQLiteMemorySearchRepository;
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
@@ -44,6 +46,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.conversations = new SQLiteConversationRepository(this.context);
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
+    this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     secureDatabaseFiles(options.path);
   }
 
@@ -82,6 +85,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   threadSummary(scopeKey: string, threadId: string) { return this.conversations.threadSummary(scopeKey, threadId); }
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[] { return this.conversations.conversationHistory(scopeKey, threadId); }
   experienceCandidates(scopeKey: string): readonly ShannonExperience[] { return this.conversations.experienceCandidates(scopeKey); }
+  searchMemory(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[] { return this.memorySearch.searchMemory(scopeKey, text, limit); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
   ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }

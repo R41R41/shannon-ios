@@ -1,6 +1,7 @@
 import type {
   CompanionStateEvent,
   CompanionStateSnapshot,
+  MemorySearchDocument,
   RecallCandidate,
   ShannonCognitiveFrame,
   ShannonIntent,
@@ -12,6 +13,7 @@ export type CognitiveScenarioCategory =
   | 'state-transition'
   | 'memory-visibility'
   | 'recall'
+  | 'memory-search'
   | 'affect'
   | 'intent-selection'
   | 'prompt-projection';
@@ -33,6 +35,7 @@ export interface CognitiveEvaluationInput {
   events?: readonly CompanionStateEvent[];
   affect?: { message: string };
   recall?: { query: ShannonMemoryQuery; candidates: readonly RecallCandidate[]; maximum?: number };
+  memorySearch?: { query: string; documents: readonly MemorySearchDocument[]; limit?: number };
   intents?: { message: string; threadId: string; values: readonly ShannonIntent[] };
   prompt?:
     | { kind: 'state'; snapshot?: CompanionStateSnapshot; maximumCharacters?: number }
@@ -59,7 +62,7 @@ export interface CognitiveEvaluationOutput {
 }
 
 const categories = new Set<CognitiveScenarioCategory>([
-  'state-transition', 'memory-visibility', 'recall', 'affect', 'intent-selection', 'prompt-projection',
+  'state-transition', 'memory-visibility', 'recall', 'memory-search', 'affect', 'intent-selection', 'prompt-projection',
 ]);
 export function isCognitiveEvaluationScenario(value: unknown): value is CognitiveEvaluationScenario {
   if (!value || typeof value !== 'object') return false;

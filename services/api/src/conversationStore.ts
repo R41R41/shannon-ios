@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { RecallCandidate, ShannonMessageEmotion } from '@shannon/cognition';
+import { searchMemoryDocuments, type RecallCandidate, type ShannonMessageEmotion } from '@shannon/cognition';
+import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem, ShannonGeneratedArtifact } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
@@ -76,6 +77,8 @@ export interface ConversationStore {
   threadSummary(scopeKey: string, threadId: string): string | undefined;
   conversationHistory(scopeKey: string, threadId?: string): readonly StoredConversationMessage[];
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[];
+  /** Deterministic full-text recall over all experiences and thread summaries. */
+  searchMemory?(scopeKey: string, text: string, limit?: number): readonly MemorySearchHit[];
   appendTurn(
     scopeKey: string,
     threadId: string,
@@ -214,6 +217,26 @@ export class InMemoryConversationStore implements ConversationStore {
   experienceCandidates(scopeKey: string, threadId?: string): readonly ShannonExperience[] {
     this.threadId(scopeKey, threadId);
     return Object.freeze((this.experiences.get(scopeKey) ?? []).map(item => Object.freeze({ ...item })));
+  }
+
+  searchMemory(scopeKey: string, text: string, limit = 12): readonly MemorySearchHit[] {
+    const archived = this.archivedThreads.get(scopeKey) ?? new Set<string>();
+    const documents = [
+      ...(this.experiences.get(scopeKey) ?? []).map(item => ({ id: item.id, text: item.summary, observedAt: item.observedAt })),
+      ...[...(this.threadSummaries.get(scopeKey) ?? new Map<string, string>())]
+        .filter(([threadId]) => !archived.has(threadId))
+        .map(([threadId, summary]) => ({ id: `thread:${threadId}`, text: `${this.threadTitles.get(scopeKey)?.get(threadId) ?? ''} ${summary}`,
+          observedAt: (this.conversations.get(scopeKey)?.get(threadId) ?? []).map(item => item.observedAt).sort().at(-1) ?? '1970-01-01T00:00:00.000Z' })),
+    ];
+    return Object.freeze(searchMemoryDocuments(text, documents, limit).map(document => Object.freeze({
+      kind: document.id.startsWith('thread:') ? 'thread' as const : 'experience' as const,
+      id: document.id,
+      sourceId: document.id.replace(/^thread:/u, ''),
+      ...(document.id.startsWith('thread:') ? { threadId: document.id.slice(7) } : {}),
+      summary: document.text,
+      observedAt: document.observedAt,
+      score: 1,
+    })));
   }
 
   appendTurn(
