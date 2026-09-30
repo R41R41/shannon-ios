@@ -114,13 +114,12 @@ Before a schema or persistence change:
 
 Recovery means restoring the backed-up database and the previous source files, then restarting the same affected services.
 
-## Physical iPhone delivery
+## iPhone TestFlight delivery
 
-1. Discover the currently connected device; do not assume a stale identifier.
-2. Build with the configured signing team and bundle identifier `com.r41r41.shannon`.
-3. Install over the existing app. Do not uninstall it, because that can remove local cache and Keychain state.
-4. Launch the installed bundle.
-5. Check conversation restoration, pairing, the changed flow, and one adjacent flow.
+1. Build the intended source with Xcode Cloud and confirm the signed build, bundle identifier `com.r41r41.shannon`, and build number.
+2. Confirm App Store Connect processing and assignment to `Shannon Internal` through the Release Runner.
+3. Have the owner update the existing app through TestFlight. Do not directly install or upload a development build to the iPhone for verification.
+4. Confirm the installed build number when it is available, then check conversation restoration, pairing, the changed flow, and one adjacent flow through the TestFlight app. Record owner-reported checks separately from directly observed checks.
 
 ## Shannon Release Runner
 
