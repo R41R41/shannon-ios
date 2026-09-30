@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ShannonActionReceipt } from '@shannon/cognition';
 import type { AgentTask } from './agentTaskStore.js';
+import type { ShannonConversationItem } from './chatModel.js';
+import type { StoredConversationMessage } from './conversationStore.js';
 
 export type ConversationActionKind = 'inspect' | 'implement' | 'update' | 'complete' | 'other';
 export type ConversationActionStatus = 'pending' | 'proposed' | 'active' | 'paused' | 'completed' | 'failed' | 'cancelled';
@@ -112,6 +114,32 @@ export function recordConversationProposal(
     resumeToken: state.resumeToken ?? randomUUID(),
     updatedAt: occurredAt,
   });
+}
+
+/** A reliable acknowledgement can complete the immediately preceding clarification, but never start work. */
+export function confirmedVoiceImplementationRequest(
+  message: string,
+  history: readonly ShannonConversationItem[],
+  latestStoredMessages: readonly StoredConversationMessage[],
+  occurredAt: string,
+): string | null {
+  const [storedUser, storedAssistant] = latestStoredMessages;
+  const elapsed = Date.parse(occurredAt) - Date.parse(storedAssistant?.observedAt ?? '');
+  if (storedUser?.role !== 'user' || storedUser.content !== history.at(-2)?.content
+    || storedAssistant?.role !== 'assistant' || storedAssistant.content !== history.at(-1)?.content
+    || !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 10 * 60_000) return null;
+  const acknowledgement = message.replace(/[\s、。.!！?？]/gu, '');
+  if (!/^(?:はい|うん|ええ|そうです)?(?:それで)?(?:進めて(?:良い|いい)(?:です)?|進めてください|お願いします|やって(?:ください)?|作って(?:ください)?|それで(?:良い|いい)です)$/u.test(acknowledgement)) {
+    return null;
+  }
+  const assistant = history.at(-1);
+  const user = history.at(-2);
+  if (assistant?.role !== 'assistant' || user?.role !== 'user') return null;
+  if (classifyAction(user.content) !== 'implement') return null;
+  if (!/(?:実装提案|作業提案|機能追加の提案)/u.test(assistant.content)
+    || !/(?:進めて(?:よい|良い|いい)|出して(?:よい|良い|いい)|作成して(?:よい|良い|いい)|提案して(?:よい|良い|いい))/u.test(assistant.content)
+    || !/[?？]/u.test(assistant.content)) return null;
+  return compact(user.content, 1_000);
 }
 
 export function recordConversationReceipt(

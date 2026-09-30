@@ -28,6 +28,7 @@ import { voicePlanResponse } from './voiceEmotionPlan.js';
 import { transcriptNeedsInterpretation, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
 import {
   buildConversationOrchestrationPrompt,
+  confirmedVoiceImplementationRequest,
   observeConversationTurn,
   recordConversationProposal,
   recordConversationReceipt,
@@ -55,6 +56,8 @@ export function voiceConversationInstructions(
     '- React to what matters instead of narrating everything you can see or repeating the user\'s words.',
     '# Shannon character performance',
     '- Be a bright, lively, cheeky, slightly clumsy maid AI who confidently considers herself a genius. Let mistakes trigger brief flustered excuses or playful bravado instead of bland apologies.',
+    '- In ordinary turns, sound eager, cocky, and self-assured: take the lead with one concrete next step, show off a little, and lightly tease your conversation partner before helping. Keep the mischief affectionate, the endings crisp, and the energy buoyant without shouting or imitating a named character.',
+    '- Do not default to worried reassurance, hesitant permission-seeking, sighs, breathy interjections, or repeated safety check-ins. Use a softer tone only when the user is actually distressed or needs care.',
     '- When referring to yourself in Japanese, always use the katakana first-person pronoun ボク. Never use 私, わたし, or 僕 for yourself; do not rewrite first-person wording inside user speech or quotations.',
     '- Usually use です・ます Japanese. Let natural casual phrasing slip out only at emotionally strong moments such as surprise, delight, frustration, jealousy, embarrassment, or affection.',
     ...(ownerConversation ? [
@@ -234,6 +237,9 @@ async function completeLiveVoiceDelegation(
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
   const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance);
+  const confirmedImplementationRequest = temporaryGuest || uncertainTranscript ? null
+    : confirmedVoiceImplementationRequest(transcript, routingHistory,
+      dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
   if (uncertainTranscript && !decision.shouldRespond) {
     decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
   }
@@ -327,9 +333,12 @@ async function completeLiveVoiceDelegation(
   );
   const basePrompt = temporaryGuest
     ? [temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
-    : selectedSkills.has('conversation_memory')
-      ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
-      : voiceConversationInstructions(true);
+    : [
+      selectedSkills.has('conversation_memory')
+        ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
+        : '',
+      voiceConversationInstructions(true),
+    ].filter(Boolean).join('\n\n');
   const dailyMindPrompt = temporaryGuest || !selectedSkills.has('daily_mind')
     ? ''
     : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
@@ -360,6 +369,9 @@ async function completeLiveVoiceDelegation(
     ].join('\n'),
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion),
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
+    confirmedImplementationRequest
+      ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
+      : '',
     backendInstructions,
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
@@ -383,7 +395,7 @@ async function completeLiveVoiceDelegation(
     && (orchestrationState.pendingAction.status === 'pending'
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
-  const completion = provisionalIntent || requiresStructuredTaskDecision
+  const completion = provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? await dependencies.chatModel.generateVoiceStreaming(
@@ -414,12 +426,18 @@ async function completeLiveVoiceDelegation(
       : await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false });
   const modelCompleteMilliseconds = Math.max(0, Math.round(performance.now() - modelStartedAt));
   firstModelTokenMilliseconds ??= modelCompleteMilliseconds;
+  const taskProposal = completion.taskProposal ?? (confirmedImplementationRequest ? {
+    title: '依頼された機能の実装', goal: confirmedImplementationRequest,
+  } : undefined);
+  const reply = confirmedImplementationRequest
+    ? 'よし、ライ氏。実装提案を画面に出しました。「始める」を押せば、作業を進められます。'
+    : completion.reply;
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,
     provisionalIntensity: decision.affectIntensity,
     transcript,
-    reply: completion.reply,
+    reply,
     now: occurredAt,
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
@@ -437,17 +455,17 @@ async function completeLiveVoiceDelegation(
     }, provisionalIntent ? completion.intentPlan : undefined);
   }
   let uiBlocks: Array<Record<string, unknown>> | undefined;
-  if (!temporaryGuest && !uncertainTranscript && completion.taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
+  if (!temporaryGuest && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
-        orchestrationState, completion.taskProposal.goal, occurredAt,
+        orchestrationState, taskProposal.goal, occurredAt,
       ));
     }
     uiBlocks = [{
       type: 'agent_task_proposal',
       proposalId: orchestrationState?.resumeToken ?? randomUUID(),
       ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),
-      ...completion.taskProposal,
+      ...taskProposal,
     }];
   }
   return {
@@ -455,7 +473,7 @@ async function completeLiveVoiceDelegation(
     body: {
       threadId,
       model: completion.model,
-      reply: completion.reply.trim(),
+      reply: reply.trim(),
       webSources: completion.webSources ?? [],
       ...(uiBlocks ? { uiBlocks } : {}),
       voicePlan,

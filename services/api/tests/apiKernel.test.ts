@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryVoiceIdentityStore } from '../src/voiceIdentity.js';
+import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import type { WorldSubscription } from '../src/worldStore.js';
 
 class RecordingChatModel implements ShannonChatModel {
@@ -125,6 +127,63 @@ describe('Shannon local API kernel', () => {
       body: { uiBlocks: [{ type: 'agent_task_proposal', projectHint: 'shannon-ios' }] } });
     expect(model.requests).toHaveLength(1);
     expect(model.voiceRequests).toHaveLength(0);
+  });
+
+  it('shows a proposal after a reliable confirmation of the immediately preceding voice clarification', async () => {
+    const model = new VoiceAwareRecordingModel();
+    const conversationStore = new InMemoryConversationStore();
+    conversationStore.appendTurn('owner-a', 'thread-work',
+      '現在時刻と現在地を取得するスキルを作ってほしい。',
+      '現在時刻と現在地を取得するスキルの実装提案を出して進めてよいですか？',
+      '2026-09-28T11:59:00.000Z');
+    const gateway = new LocalVoiceDecisionGateway();
+    const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', {
+      chatModel: model, conversationStore,
+      voiceDecision: { mode: 'jev', model: 'test', decide: async input => ({
+        ...await gateway.decide(input), transcriptReliabilityProbability: 0.96,
+      }) },
+    });
+    const result = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: { scopeKey: 'owner-a', threadId: 'thread-work', transcript: 'はい、進めて良いです。',
+        deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false,
+          userUtterance: { id: 'u1', text: 'はい、進めて良いです。',
+          rawText: 'はい、進めて良いです。', source: 'speech' } } } });
+    expect(result).toMatchObject({ status: 200, body: {
+      uiBlocks: [{ type: 'agent_task_proposal', goal: '現在時刻と現在地を取得するスキルを作ってほしい。' }],
+      reply: expect.stringContaining('画面に出しました'),
+    } });
+    expect(model.requests).toHaveLength(1);
+    expect(model.voiceRequests).toHaveLength(0);
+    expect(model.requests[0]?.systemPrompt).toContain('[Confirmed implementation clarification]');
+  });
+
+  it('does not promote an uncertain acknowledgement or a different prior question into an implementation proposal', async () => {
+    for (const [priorReply, score, observedAt] of [
+      ['現在時刻と現在地を取得するスキルの実装提案を出して進めてよいですか？', 0.4, '2026-09-28T11:59:00.000Z'],
+      ['現在地はわかりますか？', 0.96, '2026-09-28T11:59:00.000Z'],
+      ['現在時刻と現在地を取得するスキルの実装提案を出して進めてよいですか？', 0.96, '2026-09-28T11:00:00.000Z'],
+    ] as const) {
+      const model = new VoiceAwareRecordingModel();
+      const conversationStore = new InMemoryConversationStore();
+      conversationStore.appendTurn('owner-a', 'thread-work',
+        '現在時刻と現在地を取得するスキルを作ってほしい。', priorReply,
+        observedAt);
+      const gateway = new LocalVoiceDecisionGateway();
+      const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', {
+        chatModel: model, conversationStore,
+        voiceDecision: { mode: 'jev', model: 'test', decide: async input => ({
+          ...await gateway.decide(input), transcriptReliabilityProbability: score,
+        }) },
+      });
+      const result = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+        body: { scopeKey: 'owner-a', threadId: 'thread-work', transcript: 'はい、進めて良いです。',
+          deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false,
+            userUtterance: { id: 'u1', text: 'はい、進めて良いです。',
+            rawText: 'はい、進めて良いです。', source: 'speech' } } } });
+      expect(result.body).not.toHaveProperty('uiBlocks');
+      expect(model.requests).toHaveLength(0);
+      expect(model.voiceRequests).toHaveLength(1);
+    }
   });
 
   it('skips the reply model when the voice decision says no response is needed', async () => {

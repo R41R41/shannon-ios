@@ -28,9 +28,10 @@ function deliveryForEmotion(
   emotion: ShannonExpressiveEmotion,
   fallback: VoiceTurnDecision['delivery'],
 ): VoiceTurnDecision['delivery'] {
-  if (['caring', 'protective', 'gentle', 'tender', 'quietCompanion', 'sad', 'hurt', 'apologetic'].includes(emotion.primary)) {
+  if (['caring', 'gentle', 'tender', 'affectionate', 'quietCompanion', 'sad', 'hurt', 'apologetic'].includes(emotion.primary)) {
     return 'gentle';
   }
+  if (['protective', 'reassurance'].includes(emotion.primary)) return 'focused';
   if (['excited', 'ecstatic', 'giggle', 'mischievous', 'triumphant', 'scream'].includes(emotion.primary)) {
     return 'energetic';
   }
