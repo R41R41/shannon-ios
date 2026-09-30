@@ -1,18 +1,15 @@
 #if os(iOS)
 import Foundation
 @preconcurrency import AVFoundation
-
 private struct ShannonGeminiLiveOutgoingPayload: Sendable {
     enum Kind: Sendable, Equatable {
         case control
         case audio
     }
-
     let data: Data
     let kind: Kind
     let audioByteCount: Int
 }
-
 @MainActor
 final class ShannonGeminiLiveTransport {
     typealias EventHandler = @MainActor @Sendable (ShannonGeminiLiveServerEvent) -> Void
@@ -24,7 +21,6 @@ final class ShannonGeminiLiveTransport {
         _ emittedAudioChunks: Int
     ) -> Void
     typealias InputStateHandler = @MainActor @Sendable (ShannonVoiceInputState) -> Void
-
     private let session: ShannonGeminiLiveSessionDTO
     private let eventHandler: EventHandler
     private let captureHandler: CaptureHandler
@@ -50,9 +46,9 @@ final class ShannonGeminiLiveTransport {
     private var didRecordFirstAudioSend = false
     private var inputPreference: ShannonVoiceInputPreference = .automatic
     private var routeObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
-
     init(
         session: ShannonGeminiLiveSessionDTO,
         eventHandler: @escaping EventHandler,
@@ -64,13 +60,11 @@ final class ShannonGeminiLiveTransport {
         self.captureHandler = captureHandler
         self.inputStateHandler = inputStateHandler
     }
-
     func start(resumptionHandle: String? = nil) async throws {
         stopped = false
         sentAudioSeconds = 0
         didRecordFirstAudioSend = false
         try configureAudioSession()
-
         let url = try ShannonGeminiLiveProtocol.webSocketURL(token: session.token)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
@@ -78,13 +72,11 @@ final class ShannonGeminiLiveTransport {
         let nextSocket = nextURLSession.webSocketTask(with: url)
         urlSession = nextURLSession
         socket = nextSocket
-
         var streamContinuation: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?
         let stream = AsyncStream<ShannonGeminiLiveOutgoingPayload> { streamContinuation = $0 }
         guard let streamContinuation else { throw URLError(.cannotCreateFile) }
         outgoing = streamContinuation
         nextSocket.resume()
-
         sendTask = Task { [weak self, weak nextSocket] in
             guard let nextSocket else { return }
             do {
@@ -138,11 +130,9 @@ final class ShannonGeminiLiveTransport {
         }
         send(try ShannonGeminiLiveProtocol.setupMessage(session: session, resumptionHandle: resumptionHandle))
     }
-
     func finishAudioStream() throws {
         send(try ShannonGeminiLiveProtocol.audioStreamEndMessage())
     }
-
     func discardPlayback() {
         playbackDrain.cancel()
         playerNode.stop()
@@ -151,11 +141,9 @@ final class ShannonGeminiLiveTransport {
         pitchNode.reset()
         if audioEngine.isRunning { playerNode.play() }
     }
-
     func setPlaybackVolume(_ volume: Float) {
         playerNode.volume = min(1, max(0, volume))
     }
-
     func setInputPreference(_ preference: ShannonVoiceInputPreference) throws {
         inputPreference = preference
         guard routeObserver != nil else { return }
@@ -216,6 +204,10 @@ final class ShannonGeminiLiveTransport {
             NotificationCenter.default.removeObserver(routeObserver)
             self.routeObserver = nil
         }
+        if let interruptionObserver {
+            NotificationCenter.default.removeObserver(interruptionObserver)
+            self.interruptionObserver = nil
+        }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
@@ -229,6 +221,37 @@ final class ShannonGeminiLiveTransport {
         try audioSession.setPreferredIOBufferDuration(0.02)
         try audioSession.setActive(true)
         try applyInputPreference()
+        if interruptionObserver == nil {
+            interruptionObserver = NotificationCenter.default.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: audioSession,
+                queue: .main
+            ) { [weak self] notification in
+                let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+                let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+                Task { @MainActor [weak self] in
+                    guard let self, !self.stopped,
+                          let rawType,
+                          let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
+                    guard type == .ended else { return }
+                    let mayResume = AVAudioSession.InterruptionOptions(rawValue: rawOptions).contains(.shouldResume)
+                    guard mayResume else {
+                        self.eventHandler(.goAway(nil))
+                        return
+                    }
+                    do {
+                        try AVAudioSession.sharedInstance().setActive(true)
+                        if self.audioStarted && !self.audioEngine.isRunning {
+                            try self.audioEngine.start()
+                            self.playerNode.play()
+                        }
+                        try self.applyInputPreference()
+                    } catch {
+                        self.eventHandler(.goAway(nil))
+                    }
+                }
+            }
+        }
         if routeObserver == nil {
             routeObserver = NotificationCenter.default.addObserver(
                 forName: AVAudioSession.routeChangeNotification,

@@ -38,6 +38,15 @@ extension ShannonConversationView {
         }
 #if os(iOS)
         if ShannonVoiceDesignPreview.isEnabled {
+            if model.isDesignPreview, ProcessInfo.processInfo.arguments.contains("-ShannonPreviewVoiceImplementation") {
+                let id = model.installAgentTaskFixture()
+                if var task = model.agentTask(id: id) {
+                    task.title = "Minebotで音声会話を使えるようにする"
+                    task.goal = "既存の音声会話を使い、友人と話しながらMinebotへ依頼できるようにする"
+                    task.projectHint = "Minebot"
+                    model.upsertAgentTask(task)
+                }
+            }
             showsGeminiLiveVoice = true
         }
 #endif
@@ -234,7 +243,6 @@ extension ShannonConversationView {
     func performVoicePrimaryAction() {
         composerIsFocused = false
         voiceModel.cancel()
-        geminiLiveVoiceModel.stop()
         showsGeminiLiveVoice = true
     }
 

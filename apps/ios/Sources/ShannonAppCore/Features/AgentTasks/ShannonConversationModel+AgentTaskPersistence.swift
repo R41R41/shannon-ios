@@ -57,12 +57,29 @@ extension ShannonConversationModel {
     ) {
         for block in blocks where block.type == "agent_task_proposal" {
             guard let title = block.title, let goal = block.goal else { continue }
+            let id = block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID()
             let detail = [goal, block.risk].compactMap { value in
                 guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
                 return value
             }.joined(separator: "\n")
+            if var existing = agentTask(id: id) {
+                // Follow-ups can refine an unstarted proposal, but cannot reset
+                // durable work or replace the owner's reviewed execution settings.
+                guard existing.status == .proposed, existing.conversationThreadID == threadID else { continue }
+                let summary = detail.isEmpty ? goal : detail
+                guard existing.title != title || existing.goal != goal || existing.summary != summary else { continue }
+                existing.title = title
+                existing.goal = goal
+                existing.summary = summary
+                existing.hostHint = existing.hostHint ?? block.hostHint
+                existing.projectHint = existing.projectHint ?? block.projectHint
+                existing.cognitiveIntentID = existing.cognitiveIntentID ?? block.cognitiveIntentID
+                existing.updatedAt = Date()
+                upsertAgentTask(existing)
+                continue
+            }
             let task = ShannonAgentTask(
-                id: block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID(),
+                id: id,
                 conversationThreadID: threadID,
                 sourceMessageID: sourceMessageID,
                 cognitiveIntentID: block.cognitiveIntentID,

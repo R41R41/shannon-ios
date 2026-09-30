@@ -69,12 +69,22 @@ extension ShannonConversationModel {
     public func createGeminiLiveSession(
         participantMode: ShannonVoiceParticipantMode
     ) async throws -> ShannonGeminiLiveSessionDTO {
+        try await createGeminiLiveSession(participantMode: participantMode, threadID: selectedThreadId)
+    }
+
+    public func createGeminiLiveSession(
+        participantMode: ShannonVoiceParticipantMode,
+        threadID: String?
+    ) async throws -> ShannonGeminiLiveSessionDTO {
+        let requestedThreadID = threadID
         let session = try await client.createGeminiLiveSession(
             scopeKey: scopeKey,
-            threadId: selectedThreadId,
+            threadId: requestedThreadID,
             participantMode: participantMode
         )
-        if participantMode == .owner { selectedThreadId = session.threadId }
+        if participantMode == .owner, selectedThreadId == requestedThreadID {
+            selectedThreadId = session.threadId
+        }
         return session
     }
 
@@ -107,8 +117,10 @@ extension ShannonConversationModel {
     public func performLiveVoiceDelegationResponse(
         transcript: String,
         userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
-        participantMode: ShannonVoiceParticipantMode
+        participantMode: ShannonVoiceParticipantMode,
+        threadID: String? = nil
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        let requestedThreadID = threadID ?? selectedThreadId
         let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
 #if os(iOS)
         let location = requestedLocation
@@ -119,7 +131,7 @@ extension ShannonConversationModel {
 #endif
         let result = try await client.performLiveVoiceDelegation(
             scopeKey: scopeKey,
-            threadId: selectedThreadId,
+            threadId: requestedThreadID,
             transcript: transcript,
             participantMode: participantMode,
             deviceContext: ShannonVoiceDeviceContextDTO(
@@ -130,8 +142,8 @@ extension ShannonConversationModel {
             )
         )
         if participantMode == .owner {
-            selectedThreadId = result.threadId
-            if let session = result.organizeSession { upsertOrganizeSession(session) }
+            if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
+            if selectedThreadId == result.threadId, let session = result.organizeSession { upsertOrganizeSession(session) }
         }
         return result
     }
@@ -140,8 +152,10 @@ extension ShannonConversationModel {
         transcript: String,
         userUtterance: ShannonVoiceUserUtteranceDTO? = nil,
         participantMode: ShannonVoiceParticipantMode,
+        threadID: String? = nil,
         onSegment: ShannonVoiceSegmentHandler
     ) async throws -> ShannonLiveVoiceDelegationResponseDTO {
+        let requestedThreadID = threadID ?? selectedThreadId
         let requestedLocation = ShannonVoiceLocationIntent.needsCurrentLocation(transcript)
 #if os(iOS)
         let location = requestedLocation
@@ -152,7 +166,7 @@ extension ShannonConversationModel {
 #endif
         let result = try await client.performLiveVoiceDelegationStreaming(
             scopeKey: scopeKey,
-            threadId: selectedThreadId,
+            threadId: requestedThreadID,
             transcript: transcript,
             participantMode: participantMode,
             deviceContext: ShannonVoiceDeviceContextDTO(
@@ -164,40 +178,41 @@ extension ShannonConversationModel {
             onSegment: onSegment
         )
         if participantMode == .owner {
-            selectedThreadId = result.threadId
-            if let session = result.organizeSession { upsertOrganizeSession(session) }
+            if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
+            if selectedThreadId == result.threadId, let session = result.organizeSession { upsertOrganizeSession(session) }
         }
         return result
     }
 
-    public func analyzeVoiceCameraSnapshot(jpegData: Data) async throws -> String {
+    public func analyzeVoiceCameraSnapshot(jpegData: Data, threadID: String? = nil) async throws -> String {
+        let requestedThreadID = threadID ?? selectedThreadId
         let result = try await client.analyzeVoiceCameraSnapshot(
             scopeKey: scopeKey,
-            threadId: selectedThreadId,
+            threadId: requestedThreadID,
             jpegData: jpegData
         )
-        selectedThreadId = result.threadId
+        if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
         return result.description
     }
 
     public func commitRealtimeVoiceTurn(
         userTranscript: String,
-        shannonTranscript: String
+        shannonTranscript: String,
+        threadID: String? = nil
     ) async throws {
+        let requestedThreadID = threadID ?? selectedThreadId
         let userText = userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         let shannonText = shannonTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !userText.isEmpty, !shannonText.isEmpty else { throw ShannonAPIError.invalidResponse }
         let response = try await client.commitRealtimeVoiceTurn(
             scopeKey: scopeKey,
-            threadId: selectedThreadId,
+            threadId: requestedThreadID,
             userTranscript: userText,
             shannonTranscript: shannonText
         )
-        selectedThreadId = response.threadId
         state = response.state
         let emotion = response.messageEmotion
-        messages.append(ConversationMessage(role: .user, text: userText))
-        messages.append(ConversationMessage(
+        let pair = [ConversationMessage(role: .user, text: userText), ConversationMessage(
             role: .shannon,
             text: shannonText,
             emotionSnapshot: ConversationMessage.EmotionSnapshot(
@@ -207,8 +222,19 @@ extension ShannonConversationModel {
                 expression: emotion.expression,
                 stateVersion: response.state.version
             )
-        ))
-        cacheCurrentHistory()
+        )]
+        if selectedThreadId == requestedThreadID || selectedThreadId == response.threadId {
+            selectedThreadId = response.threadId
+            messages.append(contentsOf: pair)
+            cacheCurrentHistory()
+        } else {
+            // A call can finish a turn while the user is browsing another thread.
+            // Cache only for that call's thread; never append to the visible history.
+            cachedHistories[response.threadId, default: []].append(
+                contentsOf: pair.map(ShannonConversationCache.CachedMessage.init)
+            )
+        }
+        persistDisplayCache()
         await loadThreads(force: true)
     }
 }
