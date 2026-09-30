@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { resolveShannonEmotionState } from '@shannon/cognition';
 import {
   createConfiguredVoiceDecisionGateway,
   JevVoiceDecisionGateway,
@@ -6,6 +7,7 @@ import {
   OpenAIVoiceDecisionGateway,
   VOICE_SKILLS,
 } from '../src/voiceDecision.js';
+import { voicePlanResponse } from '../src/voiceEmotionPlan.js';
 
 function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -17,11 +19,120 @@ function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unk
     affect_intensity: { type: 'choice', choice: 'moderate', confidence: 0.8, probabilities: {} },
     delivery: { type: 'choice', choice: 'quick', confidence: 0.8, probabilities: {} },
     latency_class: { type: 'choice', choice: 'under_3s', confidence: 0.8, probabilities: {} },
+    waiting_scenario: { type: 'choice', choice: 'general' },
+    waiting_variant: { type: 'choice', choice: 'steady' },
+    waiting_affect: { type: 'choice', choice: 'bright' },
+    waiting_intensity: { type: 'choice', choice: 'subtle' },
+    waiting_delivery: { type: 'choice', choice: 'quick' },
     ...overrides,
   };
 }
 
 describe('Jev voice decision routing', () => {
+  it('selects a bounded waiting line and independent emotional delivery in the same Jev call', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body));
+      expect(request.questions.waiting_scenario.type).toBe('choice');
+      expect(request.questions.waiting_affect.type).toBe('choice');
+      return new Response(JSON.stringify({ answers: jevAnswers({
+        skill__current_web: { type: 'noul', noul: 0.95 },
+        conversation_class: { type: 'choice', choice: 'skill_simple' },
+        latency_class: { type: 'choice', choice: 'under_10s' },
+        affect: { type: 'choice', choice: 'focused' },
+        delivery: { type: 'choice', choice: 'focused' },
+        waiting_scenario: { type: 'choice', choice: 'weather' },
+        waiting_variant: { type: 'choice', choice: 'warm' },
+        waiting_affect: { type: 'choice', choice: 'caring' },
+        waiting_intensity: { type: 'choice', choice: 'moderate' },
+        waiting_delivery: { type: 'choice', choice: 'gentle' },
+      }) }));
+    });
+    const decision = await new JevVoiceDecisionGateway({
+      apiKey: 'test-only', fetcher: fetcher as typeof fetch,
+    }).decide({
+      scopeKey: 'owner-a', transcript: '今日の天気を教えて', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+
+    expect(decision.source).toBe('jev');
+    expect(decision.affect).toBe('focused');
+    expect(voicePlanResponse(decision)).toMatchObject({
+      waitingPhrase: '空模様を確かめますね。',
+      waitingPerformance: { affect: 'caring', intensity: 0.6, delivery: 'gentle' },
+    });
+  });
+
+  it('does not expose an unselected private category or speak before a no-response turn', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ answers: jevAnswers({
+      skill__aether_notes: { type: 'noul', noul: 0.99 },
+      latency_class: { type: 'choice', choice: 'under_10s' },
+      waiting_scenario: { type: 'choice', choice: 'aether' },
+      waiting_variant: { type: 'choice', choice: 'lively' },
+    }) })));
+    const gateway = new JevVoiceDecisionGateway({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const guest = await gateway.decide({
+      scopeKey: 'guest', transcript: '少し考えて', participantMode: 'guest',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    expect(voicePlanResponse(guest).waitingPhrase).toBe('よし、さっと見てみますね。');
+
+    const silent = { ...guest, shouldRespond: false };
+    expect(voicePlanResponse(silent).waitingPhrase).toBeUndefined();
+    expect(voicePlanResponse({ ...guest, latencyClass: 'under_3s' }).waitingPhrase).toBeUndefined();
+  });
+
+  it('keeps a valid Jev route when an older response omits the new waiting decisions', async () => {
+    const answers = jevAnswers({
+      skill__current_web: { type: 'noul', noul: 0.95 },
+      latency_class: { type: 'choice', choice: 'under_10s' },
+    });
+    for (const key of [
+      'waiting_scenario', 'waiting_variant', 'waiting_affect', 'waiting_intensity', 'waiting_delivery',
+    ]) delete answers[key];
+    const gateway = new JevVoiceDecisionGateway({
+      apiKey: 'test-only',
+      fetcher: vi.fn(async () => new Response(JSON.stringify({ answers }))) as typeof fetch,
+    });
+    const decision = await gateway.decide({
+      scopeKey: 'owner-a', transcript: '今日の天気を教えて', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    expect(decision.source).toBe('jev');
+    expect(voicePlanResponse(decision).waitingPhrase).toBe('いまの天気を確認しますね。');
+  });
+
+  it('keeps a waiting acknowledgement gentle when grief overrides a playful Jev choice', async () => {
+    const decision = await new LocalVoiceDecisionGateway().decide({
+      scopeKey: 'owner-a', transcript: '原因を調べて', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    const emotion = resolveShannonEmotionState({
+      provisionalPrimary: 'playful', provisionalIntensity: 0.9,
+      transcript: '家族が亡くなったことを話したい', now: '2026-09-30T00:00:00.000Z',
+    });
+    const plan = voicePlanResponse({ ...decision, latencyClass: 'under_10s',
+      waitingDirection: {
+        scenario: 'troubleshooting', variant: 'lively', affect: 'playful',
+        intensity: 0.9, delivery: 'energetic',
+      },
+    }, emotion);
+    expect(plan.waitingPhrase).toBe('うん、ちゃんと聞いています。');
+    expect(plan.waitingPerformance).toEqual({ affect: 'caring', intensity: 0.5, delivery: 'gentle' });
+  });
+
+  it('does not delay an emergency answer with an acknowledgement', async () => {
+    const decision = await new LocalVoiceDecisionGateway().decide({
+      scopeKey: 'owner-a', transcript: '原因を調べて', participantMode: 'owner',
+      requestedLocation: false, hasFreshLocation: false,
+    });
+    const emotion = resolveShannonEmotionState({
+      provisionalPrimary: 'playful', provisionalIntensity: 0.9,
+      transcript: '今すぐ助けて、息ができない', now: '2026-09-30T00:00:00.000Z',
+    });
+    const plan = voicePlanResponse({ ...decision, latencyClass: 'under_10s' }, emotion);
+    expect(plan.waitingPhrase).toBeUndefined();
+    expect(plan.waitingPerformance).toBeUndefined();
+  });
   it('scores every skill independently and selects every score at or above the threshold', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body));

@@ -2,6 +2,7 @@ import { extractOutputText, parseJson, stableScopeIdentifier, validModel } from 
 import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from './llmUsage.js';
 import {
   emptySkillScores, skillInstructions, VOICE_AFFECTS, VOICE_SKILLS, voiceAffectInstructions,
+  VOICE_WAITING_AFFECTS, VOICE_WAITING_SCENARIOS, VOICE_WAITING_VARIANTS,
   type VoiceAffect, type VoiceConversationClass, type VoiceDecisionGateway,
   type VoiceDecisionInput, type VoiceDelivery, type VoiceLatencyClass,
   type VoiceSkill, type VoiceTurnDecision,
@@ -11,6 +12,7 @@ import {
   directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
   normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
+import { fallbackWaitingDirection, jevWaitingQuestions } from './voiceWaitingCue.js';
 
 export {
   VOICE_AFFECTS, VOICE_SKILLS,
@@ -266,6 +268,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
             over_10s: 'Complex multi-step work, broad research, or external action.',
           },
         }],
+        ...jevWaitingQuestions,
       ]);
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
@@ -370,6 +373,7 @@ function parsedOpenAIDecision(
     shouldRespond: shouldRespondToTurn(conversationClass),
     replyRequiredProbability, solutionWantedProbability, conversationClass, latencyClass,
     affect, affectIntensity, delivery,
+    waitingDirection: fallbackWaitingDirection(input, selected, affect, affectIntensity, delivery),
     selectedSkills: selected,
     skillScores,
     elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
@@ -409,12 +413,28 @@ function parsedJevDecision(
     rawConversationClass, replyRequiredProbability, selected, input.transcript,
   );
   const shouldRespond = shouldRespondToTurn(conversationClass);
+  const fallbackWaiting = fallbackWaitingDirection(input, selected, affect, affectIntensity, delivery);
+  let waitingDirection = fallbackWaiting;
+  try {
+    waitingDirection = {
+      scenario: choiceValue(answerMap.waiting_scenario, VOICE_WAITING_SCENARIOS),
+      variant: choiceValue(answerMap.waiting_variant, VOICE_WAITING_VARIANTS),
+      affect: choiceValue(answerMap.waiting_affect, VOICE_WAITING_AFFECTS),
+      intensity: affectIntensityValue(answerMap.waiting_intensity),
+      delivery: choiceValue(answerMap.waiting_delivery, [
+        'conversational', 'quick', 'gentle', 'focused', 'energetic',
+      ] as const),
+    };
+  } catch {
+    // A rollout may briefly see an older Jev response. Keep the router's valid
+    // capability decision and use a conservative bounded waiting direction.
+  }
   return {
     source: 'jev', shouldRespond, replyRequiredProbability, solutionWantedProbability,
     ...(answerMap.transcript_reliable === undefined ? {} : {
       transcriptReliabilityProbability: noulValue(answerMap.transcript_reliable),
     }),
-    conversationClass, latencyClass, affect, affectIntensity, delivery,
+    conversationClass, latencyClass, affect, affectIntensity, delivery, waitingDirection,
     selectedSkills: selected,
     skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
@@ -455,6 +475,7 @@ function localDecision(
     replyRequiredProbability: acknowledgementOnly ? 0.1 : 0.9,
     solutionWantedProbability: solutionWanted ? 0.9 : 0.25,
     conversationClass, latencyClass, affect, affectIntensity, delivery,
+    waitingDirection: fallbackWaitingDirection(input, selected, affect, affectIntensity, delivery),
     selectedSkills: selected, skillScores,
     elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };

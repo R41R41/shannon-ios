@@ -13,6 +13,48 @@ function deferred<T>() {
 }
 
 describe('live voice sentence streaming', () => {
+  it('speaks one waiting line with its own acting plan before the answer', async () => {
+    const answerPlan = {
+      shouldRespond: true, affect: 'focused', affectIntensity: 0.3, delivery: 'focused',
+      waitingPhrase: '空模様を確かめますね。',
+      waitingPerformance: { affect: 'caring', intensity: 0.6, delivery: 'gentle' },
+    };
+    const kernel = {
+      streamLiveVoiceDelegation: async (_request: unknown, observer: {
+        onPlan(plan: Record<string, unknown>): Promise<void>;
+        onTextDelta(delta: string): Promise<void>;
+      }) => {
+        await observer.onPlan(answerPlan);
+        await observer.onPlan(answerPlan);
+        await observer.onTextDelta('答えです。');
+        return { status: 200, body: { threadId: 'thread', reply: '答えです。' } };
+      },
+    } as unknown as ShannonApiKernel;
+    const request = Readable.from([JSON.stringify({ transcript: '今日の天気は？' })]) as IncomingMessage;
+    request.method = 'POST';
+    let output = '';
+    const response = Object.assign(new EventEmitter(), {
+      headersSent: false,
+      writeHead() { this.headersSent = true; return this; },
+      write(value: string) { output += value; return true; },
+      end() {},
+    }) as unknown as ServerResponse;
+
+    await createLiveVoiceStreamRoute(kernel, () => true)(
+      request, response, { deviceId: 'device', scopeKey: 'owner' } as ShannonDevicePrincipal,
+    );
+    const segments = output.trim().split('\n').map(line => JSON.parse(line) as {
+      type: string; text?: string; voicePlan?: Record<string, unknown>;
+    }).filter(event => event.type === 'segment');
+    expect(segments.map(segment => segment.text)).toEqual(['空模様を確かめますね。', '答えです。']);
+    expect(segments[0]?.voicePlan).toMatchObject({
+      affect: 'caring', affectIntensity: 0.6, delivery: 'gentle',
+    });
+    expect(segments[1]?.voicePlan).toMatchObject({
+      affect: 'focused', affectIntensity: 0.3, delivery: 'focused',
+    });
+  });
+
   it('emits complete Japanese sentences across arbitrary model deltas', () => {
     const segmenter = new SpokenSentenceSegmenter();
 

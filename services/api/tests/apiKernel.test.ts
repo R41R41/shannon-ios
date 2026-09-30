@@ -239,7 +239,7 @@ describe('Shannon local API kernel', () => {
           shouldRespond: true,
           conversationClass: 'skill_simple',
           selectedSkills: ['current_web'],
-          waitingPhrase: 'ちょっと最新の情報を調べてみますね。',
+          waitingPhrase: 'いまの天気を確認しますね。',
         },
       },
     });

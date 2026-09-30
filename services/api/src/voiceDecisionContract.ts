@@ -15,6 +15,28 @@ export type VoiceDelivery = 'conversational' | 'quick' | 'gentle' | 'focused' | 
 export type VoiceConversationClass = 'no_response' | 'greeting' | 'direct' | 'skill_simple' | 'skill_complex';
 export type VoiceLatencyClass = 'under_1s' | 'under_3s' | 'under_10s' | 'over_10s';
 
+export const VOICE_WAITING_SCENARIOS = [
+  'general', 'web', 'weather', 'transit', 'aether', 'voyager', 'suite',
+  'agent', 'memory', 'daily_mind', 'time', 'location', 'support', 'analysis',
+  'planning', 'troubleshooting',
+] as const;
+export type VoiceWaitingScenario = typeof VOICE_WAITING_SCENARIOS[number];
+export const VOICE_WAITING_VARIANTS = ['steady', 'warm', 'lively'] as const;
+export type VoiceWaitingVariant = typeof VOICE_WAITING_VARIANTS[number];
+export const VOICE_WAITING_AFFECTS = [
+  'neutral', 'bright', 'playful', 'caring', 'gentle', 'focused',
+  'curiosity', 'reassurance', 'apologetic',
+] as const satisfies readonly VoiceAffect[];
+export type VoiceWaitingAffect = typeof VOICE_WAITING_AFFECTS[number];
+
+export interface VoiceWaitingDirection {
+  readonly scenario: VoiceWaitingScenario;
+  readonly variant: VoiceWaitingVariant;
+  readonly affect: VoiceWaitingAffect;
+  readonly intensity: number;
+  readonly delivery: VoiceDelivery;
+}
+
 export interface VoiceDecisionInput {
   scopeKey: string;
   transcript: string;
@@ -35,6 +57,7 @@ export interface VoiceTurnDecision {
   affect: VoiceAffect;
   affectIntensity: number;
   delivery: VoiceDelivery;
+  waitingDirection?: VoiceWaitingDirection;
   selectedSkills: readonly VoiceSkill[];
   skillScores: Readonly<Record<VoiceSkill, number>>;
   elapsedMilliseconds: number;

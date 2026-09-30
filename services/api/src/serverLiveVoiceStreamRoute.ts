@@ -61,7 +61,9 @@ export function createLiveVoiceStreamRoute(
           startStream(response);
           await writeEvent(response, { type: 'plan', voicePlan: plan });
           if (firstPlan && typeof plan.waitingPhrase === 'string' && plan.waitingPhrase.trim()) {
-            await writeEvent(response, { type: 'segment', text: plan.waitingPhrase, voicePlan: plan });
+            await writeEvent(response, {
+              type: 'segment', text: plan.waitingPhrase, voicePlan: waitingSegmentPlan(plan),
+            });
           }
         },
         onTextDelta: async delta => {
@@ -112,6 +114,17 @@ export function createLiveVoiceStreamRoute(
       response.off('close', abort);
       release();
     }
+  };
+}
+
+function waitingSegmentPlan(plan: Record<string, unknown>): Record<string, unknown> {
+  const direction = record(plan.waitingPerformance);
+  if (!direction) return plan;
+  return {
+    ...plan,
+    affect: direction.affect ?? plan.affect,
+    affectIntensity: direction.intensity ?? plan.affectIntensity,
+    delivery: direction.delivery ?? plan.delivery,
   };
 }
 
