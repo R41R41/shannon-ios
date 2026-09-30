@@ -127,7 +127,7 @@ function prepare() {
 
 function publish(options) {
   if (!options.confirmExternalRelease) {
-    throw new Error('External release is locked; pass --confirm-external-release only after current user approval');
+    throw new Error('External release is locked; pass --confirm-external-release when the current user request explicitly includes delivery');
   }
   const repository = inspectRepository();
   assertExpectedHead(repository.head, options.expectedHead);

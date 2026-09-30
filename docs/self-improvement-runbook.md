@@ -87,9 +87,9 @@ The Mac launchd label is `com.shannon.agent-host`; the staged Azure unit is `sha
 
 The Agent Host must launch Codex only inside an allowlisted project. Its saved state contains task, Codex thread, turn, and pending-approval checkpoint identifiers used for reattachment after restart. A cloud host must use a dedicated writable checkout, never the live API deployment directory.
 
-For cloud TestFlight delivery, work on `shannon/task-<task-id>`. Do not integrate or push `main` until tests pass and the user explicitly requested delivery. The push/integration operation needs a fresh approval at execution time. Xcode Cloud, not Azure Linux, performs the iOS build and signing.
+For cloud TestFlight delivery, work on `shannon/task-<task-id>`. Do not integrate or push `main` until tests pass and the user explicitly requested delivery. That explicit request authorizes the matching push, integration, and distribution; do not ask for a second approval at execution time. If the target or scope changes, clarify the new action before proceeding. Xcode Cloud, not Azure Linux, performs the iOS build and signing.
 
-An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Discard the expired request, preserve the Shannon task goal, continue from the same working tree in a clean Codex thread, publish a `started` recovery event so Azure clears the stale approval, and ask for a fresh approval only if the remaining operation still requires it. A clean thread is intentional: the expired request can leave an unmatched tool call in the old Codex history.
+An approval belongs to the live Codex connection that requested it. If the Agent Host restarts while waiting for approval, never infer that the old request was accepted and never leave Azure in `waiting_approval`. Discard the expired request, preserve the Shannon task goal, continue from the same working tree in a clean Codex thread, publish a `started` recovery event so Azure clears the stale approval, and ask for a fresh approval only if the remaining operation independently requires one. An explicit delivery request continues to authorize its matching release after recovery. A clean thread is intentional: the expired request can leave an unmatched tool call in the old Codex history.
 
 If a saved turn is no longer active after restart, resume the same Codex thread automatically and inspect the working tree before continuing. Do not create a duplicate task or repeat changes that are already present.
 
@@ -128,7 +128,7 @@ Recovery means restoring the backed-up database and the previous source files, t
 
 1. `inspect` confirms `R41R41/shannon-ios`, `main`, the exact HEAD, staged-change safety, and visible uncommitted paths.
 2. `prepare` runs the deterministic API/iOS/app checks plus an unsigned iPhone Release build.
-3. `publish` requires both the exact prepared HEAD and `--confirm-external-release`. Use that flag only after a fresh user approval. It skips an already-pushed commit and never force-pushes.
+3. `publish` requires both the exact prepared HEAD and `--confirm-external-release`. Use that operator flag when the current user request explicitly includes this external delivery; it does not require another user confirmation. It skips an already-pushed commit and never force-pushes.
 4. `monitor` reads only the safe Azure distributor projection until the expected Build is assigned to `Shannon Internal`.
 5. Every phase writes a credential-free summary to `.build/release-runner/latest.json`.
 
