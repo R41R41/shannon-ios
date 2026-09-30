@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-09-29 / assembled voice turns, Jev routing, cascade speech, and persistent iPhone voice workspace
+Revision: 2026-09-30 / Memory V2 full-text and semantic recall
 
 ## System shape
 
@@ -34,7 +34,10 @@ The response path is intentionally short and uses one immutable state snapshot:
 
 1. Authenticate the device and resolve the conversation thread.
 2. Load the latest committed companion state.
-3. Run one bounded, read-only relevance pass over prior experience using the current utterance and situation cues. This pure pass does not write shared state, call another model, or wait for the background worker.
+3. Run the bounded, read-only recall stages. None of them writes shared state or waits for the background worker.
+   - Always: the deterministic relevance pass over recent experience plus deterministic full-text search over every experience and other threads' rolling summaries. No model is called.
+   - Only for memory turns (voice: Jev selected `conversation_memory`; text: the equivalent `needsSemanticMemoryRecall` classifier shared with the Apple clients through `config/memory-recall-cues.json`): semantic recall — query rewrite, embedding search over precomputed summary embeddings, and reranking. `SHANNON_MEMORY_MAX_MODEL_CALLS_PER_TURN` (default 4: rewrite, embed, rerank, and knowledge-tree navigation) and `SHANNON_MEMORY_SEMANTIC_TIMEOUT_MS` (default 4000) bound it; a failure or timeout contributes nothing and the turn continues with deterministic recall. Forgotten or invalidated sources are filtered before any text reaches a model. Semantic hits are appended after deterministic results with cue `semantic` and an instruction to treat them as candidates. Cost is recorded in the `memory` lane.
+   - Voice classifies such a turn as `under_10s` or longer so the existing waiting phrase plays first; Talk shows 「記憶を探しています」 while a memory turn is pending.
 4. Select one owner-visible active intention using current-turn evidence, thread affinity, priority, and recency. An explicitly stated goal in the current utterance participates provisionally so the same reply can honor it, but is persisted only after the turn succeeds.
 5. Assemble the minimal identity prompt, prompt projection, turn-specific recalled memories, selected intention, relevant Aether context, active agent-task projection, and bounded conversation history.
 6. Call the fixed chat model once with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work.
@@ -56,6 +59,15 @@ When that same owner turn explicitly creates or refreshes a goal, the existing s
 `GET /v1/cognition` exposes the owner's intention ledger and recent bounded cycle receipts. `POST /v1/cognition/intents/status` can pause, reactivate, complete, or dismiss one exact intention. The prompt treats an intention as continuity evidence, never proof that work occurred; only the existing verified action or agent-task receipts can establish an external change.
 
 This lane is the first durable perceive → recall → intend → plan → respond → record vertical slice. It now supports bounded initial decomposition but does not replan from verified execution progress, choose autonomous external actions, or mark plan stages or goals complete from model prose. Those remain later bounded extensions over the same owner-visible ledger.
+
+## Shannon private knowledge
+
+Memory has three kinds: experience (`experience_events`, thread summaries), Shannon's private knowledge (`shannon_knowledge_documents`), and the user profile (`knowledge_answers`, `knowledge_evidence`, `knowledge_revisions`, unchanged). Private knowledge is Shannon's own procedures, lessons, and hypotheses. It has no user-facing folder, list, summary, or API route; the owner reaches it only by asking Shannon (see inquiry below). Syzygy decision: `TI-REQ-SHANNON-MEMORY-V2`.
+
+- **Document** (schema 17): title, Markdown body, parsed heading tree, status (`hypothesis`, `confirmed`, `retired`), applicability, source experience IDs (a database constraint rejects an empty list), Aether references by document ID, version and optional section/decision ID only, timestamps, and a version. Every write appends to `shannon_knowledge_revisions`; retirement keeps its reason and evidence there.
+- **Writing**: `ShannonKnowledgeConsolidator` runs after each completed sleep batch, inside the shared monthly background budget (lane `memory_background`, default model `gpt-5.6-terra`, `SHANNON_KNOWLEDGE_MODEL`). It sees only visible experiences of that day plus related earlier ones found by full-text search, detects recurring situation → action → outcome patterns, and may create, update, or retire notes without approval or notification. `normalizeKnowledgeDraft` rejects drafts without known sources, with copied conversation lines, or with secret-like text, and stores a single-source success as `hypothesis`. A failure never fails the sleep batch.
+- **Using**: `usableShannonKnowledge` drops retired notes, any note whose source experience is forgotten, corrected, or rejected, and any note citing an older Aether version than the known current one. Deterministic term matching selects up to three notes per turn; semantic recall may add usable notes. A note longer than 1,500 characters (or any note on a voice `skill_complex` turn) is navigated by heading: one model call chooses sections within the per-turn call budget, otherwise sections are chosen deterministically. The prompt block is labelled lowest authority, states the order user's explicit words > Aether decisions > profile > notes, and marks hypotheses as tentative. Notes are never written into user facts or the profile.
+- **Inquiry and forgetting**: 「〇〇について何を覚えてる？」 adds a provenance block (conversation date, other-thread summary, or Shannon note/hypothesis). Within ten minutes, 「それは忘れて」 forgets exactly the items cited in that answer: experiences through the existing memory controls (restorable from Memory), notes by retirement with the owner's instruction as the reason. Knowledge derived from a forgotten experience stops being used and is never embedded.
 
 ## Legacy platform convergence
 
@@ -98,7 +110,8 @@ third-party identities do not enter owner memory or legacy prompts in this slice
 
 - Emotion is a continuous shared state updated after conversation events and decayed toward its baseline.
 - Direct statements such as preferences and personal facts can update structured knowledge immediately, with evidence and confidence.
-- Turn-specific recall ranking runs synchronously as a bounded, deterministic read before generation, so the current answer—not only the next answer—can use relevant experience. It does not mutate state or invoke an additional model.
+- Turn-specific recall ranking runs synchronously as a bounded read before generation, so the current answer—not only the next answer—can use relevant experience. It never mutates state. Its deterministic stages never invoke a model; the optional semantic stage is bounded as described in the FCA response lane.
+- The background worker embeds experience summaries, thread summaries, and Shannon knowledge between idle polls (`memory_embeddings`, lane `memory_background`, inside the shared monthly background budget). A rewritten summary gets a new source revision and is re-embedded; a forgotten or hidden source is never sent to the provider and is recorded as withheld until the companion state changes.
 - Durable active-memory replacement and interest changes remain outside the response path.
 - Each recall pass replaces the complete active-memory set with one bounded state event. Pinned experiences are retained, and unchanged recall does not create another state version, event, or prompt projection.
 - Explicit future intent such as “明日…しよう”, “あとで…したい”, or “忘れないで” becomes prospective memory in the normal turn-refinement worker. Individual records are bounded; authoritative commitments and user memory controls are not silently evicted at a collection limit. Only working projections are budgeted. Capture is conservative Japanese rule extraction, not unrestricted semantic understanding.
@@ -169,7 +182,7 @@ Background voice activation remains deliberately later work. A call starts only 
 - The default Mac layout is a `NavigationSplitView`: thread and destination sidebar, a neutral reading/work surface, and an inspector that opens only when work context is useful.
 - The root view owns the fixed 860×600 minimum window size. Scene-level content-driven minimum sizing is not combined with the restorable inspector, because adding or removing that inspector changes the content constraint tree during AppKit's window update pass.
 - Talk preserves the ChatGPT-like reading hierarchy: a wide Markdown response, quiet user messages, copy, multi-line composer, keyboard submission, search-ready thread navigation, and minimal permanent chrome.
-- Talk derives a local conversation outline from user requests and Markdown headings in Shannon's replies. Its popover leads with the saved rolling `現在地`, and selecting an outline entry jumps to the exact source message without storing a second conversation index. Semantic embedding search remains later work.
+- Talk derives a local conversation outline from user requests and Markdown headings in Shannon's replies. Its popover leads with the saved rolling `現在地`, and selecting an outline entry jumps to the exact source message without storing a second conversation index. Semantic embedding search in this outline UI remains later work; Shannon's own recall uses embeddings as described in the FCA response lane.
 - The normal chat response produces a bounded `threadSummary` in the same structured model call as the visible reply, so rolling navigation adds no second model request. The previous saved summary is supplied as explicitly non-instructional reference data when the display history is truncated. SQLite schema 10 stores the latest summary on `conversation_threads`; old databases migrate additively, and missing or non-model turns fall back to a bounded deterministic latest-reply summary.
 - `GET /v1/threads` additively returns the rolling summary and up to twelve Markdown section titles. Old clients ignore these fields and cached old responses decode without them. Mac thread search matches title, summary, and sections, while the sidebar reveals the matching context only during a search. Opening a result resolves the matching section or message after history loads and jumps there.
 - Mac checks the existing initiative inbox once a minute while connected. Unread initiative threads appear in a small `シャノンから` group with a quiet sparkle signal, then return to the ordinary chronological conversation list after acknowledgement. Search remains one neutral result list, so presence never overrides retrieval order or adds a second source of truth.
@@ -216,6 +229,8 @@ Runtime configuration uses all three of `SHANNON_VOYAGER_INTEGRATION_URL`, `SHAN
 
 Shannon reads only a bounded, purpose-built Aether context projection. Proposed changes are written to Aether's proposal inbox for review; Shannon does not directly rewrite Aether's canonical data.
 
+The section-level search contract `syzygy.aether-knowledge-search.v1` (Syzygy hub `contracts/knowledge/`) has a read-only consumer adapter in `aetherKnowledgeSearch.ts`, verified against the shared fixtures in `services/api/tests/fixtures/aether-knowledge-search-v1/`. Only a fixture-backed fake exists; Aether's provider is not implemented and nothing on the response path calls it yet. Shannon persists only document ID, version, section ID, and decision ID from a hit, never the excerpt.
+
 Text and voice use the same bounded read projection. A supported explicit owner voice command can enqueue a note proposal. A durable request receipt prevents a retry from recreating the inbox file after Aether has consumed it; an ambiguous interrupted publication fails closed and asks the user to inspect the inbox. No consumer-side contract or canonical note format is changed.
 
 ## World and initiative
@@ -254,7 +269,7 @@ Due, visible, pending commitments can also supply a candidate to that same loop.
 
 ## Scope of the cognitive hardening
 
-Turn recall now uses observed timestamps for recency, explicit location mentions, explicitly named registered participants and a matching current commitment. Retrieved items carry their evidence time. A small deterministic synonym map handles selected paraphrases; there is no embedding index or general semantic retrieval yet. Memory-sensitive voice questions are instructed to consult fresh backend state, but this remains provider tool-use behavior to evaluate on-device, not a guaranteed per-audio-frame shared-context update.
+Turn recall now uses observed timestamps for recency, explicit location mentions, explicitly named registered participants and a matching current commitment. Retrieved items carry their evidence time. A small deterministic synonym map handles selected paraphrases. SQLite schema 15 adds a trigger-maintained full-text index over every completed-turn experience summary and every thread's rolling summary (`memory_search_documents` plus an FTS5 `trigram` table). Terms of three or more characters use FTS5; one- and two-character Japanese terms, which trigram cannot index, use a bounded substring fallback, and a runtime without FTS5 trigram uses that fallback for every term. The search is read-only, calls no model, excludes archived threads, and its hits pass through the same forgetting filter as other recall candidates; other threads' summaries are used only while `mayUseThreadSummary` allows it. Model-assisted semantic recall is an additional, bounded stage described in the FCA response lane. Memory-sensitive voice questions are instructed to consult fresh backend state, but this remains provider tool-use behavior to evaluate on-device, not a guaranteed per-audio-frame shared-context update.
 
 Waterlight consumes a native provider-neutral embodiment frame derived from actual speaking/listening/tool activity. This connects tool attention to the displayed state without changing audio processing. The TypeScript runtime types, durable intention ledger, bounded initial plan proposal, expressive state, and conversation execution state provide one response orchestrator, not a universal planner. Progress-aware replanning beyond the active request, Live2D rendering, cross-product autonomous action orchestration, and model-quality A/B evaluation remain separate work.
 
@@ -301,7 +316,9 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 | Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
 | Person identity registry | `people`, `person_platform_identities`, `person_identity_events` |
 | Intention and cognitive audit | `cognitive_intents`, `cognitive_cycle_receipts` |
-| Cost | `llm_usage_events` (`chat`, `sleep`, and `voice` lanes) |
+| Memory search | `memory_search_documents`, `memory_search_fts` (FTS5 trigram, optional), `memory_embeddings` |
+| Shannon private knowledge | `shannon_knowledge_documents`, `shannon_knowledge_revisions` |
+| Cost | `llm_usage_events` (`chat`, `sleep`, `voice`, `memory`, and `memory_background` lanes; `sleep` and `memory_background` share the monthly background budget) |
 | Pairing | device pairing records and device tokens |
 
 ## Cognitive Evaluation Harness v0
@@ -314,6 +331,7 @@ A Codex turn ending is not itself task completion. The Agent Host requires a str
 - reportは評価証拠であり、`agent_tasks` の状態や昇格承認ではない。
 - 評価通過だけでmerge、push、配布、Capability拡大を行わない。
 - `scripts/verify.sh cognition-eval` は回帰、無効scenario、型不整合で非ゼロ終了する。
+- Memory V2の決定的シナリオ（全文検索、意味検索の失敗時の合流、知識の安全装置）は `packages/evaluation/fixtures/scenarios/memory.v2.ts` に置く。実モデルでの30問比較（合成データ、現行方式との正答率・出典・応答時間・費用）は課金を伴うため `pnpm --filter @shannon/api test:llm-memory-recall` で明示的に実行する時だけ動く。
 
 Phase -1ではSkill生成、独自NN、Fine-tuning、人格学習、Shadow/Canary、自動ロールバック、本番DB migration、API/UI変更を行わない。
 

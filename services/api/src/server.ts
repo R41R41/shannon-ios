@@ -9,6 +9,7 @@ import { createGeminiSpeechRoute } from './serverGeminiSpeechRoute.js';
 import { createGeminiLiveRoute } from './serverGeminiLiveRoute.js';
 import { createLiveVoiceStreamRoute } from './serverLiveVoiceStreamRoute.js';
 import { createLocalApiKernel } from './apiKernel.js';
+import { createConfiguredTurnMemoryRecall } from './turnMemoryRecall.js';
 import { DurableBackgroundDispatcher } from './backgroundUpdates.js';
 import { createConfiguredChatModel } from './chatModel.js';
 import { createConfiguredVoiceDecisionGateway } from './voiceDecision.js';
@@ -85,6 +86,7 @@ const kernel = createLocalApiKernel(now, {
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
+  memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);
 const port = parsePort(process.env.SHANNON_API_PORT);

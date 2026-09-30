@@ -1,0 +1,7 @@
+{
+  "contract": "syzygy.aether-knowledge-search.v1",
+  "kind": "request",
+  "access": "read-write",
+  "query": "音声待機文の方針",
+  "limit": 5
+}

@@ -26,7 +26,7 @@ export interface ShannonMemoryQuery {
   goal?: string;
 }
 
-export type ShannonRecallReason = 'words' | 'related-terms' | 'participant' | 'location' | 'goal' | 'recent';
+export type ShannonRecallReason = 'words' | 'related-terms' | 'participant' | 'location' | 'goal' | 'recent' | 'semantic';
 
 /** A recall result carries an explanation so prompts and diagnostics stay auditable. */
 export interface ContextualMemory {

@@ -11,6 +11,7 @@ import SwiftUI
 /// that work continues. Text and the accessibility label stay authoritative.
 struct ShannonTypingIndicator: View {
     let expression: ShannonExpressionDTO
+    var isSearchingMemory = false
 
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -28,7 +29,7 @@ struct ShannonTypingIndicator: View {
                 ShannonChatAvatarView(expression: expression, size: 54)
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
-                        Text("考えている…")
+                        Text(isSearchingMemory ? "記憶を探しています…" : "考えている…")
                             .font(.callout)
                             .foregroundStyle(palette.textSecondary)
                         if let label = ShannonThinkingElapsed.label(seconds: elapsed) {
@@ -50,7 +51,7 @@ struct ShannonTypingIndicator: View {
                 Spacer(minLength: 0)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("シャノンが考えています")
+            .accessibilityLabel(isSearchingMemory ? "シャノンが記憶を探しています" : "シャノンが考えています")
             .accessibilityValue(ShannonThinkingElapsed.label(seconds: elapsed).map { "\($0)経過" } ?? "")
         }
         .onAppear { startedAt = Date() }

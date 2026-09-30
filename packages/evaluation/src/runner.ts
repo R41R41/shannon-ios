@@ -5,7 +5,14 @@ import {
   createInitialCompanionState,
   projectEmotionReaction,
   reduceCompanionState,
+  buildShannonKnowledgePrompt,
+  knowledgeExcerpt,
+  mergeSemanticMemories,
+  normalizeKnowledgeDraft,
+  selectRelevantKnowledge,
+  usableShannonKnowledge,
   restoreCompanionState,
+  searchMemoryDocuments,
   selectContextualMemories,
   selectPrimaryIntent,
 } from '@shannon/cognition';
@@ -83,6 +90,25 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
   if (input.recall) output.selectedMemoryIDs = selectContextualMemories(
     input.recall.query, input.recall.candidates, input.recall.maximum,
   ).map(memory => memory.id);
+  if (input.memorySearch) output.selectedMemoryIDs = searchMemoryDocuments(
+    input.memorySearch.query, input.memorySearch.documents, input.memorySearch.limit,
+  ).map(document => document.id);
+  if (input.semanticRecall) output.selectedMemoryIDs = mergeSemanticMemories(
+    selectContextualMemories(input.semanticRecall.query, input.semanticRecall.candidates),
+    // The production contract: a failed or timed-out semantic stage contributes nothing.
+    input.semanticRecall.status === 'used' ? input.semanticRecall.hits : [],
+  ).map(memory => memory.id);
+  if (input.knowledge) {
+    const { query, documents, forgottenExperienceIds = [], currentAetherVersions = {} } = input.knowledge;
+    const usable = usableShannonKnowledge(documents, id => !forgottenExperienceIds.includes(id), id => currentAetherVersions[id]);
+    const selected = selectRelevantKnowledge(query, usable);
+    output.selectedMemoryIDs = selected.map(document => `knowledge:${document.id}`);
+    output.text = buildShannonKnowledgePrompt(selected.map(document => ({ document, excerpt: knowledgeExcerpt(document), sourceDates: [] })));
+  }
+  if (input.knowledgeDraft) {
+    const result = normalizeKnowledgeDraft(input.knowledgeDraft.draft, new Map(Object.entries(input.knowledgeDraft.sources)));
+    output.text = 'rejected' in result ? `rejected:${result.rejected}` : `status:${result.draft.status}`;
+  }
   if (input.intents) output.primaryIntentID = selectPrimaryIntent(
     input.intents.message, input.intents.threadId, input.intents.values, input.now,
   )?.id ?? null;

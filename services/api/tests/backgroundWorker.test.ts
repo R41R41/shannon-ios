@@ -289,6 +289,27 @@ describe('Shannon durable background worker', () => {
     store.close();
   });
 
+  it('runs Shannon knowledge building after a sleep batch without letting its failure fail the batch', async () => {
+    const store = new SQLiteShannonStore({ path: databasePath(), now: () => '2026-09-01T15:00:00.000Z' });
+    store.appendTurn('owner-a', store.createThread('owner-a', '知識'), '写真整理が進まない', '区切ろう', '2026-09-01T03:00:00.000Z');
+    const windows: string[] = [];
+    const errors: string[] = [];
+    const worker = new ShannonBackgroundWorker(store, store, store, new LocalRuleSleepMemoryAnalyzer(), {
+      workerId: 'knowledge-worker', timeZone: 'Asia/Tokyo', sleepHour: 3,
+      now: () => new Date('2026-09-01T18:30:00.000Z'), reportError: code => errors.push(code),
+      knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
+        windows.push(`${scopeKey}:${startAt}:${endAt}`);
+        throw new Error('KNOWLEDGE_TEST_FAILURE');
+      } },
+    });
+    expect(await worker.runOnce()).toBe('processed'); // turn refinement
+    expect(await worker.runOnce()).toBe('processed'); // sleep consolidation + knowledge
+    expect(windows).toEqual(['owner-a:2026-08-31T15:00:00.000Z:2026-09-01T15:00:00.000Z']);
+    expect(errors).toEqual(['KNOWLEDGE_CONSOLIDATION_KNOWLEDGE_TEST_FAILURE']);
+    expect(store.events('owner-a').map(event => event.type)).toContain('sleep.completed');
+    store.close();
+  });
+
   it('recovers a turn saved immediately before an API process crash', async () => {
     const path = databasePath();
     const apiStore = new SQLiteShannonStore({ path, now: () => '2026-08-31T00:00:00.000Z' });

@@ -1,7 +1,11 @@
 import type {
   CompanionStateEvent,
   CompanionStateSnapshot,
+  MemorySearchDocument,
   RecallCandidate,
+  SemanticRecallHit,
+  KnowledgeDraft,
+  ShannonKnowledgeDocument,
   ShannonCognitiveFrame,
   ShannonIntent,
   ShannonMemoryQuery,
@@ -12,6 +16,9 @@ export type CognitiveScenarioCategory =
   | 'state-transition'
   | 'memory-visibility'
   | 'recall'
+  | 'memory-search'
+  | 'semantic-fallback'
+  | 'knowledge-safety'
   | 'affect'
   | 'intent-selection'
   | 'prompt-projection';
@@ -33,6 +40,22 @@ export interface CognitiveEvaluationInput {
   events?: readonly CompanionStateEvent[];
   affect?: { message: string };
   recall?: { query: ShannonMemoryQuery; candidates: readonly RecallCandidate[]; maximum?: number };
+  memorySearch?: { query: string; documents: readonly MemorySearchDocument[]; limit?: number };
+  /** Deterministic recall followed by a semantic stage that succeeded, failed, or timed out. */
+  semanticRecall?: {
+    query: ShannonMemoryQuery;
+    candidates: readonly RecallCandidate[];
+    status: 'used' | 'failed' | 'timeout';
+    hits: readonly SemanticRecallHit[];
+  };
+  /** Shannon private knowledge projected for one query after the usability gate. */
+  knowledge?: {
+    query: string;
+    documents: readonly ShannonKnowledgeDocument[];
+    forgottenExperienceIds?: readonly string[];
+    currentAetherVersions?: Readonly<Record<string, number>>;
+  };
+  knowledgeDraft?: { draft: KnowledgeDraft; sources: Readonly<Record<string, string>> };
   intents?: { message: string; threadId: string; values: readonly ShannonIntent[] };
   prompt?:
     | { kind: 'state'; snapshot?: CompanionStateSnapshot; maximumCharacters?: number }
@@ -59,7 +82,7 @@ export interface CognitiveEvaluationOutput {
 }
 
 const categories = new Set<CognitiveScenarioCategory>([
-  'state-transition', 'memory-visibility', 'recall', 'affect', 'intent-selection', 'prompt-projection',
+  'state-transition', 'memory-visibility', 'recall', 'memory-search', 'semantic-fallback', 'knowledge-safety', 'affect', 'intent-selection', 'prompt-projection',
 ]);
 export function isCognitiveEvaluationScenario(value: unknown): value is CognitiveEvaluationScenario {
   if (!value || typeof value !== 'object') return false;

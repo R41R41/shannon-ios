@@ -1,0 +1,14 @@
+{
+  "description": "Shared cases for the text memory-turn classifier. TypeScript: packages/cognition/src/semanticRecall.ts. Swift: ShannonMemoryRecallCue. Synthetic utterances only.",
+  "cases": [
+    { "text": "前に決めた待機文の理由を覚えてる？", "memoryTurn": true },
+    { "text": "旅の予定どうなったっけ？", "memoryTurn": true },
+    { "text": "写真整理について何を覚えてる？", "memoryTurn": true },
+    { "text": "この前話したアプリの件の続き", "memoryTurn": true },
+    { "text": "なぜ決めたんだっけ", "memoryTurn": true },
+    { "text": "今日は暑いね", "memoryTurn": false },
+    { "text": "天気を調べて", "memoryTurn": false },
+    { "text": "こんにちは", "memoryTurn": false },
+    { "text": "SwiftUIでリストを作る方法", "memoryTurn": false }
+  ]
+}
