@@ -302,6 +302,10 @@ async function completeLiveVoiceDelegation(
     '- Return concise verified facts for Shannon to paraphrase aloud. Avoid Markdown tables and long URLs.',
     '- This lane is read-only unless an explicit user command has already returned a verified proposal receipt. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
+    ...(!temporaryGuest ? [
+      '- Shannon can propose a Codex implementation task, including adding a new capability or changing Shannon itself. A user starts the visible proposal before code work runs. Never claim this capability is unavailable.',
+      '- If an ASR-uncertain request sounds like an implementation request, briefly confirm the intended feature before proposing it. Do not treat uncertain speech as execution authorization.',
+    ] : []),
     ...(selectedSkills.has('current_web') ? [
       '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
       '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',

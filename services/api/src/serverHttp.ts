@@ -59,6 +59,22 @@ export function consumeDeviceAllowance(
   return window.count <= maximumPerMinute;
 }
 
+// A voice turn can synthesize several sentences, including one prefetched sentence.
+// Keep that budget separate from session/delegation requests so a long spoken reply
+// cannot exhaust the allowance needed to finish its own audio.
+export class VoiceRequestAllowances {
+  private readonly controlUsage = new Map<string, { startedAt: number; count: number }>();
+  private readonly speechUsage = new Map<string, { startedAt: number; count: number }>();
+
+  consumeControl(deviceId: string): boolean {
+    return consumeDeviceAllowance(this.controlUsage, deviceId, 30);
+  }
+
+  consumeSpeech(deviceId: string): boolean {
+    return consumeDeviceAllowance(this.speechUsage, deviceId, 60);
+  }
+}
+
 export async function readJson(request: IncomingMessage, maximumBytes: number): Promise<unknown> {
   const body = await readBytes(request, maximumBytes);
   if (!body.byteLength) return undefined;

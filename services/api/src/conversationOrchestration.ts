@@ -189,7 +189,7 @@ function executionReceiptLine(task: AgentTask): string {
 }
 
 function classifyAction(message: string): ConversationActionKind | null {
-  if (/(?:実装|修正|改善|変更|追加|削除|統合|構築|作成|開発).{0,80}(?:して|お願い|ほしい|やって|進めて)|(?:して|やって|進めて)(?:ください|ほしい|お願い)?$/u.test(message)) return 'implement';
+  if (/(?:実装|修正|改善|変更|追加|削除|統合|構築|作成|開発).{0,80}(?:して|お願い|ほしい|やって|進めて)|(?:して|やって|進めて)(?:ください|ほしい|お願い)?$|作って(?:くれない|くれる|ください|ほしい|お願い)?(?:[？?。!！]|$)/u.test(message)) return 'implement';
   if (/(?:完了|終わり|済み).{0,40}(?:にして|更新して)/u.test(message)) return 'complete';
   if (/(?:更新|反映|書き換え).{0,60}(?:して|お願い|ほしい)/u.test(message)) return 'update';
   if (/(?:見て|確認して|調べて|読んで|探して)/u.test(message)) return 'inspect';
@@ -197,7 +197,7 @@ function classifyAction(message: string): ConversationActionKind | null {
 }
 
 function requiresExplicitExecution(message: string): boolean {
-  return /(?:実装|修正|改善|変更|追加|削除|統合|構築|作成|開発|更新|反映).{0,80}(?:して|お願い|ほしい|やって|進めて)/u.test(message);
+  return /(?:実装|修正|改善|変更|追加|削除|統合|構築|作成|開発|更新|反映).{0,80}(?:して|お願い|ほしい|やって|進めて)|作って(?:くれない|くれる|ください|ほしい|お願い)?(?:[？?。!！]|$)/u.test(message);
 }
 
 function initialState(scopeKey: string, threadId: string, occurredAt: string): ConversationOrchestrationState {

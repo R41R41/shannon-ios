@@ -15,6 +15,14 @@ const directories: string[] = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
 
 describe('conversation execution orchestration', () => {
+  it('recognizes a colloquial request to add a capability as implementation work', () => {
+    const state = observeConversationTurn({ previous: null, scopeKey: 'owner', threadId: 'thread',
+      message: '新しいセンサーの機能を、あの、作ってくれない？シャノンに。',
+      occurredAt: at, participantMode: 'owner', tasks: [] })!;
+    expect(state.pendingAction?.kind).toBe('implement');
+    expect(state.approvedScope).toHaveLength(1);
+  });
+
   it('keeps additions and corrections on one durable proposal identity', () => {
     const store = new InMemoryConversationOrchestrationStore();
     let state = observeConversationTurn({ previous: null, scopeKey: 'owner', threadId: 'thread',

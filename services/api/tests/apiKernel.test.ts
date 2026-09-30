@@ -113,6 +113,20 @@ describe('Shannon local API kernel', () => {
     expect(model.requests).toHaveLength(2);
   });
 
+  it('routes a colloquial voice capability request to a visible implementation proposal', async () => {
+    const model = new VoiceAwareRecordingModel();
+    model.taskProposal = { title: 'センサー機能', goal: 'シャノンにセンサー機能を追加する',
+      projectHint: 'shannon-ios' };
+    const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', { chatModel: model });
+    const result = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: { scopeKey: 'owner-a', threadId: 'thread-work',
+        transcript: 'センサーを使う機能を、あの、作ってくれない？シャノンに。' } });
+    expect(result).toMatchObject({ status: 200,
+      body: { uiBlocks: [{ type: 'agent_task_proposal', projectHint: 'shannon-ios' }] } });
+    expect(model.requests).toHaveLength(1);
+    expect(model.voiceRequests).toHaveLength(0);
+  });
+
   it('skips the reply model when the voice decision says no response is needed', async () => {
     const model = new VoiceAwareRecordingModel();
     const api = createLocalApiKernel(() => '2026-09-15T00:00:00.000Z', {

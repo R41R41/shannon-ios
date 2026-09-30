@@ -59,6 +59,8 @@ describe('contextual ASR reliability and authority', () => {
     expect(h.decisions[0]?.rawTranscript).toContain('写真せいり');
     expect(h.requests).toHaveLength(1);
     expect(h.requests[0]?.systemPrompt).toContain('[Contextual transcript interpretation required]');
+    expect(h.requests[0]?.systemPrompt).toContain('can propose a Codex implementation task');
+    expect(h.requests[0]?.systemPrompt).not.toContain('Aetherのノートのことですね');
     expect(h.requests[0]?.systemPrompt).toContain('写真せいり');
     expect(h.requests[0]?.systemPrompt).toContain('Output was interrupted, NOT their input');
     expect(h.store.list('owner', 'thread')).toEqual([]);

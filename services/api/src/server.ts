@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { handleDeviceManagement, handlePushRegistration } from './serverDeviceRoutes.js';
-import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson } from './serverHttp.js';
+import { bindScope, consumeDeviceAllowance, parseHost, parsePort, readBytes, readJson, sendJson, VoiceRequestAllowances } from './serverHttp.js';
 import { bearerAuthorized, configuredApiToken, configuredAuthMode } from './apiAuth.js';
 import { handleVoiceVisionSnapshot } from './serverVoiceVisionRoute.js';
 import { createPairingRoute } from './serverPairingRoute.js';
@@ -97,16 +97,16 @@ const deviceAuth = authMode === 'paired'
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
-const deviceVoiceUsage = new Map<string, { startedAt: number; count: number }>();
+const voiceAllowances = new VoiceRequestAllowances();
 const activeVoiceScopes = new Set<string>();
 const geminiSpeechRoute = createGeminiSpeechRoute(
-  process.env, persistentStore, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+  process.env, persistentStore, (deviceId) => voiceAllowances.consumeSpeech(deviceId),
 );
 const geminiLiveRoute = createGeminiLiveRoute(
-  process.env, kernel, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+  process.env, kernel, (deviceId) => voiceAllowances.consumeControl(deviceId),
 );
 const liveVoiceStreamRoute = createLiveVoiceStreamRoute(
-  kernel, (deviceId) => consumeDeviceAllowance(deviceVoiceUsage, deviceId, 10),
+  kernel, (deviceId) => voiceAllowances.consumeControl(deviceId),
 );
 const server = createServer(async (request, response) => {
   try {
@@ -285,7 +285,7 @@ async function handleVoiceTranscription(
     sendJson(response, 503, { error: 'VOICE_NOT_CONFIGURED', message: '音声入力は現在利用できません。' });
     return;
   }
-  if (!consumeDeviceAllowance(deviceVoiceUsage, principal.deviceId, 10)) {
+  if (!voiceAllowances.consumeControl(principal.deviceId)) {
     sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
     return;
   }

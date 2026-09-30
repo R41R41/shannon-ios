@@ -2,19 +2,20 @@ import Foundation
 
 enum ShannonElevenCascadeSpeech {
     private static let characterTag = "[anime character]"
+    private static let everydayStyle = "[anime character] [mischievously] [briskly]"
 
     static func style(for text: String, plan: ShannonVoicePlanDTO?) -> String {
         guard let plan else {
             if text.contains("ふふ") || text.contains("任せて") || text.contains("天才") {
-                return "\(characterTag) [mischievously]"
+                return "\(characterTag) [mischievously] [energetically]"
             }
             if text.contains("ありがとう") || text.contains("おかえり") || text.contains("！") {
-                return "\(characterTag) [cheerfully]"
+                return "\(characterTag) [cheerfully] [energetically]"
             }
-            return characterTag
+            return everydayStyle
         }
         let affect: String? = switch plan.affect {
-        case .neutral: nil
+        case .neutral: "[mischievously]"
         case .bright, .happy, .fun, .relief, .pride, .gratitude, .hope, .content,
              .excited, .ecstatic, .triumphant:
             "[cheerfully]"
@@ -40,7 +41,7 @@ enum ShannonElevenCascadeSpeech {
             "[calmly]"
         }
         let delivery: String? = switch plan.delivery {
-        case .conversational: nil
+        case .conversational: plan.affect == .neutral ? "[briskly]" : nil
         case .quick: "[briskly]"
         case .gentle: "[calmly]"
         case .focused: "[clearly]"
@@ -48,7 +49,13 @@ enum ShannonElevenCascadeSpeech {
         }
         var tags = [characterTag]
         if let affect { tags.append(affect) }
-        if let delivery, !tags.contains(delivery) { tags.append(delivery) }
+        let expressiveDelivery: String? = switch plan.affect {
+        case .bright, .happy, .fun, .playful, .giggle, .teasing, .mischievous,
+             .plotting, .smug, .excited, .ecstatic, .triumphant:
+            delivery == nil || delivery == "[briskly]" ? "[energetically]" : delivery
+        default: delivery
+        }
+        if let expressiveDelivery, !tags.contains(expressiveDelivery) { tags.append(expressiveDelivery) }
         return tags.joined(separator: " ")
     }
 }

@@ -74,13 +74,13 @@ export function createGeminiSpeechRoute(
         return sendJson(response, 400, { error: 'GEMINI_SPEECH_INVALID_STYLE' });
       }
       if (provider === 'eleven') validatedElevenTags(style);
-      if (!consumeAllowance(principal.deviceId)) {
-        return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
-      }
       if (!activeScopes.acquire(principal.scopeKey)) {
         return sendJson(response, 429, { error: 'BUSY', message: 'いまの返答を音声にしています。' });
       }
       try {
+        if (!consumeAllowance(principal.deviceId)) {
+          return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
+        }
         if (mode === 'stream') {
           await streamSpeech(request, response, selectedGateway, { scopeKey: principal.scopeKey, text, style }, provider);
           return;
