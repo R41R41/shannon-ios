@@ -108,8 +108,10 @@ public final class ShannonGeminiLiveSessionModel {
         microphonePrimerPhase = nil
 
         phase = .connecting
+        var failedStage = "session"
         do {
             let created = try await createSession(participantMode)
+            failedStage = "audio"
             guard sessionGenerationID == generation else { return }
             session = created
             model = created.model
@@ -135,10 +137,13 @@ public final class ShannonGeminiLiveSessionModel {
             if sessionGenerationID != generation { next.stop() }
         } catch {
             guard sessionGenerationID == generation else { return }
-            fail(
-                "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。",
-                recovery: .reconnect
-            )
+            let code = (error as NSError).code
+            ShannonVoiceDiagnostics.shared.record("gemini.session.start.failed",
+                metadata: ["stage": failedStage, "domain": (error as NSError).domain, "code": String(code)])
+            fail(failedStage == "session"
+                ? "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+                : "マイクや音声の準備ができませんでした。ほかのアプリがマイクを使っていないか確認して、もう一度お試しください。",
+                recovery: .reconnect)
         }
     }
 
@@ -228,7 +233,8 @@ public final class ShannonGeminiLiveSessionModel {
                 preference: preference,
                 activeInputName: inputState.activeInputName,
                 isBuiltInAvailable: inputState.isBuiltInAvailable,
-                isConnectedInputAvailable: inputState.isConnectedInputAvailable
+                isConnectedInputAvailable: inputState.isConnectedInputAvailable,
+                isPreferenceUnavailable: false
             )
             UserDefaults.standard.set(preference.rawValue, forKey: Self.inputPreferenceDefaultsKey)
         } catch {

@@ -45,6 +45,7 @@ final class ShannonGeminiLiveTransport {
     private var stopped = false
     private var didRecordFirstAudioSend = false
     private var inputPreference: ShannonVoiceInputPreference = .automatic
+    private var preferenceUnavailable = false
     private var routeObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
     private(set) var sentAudioSeconds: Double = 0
@@ -269,23 +270,14 @@ final class ShannonGeminiLiveTransport {
     private func applyInputPreference() throws {
         let audioSession = AVAudioSession.sharedInstance()
         let inputs = audioSession.availableInputs ?? []
-        let selected: AVAudioSessionPortDescription?
-        switch inputPreference {
-        case .automatic:
-            selected = nil
-        case .builtIn:
-            guard let input = inputs.first(where: { $0.portType == .builtInMic }) else {
-                publishInputState()
-                throw URLError(.cannotOpenFile)
-            }
-            selected = input
-        case .connected:
-            guard let input = inputs.first(where: { $0.portType != .builtInMic }) else {
-                publishInputState()
-                throw URLError(.cannotOpenFile)
-            }
-            selected = input
+        let resolution = ShannonVoiceInputRouting.resolve(
+            inputPreference, inputIsBuiltIn: inputs.map { $0.portType == .builtInMic }
+        )
+        if resolution.isPreferenceUnavailable, !preferenceUnavailable {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.input.fallback", metadata: ["preference": inputPreference.rawValue])
         }
+        preferenceUnavailable = resolution.isPreferenceUnavailable
+        let selected = resolution.preferredIndex.map { inputs[$0] }
         if audioSession.preferredInput?.uid != selected?.uid {
             try audioSession.setPreferredInput(selected)
         }
@@ -299,7 +291,8 @@ final class ShannonGeminiLiveTransport {
             preference: inputPreference,
             activeInputName: audioSession.currentRoute.inputs.first?.portName,
             isBuiltInAvailable: inputs.contains(where: { $0.portType == .builtInMic }),
-            isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic })
+            isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic }),
+            isPreferenceUnavailable: preferenceUnavailable
         ))
     }
 

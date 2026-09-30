@@ -103,21 +103,27 @@ public struct ShannonVoiceInputState: Equatable, Sendable {
     public let activeInputName: String?
     public let isBuiltInAvailable: Bool
     public let isConnectedInputAvailable: Bool
+    /// The saved choice is not connected, so this call uses automatic routing.
+    public let isPreferenceUnavailable: Bool
 
     public init(
         preference: ShannonVoiceInputPreference = .automatic,
         activeInputName: String? = nil,
         isBuiltInAvailable: Bool = true,
-        isConnectedInputAvailable: Bool = false
+        isConnectedInputAvailable: Bool = false,
+        isPreferenceUnavailable: Bool = false
     ) {
         self.preference = preference
         self.activeInputName = activeInputName
         self.isBuiltInAvailable = isBuiltInAvailable
         self.isConnectedInputAvailable = isConnectedInputAvailable
+        self.isPreferenceUnavailable = isPreferenceUnavailable
     }
 
     public var activeInputLabel: String {
-        activeInputName.map { "使用中: \($0)" } ?? "入力を確認中"
+        guard let activeInputName else { return "入力を確認中" }
+        guard isPreferenceUnavailable else { return "使用中: \(activeInputName)" }
+        return "使用中: \(activeInputName)（\(preference.japaneseLabel)が未接続）"
     }
 
     public func canSelect(_ preference: ShannonVoiceInputPreference) -> Bool {
