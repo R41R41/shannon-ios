@@ -231,22 +231,27 @@ describe('using what she remembers', () => {
     peopleStore.close();
   });
 
-  it('(c) what was said with A is available with A and withheld when only B or an unnamed guest is present', async () => {
+  it('(c) what was said with A is open with A, and marked as A\'s when only B or an unnamed guest is present', async () => {
     const { guestCall, chat, peopleStore } = harness();
     await chat('実は借金があって、ミズクラゲ銀行のローンを返している');
     await guestCall('call-0001', mikiCall);
     const withB = await guestCall('call-0002', ['はじめまして、ケンと言います', 'ミキさんってどんな人？苦手なものは？'], { remember: false });
+    const guarded = '【機微:ほかの人のこと・別の人と一緒の時に聞いた】[ミキさんと一緒の時] ミキさんは辛いものが苦手';
+    expect(withB.prompts[1]).toContain(guarded);
     for (const prompt of withB.prompts) {
-      expect(prompt).not.toContain('辛いものが苦手');
-      expect(prompt).not.toContain('映画に行こう');
-      expect(prompt).not.toContain('ミズクラゲ銀行');
+      expect(prompt).toContain('[Speak-time privacy check');
+      // Nothing about ミキ is listed as what Shannon talked about with the person who is here.
+      expect(prompt).not.toContain('What you talked about with ミキさん before');
+      expect(prompt).not.toMatch(/(?<!】\[ミキさんと一緒の時\] )ミキさんは辛いものが苦手/u);
     }
-    const unnamed = await guestCall('call-0003', ['こんにちは', '苦手な食べ物の話、前にした？'], { remember: false });
-    for (const prompt of unnamed.prompts) expect(prompt).not.toContain('辛いものが苦手');
+    const unnamed = await guestCall('call-0003', ['こんにちは', 'ミキさんの苦手な食べ物って何？'], { remember: false });
+    expect(unnamed.prompts[1]).toContain(guarded);
     const withA = await guestCall('call-0004', ['ミキと言います', '苦手な食べ物の話、前にした？'], { remember: false });
-    expect(withA.prompts[1]).toContain('ミキさんは辛いものが苦手');
-    // A sensitive one-to-one item stays with the owner even when a remembered person is present.
-    for (const prompt of withA.prompts) expect(prompt).not.toContain('ミズクラゲ銀行');
+    expect(withA.prompts[1]).toContain('What you talked about with ミキさん before');
+    expect(withA.prompts[1]).toMatch(/\(\d{4}-\d{2}-\d{2} ミキさんと一緒の時\) ミキさんは辛いものが苦手/u);
+    expect(withA.prompts[1]).not.toContain('【機微:ほかの人のこと');
+    // A protected one-to-one item never appears unmarked, even when a remembered person is present.
+    for (const prompt of withA.prompts) expect(prompt).not.toMatch(/(?<!】)ユーザー: 実は借金/u);
     peopleStore.close();
   });
 
@@ -297,7 +302,7 @@ describe('review regressions', () => {
     const other = await guestCall('call-0002', ['こんにちは', '友達のミキさんが転職したらしい', 'ミキさんの苦手なものって何？'], { remember: false });
     for (const prompt of other.prompts) {
       expect(prompt).not.toContain('you have talked with them before');
-      expect(prompt).not.toContain('辛いものが苦手');
+      expect(prompt).not.toContain('What you talked about with ミキさん before');
       expect(prompt).toContain('No name has been established yet');
     }
     expect(peopleStore.listPeople('owner')).toHaveLength(1);

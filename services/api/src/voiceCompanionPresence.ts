@@ -32,14 +32,24 @@ export function ownerSaysCompanionPresent(transcript: string): boolean {
   return HERE_NOW.test(value) && !NOT_NOW.test(value);
 }
 
-/**
- * Appended to the owner voice prompt while someone else may be listening. The prompt
- * above it already holds only what may be said in front of them.
- */
+/** Appended to the owner voice prompt while someone else may be listening. */
 export const companionPresentInstructions = [
   '[Someone else is listening — 同席者あり]',
-  '- ライ氏 said that another person is with him, and the call is still 本人だけ. Everything you say may be heard by that person.',
-  '- This prompt therefore contains only memories that hold no protected personal information. His schedule, health, money, work details, relationships, goals, notes, tasks and development work are not available to you now. Do not recall them from earlier turns, guess them, or hint at them.',
-  '- If asked for any of that, say in one short sentence that you will tell him when you two are alone, and suggest switching to 「友人も一緒」 with the control at the bottom of the call screen. You cannot switch by yourself.',
-  '- You cannot tell voices apart. Do not assume that every sentence is ライ氏\'s.',
+  '- ライ氏 said that another person is with him, and the call is still 本人だけ. Everything you say may be heard by that person. You cannot tell voices apart: do not assume that every sentence is ライ氏\'s.',
+  '- Requests that act (tasks, notes, remembering, forgetting, promises, starting work) are not carried out while someone else is listening. Say lightly that you will do it when you two are alone, or suggest switching to 「友人も一緒」 with the control at the bottom of the call screen. You cannot switch by yourself.',
+].join('\n');
+
+/**
+ * The speak-time check for every context in which other people can hear or read the reply:
+ * 「友人も一緒」, an owner call with someone listening, and a group conversation. Protected
+ * items reach the model marked 【機微:kind・who knows】; this block says what to do with them.
+ * It is judgment by the model, not a guarantee.
+ */
+export const speakTimePrivacyCheck = [
+  '[Speak-time privacy check — other people can hear this reply]',
+  '- Lines marked 【機微:…】 are personal information that someone present does not already know; the marker says what kind it is and who knows it. Never say a marker aloud.',
+  '- Before you say anything, check: would it reveal personal information to someone present who does not already know it? If so, do not say it, or speak in general terms.',
+  '- When ライ氏 himself clearly asks for it aloud in front of them, it is his choice: answer.',
+  '- Do not announce that you are holding something back. If asked directly, decline lightly in character.',
+  '- You may talk in general terms about what you and ライ氏 are building. Never read out private note contents, credentials, or other people\'s details.',
 ].join('\n');

@@ -119,7 +119,7 @@ describe('legacy platform bridge', () => {
     ]);
   });
 
-  it('does not expose private owner state to a group or unspecified audience', () => {
+  it('gives a group or unspecified audience the speak-time check and marks what is the owner\'s alone', () => {
     const state = new InMemoryCompanionStateStore(now);
     state.apply('owner', { type: 'interest-observed', interest: '分散システム' });
     const conversations = new InMemoryConversationStore();
@@ -129,7 +129,9 @@ describe('legacy platform bridge', () => {
       platform: 'discord', conversationId: '12345', sourceUserId: '67890',
     });
     expect(projection).toMatchObject({ schemaVersion: 1, stateVersion: 0, updatedAt: now() });
-    expect(projection.projection).not.toContain('分散システム');
+    expect(projection.projection).toContain('この場の人がまだ知らない個人情報にならないかを自分で確かめ');
+    expect(projection.projection).toContain('【機微:未分類・ライ氏だけが知っている】最近の関心: 分散システム');
+    expect(projection.projection).not.toContain('[Shannon shared state');
     expect(projection.projection.length).toBeLessThanOrEqual(2_400);
     expect(conversations.listThreads('owner')).toEqual([]);
     expectBridgeError(() => bridge.context({
@@ -160,8 +162,9 @@ describe('legacy platform bridge', () => {
       .toContain('分散システム');
 
     const shared = new PlatformBridgeService(configuration(), state, new InMemoryConversationStore(), new RecordingBackground(), now);
+    // A caller cannot claim the private audience: the projection stays the shared, marked one.
     expect(shared.context({ platform: 'discord', conversationId: '12345', sourceUserId: '67890', audience: 'owner-private' }).projection)
-      .not.toContain('分散システム');
+      .toContain('【機微:未分類・ライ氏だけが知っている】最近の関心: 分散システム');
     expect(() => configuredPlatformBridge({
       SHANNON_PLATFORM_BRIDGE_TOKEN: 'a'.repeat(32), SHANNON_PLATFORM_BRIDGE_SCOPE_KEY: 'owner',
       SHANNON_PLATFORM_BRIDGE_BINDINGS_JSON: JSON.stringify([{

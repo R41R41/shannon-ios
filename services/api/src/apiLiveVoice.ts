@@ -4,6 +4,7 @@ import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '
 import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
+  UNLABELLED_DISCLOSURE_MARKER,
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
   isOwnerOnly,
@@ -54,8 +55,9 @@ import { guestSpeakerReminder, guestTurnPositionInstruction, ownerCompanionPrese
 import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
-import { companionPresentInstructions, ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
+import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 import type { PeopleMemory } from './peopleMemory.js';
+import { DisclosureGate } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -139,6 +141,8 @@ async function completeLiveVoiceDelegation(
   const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
+  // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
+  const legacyGuest = temporaryGuest && guestPresence?.recorded !== true;
   const routingHistory = temporaryGuest ? guestHistory
     : visibleConversationHistory(routingState, dependencies.conversationStore, scopeKey, threadId, present);
   const rawTranscript = deviceContext?.userUtterance?.rawText ?? transcript;
@@ -148,7 +152,8 @@ async function completeLiveVoiceDelegation(
     ? guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source) : null;
   const router = address && !address.respond ? new LocalVoiceDecisionGateway() : dependencies.voiceDecision;
   let decision = await router.decide({
-    scopeKey, transcript, rawTranscript, participantMode,
+    // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
+    scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
     context: boundedVoiceHistory(routingHistory, 4),
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
@@ -163,7 +168,7 @@ async function completeLiveVoiceDelegation(
   }
   if (address) decision = applyGuestAddressing(decision, address);
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
-  const semanticMemoryTurn = !temporaryGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
+  const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
   if (semanticMemoryTurn) decision = withMemorySearchLatency(decision);
   if (decision.selectedSkills.includes('place_discovery')) decision = withMemorySearchLatency(decision);
@@ -173,7 +178,8 @@ async function completeLiveVoiceDelegation(
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
-  const command = !temporaryGuest && !uncertainTranscript && deviceContext?.userUtterance
+  // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone.
+  const command = alone && !uncertainTranscript && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })
@@ -186,7 +192,7 @@ async function completeLiveVoiceDelegation(
     }
     const captured = dependencies.stateStore.snapshot(scopeKey);
     const message = deviceContext?.userUtterance?.text ?? transcript;
-    const provisionalIntent = alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
+    const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
     const cognitiveContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
       scopeKey, message, occurredAt, channel: 'voice', threadId, present,
       intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
@@ -238,6 +244,7 @@ async function completeLiveVoiceDelegation(
       '- If an ASR-uncertain request sounds like an implementation request, briefly confirm the intended feature before proposing it. Do not treat uncertain speech as execution authorization.',
       alone ? ownerCompanionPresenceInstructions : companionPresentInstructions,
     ] : []),
+    ...(!alone && !legacyGuest ? [speakTimePrivacyCheck] : []),
     ...(selectedSkills.has('current_web') ? [
       '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
       '- For local recommendations, use the one-time GPS only if present, check current opening hours and weather on the web, and mention uncertainty briefly.',
@@ -256,13 +263,13 @@ async function completeLiveVoiceDelegation(
     captured,
     dependencies.conversationStore,
     { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId, present,
-      intents: alone ? dependencies.cognitiveIntents.list(scopeKey, 'active') : [], provisionalIntent,
+      intents: legacyGuest ? [] : dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
       timeZone: deviceContext?.timeZoneIdentifier, additionalCandidates: peopleRecall?.candidates ?? [],
       participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
   const complexTurn = decision.conversationClass === 'skill_complex';
-  const recalled = !temporaryGuest && dependencies.memoryRecall
+  const recalled = !legacyGuest && dependencies.memoryRecall
     && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
@@ -278,15 +285,15 @@ async function completeLiveVoiceDelegation(
         : shannonIdentityPrompt('owner'),
       voiceConversationInstructions(true),
     ].join('\n\n');
-  // Today's focus is built from the owner's interests, which carry no label.
-  const dailyMindPrompt = !alone || !selectedSkills.has('daily_mind')
-    ? ''
-    : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  // Agent work, notes and tasks stay with the owner whenever anyone else can hear, whatever their content.
-  const taskPrompt = !alone || !selectedSkills.has('agent_status')
+  // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
+  const focus = legacyGuest || !selectedSkills.has('daily_mind') ? '' : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
+  const dailyMindPrompt = !focus || alone ? focus
+    : new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey).mentionsWithheld(focus) ? '' : `${UNLABELLED_DISCLOSURE_MARKER}\n${focus}`;
+  // Agent work, notes and tasks keep their bounded projections; the speak-time check says how far to go aloud.
+  const taskPrompt = legacyGuest || !selectedSkills.has('agent_status')
     ? ''
     : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
-  const capabilityPrompt = !alone
+  const capabilityPrompt = legacyGuest
     ? ''
     : await conversationCapabilityPrompt(scopeKey, transcript, dependencies, {
       aetherNotes: selectedSkills.has('aether_notes'),
@@ -294,7 +301,7 @@ async function completeLiveVoiceDelegation(
     });
   observer?.signal?.throwIfAborted();
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
-  const includeCognitiveContext = temporaryGuest ? guestPresence?.recorded === true : selectedSkills.has('conversation_memory');
+  const includeCognitiveContext = temporaryGuest ? !legacyGuest : selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
     includeCognitiveContext ? cognitiveContext.prompt : complexTurn ? recalled?.knowledgePrompt : '',
@@ -414,7 +421,7 @@ async function completeLiveVoiceDelegation(
   if (placeSkill?.places.length) {
     uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
   }
-  if (!temporaryGuest && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
+  if (alone && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
         orchestrationState, taskProposal.goal, occurredAt, dependencies.agentTasks.list(scopeKey),

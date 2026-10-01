@@ -9,13 +9,17 @@ import {
 } from './types.js';
 
 /**
- * Audience-scoped memory with a sensitivity gate.
+ * Audience-scoped memory with a speak-time self-check.
  *
  * Every stored item records who was present when it was said and whether it holds
- * personal information that deserves protection. A context states who is present. An
- * item may reach the model when the owner is alone, when the item is ordinary, or when
- * everyone present was already in the item's audience. Whatever is unknown is treated
- * as owner-only and sensitive.
+ * personal information that deserves protection. A context states who is present.
+ * With other people present an item is one of three things:
+ * - `open`: ordinary, or everyone present already heard it. It is used as it is.
+ * - `guarded`: protected and not known to someone present. It still reaches the model,
+ *   with a marker, and the model checks before speaking. This is judgment, not a guarantee.
+ * - `withheld`: the owner asked for secrecy, marked it 機微 by hand, or it comes from a
+ *   call whose guest was never named. It never reaches the model.
+ * Whatever is unknown is treated as owner-only and sensitive, that is, guarded.
  */
 
 export const OWNER_AUDIENCE: MemoryAudience = Object.freeze({ kind: 'owner' as const });
@@ -91,14 +95,47 @@ export function audienceCovers(audience: MemoryAudience | undefined, present: Me
   return audience.kind === 'people' && present.personIds.every(id => audience.personIds.includes(id));
 }
 
+export type DisclosureDecision = 'open' | 'guarded' | 'withheld';
+
 /**
- * The disclosure rule. `present` is who can hear or read the reply.
- * Unknown audience is owner-only; unknown sensitivity is sensitive.
+ * The disclosure rule. `present` is who can hear or read the reply; `disclosure` is the
+ * resolved label (see `resolveDisclosure`). Unknown audience is owner-only; unknown
+ * sensitivity is sensitive.
  */
+export function disclosureDecision(disclosure: MemoryDisclosure | undefined, present: MemoryAudience): DisclosureDecision {
+  if (isOwnerOnly(present) || audienceCovers(disclosure?.audience, present)) return 'open';
+  const sensitivity = disclosure?.sensitivity ?? 'sensitive';
+  // The owner's own choice decides: 機微 by hand never reaches the model, ふつう by hand is used freely.
+  if (disclosure?.decidedBy === 'owner') return sensitivity === 'sensitive' ? 'withheld' : 'open';
+  if (disclosure?.category === 'secret' || disclosure?.category === 'unknown_audience') return 'withheld';
+  return sensitivity === 'ordinary' ? 'open' : 'guarded';
+}
+
+/** Whether the item may reach the model at all while `present` can hear the reply. */
 export function mayDisclose(disclosure: MemoryDisclosure | undefined, present: MemoryAudience): boolean {
-  if (isOwnerOnly(present)) return true;
-  if ((disclosure?.sensitivity ?? 'sensitive') === 'ordinary') return true;
-  return audienceCovers(disclosure?.audience, present);
+  return disclosureDecision(disclosure, present) !== 'withheld';
+}
+
+/** Marker for derived text with no label of its own (summaries, Shannon's notes, goals, interests). */
+export const UNLABELLED_DISCLOSURE_MARKER = '【機微:未分類・ライ氏だけが知っている】';
+
+/**
+ * The compact marker a guarded item carries into the prompt: what kind of personal
+ * information it is and who already knows it. Empty for open items.
+ */
+export function disclosureMarker(
+  disclosure: MemoryDisclosure | undefined,
+  present: MemoryAudience,
+  nameOf: (personId: string) => string | undefined = () => undefined,
+): string {
+  if (disclosureDecision(disclosure, present) !== 'guarded') return '';
+  const kind = disclosure?.category ? SENSITIVITY_CATEGORY_LABELS[disclosure.category] : '未分類';
+  const audience = disclosure?.audience;
+  const names = audience?.kind === 'people' ? audience.personIds.flatMap(id => nameOf(id) ?? []).map(name => `${name}さん`) : [];
+  const knownBy = !audience || isOwnerOnly(audience) ? 'ライ氏だけが知っている'
+    : audience.kind === 'group' ? '別のグループの会話で出た'
+      : `${names.length ? names.join('・') : '別の人'}と一緒の時に聞いた`;
+  return `【機微:${kind}・${knownBy}】`;
 }
 
 /** The stored label with the owner's own 機微／ふつう choice applied. */
@@ -190,16 +227,16 @@ export function disclosureFor(
 }
 
 /**
- * The snapshot as it may be shown to a model while `present` can hear the reply.
- * With only the owner present it is returned unchanged. Otherwise unlabelled
- * projections (interests, cached active memories) are dropped.
+ * The snapshot as it may reach a model while `present` can hear the reply: withheld
+ * items are removed, guarded ones stay (the prompt marks them). With only the owner
+ * present it is returned unchanged. The cached active-memory projection is dropped
+ * because its entries cannot be told apart from withheld turns; recall rebuilds it.
  */
 export function discloseSnapshot(snapshot: CompanionStateSnapshot, present: MemoryAudience): CompanionStateSnapshot {
   if (isOwnerOnly(present)) return snapshot;
   const allowed = (id: string, stored: MemoryDisclosure | undefined) => mayDisclose(resolveDisclosure(snapshot, id, stored), present);
   return Object.freeze({
     ...snapshot,
-    interests: Object.freeze([]),
     activeMemories: Object.freeze([]),
     userFacts: Object.freeze(snapshot.userFacts.filter(item => allowed(item.id, item.disclosure))),
     relationships: Object.freeze(snapshot.relationships.filter(item => allowed(item.id, item.disclosure))),

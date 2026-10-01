@@ -112,10 +112,12 @@ export class SemanticMemoryRecall {
         signal.throwIfAborted();
         scores = new Map(ranked.filter(row => scores.has(row.id)).map(row => [row.id, row.relevance]));
       }
+      const gate = new DisclosureGate(input.present, input.snapshot, conversationStoreOf(this.index), input.scopeKey);
       const hits = shortlist.flatMap(row => {
         const relevance = scores.get(row.candidate.id);
         return relevance === undefined ? [] : [{
-          id: row.candidate.id, summary: row.candidate.summary, observedAt: row.candidate.observedAt, relevance,
+          id: row.candidate.id, summary: `${gate.markerForRecallId(row.candidate.id)}${row.candidate.summary}`,
+          observedAt: row.candidate.observedAt, relevance,
         }];
       });
       return finish(hits.length ? 'used' : 'empty', hits);
