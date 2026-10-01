@@ -148,6 +148,7 @@ public struct ShannonDesktopRootView: View {
                 try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 await conversation.refreshInitiatives()
+                await conversation.refreshCaptures()
             }
         }
         .onChange(of: conversation.agentTasks.map(\.id)) {

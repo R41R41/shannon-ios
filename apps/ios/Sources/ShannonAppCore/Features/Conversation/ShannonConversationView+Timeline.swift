@@ -34,6 +34,9 @@ extension ShannonConversationView {
                                 sendToAether: { Task { await model.sendToAether(message) } }
                             )
                                 .id(message.id)
+                            if ShannonTurnCaptureList.hasContent(message) {
+                                ShannonTurnCaptureList(message: message, conversation: model, memory: memoryModel)
+                            }
                             if let task = model.agentTask(sourceMessageID: message.id) {
                                 ShannonAgentTaskCardView(
                                     task: task,

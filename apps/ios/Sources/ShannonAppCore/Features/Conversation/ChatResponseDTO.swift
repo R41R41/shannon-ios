@@ -11,6 +11,8 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public let state: CompanionStateDTO
     public let uiBlocks: [ShannonUIBlockDTO]?
     public let artifacts: [ShannonGeneratedArtifactDTO]?
+    /// Absent on servers that do not record per-turn captures.
+    public let turnId: String?
 
     public init(
         mode: String,
@@ -22,8 +24,10 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
         state: CompanionStateDTO,
         uiBlocks: [ShannonUIBlockDTO]? = nil,
         artifacts: [ShannonGeneratedArtifactDTO]? = nil,
-        thread: ChatThreadDTO? = nil
+        thread: ChatThreadDTO? = nil,
+        turnId: String? = nil
     ) {
+        self.turnId = turnId
         self.thread = thread
         self.mode = mode
         self.reply = reply

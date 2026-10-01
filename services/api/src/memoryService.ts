@@ -13,6 +13,7 @@ import type { PersonalityProfile } from './knowledgeStore.js';
 import type { WorldItem, WorldReader } from './worldStore.js';
 import { configuredBackgroundBudgetUsd, type LlmUsageReader, type LlmUsageSummaryRow } from './llmUsage.js';
 import { commitmentDeadline } from './commitmentTime.js';
+import { SNOOZE_MILLISECONDS } from './commitmentInitiative.js';
 import type { CommitmentSleepReview } from './sleepCommitmentReview.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from './initiativeStore.js';
 import type { DailyMindFocus, DailyMindReader } from './dailyMind.js';
@@ -46,7 +47,7 @@ export interface MemoryItem {
   updatedAt: string;
   changeReason: string;
   evidence: readonly MemoryEvidence[];
-  commitment?: { status: 'pending' | 'completed' | 'dismissed'; dueAt?: string; dueDate?: string; dueHint?: string; timeZone?: string };
+  commitment?: { status: 'pending' | 'completed' | 'dismissed'; dueAt?: string; dueDate?: string; dueHint?: string; timeZone?: string; remindAfter?: string };
 }
 
 export interface SleepChange {
@@ -107,7 +108,7 @@ export interface ActivityItem {
   occurredAt: string;
 }
 
-export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore' | 'complete' | 'dismiss';
+export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore' | 'complete' | 'dismiss' | 'snooze';
 
 export interface MemoryMutation {
   memoryId: string;
@@ -163,7 +164,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
             ?? (memory.sourceExperienceId ? controls.get(memory.sourceExperienceId) : undefined), metadata.get(memory.id)),
         updatedAt: controls.get(memory.id)?.updatedAt ?? memory.updatedAt,
         commitment: { status: memory.status, dueAt: memory.dueAt, dueDate: memory.dueDate,
-          dueHint: memory.dueHint, timeZone: memory.timeZone },
+          dueHint: memory.dueHint, timeZone: memory.timeZone, remindAfter: memory.remindAfter },
       });
     }
 
@@ -265,8 +266,16 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const timestamp = this.now();
     const events: CompanionStateEvent[] = [];
     const promise = state.prospectiveMemories.find(memory => memory.id === item.id);
-    if ((mutation.action === 'complete' || mutation.action === 'dismiss') && !promise) {
+    if ((mutation.action === 'complete' || mutation.action === 'dismiss' || mutation.action === 'snooze') && !promise) {
       throw new Error('MEMORY_COMMITMENT_REQUIRED');
+    }
+    if (promise && mutation.action === 'snooze') {
+      // 「あとで」 is a new revision of the same promise: one more reminder, inside the same daily slot.
+      if (promise.status !== 'pending') throw new Error('MEMORY_COMMITMENT_REQUIRED');
+      this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', replace: true, memory: {
+        ...promise, updatedAt: timestamp, remindAfter: new Date(Date.parse(timestamp) + SNOOZE_MILLISECONDS).toISOString(),
+      } });
+      return this.dashboard(scopeKey);
     }
     const source = this.history?.experienceCandidates(scopeKey).find(value => value.id === (promise?.sourceExperienceId ?? item.id));
     const control = { ...actionControl(item, previous, mutation, timestamp),
@@ -274,7 +283,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       contextInvalidatedAt: ['forget', 'reject', 'correct'].includes(mutation.action) ? timestamp : previous?.contextInvalidatedAt };
     events.push({ type: 'memory-control-upserted', control });
     if (promise && mutation.action === 'correct' && control.overrideText) {
-      const { dueAt: _at, dueDate: _date, dueHint: _hint, ...retained } = promise;
+      const { dueAt: _at, dueDate: _date, dueHint: _hint, remindAfter: _remind, ...retained } = promise;
       events.push({ type: 'prospective-memory-upserted', replace: true, memory: {
         ...retained, summary: control.overrideText, updatedAt: timestamp,
         ...commitmentDeadline(control.overrideText, timestamp, promise.timeZone),

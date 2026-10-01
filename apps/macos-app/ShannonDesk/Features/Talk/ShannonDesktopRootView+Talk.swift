@@ -70,6 +70,9 @@ extension ShannonDesktopRootView {
                                 } : nil
                             )
                                 .id(message.id)
+                            if ShannonTurnCaptureList.hasContent(message) {
+                                ShannonTurnCaptureList(message: message, conversation: conversation, memory: memory)
+                            }
                             if let session = conversation.organizeSession(sourceMessageID: message.id) {
                                 ShannonConversationOrganizeCard(model: conversation, session: session)
                                 .id("organize-session-\(session.id)")

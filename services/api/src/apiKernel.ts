@@ -40,11 +40,8 @@ import { LocalStubChatModel, type ShannonChatAttachment, type ShannonChatModel }
 import { LocalVoiceDecisionGateway, type VoiceDecisionGateway } from './voiceDecision.js';
 import { InMemoryConversationStore, type ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, ChatRequest, ChatResponse, StateEventRequest } from './contracts.js';
-import {
-  ShannonMemoryService,
-  type MemoryAction,
-  type ShannonMemoryStore,
-} from './memoryService.js';
+import { ShannonMemoryService, type MemoryAction, type ShannonMemoryStore } from './memoryService.js';
+import { conversationWithCaptures } from './turnCaptures.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { InitiativeInbox } from './initiativeStore.js';
 import type { AetherContextReader } from './aetherContext.js';
@@ -229,7 +226,7 @@ export class ShannonApiKernel {
         status: 200,
         body: {
           threadId: resolvedThreadId,
-          messages: this.conversationStore.conversationHistory(scopeKey, resolvedThreadId),
+          messages: conversationWithCaptures({ conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents }, scopeKey, resolvedThreadId),
           state: this.stateStore.snapshot(scopeKey),
         },
       };
@@ -402,7 +399,7 @@ export class ShannonApiKernel {
         return {
           status: 200,
           body: {
-            mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId,
+            mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId, turnId: experience.id,
             snapshotVersion: captured.version, messageEmotion, systemPrompt, state: captured,
             thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId),
             ...(session ? { uiBlocks: [{ type: 'organize_session' as const, session }] } : {}),
@@ -454,6 +451,7 @@ export class ShannonApiKernel {
         completedAt: occurredAt,
       };
       const experience = this.background.recordTurn(completedTurn);
+      response.turnId = experience.id;
       const completedIntent = recordCompletedCognitiveCycle(this.cognitiveIntents, body.scopeKey, cognitiveContext.frame, provisionalIntent, experience.id, {
         threadId, channel: 'text', action: 'respond', summary: '現在の状況・記憶・意図を使って返答した。', occurredAt,
       }, provisionalIntent ? completion.intentPlan : undefined);

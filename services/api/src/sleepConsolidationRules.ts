@@ -38,6 +38,11 @@ export const EXPLICIT_FACT_PATTERNS = [
     statement: (value: string) => `ユーザーは${value}が苦手`,
     accept: directPreferenceValue,
   },
+  {
+    pattern: /^(?:僕は|私は|自分は)?(?:最近|近頃)?(?:は)?(?:、)?([^はが、]{1,60}?)が好きになった(?:んだ|よ)?$/u,
+    statement: (value: string) => `ユーザーは${value}が好き`,
+    accept: directPreferenceValue,
+  },
   { pattern: /^(?:僕は|私は|自分は)(?:、)?(.{1,100}?)(?:をしている|をやっている)(?:んだ|よ)?$/u, statement: (value: string) => `ユーザーは${value}をしている` },
   { pattern: /^(?:僕の|私の|自分の)?名前は(?:、)?(.{1,60})$/u, statement: (value: string) => `ユーザーの名前は${value}` },
   { pattern: /^(?:僕の|私の|自分の)?(?:仕事|職業)は(?:、)?(.{1,100})$/u, statement: (value: string) => `ユーザーの仕事は${value}` },
@@ -62,6 +67,26 @@ interface RulePattern {
   accept?: (value: string, text: string) => boolean;
 }
 
+const RESTATEMENT_OPENER = /^(?:やっぱり|やっぱ|やはり|実は|本当は|ほんとは)[、,\s]*/u;
+
+function ruleStatement(text: string, pattern: RulePattern): string | null {
+  const match = text.match(pattern.pattern);
+  if (!match) return null;
+  const value = (match[1] ?? '').trim().replace(/[。！？].*$/u, '').replace(RESTATEMENT_OPENER, '').slice(0, 100);
+  if (match[1] !== undefined && !value) return null;
+  if (pattern.accept && !pattern.accept(value, text)) return null;
+  return pattern.statement(value);
+}
+
+/** The statement a directly stated owner fact would be stored as, or null when no explicit rule applies. */
+export function explicitFactStatement(text: string): string | null {
+  for (const pattern of EXPLICIT_FACT_PATTERNS) {
+    const statement = ruleStatement(text, pattern);
+    if (statement) return statement;
+  }
+  return null;
+}
+
 export function appendRuleProposal(
   proposals: UserFactProposal[],
   text: string,
@@ -69,12 +94,8 @@ export function appendRuleProposal(
   kind: 'user-fact' | 'relationship' | 'interest',
 ): void {
   if (!isOwnerMemoryEvidence(text)) return;
-  const match = text.match(pattern.pattern);
-  if (!match) return;
-  const value = (match[1] ?? '').trim().replace(/[。！？].*$/u, '').slice(0, 100);
-  if (match[1] !== undefined && !value) return;
-  if (pattern.accept && !pattern.accept(value, text)) return;
-  proposals.push({ kind, statement: pattern.statement(value), evidence: text.slice(0, 240) });
+  const statement = ruleStatement(text, pattern);
+  if (statement) proposals.push({ kind, statement, evidence: text.slice(0, 240) });
 }
 
 export function directPreferenceValue(value: string): boolean {
@@ -87,43 +108,69 @@ export function consolidateProposals(
   current: CompanionStateSnapshot,
   observedAt: string,
   initialConfidence: number,
+  options: { revise?: boolean } = {},
 ): ImmediateMemoryOutcome {
   const facts: UserFact[] = [];
   const relationships: RelationshipInsight[] = [];
   const interests: string[] = [];
+  const revisions: { id: string; previousText: string }[] = [];
   for (const proposal of proposals) {
     const kind = proposal.kind ?? 'user-fact';
     const statement = normalize(proposal.statement).slice(0, 160);
     const evidence = normalize(proposal.evidence).slice(0, 240);
     if (!statement || !evidence || !source.includes(evidence) || !isOwnerMemoryEvidence(evidence, source)) continue;
     if (isForgottenCommitmentEvidence(current, evidence)) continue;
-    const id = memoryId(kind, statement);
+    const stored = kind === 'interest' ? [] : kind === 'user-fact' ? current.userFacts : current.relationships;
+    // A revised fact keeps its original id, so the same sentence must resolve to it.
+    let id = stored.find(item => item.statement === statement)?.id ?? memoryId(kind, statement);
     const control = current.memoryControls.find(item => item.memoryId === id);
     if (control && control.status !== 'active') continue;
-    if (conflictingCurrent(current, kind, statement)) continue;
-    if (kind === 'user-fact') {
-      const previous = current.userFacts.find(item => item.id === id);
-      facts.push({
-        id, statement,
-        confidence: Math.min(0.9, previous ? previous.confidence + 0.08 : initialConfidence),
-        observedAt, evidence,
-      });
-    } else if (kind === 'relationship') {
-      const previous = current.relationships.find(item => item.id === id);
-      relationships.push({
-        id, statement,
-        confidence: Math.min(0.9, previous ? previous.confidence + 0.08 : initialConfidence),
-        observedAt, evidence,
-      });
-    } else if (!current.interests.includes(statement)) {
-      interests.push(statement);
+    const conflict = conflictingCurrent(current, kind, statement);
+    const superseded = conflict ?? (options.revise && kind === 'user-fact' ? supersededCurrent(current, statement) : null);
+    let revised = false;
+    if (superseded && superseded.id !== id) {
+      // The nightly batch still holds a contradiction for review; only a newer
+      // utterance in the live conversation may update what the owner said before.
+      if (!options.revise || !mayRevise(current, superseded.id, observedAt)) continue;
+      revisions.push({ id: superseded.id, previousText: superseded.text });
+      id = superseded.id;
+      revised = true;
     }
+    const previous = revised ? undefined : stored.find(item => item.id === id);
+    const item = {
+      id, statement,
+      confidence: Math.min(0.9, previous ? previous.confidence + 0.08 : initialConfidence),
+      observedAt, evidence,
+    };
+    if (kind === 'user-fact') facts.push(item);
+    else if (kind === 'relationship') relationships.push(item);
+    else if (!current.interests.includes(statement)) interests.push(statement);
   }
   return Object.freeze({
     facts: Object.freeze(facts.slice(0, 8)),
     relationships: Object.freeze(relationships.slice(0, 6)),
     interests: Object.freeze(interests.slice(0, 6)),
+    revisions: Object.freeze(revisions),
   });
+}
+
+/** An owner correction is authoritative, and a late job must not undo a newer statement. */
+function mayRevise(current: CompanionStateSnapshot, id: string, observedAt: string): boolean {
+  if (current.memoryControls.some(control => control.memoryId === id && (control.status !== 'active' || control.overrideText))) return false;
+  const stored = current.userFacts.find(item => item.id === id) ?? current.relationships.find(item => item.id === id);
+  return Boolean(stored) && stored!.observedAt < observedAt;
+}
+
+const SINGLE_VALUED = /^ユーザーの(名前|仕事|誕生日)は/u;
+
+/** A stored answer that a new statement replaces without being its opposite: 「寿司より焼肉が好き」, a new name or address. */
+export function supersededCurrent(current: CompanionStateSnapshot, candidate: string): { id: string; text: string } | null {
+  const comparative = candidate.match(/^ユーザーは(.{1,40}?)より(.{1,40}?)(?:の方|のほう)?が好き$/u);
+  const attribute = candidate.match(SINGLE_VALUED)?.[1] ?? (/に住んでいる$/u.test(candidate) ? '住所' : null);
+  const row = current.userFacts.find(item => item.statement !== candidate && (
+    (comparative && polarity(item.statement) === 1 && topic(item.statement) === comparative[1])
+    || (attribute && (item.statement.match(SINGLE_VALUED)?.[1] ?? (/に住んでいる$/u.test(item.statement) ? '住所' : null)) === attribute)));
+  return row ? { id: row.id, text: row.statement } : null;
 }
 
 export function parseProposalRows(value: unknown, kind: UserFactProposal['kind']): UserFactProposal[] {

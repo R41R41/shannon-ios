@@ -23,6 +23,22 @@ extension ShannonAPIClient {
         return try JSONDecoder().decode(ConversationHistoryResponseDTO.self, from: data)
     }
 
+    public func loadConversationCaptures(scopeKey: String, threadId: String) async throws -> ShannonConversationCapturesDTO {
+        let connection = currentConnection()
+        var components = URLComponents(
+            url: baseURL.appending(path: "/v1/conversation/captures"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey),
+            URLQueryItem(name: "threadId", value: threadId),
+        ]
+        guard let url = components?.url else { throw ShannonAPIError.invalidResponse }
+        var request = URLRequest(url: url)
+        authorize(&request, connection: connection)
+        return try await response(ShannonConversationCapturesDTO.self, for: request)
+    }
+
     public func loadThreads(scopeKey: String) async throws -> ThreadListResponseDTO {
         let connection = currentConnection()
         var components = URLComponents(

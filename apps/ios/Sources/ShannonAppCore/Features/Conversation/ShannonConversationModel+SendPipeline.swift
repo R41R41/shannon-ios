@@ -59,9 +59,12 @@ extension ShannonConversationModel {
                     stateVersion: response.snapshotVersion
                 ),
                 artifacts: response.artifacts ?? [],
-                places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? []
+                places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? [],
+                turnID: response.turnId
             )
             messages.append(replyMessage)
+            // The reply never waits for memory extraction; what was captured is fetched afterwards.
+            scheduleCaptureRefresh()
             installAgentTaskProposals(
                 response.uiBlocks ?? [],
                 threadID: response.threadId,

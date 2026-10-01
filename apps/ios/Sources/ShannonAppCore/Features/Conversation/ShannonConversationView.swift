@@ -94,6 +94,9 @@ public struct ShannonConversationView: View {
         .onChange(of: scenePhase) {
             if scenePhase != .active {
                 voiceModel.cancel()
+            } else {
+                // Another device, or the worker, may have recorded captures while this one was away.
+                Task { await model.refreshCaptures() }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in

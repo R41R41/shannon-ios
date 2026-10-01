@@ -36,5 +36,5 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     messageEmotion, completedAt: dependencies.now(), timeZone };
   const experience = dependencies.background.recordTurn(turn);
   dependencies.background.schedule(turn, experience.id);
-  return { status: 201, body: { threadId, messageEmotion, state: captured } };
+  return { status: 201, body: { threadId, turnId: experience.id, messageEmotion, state: captured } };
 }

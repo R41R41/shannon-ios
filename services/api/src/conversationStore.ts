@@ -4,6 +4,7 @@ import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem, ShannonGeneratedArtifact } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
 import { DEFAULT_THREAD_TITLE, initialThreadTitle } from './threadTitle.js';
+import type { ReminderReference, ReminderView, TurnCaptureRecord, TurnCaptureView } from './turnCaptures.js';
 
 export interface ShannonExperience extends RecallCandidate {
   timeZone?: string;
@@ -37,6 +38,10 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
   sourceAttribution?: ShannonSourceAttribution;
+  /** The promise a reminder message is about; resolved to a `ReminderView` for clients. */
+  reminder?: ReminderReference | ReminderView;
+  /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */
+  captures?: readonly TurnCaptureView[];
 }
 
 export interface TurnPersistenceContext {
@@ -93,6 +98,9 @@ export interface ConversationStore {
    * experience event, so it never becomes a memory, promise, or profile source.
    */
   appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage;
+  /** Durable per-turn capture records. Optional so lightweight stores stay valid. */
+  recordTurnCaptures?(scopeKey: string, captures: readonly TurnCaptureRecord[]): void;
+  turnCaptures?(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[];
 }
 
 export class InMemoryConversationStore implements ConversationStore {
@@ -105,6 +113,7 @@ export class InMemoryConversationStore implements ConversationStore {
   private readonly platformReceipts = new Map<string, { payloadHash: string; experience: ShannonExperience }>();
 
   private readonly defaultThreadCache = new Map<string, string>();
+  private readonly captures = new Map<string, Map<string, TurnCaptureRecord>>();
 
   constructor(
     private readonly maximumConversationItems = 200,
@@ -315,6 +324,17 @@ export class InMemoryConversationStore implements ConversationStore {
     threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));
     this.conversations.set(scopeKey, threads);
     return Object.freeze({ ...note });
+  }
+
+  recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]): void {
+    const rows = this.captures.get(scopeKey) ?? new Map<string, TurnCaptureRecord>();
+    for (const capture of captures) if (!rows.has(capture.id)) rows.set(capture.id, Object.freeze({ ...capture }));
+    this.captures.set(scopeKey, rows);
+  }
+
+  turnCaptures(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[] {
+    const wanted = new Set(turnIds);
+    return Object.freeze([...this.captures.get(scopeKey)?.values() ?? []].filter(capture => wanted.has(capture.turnId)));
   }
 
   ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult {

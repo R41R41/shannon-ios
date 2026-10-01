@@ -151,9 +151,14 @@ struct ShannonKnowledgeCorrectionModifier: ViewModifier {
         content.sheet(item: $editingAnswer) { answer in
             NavigationStack {
                 Form {
-                    Section(answer.question) {
+                    Section {
                         TextField("回答", text: $editingText, axis: .vertical)
                             .lineLimit(2...8)
+                    } header: {
+                        Text(answer.question)
+                    } footer: {
+                        // The pencil records the same owner correction as the memory detail screen.
+                        Text("あなたの訂正として記録し、会話や夜の整理で元の内容に戻らないようにします。\(ShannonKnowledgeCorrection.maximumLength)文字まで（いま\(editingText.trimmingCharacters(in: .whitespacesAndNewlines).count)文字）。")
                     }
                     if let error = model.errorMessage {
                         Section {
@@ -178,13 +183,22 @@ struct ShannonKnowledgeCorrectionModifier: ViewModifier {
                             }
                         }
                         .disabled(
-                            editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                || model.mutatingMemoryID != nil
+                            !ShannonKnowledgeCorrection.isValid(editingText) || model.mutatingMemoryID != nil
                         )
                     }
                 }
             }
             .presentationDetents([.medium, .large])
         }
+    }
+}
+
+/// Shared with the server limit for an owner correction, so the pencil never fails without a reason.
+enum ShannonKnowledgeCorrection {
+    static let maximumLength = 320
+
+    static func isValid(_ text: String) -> Bool {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !value.isEmpty && value.count <= maximumLength
     }
 }

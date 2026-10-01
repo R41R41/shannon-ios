@@ -24,6 +24,7 @@ import {
 } from './sqliteStoreCodecs.js';
 import type { PersistedExperienceEvent } from './sqliteStore.js';
 import type { SQLiteStoreContext } from './sqliteStoreContext.js';
+import { insertTurnCaptures, selectTurnCaptures, type TurnCaptureRecord } from './turnCaptures.js';
 
 interface EventRow { sequence: number; event_id: string; scope_key: string; event_type: string; observed_at: string; payload_json: string; }
 interface ThreadRow { thread_id: string; title: string; created_at: string; updated_at: string; message_count: number; summary: string | null; }
@@ -340,6 +341,14 @@ export class SQLiteConversationRepository implements ConversationStore {
       );
       return { duplicate: false, experience };
     });
+  }
+
+  recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]): void {
+    if (captures.length) this.context.transaction(() => insertTurnCaptures(this.context.database, scopeKey, captures));
+  }
+
+  turnCaptures(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[] {
+    return Object.freeze(selectTurnCaptures(this.context.database, scopeKey, turnIds));
   }
 
   events(scopeKey: string): readonly PersistedExperienceEvent[] {

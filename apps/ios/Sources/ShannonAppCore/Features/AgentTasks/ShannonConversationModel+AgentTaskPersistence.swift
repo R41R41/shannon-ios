@@ -155,7 +155,10 @@ extension ShannonConversationModel {
             sentAt: parseDate(message.observedAt),
             emotionSnapshot: emotionSnapshot,
             artifacts: message.artifacts ?? [],
-            sourceAttribution: message.sourceAttribution
+            sourceAttribution: message.sourceAttribution,
+            turnID: message.sourceExperienceId,
+            captures: role == .shannon ? message.captures ?? [] : [],
+            reminder: role == .shannon ? message.reminder : nil
         )
     }
 

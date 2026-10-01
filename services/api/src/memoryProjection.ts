@@ -75,6 +75,9 @@ export function actionControl(
     case 'dismiss':
       changeReason = 'ユーザーが約束を取り消し';
       break;
+    case 'snooze':
+      changeReason = 'ユーザーがあとでを選択';
+      break;
     case 'correct': {
       const text = mutation.text?.replace(/\s+/g, ' ').trim().slice(0, 320);
       if (!text) throw new Error('MEMORY_CORRECTION_REQUIRED');

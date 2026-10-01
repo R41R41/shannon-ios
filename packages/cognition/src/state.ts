@@ -107,6 +107,7 @@ function cleanProspectiveMemory(memory: ProspectiveMemory): ProspectiveMemory {
     ...(memory.timeZone ? { timeZone: cleanText(memory.timeZone, 64) } : {}),
     ...(memory.sourceExperienceId ? { sourceExperienceId: cleanText(memory.sourceExperienceId, 120) } : {}),
     ...(memory.evidence ? { evidence: cleanText(memory.evidence, 320) } : {}),
+    ...(memory.remindAfter && Number.isFinite(Date.parse(memory.remindAfter)) ? { remindAfter: memory.remindAfter } : {}),
   });
 }
 
@@ -422,6 +423,7 @@ export function restoreCompanionState(
       ...(typeof value.timeZone === 'string' ? { timeZone: value.timeZone } : {}),
       ...(typeof value.sourceExperienceId === 'string' ? { sourceExperienceId: value.sourceExperienceId } : {}),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
+      ...(typeof value.remindAfter === 'string' ? { remindAfter: value.remindAfter } : {}),
     });
   }, item => item.id);
   const memoryControls = restoredItems(row.memoryControls, MAX_MEMORY_CONTROLS, value => {

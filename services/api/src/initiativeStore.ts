@@ -3,7 +3,7 @@ import { chmodSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from './dailyMind.js';
-import { dueCommitmentCandidate } from './commitmentInitiative.js';
+import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from './commitmentInitiative.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
 import {
   intentInitiativeCandidateIsCurrent,
@@ -56,7 +56,8 @@ export interface InitiativeInbox {
 export type InitiativeLoopResult = Readonly<{
   considered: number;
   sent: number;
-  stopped: 'quiet-hours' | 'no-owner' | 'today-is-enough' | 'recent-conversation' | 'nothing-worth-saying' | null;
+  stopped: 'quiet-hours' | 'no-owner' | 'today-is-enough' | 'recent-conversation' | 'nothing-worth-saying'
+    | 'reserved-for-commitment' | null;
 }>;
 
 export interface InitiativeEvaluationSummary {
@@ -149,11 +150,17 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       const state = parseState(scope.snapshot_json);
       const promises = dueCommitmentCandidate(scope.scope_key, JSON.parse(scope.snapshot_json), at);
       considered += promises.length;
-      const promise = promises.find(candidate => !this.database.prepare(
+      const delivered = (itemId: string) => Boolean(this.database.prepare(
         'SELECT 1 FROM initiative_messages WHERE scope_key = ? AND source_item_id = ?'
-      ).get(scope.scope_key, candidate.item_id));
+      ).get(scope.scope_key, itemId));
+      const promise = promises.find(candidate => !delivered(candidate.item_id));
       if (promise) {
         if (this.persistMessage(scope.scope_key, state, promise, null, null, dayKey, at)) sent += 1;
+        continue;
+      }
+      // A promise due later today keeps the day's only slot; a spontaneous topic can wait.
+      if (commitmentAwaitingTodaySlot(scope.scope_key, JSON.parse(scope.snapshot_json), at, timeZone, delivered)) {
+        lastStop = 'reserved-for-commitment';
         continue;
       }
       const intentCandidates = intentInitiativeCandidates(this.database, scope.scope_key, at);
@@ -224,7 +231,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     `).all(cutoff) as unknown as Array<{ source_title: string; count: number }>;
     const stopped = {
       'quiet-hours': 0, 'no-owner': 0, 'today-is-enough': 0,
-      'recent-conversation': 0, 'nothing-worth-saying': 0,
+      'recent-conversation': 0, 'nothing-worth-saying': 0, 'reserved-for-commitment': 0,
     } satisfies Record<Exclude<InitiativeLoopResult['stopped'], null>, number>;
     for (const row of rows) if (row.stopped && row.stopped in stopped) stopped[row.stopped as keyof typeof stopped] += 1;
     const eligible = rows.filter(row => row.stopped !== 'quiet-hours' && row.stopped !== 'no-owner');

@@ -18,8 +18,14 @@ struct ShannonConversationCache {
         let emotionSnapshot: CachedEmotion?
         let artifacts: [ShannonGeneratedArtifactDTO]?
         let sourceAttribution: ShannonSourceAttributionDTO?
+        let turnID: String?
+        let captures: [ShannonTurnCaptureDTO]?
+        let reminder: ShannonReminderDTO?
 
         init(_ message: ConversationMessage) {
+            turnID = message.turnID
+            captures = message.captures.isEmpty ? nil : message.captures
+            reminder = message.reminder
             id = message.id
             role = message.role == .user ? "user" : "shannon"
             text = message.text
@@ -43,7 +49,10 @@ struct ShannonConversationCache {
                 deliveryState: deliveryState == "failed" ? .failed : .sent,
                 emotionSnapshot: emotionSnapshot?.value,
                 artifacts: artifacts ?? [],
-                sourceAttribution: sourceAttribution
+                sourceAttribution: sourceAttribution,
+                turnID: turnID,
+                captures: captures ?? [],
+                reminder: reminder
             )
         }
     }

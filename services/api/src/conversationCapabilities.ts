@@ -1,6 +1,7 @@
 import { mentionsSuiteProduct, suiteProductPattern } from '@shannon/cognition';
 import type { AetherContextReader } from './aetherContext.js';
 import type { VoyagerCatalog } from './organize.js';
+import { reminderCapabilityBoundary } from './reminderCapability.js';
 
 export interface ConversationReadCapabilities {
   aetherContext?: AetherContextReader | null;
@@ -39,6 +40,9 @@ export function conversationCapabilityPrompt(
   selection: ConversationCapabilitySelection = { aetherNotes: true, voyagerTasks: true },
 ): string | Promise<string> {
   const sections: string[] = [];
+  // The promise is stored after the reply, so the reply must not claim a clock alarm she cannot ring.
+  const reminderBoundary = reminderCapabilityBoundary(message);
+  if (reminderBoundary) sections.push(reminderBoundary);
   if (selection.aetherNotes !== false) {
     try {
       const notes = dependencies.aetherContext?.promptFor(scopeKey, message);
