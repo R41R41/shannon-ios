@@ -454,6 +454,16 @@ Two layers exist. The foundation is what every autonomous step must pass through
 
 All autonomy tables are created with `CREATE TABLE IF NOT EXISTS` outside the numbered migrations. The schema version is unchanged and an older API binary can still open the database. Her places are configured in the environment (`SHANNON_AUTONOMY_WORKSPACE_ROOT`, `SHANNON_AUTONOMY_HOST_FOLDERS_JSON`, and the repository, production, and protected roots); the running source and the database directory are always protected. Folder separation is weaker than account or virtual-machine isolation: staying inside it depends on what the runner is given access to and on the activity record.
 
+## Body
+
+Shannon's body is the Live2D desktop application on the owner's Windows PC; her mind is this server. The contract is `docs/body-contract.md` (`bodyContract.ts`, `bodyStore.ts`, `shannonBody.ts`, `apiBodyRoutes.ts`), and it is one-directional: the body calls, the server never does.
+
+- **Events** (`POST /v1/body/events`): touches, the owner leaving and returning, calls, window and application state, each with an idempotency key, a time, and `audience: owner | others`. The vocabulary is closed and there is no text field, so an event cannot carry an instruction. Events are stored in `body_events` (30 days, 2,000 a day). Touches and returns the owner caused in the last 30 minutes become at most three fixed-wording lines under `[体に起きたこと]` in an owner text turn; the block is read, never written, and voice and the platform bridge do not receive it. An event with `audience: others` is stored and never reaches a prompt. An event produces no reply, no notification, no memory, and no change of her feeling.
+- **Presence** (`GET /v1/body/presence`): a read-only projection of existing state — 「いま」 without its cause, the autonomy control state, the activity loop's latest step as `doing` (`idle | thinking | reading | noting | drafting | revising | showing`), and the number of study cards awaiting a reaction. The body polls it with an `etag`; there is no stream and no push.
+- **Capabilities** (`PUT /v1/body/capabilities`): identifiers of expressions and gestures and boolean flags, stored per device in `body_capabilities` and returned in presence. They are in no prompt; the persona and capabilities wording are unchanged.
+- **Nudges** (`GET /v1/body/nudges`): five fixed seed lines (`bodyNudges.ts`, awaiting the owner's review) with a scene, face, and voice direction, and the limits the body must keep (not during a conversation or 15 minutes after one, 2 an hour, 10 a day). No model is called.
+- `SHANNON_BODY_INGEST=off` refuses events and keeps stored ones out of conversation turns.
+
 ## Durable store
 
 | Concern | Tables |

@@ -4,10 +4,13 @@ import type { OrganizeSession } from './organize.js';
 import type { ShannonPlace } from './placeDiscovery.js';
 
 export interface ApiRequest {
-  method: 'GET' | 'POST';
+  /** `PUT` exists only for `/v1/body/capabilities`. */
+  method: 'GET' | 'POST' | 'PUT';
   path: string;
   query?: URLSearchParams;
   body?: unknown;
+  /** The paired device that sent the request; absent for a fixed-token or service caller. */
+  deviceId?: string;
 }
 
 export interface ApiResponse {

@@ -48,6 +48,9 @@ import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
+import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
+import { bodyIngestEnabled } from './bodyContract.js';
+import { SQLiteBodyStore } from './bodyStore.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -65,6 +68,7 @@ const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePa
 const conversationOrchestrationStore = new SQLiteConversationOrchestrationStore(configuredDatabasePath());
 const autonomyStore = new SQLiteAutonomyStore(configuredDatabasePath());
 const autonomyAnnouncer = new SQLiteAutonomyAnnouncer(configuredDatabasePath());
+const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 // Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
 const autonomy = new ShannonAutonomyService({
   store: autonomyStore, config: configuredAutonomy(process.env, { databasePath: configuredDatabasePath() }), now,
@@ -106,6 +110,8 @@ const kernel = createLocalApiKernel(now, {
   conversationOrchestration: conversationOrchestrationStore,
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
+  // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -119,6 +125,7 @@ const deviceAuth = authMode === 'paired'
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
+const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
 const voiceAllowances = new VoiceRequestAllowances();
 const activeVoiceScopes = new Set<string>();
@@ -133,11 +140,15 @@ const liveVoiceStreamRoute = createLiveVoiceStreamRoute(
 );
 const server = createServer(async (request, response) => {
   try {
-    if (request.method !== 'GET' && request.method !== 'POST') {
+    if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT') {
       sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return;
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    if (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH) {
+      sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+      return;
+    }
     if (url.pathname === '/v1/pair') {
       await pairingRoute(request, response);
       return;
@@ -213,7 +224,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     // One ended 「友人も一緒」 period carries up to sixty turns of text.
-    const body = request.method === 'POST' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : 64 * 1024) : undefined;
+    const body = request.method !== 'GET' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {
@@ -233,6 +244,11 @@ const server = createServer(async (request, response) => {
       sendJson(response, 429, { error: 'BUSY', message: 'いま少し混み合っています。' });
       return;
     }
+    // The body polls presence and reports touches; this keeps one device from flooding either.
+    if (principal && url.pathname.startsWith(BODY_ROUTE_PREFIX) && !consumeDeviceAllowance(bodyUsage, principal.deviceId, 120)) {
+      sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many body requests; retry after a minute.' });
+      return;
+    }
     if (isPairedChat) activeChats += 1;
     try {
       const result = await kernel.dispatch({
@@ -240,6 +256,7 @@ const server = createServer(async (request, response) => {
         path: url.pathname,
         query,
         body: principal ? bindScope(body, principal.scopeKey) : body,
+        ...(principal ? { deviceId: principal.deviceId } : {}),
       });
       sendJson(response, result.status, result.body);
     } finally {
@@ -289,6 +306,7 @@ function shutdown(): void {
     conversationOrchestrationStore.close();
     peopleMemoryStore.close();
     autonomyAnnouncer.close();
+    bodyStore.close();
     autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;

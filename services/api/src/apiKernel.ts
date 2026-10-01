@@ -85,6 +85,8 @@ import {
 } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
+import { BODY_ROUTE_PREFIX, dispatchBodyRequest } from './apiBodyRoutes.js';
+import { ShannonBody, type ShannonBodyOptions } from './shannonBody.js';
 import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
@@ -128,7 +130,7 @@ export interface ShannonApiKernelOptions {
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
   autonomy?: ShannonAutonomyService;
-  notion?: NotionTurnReader;
+  notion?: NotionTurnReader; body?: ShannonBodyOptions;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -156,7 +158,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody;
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -192,6 +194,7 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
+    this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -220,6 +223,7 @@ export class ShannonApiKernel {
       voiceIdentity: this.voiceIdentity, now: this.now,
     });
     if (preferenceResponse) return preferenceResponse;
+    if (request.path.startsWith(BODY_ROUTE_PREFIX)) return dispatchBodyRequest(request, this.body);
 
     if (request.method === 'GET' && request.path === '/v1/state') {
       const scopeKey = request.query?.get('scopeKey');
@@ -374,7 +378,7 @@ export class ShannonApiKernel {
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
         { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion });
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
-      const dailyMindPrompt = [this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey)].filter(Boolean).join('\n\n');
+      const dailyMindPrompt = [this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), this.body.ownerContext(body.scopeKey, occurredAt, (body as { audience?: unknown }).audience)].filter(Boolean).join('\n\n');
       const systemPrompt = [
         basePrompt, cognitiveContext.prompt, peopleRecall.prompt, dailyMindPrompt, capability.prompt,
         buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),
@@ -486,13 +490,8 @@ export class ShannonApiKernel {
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people,
     };
   }
-  waitForBackground(scopeKey: string): Promise<void> {
-    return this.background.waitForIdle(scopeKey);
-  }
+  waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }
 }
-export function createLocalApiKernel(
-  now: CompanionClock = () => new Date().toISOString(),
-  options: ShannonApiKernelOptions = {},
-): ShannonApiKernel {
+export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString(), options: ShannonApiKernelOptions = {}): ShannonApiKernel {
   return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now), now, options);
 }
