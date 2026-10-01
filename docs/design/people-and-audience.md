@@ -156,6 +156,32 @@ background worker is not implemented; the label carries `decidedBy` so one can b
   kept only as a tombstone so a late or repeated save stores nothing.
 - Old clients send no call id: nothing is stored, no owner memory is given to the model (their notice says so), and the earlier summary endpoint keeps working.
 
+## Remembering people from a platform conversation
+
+Owner request, 2026-10-02: 「人」は音声会話以外でもdiscordとかでの会話でも追加更新されて欲しい.
+
+- **Who.** The platform user id, sent by the legacy runtime with the service credential, is the identity. No name,
+  writing style or voice is compared. First sight creates a person from the display name, shown as
+  「Discordで会った人」; a changed display name becomes an alias (a name the owner chose in 人 stays).
+- **Never merged automatically.** ミキ met by voice and ミキ on Discord are two people until the owner merges them.
+  人 shows 「同じ名前のミキさん（Discord）と統合…」 as a suggestion only. After a merge the account follows the merged person.
+- **What.** Per conversation and day: the exchanges as text, what the person states about themselves, promises, and
+  one summary. Stored deterministically on arrival; the background worker may rewrite the summary within the
+  background budget. Chat, voice and the platform reply never wait for a model.
+- **Audience.** Everything said in a conversation is known to everyone in it: its audience is that conversation.
+  A DM with a friend is that friend alone. In another conversation the same item arrives marked and falls under the
+  speak-time self-check. With the owner alone everything is used, and answers say where it was said
+  (「友人グループ（Discord）で話した時」).
+- **A friend's DM.** The owner is not there, so nothing protected of his is given at all: only that friend's own DM
+  memories and the owner's unprotected content.
+- **Not the owner's.** A friend's message never becomes an owner fact, promise, goal, experience or thread message,
+  and is not part of the sleep batch or Shannon's knowledge.
+- **Bounds.** 200 stored messages per conversation and day, 1,000 per day, 600 characters each; bots and system
+  messages are not stored; attachments are refused; `SHANNON_PLATFORM_PEOPLE_INGEST=off` stops it.
+- **Forgetting.** The same controls as for a call. A forgotten person's later messages are not stored
+  (the account is remembered only as "forgotten") until the owner restores them. A day's summary names everyone who
+  spoke, so it is hidden while any of them is forgotten.
+
 ## Forgetting
 
 Forgetting one person item, or a whole person, writes the same memory control the forgetting boundary already uses
