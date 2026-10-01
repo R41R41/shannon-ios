@@ -90,7 +90,7 @@ async function seeded() {
   const guest = (transcript: string, extra: Record<string, unknown> = {}) => api.dispatch({ method: 'POST', path: delegations, body: {
     scopeKey: 'owner', threadId: 'thread', transcript, participantMode: 'guest',
     deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
-      userUtterance: { id: 'g1', text: transcript, source: 'speech', rawText: transcript, callContext: { turns: [], introductionStart: true, ...extra } } },
+      userUtterance: { id: 'g1', text: transcript, source: 'speech', rawText: transcript, callContext: { callId: 'call-audience-0001', turns: [], introductionStart: true, ...extra } } },
   } });
   const ownerVoice = (transcript: string, companionPresent: boolean, threadId = 'thread') => api.dispatch({ method: 'POST', path: delegations, body: {
     scopeKey: 'owner', threadId, transcript,
@@ -260,6 +260,19 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
     const request = model.voiceRequests.at(-1)!;
     expect(request.systemPrompt).toContain('[Someone else is listening');
     for (const word of SENSITIVE) expect(everythingSaid(request)).not.toContain(word);
+    store.close();
+  });
+
+  it('accepts the flag the iPhone sends with the utterance and rejects a malformed one', async () => {
+    const { store, model, api } = await seeded();
+    const send = (companionPresent: unknown) => api.dispatch({ method: 'POST', path: delegations, body: {
+      scopeKey: 'owner', threadId: 'thread', transcript: '前に話したローンのこと覚えてる？',
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
+        userUtterance: { id: 'flagged', text: '前に話したローンのこと覚えてる？', source: 'speech', companionPresent } } } });
+    expect((await send(true)).status).toBe(200);
+    expect(model.last.systemPrompt).toContain('[Someone else is listening');
+    for (const word of SENSITIVE) expect(everythingSaid(model.last)).not.toContain(word);
+    expect((await send('yes')).status).toBe(400);
     store.close();
   });
 

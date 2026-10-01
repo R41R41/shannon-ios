@@ -50,7 +50,8 @@ extension ShannonGeminiLiveSessionModel {
                     id: batch.id.uuidString, text: batch.turns[batch.turns.count - 1].text,
                     source: batch.source, rawText: batch.rawText.isEmpty ? nil : batch.rawText,
                     callContext: mode == .guest ? guestCall.requestContext(
-                        addressedByName: batch.addressedByName, followsShannonTurn: batch.followsShannonTurn) : nil
+                        addressedByName: batch.addressedByName, followsShannonTurn: batch.followsShannonTurn) : nil,
+                    companionPresent: companionSuspected ? true : nil
                 )
                 let localReply = mode == .owner ? batch.localReply : nil
                 let onSegment: ShannonVoiceSegmentHandler = {

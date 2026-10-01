@@ -83,6 +83,7 @@ public struct ShannonMemoryView: View {
         // This shared composition is also rendered directly by fixture tests;
         // LazyVStack/ScrollView virtualization must not hide the entry in tests.
         managementEntry(palette)
+        peopleEntry(palette)
         if let report = model.latestSleepReport {
             Button { selectedSleepReport = report } label: {
                 SleepSummaryCard(report: report, palette: palette)
@@ -124,6 +125,16 @@ public struct ShannonMemoryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("memory-management-entry")
+    }
+
+    func peopleEntry(_ palette: ShannonPalette) -> some View {
+        NavigationLink {
+            ShannonPeopleListPage(model: model)
+        } label: {
+            ShannonPeopleEntryLabel(people: model.people, palette: palette)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("memory-people-entry")
     }
 
     @ViewBuilder

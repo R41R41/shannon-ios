@@ -152,6 +152,18 @@ struct ShannonMemoryHubList: View {
                 .listRowBackground(palette.subtleSurface)
             }
             NavigationLink {
+                ShannonPeopleListPage(model: model)
+            } label: {
+                ShannonMemoryCategoryRow(
+                    title: ShannonPeopleMemoryCopy.title,
+                    symbol: "person.2",
+                    value: overview.peopleValue,
+                    palette: palette
+                )
+            }
+            .accessibilityIdentifier("memory-category-people")
+            .listRowBackground(palette.subtleSurface)
+            NavigationLink {
                 ShannonMemoryLibraryView(model: model)
             } label: {
                 ShannonMemoryManagementRow(summary: overview.managementSummary, palette: palette)

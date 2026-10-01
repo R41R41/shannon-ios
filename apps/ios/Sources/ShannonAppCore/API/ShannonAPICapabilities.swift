@@ -90,11 +90,23 @@ public protocol ShannonVoiceServing: Sendable {
         shannonTranscript: String,
         emotion: ShannonVoiceTurnEmotionDTO?
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
-    func saveVoiceCallSummary(
+    func commitRealtimeVoiceTurn(
         scopeKey: String,
         threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?,
+        companionPresent: Bool
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
+    /// Remembers one ended 「友人も一緒」 period.
+    func rememberVoiceCall(
+        scopeKey: String,
+        callId: String,
+        threadId: String?,
         turns: [ShannonVoiceCallContextTurnDTO]
-    ) async throws -> ShannonVoiceCallSummaryResponseDTO
+    ) async throws -> ShannonRememberedVoiceCallDTO
+    /// 「今回は残さない」: removes what one period left behind.
+    func discardVoiceCall(scopeKey: String, callId: String) async throws
 }
 
 public protocol ShannonConversationServing: Sendable {
@@ -122,6 +134,9 @@ public protocol ShannonMemoryServing: Sendable {
         text: String?
     ) async throws -> ShannonMemoryDashboardDTO
     func correctKnowledge(scopeKey: String, answerId: String, answer: String) async throws -> ShannonMemoryDashboardDTO
+    /// People Shannon has met with the owner. A server that predates it answers with nothing.
+    func loadPeopleMemory(scopeKey: String) async throws -> ShannonPeopleMemoryDTO
+    func mutatePeopleMemory(scopeKey: String, change: ShannonPeopleMemoryChange) async throws -> ShannonPeopleMemoryDTO
     func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO
     func updateCognitiveIntent(
         scopeKey: String,
@@ -132,6 +147,12 @@ public protocol ShannonMemoryServing: Sendable {
 
 public extension ShannonMemoryServing {
     func loadCognition(scopeKey: String) async throws -> ShannonCognitionDashboardDTO { .empty }
+
+    func loadPeopleMemory(scopeKey: String) async throws -> ShannonPeopleMemoryDTO { .empty }
+
+    func mutatePeopleMemory(scopeKey: String, change: ShannonPeopleMemoryChange) async throws -> ShannonPeopleMemoryDTO {
+        throw ShannonAPIError.invalidResponse
+    }
 
     func updateCognitiveIntent(
         scopeKey: String,

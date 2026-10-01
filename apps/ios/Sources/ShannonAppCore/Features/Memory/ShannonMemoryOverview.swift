@@ -91,19 +91,25 @@ struct ShannonMemoryOverview: Equatable {
     let isLoading: Bool
     let hasMemoryError: Bool
     let hasCognitionError: Bool
+    let people: ShannonPeopleMemoryDTO?
+    let hasPeopleError: Bool
 
     init(
         dashboard: ShannonMemoryDashboardDTO?,
         cognition: ShannonCognitionDashboardDTO,
         isLoading: Bool = false,
         hasMemoryError: Bool = false,
-        hasCognitionError: Bool = false
+        hasCognitionError: Bool = false,
+        people: ShannonPeopleMemoryDTO? = nil,
+        hasPeopleError: Bool = false
     ) {
         self.dashboard = dashboard
         self.cognition = cognition
         self.isLoading = isLoading
         self.hasMemoryError = hasMemoryError
         self.hasCognitionError = hasCognitionError
+        self.people = people
+        self.hasPeopleError = hasPeopleError
     }
 
     @MainActor
@@ -113,8 +119,16 @@ struct ShannonMemoryOverview: Equatable {
             cognition: model.cognition,
             isLoading: model.isLoading,
             hasMemoryError: model.errorMessage != nil,
-            hasCognitionError: model.cognitionErrorMessage != nil
+            hasCognitionError: model.cognitionErrorMessage != nil,
+            people: model.people,
+            hasPeopleError: model.peopleErrorMessage != nil
         )
+    }
+
+    /// 人: how many people Shannon remembers. Forgotten people are not counted.
+    var peopleValue: Value {
+        guard people != nil else { return missingValue(hasError: hasPeopleError) }
+        return .count(ShannonPeopleMemoryPresentation(people: people).rememberedCount)
     }
 
     // MARK: いま

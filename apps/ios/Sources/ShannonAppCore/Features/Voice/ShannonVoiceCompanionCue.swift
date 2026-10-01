@@ -62,6 +62,13 @@ enum ShannonVoiceCompanionCue: Equatable, Sendable {
         ])
     }
 
+    /// A short, plain no to `question`: nobody else is there.
+    static func denies(_ text: String) -> Bool {
+        let value = compact(text)
+        guard !value.isEmpty, value.count <= 14 else { return false }
+        return matches(value, any: ["^(?:いや|いいえ|ううん|違|ちが)", "いない", "いません", "一人", "ひとり", "だけ(?:だよ|です)?$"])
+    }
+
     private static func compact(_ text: String) -> String {
         text.precomposedStringWithCompatibilityMapping.lowercased()
             .components(separatedBy: CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters).union(.symbols))

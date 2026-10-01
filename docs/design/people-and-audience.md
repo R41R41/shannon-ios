@@ -120,7 +120,7 @@ background worker is not implemented; the label carries `decidedBy` so one can b
   `{owner, that person}`. One bounded model call writes the summary; without it a deterministic summary is used.
 - 「今回は残さない」 on the end card deletes that call's items and its person if this call created them. The call id is
   kept only as a tombstone so a late or repeated save stores nothing.
-- Old clients send no call id: nothing is stored and the earlier summary endpoint keeps working.
+- Old clients send no call id: nothing is stored, no owner memory is given to the model (their notice says so), and the earlier summary endpoint keeps working.
 
 ## Forgetting
 

@@ -11,6 +11,10 @@ public final class ShannonMemoryModel {
     public private(set) var mutatingIntentID: String?
     public private(set) var errorMessage: String?
     public private(set) var cognitionErrorMessage: String?
+    /// People Shannon has met with the owner. Nil until the first load.
+    public private(set) var people: ShannonPeopleMemoryDTO?
+    public private(set) var peopleErrorMessage: String?
+    public private(set) var mutatingPeopleID: String?
 
     private let scopeKey: String
     private let client: any ShannonMemoryServing
@@ -69,6 +73,35 @@ public final class ShannonMemoryModel {
             cognition = try await client.loadCognition(scopeKey: scopeKey)
         } catch {
             cognitionErrorMessage = "目的と認知履歴を読み込めませんでした。前回の表示はそのまま残しています。"
+        }
+        await reloadPeople()
+    }
+
+    /// Independent of the dashboard: a failure here keeps the previous list and the other sections.
+    public func reloadPeople() async {
+        peopleErrorMessage = nil
+        do {
+            people = try await client.loadPeopleMemory(scopeKey: scopeKey)
+        } catch let error as ShannonAPIError where error == .rejected(status: 404) {
+            // A server that predates people memory has nothing to show.
+            people = .empty
+        } catch {
+            peopleErrorMessage = "人の記憶を読み込めませんでした。前回の表示はそのまま残しています。"
+        }
+    }
+
+    /// Applies one change under 人. The list is replaced only by what the server returns.
+    public func changePeople(_ change: ShannonPeopleMemoryChange) async -> Bool {
+        guard mutatingPeopleID == nil else { return false }
+        mutatingPeopleID = change.targetID
+        peopleErrorMessage = nil
+        defer { mutatingPeopleID = nil }
+        do {
+            people = try await client.mutatePeopleMemory(scopeKey: scopeKey, change: change)
+            return true
+        } catch {
+            peopleErrorMessage = "変更できませんでした。保存されていません。"
+            return false
         }
     }
 
@@ -144,5 +177,6 @@ public final class ShannonMemoryModel {
     public func dismissError() {
         errorMessage = nil
         cognitionErrorMessage = nil
+        peopleErrorMessage = nil
     }
 }

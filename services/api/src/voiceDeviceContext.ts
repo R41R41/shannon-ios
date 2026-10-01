@@ -36,7 +36,9 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
   } as UserUtterance;
   if (value.companionPresent !== undefined && typeof value.companionPresent !== 'boolean') return false;
-  const companion = value.companionPresent === true ? { companionPresent: true } : {};
+  if (objectBody(utterance) && utterance.companionPresent !== undefined && typeof utterance.companionPresent !== 'boolean') return false;
+  const companion = value.companionPresent === true || (objectBody(utterance) && utterance.companionPresent === true)
+    ? { companionPresent: true } : {};
   if (value.location === undefined || value.location === null) {
     return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance, guestCall, ...companion };
   }

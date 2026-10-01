@@ -198,6 +198,9 @@ describe('remembering a friend from a 「友人も一緒」 call', () => {
       timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null,
       userUtterance: { id: 'old-1', text: 'はじめまして、ミキと言います', source: 'speech', callContext: { turns: [], introductionStart: true } } } });
     expect(model.last.systemPrompt).toContain('This call is not being recorded in memory');
+    // That client's own notice says no owner memory is used, so none is given to it.
+    expect(model.last.systemPrompt).not.toContain('[この場で使ってよいライ氏についての記憶]');
+    expect(model.last.systemPrompt).not.toContain('[Current cognitive context');
     expect(await overview()).toEqual({ people: [], unnamed: [] });
     expect((await post(calls, { turns: [{ role: 'participant', text: 'こんにちは' }] })).status).toBe(400);
     peopleStore.close();

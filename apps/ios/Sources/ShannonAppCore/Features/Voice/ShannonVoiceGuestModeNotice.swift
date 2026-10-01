@@ -4,14 +4,14 @@ import SwiftUI
 enum ShannonVoiceGuestModeCopy {
     static let name = ShannonVoiceParticipantMode.guest.japaneseName
     static let lines = [
-        "この通話の中の会話だけを覚えています。本人の記憶・予定・ノートは使いません。",
-        "会話は保存しません。終了時に本人が選んだ時だけ、短い要約が残ります。",
-        "声は文字にするため外部のサービスへ送られます。録音は残しません。",
+        "お名前と、この通話で話したことをシャノンが覚えます。声で人を聞き分けることはしません。",
+        "本人の予定・ノート・作業と、守るべき個人的な記憶は、この場では使いません。",
+        "声は文字にするため外部のサービスへ送られます。録音は残しません。通話の後で「今回は残さない」を選ぶと、この通話の記録は消えます。",
     ]
     static let switchToGuestTitle = "友人も一緒にしますか？"
-    static let switchToGuestMessage = "通話はそのまま続きます。切り替えた後は、この通話の中の会話だけを覚え、本人の記憶・予定・ノートは使いません。会話は保存しません。"
+    static let switchToGuestMessage = "通話はそのまま続きます。切り替えた後は、お友達のお名前とこの通話で話したことをシャノンが覚えます。本人の予定・ノート・作業と、守るべき個人的な記憶は使いません。通話の後で「今回は残さない」を選べます。"
     static let switchToOwnerTitle = "本人だけに戻しますか？"
-    static let switchToOwnerMessage = "通話はそのまま続きます。「友人も一緒」の間の会話は引き継がれません。ここからの会話はトークに保存されます。"
+    static let switchToOwnerMessage = "通話はそのまま続きます。「友人も一緒」の間に聞いたお名前と会話は、ここまでの分を覚えます。ここからの会話はトークに保存され、本人の予定や守るべき記憶も使って話します。"
     static let photoUnavailableTitle = "「友人も一緒」では写真を共有できません"
     static let photoUnavailableMessage = "写真の説明に本人のトークの内容を使うためです。「本人だけ」に戻すと共有できます。"
 }

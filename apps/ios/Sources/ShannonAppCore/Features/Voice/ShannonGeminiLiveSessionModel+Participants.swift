@@ -17,6 +17,8 @@ extension ShannonGeminiLiveSessionModel {
         // A reply still being generated belongs to the mode it was asked in; start it again.
         if responseDelivery.response == nil { interruptResponse() }
         if mode == .owner {
+            // The period is over: hand its turns over to be remembered before owner turns resume.
+            finishGuestPeriod()
             // Nothing heard in 「友人も一緒」 may be answered with, or saved to, the owner's context.
             pendingTurns.reset()
             discardUnfinalizedInput()
@@ -51,6 +53,8 @@ extension ShannonGeminiLiveSessionModel {
             let cue = ShannonVoiceCompanionCue.detect(in: rawText) ?? ShannonVoiceCompanionCue.detect(in: heard)
             if cue == .switchToGuest || (answersQuestion && ShannonVoiceCompanionCue.confirms(rawText)) {
                 switchParticipantMode(to: .guest, origin: .spoken)
+            } else if answersQuestion, ShannonVoiceCompanionCue.denies(rawText) {
+                guestCall.companionDenied()
             } else if cue == .ask {
                 localReply = ShannonVoiceCompanionCue.question
             }
@@ -59,8 +63,14 @@ extension ShannonGeminiLiveSessionModel {
             addressedByName: addressedByName, followsShannonTurn: followsShannonTurn, localReply: localReply)
     }
 
-    /// The summary is offered only for a call that had a 「友人も一緒」 period in which both sides spoke.
-    var callSummaryTurns: [ShannonVoiceCallContextTurnDTO]? { guestCall.summaryTurns }
+    /// Closes the running 「友人も一緒」 period, if any, and hands it to whoever remembers calls.
+    func finishGuestPeriod() {
+        guard let period = guestCall.endGuestPeriod() else { return }
+        guestPeriodEnded?(period)
+    }
+
+    /// Owner mode: someone may be listening, so protected memories are not read out and the turn is marked.
+    var companionSuspected: Bool { participantMode == .owner && guestCall.companionSuspected }
 
     /// Keeps the call screen readable on a table. Released when the call ends.
     func setKeepsScreenAwake(_ awake: Bool) {

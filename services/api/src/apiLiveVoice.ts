@@ -292,7 +292,8 @@ async function completeLiveVoiceDelegation(
       voyagerTasks: selectedSkills.has('voyager_tasks'),
     });
   observer?.signal?.throwIfAborted();
-  const includeCognitiveContext = temporaryGuest || selectedSkills.has('conversation_memory');
+  // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
+  const includeCognitiveContext = temporaryGuest ? guestPresence?.recorded === true : selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
     includeCognitiveContext ? cognitiveContext.prompt : complexTurn ? recalled?.knowledgePrompt : '',

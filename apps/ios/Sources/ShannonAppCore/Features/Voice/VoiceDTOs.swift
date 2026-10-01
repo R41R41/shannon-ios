@@ -178,16 +178,19 @@ public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
     public let rawText: String?
     /// Only for 「友人も一緒」: this call's own earlier turns. Omitted for owner turns.
     public let callContext: ShannonVoiceCallContextDTO?
+    /// Owner mode only: the owner said someone may be with him and the call was not switched.
+    public let companionPresent: Bool?
 
     public init(
         id: String, text: String, source: ShannonVoiceUtteranceSource? = nil, rawText: String? = nil,
-        callContext: ShannonVoiceCallContextDTO? = nil
+        callContext: ShannonVoiceCallContextDTO? = nil, companionPresent: Bool? = nil
     ) {
         self.id = id
         self.text = text
         self.source = source
         self.rawText = rawText
         self.callContext = callContext
+        self.companionPresent = companionPresent
     }
 }
 
@@ -429,6 +432,8 @@ public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
     public let shannonTranscript: String
     /// The reconciled emotion the voice acted with, so the stored face equals the call Eye.
     public var emotion: ShannonVoiceTurnEmotionDTO? = nil
+    /// Someone else may have been listening: the turn is kept but teaches nothing about the owner.
+    public var companionPresent: Bool? = nil
 }
 
 public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {
