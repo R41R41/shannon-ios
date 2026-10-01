@@ -91,6 +91,14 @@ public protocol ShannonConversationServing: Sendable {
     func createThread(scopeKey: String, title: String?) async throws -> String
     func renameThread(scopeKey: String, threadId: String, title: String) async throws
     func archiveThread(scopeKey: String, threadId: String) async throws
+    /// What Shannon took in for recent turns of a thread. Older servers answer with nothing.
+    func loadConversationCaptures(scopeKey: String, threadId: String) async throws -> ShannonConversationCapturesDTO
+}
+
+public extension ShannonConversationServing {
+    func loadConversationCaptures(scopeKey: String, threadId: String) async throws -> ShannonConversationCapturesDTO {
+        ShannonConversationCapturesDTO(threadId: threadId)
+    }
 }
 
 public protocol ShannonMemoryServing: Sendable {

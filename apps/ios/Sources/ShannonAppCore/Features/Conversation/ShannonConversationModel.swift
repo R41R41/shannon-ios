@@ -56,6 +56,11 @@ public final class ShannonConversationModel {
     var pendingAttachmentsByMessageID: [UUID: [ShannonChatAttachmentDTO]] = [:]
     var pendingPhotoByMessageID: [UUID: Data] = [:]
     var pendingWebSearchMessageIDs: Set<UUID> = []
+    /// Capture and reminder actions in flight, keyed by capture id or commitment id.
+    public internal(set) var pendingCaptureActionIDs: Set<String> = []
+    public internal(set) var captureActionError: String?
+    var captureRefreshTask: Task<Void, Never>?
+    var captureRefreshDelays: [Duration] = [.milliseconds(1_500), .seconds(4), .seconds(10)]
 
     public init(
         scopeKey: String = "local-owner",

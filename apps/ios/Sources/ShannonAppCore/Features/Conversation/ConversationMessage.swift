@@ -43,6 +43,11 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let artifacts: [ShannonGeneratedArtifactDTO]
     public let sourceAttribution: ShannonSourceAttributionDTO?
     public let places: [ShannonPlaceDTO]
+    /// The server turn this message belongs to, when known.
+    public let turnID: String?
+    /// What Shannon took in from this turn. Empty until the server has recorded it.
+    public let captures: [ShannonTurnCaptureDTO]
+    public let reminder: ShannonReminderDTO?
 
     public init(
         id: UUID = UUID(),
@@ -53,8 +58,14 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         emotionSnapshot: EmotionSnapshot? = nil,
         artifacts: [ShannonGeneratedArtifactDTO] = [],
         sourceAttribution: ShannonSourceAttributionDTO? = nil,
-        places: [ShannonPlaceDTO] = []
+        places: [ShannonPlaceDTO] = [],
+        turnID: String? = nil,
+        captures: [ShannonTurnCaptureDTO] = [],
+        reminder: ShannonReminderDTO? = nil
     ) {
+        self.turnID = turnID
+        self.captures = captures
+        self.reminder = reminder
         self.id = id
         self.role = role
         self.text = text
@@ -76,7 +87,27 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             emotionSnapshot: emotionSnapshot,
             artifacts: artifacts,
             sourceAttribution: sourceAttribution,
-            places: places
+            places: places,
+            turnID: turnID,
+            captures: captures,
+            reminder: reminder
+        )
+    }
+
+    public func with(captures: [ShannonTurnCaptureDTO], reminder: ShannonReminderDTO?) -> ConversationMessage {
+        ConversationMessage(
+            id: id,
+            role: role,
+            text: text,
+            sentAt: sentAt,
+            deliveryState: deliveryState,
+            emotionSnapshot: emotionSnapshot,
+            artifacts: artifacts,
+            sourceAttribution: sourceAttribution,
+            places: places,
+            turnID: turnID,
+            captures: captures,
+            reminder: reminder
         )
     }
 }

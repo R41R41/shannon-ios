@@ -221,12 +221,14 @@ extension ShannonConversationModel {
                 openness: emotion.openness,
                 expression: emotion.expression,
                 stateVersion: response.state.version
-            )
+            ),
+            turnID: response.turnId
         )]
         if selectedThreadId == requestedThreadID || selectedThreadId == response.threadId {
             selectedThreadId = response.threadId
             messages.append(contentsOf: pair)
             cacheCurrentHistory()
+            scheduleCaptureRefresh()
         } else {
             // A call can finish a turn while the user is browsing another thread.
             // Cache only for that call's thread; never append to the visible history.

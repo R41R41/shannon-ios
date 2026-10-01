@@ -87,6 +87,9 @@ extension ShannonConversationView {
                                 ScrollView(dialogueIsExpanded ? .vertical : []) {
                                     ShannonRichMarkdownText(source: reply.text, palette: palette)
                                         .textSelection(.enabled)
+                                    if ShannonTurnCaptureList.hasContent(reply) {
+                                        ShannonTurnCaptureList(message: reply, conversation: model, memory: memoryModel)
+                                    }
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(

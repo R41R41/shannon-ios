@@ -258,6 +258,8 @@ public enum ShannonMemoryActionDTO: String, Codable, Equatable, Sendable {
     case restore
     case complete
     case dismiss
+    /// 「あとで」: one more reminder later, inside the same daily slot.
+    case snooze
 }
 
 public struct ShannonMemoryMutationDTO: Codable, Equatable, Sendable {

@@ -9,6 +9,10 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let stateVersion: Int?
     public let artifacts: [ShannonGeneratedArtifactDTO]?
     public let sourceAttribution: ShannonSourceAttributionDTO?
+    /// The completed turn this message belongs to; captures are keyed by it.
+    public let sourceExperienceId: String?
+    public let captures: [ShannonTurnCaptureDTO]?
+    public let reminder: ShannonReminderDTO?
 
     public init(
         id: String,
@@ -18,8 +22,14 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
         messageEmotion: ShannonMessageEmotionDTO? = nil,
         stateVersion: Int? = nil,
         artifacts: [ShannonGeneratedArtifactDTO]? = nil,
-        sourceAttribution: ShannonSourceAttributionDTO? = nil
+        sourceAttribution: ShannonSourceAttributionDTO? = nil,
+        sourceExperienceId: String? = nil,
+        captures: [ShannonTurnCaptureDTO]? = nil,
+        reminder: ShannonReminderDTO? = nil
     ) {
+        self.sourceExperienceId = sourceExperienceId
+        self.captures = captures
+        self.reminder = reminder
         self.id = id
         self.role = role
         self.content = content

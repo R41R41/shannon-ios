@@ -424,4 +424,5 @@ public struct ShannonRealtimeVoiceTurnResponseDTO: Codable, Equatable, Sendable 
     public let threadId: String
     public let messageEmotion: ShannonMessageEmotionDTO
     public let state: CompanionStateDTO
+    public var turnId: String?
 }
