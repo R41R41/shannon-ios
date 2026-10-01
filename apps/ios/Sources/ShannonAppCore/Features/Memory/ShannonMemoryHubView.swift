@@ -12,6 +12,8 @@ struct ShannonMemoryHubList: View {
         let overview = ShannonMemoryOverview(model: model)
         List {
             nowSection(overview, palette: palette)
+            errorSection(model.cognitionErrorMessage, palette: palette)
+            errorSection(model.errorMessage, palette: palette)
             categorySection(overview, palette: palette)
             Section {
                 NavigationLink {
@@ -106,20 +108,28 @@ struct ShannonMemoryHubList: View {
                 }
             }
 
-            if let error = model.cognitionErrorMessage {
-                MemoryErrorCard(message: error, palette: palette) {
+        }
+    }
+
+    private func emptyIntentText(_ overview: ShannonMemoryOverview) -> String {
+        if model.isLoading && model.cognition == .empty { return "目的を読み込み中…" }
+        // The failure itself is explained once, by the error card below the いま card.
+        if overview.hasCognitionError && model.cognition == .empty { return "目的と認知履歴" }
+        return "続けている目的はありません"
+    }
+
+    /// A load failure in its own section so it never breaks the rounded card above it.
+    @ViewBuilder
+    private func errorSection(_ message: String?, palette: ShannonPalette) -> some View {
+        if let message {
+            Section {
+                MemoryErrorCard(message: message, palette: palette) {
                     Task { await model.reload() }
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             }
         }
-    }
-
-    private func emptyIntentText(_ overview: ShannonMemoryOverview) -> String {
-        if model.isLoading && model.cognition == .empty { return "目的を読み込み中…" }
-        if overview.hasCognitionError && model.cognition == .empty { return "目的を読み込めませんでした" }
-        return "続けている目的はありません"
     }
 
     // MARK: Categories
@@ -149,13 +159,6 @@ struct ShannonMemoryHubList: View {
             .accessibilityIdentifier("memory-management-entry")
             .listRowBackground(palette.subtleSurface)
 
-            if let error = model.errorMessage {
-                MemoryErrorCard(message: error, palette: palette) {
-                    Task { await model.reload() }
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
-            }
         } header: {
             Text("記憶")
         } footer: {

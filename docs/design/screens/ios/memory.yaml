@@ -39,6 +39,7 @@ accessibility:
   focus: "標準NavigationLink・List・Menuで一覧、状態変更、戻るを提供する"
   reduce_motion: "導線と状態の理解に装飾アニメーションを使わない。いまカードの目はReduce Motionで静止する"
 evidence:
-  current: []
+  current:
+    - "docs/screenshots/shannon-ios-memory-hub-error-light-v1.png"
   approved: []
   privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない"

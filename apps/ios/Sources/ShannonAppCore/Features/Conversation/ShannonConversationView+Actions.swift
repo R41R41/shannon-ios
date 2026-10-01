@@ -24,6 +24,9 @@ extension ShannonConversationView {
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewWork") {
             selectedPage = .work
         }
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewMemory") {
+            selectedPage = .memory
+        }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewAgentTask"),
            let task = model.agentTasks.first(where: { $0.status == .proposed }) {
             selectedPage = .work

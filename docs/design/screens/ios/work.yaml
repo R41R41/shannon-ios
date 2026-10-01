@@ -51,6 +51,8 @@ accessibility:
   reduce_motion: "状態変化をアニメーションだけで伝えない。計画の連結線とブロックはReduce Motion時に短い切替にし、脈動させない。計画と完了工程の開閉は0.35秒の減衰スプリング、Reduce Motion時は0.15秒のease-outにする。承認到着時の先頭への移動はReduce Motion時にアニメーションしない"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-task-room-approval-first-light-v1.png"
+    - "docs/screenshots/shannon-ios-task-room-plan-fold-light-v1.png"
     - "docs/screenshots/shannon-ios-approval-hold-network-light-v1.png"
     - "docs/screenshots/shannon-ios-approval-hold-command-dark-v1.png"
     - "docs/screenshots/shannon-ios-approval-hold-confirm-light-v1.png"

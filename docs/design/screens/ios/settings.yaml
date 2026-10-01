@@ -41,6 +41,7 @@ accessibility:
   focus: "シートを閉じても設定一覧へ戻る"
   reduce_motion: "切替状態を動きだけで表現しない"
 evidence:
-  current: []
+  current:
+    - "docs/screenshots/shannon-ios-settings-current-values-light-v1.png"
   approved: []
   privacy: "設定画面の証跡には実会話や認証情報を含めない"
