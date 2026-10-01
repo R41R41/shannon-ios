@@ -188,5 +188,16 @@ extension ShannonGeminiLiveSessionModel {
         ttsCostUsd += segmentDuration / 10 * speech.outputUsdPerTenSeconds
         updateCost()
     }
+
+    /// Diagnostics that used to sit on the call screen now go to Settings › 音声診断.
+    func recordSessionSummary() {
+        ShannonVoiceDiagnostics.shared.record("gemini.session.summary", metadata: [
+            "provider": speechProvider.japaneseName, "model": model, "voice": voice,
+            "estimated_cost_usd": ttsCostEstimateAvailable
+                ? estimatedCostUsd.formatted(.number.precision(.fractionLength(5))) : "unavailable",
+            "interruption_ms": String(interruptionLatencyMilliseconds ?? -1),
+            "input_audio_seconds": String(Int(inputAudioSeconds)),
+        ])
+    }
 }
 #endif

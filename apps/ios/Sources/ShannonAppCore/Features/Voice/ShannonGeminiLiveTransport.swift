@@ -46,6 +46,7 @@ final class ShannonGeminiLiveTransport {
     private var didRecordFirstAudioSend = false
     private var inputPreference: ShannonVoiceInputPreference = .automatic
     private var preferenceUnavailable = false
+    private var inputMuted = false
     private var routeObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
     private(set) var sentAudioSeconds: Double = 0
@@ -141,6 +142,11 @@ final class ShannonGeminiLiveTransport {
         playbackFormatMixerNode.reset()
         pitchNode.reset()
         if audioEngine.isRunning { playerNode.play() }
+    }
+    /// Voice Processing delivers silence while muted, so nothing the user says is sent.
+    func setInputMuted(_ muted: Bool) {
+        inputMuted = muted
+        if inputTapInstalled { audioEngine.inputNode.isVoiceProcessingInputMuted = muted }
     }
     func setPlaybackVolume(_ volume: Float) {
         playerNode.volume = min(1, max(0, volume))
@@ -306,6 +312,7 @@ final class ShannonGeminiLiveTransport {
         ioAudioUnit.isInputEnabled = true
         ioAudioUnit.isOutputEnabled = true
         input.isVoiceProcessingBypassed = false
+        input.isVoiceProcessingInputMuted = inputMuted
 
         // Voice Processing I/O exposes the physical microphone format on bus 1,
         // even though the input node must be connected from its sole graph output.

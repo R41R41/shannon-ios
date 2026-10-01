@@ -32,6 +32,44 @@ Phone calls and competing audio sessions take priority; resume only when iOS per
 and surface reconnect when the audio path cannot resume. Background audio exists only
 for an active user-initiated call; closing the call releases the audio session.
 
+## Expanded call layout
+
+The expanded call (`ShannonGeminiLiveVoiceView`) is laid out like a call screen with
+the Waterlight Eye as the focus:
+
+- **Top:** a labelled “小さく” control at leading (minimize; the call continues in the
+  compact strip) and a centered “シャノン” title with the elapsed call time once the
+  call is ready to listen. Provider and model identifiers are not visible text: the
+  title's VoiceOver hint carries them, and `gemini.session.created` /
+  `gemini.session.summary` record provider, model, voice, interruption latency and
+  estimated cost in Settings › 音声診断. Per-turn latency stays in the same log.
+- **Center:** the Eye, vertically centered, with exactly one status line under it.
+  `ShannonGeminiLiveStatusPresentation` is the single source of that line: phase
+  title, an optional detail (first-listen reassurance, mute guidance, reconnecting,
+  a non-fatal notice, or the failure message), and the inline input glyph. The glyph
+  is the real microphone level while listening (still under Reduce Motion) or a
+  muted microphone symbol. No header subtitle or bottom label repeats the state.
+  A failure adds only its action (“もう一度つなぐ” or “設定を開く”) under the line.
+- **Subtitles:** at most the latest user line (“あなた：…”, or “参加者：…” for guests,
+  muted) and the latest Shannon line, each up to two lines (four at accessibility
+  sizes), centered and truncated at the head. VoiceOver reads the full current
+  turn; the complete conversation stays in the call's pinned Talk thread.
+  The implementation review card, unshared photo preview, photo errors and text
+  retry follow below and scroll when space runs out.
+- **Bottom control bar** (`ShannonGeminiLiveCallControls`, safe-area inset):
+  写真, 人物, マイク, 文字, 終了, each a round control with a visible label. マイク
+  is the larger primary-action control; tapping toggles mute (icon and label change
+  to “ミュート中”, not color alone), long press opens the input-microphone menu, and
+  VoiceOver exposes “入力マイクを選ぶ” as an action. 文字 reveals or hides the
+  multiline composer above the bar; the bar and composer ride above the keyboard,
+  and a retained draft reopens the composer. 終了 uses the danger role. Guests have no
+  写真 control. When labels no longer fit on one row the bar wraps to rows of three,
+  then two, then one column; labels never truncate.
+
+Mute uses Voice Processing input muting, so only silence is sent while muted. It
+survives a reconnect of the same call and resets when the call ends.
+DEBUG fixture: add `-ShannonPreviewVoiceMuted` to show the muted state.
+
 ## Required evidence
 
 - Deterministic thread-affinity, proposal/start boundary and existing barge-in tests.

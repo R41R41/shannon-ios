@@ -11,6 +11,9 @@ final class ShannonVoiceWorkspaceState {
     var threadContext: ShannonVoiceThreadContext?
     var connectionRequestID: UUID?
     var typedMessage = ""
+    /// The multiline composer revealed by the call screen's 文字 control.
+    var showsTextComposer = false
+    var showsInputPicker = false
     var showsParticipantModePicker = false
     var showsPhotoSource = false
     var showsCamera = false

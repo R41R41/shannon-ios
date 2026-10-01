@@ -3,6 +3,8 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+/// The expanded realtime voice call: the Waterlight Eye is the focus, one status
+/// line describes the call, and a labelled control bar sits at the bottom.
 public struct ShannonGeminiLiveVoiceView: View {
     @Bindable var model: ShannonGeminiLiveSessionModel
     @Bindable var workspace: ShannonVoiceWorkspaceState
@@ -17,6 +19,8 @@ public struct ShannonGeminiLiveVoiceView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
     @FocusState private var composerIsFocused: Bool
 
     init(
@@ -50,18 +54,23 @@ public struct ShannonGeminiLiveVoiceView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            VStack(spacing: ShannonSpacing.medium) {
+            VStack(spacing: ShannonSpacing.small) {
                 header(palette)
-                ScrollView {
-                    conversationContent(palette)
+                GeometryReader { proxy in
+                    ScrollView {
+                        conversationContent(palette)
+                            .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }
             .padding(.horizontal, ShannonSpacing.large)
-            .padding(.vertical, ShannonSpacing.small)
+            .padding(.top, ShannonSpacing.small)
         }
         .foregroundStyle(palette.textPrimary)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            composerDock(palette)
+            controlDock(palette)
         }
         .fullScreenCover(isPresented: $workspace.showsCamera) {
             ShannonVoiceCameraPicker(onCapture: receiveCameraImage, onCancel: { workspace.showsCamera = false })
@@ -87,14 +96,25 @@ public struct ShannonGeminiLiveVoiceView: View {
             Button("友人も一緒") { switchParticipantMode(to: .guest) }
             Button("キャンセル", role: .cancel) {}
         } message: {
-            Text("「友人も一緒」では所有者の履歴や記憶を使わず、この通話を保存しません。切り替えるとGeminiへつなぎ直します。")
+            Text("「友人も一緒」では所有者の履歴や記憶を使わず、この通話を保存しません。切り替えると音声会話をつなぎ直します。")
+        }
+        .confirmationDialog("入力マイク", isPresented: $workspace.showsInputPicker, titleVisibility: .visible) {
+            ForEach(ShannonVoiceInputPreference.allCases.filter { model.inputState.canSelect($0) }) { preference in
+                Button(preference.japaneseLabel) { model.selectInput(preference) }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            if model.inputState.activeInputName != nil { Text(model.inputState.activeInputLabel) }
         }
         .task {
+            // A retained draft reopens with its composer after minimization.
+            if !workspace.typedMessage.isEmpty { workspace.showsTextComposer = true }
 #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewVoiceKeyboard") {
                 if workspace.typedMessage.isEmpty {
                     workspace.typedMessage = "さっきの依頼の続きです。\nAetherの最新ノートも一緒に確認してほしい。"
                 }
+                workspace.showsTextComposer = true
                 composerIsFocused = true
             }
 #endif
@@ -103,53 +123,39 @@ public struct ShannonGeminiLiveVoiceView: View {
             guard workspace.typedMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let failedText = model.textSendState.failedText else { return }
             workspace.typedMessage = failedText
+            workspace.showsTextComposer = true
         }
+    }
+
+    private var statusPresentation: ShannonGeminiLiveStatusPresentation {
+        ShannonGeminiLiveStatusPresentation(
+            phase: model.phase,
+            failureRecovery: model.failureRecovery,
+            errorMessage: model.errorMessage,
+            isMuted: model.isMicrophoneMuted,
+            hasConversation: !model.userTranscript.isEmpty || !model.shannonTranscript.isEmpty
+        )
     }
 
     private func conversationContent(_ palette: ShannonPalette) -> some View {
         VStack(spacing: ShannonSpacing.large) {
             if model.participantMode == .guest {
                 ShannonVoiceGuestModeNotice(palette: palette)
+                    .frame(maxWidth: 560)
             }
-            ShannonWaterlightEyeView(
-                expression: expression,
-                activity: eyeActivity,
-                size: model.phase == .failed ? 168 : 250
-            )
+            ShannonWaterlightEyeView(expression: expression, activity: eyeActivity, size: eyeSize)
                 .frame(maxWidth: 440)
-            status(palette)
-            if let task {
-                Button { composerIsFocused = false; openTask(task.id) } label: {
-                    VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                        Label(task.status == .proposed ? "実装案ができました" : task.status.japaneseName,
-                              systemImage: task.status.symbolName)
-                            .font(.subheadline.weight(.semibold))
-                        Text(task.title).font(.body).multilineTextAlignment(.leading)
-                        Label(task.status == .proposed ? "内容を確認して開始" : "作業を見る",
-                              systemImage: "arrow.right")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
-                    .padding(ShannonSpacing.medium)
-                }
-                .buttonStyle(.bordered)
-                .frame(maxWidth: 560)
-                .accessibilityHint("音声会話は続きます。開始前に作業環境と内容を確認できます。")
-            }
-            if model.phase != .failed, let error = model.errorMessage {
-                statusMessage(error, symbol: "exclamationmark.bubble",
-                    foreground: palette.onAttentionTint, background: palette.attentionTint)
-            }
-            if !model.userTranscript.isEmpty {
-                transcriptCard(
-                    model.participantMode.transcriptSpeakerName,
-                    text: model.userTranscript,
+            VStack(spacing: ShannonSpacing.medium) {
+                ShannonGeminiLiveStatusView(
+                    presentation: statusPresentation,
+                    level: model.audioLevel,
+                    phase: model.phase,
                     palette: palette
                 )
+                if model.phase == .failed { connectionRecovery }
+                subtitles(palette)
             }
-            if !model.shannonTranscript.isEmpty {
-                transcriptCard("シャノン", text: model.shannonTranscript, palette: palette)
-            }
+            if let task { taskCard(task) }
             if let pendingCameraImage = workspace.pendingCameraImage,
                let pendingCameraData = workspace.pendingCameraData {
                 ShannonVoicePhotoPreview(
@@ -170,136 +176,173 @@ public struct ShannonGeminiLiveVoiceView: View {
                     background: palette.dangerTint
                 )
             }
-            if model.phase == .failed, let error = model.errorMessage {
-                connectionRecovery(error, palette: palette)
-            }
             if case let .failed(text, message) = model.textSendState {
                 textRetry(text: text, message: message, palette: palette)
             }
-            metrics(palette)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, ShannonSpacing.medium)
     }
 
-    private func composerDock(_ palette: ShannonPalette) -> some View {
-        VStack(spacing: ShannonSpacing.small) {
-            HStack(spacing: ShannonSpacing.small) {
-                ShannonGeminiLiveLevelBar(level: model.audioLevel, phase: model.phase, palette: palette)
-                Text(model.phase == .speaking ? "シャノンが話しています" : model.inputState.activeInputLabel)
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
-                Spacer(minLength: 0)
-                if composerIsFocused {
-                    Button { composerIsFocused = false } label: {
-                        Image(systemName: "keyboard.chevron.compact.down")
-                            .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("キーボードを閉じる")
+    private var eyeSize: CGFloat {
+        if composerIsFocused { return 140 }
+        if dynamicTypeSize.isAccessibilitySize { return 200 }
+        return model.phase == .failed ? 180 : 280
+    }
+
+    private func taskCard(_ task: ShannonAgentTask) -> some View {
+        Button { composerIsFocused = false; openTask(task.id) } label: {
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                Label(task.status == .proposed ? "実装案ができました" : task.status.japaneseName,
+                      systemImage: task.status.symbolName)
+                    .font(.subheadline.weight(.semibold))
+                Text(task.title).font(.body).multilineTextAlignment(.leading)
+                Label(task.status == .proposed ? "内容を確認して開始" : "作業を見る",
+                      systemImage: "arrow.right")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
+            .padding(ShannonSpacing.medium)
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: 560)
+        .accessibilityHint("音声会話は続きます。開始前に作業環境と内容を確認できます。")
+    }
+
+    @ViewBuilder
+    private func subtitles(_ palette: ShannonPalette) -> some View {
+        let lines = ShannonGeminiLiveSubtitles(
+            speakerName: model.participantMode.transcriptSpeakerName,
+            userTranscript: model.userTranscript,
+            shannonTranscript: model.shannonTranscript
+        )
+        let lineLimit = dynamicTypeSize.isAccessibilitySize ? 4 : 2
+        if !lines.isEmpty {
+            VStack(spacing: ShannonSpacing.extraSmall) {
+                if let user = lines.user {
+                    Text(user)
+                        .font(.callout)
+                        .foregroundStyle(palette.textSecondary)
+                        .lineLimit(lineLimit)
+                        .truncationMode(.head)
+                }
+                if let shannon = lines.shannon {
+                    Text(shannon)
+                        .font(.body)
+                        .lineLimit(lineLimit)
+                        .truncationMode(.head)
                 }
             }
-            composer
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 560)
+            // Visible subtitles are bounded; VoiceOver reads the whole current turn.
+            // The complete conversation remains in the call's pinned Talk thread.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(subtitleAccessibilityLabel)
+        }
+    }
+
+    private var subtitleAccessibilityLabel: String {
+        var parts: [String] = []
+        if !model.userTranscript.isEmpty {
+            parts.append("\(model.participantMode.transcriptSpeakerName)：\(model.userTranscript)")
+        }
+        if !model.shannonTranscript.isEmpty { parts.append("シャノン：\(model.shannonTranscript)") }
+        return parts.joined(separator: "、")
+    }
+
+    private func controlDock(_ palette: ShannonPalette) -> some View {
+        VStack(spacing: ShannonSpacing.medium) {
+            if workspace.showsTextComposer { composer }
+            ShannonGeminiLiveCallControls(
+                isMuted: model.isMicrophoneMuted,
+                inputState: model.inputState,
+                participantMode: model.participantMode,
+                isPhotoBusy: workspace.isSharingCameraSnapshot || workspace.isLoadingLibraryPhoto,
+                showsTextComposer: workspace.showsTextComposer,
+                palette: palette,
+                choosePhoto: { composerIsFocused = false; workspace.showsPhotoSource = true },
+                chooseParticipant: { composerIsFocused = false; workspace.showsParticipantModePicker = true },
+                toggleMute: model.toggleMicrophoneMute,
+                selectInput: { composerIsFocused = false; model.selectInput($0) },
+                showInputPicker: { composerIsFocused = false; workspace.showsInputPicker = true },
+                toggleTextComposer: toggleTextComposer,
+                end: end
+            )
         }
         .padding(.horizontal, ShannonSpacing.large)
-        .padding(.vertical, ShannonSpacing.small)
-        .background(.regularMaterial)
+        .padding(.vertical, ShannonSpacing.medium)
+        .background {
+            Group {
+                if reduceTransparency || contrast == .increased {
+                    palette.elevatedSurface
+                } else {
+                    Rectangle().fill(.regularMaterial)
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .overlay(alignment: .top) { Rectangle().fill(palette.divider).frame(height: 1) }
+    }
+
+    private func toggleTextComposer() {
+        if workspace.showsTextComposer {
+            composerIsFocused = false
+            workspace.showsTextComposer = false
+        } else {
+            workspace.showsTextComposer = true
+            composerIsFocused = true
+        }
     }
 
     private func header(_ palette: ShannonPalette) -> some View {
-        VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-            let titleLayout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: ShannonSpacing.extraSmall))
-                : AnyLayout(HStackLayout(spacing: ShannonSpacing.small))
-            titleLayout {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: ShannonSpacing.small) {
+                minimizeButton
+                Spacer(minLength: ShannonSpacing.small)
                 voiceTitle(palette)
-                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: ShannonSpacing.small) }
-                HStack(spacing: ShannonSpacing.small) {
-                    minimizeButton
-                    Button(role: .destructive, action: end) {
-                        Label("終了", systemImage: "phone.down.fill")
-                            .frame(minHeight: ShannonTouchTarget.minimum)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel("音声会話を終了する")
-                }
-                .font(.subheadline.weight(.medium))
+                Spacer(minLength: ShannonSpacing.small)
+                // Mirrors the leading control so the title stays centered.
+                minimizeButton.hidden().accessibilityHidden(true)
             }
-            let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: ShannonSpacing.extraSmall))
-                : AnyLayout(HStackLayout(spacing: ShannonSpacing.small))
-            layout {
-                inputMenu
-                if model.participantMode.allowsCameraSharing { cameraButton }
-                participantButton
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                minimizeButton
+                voiceTitle(palette).frame(maxWidth: .infinity)
             }
-            .font(.subheadline.weight(.medium))
-            .labelStyle(.titleAndIcon)
         }
-    }
-
-    private var inputMenu: some View {
-        Menu {
-            ForEach(ShannonVoiceInputPreference.allCases) { preference in
-                Button { composerIsFocused = false; model.selectInput(preference) } label: {
-                    Label(preference.japaneseLabel, systemImage: preference.systemImage)
-                }
-                .disabled(!model.inputState.canSelect(preference))
-            }
-        } label: {
-            Label("マイク", systemImage: "mic")
-                .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
-        }
-        .buttonStyle(.bordered)
-        .accessibilityLabel("入力マイク、\(model.inputState.preference.japaneseLabel)")
-    }
-
-    private var cameraButton: some View {
-        Button { composerIsFocused = false; workspace.showsPhotoSource = true } label: {
-            Label("写真", systemImage: "camera")
-                .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
-        }
-        .buttonStyle(.bordered)
-        .disabled(workspace.isSharingCameraSnapshot || workspace.isLoadingLibraryPhoto)
-        .accessibilityLabel("写真をシャノンに見せる")
     }
 
     private func voiceTitle(_ palette: ShannonPalette) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("シャノンと音声会話").font(.headline)
-            if !dynamicTypeSize.isAccessibilitySize {
-                Text("\(model.speechProvider.japaneseName) · \(model.inputState.activeInputLabel)")
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
-                    .lineLimit(1)
+        VStack(spacing: 2) {
+            Text("シャノン").font(.headline)
+            if let callStartedAt = model.callStartedAt {
+                TimelineView(.periodic(from: callStartedAt, by: 1)) { context in
+                    let seconds = Int(context.date.timeIntervalSince(callStartedAt))
+                    Text(ShannonVoiceCallDuration.text(seconds: seconds))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(palette.textSecondary)
+                        .accessibilityLabel(ShannonVoiceCallDuration.accessibilityText(seconds: seconds))
+                }
             }
         }
-    }
-
-    private var participantButton: some View {
-        Button { composerIsFocused = false; workspace.showsParticipantModePicker = true } label: {
-            Label("人物", systemImage: model.participantMode == .owner ? "person" : "person.2")
-                .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
-        }
-        .buttonStyle(.bordered)
-        .accessibilityLabel("音声の参加者、\(model.participantMode.japaneseName)")
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(ShannonGeminiLiveStatusPresentation.diagnosticsHint(
+            provider: model.speechProvider.japaneseName, model: model.model, voice: model.voice))
     }
 
     private var minimizeButton: some View {
         Button { composerIsFocused = false; minimize() } label: {
             Label("小さく", systemImage: "chevron.down")
+                .labelStyle(.titleAndIcon)
+                .font(.subheadline.weight(.medium))
                 .frame(minHeight: ShannonTouchTarget.minimum)
+                .fixedSize()
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
         .accessibilityLabel("音声会話を続けたまま小さくする")
-    }
-
-    private func status(_ palette: ShannonPalette) -> some View {
-        ShannonGeminiLiveStatusView(
-            phase: model.phase,
-            failureRecovery: model.failureRecovery,
-            palette: palette
-        )
     }
 
     private var composer: some View {
@@ -323,32 +366,25 @@ public struct ShannonGeminiLiveVoiceView: View {
         .background(.background, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
     }
 
-    private func connectionRecovery(_ message: String, palette: ShannonPalette) -> some View {
-        VStack(spacing: ShannonSpacing.medium) {
-            statusMessage(
-                message,
-                symbol: model.failureRecovery == .openSettings ? "mic.slash.fill" : "wifi.exclamationmark",
-                foreground: palette.onDangerTint,
-                background: palette.dangerTint
-            )
-            switch model.failureRecovery {
-            case .openSettings:
-                Button("設定を開く") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    openURL(url)
-                }
-                .buttonStyle(.borderedProminent)
-            case .updateRequired:
-                Text("最新版へ更新してから、もう一度開いてください。")
-                    .font(.footnote)
-                    .foregroundStyle(palette.textSecondary)
-            case .reconnect, .none:
-                Button("もう一度つなぐ") { Task { await model.retry() } }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Geminiへ再接続")
+    /// The failure text itself is in the status line; this adds only the action.
+    @ViewBuilder
+    private var connectionRecovery: some View {
+        switch model.failureRecovery {
+        case .openSettings:
+            Button("設定を開く") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                openURL(url)
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        case .updateRequired:
+            EmptyView()
+        case .reconnect, .none:
+            Button("もう一度つなぐ") { Task { await model.retry() } }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityHint("会話内容を保ったまま、音声会話へ再接続します。")
         }
-        .controlSize(.large)
     }
 
     private func textRetry(text: String, message: String, palette: ShannonPalette) -> some View {
@@ -397,38 +433,6 @@ public struct ShannonGeminiLiveVoiceView: View {
         }
     }
 
-    private func transcriptCard(_ speaker: String, text: String, palette: ShannonPalette) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(speaker).font(.caption.weight(.semibold)).foregroundStyle(palette.textSecondary)
-            Text(text).font(.body).frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(ShannonSpacing.medium)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
-        .frame(maxWidth: 560)
-    }
-
-    private func metrics(_ palette: ShannonPalette) -> some View {
-        VStack(spacing: 5) {
-            Text("\(model.model) · \(model.voice)")
-            HStack(spacing: ShannonSpacing.medium) {
-                if let latency = model.firstAudioLatencyMilliseconds { Label("再生キュー \(latency) ms", systemImage: "timer") }
-                if let latency = model.interruptionLatencyMilliseconds { Label("割込 \(latency) ms", systemImage: "waveform.badge.minus") }
-            }
-            if let latency = model.firstTTSByteLatencyMilliseconds {
-                Text("TTS要求から最初のPCM \(latency) ms")
-            }
-            if model.ttsCostEstimateAvailable {
-                Text("今回の音声 約$\(model.estimatedCostUsd.formatted(.number.precision(.fractionLength(5))))")
-            } else {
-                Text("今回の音声費用 · ElevenLabs分は未計上")
-            }
-        }
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(palette.textSecondary)
-        .multilineTextAlignment(.center)
-        .accessibilityElement(children: .combine)
-    }
-
     private func switchParticipantMode(to mode: ShannonVoiceParticipantMode) {
         guard mode != model.participantMode else { return }
         workspace.clearPhoto()
@@ -440,8 +444,8 @@ public struct ShannonGeminiLiveVoiceView: View {
         if model.sendText(text) {
             workspace.typedMessage = ""
             composerIsFocused = false
+            workspace.showsTextComposer = false
         }
     }
-
 }
 #endif
