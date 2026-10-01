@@ -419,8 +419,8 @@ describe('Shannon local API kernel', () => {
 
     const session = api.realtimeVoiceSession('owner-a', undefined, { participantMode: 'guest' });
     expect(session.threadId).toBe('temporary-guest-session');
-    expect(session.instructions).toContain('[Temporary guest voice session]');
-    expect(session.instructions).toContain('do not assume any guest participant is ライ');
+    expect(session.instructions).toContain('[Introduction mode — 友人も一緒]');
+    expect(session.instructions).toContain('do not assume the current speaker is ライ氏');
     expect(session.instructions).not.toContain('conversation partner is ライ');
     expect(session.instructions).not.toContain('[Shannon shared state v1]');
     expect(session.instructions).not.toContain('ミズクラゲ');
@@ -434,7 +434,7 @@ describe('Shannon local API kernel', () => {
     expect(delegated).toMatchObject({ status: 200, body: { threadId: privateThreadId } });
     expect(model.requests).toHaveLength(1);
     expect(model.requests[0]?.history).toEqual([]);
-    expect(model.requests[0]?.systemPrompt).toContain('[Temporary guest voice session]');
+    expect(model.requests[0]?.systemPrompt).toContain('[Introduction mode — 友人も一緒]');
     expect(model.requests[0]?.systemPrompt).not.toContain('ミズクラゲ');
   });
 

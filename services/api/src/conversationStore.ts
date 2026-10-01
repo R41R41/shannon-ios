@@ -88,6 +88,11 @@ export interface ConversationStore {
     context?: TurnPersistenceContext,
   ): ShannonExperience;
   ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult;
+  /**
+   * Adds a Shannon-authored note to a thread without a user message and without an
+   * experience event, so it never becomes a memory, promise, or profile source.
+   */
+  appendNote?(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage;
 }
 
 export class InMemoryConversationStore implements ConversationStore {
@@ -297,6 +302,19 @@ export class InMemoryConversationStore implements ConversationStore {
     experiences.push(experience);
     this.experiences.set(scopeKey, experiences.slice(-this.maximumExperiences));
     return experience;
+  }
+
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage {
+    const resolvedThreadId = this.threadId(scopeKey, threadId);
+    const threads = this.conversations.get(scopeKey) ?? new Map<string, StoredConversationMessage[]>();
+    const conversation = threads.get(resolvedThreadId) ?? [];
+    const note: StoredConversationMessage = {
+      id: randomUUID(), sourceExperienceId: `${noteKind}:${randomUUID()}`, role: 'assistant', content, observedAt,
+    };
+    conversation.push(note);
+    threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));
+    this.conversations.set(scopeKey, threads);
+    return Object.freeze({ ...note });
   }
 
   ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult {

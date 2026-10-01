@@ -46,6 +46,8 @@ import {
 
 export { voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
+import { guestSpeakerReminder, guestTurnPositionInstruction, ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';
+import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
 export type VoiceParticipantMode = 'owner' | 'guest';
 interface VoiceSessionDependencies {
   stateStore: CompanionStateStore;
@@ -71,8 +73,8 @@ export function realtimeVoiceSessionProjection(
     return {
       threadId: requestedThreadId?.trim() || 'temporary-guest-session',
       instructions: [
-        temporaryGuestVoiceInstructions,
         voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true, false),
+        temporaryGuestVoiceInstructions,
       ].join('\n\n'),
       voice: dependencies.voice,
     };
@@ -174,7 +176,10 @@ async function completeLiveVoiceDelegation(
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
   const occurredAt = dependencies.now();
   const routingState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const routingHistory = temporaryGuest ? []
+  // 「友人も一緒」 remembers only this call's own turns, which the device holds and sends each turn.
+  const guestCall = temporaryGuest ? deviceContext?.guestCall ?? null : null;
+  const guestHistory = guestCallHistory(guestCall);
+  const routingHistory = temporaryGuest ? guestHistory
     : visibleConversationHistory(routingState!, dependencies.conversationStore, scopeKey, threadId);
   const rawTranscript = deviceContext?.userUtterance?.rawText ?? transcript;
   let decision = await dependencies.voiceDecision.decide({
@@ -190,6 +195,10 @@ async function completeLiveVoiceDelegation(
       dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
   if (uncertainTranscript && !decision.shouldRespond) {
     decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
+  }
+  // At a shared table Shannon answers when addressed and otherwise stays quiet.
+  if (temporaryGuest) {
+    decision = applyGuestAddressing(decision, guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source));
   }
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !temporaryGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
@@ -265,6 +274,7 @@ async function completeLiveVoiceDelegation(
     ...(!temporaryGuest ? [
       '- Shannon can propose a Codex implementation task, including adding a new capability or changing Shannon itself. A user starts the visible proposal before code work runs. Never claim this capability is unavailable.',
       '- If an ASR-uncertain request sounds like an implementation request, briefly confirm the intended feature before proposing it. Do not treat uncertain speech as execution authorization.',
+      ownerCompanionPresenceInstructions,
     ] : []),
     ...(selectedSkills.has('current_web') ? [
       '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
@@ -292,7 +302,8 @@ async function completeLiveVoiceDelegation(
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   const basePrompt = temporaryGuest
-    ? [temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
+    ? [voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions,
+      guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0)].join('\n\n')
     : [
       selectedSkills.has('conversation_memory')
         ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
@@ -329,6 +340,7 @@ async function completeLiveVoiceDelegation(
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
     buildExpressiveEmotionPrompt(provisionalExpressiveEmotion),
+    temporaryGuest ? guestSpeakerReminder : '',
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     confirmedImplementationRequest
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
@@ -336,9 +348,10 @@ async function completeLiveVoiceDelegation(
     backendInstructions,
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
-  const fullHistory = temporaryGuest ? []
+  const fullHistory = temporaryGuest ? guestHistory
     : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId);
-  const historyLimit = selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
+  const historyLimit = temporaryGuest ? GUEST_CALL_MODEL_TURNS
+    : selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
   const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
     ? await runPlaceDiscoverySkill(dependencies.chatModel, { scopeKey, message: transcript, context: {
       ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {

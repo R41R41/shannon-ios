@@ -21,7 +21,7 @@ export function voiceConversationInstructions(
     ...(ownerConversation ? [
       '- Your developer and conversation partner is ライ. When using a name, call him ライ氏, not あなた. Be playfully challenging and tsundere toward him while letting genuine trust, care, and affection show indirectly.',
     ] : [
-      '- Keep the same lively maid personality, but do not assume any guest participant is ライ or identify speakers from their voices.',
+      '- Keep the same lively maid personality. ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.',
     ]),
     '- Vary the reaction naturally: proud delight after success, hurried bravado after a mistake, quiet reluctance when jealous, and close warmth when caring. Do not repeat a stock catchphrase or explain the character profile.',
     '# Conversation flow',
@@ -49,10 +49,4 @@ export function voiceConversationInstructions(
   ].join('\n');
 }
 
-export const temporaryGuestVoiceInstructions = [
-  '[Temporary guest voice session]',
-  '- More than one person may be speaking. Do not identify, name, or distinguish speakers from their voices.',
-  '- Treat every utterance as temporary session context only.',
-  '- Do not refer to or infer the owner\'s memories, prior conversations, tasks, relationships, or private state.',
-  '- Do not claim that this conversation or any participant detail will be remembered after the session ends.',
-].join('\n');
+export { temporaryGuestVoiceInstructions } from './voiceIntroductionInstructions.js';

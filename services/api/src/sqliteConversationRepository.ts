@@ -263,6 +263,27 @@ export class SQLiteConversationRepository implements ConversationStore {
     return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt });
   }
 
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage {
+    const effectiveThreadId = this.threadId(scopeKey, threadId);
+    this.ensureThread(scopeKey, effectiveThreadId, null);
+    const row: MessageRow = {
+      message_id: randomUUID(), thread_id: effectiveThreadId, turn_id: `${noteKind}:${randomUUID()}`,
+      role: 'assistant', content, observed_at: observedAt, metadata_json: JSON.stringify({ noteKind }),
+    };
+    this.context.transaction(() => {
+      // No user row and no experience event: the note is display history only.
+      this.context.database.prepare(`
+        INSERT INTO conversation_messages
+          (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
+        VALUES (?, ?, ?, ?, 1, 'assistant', ?, ?, ?)
+      `).run(row.message_id, scopeKey, effectiveThreadId, row.turn_id, content, observedAt, row.metadata_json);
+      this.context.database.prepare(`
+        UPDATE conversation_threads SET updated_at = ? WHERE scope_key = ? AND thread_id = ?
+      `).run(observedAt, scopeKey, effectiveThreadId);
+    });
+    return freezeStoredMessage(row);
+  }
+
   ingestPlatformTurn(input: PlatformTurnPersistenceInput): PlatformTurnPersistenceResult {
     return this.context.transaction(() => {
       const previous = this.context.database.prepare(`

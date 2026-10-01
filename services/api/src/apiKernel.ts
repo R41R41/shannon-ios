@@ -317,9 +317,9 @@ export class ShannonApiKernel {
     const liveVoiceResponse = dispatchLiveVoiceRequest(request, this.liveVoiceDependencies());
     if (liveVoiceResponse) return await liveVoiceResponse;
 
-    const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore,
+    const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.chatModel,
       conversationStore: this.conversationStore, background: this.background, now: this.now });
-    if (turnResponse) return turnResponse;
+    if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
       if (!objectBody(request.body)) return badRequest('JSON object body is required');

@@ -3,11 +3,15 @@ import { objectBody, validScopeKey, validBoundedString, badRequest } from './api
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
+import type { ShannonChatModel } from './chatModel.js';
+import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
 
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
-  background: TurnBackgroundService; now: () => string;
-}): ApiResponse | null {
+  background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
+}): ApiResponse | Promise<ApiResponse> | null {
+  const summary = dispatchVoiceCallSummary(request, dependencies);
+  if (summary) return summary;
   if (request.method !== 'POST' || ![
     '/v1/voice/gemini/cascade/turns',
     '/v1/voice/realtime/turns',
