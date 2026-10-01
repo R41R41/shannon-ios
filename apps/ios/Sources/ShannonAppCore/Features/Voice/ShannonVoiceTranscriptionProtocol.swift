@@ -17,6 +17,24 @@ public enum ShannonOpenAITranscriptionProtocol {
     public static let endpoint = "wss://api.openai.com/v1/realtime?intent=transcription"
     public static let sampleRate = 24_000
     public static let acceptedModels: Set<String> = ["gpt-4o-mini-transcribe", "gpt-4o-transcribe"]
+    /// Mirrors the server's session prompt (`TRANSCRIPTION_PROMPT`). The prompt measurably helps
+    /// product names, but for noise or an empty segment the model can return it as the transcript.
+    public static let promptVocabulary = [
+        "シャノン", "ライ", "Aether", "Voyager", "Syzygy", "Jev", "Minebot", "Codex", "SwiftUI", "TestFlight",
+    ]
+
+    /// Removes a leaked run of the prompt's words. Four or more vocabulary words in a row, joined only by
+    /// separators, is never speech, while a real sentence that names one or two products is untouched.
+    public static func removingLeakedPrompt(from transcript: String) -> String {
+        let words = promptVocabulary.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+        return transcript
+            .replacingOccurrences(
+                of: "(?:(?:\(words))[\\s、,，・]*){4,}",
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     public static func webSocketRequest(token: String) throws -> URLRequest {
         guard let url = URL(string: endpoint), token.hasPrefix("ek_"), token.count <= 512 else {
@@ -45,8 +63,7 @@ public enum ShannonOpenAITranscriptionProtocol {
         case "input_audio_buffer.speech_stopped":
             return [.speechStopped]
         case "conversation.item.input_audio_transcription.completed":
-            let transcript = (root["transcript"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let transcript = removingLeakedPrompt(from: (root["transcript"] as? String) ?? "")
             return transcript.isEmpty ? [] : [.inputTranscript(transcript)]
         default:
             return []

@@ -60,6 +60,7 @@ extension ShannonGeminiLiveSessionModel {
                                        "response_ms": String(milliseconds)])
                     }
                     self.shannonTranscript += segment
+                    self.echoGuard.recordSpoken(segment, at: ProcessInfo.processInfo.systemUptime)
                     await coordinator.enqueue(segment, plan: plan)
                 }
                 try requireCurrentResponse(generation)
@@ -115,6 +116,7 @@ extension ShannonGeminiLiveSessionModel {
                 phase = .listening
                 responseTask = nil
                 responseGenerationID = nil
+                markPlaybackEnded()
                 textSendState = .idle
                 if responseGenerationID == nil, !pendingTurns.turns.isEmpty, transport != nil {
                     beginResponse()
@@ -134,6 +136,7 @@ extension ShannonGeminiLiveSessionModel {
                 transport?.discardPlayback()
                 responseTask = nil
                 responseGenerationID = nil
+                markPlaybackEnded()
                 playbackLevel = 0
                 phase = .listening
                 errorMessage = responseDelivery.failureMessage

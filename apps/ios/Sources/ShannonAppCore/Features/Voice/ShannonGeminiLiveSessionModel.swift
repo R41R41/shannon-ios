@@ -44,7 +44,9 @@ public final class ShannonGeminiLiveSessionModel {
     var responseTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
-    private var sustainedSpeechTask: Task<Void, Never>?
+    var echoGuard = ShannonSpeechEchoGuard()
+    /// Recognition lags speech, so Shannon's own last words can arrive as a transcript after playback ends.
+    private var echoGraceUntil: TimeInterval = 0
     private var bargeCandidateStartedAt: TimeInterval?
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
@@ -168,8 +170,6 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask?.cancel()
         finalizeTask?.cancel()
         duckRestoreTask?.cancel()
-        sustainedSpeechTask?.cancel()
-        sustainedSpeechTask = nil
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
@@ -288,33 +288,34 @@ public final class ShannonGeminiLiveSessionModel {
             phase = .listening
             if callStartedAt == nil { callStartedAt = Date() }
         case .speechStarted:
-            // No live caption is shown. Speech sustained for the barge-in window still
-            // interrupts the reply; a shorter sound only ducks playback until it ends.
-            handleBargeIn(hasFinalText: false)
-            scheduleSustainedSpeechInterruption()
+            duckForSpeech()
         case .speechStopped:
-            sustainedSpeechTask?.cancel()
-            sustainedSpeechTask = nil
+            if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
-            sustainedSpeechTask?.cancel()
-            sustainedSpeechTask = nil
+            if discardsAsEcho(text) { return }
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
-            handleBargeIn(hasFinalText: true)
+            // Only a completed transcript that is not Shannon's own voice interrupts her reply.
+            interruptResponse()
             scheduleFinalization(turnComplete: false)
         case .goAway:
             fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
     }
 
-    private func scheduleSustainedSpeechInterruption() {
-        sustainedSpeechTask?.cancel()
-        guard responseTask != nil else { return }
-        sustainedSpeechTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(340)) } catch { return }
-            self?.sustainedSpeechTask = nil
-            self?.interruptResponse()
-        }
+    /// A transcript that repeats what Shannon just said is her own voice through the microphone,
+    /// not the owner. Only the character count is logged, never the text.
+    private func discardsAsEcho(_ text: String) -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        let speaking = responseTask != nil
+        guard speaking || now < echoGraceUntil, echoGuard.isEcho(text, now: now) else { return false }
+        ShannonVoiceDiagnostics.shared.record("gemini.input.echo.discarded",
+            metadata: ["characters": String(text.count), "during_playback": String(speaking)])
+        return true
+    }
+
+    func markPlaybackEnded() {
+        echoGraceUntil = ProcessInfo.processInfo.systemUptime + 5
     }
 
     private func previewInput(_ current: String) -> String {
@@ -365,16 +366,19 @@ public final class ShannonGeminiLiveSessionModel {
         userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
         beginResponse()
     }
-    private func handleBargeIn(hasFinalText: Bool) {
+    /// A sound heard while Shannon speaks may be her own voice returning through the microphone, so
+    /// it only lowers playback. The reply stops when a completed transcript shows the owner spoke
+    /// (see `.inputTranscript`); the duck lifts shortly after the sound stops.
+    private func duckForSpeech() {
         guard responseTask != nil else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        if bargeCandidateStartedAt == nil {
-            bargeCandidateStartedAt = now
-            transport?.setPlaybackVolume(0.18)
-        }
-        scheduleDuckRelease()
-        if hasFinalText || now - (bargeCandidateStartedAt ?? now) >= 0.34 {
-            interruptResponse()
+        if bargeCandidateStartedAt == nil { bargeCandidateStartedAt = ProcessInfo.processInfo.systemUptime }
+        transport?.setPlaybackVolume(0.18)
+        duckRestoreTask?.cancel()
+        // Safety net in case the stop event never arrives.
+        duckRestoreTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(10)) } catch { return }
+            self?.transport?.setPlaybackVolume(1)
+            self?.bargeCandidateStartedAt = nil
         }
     }
 
@@ -401,6 +405,7 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask?.cancel()
         responseTask = nil
         responseGenerationID = nil
+        markPlaybackEnded()
         duckRestoreTask?.cancel()
         duckRestoreTask = nil
         transport?.discardPlayback()
@@ -418,6 +423,8 @@ public final class ShannonGeminiLiveSessionModel {
         userTranscript = ""
         shannonTranscript = ""
         turnAssembler.reset()
+        echoGuard.reset()
+        echoGraceUntil = 0
         inputAudioSeconds = 0
         outputAudioSeconds = 0
         ttsCostUsd = 0
