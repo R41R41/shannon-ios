@@ -27,7 +27,7 @@ public struct ShannonMemoryView: View {
             if showsDismissButton {
                 NavigationStack {
                     memoryContent(palette)
-                        .navigationTitle("シャノンの記憶")
+                        .navigationTitle("頭の中")
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("閉じる") { dismiss() }
@@ -45,34 +45,11 @@ public struct ShannonMemoryView: View {
                 memoryContent(palette)
             }
         }
-        .sheet(item: $editingAnswer) { answer in
-            NavigationStack {
-                Form {
-                    Section(answer.question) {
-                        TextField("回答", text: $editingText, axis: .vertical)
-                            .lineLimit(2...8)
-                    }
-                }
-                .navigationTitle("知識を訂正")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("キャンセル") { editingAnswer = nil }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("保存") {
-                            let value = editingText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            Task {
-                                if await model.correctKnowledge(answerID: answer.answerId, answer: value) {
-                                    editingAnswer = nil
-                                }
-                            }
-                        }
-                        .disabled(editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
+        .modifier(ShannonKnowledgeCorrectionModifier(
+            model: model,
+            editingAnswer: $editingAnswer,
+            editingText: $editingText
+        ))
         .sheet(item: $selectedSleepReport) { report in
             NavigationStack {
                 ShannonSleepReportView(report: report)
@@ -80,7 +57,13 @@ public struct ShannonMemoryView: View {
         }
     }
 
+    @ViewBuilder
     func memoryContent(_ palette: ShannonPalette) -> some View {
+#if os(iOS)
+        // iPhone: いま + category list. Each category pushes a page that reuses
+        // the section views below; the Mac keeps its overview composition.
+        ShannonMemoryHubList(model: model, workspaceTopInset: workspaceTopInset)
+#else
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ShannonSpacing.large) {
                 overviewContent(palette)
@@ -92,6 +75,7 @@ public struct ShannonMemoryView: View {
         .background(Color.clear)
         .task { await model.loadIfNeeded() }
         .refreshable { await model.reload() }
+#endif
     }
 
     @ViewBuilder
@@ -166,21 +150,7 @@ public struct ShannonMemoryView: View {
                 ShannonInitiativeEvaluationCard(evaluation: evaluation, palette: palette)
             }
             if let profile = model.dashboard?.personalityProfile {
-                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                    HStack {
-                        Text("性格分析").font(.title3.weight(.semibold))
-                        Spacer()
-                        Text("v\(profile.version)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(palette.action)
-                    }
-                    Text(profile.analysis)
-                        .font(.body)
-                        .lineSpacing(4)
-                        .foregroundStyle(palette.textSecondary)
-                }
-                .padding(ShannonSpacing.large)
-                .background(palette.canvas, in: RoundedRectangle(cornerRadius: ShannonShape.large))
+                ShannonPersonalityProfileCard(profile: profile, palette: palette)
             }
             if !state.interests.isEmpty {
                 MemorySimpleSection(title: "興味", symbol: "sparkles", values: state.interests, palette: palette)
@@ -208,25 +178,9 @@ public struct ShannonMemoryView: View {
                 memorySection(nil, items: facts, palette: palette)
             }
         } else {
-            ForEach(knowledgeCategories(answers), id: \.category) { group in
-                VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                    Text(group.category).font(.title3.weight(.semibold))
-                    ForEach(group.answers) { answer in
-                        HStack(alignment: .center, spacing: ShannonSpacing.small) {
-                            KnowledgeAnswerCard(answer: answer, palette: palette)
-                            Button {
-                                editingText = answer.answer
-                                editingAnswer = answer
-                            } label: {
-                                Image(systemName: "pencil")
-                                    .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(palette.action)
-                            .accessibilityLabel("\(answer.question)を編集")
-                        }
-                    }
-                }
+            ShannonKnowledgeAnswerGroups(answers: answers, palette: palette) { answer in
+                editingText = answer.answer
+                editingAnswer = answer
             }
         }
     }
@@ -256,19 +210,7 @@ public struct ShannonMemoryView: View {
 
         let world = model.dashboard?.world ?? []
         if !world.isEmpty {
-            VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                Text("見つけたもの").font(.title3.weight(.semibold))
-                ForEach(world.prefix(12)) { item in
-                    if let url = URL(string: item.url) {
-                        Link(destination: url) {
-                            WorldItemCard(item: item, palette: palette)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        WorldItemCard(item: item, palette: palette)
-                    }
-                }
-            }
+            ShannonWorldItemSection(items: Array(world.prefix(12)), palette: palette)
         }
         let activity = model.dashboard?.activity ?? []
         if activity.isEmpty {
@@ -279,15 +221,7 @@ public struct ShannonMemoryView: View {
                 memorySection(nil, items: experiences, palette: palette)
             }
         } else {
-            ForEach(activityGroups(activity)) { group in
-                VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                    Text(group.title)
-                        .font(.title3.weight(.semibold))
-                    ForEach(group.items) { item in
-                        ActivityTimelineRow(item: item, palette: palette)
-                    }
-                }
-            }
+            ShannonActivityTimelineSection(items: activity, palette: palette)
         }
     }
 
@@ -296,65 +230,10 @@ public struct ShannonMemoryView: View {
         items: [ShannonMemoryItemDTO],
         palette: ShannonPalette
     ) -> some View {
-        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-            if let title {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                    .padding(.horizontal, ShannonSpacing.extraSmall)
-            }
-            ForEach(items) { item in
-                NavigationLink {
-                    ShannonMemoryDetailView(model: model, memoryID: item.id)
-                } label: {
-                    MemoryCard(item: item, palette: palette)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        ShannonMemoryCardList(model: model, title: title, items: items, palette: palette)
     }
 
     func emptyState(_ title: String, symbol: String, palette: ShannonPalette) -> some View {
-        ContentUnavailableView {
-            Label(title, systemImage: symbol)
-        }
-        .foregroundStyle(palette.textSecondary)
-        .padding(.vertical, ShannonSpacing.huge)
-    }
-
-    func knowledgeCategories(_ answers: [ShannonKnowledgeAnswerDTO]) -> [(category: String, answers: [ShannonKnowledgeAnswerDTO])] {
-        let grouped = Dictionary(grouping: answers, by: \.category)
-        let order = ["基本情報", "趣味嗜好", "興味", "その他"]
-        return grouped.map { ($0.key, $0.value) }.sorted {
-            (order.firstIndex(of: $0.0) ?? 99) < (order.firstIndex(of: $1.0) ?? 99)
-        }
-    }
-
-    func activityGroups(_ items: [ShannonActivityItemDTO]) -> [ShannonActivityGroup] {
-        let calendar = Calendar.current
-        let now = Date()
-        let thisWeek = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-        var today: [ShannonActivityItemDTO] = []
-        var week: [ShannonActivityItemDTO] = []
-        var earlier: [ShannonActivityItemDTO] = []
-
-        for item in items {
-            guard let date = parsedDate(item.occurredAt) else {
-                earlier.append(item)
-                continue
-            }
-            if calendar.isDateInToday(date) {
-                today.append(item)
-            } else if date >= thisWeek {
-                week.append(item)
-            } else {
-                earlier.append(item)
-            }
-        }
-
-        return [
-            ShannonActivityGroup(id: "today", title: "今日", items: today),
-            ShannonActivityGroup(id: "week", title: "今週", items: week),
-            ShannonActivityGroup(id: "earlier", title: "それ以前", items: earlier),
-        ].filter { !$0.items.isEmpty }
+        ShannonMemoryEmptyState(title: title, symbol: symbol, palette: palette)
     }
 }
