@@ -29,6 +29,7 @@ import {
   consolidateProposals,
   deduplicateProposals,
   directPreferenceValue,
+  explicitFactStatement,
   extractOutputText,
   makeChange,
   memoryId,
@@ -36,6 +37,7 @@ import {
   parseJson,
   parseProposalRows,
 } from './sleepConsolidationRules.js';
+import { classifyRememberRequest, rememberRequestContent } from './rememberRequest.js';
 
 export interface UserFactProposal {
   kind?: 'user-fact' | 'relationship' | 'interest';
@@ -78,6 +80,8 @@ export interface ImmediateMemoryOutcome {
   facts: readonly UserFact[];
   relationships: readonly RelationshipInsight[];
   interests: readonly string[];
+  /** Stored answers that a newer owner statement replaced in place (same id, previous wording kept as history). */
+  revisions?: readonly { id: string; previousText: string }[];
 }
 
 /**
@@ -98,6 +102,7 @@ export function captureImmediateExplicitMemory(
     current,
     observedAt,
     0.72,
+    { revise: true },
   );
 }
 
@@ -106,13 +111,19 @@ export function extractExplicitMemoryProposals(value: string): UserFactProposal[
   if (!text) return [];
   const proposals: UserFactProposal[] = [];
   const utterances = text.match(/[^。！？!?]+[。！？!?]?/gu) ?? [];
+  let likedSubject: string | undefined;
   for (const utterance of utterances) {
     if (/[？?]\s*$/u.test(utterance)) continue;
     const sentence = utterance.replace(/[。！!]\s*$/u, '').trim();
     if (!sentence) continue;
-    for (const pattern of EXPLICIT_FACT_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'user-fact');
-    for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'relationship');
-    for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, sentence, pattern, 'interest');
+    // 「…、覚えておいて」 states its fact before the request; the request is not part of the fact.
+    const stated = rememberRequestContent(sentence) ?? sentence;
+    for (const pattern of EXPLICIT_FACT_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'user-fact');
+    for (const pattern of RELATIONSHIP_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'relationship');
+    for (const pattern of INTEREST_PATTERNS) appendRuleProposal(proposals, stated, pattern, 'interest');
+    const remembered = classifyRememberRequest(sentence, likedSubject);
+    if (remembered?.kind === 'knowledge') proposals.push({ kind: 'user-fact', statement: remembered.statement, evidence: remembered.evidence.slice(0, 240) });
+    likedSubject = explicitFactStatement(stated)?.match(/^ユーザーは(.{1,40})が好き$/u)?.[1] ?? likedSubject;
   }
   return deduplicateProposals(proposals);
 }

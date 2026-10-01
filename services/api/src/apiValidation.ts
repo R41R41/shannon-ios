@@ -102,7 +102,7 @@ export function validMemoryStatus(value: unknown): boolean {
 
 export function validMemoryAction(value: unknown): value is MemoryAction {
   return value === 'complete' || value === 'dismiss' || value === 'correct' || value === 'forget' || value === 'pin'
-    || value === 'unpin' || value === 'reject' || value === 'restore';
+    || value === 'unpin' || value === 'reject' || value === 'restore' || value === 'snooze';
 }
 
 export function badRequest(message: string): ApiResponse {

@@ -13,7 +13,9 @@ import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
-import { extractProspectiveMemories } from './prospectiveMemory.js';
+import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } from './prospectiveMemory.js';
+import { extractExplicitUserIntent } from './cognitiveIntent.js';
+import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from './turnCaptures.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 
 export interface CompletedTurn {
@@ -77,20 +79,43 @@ export class TurnRefinementProcessor {
       sourceTime,
       supplementalProposals,
     );
+    const captures: TurnCaptureRecord[] = [];
+    const capture = (kind: TurnCaptureRecord['kind'], key: string, text: string, extra: Partial<TurnCaptureRecord> = {}) => {
+      if (recordedExperienceId) captures.push({ id: turnCaptureId(recordedExperienceId, kind, key), turnId: recordedExperienceId,
+        kind, text: text.slice(0, 160), createdAt: sourceTime, ...extra });
+    };
+    const learned = (id: string, statement: string, known: boolean) => {
+      const revision = immediate.revisions?.find(item => item.id === id);
+      capture('knowledge', id, ownerFacingStatement(statement), { itemId: id,
+        ...(revision ? { change: 'updated' as const, previousText: revision.previousText }
+          : { change: known ? 'confirmed' as const : 'created' as const }) });
+    };
     for (const fact of immediate.facts) {
       this.stateStore.apply(scopeKey, { type: 'user-fact-upserted',
         fact: { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
+      learned(fact.id, fact.statement, current.userFacts.some(item => item.id === fact.id));
     }
     for (const relationship of immediate.relationships) {
       this.stateStore.apply(scopeKey, { type: 'relationship-upserted',
         relationship: { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
+      learned(relationship.id, relationship.statement, current.relationships.some(item => item.id === relationship.id));
     }
     for (const interest of immediate.interests) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
-    for (const memory of extractProspectiveMemories(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
+    for (const promise of extractPromiseCaptures(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
+      const { memory } = promise;
       this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', memory });
+      capture('commitment', memory.id, promise.topic, { itemId: memory.id,
+        ...(memory.dueDate ? { dueDate: memory.dueDate } : {}), ...(memory.dueAt ? { dueAt: memory.dueAt } : {}),
+        ...(memory.dueHint ? { dueHint: memory.dueHint } : {}), ...(memory.timeZone ? { timeZone: memory.timeZone } : {}),
+        ...(promise.note ? { note: promise.note } : {}) });
     }
+    // The response lane owns the intention ledger; this records only that the turn stated a goal.
+    const goal = extractExplicitUserIntent(userMessage, '', sourceTime);
+    if (goal) capture('intent', intentCaptureKey(goal.title), goal.title, { itemId: intentCaptureKey(goal.title) });
+    if (requestsExactTimeAlert(userMessage)) capture('notice', 'exact-time', EXACT_TIME_DECLINED);
+    if (captures.length) this.conversationStore.recordTurnCaptures?.(scopeKey, captures);
 
     const pinnedIds = new Set(current.memoryControls
       .filter(control => control.kind === 'experience' && control.status === 'active' && control.pinned)

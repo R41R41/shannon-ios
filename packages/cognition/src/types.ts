@@ -90,6 +90,8 @@ export interface ProspectiveMemory {
   timeZone?: string;
   sourceExperienceId?: string;
   evidence?: string;
+  /** Set when the owner answers a reminder with 「あとで」: no further reminder before this instant. */
+  remindAfter?: string;
 }
 
 export type MemoryKind = 'user-fact' | 'interest' | 'experience' | 'relationship';

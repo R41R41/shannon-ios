@@ -1,26 +1,72 @@
-import { restoreCompanionState, visibleMemoryText } from '@shannon/cognition';
+import { restoreCompanionState, visibleMemoryText, type CompanionStateSnapshot, type ProspectiveMemory } from '@shannon/cognition';
 import type { CandidateRow } from './initiativeSelection.js';
+
+const QUIET_START_HOUR = 23;
+/** 「あとで」 re-arms exactly one later reminder, never sooner than this. */
+export const SNOOZE_MILLISECONDS = 3 * 60 * 60_000;
+
+function localParts(at: string, timeZone: string): { day: string; hour: number } | null {
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(at)).map(part => [part.type, part.value]));
+    return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+  } catch { return null; }
+}
+
+/** A date without a clock time becomes eligible in the part of the day the owner named. */
+function eligibleHour(memory: ProspectiveMemory): number {
+  const hint = memory.dueHint ?? '';
+  return /今夜|今晩|明晩|夜|晩/u.test(hint) ? 19 : /夕方/u.test(hint) ? 17 : /昼|午後/u.test(hint) ? 12 : 9;
+}
+
+function visiblePending(state: CompanionStateSnapshot): ProspectiveMemory[] {
+  return state.prospectiveMemories.filter(memory => memory.status === 'pending'
+    && visibleMemoryText(state, memory.id, memory.summary)
+    && (!memory.sourceExperienceId || visibleMemoryText(state, memory.sourceExperienceId, memory.summary)));
+}
+
+export function commitmentItemId(memory: ProspectiveMemory): string {
+  return `commitment:${memory.id}:${memory.updatedAt}`;
+}
+
+function isDue(memory: ProspectiveMemory, at: string): boolean {
+  if (memory.remindAfter && Date.parse(memory.remindAfter) > Date.parse(at)) return false;
+  if (memory.dueAt) return Date.parse(memory.dueAt) <= Date.parse(at);
+  if (!memory.dueDate) return false;
+  const local = localParts(at, memory.timeZone ?? 'Asia/Tokyo');
+  return Boolean(local) && local!.day >= memory.dueDate && local!.hour >= eligibleHour(memory);
+}
 
 /** A reminder is a proposal to resume a promise, never evidence of its completion. */
 export function dueCommitmentCandidate(scopeKey: string, raw: unknown, at: string): (CandidateRow & { score: number })[] {
   const state = restoreCompanionState(scopeKey, raw, at);
-  return state.prospectiveMemories.flatMap(memory => {
-    if (memory.status !== 'pending' || !visibleMemoryText(state, memory.id, memory.summary)
-      || (memory.sourceExperienceId && !visibleMemoryText(state, memory.sourceExperienceId, memory.summary))) return [];
-    let due = false;
-    if (memory.dueAt) due = Date.parse(memory.dueAt) <= Date.parse(at);
-    else if (memory.dueDate) {
-      try {
-        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
-          timeZone: memory.timeZone ?? 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', hourCycle: 'h23',
-        }).formatToParts(new Date(at)).map(part => [part.type, part.value]));
-        due = `${parts.year}-${parts.month}-${parts.day}` >= memory.dueDate && Number(parts.hour) >= 9;
-      } catch { return []; }
+  return visiblePending(state).filter(memory => isDue(memory, at)).map(memory => ({
+    item_id: commitmentItemId(memory), source_id: 'commitment',
+    source_title: 'ふたりの約束', title: visibleMemoryText(state, memory.id, memory.summary)!, url: '',
+    summary: memory.id, published_at: memory.dueAt ?? null, discovered_at: memory.updatedAt, score: 0.8,
+  })).sort((a, b) => (a.published_at ?? a.discovered_at).localeCompare(b.published_at ?? b.discovered_at));
+}
+
+/**
+ * The one-message-per-day slot belongs to a promise that becomes due later the
+ * same day. Without this, a spontaneous topic at 07:00 would spend the slot
+ * before a date-only promise is eligible at 09:00 and the promise would never
+ * be mentioned. The daily limit, quiet hours and cooldown are unchanged.
+ */
+export function commitmentAwaitingTodaySlot(
+  scopeKey: string, raw: unknown, at: string, ownerTimeZone: string, alreadyDelivered: (itemId: string) => boolean,
+): boolean {
+  const state = restoreCompanionState(scopeKey, raw, at);
+  const today = localParts(at, ownerTimeZone);
+  if (!today) return false;
+  return visiblePending(state).some(memory => {
+    if ((!memory.dueAt && !memory.dueDate) || isDue(memory, at) || alreadyDelivered(commitmentItemId(memory))) return false;
+    // Step in quarter hours, the loop's own recheck interval, until quiet hours begin.
+    for (let instant = Date.parse(at) + 15 * 60_000; ; instant += 15 * 60_000) {
+      const local = localParts(new Date(instant).toISOString(), ownerTimeZone);
+      if (!local || local.day !== today.day || local.hour >= QUIET_START_HOUR) return false;
+      if (isDue(memory, new Date(instant).toISOString())) return true;
     }
-    if (!due) return [];
-    return [{ item_id: `commitment:${memory.id}:${memory.updatedAt}`, source_id: 'commitment',
-      source_title: 'ふたりの約束', title: visibleMemoryText(state, memory.id, memory.summary)!, url: '',
-      summary: memory.id, published_at: memory.dueAt ?? null, discovered_at: memory.updatedAt, score: 0.8 }];
-  }).sort((a, b) => (a.published_at ?? a.discovered_at).localeCompare(b.published_at ?? b.discovered_at));
+  });
 }

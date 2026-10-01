@@ -7,6 +7,7 @@ import type {
   ShannonIntent,
   ShannonVerifiedWork,
 } from '@shannon/cognition';
+import { isNearTermOrConditionalWish, widenedGoalStatement } from './intentRules.js';
 
 export interface CognitiveIntentPlan {
   nextStep: string;
@@ -58,7 +59,7 @@ export function extractExplicitUserIntent(
   const ongoingMatch = text.match(/^(?:今後|これから|引き続き|最終的には|最終目標として)[、\s]*(.{3,320})[。.!！]?$/u);
   const directMatch = text.match(/^(.{3,280}?(?:実装|改善|統合|構築|作成|開発|修正|整理|実現|完成|進め|育て)(?:したい|たい|てほしい|てください|てお願いします))[。.!！]?$/u);
   const captured = goalMatch?.[1] ?? (ongoingMatch && meaningfulOngoingGoal(ongoingMatch[1]!) ? ongoingMatch[1] : undefined)
-    ?? directMatch?.[1];
+    ?? (directMatch && !isNearTermOrConditionalWish(text) ? directMatch[1] : undefined) ?? widenedGoalStatement(text) ?? undefined;
   if (!captured) return null;
   const desiredOutcome = captured.replace(/[。.!！]+$/gu, '').trim();
   const title = conciseIntentTitle(desiredOutcome);

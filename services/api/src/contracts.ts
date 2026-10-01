@@ -44,6 +44,8 @@ export interface ChatResponse {
   model: string;
   reply: string;
   threadId: string;
+  /** The completed turn; clients use it to attach captures that the worker records after the reply. */
+  turnId?: string;
   snapshotVersion: number;
   messageEmotion: ShannonMessageEmotion;
   systemPrompt: string;

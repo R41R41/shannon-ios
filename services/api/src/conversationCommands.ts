@@ -9,6 +9,7 @@ import { ShannonMemoryService } from './memoryService.js';
 import { forgetCitedMemories } from './memoryForgetCommand.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
+import { resolveReminderReply } from './reminderReply.js';
 
 export interface UserUtterance {
   id: string; text: string;
@@ -34,6 +35,19 @@ export function executeConversationCommand(
     ? executeAgentWorkCommand(scopeKey, threadId, utterance, text, at, dependencies.agentTasks)
     : null;
   if (workCommand) return workCommand;
+  const reminderReply = resolveReminderReply(dependencies.conversationStore.conversationHistory(scopeKey, threadId),
+    dependencies.stateStore.snapshot(scopeKey), text, at);
+  if (reminderReply) {
+    const quoted = contentPreview(reminderReply.summary);
+    try {
+      new ShannonMemoryService(dependencies.stateStore, dependencies.conversationStore, () => at)
+        .mutate(scopeKey, { memoryId: reminderReply.memoryId, action: reminderReply.action });
+    } catch { return { reply: `「${quoted}」の約束を更新できたか確認できませんでした。まだ変更していない可能性があるので、頭の中の「約束と目的」で確認してください。` }; }
+    return { reply: reminderReply.action === 'complete' ? `「${quoted}」の約束を完了にしました。`
+      : `わかりました。「${quoted}」は、あとでもう一度だけ声をかけます。声かけは1日1回の枠の中なので、時刻は約束できません。`,
+      receipt: { id: reminderReply.memoryId, capability: 'memory.control', status: 'completed',
+        summary: reminderReply.action === 'complete' ? 'リマインドへの返事で約束を完了' : 'リマインドへの返事で約束を後回し', occurredAt: at } };
+  }
   const task = text.match(/^(?:[「"])?(.{1,500}?)(?:[」"])?を(?:タスクにして|タスクに追加して)$/u);
   if (task && dependencies.organizeStore) {
     const resolved = resolveConversationContent(task[1]!, scopeKey, threadId, at,

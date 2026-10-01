@@ -4,12 +4,13 @@ import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ApiRequest, ApiResponse, StateEventRequest } from './contracts.js';
 import type { InitiativeInbox } from './initiativeStore.js';
-import type { KnowledgeStore } from './knowledgeStore.js';
-import type { ShannonMemoryStore } from './memoryService.js';
+import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
+import type { MemoryDashboard, ShannonMemoryStore } from './memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
 import type { CognitiveIntentStatus, CognitiveIntentStore } from './cognitiveIntent.js';
+import { conversationWithCaptures } from './turnCaptures.js';
 import { badRequest, objectBody, validBoundedString, validEvent, validMemoryAction, validScopeKey, validThreadTitle } from './apiValidation.js';
 
 export interface ApiDataRouteDependencies {
@@ -55,6 +56,21 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
       }
       throw error;
     }
+  }
+
+  if (request.method === 'GET' && request.path === '/v1/conversation/captures') {
+    const scopeKey = request.query?.get('scopeKey');
+    const requested = request.query?.get('threadId')?.trim();
+    if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    if (!requested || requested.length > 160) return badRequest('threadId is invalid');
+    // A small poll target: the reply is already shown, and this adds what the worker recorded since.
+    const messages = conversationWithCaptures(dependencies, scopeKey, requested);
+    return { status: 200, body: {
+      threadId: requested,
+      turns: messages.flatMap(message => message.captures?.length && message.sourceExperienceId
+        ? [{ turnId: message.sourceExperienceId, messageId: message.id, captures: message.captures }] : []),
+      reminders: messages.flatMap(message => message.reminder ? [{ messageId: message.id, ...message.reminder }] : []),
+    } };
   }
 
   if (request.method === 'GET' && request.path === '/v1/threads') {
@@ -221,14 +237,13 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
     if (typeof answerId !== 'string' || !answerId.trim() || answerId.length > 160) {
       return badRequest('answerId is invalid');
     }
-    if (typeof answer !== 'string' || !answer.trim() || answer.length > 500) {
-      return badRequest('answer must be 1..500 characters');
+    // The pencil shares the memory-detail limit so both entrances record one identical correction.
+    if (typeof answer !== 'string' || !answer.trim() || answer.trim().length > 320) {
+      return badRequest('answer must be 1..320 characters');
     }
-    if (!dependencies.knowledgeStore?.knowledgeAnswers(scopeKey).some(item => item.answerId === answerId)) {
-      return { status: 404, body: { error: 'KNOWLEDGE_NOT_FOUND' } };
-    }
-    dependencies.knowledgeStore.correctKnowledge(scopeKey, answerId, answer.trim(), dependencies.now());
-    return { status: 200, body: dependencies.memoryStore.dashboard(scopeKey) };
+    const known = dependencies.knowledgeStore?.knowledgeAnswers(scopeKey).find(item => item.answerId === answerId);
+    if (!known || !dependencies.knowledgeStore) return { status: 404, body: { error: 'KNOWLEDGE_NOT_FOUND' } };
+    return { status: 200, body: correctKnowledgeAsOwner(dependencies, dependencies.knowledgeStore, scopeKey, known, answer.trim()) };
   }
 
   if (request.method === 'POST' && request.path === '/v1/events') {
@@ -273,6 +288,28 @@ export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRo
     }
   }
   return undefined;
+}
+
+/** An owner correction must outlive re-extraction, so it is recorded as a memory control, not only as an answer row. */
+function correctKnowledgeAsOwner(
+  dependencies: ApiDataRouteDependencies, knowledge: KnowledgeStore, scopeKey: string, known: KnowledgeAnswer, text: string,
+): MemoryDashboard {
+  const at = dependencies.now();
+  try {
+    dependencies.memoryStore.mutate(scopeKey, { memoryId: known.answerId, action: 'correct', text });
+  } catch (error) {
+    if (!(error instanceof Error && error.message === 'MEMORY_NOT_FOUND')) throw error;
+    // An answer whose fact left the bounded state still needs the same durable boundary.
+    dependencies.stateStore.apply(scopeKey, { type: 'memory-control-upserted', control: {
+      memoryId: known.answerId, kind: 'user-fact', status: 'active', pinned: false, updatedAt: at,
+      changeReason: 'ユーザーが内容を訂正', overrideText: text, contextInvalidatedAt: at,
+      ...(known.evidence.find(item => item.source !== 'user') ? { sourceEvidence: known.evidence.find(item => item.source !== 'user')!.quote } : {}),
+    } });
+  }
+  if (knowledge.knowledgeAnswers(scopeKey).find(item => item.answerId === known.answerId)?.answer !== text) {
+    knowledge.correctKnowledge(scopeKey, known.answerId, text, at);
+  }
+  return dependencies.memoryStore.dashboard(scopeKey);
 }
 
 function isCognitiveIntentStatus(value: unknown): value is CognitiveIntentStatus {
