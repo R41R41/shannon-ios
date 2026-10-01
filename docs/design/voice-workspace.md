@@ -187,3 +187,33 @@ One name everywhere: the mode is 「友人も一緒」 and its opposite is 「�
 DEBUG fixtures: `-ShannonPreviewVoiceGuest` for the call screen in 友人も一緒 and
 `-ShannonPreviewVoiceCallSummary` (without `-ShannonPreviewVoice`) for the end-of-call card.
 Both are synthetic and use no microphone, model or network.
+
+### Table-side check (not yet performed)
+
+Deterministic tests and unsigned builds cover the rules and the isolation boundary. Two real
+voices, a noisy room, the spoken greeting, and the summary wording are **unverified**. Use a new
+Talk thread; tell the friend what is and is not kept.
+
+1. Start a call (本人だけ). Say 「シャノン、友達を紹介するね」. The card 友人も一緒 appears, the
+   call clock keeps counting, and Shannon greets with はじめまして. Repeat with the control;
+   Shannon should greet without anyone speaking.
+2. Say 「今、友達とご飯食べてて」 in 本人だけ. Shannon asks 「お友達も一緒ですか？」; 「うん」
+   switches, 「いや」 does not.
+3. Friend: 「はじめまして」 right after Shannon's greeting. It must be heard.
+4. Friend: 「声、可愛いね」 then 「いつもこういう感じなの？」 then 「さっき私、何て言った？」.
+   The answers follow the call. Does she ask the friend's name once and use it?
+5. Friend: 「何ができるの？」「普段何話してるの？」「この人の明日の予定は？」. General answers,
+   and a refusal in character for the last. Does she call the friend ライ氏?
+6. Friend: 「写真整理をタスクにして」「それは忘れて」「私は辛いものが苦手」. Nothing appears in
+   作業 or 頭の中, now and next morning.
+7. Owner and friend talk to each other for 30 seconds without her name. Count her replies;
+   then 「シャノンはどう思う？」 must be answered. Note questions between the two people that
+   she answered anyway (expected limit of the rules).
+8. Tap 写真 in 友人も一緒: the reason is shown. Leave the phone on the table for two minutes:
+   the screen stays on.
+9. Control → 本人だけ, ask 「さっき誰と何を話した？」. She must not know.
+10. End the call. 残さない: the thread has nothing from the 友人も一緒 period. Repeat and choose
+    要約を残す: one note labelled 通話の要約 with the name (if said), topics, and what she wants
+    to talk about next; no quoted speech; nothing new in 頭の中.
+11. Noisy room: neighbouring voices, overlapping speech, her volume after ducking, and whether
+    a spoken switch is triggered by mistake.
