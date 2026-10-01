@@ -52,6 +52,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     /// What Shannon took in from this turn. Empty until the server has recorded it.
     public let captures: [ShannonTurnCaptureDTO]
     public let reminder: ShannonReminderDTO?
+    /// A piece of her study this message is about.
+    public let studyPiece: ShannonStudyPieceLinkDTO?
 
     public init(
         id: UUID = UUID(),
@@ -65,8 +67,10 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         places: [ShannonPlaceDTO] = [],
         turnID: String? = nil,
         captures: [ShannonTurnCaptureDTO] = [],
-        reminder: ShannonReminderDTO? = nil
+        reminder: ShannonReminderDTO? = nil,
+        studyPiece: ShannonStudyPieceLinkDTO? = nil
     ) {
+        self.studyPiece = studyPiece
         self.turnID = turnID
         self.captures = captures
         self.reminder = reminder
@@ -94,7 +98,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             places: places,
             turnID: turnID,
             captures: captures,
-            reminder: reminder
+            reminder: reminder,
+            studyPiece: studyPiece
         )
     }
 
@@ -111,7 +116,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             places: places,
             turnID: turnID,
             captures: captures,
-            reminder: reminder
+            reminder: reminder,
+            studyPiece: studyPiece
         )
     }
 }

@@ -66,6 +66,8 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
   sourceAttribution?: ShannonSourceAttribution;
+  /** A piece of her study this message is about; clients open the reader from it. */
+  studyPiece?: { id: string; title: string };
   /** The promise a reminder message is about; resolved to a `ReminderView` for clients. */
   reminder?: ReminderReference | ReminderView;
   /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */

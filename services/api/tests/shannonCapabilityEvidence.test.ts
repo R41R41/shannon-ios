@@ -2,10 +2,15 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt,
+  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
 } from '@shannon/cognition';
 import { FileAetherContextReader } from '../src/aetherContext.js';
+import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
+import { BoundedPublicReader } from '../src/autonomyReader.js';
+import { ShannonAutonomyService } from '../src/autonomyService.js';
+import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
+import { StudyStore } from '../src/studyStore.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { validatedChatAttachments } from '../src/apiValidation.js';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
@@ -96,5 +101,15 @@ describe('Shannon capability description', () => {
     const owner = shannonCapabilityPrompt('owner');
     expect(owner).toBe(shannonCapabilityPrompt());
     expect(shannonCapabilityPrompt('guest').length).toBeLessThan(owner.length);
+  });
+
+  it('says she is active on her own only in the wording used while the activity loop runs, and has a code path for each verb', () => {
+    // The static description never claims it; `ShannonAutonomyService.identityProjection` swaps the line only while the loop is running.
+    expect(shannonCapabilityPrompt('owner')).toContain('仕組みは準備中');
+    const running = withAutonomyRunning(shannonCapabilityPrompt('owner'));
+    expect(running).toContain('いまは調べて、書斎にメモと物語を書き、見せている。');
+    // 調べて: the bounded public reader. 書斎にメモと物語を書き: the study store. 見せている: the initiative path. All driven by the loop.
+    expect(exists(ShannonAutonomyLoop.prototype.tick, BoundedPublicReader.prototype.read, StudyStore.prototype.create,
+      StudyStore.prototype.revise, SQLiteStudyShowing.prototype.tell, ShannonAutonomyService.prototype.identityProjection)).toBe(true);
   });
 });

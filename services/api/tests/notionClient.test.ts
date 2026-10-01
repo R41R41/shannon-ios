@@ -79,7 +79,7 @@ describe('Notion read allowlist', () => {
   it('keeps every Notion source free of write methods and of a second network exit', () => {
     const directory = join(import.meta.dirname, '../src');
     const sources = readdirSync(directory).filter(name => /^notion.*\.ts$/u.test(name));
-    expect(sources.sort()).toEqual(['notionAutonomousRead.ts', 'notionClient.ts', 'notionConversation.ts', 'notionSource.ts', 'notionText.ts']);
+    expect(sources.sort()).toEqual(['notionAutonomousRead.ts', 'notionClient.ts', 'notionConversation.ts', 'notionLoopReader.ts', 'notionSource.ts', 'notionText.ts']);
     for (const name of sources) {
       const text = readFileSync(join(directory, name), 'utf8');
       expect(text, name).not.toMatch(/['"`](?:PATCH|PUT|DELETE)['"`]/u);

@@ -13,6 +13,8 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
     public let sourceExperienceId: String?
     public let captures: [ShannonTurnCaptureDTO]?
     public let reminder: ShannonReminderDTO?
+    /// A piece of her study this message is about; the timeline shows a card that opens the reader.
+    public let studyPiece: ShannonStudyPieceLinkDTO?
 
     public init(
         id: String,
@@ -25,8 +27,10 @@ public struct StoredConversationMessageDTO: Codable, Equatable, Sendable {
         sourceAttribution: ShannonSourceAttributionDTO? = nil,
         sourceExperienceId: String? = nil,
         captures: [ShannonTurnCaptureDTO]? = nil,
-        reminder: ShannonReminderDTO? = nil
+        reminder: ShannonReminderDTO? = nil,
+        studyPiece: ShannonStudyPieceLinkDTO? = nil
     ) {
+        self.studyPiece = studyPiece
         self.sourceExperienceId = sourceExperienceId
         self.captures = captures
         self.reminder = reminder

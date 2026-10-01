@@ -17,6 +17,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'README.md',
     'docs/architecture.md',
     'packages/cognition/src/pursuits.ts',
+    // What her own activity is asked to do, and from which materials.
+    'services/api/src/autonomyLoopPrompts.ts',
+    'services/api/src/autonomyLoopPlan.ts',
   ]),
   persona: Object.freeze([
     'packages/cognition/src/persona.ts',
@@ -105,6 +108,15 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyService.ts',
     'services/api/src/autonomyAnnouncer.ts',
     'services/api/src/apiAutonomyRoutes.ts',
+    // The activity loop: every step it takes passes the gate, the budget, and the record.
+    'services/api/src/autonomyLoop.ts',
+    'services/api/src/autonomyLoopConfig.ts',
+    'services/api/src/autonomyLoopState.ts',
+    'services/api/src/autonomyLoopSteps.ts',
+    'services/api/src/autonomyReader.ts',
+    'services/api/src/autonomyShowing.ts',
+    'services/api/src/autonomyTextModel.ts',
+    'services/api/src/autonomyWorker.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',
@@ -119,6 +131,7 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
   ]),
   activity_record: Object.freeze([
     'services/api/src/autonomyActivity.ts',
+    'services/api/src/autonomyDayLog.ts',
   ]),
   response_path: Object.freeze([
     'services/api/src/server.ts',

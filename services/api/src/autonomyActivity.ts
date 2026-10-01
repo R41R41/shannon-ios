@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { autonomyDomainLabel } from '@shannon/cognition';
 import { roundYen } from './autonomyBudget.js';
+import { autonomyDayLog } from './autonomyDayLog.js';
 
 /**
  * The activity record (「したことの記録」): an append-only log of every autonomous
@@ -48,7 +49,7 @@ export interface AutonomyActivityEntry extends AutonomyActivityDraft {
 
 export interface AutonomyActivityDay {
   dayKey: string;
-  /** One line, computed without a model. */
+  /** A short log of the day, computed without a model: what she did, what was stopped, and what it cost. */
   summary: string;
   counts: { done: number; needsApproval: number; refused: number; failed: number };
   costYen: number;
@@ -157,7 +158,7 @@ export class AutonomyActivityRecord {
   }
 }
 
-/** The one-line daily summary, from counts only. */
+/** The daily summary: a short log of her day from the recorded steps, then counts of what needs attention, then the cost. */
 export function summarizeAutonomyDay(dayKey: string, entries: readonly AutonomyActivityEntry[]): AutonomyActivityDay {
   const count = (predicate: (entry: AutonomyActivityEntry) => boolean) => entries.filter(predicate).length;
   const counts = {
@@ -168,14 +169,16 @@ export function summarizeAutonomyDay(dayKey: string, entries: readonly AutonomyA
   };
   const costYen = roundYen(entries.reduce((total, item) => total + item.costYen, 0));
   const ownerActions = count(item => item.actor === 'owner');
+  const log = autonomyDayLog(entries);
   const parts = [
-    counts.done ? `したこと${counts.done}件` : '',
+    counts.done && !log ? `したこと${counts.done}件` : '',
     counts.needsApproval ? `承認が必要${counts.needsApproval}件` : '',
     counts.refused ? `止めたこと${counts.refused}件` : '',
     counts.failed ? `うまくいかなかったこと${counts.failed}件` : '',
     ownerActions ? `所有者の操作${ownerActions}件` : '',
   ].filter(Boolean);
-  const summary = `${parts.length ? parts.join('、') : `記録${entries.length}件`}。使った費用は${formatYen(costYen)}です。`;
+  const rest = parts.length ? `${parts.join('、')}。` : log ? '' : `記録${entries.length}件。`;
+  const summary = `${log ?? ''}${rest}使った費用は${formatYen(costYen)}です。`;
   return Object.freeze({ dayKey, summary, counts, costYen, entries: Object.freeze([...entries]) });
 }
 

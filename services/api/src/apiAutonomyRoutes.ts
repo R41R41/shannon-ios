@@ -1,5 +1,6 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
+import { dispatchStudyRequest } from './apiStudyRoutes.js';
 import type { AutonomyOwnerError, ShannonAutonomyService } from './autonomyService.js';
 
 /**
@@ -9,6 +10,7 @@ import type { AutonomyOwnerError, ShannonAutonomyService } from './autonomyServi
  */
 export function dispatchAutonomyRequest(request: ApiRequest, autonomy: ShannonAutonomyService): ApiResponse | undefined {
   if (!request.path.startsWith('/v1/autonomy')) return undefined;
+  if (request.path.startsWith('/v1/autonomy/study')) return dispatchStudyRequest(request, autonomy.study);
 
   if (request.method === 'GET' && request.path === '/v1/autonomy') {
     const scopeKey = request.query?.get('scopeKey');
@@ -21,7 +23,8 @@ export function dispatchAutonomyRequest(request: ApiRequest, autonomy: ShannonAu
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
     const days = Number(request.query?.get('days') ?? '14');
     if (!Number.isInteger(days) || days < 1 || days > 90) return badRequest('days must be 1..90');
-    return { status: 200, body: { control: autonomy.overview(scopeKey).control, days: autonomy.activityDays(scopeKey, days) } };
+    const overview = autonomy.overview(scopeKey);
+    return { status: 200, body: { control: overview.control, loop: overview.loop, budget: overview.budget, days: autonomy.activityDays(scopeKey, days) } };
   }
 
   if (request.method !== 'POST') return undefined;

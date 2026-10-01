@@ -21,8 +21,11 @@ struct ShannonConversationCache {
         let turnID: String?
         let captures: [ShannonTurnCaptureDTO]?
         let reminder: ShannonReminderDTO?
+        /// Absent in caches written before her study existed.
+        let studyPiece: ShannonStudyPieceLinkDTO?
 
         init(_ message: ConversationMessage) {
+            studyPiece = message.studyPiece
             turnID = message.turnID
             captures = message.captures.isEmpty ? nil : message.captures
             reminder = message.reminder
@@ -52,7 +55,8 @@ struct ShannonConversationCache {
                 sourceAttribution: sourceAttribution,
                 turnID: turnID,
                 captures: captures ?? [],
-                reminder: reminder
+                reminder: reminder,
+                studyPiece: studyPiece
             )
         }
     }

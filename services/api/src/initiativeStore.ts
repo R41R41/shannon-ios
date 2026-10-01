@@ -27,9 +27,9 @@ import {
   type RecentWorldSignal,
 } from './initiativeSelection.js';
 
-const QUIET_START_HOUR = 23;
-const QUIET_END_HOUR = 7;
-const USER_COOLDOWN_MILLISECONDS = 90 * 60_000;
+export const QUIET_START_HOUR = 23;
+export const QUIET_END_HOUR = 7;
+export const USER_COOLDOWN_MILLISECONDS = 90 * 60_000;
 const CANDIDATE_MAX_AGE_MILLISECONDS = 48 * 60 * 60_000;
 
 interface InitiativeCandidate extends CandidateRow {

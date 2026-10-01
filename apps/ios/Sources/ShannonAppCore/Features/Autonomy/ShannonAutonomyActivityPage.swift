@@ -32,7 +32,7 @@ public struct ShannonAutonomyActivityPage: View {
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("この日のまとめ、\(day.summary)")
                     ForEach(day.entries) { entry in
-                        ShannonAutonomyActivityRow(entry: entry)
+                        ShannonAutonomyActivityRow(entry: entry, study: model.study)
                     }
                 } header: {
                     Text(ShannonAutonomyFormat.dayTitle(day.dayKey))
@@ -77,7 +77,7 @@ public struct ShannonAutonomyActivityPage: View {
         } header: {
             Text("状態")
         } footer: {
-            Text(overview.control.stateDetail)
+            Text(overview.stateDetail)
         }
     }
 
@@ -211,6 +211,7 @@ public struct ShannonAutonomyActivityPage: View {
 
 struct ShannonAutonomyActivityRow: View {
     let entry: ShannonAutonomyActivityEntryDTO
+    var study: ShannonStudyModel?
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
@@ -234,8 +235,18 @@ struct ShannonAutonomyActivityRow: View {
                 }
                 // The link stays its own element so VoiceOver can open it.
                 .accessibilityElement(children: .combine)
-                if let link = entry.link, let url = URL(string: link), url.scheme == "https" {
-                    Link("作ったものを開く", destination: url)
+                if let pieceID = entry.studyPieceID, let study, study.isSupported {
+                    NavigationLink {
+                        ShannonStudyPiecePage(study: study, pieceID: pieceID)
+                    } label: {
+                        Text("書斎で開く")
+                            .font(.footnote)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
+                    }
+                    .accessibilityHint("この時に書いたものを書斎で開きます")
+                } else if let link = entry.link, let url = URL(string: link), url.scheme == "https" {
+                    Link(entry.tool == "study.read" ? "読んだページを開く" : "作ったものを開く", destination: url)
                         .font(.footnote)
                         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                 }

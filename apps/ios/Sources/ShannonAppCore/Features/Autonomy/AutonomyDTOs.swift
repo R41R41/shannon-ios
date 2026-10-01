@@ -245,6 +245,8 @@ public struct ShannonAutonomyProposalDTO: Codable, Equatable, Identifiable, Send
 
 public struct ShannonAutonomyOverviewDTO: Codable, Equatable, Sendable {
     public let control: ShannonAutonomyControlDTO
+    /// The activity loop's state line. Absent from a server that has no loop yet.
+    public let loop: ShannonAutonomyLoopDTO?
     public let budget: ShannonAutonomyBudgetDTO
     public let budgetRequest: ShannonAutonomyBudgetRequestDTO?
     public let maximumExtraYen: Double
@@ -254,6 +256,7 @@ public struct ShannonAutonomyOverviewDTO: Codable, Equatable, Sendable {
 
     public init(
         control: ShannonAutonomyControlDTO,
+        loop: ShannonAutonomyLoopDTO? = nil,
         budget: ShannonAutonomyBudgetDTO,
         budgetRequest: ShannonAutonomyBudgetRequestDTO? = nil,
         maximumExtraYen: Double = 0,
@@ -262,6 +265,7 @@ public struct ShannonAutonomyOverviewDTO: Codable, Equatable, Sendable {
         proposals: [ShannonAutonomyProposalDTO] = []
     ) {
         self.control = control
+        self.loop = loop
         self.budget = budget
         self.budgetRequest = budgetRequest
         self.maximumExtraYen = maximumExtraYen
@@ -269,6 +273,11 @@ public struct ShannonAutonomyOverviewDTO: Codable, Equatable, Sendable {
         self.modelChoices = modelChoices
         self.proposals = proposals
     }
+
+    /// 準備中／動いています／一時停止中／今日は予算を使い切りました, or the switch state from an older server.
+    public var stateLabel: String { loop?.label ?? control.stateLabel }
+    public var stateDetail: String { loop?.detail ?? control.stateDetail }
+    public var stateSymbol: String { loop?.symbolName ?? control.symbolName }
 }
 
 public struct ShannonAutonomyActivityEntryDTO: Codable, Equatable, Identifiable, Sendable {
@@ -310,6 +319,13 @@ public struct ShannonAutonomyActivityEntryDTO: Codable, Equatable, Identifiable,
         self.outcome = outcome
         self.link = link
         self.approval = approval
+    }
+
+    /// The piece of her study this entry produced, when it produced one.
+    public var studyPieceID: String? {
+        guard let link, link.hasPrefix("shannon-study://") else { return nil }
+        let id = String(link.dropFirst("shannon-study://".count))
+        return id.isEmpty ? nil : id
     }
 
     public var outcomeLabel: String {
@@ -380,10 +396,18 @@ public struct ShannonAutonomyActivityDayDTO: Codable, Equatable, Identifiable, S
 
 public struct ShannonAutonomyActivityDTO: Codable, Equatable, Sendable {
     public let control: ShannonAutonomyControlDTO
+    public let loop: ShannonAutonomyLoopDTO?
+    /// Today's spend against the cap, as of this reading of the record.
+    public let budget: ShannonAutonomyBudgetDTO?
     public let days: [ShannonAutonomyActivityDayDTO]
 
-    public init(control: ShannonAutonomyControlDTO, days: [ShannonAutonomyActivityDayDTO]) {
+    public init(
+        control: ShannonAutonomyControlDTO, loop: ShannonAutonomyLoopDTO? = nil,
+        budget: ShannonAutonomyBudgetDTO? = nil, days: [ShannonAutonomyActivityDayDTO]
+    ) {
         self.control = control
+        self.loop = loop
+        self.budget = budget
         self.days = days
     }
 }
