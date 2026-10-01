@@ -84,7 +84,7 @@ describe('study routes for the owner', () => {
     expect(JSON.stringify(overview)).not.toContain('傘のある駅');
     expect(overview.pieces.find(piece => piece.kind === 'note')).toMatchObject({ hidden: false, title: '夕方の駅が懐かしい理由', statusLabel: '見せてもいい' });
     const detail = (await get(`/v1/autonomy/study/pieces/${story.id}`)).body as StudyPieceDetail;
-    expect(detail).toMatchObject({ hidden: true, title: null, body: null, versions: [], sources: [], canReact: false, canPutAway: true });
+    expect(detail).toMatchObject({ hidden: true, title: null, body: null, versions: [], sources: [], canReact: false, canPutAway: true, awaitingReaction: false });
     expect(JSON.stringify(detail)).not.toContain('駅のベンチ');
     expect((await get('/v1/autonomy/study/pieces/missing')).status).toBe(404);
   });
@@ -94,13 +94,14 @@ describe('study routes for the owner', () => {
     expect((await post(`/v1/autonomy/study/pieces/${story.id}/reaction`, { reaction: 'like' })).status).toBe(409);
     store.study.markReady(scope, story.id, at);
     const detail = (await get(`/v1/autonomy/study/pieces/${story.id}`)).body as StudyPieceDetail;
-    expect(detail).toMatchObject({ hidden: false, title: '傘のある駅', body: STORY_BODY, version: 1, canReact: true });
+    expect(detail).toMatchObject({ hidden: false, title: '傘のある駅', body: STORY_BODY, version: 1, canReact: true, awaitingReaction: true });
     expect(detail.versions).toEqual([{ version: 1, changeNote: '誰もいない場所に、誰かがいた気配だけを書こうとしました。', createdAt: expect.any(String) }]);
 
     expect((await post(`/v1/autonomy/study/pieces/${story.id}/reaction`, { reaction: 'love' })).status).toBe(400);
     expect((await post(`/v1/autonomy/study/pieces/${story.id}/reaction`, { reaction: 'like', comment: 'あ'.repeat(401) })).status).toBe(400);
     const reacted = await post(`/v1/autonomy/study/pieces/${story.id}/reaction`, { reaction: 'unclear', comment: '最後が分かりませんでした。' });
     expect(reacted.status).toBe(200);
+    expect(reacted.body).toMatchObject({ awaitingReaction: false });
     expect((reacted.body as StudyPieceDetail).feedback).toMatchObject([{ reaction: 'unclear', reactionLabel: 'よく分からない', comment: '最後が分かりませんでした。', version: 1, used: false }]);
     expect(entries()[0]).toMatchObject({ actor: 'owner', summary: '所有者が「傘のある駅」に感想を残しました（よく分からない）。', link: `shannon-study://${story.id}` });
 

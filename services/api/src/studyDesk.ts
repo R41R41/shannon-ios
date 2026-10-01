@@ -28,6 +28,8 @@ export interface StudyPieceCard {
   version: number | null;
   /** She is working on a newer version than the one shown. */
   revising: boolean;
+  /** A story the owner can read whose readable version they have not reacted to yet. */
+  awaitingReaction: boolean;
   updatedAt: string;
 }
 
@@ -135,6 +137,9 @@ export class StudyDesk {
       excerpt: readable ? clip(readable.body, 90) : null,
       version: readable ? piece.readableVersion : null,
       revising,
+      // A readable story whose readable version has no reaction from the owner yet.
+      awaitingReaction: readable !== null && piece.kind === 'story' && piece.status !== 'put_away'
+        && !this.store.study.feedback(scopeKey, piece.id).some(item => item.version === piece.readableVersion),
       updatedAt: piece.updatedAt,
     });
   }

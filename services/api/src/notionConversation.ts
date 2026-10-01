@@ -11,6 +11,8 @@ import { notionFailureCode, type NotionDatabaseRows, type NotionObjectSummary, t
  */
 const NOTION_NAME = /notion|ノーション/iu;
 const STORY_NAME = /ウサカテ|うさかて|消えた白(?:ウサギ|うさぎ|兎)|白(?:ウサギ|うさぎ|兎)と(?:僕|ぼく|ボク)らのカーテンコール/u;
+/** Notion search matches titles; 「消えた白ウサギと僕らのカーテンコール」 and its pages are found by this word. */
+const STORY_TITLE_WORD = '白ウサギ';
 const CHARACTER_DATABASE = /キャラ(?:クター)?\s*(?:DB|データベース)/iu;
 // A passing remark about foreshadowing in someone else's work must not start a Notion read.
 const FORESHADOWING = /伏線(?:トラッカー|メモ|一覧|リスト)|(?:未?回収)[^。！？]{0,12}伏線|伏線[^。！？]{0,12}(?:未?回収|残って|張って|張った)/u;
@@ -59,9 +61,10 @@ export function notionSearchPhrases(message: string): readonly string[] {
   for (const word of content.match(/[\p{Script=Han}\p{Script=Katakana}ー]{2,}|[A-Za-z0-9][A-Za-z0-9._-]+/gu) ?? []) {
     if (!STOP_WORDS.has(word.toLocaleLowerCase('ja-JP')) && !STORY_NAME.test(word)) phrases.push(word.slice(0, 80));
   }
-  if (STORY_NAME.test(message)) phrases.push('ウサカテ');
-  phrases.push('');
-  return Object.freeze([...new Set(phrases)].slice(0, NOTION_TURN_BOUNDS.searches));
+  // The pages carry the full title, so the nickname finds nothing: search by a word of the title instead.
+  // A turn about the story ends with that search, never with the list of everything shared.
+  const last = STORY_NAME.test(message) ? STORY_TITLE_WORD : '';
+  return Object.freeze([...[...new Set(phrases)].filter(phrase => phrase !== last).slice(0, NOTION_TURN_BOUNDS.searches - 1), last]);
 }
 
 type ReadObject = { kind: 'page'; page: NotionPageText } | { kind: 'database'; database: NotionDatabaseRows };

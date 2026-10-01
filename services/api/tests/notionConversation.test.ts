@@ -54,7 +54,11 @@ describe('Notion routing rule', () => {
   });
 
   it('derives at most three single-word search phrases, most specific first', () => {
-    expect(notionSearchPhrases('ウサカテのキャラクターDBを見せて')).toEqual(['キャラクター', 'ウサカテ', '']);
+    expect(notionSearchPhrases('ウサカテのキャラクターDBを見せて')).toEqual(['キャラクター', '白ウサギ']);
+    // The nickname is not in any title: the story is searched by a word of its title, within the bound.
+    expect(notionSearchPhrases('ウサカテの第一幕と第二幕と第三幕を読んで').at(-1)).toBe('白ウサギ');
+    expect(notionSearchPhrases('ウサカテの第一幕と第二幕と第三幕を読んで')).toHaveLength(3);
+    expect(notionSearchPhrases('Notionの設計を見せて').at(-1)).toBe('');
     expect(notionSearchPhrases('Notionの「シナリオ草稿」を読んで')).toEqual(['シナリオ草稿', '']);
     expect(notionSearchPhrases('まだ回収していない伏線を教えて')).toEqual(['伏線', '回収', '']);
     expect(notionSearchPhrases('Notionに何がある？')).toEqual(['']);
