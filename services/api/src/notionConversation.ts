@@ -12,7 +12,8 @@ import { notionFailureCode, type NotionDatabaseRows, type NotionObjectSummary, t
 const NOTION_NAME = /notion|ノーション/iu;
 const STORY_NAME = /ウサカテ|うさかて|消えた白(?:ウサギ|うさぎ|兎)|白(?:ウサギ|うさぎ|兎)と(?:僕|ぼく|ボク)らのカーテンコール/u;
 const CHARACTER_DATABASE = /キャラ(?:クター)?\s*(?:DB|データベース)/iu;
-const FORESHADOWING = /伏線/u;
+// A passing remark about foreshadowing in someone else's work must not start a Notion read.
+const FORESHADOWING = /伏線(?:トラッカー|メモ|一覧|リスト)|(?:未?回収)[^。！？]{0,12}伏線|伏線[^。！？]{0,12}(?:未?回収|残って|張って|張った)/u;
 
 /** The owner named Notion, the story 「ウサカテ」, its character database, or its foreshadowing notes. */
 export function asksAboutNotion(message: string): boolean {
