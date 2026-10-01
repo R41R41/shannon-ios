@@ -90,10 +90,10 @@ describe('voice delivery notes', () => {
     expect(owner).not.toMatch(/consult the backend|Always delegate|Use the client\/backend/u);
   });
 
-  it('leaves the guest-specific rule unchanged', () => {
+  it('keeps the guest rule that the speaker is not assumed to be the owner', () => {
     expect(voiceConversationInstructions(true, false, false)).toContain(
-      '- Keep the same lively maid personality, but do not assume any guest participant is ライ or identify speakers from their voices.',
+      '- Keep the same lively maid personality. ライ氏 is present with a friend: do not assume the current speaker is ライ氏 or identify speakers from their voices.',
     );
-    expect(temporaryGuestVoiceInstructions).toContain('Do not identify, name, or distinguish speakers from their voices.');
+    expect(temporaryGuestVoiceInstructions).toContain('never identify, name, or distinguish a speaker from their voice');
   });
 });

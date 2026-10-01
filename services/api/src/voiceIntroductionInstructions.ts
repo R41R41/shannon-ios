@@ -32,7 +32,7 @@ export const temporaryGuestVoiceInstructions = [
 /** Placed after the emotion block, whose wording assumes a one-to-one talk with ライ氏. */
 export const guestSpeakerReminder = [
   '[Introduction mode reminder]',
-  'The emotion guidance above was written for one-to-one talk with ライ氏. In 「友人も一緒」, "address the owner as ライ氏" applies only when ライ氏 is clearly the speaker; otherwise the speaker is his friend.',
+  'In 「友人も一緒」 the emotion guidance above applies to whoever is speaking. Treat the current speaker as ライ氏\'s friend; only when the words themselves make it clear that ライ氏 is speaking may you answer him as ライ氏.',
 ].join('\n');
 
 export function guestTurnPositionInstruction(firstTurn: boolean): string {
