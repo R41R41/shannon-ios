@@ -27,6 +27,10 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var speechProvider: ShannonSpeechProvider = .gemini
     public internal(set) var ttsCostEstimateAvailable = true
     public private(set) var inputState: ShannonVoiceInputState
+    /// User-chosen mute. It survives a reconnect of the same call and resets when the call ends.
+    public private(set) var isMicrophoneMuted = false
+    /// When the call first became ready to listen; kept across a reconnect of the same call.
+    public private(set) var callStartedAt: Date?
     public internal(set) var microphonePrimerPhase: ShannonPermissionPrimerPhase?
     var microphonePrimerContinuation: CheckedContinuation<Bool, Never>?
     var microphonePermission: @MainActor () -> ShannonMediaPermission = ShannonMediaPermission.currentMicrophone
@@ -71,10 +75,14 @@ public final class ShannonGeminiLiveSessionModel {
         commitTurn: @escaping @MainActor (String, String) async throws -> Void,
         handleDelegationResponse: @escaping @MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void
     ) async {
-        let retained = preservePendingInput && self.participantMode == participantMode
-            ? pendingTurns : ShannonPendingVoiceTurns()
+        let sameCall = preservePendingInput && self.participantMode == participantMode
+        let retained = sameCall ? pendingTurns : ShannonPendingVoiceTurns()
+        let retainedMute = sameCall && isMicrophoneMuted
+        let retainedStart = sameCall ? callStartedAt : nil
         stop()
         pendingTurns = retained
+        isMicrophoneMuted = retainedMute
+        callStartedAt = retainedStart
         let generation = UUID()
         sessionGenerationID = generation
         self.createSession = createSession
@@ -116,6 +124,8 @@ public final class ShannonGeminiLiveSessionModel {
             session = created
             model = created.model
             voice = created.voice
+            ShannonVoiceDiagnostics.shared.record("gemini.session.created", metadata: [
+                "provider": speechProvider.japaneseName, "model": created.model, "voice": created.voice])
             let next = ShannonGeminiLiveTransport(
                 session: created,
                 eventHandler: { [weak self] event in
@@ -132,6 +142,7 @@ public final class ShannonGeminiLiveSessionModel {
                 }
             )
             transport = next
+            next.setInputMuted(isMicrophoneMuted)
             try next.setInputPreference(inputState.preference)
             try await next.start()
             if sessionGenerationID != generation { next.stop() }
@@ -141,7 +152,7 @@ public final class ShannonGeminiLiveSessionModel {
             ShannonVoiceDiagnostics.shared.record("gemini.session.start.failed",
                 metadata: ["stage": failedStage, "domain": (error as NSError).domain, "code": String(code)])
             fail(failedStage == "session"
-                ? "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+                ? "音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
                 : "マイクや音声の準備ができませんでした。ほかのアプリがマイクを使っていないか確認して、もう一度お試しください。",
                 recovery: .reconnect)
         }
@@ -161,11 +172,14 @@ public final class ShannonGeminiLiveSessionModel {
         pendingTurns.reset()
         finalizeTask = nil
         duckRestoreTask = nil
+        if session != nil { recordSessionSummary() }
         transport?.stop()
         transport = nil
         session = nil
         sessionGenerationID = nil
         phase = .idle
+        isMicrophoneMuted = false
+        callStartedAt = nil
         audioLevel = 0
         playbackLevel = 0
     }
@@ -222,6 +236,13 @@ public final class ShannonGeminiLiveSessionModel {
         return sendText(text)
     }
 
+    public func toggleMicrophoneMute() {
+        isMicrophoneMuted.toggle()
+        if isMicrophoneMuted { audioLevel = 0 }
+        transport?.setInputMuted(isMicrophoneMuted)
+        ShannonVoiceDiagnostics.shared.record("gemini.audio.input.mute", metadata: ["muted": String(isMicrophoneMuted)])
+    }
+
     public func selectInput(_ preference: ShannonVoiceInputPreference) {
         guard inputState.canSelect(preference) else {
             errorMessage = "選んだマイクは現在接続されていません。"
@@ -262,6 +283,7 @@ public final class ShannonGeminiLiveSessionModel {
         switch event {
         case .setupComplete:
             phase = .listening
+            if callStartedAt == nil { callStartedAt = Date() }
         case let .interimInputTranscript(text):
             let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty else { return }
@@ -277,7 +299,7 @@ public final class ShannonGeminiLiveSessionModel {
         case .sessionHandle:
             break
         case .goAway:
-            fail("Geminiとの接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+            fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
     }
 
@@ -297,7 +319,7 @@ public final class ShannonGeminiLiveSessionModel {
                 metadata: ["pcm_bytes": String(ShannonGeminiLiveAudioChunker.chunkByteCount)]
             )
         }
-        audioLevel = min(1, max(0, rms * 18))
+        audioLevel = isMicrophoneMuted ? 0 : min(1, max(0, rms * 18))
         inputAudioSeconds += seconds
         updateCost()
         if started, responseTask != nil {
@@ -423,6 +445,8 @@ public final class ShannonGeminiLiveSessionModel {
         errorMessage = nil
         failureRecovery = nil
         textSendState = .idle
+        isMicrophoneMuted = arguments.contains("-ShannonPreviewVoiceMuted")
+        callStartedAt = Date().addingTimeInterval(-83)
         if arguments.contains("-ShannonPreviewMicrophonePrimer") {
             phase = .requestingPermission
             let denied = arguments.contains("-ShannonPreviewPrimerDenied")
@@ -449,7 +473,7 @@ public final class ShannonGeminiLiveSessionModel {
             errorMessage = responseDelivery.failureMessage
         } else if arguments.contains("-ShannonPreviewVoiceFailed") {
             phase = .failed
-            errorMessage = "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+            errorMessage = "音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
             failureRecovery = .reconnect
             textSendState = .failed(
                 text: "続きはテキストで送って",
