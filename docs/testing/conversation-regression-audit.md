@@ -12,9 +12,19 @@ original baseline unless noted here.
 
 | Finding | Current state on `f294123` |
 | --- | --- |
-| Suite identity and Japanese aliases | **Open.** The non-live audit (`LocalVoiceDecisionGateway`, no billable calls) still passes 0/7: no prompt contains explicit Aether/Voyager definitions; `エーテル…設計` and `ボイジャー…予定` select no internal skill and call no reader; the Japanese latest-status question selects only `current_web`. |
+| Suite identity and Japanese aliases | **Resolved in code on 2026-10-01; live confirmation pending.** The non-live audit (`LocalVoiceDecisionGateway`, no billable calls) passes 7/7 and the same seven probes run in `services/api/tests/suiteIdentityRouting.test.ts` for text and voice. Every prompt starts with the canonical identity block, which defines Aether, Voyager and Shannon; `エーテル`/`ボイジャー` select the internal skills and reach the readers; the Japanese latest-status question selects both internal skills and not `current_web`. The live audit (`SHANNON_AUDIT_LIVE=1`, Jev plus two answer-model calls) has not been rerun, so the model's actual answer to the definition question is unverified. |
 | Shared voice request budget | **Resolved by `5d6e9cf`.** Session/delegation requests now use a 30-per-minute control budget and sentence TTS a separate 60-per-minute speech budget (`VoiceRequestAllowances`). The audit script now characterizes those production budgets; the 11-request synthetic turn is fully admitted. |
 | Automated result counts and UI smoke | Historical for `00c2102`; `main` has since added tests. Re-run the commands below for current totals. |
+
+### Resolution — 2026-10-01
+
+| Root cause below | Change |
+| --- | --- |
+| 1. No prompt guaranteed the product definitions; the slim voice prompt dropped identity | `packages/cognition` owns one identity block (persona, suite roles, capabilities). It is the first section of the text prompt, the owner voice prompt with memory, the slim owner voice prompt, and the guest voice prompt. |
+| 2. `エーテル`/`ボイジャー` were unknown to the mandatory patterns and the task read gate | Mandatory patterns and the shared notes/tasks gates take both names from the suite dictionary. The Voyager search phrase is the content word asked about, not the utterance. |
+| 3. `最新` forced `current_web` for an internal status question | A freshness word beside a suite product name clears `current_web` unless the owner explicitly asks for the web. Ordinary `最新` questions still select it. |
+
+Not changed: Voyager's read contract is keyword search only, so "やることある？" cannot list open tasks. Shannon now searches the generic word and is told that an empty result is not an empty list. A list-open-tasks read needs a Voyager contract change.
 
 ## Incident and root causes
 
@@ -66,7 +76,7 @@ these public roles does not authorize reading private notes or starting a task.
 | Live memory extraction | 27/27 | Synthetic preferences/profile/relationship inputs and facts that must not become memory |
 | Live agent-task proposal classification | 6/7 | Actual model proposal decisions; no task execution |
 | Live daily-mind generation | 1/1 | Bounded synthetic reflection and usage recording; no production save |
-| New suite-context audit | 0/7 | All inspected prompts lack explicit suite definitions; specific routing/read failures below |
+| New suite-context audit | 0/7 at the baseline; 7/7 non-live on 2026-10-01 | Baseline: all inspected prompts lacked explicit suite definitions, with the routing/read failures below. Now: definitions present, required skills selected, readers called, no `current_web` on the internal status probe |
 
 The deterministic total is **717 distinct tests**, excluding duplicate reruns and fast
 checks. A simultaneous rerun with the Simulator/Swift workload produced six 5-second
@@ -191,7 +201,7 @@ the complete environment or actual conversation transcripts.
 
 ## Fix acceptance and reusable knowledge
 
-No product fix has been made in this investigation. Required follow-up acceptance:
+The original investigation made no product fix. The 2026-10-01 change addresses the first four items below for the non-live path; the request-budget item was resolved earlier by `5d6e9cf`. Still open: the live rerun, and semantic checks of the model's actual definition answers. Required follow-up acceptance:
 
 - Every relevant response/router receives a small, stable product-role dictionary,
   independent of optional/private memory skills; role questions need no private read.
