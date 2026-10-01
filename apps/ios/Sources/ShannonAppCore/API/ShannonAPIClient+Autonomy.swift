@@ -72,7 +72,7 @@ extension ShannonAPIClient: ShannonAutonomyServing {
         ))
     }
 
-    private func autonomyGet(_ path: String, scopeKey: String, extra: [URLQueryItem] = []) throws -> URLRequest {
+    func autonomyGet(_ path: String, scopeKey: String, extra: [URLQueryItem] = []) throws -> URLRequest {
         let connection = currentConnection()
         var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "scopeKey", value: connection?.scopeKey ?? scopeKey)] + extra
@@ -82,7 +82,7 @@ extension ShannonAPIClient: ShannonAutonomyServing {
         return request
     }
 
-    private func autonomyPost<Body: Encodable>(
+    func autonomyPost<Body: Encodable>(
         _ path: String,
         body: Body,
         connection: ShannonConnectionCredential?
@@ -96,7 +96,7 @@ extension ShannonAPIClient: ShannonAutonomyServing {
     }
 
     /// Identifiers are server-issued and contain no separator; `appending(path:)` does the percent-encoding.
-    private static func pathComponent(_ value: String) throws -> String {
+    static func pathComponent(_ value: String) throws -> String {
         guard !value.isEmpty, !value.contains("/"), !value.contains("?"), !value.contains("#"),
               value != ".", value != ".." else {
             throw ShannonAPIError.invalidResponse

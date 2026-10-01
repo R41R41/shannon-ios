@@ -35,6 +35,17 @@ struct ShannonAutonomyHubSection: View {
                     .listRowBackground(palette.subtleSurface)
                 }
 
+                if model.study.isSupported {
+                    NavigationLink {
+                        ShannonStudyPage(study: model.study)
+                    } label: {
+                        ShannonStudyEntryLabel(study: model.study, tint: palette.action)
+                            .foregroundStyle(palette.textPrimary)
+                    }
+                    .accessibilityIdentifier("autonomy-study-entry")
+                    .listRowBackground(palette.subtleSurface)
+                }
+
                 NavigationLink {
                     ShannonAutonomyActivityPage(model: model)
                 } label: {
@@ -99,6 +110,20 @@ struct ShannonAutonomyOverviewCard: View {
                 .accessibilityHint("シャノン自身の目標・問い・作品の一覧を開きます")
                 .accessibilityIdentifier("autonomy-pursuits-entry")
                 Divider()
+                if model.study.isSupported {
+                    NavigationLink {
+                        ShannonStudyPage(study: model.study)
+                    } label: {
+                        HStack(spacing: ShannonSpacing.small) {
+                            ShannonStudyEntryLabel(study: model.study, tint: palette.action)
+                                .foregroundStyle(palette.textPrimary)
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(palette.textSecondary).accessibilityHidden(true)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("autonomy-study-entry")
+                    Divider()
+                }
                 NavigationLink {
                     ShannonAutonomyActivityPage(model: model)
                 } label: {
@@ -319,7 +344,7 @@ public struct ShannonAutonomySettingsSection: View {
             } header: {
                 Text("シャノンの自律")
             } footer: {
-                Text(model.control?.stateDetail ?? "シャノンが自分から動く範囲・予算・記録を確認できます。")
+                Text(model.overview?.stateDetail ?? "シャノンが自分から動く範囲・予算・記録を確認できます。")
             }
         }
     }
@@ -337,12 +362,13 @@ struct ShannonAutonomyPauseToggle: View {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("自律活動を一時停止")
-                    Text(model.control?.stateLabel ?? "未取得")
+                    Text(model.stateLabel)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("autonomy-loop-state")
                 }
             } icon: {
-                Image(systemName: model.control?.symbolName ?? "pause.circle")
+                Image(systemName: model.overview?.stateSymbol ?? "pause.circle")
             }
         }
         .disabled(model.overview == nil || model.isChangingPause)

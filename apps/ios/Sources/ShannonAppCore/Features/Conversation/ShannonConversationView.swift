@@ -109,6 +109,7 @@ public struct ShannonConversationView: View {
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
+        .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
 #if DEBUG
         .onAppear { applyDesignPreviewLaunchState() }
 #endif

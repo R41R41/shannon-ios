@@ -211,6 +211,10 @@ struct ShannonMessageRow: View {
                 ShannonGeneratedArtifactCard(artifact: artifact, palette: palette)
             }
 
+            if let studyPiece = message.studyPiece {
+                ShannonStudyPieceLinkCard(link: studyPiece)
+            }
+
             if let attribution = message.sourceAttribution,
                let sourceURL = safeSourceURL(attribution.url) {
                 Link(destination: sourceURL) {

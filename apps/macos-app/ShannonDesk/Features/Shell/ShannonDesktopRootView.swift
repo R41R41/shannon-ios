@@ -95,6 +95,7 @@ public struct ShannonDesktopRootView: View {
             detail
         }
         .navigationSplitViewStyle(.balanced)
+        .shannonOpensStudyPieces(with: memory.autonomy.study)
         .inspector(isPresented: $showsInspector) {
             auxiliaryInspector
                 .inspectorColumnWidth(min: 230, ideal: 286, max: 390)

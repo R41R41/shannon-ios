@@ -152,7 +152,8 @@ extension ShannonConversationModel {
             sourceAttribution: message.sourceAttribution,
             turnID: message.sourceExperienceId,
             captures: role == .shannon ? message.captures ?? [] : [],
-            reminder: role == .shannon ? message.reminder : nil
+            reminder: role == .shannon ? message.reminder : nil,
+            studyPiece: role == .shannon ? message.studyPiece : nil
         )
     }
 

@@ -65,6 +65,9 @@ struct DesktopMessageView: View {
                     }
                     .padding(.top, 2)
                 }
+                if let studyPiece = message.studyPiece {
+                    ShannonStudyPieceLinkCard(link: studyPiece)
+                }
                 if let attribution = message.sourceAttribution,
                    let sourceURL = safeSourceURL(attribution.url) {
                     Link(destination: sourceURL) {

@@ -15,6 +15,8 @@ public final class ShannonAutonomyModel {
     public private(set) var errorMessage: String?
     /// False when the server predates bounded autonomy; the surfaces then stay hidden.
     public private(set) var isSupported = true
+    /// Her study: what she wrote in her own time and is willing to show.
+    public let study: ShannonStudyModel
 
     private let scopeKey: String
     private let client: (any ShannonAutonomyServing)?
@@ -23,8 +25,12 @@ public final class ShannonAutonomyModel {
     public init(scopeKey: String = "local-owner", client: (any ShannonAutonomyServing)? = ShannonAPIClient()) {
         self.scopeKey = scopeKey
         self.client = client
+        self.study = ShannonStudyModel(scopeKey: scopeKey, client: client as? any ShannonStudyServing)
         if client == nil { isSupported = false }
     }
+
+    /// The loop's state line (準備中／動いています／一時停止中／今日は予算を使い切りました).
+    public var stateLabel: String { overview?.stateLabel ?? "未取得" }
 
     public var control: ShannonAutonomyControlDTO? { overview?.control }
 
@@ -53,7 +59,7 @@ public final class ShannonAutonomyModel {
     public var summary: String {
         guard let overview else { return isLoading ? "読み込み中…" : "未取得" }
         if waitingCount > 0 { return "確認待ち \(waitingCount)件" }
-        if overview.control.state != "active" { return overview.control.stateLabel }
+        if overview.control.state != "active" || overview.loop?.state == "preparing" { return overview.stateLabel }
         return "今日 \(overview.budget.usedLabel)"
     }
 
