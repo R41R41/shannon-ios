@@ -3,7 +3,7 @@ screen_id: shannon-macos-memory
 platform: macos
 baseline_commit: a84f898
 last_verified_at: 2026-10-02
-verification_scope: "2026-10-02（人・機微／ふつう）: 共有の一覧・詳細・扱い表示をswift testとMac Debugビルドで確認。起動中のMacアプリでの表示、キーボード操作、VoiceOver実読み上げは未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認 2026-10-02（シャノンのやりたいこと・したことの記録）: 合成fixtureでのDTO解読・状態ラベル・所有者に許す操作の判定・一時停止と予算依頼と提案の決定の流れをswift testで確認し、iOS DebugとMac Debugのビルドが通ることを確認。Simulator・実機での表示、実タップ、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
+verification_scope: "2026-10-02（Discordなどで会った人）: 話した場所・統合の提案・旧サーバーの読み込みをswift test、サーバーの回帰テスト、iOS DebugとMac Debugのビルドで確認。Simulator・実機での表示、実タップ、VoiceOver実読み上げ、実際のDiscordからの受信は未確認。 2026-10-02（人・機微／ふつう）: 共有の一覧・詳細・扱い表示をswift testとMac Debugビルドで確認。起動中のMacアプリでの表示、キーボード操作、VoiceOver実読み上げは未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認 2026-10-02（シャノンのやりたいこと・したことの記録）: 合成fixtureでのDTO解読・状態ラベル・所有者に許す操作の判定・一時停止と予算依頼と提案の決定の流れをswift testで確認し、iOS DebugとMac Debugのビルドが通ることを確認。Simulator・実機での表示、実タップ、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。 2026-10-02（忘れる範囲の精密化と説明文）: サーバーの回帰テスト、swift test（文言の検査を含む）、iOS DebugビルドとMac Debugのテストで確認。実機・Simulatorでの確認ダイアログの表示、Dynamic Typeでの折り返し、VoiceOver読み上げは未確認。2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
 user_job: "頭の中から記憶・約束・継続目的、その次の一手と計画案、認知結果を確認し、必要な状態変更を行う"
 primary_action: "継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
@@ -19,6 +19,7 @@ improve:
   - "忘れた・事実ではないと指定した項目は覚えていることの一覧に出さず、記憶の管理から復元できる。約束を復元すると忘れる前の状態（未完了など）に戻る"
   - "rich dashboardでも記憶と約束の管理入口を常設する"
   - "管理入口の下に「人」の入口を置き、覚えている人数と名前を1行で示す。開くとiPhoneと同じ人の一覧・人の詳細（その人のこと・話したことの要約・約束・次に話したいこと、『〇〇さんと一緒の時・日付・機微／ふつう』）を標準Listで表示し、名前の変更・統合・忘れる・復元・機微／ふつうの切り替えができる"
+  - "人はDiscordなどの会話からも増える。人の詳細に「話した場所」と、同じ名前の人との統合の提案を示す（iPhoneと同じ部品）"
   - "記憶の詳細に『ほかの人がいる場での扱い』（話した時・機微／ふつう・理由）を示し、切り替えられる。手で機微にしたものは、ほかの人がいる場ではシャノンにも渡さない"
   - "完了・取り消し済みや忘れた記憶も一覧から詳細へ進める"
   - "継続目的と最近の認知履歴を一覧し、目的状態を明示操作で変更する"
@@ -47,4 +48,4 @@ accessibility:
 evidence:
   current: []
   approved: []
-  privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない。人の記憶はiPhoneの「友人も一緒」の通話からだけ作られ、Macからは追加しない。声では人を確かめない"
+  privacy: "合成fixtureのみ。実会話・個人情報・credentialを含めない。人の記憶はiPhoneの「友人も一緒」の通話と、結び付け済みのDiscordなどの会話から作られ、Macからは追加しない。声では人を確かめない"

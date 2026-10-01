@@ -1,0 +1,11 @@
+{
+  "platform": "discord",
+  "requestId": "discord:1004",
+  "conversationId": "discord:111:222",
+  "conversationKind": "channel",
+  "sourceUserId": "900000000000000099",
+  "sourceDisplayName": "MusicBot",
+  "sourceKind": "bot",
+  "userMessage": "Now playing: lo-fi",
+  "observedAt": "2026-10-02T03:03:00.000Z"
+}

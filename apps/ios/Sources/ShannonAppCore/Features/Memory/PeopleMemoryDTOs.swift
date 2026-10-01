@@ -78,6 +78,19 @@ public struct ShannonPersonMemoryItemDTO: Codable, Equatable, Identifiable, Send
     public var isForgotten: Bool { status != "active" }
 }
 
+/// Another remembered person with the same name. Shannon never merges them herself; the owner decides.
+public struct ShannonPersonMergeSuggestionDTO: Codable, Equatable, Sendable {
+    public let personId: String
+    public let displayName: String
+    public let sources: [String]
+
+    public init(personId: String, displayName: String, sources: [String] = []) {
+        self.personId = personId
+        self.displayName = displayName
+        self.sources = sources
+    }
+}
+
 public struct ShannonRememberedPersonDTO: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let displayName: String
@@ -87,11 +100,17 @@ public struct ShannonRememberedPersonDTO: Codable, Equatable, Identifiable, Send
     public let lastTalkedAt: String?
     public let forgotten: Bool
     public let items: [ShannonPersonMemoryItemDTO]
+    /// Where she knows the person from: 「音声」「Discord」… Absent from a server that predates platform people.
+    public let sources: [String]?
+    public let mergeSuggestions: [ShannonPersonMergeSuggestionDTO]?
 
     public init(
         id: String, displayName: String, aliases: [String] = [], howKnown: String = "", createdAt: String,
-        lastTalkedAt: String? = nil, forgotten: Bool = false, items: [ShannonPersonMemoryItemDTO] = []
+        lastTalkedAt: String? = nil, forgotten: Bool = false, items: [ShannonPersonMemoryItemDTO] = [],
+        sources: [String]? = nil, mergeSuggestions: [ShannonPersonMergeSuggestionDTO]? = nil
     ) {
+        self.sources = sources
+        self.mergeSuggestions = mergeSuggestions
         self.id = id
         self.displayName = displayName
         self.aliases = aliases
@@ -167,9 +186,12 @@ struct ShannonPeopleMemoryActionRequestDTO: Encodable, Equatable {
 /// Words shown under 人 and in the call, kept in one place so both say the same thing.
 public enum ShannonPeopleMemoryCopy {
     public static let title = "人"
-    public static let rule = "「友人も一緒」で聞いたお名前と、その人と話したことです。機微な内容は、別の人がいる場ではシャノンが話す前に確かめます。手で機微にしたものは、その時に一緒にいた人の前でだけ使います。ライ氏と二人の時は全部使います。"
+    public static let rule = "「友人も一緒」の通話やDiscordなどで知ったお名前と、その人と話したことです。機微な内容は、別の人がいる場ではシャノンが話す前に確かめます。手で機微にしたものは、その時に一緒にいた人の前でだけ使います。ライ氏と二人の時は全部使います。"
     public static let emptyTitle = "まだ誰も覚えていません"
-    public static let emptyMessage = "通話を「友人も一緒」にして、お友達が名前を言うと、ここに残ります。声で人を聞き分けることはしません。"
+    public static let emptyMessage = "通話を「友人も一緒」にしてお友達が名前を言うか、Discordなどでシャノンと話した人が、ここに残ります。声で人を聞き分けることはしません。"
+    public static let voiceIdentity = "名前は通話の中の言葉で聞いたものです。声で人を確かめることはしません。"
+    public static let platformIdentity = "Discordなどで会った人は、そのアカウントで同じ人と分かります。名前はそこでの表示名です。声や文面から人を推測することはしません。"
+    public static let mergeSuggestionFooter = "同じ名前でも別の人かもしれないので、シャノンが自分でまとめることはしません。"
     public static let unnamedTitle = "名前を聞いていない方"
     public static let unnamedFooter = "名前が分からない通話は、ライ氏と二人の時にだけ使います。"
     public static let forgetItem = "この内容を、今後の会話の材料から外します。この内容に触れたシャノンの返答も外れます。復元すると元に戻ります。"

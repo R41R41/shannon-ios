@@ -1,0 +1,11 @@
+{
+  "platform": "discord",
+  "requestId": "discord:1005",
+  "conversationId": "dm:900000000000000002",
+  "conversationKind": "dm",
+  "sourceUserId": "900000000000000002",
+  "sourceDisplayName": "ミキ",
+  "userMessage": "この前の映画、面白かったね",
+  "shannonReply": "そうでしたね。",
+  "observedAt": "2026-10-02T03:04:00.000Z"
+}

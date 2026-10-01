@@ -178,11 +178,13 @@ export class DisclosureGate {
  * The profile for a context with other people present: what Shannon knows about ライ氏,
  * each protected line marked. Items that must not reach the model are already removed.
  */
-export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16): string {
+export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16, openOnly = false): string {
   const disclosed = gate.snapshot();
   const line = (id: string, original: string, stored: MemoryDisclosure | undefined, prefix = '') => {
     const text = visibleMemoryText(disclosed, id, original);
-    return text ? [`- ${gate.marker(id, stored)}${prefix}${text}`] : [];
+    const marker = gate.marker(id, stored);
+    // `openOnly`: the owner is not in the conversation, so nobody could release a protected line.
+    return text && !(openOnly && marker) ? [`- ${marker}${prefix}${text}`] : [];
   };
   const lines = [
     ...disclosed.userFacts.flatMap(item => line(item.id, item.statement, item.disclosure)),
@@ -190,7 +192,7 @@ export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16): st
     ...disclosed.prospectiveMemories.filter(item => item.status === 'pending')
       .flatMap(item => line(item.id, item.summary, item.disclosure, '約束: ')),
   ].slice(0, maximumItems);
-  const interests = disclosed.interests.slice(0, 6);
+  const interests = openOnly ? [] : disclosed.interests.slice(0, 6);
   return [
     '[ライ氏についての記憶 — ほかの人がいる場]',
     '「ユーザー」はライ氏のこと。【機微:…】が付いた行は、この場の人がまだ知らない個人情報。',

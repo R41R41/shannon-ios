@@ -1,0 +1,10 @@
+{
+  "platform": "discord",
+  "conversationId": "discord:111:222",
+  "conversationKind": "channel",
+  "sourceUserId": "900000000000000001",
+  "participants": [
+    "900000000000000002",
+    "900000000000000003"
+  ]
+}

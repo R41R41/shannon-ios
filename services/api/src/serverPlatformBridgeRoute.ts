@@ -14,6 +14,8 @@ import {
   PlatformBridgeService,
 } from './platformBridge.js';
 import { readJson, sendJson } from './serverHttp.js';
+import type { PeopleMemoryStore } from './peopleMemoryStore.js';
+import { PlatformPeople, platformPeopleEnabled } from './platformPeople.js';
 
 export interface PlatformBridgeRouteDependencies {
   configuration: PlatformBridgeConfiguration;
@@ -52,10 +54,12 @@ export function createConfiguredPlatformBridgeRoute(
   background: TurnBackgroundService,
   now: CompanionClock,
   chatModel: ShannonChatModel,
+  peopleStore: PeopleMemoryStore | null = null,
 ): PlatformBridgeRouteDependencies | null {
   const configuration = configuredPlatformBridge(environment);
   return configuration
-    ? { configuration, chatModel, service: new PlatformBridgeService(configuration, stateStore, conversationStore, background, now) }
+    ? { configuration, chatModel, service: new PlatformBridgeService(configuration, stateStore, conversationStore, background, now,
+      peopleStore ? new PlatformPeople(peopleStore, stateStore) : null, () => platformPeopleEnabled(environment)) }
     : null;
 }
 

@@ -5,10 +5,11 @@ import { badRequest, objectBody, validBoundedString, validScopeKey } from './api
 import { acceptedSummary } from './apiVoiceCallSummary.js';
 import type { ShannonChatModel } from './chatModel.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
-import { audiencePeople, personMemoryId, type CallSummarizer, type PeopleMemory } from './peopleMemory.js';
-import type { PersonMemoryItem } from './peopleMemoryStore.js';
+import { audiencePeople, personMemoryId, placeLabel, type CallSummarizer, type PeopleMemory } from './peopleMemory.js';
+import type { PersonCall, PersonMemoryItem, RememberedPerson } from './peopleMemoryStore.js';
+import { platformDisplayName } from './platformPeople.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from './voiceGuestCall.js';
-import { cleanPersonName } from './voiceGuestNames.js';
+import { cleanPersonName, personNameKey } from './voiceGuestNames.js';
 
 export const VOICE_CALL_MEMORY_PATH = '/v1/voice/gemini/cascade/calls';
 export const VOICE_CALL_DISCARD_PATH = '/v1/voice/gemini/cascade/calls/discard';
@@ -38,6 +39,10 @@ export interface PeopleMemoryOverview {
   people: readonly {
     id: string; displayName: string; aliases: readonly string[]; howKnown: string; createdAt: string;
     lastTalkedAt?: string; forgotten: boolean; items: readonly PersonItemView[];
+    /** Where Shannon knows the person from: 「音声」「Discord」… */
+    sources: readonly string[];
+    /** Other remembered people with the same name. Only a suggestion: the owner decides whether they are one person. */
+    mergeSuggestions: readonly { personId: string; displayName: string; sources: readonly string[] }[];
   }[];
   /** Calls whose guest never gave a name. Used only when the owner is alone. */
   unnamed: readonly PersonItemView[];
@@ -55,11 +60,16 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
   const snapshot = stateStore.snapshot(scopeKey);
   const persons = people.listPeople(scopeKey);
   const nameOf = (id: string) => persons.find(person => person.id === id)?.displayName;
+  const calls = new Map<string, PersonCall | null>();
+  const callOf = (id: string) => { if (!calls.has(id)) calls.set(id, people.call(scopeKey, id)); return calls.get(id) ?? null; };
+  // An item belongs to the person it is about, to the people of its audience, and, for a platform period's summary, to those who spoke in it.
+  const belongs = (item: PersonMemoryItem, personId: string) => item.personId === personId || audiencePeople(item).includes(personId)
+    || (!item.personId && callOf(item.callId)?.source !== undefined && callOf(item.callId)!.personIds.includes(personId));
   const view = (item: PersonMemoryItem): PersonItemView => {
     const { sensitivity, category, reason, decidedBy } = item.disclosure;
     return {
       id: item.id, kind: item.kind, kindLabel: ITEM_KIND_LABELS[item.kind], text: item.text, observedAt: item.observedAt,
-      audience: describeAudience(item.disclosure.audience, nameOf),
+      audience: placeLabel(callOf(item.callId)) ?? describeAudience(item.disclosure.audience, nameOf),
       sensitivity: sensitivity ?? 'sensitive',
       decidedBy: decidedBy ?? 'default',
       reason: decidedBy === 'owner' ? 'ライ氏が選んだ扱い' : category ? `${SENSITIVITY_CATEGORY_LABELS[category]}（${reason ?? ''}）` : reason ?? '',
@@ -67,17 +77,26 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
     };
   };
   const items = people.allItems(scopeKey);
+  // Only people with a remembered call: not a bare platform identity, and not a name from a period that was never saved.
+  const listed = persons.filter(person => items.some(item => belongs(item, person.id)));
+  const sourcesOf = (personId: string) => [...new Set(items.filter(item => belongs(item, personId))
+    .map(item => { const source = callOf(item.callId)?.source; return source ? platformDisplayName(source) : '音声'; }))].sort();
+  const keysOf = (person: RememberedPerson) => [person.displayName, ...person.aliases].map(personNameKey).filter(Boolean);
   return {
-    // Only people with a remembered call: not a platform identity, and not a name from a period that was never saved.
-    people: persons.filter(person => items.some(item => item.personId === person.id || audiencePeople(item).includes(person.id))).map(person => {
-      const own = items.filter(item => item.personId === person.id || audiencePeople(item).includes(person.id));
+    people: listed.map(person => {
+      const own = items.filter(item => belongs(item, person.id));
       const lastTalkedAt = own.map(item => item.observedAt).sort().at(-1);
+      const keys = keysOf(person);
       return { id: person.id, displayName: person.displayName, aliases: person.aliases, howKnown: person.howKnown,
         createdAt: person.createdAt, forgotten: Boolean(person.forgottenAt), ...(lastTalkedAt ? { lastTalkedAt } : {}),
         // The exchanges themselves are kept for recall; the list shows what she took from them.
-        items: own.filter(item => item.kind !== 'turn').map(view) };
+        items: own.filter(item => item.kind !== 'turn').map(view),
+        sources: sourcesOf(person.id),
+        // Never merged automatically: the same name on a platform and in a call may be two people.
+        mergeSuggestions: person.forgottenAt ? [] : listed.filter(other => other.id !== person.id && !other.forgottenAt
+          && keysOf(other).some(key => keys.includes(key))).map(other => ({ personId: other.id, displayName: other.displayName, sources: sourcesOf(other.id) })) };
     }),
-    unnamed: items.filter(item => audiencePeople(item).length === 0 && !item.personId && item.kind !== 'turn').map(view),
+    unnamed: items.filter(item => audiencePeople(item).length === 0 && !item.personId && !callOf(item.callId)?.source && item.kind !== 'turn').map(view),
   };
 }
 
