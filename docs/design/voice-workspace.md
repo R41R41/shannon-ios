@@ -50,20 +50,21 @@ the Waterlight Eye as the focus:
   is the real microphone level while listening (still under Reduce Motion) or a
   muted microphone symbol. No header subtitle or bottom label repeats the state.
   A failure adds only its action (“もう一度つなぐ” or “設定を開く”) under the line.
-- **Subtitles:** at most the latest user line (“あなた：…”, or “参加者：…” for guests,
-  muted) and the latest Shannon line, each up to two lines (four at accessibility
+- **Subtitles:** at most the latest user line (“あなた：…”, or the neutral “話し手：…” in
+  「友人も一緒」, muted) and the latest Shannon line, each up to two lines (four at accessibility
   sizes), centered and truncated at the head. VoiceOver reads the full current
-  turn; the complete conversation stays in the call's pinned Talk thread.
+  turn; owner turns stay in the call's pinned Talk thread and 「友人も一緒」 turns are not kept.
   The implementation review card, unshared photo preview, photo errors and text
   retry follow below and scroll when space runs out.
 - **Bottom control bar** (`ShannonGeminiLiveCallControls`, safe-area inset):
-  写真, 人物, マイク, 文字, 終了, each a round control with a visible label. マイク
+  写真, 本人だけ／友人も一緒, マイク, 文字, 終了, each a round control with a visible label.
+  The participant control's label is the current mode (tinted in 「友人も一緒」). マイク
   is the larger primary-action control; tapping toggles mute (icon and label change
   to “ミュート中”, not color alone), long press opens the input-microphone menu, and
   VoiceOver exposes “入力マイクを選ぶ” as an action. 文字 reveals or hides the
   multiline composer above the bar; the bar and composer ride above the keyboard,
-  and a retained draft reopens the composer. 終了 uses the danger role. Guests have no
-  写真 control. When labels no longer fit on one row the bar wraps to rows of three,
+  and a retained draft reopens the composer. 終了 uses the danger role. In 「友人も一緒」 the
+  写真 control stays in place, dimmed, and explains why it is unavailable when tapped. When labels no longer fit on one row the bar wraps to rows of three,
   then two, then one column; labels never truncate.
 
 Mute uses Voice Processing input muting, so only silence is sent while muted. It
@@ -155,3 +156,34 @@ voice operation to the call's captured thread rather than the currently browsed 
   phase (`ShannonVoiceAmbientMotion`): slightly livelier while speaking, still when the
   call failed or ended. iOS 17 and Reduce Motion keep the still gradient. It carries no
   state on its own; the status line and the Eye stay authoritative.
+
+## 友人も一緒 (2026-10-01)
+
+One name everywhere: the mode is 「友人も一緒」 and its opposite is 「本人だけ」. “ゲストモード”,
+“人物” and “音声の参加者” are no longer shown.
+
+- **Switching** never reconnects. The participant control opens a confirmation whose title is
+  the action (「友人も一緒にしますか？」 or 「本人だけに戻しますか？」) and whose message says
+  the call continues and what is and is not kept. Saying 「友達を紹介するね」 or 「友達と一緒に
+  いる」 switches directly; uncertain wording makes Shannon ask 「お友達も一緒ですか？」.
+  Switching by the control makes Shannon greet first, because nobody has spoken yet.
+  Speech never switches back to 本人だけ.
+- **Persistent indicator** (`ShannonVoiceGuestModeNotice`): for the whole period, above the
+  Eye, a card titled 友人も一緒 states in three lines that only this call is remembered and the
+  owner's memory, schedule and notes are not used; that the conversation is not saved and a
+  short summary is kept only if the owner chooses at the end; and that speech is sent to an
+  external service for transcription and no recording is kept. The minimized pill shows
+  友人も一緒 beside the status without being expanded.
+- **End of call** (`ShannonVoiceCallSummaryPrompt`): after a call that had a 友人も一緒 period,
+  a card in the pill's place asks 「この通話の要約をトークに残しますか？」 with 残さない and
+  要約を残す. It is not modal. Saving shows progress, then confirmation; a failure offers a
+  retry or 残さない. Leaving it unanswered keeps nothing, and a new call removes it.
+- **Saved note**: the Talk timeline shows the note as a Shannon message with a 通話の要約 label;
+  VoiceOver says it is a record the owner chose to keep, not the conversation itself.
+- **Table conversation**: Shannon answers when named, asked, requested, greeted, or when a short
+  reaction follows her own turn; otherwise she stays silent and the status returns to listening.
+- The screen stays awake during a call.
+
+DEBUG fixtures: `-ShannonPreviewVoiceGuest` for the call screen in 友人も一緒 and
+`-ShannonPreviewVoiceCallSummary` (without `-ShannonPreviewVoice`) for the end-of-call card.
+Both are synthetic and use no microphone, model or network.
