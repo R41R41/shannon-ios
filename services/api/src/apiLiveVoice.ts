@@ -5,6 +5,7 @@ import {
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
   buildIntentPrompt,
+  projectEmotionReaction,
   resolveShannonEmotionState,
   selectPrimaryIntent,
   shannonIdentityPrompt,
@@ -240,9 +241,9 @@ async function completeLiveVoiceDelegation(
       reply: command.reply, webSources: [], ...(command.receipt ? { receipt: command.receipt } : {}),
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
-  const previousExpressiveEmotion = temporaryGuest
-    ? undefined
-    : dependencies.stateStore.snapshot(scopeKey).expressiveEmotion;
+  const emotionState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
+  const previousExpressiveEmotion = emotionState?.expressiveEmotion;
+  const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript) : undefined;
   const provisionalExpressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,
@@ -252,7 +253,7 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
   let expressiveEmotion = provisionalExpressiveEmotion;
-  let voicePlan = voicePlanResponse(decision, expressiveEmotion);
+  let voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood);
   await observer?.onPlan(voicePlan);
   observer?.signal?.throwIfAborted();
   if (!decision.shouldRespond) {
@@ -401,7 +402,7 @@ async function completeLiveVoiceDelegation(
               now: occurredAt,
               target: temporaryGuest ? '現在の話者' : 'ライ氏',
             });
-            voicePlan = voicePlanResponse(decision, expressiveEmotion);
+            voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood);
             await observer.onPlan(voicePlan);
           }
         },
@@ -428,7 +429,7 @@ async function completeLiveVoiceDelegation(
     now: occurredAt,
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
-  voicePlan = voicePlanResponse(decision, expressiveEmotion);
+  voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood);
   if (!temporaryGuest) {
     dependencies.stateStore.apply(scopeKey, {
       type: 'expressive-emotion-updated',

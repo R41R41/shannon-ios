@@ -612,7 +612,7 @@ describe('SQLite Shannon persistence', () => {
           { role: 'user', content: '完成して嬉しい！' },
           { role: 'assistant', content: '返答1', messageEmotion: { expression: 'tender' } },
         ],
-        state: { version: 1 },
+        state: { version: 2 },
       },
     });
     await secondApi.dispatch({

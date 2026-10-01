@@ -1,10 +1,19 @@
-import type { ShannonExpressiveEmotion } from '@shannon/cognition';
+import { deriveShannonFace, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
+/** The quiet face of a call with no owner state (友人も一緒): the baseline mood. */
+const BASELINE_MOOD: ShannonEmotion = { valence: 0, arousal: 0.3, openness: 0.35 };
+
+/**
+ * `expression` and `feeling` are the face of the same per-turn emotion the
+ * voice acts with, so the call Eye and the voice cannot disagree. `mood` is the
+ * owner's continuous mood; a guest call passes none and nothing is stored.
+ */
 export function voicePlanResponse(
   decision: VoiceTurnDecision,
   emotion?: ShannonExpressiveEmotion,
+  mood: ShannonEmotion = BASELINE_MOOD,
 ): Record<string, unknown> {
   const selectedWaitingDirection = waitingDirectionFor(decision);
   const waitingDirection = emotion?.overrideReason === 'grief'
@@ -25,7 +34,7 @@ export function voicePlanResponse(
     affect: emotion?.primary ?? decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
-    ...(emotion ? { emotion } : {}),
+    ...(emotion ? { emotion, ...deriveShannonFace(mood, emotion) } : {}),
     selectedSkills: decision.selectedSkills,
     skillScores: decision.skillScores,
     waitingPhrase,

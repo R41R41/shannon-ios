@@ -17,6 +17,7 @@ import { EXACT_TIME_DECLINED, extractPromiseCaptures, requestsExactTimeAlert } f
 import { extractExplicitUserIntent } from './cognitiveIntent.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from './turnCaptures.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
+import { sharedTimeEvent } from './companionPresence.js';
 
 export interface CompletedTurn {
   timeZone?: string;
@@ -130,6 +131,8 @@ export class TurnRefinementProcessor {
     if (resonantInterest) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest: resonantInterest });
     }
+    // Last, so the slow traits are recalibrated from what this turn just stored.
+    this.stateStore.apply(scopeKey, sharedTimeEvent(candidates, sourceTime, source?.timeZone ?? timeZone));
   }
 }
 

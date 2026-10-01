@@ -45,7 +45,10 @@ describe('Shannon durable background worker', () => {
       { workerId: 'test-worker', now: () => new Date('2026-08-31T10:00:01.000Z') },
     );
     expect(await worker.runOnce()).toBe('processed');
-    expect(workerStore.snapshot('owner-a')).toMatchObject({ version: 1, emotion: { valence: 0.14 } });
+    // The emotion delta, then the day's shared-time evidence that recalibrates the slow traits.
+    expect(workerStore.snapshot('owner-a')).toMatchObject({
+      version: 2, emotion: { valence: 0.14 }, sharedDays: ['2026-08-31'], temperament: { closeness: 0.17 },
+    });
     expect(workerStore.pendingBackgroundJobCount()).toBe(0);
     workerStore.close();
   });

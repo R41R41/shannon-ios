@@ -50,6 +50,8 @@ export interface ShannonExpressiveEmotion {
   startedAt: string;
   decay: number;
   carryover: number;
+  /** When this feeling was last expressed; carry-over decays from here. Absent in older snapshots. */
+  updatedAt?: string;
   overrideReason?: ShannonEmotionOverrideReason;
 }
 
@@ -127,12 +129,19 @@ export interface CompanionStateSnapshot {
   relationships: readonly RelationshipInsight[];
   prospectiveMemories: readonly ProspectiveMemory[];
   memoryControls: readonly MemoryControl[];
+  /**
+   * Owner-local days (YYYY-MM-DD) on which the owner and Shannon talked, kept
+   * for the last 30 days. Evidence for the slow traits; absent in older snapshots.
+   */
+  sharedDays?: readonly string[];
 }
 
 export type CompanionStateEvent =
   | { type: 'memory-transaction'; events: readonly CompanionStateEvent[] }
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
   | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
+  /** An owner turn was recorded on these owner-local days; `today` anchors the 30-day window. */
+  | { type: 'shared-time-observed'; days: readonly string[]; today: string }
   | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }
   | { type: 'user-fact-upserted'; fact: UserFact; source?: MemoryLearningSource }
   | { type: 'relationship-upserted'; relationship: RelationshipInsight; source?: MemoryLearningSource }

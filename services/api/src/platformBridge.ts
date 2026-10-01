@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   buildCompanionStatePrompt,
-  createShannonMessageEmotion,
-  projectEmotionReaction,
+  resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
@@ -81,11 +80,9 @@ export class PlatformBridgeService {
 
     const threadId = platformBridgeThreadId(request.platform, request.conversationId);
     const capturedState = this.stateStore.snapshot(this.configuration.scopeKey);
-    const messageEmotion = createShannonMessageEmotion(
-      projectEmotionReaction(capturedState, request.userMessage),
-      capturedState.temperament,
-      { userMessage: request.userMessage, shannonReply: request.shannonReply },
-    );
+    const { messageEmotion } = resolveReplyEmotion({
+      snapshot: capturedState, userMessage: request.userMessage, reply: request.shannonReply, now: request.observedAt,
+    });
     const completedTurn = {
       scopeKey: this.configuration.scopeKey,
       threadId,

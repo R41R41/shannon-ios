@@ -4,6 +4,7 @@ import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.
 import { filterMeaningfulInterests } from './interests.js';
 import { shannonPersonaPrompt, shannonSuitePrompt, type ShannonAudience } from './persona.js';
 import { shannonCapabilityPrompt } from './capabilities.js';
+import { currentShannonEmotion } from './emotionState.js';
 
 /**
  * Stable identity block: canonical persona, suite roles, and capabilities. It is the
@@ -17,6 +18,8 @@ export const SHANNON_CORE_PROMPT = shannonIdentityPrompt('owner');
 
 export interface CompanionPromptOptions {
   maximumCharacters?: number;
+  /** Turn time. When given, the prompt states the conversational feeling as it stands at that moment. */
+  now?: string;
 }
 
 function fixed(value: number): string {
@@ -73,11 +76,11 @@ export function buildCompanionStatePrompt(
     fitSections([prospectiveMemories.length
       ? `未完了の約束・未来記憶 (保存済み。外部実行の証拠ではない):\n${prospectiveMemories.map(memory => `- ${visibleMemoryText(snapshot, memory.id, memory.summary)} [発言=${memory.createdAt}; 期限=${memory.dueAt ?? memory.dueDate ?? memory.dueHint ?? '未定'}; TZ=${memory.timeZone ?? '不明'}]`).join('\n')}`
       : '未完了の約束・未来記憶: なし'], Math.floor(maximumCharacters * 0.32)),
-    `気質: 好奇心 ${fixed(snapshot.temperament.curiosity)} / 自発性 ${fixed(snapshot.temperament.initiative)} / 親密さ ${fixed(snapshot.temperament.closeness)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
+    // Traits that move with evidence (see temperament.ts) and fixed dispositions are labelled apart.
+    `経験で育つ気質: 親密さ ${fixed(snapshot.temperament.closeness)} / 好奇心 ${fixed(snapshot.temperament.curiosity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
+    `変わらない性格: 自発性 ${fixed(snapshot.temperament.initiative)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
-    snapshot.expressiveEmotion
-      ? `会話感情: ${snapshot.expressiveEmotion.primary} / 強度 ${fixed(snapshot.expressiveEmotion.intensity)} / 対象 ${snapshot.expressiveEmotion.target} / 理由 ${snapshot.expressiveEmotion.cause} / 表出 ${snapshot.expressiveEmotion.visibility}`
-      : '',
+    currentFeelingLine(snapshot, options.now),
     interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
     interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
     fitSections([facts.length
@@ -90,6 +93,19 @@ export function buildCompanionStatePrompt(
       ? `今、想起されている記憶:\n${activeMemories.map(memory => `- ${memory.summary}`).join('\n')}`
       : '今、想起されている記憶: なし'], Math.floor(maximumCharacters * 0.14)),
   ], maximumCharacters);
+}
+
+/**
+ * The conversational feeling as it stands at `now`, through the carry-over rule
+ * shared with voice. Without a clock (a cached projection) the line is left out
+ * rather than showing a stored feeling that may be hours old.
+ */
+function currentFeelingLine(snapshot: CompanionStateSnapshot, now: string | undefined): string {
+  if (!now) return '';
+  const feeling = currentShannonEmotion(snapshot.expressiveEmotion, now);
+  return feeling.primary === 'neutral'
+    ? `いまの会話感情: 落ち着いている (${feeling.cause})`
+    : `いまの会話感情: ${feeling.primary} / 強度 ${fixed(feeling.intensity)} / 対象 ${feeling.target} / 理由 ${feeling.cause} / 表出 ${feeling.visibility}`;
 }
 
 export function assembleShannonSystemPrompt(
