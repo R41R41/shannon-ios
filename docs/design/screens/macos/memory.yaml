@@ -2,14 +2,16 @@ schema_version: 1
 screen_id: shannon-macos-memory
 platform: macos
 baseline_commit: a84f898
-last_verified_at: 2026-09-25
-verification_scope: "合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
+last_verified_at: 2026-10-02
+verification_scope: "2026-10-02（鉛筆の訂正・忘れる確認の説明）: サーバーの回帰テストとswift test、Debugビルドで確認。実機での訂正操作と翌日の表示は未確認。合成fixture・shared Swiftモデル/部品描画。起動中Macアプリでの目的状態変更は未確認"
 user_job: "頭の中から記憶・約束・継続目的、その次の一手と計画案、認知結果を確認し、必要な状態変更を行う"
 primary_action: "継続目的を開き、確認・一時停止・完了・再開する"
 preserve:
   - "Mac sidebarと会話・開発・作業の構成"
   - "いま・知識・記憶の概要、日記、活動表示"
 improve:
+  - "覚えていることの鉛筆での訂正は、記憶の詳細の訂正と同じ『あなたの訂正』として記録する。同じ発言や夜の整理で元の内容へ戻らず、記憶の管理と会話にも訂正後の内容が使われる。上限320文字と現在の文字数を入力欄の下に示す"
+  - "忘れる時の確認に、これより前のシャノンの返答が今後の会話の材料から外れることを1文で説明する"
   - "rich dashboardでも記憶と約束の管理入口を常設する"
   - "完了・取り消し済みや忘れた記憶も一覧から詳細へ進める"
   - "継続目的と最近の認知履歴を一覧し、目的状態を明示操作で変更する"
