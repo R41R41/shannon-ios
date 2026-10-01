@@ -275,10 +275,7 @@ export class ShannonAutonomyService {
         state: !this.config.enabled ? 'disabled' as const : control.paused ? 'paused' as const : 'active' as const,
         enabled: this.config.enabled, paused: control.paused, changedAt: control.changedAt,
       },
-      loop: autonomyLoopStatus({
-        enabled: this.config.enabled, paused: control.paused, heartbeat: this.store.loop.heartbeat(), at,
-        budgetStopped: budget.exhausted || this.store.loop.budgetBlocked(scopeKey, dayKey, budget.capYen),
-      }),
+      loop: this.loopStatus(scopeKey, at, control.paused, budget),
       budget,
       budgetRequest: this.store.budgetRequest(scopeKey, dayKey),
       maximumExtraYen: this.config.maximumExtraYenPerDay,
@@ -398,9 +395,18 @@ export class ShannonAutonomyService {
     // The server switch is read first: while it is off the wording cannot change and nothing else is looked up.
     if (!this.config.enabled) return prompt;
     try {
-      const state = this.overview(scopeKey).loop.state;
+      const at = this.now();
+      const budget = this.budget(scopeKey, autonomyDayKey(at, this.config));
+      const state = this.loopStatus(scopeKey, at, this.store.control(scopeKey).paused, budget).state;
       return state === 'running' || state === 'budget_exhausted' ? withAutonomyRunning(prompt) : prompt;
     } catch { return prompt; }
+  }
+
+  private loopStatus(scopeKey: string, at: string, paused: boolean, budget: AutonomyBudgetStatus): AutonomyLoopStatus {
+    return autonomyLoopStatus({
+      enabled: this.config.enabled, paused, heartbeat: this.store.loop.heartbeat(), at,
+      budgetStopped: budget.exhausted || this.store.loop.budgetBlocked(scopeKey, budget.dayKey, budget.capYen),
+    });
   }
 
   private budget(scopeKey: string, dayKey: string): AutonomyBudgetStatus {
