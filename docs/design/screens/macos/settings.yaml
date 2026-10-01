@@ -2,13 +2,16 @@ schema_version: 1
 screen_id: shannon-macos-settings
 platform: macos
 baseline_commit: a392bc582ce9644889296297a42073e2bdd1ca67
-last_verified_at: 2026-09-15
+last_verified_at: 2026-10-02
+verification_scope: "2026-10-02（シャノンのやりたいこと・したことの記録）: 合成fixtureでのDTO解読・状態ラベル・所有者に許す操作の判定・一時停止と予算依頼と提案の決定の流れをswift testで確認し、iOS DebugとMac Debugのビルドが通ることを確認。Simulator・実機での表示、実タップ、Dynamic Typeでの折り返し、VoiceOver実読み上げ、実サーバーとの往復は未確認。"
 user_job: "Macの設定からシャノンの表示とDockアイコンを選ぶ"
 primary_action: "L02、L06、L10から実行中のDockアイコンを選ぶ"
 preserve:
   - "外観、接続、音声、情報源の既存設定"
   - "L06をインストール直後とFinder表示の標準アイコンにする"
 improve:
+  - "『シャノンの自律』の節に、自律活動の一時停止（オンで停止。サーバーが保存を返してから表示が変わる）と現在の状態（準備中／一時停止中／動いてよい状態）、『したことの記録』への行（確認待ちの件数、または今日の使った額／上限）を置く"
+  - "一時停止中も会話・音声・記憶・所有者が始めた作業は動くことを、節の説明で伝える"
   - "アプリ内設定と標準Settings Sceneの両方から同じ選択画面を開く"
   - "実際の3候補を画像、レベル、説明と選択状態で示す"
 do_not_change:
@@ -19,6 +22,7 @@ states:
   error: "現在の選択を保ち、画像読込失敗を示す"
   offline: "アイコン切替は端末内で完結する"
   conflict: "保存済みレベルを正として起動時にDockへ再適用する"
+  autonomy_pause: "保存に失敗した時は切り替えず、まだ止まっていないことを文で伝える。サーバーが自律の経路を持たない時は節を出さない"
   selection: "選択中をチェック、枠、読み上げで示す"
 accessibility:
   dynamic_type: "説明が切れないよう設定シートをスクロール可能にする"

@@ -380,7 +380,7 @@ describe('proposals from Shannon', () => {
     const { service, agentTasks, entries } = harness();
     const { decision, proposal } = service.proposeAgentTask(scope, draft);
     expect(decision).toMatchObject({ decision: 'needs_approval', reason: 'core_path', coreAreas: ['emotion', 'persona'] });
-    expect(proposal).toMatchObject({ origin: 'shannon', status: 'proposed', reason: draft.reason, coreAreas: ['emotion', 'persona'], projectHint: 'shannon-ios' });
+    expect(proposal).toMatchObject({ origin: 'shannon', status: 'proposed', reason: draft.reason, coreAreas: ['emotion', 'persona'], coreAreaLabels: ['感情', '人格'], projectHint: 'shannon-ios' });
     expect(agentTasks.list(scope)).toEqual([]);
     expect(agentTasks.claim('any-host', '2026-10-02T01:00:01.000Z')).toBeNull();
     expect(entries()[0]).toMatchObject({ kind: 'proposal', actor: 'shannon', outcome: 'needs_approval', approval: 'needed', link: `shannon-proposal://${proposal!.id}` });

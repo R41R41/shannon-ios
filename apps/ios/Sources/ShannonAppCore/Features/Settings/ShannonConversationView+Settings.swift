@@ -74,6 +74,8 @@ extension ShannonConversationView {
                     Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
                 }
 
+                ShannonAutonomySettingsSection(model: memoryModel.autonomy)
+
                 Section("接続と詳細") {
                     if let connectionModel {
                         settingsValueButton(

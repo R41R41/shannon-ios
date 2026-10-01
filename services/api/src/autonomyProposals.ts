@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { ShannonCoreAreaId } from '@shannon/cognition';
+import { SHANNON_CORE_AREA_LABELS, type ShannonCoreAreaId } from '@shannon/cognition';
 
 /**
  * Agent-task proposals that come from Shannon's own background activity
@@ -21,6 +21,8 @@ export interface ShannonAgentTaskProposal {
   projectHint?: string;
   /** Core areas the change touches; empty when it needs approval for another reason. */
   coreAreas: readonly ShannonCoreAreaId[];
+  /** The same areas in the owner-facing words. */
+  coreAreaLabels: readonly string[];
   status: ShannonProposalStatus;
   /** The agent task the owner started from it. */
   taskId?: string;
@@ -108,7 +110,7 @@ function proposal(row: ProposalRow): ShannonAgentTaskProposal {
   let coreAreas: ShannonCoreAreaId[] = [];
   try {
     const parsed: unknown = JSON.parse(row.core_areas_json);
-    if (Array.isArray(parsed)) coreAreas = parsed.filter((item): item is ShannonCoreAreaId => typeof item === 'string');
+    if (Array.isArray(parsed)) coreAreas = parsed.filter((item): item is ShannonCoreAreaId => typeof item === 'string' && item in SHANNON_CORE_AREA_LABELS);
   } catch { /* shown without areas */ }
   return Object.freeze({
     id: row.proposal_id,
@@ -118,6 +120,7 @@ function proposal(row: ProposalRow): ShannonAgentTaskProposal {
     reason: row.reason,
     ...(row.project_hint ? { projectHint: row.project_hint } : {}),
     coreAreas: Object.freeze(coreAreas),
+    coreAreaLabels: Object.freeze(coreAreas.map(area => SHANNON_CORE_AREA_LABELS[area])),
     status: row.status as ShannonProposalStatus,
     ...(row.task_id ? { taskId: row.task_id } : {}),
     createdAt: row.created_at,

@@ -67,6 +67,7 @@ public struct ShannonMemoryView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: ShannonSpacing.large) {
                 overviewContent(palette)
+                ShannonAutonomyOverviewCard(model: model.autonomy, palette: palette)
             }
             .padding(.horizontal, ShannonSpacing.large)
             .padding(.top, max(ShannonSpacing.large, workspaceTopInset))

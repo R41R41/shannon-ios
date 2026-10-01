@@ -11,6 +11,8 @@ public final class ShannonMemoryModel {
     public private(set) var mutatingIntentID: String?
     public private(set) var errorMessage: String?
     public private(set) var cognitionErrorMessage: String?
+    /// Shannon's own pursuits and activity record, shown in 頭の中 and Settings.
+    public let autonomy: ShannonAutonomyModel
 
     private let scopeKey: String
     private let client: any ShannonMemoryServing
@@ -22,6 +24,7 @@ public final class ShannonMemoryModel {
     ) {
         self.scopeKey = scopeKey
         self.client = client
+        self.autonomy = ShannonAutonomyModel(scopeKey: scopeKey, client: client as? any ShannonAutonomyServing)
     }
 
     public var activeItems: [ShannonMemoryItemDTO] {
