@@ -19,6 +19,7 @@ import { ShannonMemoryService } from './memoryService.js';
 import { SQLiteWorldStore } from './worldStore.js';
 import { SQLiteInitiativeStore } from './initiativeStore.js';
 import { FileAetherContextReader } from './aetherContext.js';
+import { configuredNotionSource } from './notionSource.js';
 import { FileAetherProposalStore } from './aetherProposal.js';
 import { SQLitePushNotificationStore, type APNsEnvironment } from './pushNotifications.js';
 import { SQLiteAgentTaskStore } from './agentTaskStore.js';
@@ -105,6 +106,8 @@ const kernel = createLocalApiKernel(now, {
   conversationOrchestration: conversationOrchestrationStore,
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
+  // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
+  notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel);
 const port = parsePort(process.env.SHANNON_API_PORT);

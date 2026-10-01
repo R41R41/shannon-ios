@@ -2,15 +2,57 @@ import { mentionsSuiteProduct, suiteProductPattern } from '@shannon/cognition';
 import type { AetherContextReader } from './aetherContext.js';
 import type { VoyagerCatalog } from './organize.js';
 import { reminderCapabilityBoundary } from './reminderCapability.js';
+import type { ShannonWebSource } from './chatModel.js';
+import { asksAboutNotion, notionTurnProjection } from './notionConversation.js';
+import type { NotionSource } from './notionSource.js';
+
+export type NotionTurnReader = NotionSource;
 
 export interface ConversationReadCapabilities {
   aetherContext?: AetherContextReader | null;
   voyagerCatalog?: VoyagerCatalog | null;
+  /** Read-only Notion reader. Used only when the owner is alone and names Notion or the story. */
+  notion?: NotionTurnReader | null;
 }
 
 export interface ConversationCapabilitySelection {
   aetherNotes?: boolean;
   voyagerTasks?: boolean;
+  /** False whenever anyone other than the owner may hear or read the reply. */
+  notion?: boolean;
+}
+
+export interface ConversationCapabilityContext {
+  prompt: string;
+  /** Pages shown to the model this turn, attached to the reply as source links. */
+  sources: readonly ShannonWebSource[];
+}
+
+export const NO_CAPABILITY_CONTEXT: ConversationCapabilityContext = Object.freeze({ prompt: '', sources: Object.freeze([]) });
+
+/**
+ * The read projections of one turn: notes and tasks as before, plus the owner-private
+ * Notion projection. The Notion section is appended after the 6,000-character cap of the
+ * other sections and carries its own bound, so its quoted data is never cut mid-entry.
+ * A turn that reads neither tasks nor Notion is answered without waiting, as before.
+ */
+export function conversationCapabilityContext(
+  scopeKey: string, message: string, dependencies: ConversationReadCapabilities,
+  selection: ConversationCapabilitySelection = { aetherNotes: true, voyagerTasks: true, notion: true },
+): ConversationCapabilityContext | Promise<ConversationCapabilityContext> {
+  const base = conversationCapabilityPrompt(scopeKey, message, dependencies, selection);
+  if (selection.notion !== true || !asksAboutNotion(message)) {
+    return typeof base === 'string' ? { prompt: base, sources: [] } : base.then(prompt => ({ prompt, sources: [] }));
+  }
+  return Promise.all([base, notionTurnProjection(dependencies.notion, message).catch(() => null)]).then(([prompt, notion]) => (
+    notion ? { prompt: [prompt, notion.prompt].filter(Boolean).join('\n\n'), sources: notion.sources } : { prompt, sources: [] }));
+}
+
+/** Puts the turn's own sources in front of the ones the model reported, without duplicates. */
+export function withCapabilitySources<T extends { webSources?: ShannonWebSource[] }>(completion: T, context: ConversationCapabilityContext): T {
+  if (!context.sources.length) return completion;
+  const seen = new Set(context.sources.map(source => source.url));
+  return { ...completion, webSources: [...context.sources, ...(completion.webSources ?? []).filter(source => !seen.has(source.url))] };
 }
 
 const NOTE_WORDS = /ノート|メモ/u;

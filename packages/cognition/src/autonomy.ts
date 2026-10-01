@@ -23,6 +23,7 @@ export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'aether_study', rule: 'free', label: 'Aetherの書斎' },
   { id: 'voyager_list', rule: 'free', label: 'Voyagerの自分のタスク' },
   { id: 'public_read', rule: 'free', label: '公開情報を読む' },
+  { id: 'notion_read', rule: 'free', label: '共有されたNotionを読む' },
   { id: 'thinking', rule: 'free', label: '考える・書く' },
   { id: 'owner_message', rule: 'free', label: '持ち主に見せる' },
   { id: 'core', rule: 'approval', label: '基幹部分' },

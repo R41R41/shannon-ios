@@ -32,6 +32,8 @@ export interface AutonomyConfig {
   yenPerUsd: number;
   timeZone: string;
   maximumPublicReadsPerDay: number;
+  /** Reads of the owner's shared Notion pages per owner-local day. */
+  maximumNotionReadsPerDay: number;
   modelPrices: AutonomyModelPrices;
   places: AutonomyPlaces;
 }
@@ -51,6 +53,7 @@ export function configuredAutonomy(
     yenPerUsd: boundedNumber(environment.SHANNON_AUTONOMY_YEN_PER_USD, 50, 1_000, 160),
     timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || 'Asia/Tokyo',
     maximumPublicReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_PUBLIC_READS, 0, 10_000, 200)),
+    maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
     modelPrices: configuredAutonomyModelPrices(environment),
     places: Object.freeze({
       hostFolders: hostFolders(environment.SHANNON_AUTONOMY_HOST_FOLDERS_JSON),

@@ -30,6 +30,8 @@ function context(overrides: Partial<AutonomyPolicyContext> = {}): AutonomyPolicy
     resolvePath: path => (path.startsWith('/') ? normalize(path) : null),
     publicReadsToday: 0,
     maximumPublicReadsPerDay: 200,
+    notionReadsToday: 0,
+    maximumNotionReadsPerDay: 100,
     ...overrides,
   };
 }
@@ -47,6 +49,7 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     ['her study in Aether', { domain: 'aether_study' }, 'allow', 'free_domain'],
     ['her own task list in Voyager', { domain: 'voyager_list' }, 'allow', 'free_domain'],
     ['reading a public page', { domain: 'public_read', urls: ['https://example.org/essay'] }, 'allow', 'free_domain'],
+    ["reading the owner's shared Notion", { domain: 'notion_read', tool: 'notion' }, 'allow', 'free_domain'],
     ['thinking with a model inside the budget', { domain: 'thinking', paid: { model: 'gemini-3.8-flash', estimatedCostYen: 12 } }, 'allow', 'free_domain'],
     ['showing something to the owner', { domain: 'owner_message' }, 'allow', 'free_domain'],
     // Needs the owner's approval.
@@ -72,6 +75,7 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     ['a file elsewhere on the VM', { domain: 'vm_workspace', paths: ['/etc/hosts'] }, 'needs_approval', 'outside_own_area'],
     ['sending to someone else', { domain: 'outreach' }, 'needs_approval', 'approval_domain'],
     ['publishing a story from her study', { domain: 'aether_study', reachesOthers: true }, 'needs_approval', 'reaches_others'],
+    ['a Notion step that would reach someone else', { domain: 'notion_read', reachesOthers: true }, 'needs_approval', 'reaches_others'],
     ['a workspace script that posts', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/tools/post.mjs'], reachesOthers: true }, 'needs_approval', 'reaches_others'],
     // Never.
     ['buying something', { domain: 'spending' }, 'forbidden', 'forbidden_domain'],
@@ -178,6 +182,21 @@ describe('authorizeAutonomousAction: switches and budget', () => {
     expect(read(2).decision).toBe('allow');
     expect(read(3)).toMatchObject({ decision: 'forbidden', reason: 'access_limit' });
     expect(read(2, ['https://example.org/a', 'https://example.org/b'])).toMatchObject({ decision: 'forbidden', reason: 'access_limit' });
+  });
+
+  it('limits Notion reads per day and allows none when no limit is supplied', () => {
+    const read = (overrides: Partial<AutonomyPolicyContext>) => decide({ domain: 'notion_read' }, overrides);
+    expect(read({ notionReadsToday: 2, maximumNotionReadsPerDay: 3 }).decision).toBe('allow');
+    expect(read({ notionReadsToday: 3, maximumNotionReadsPerDay: 3 })).toMatchObject({ decision: 'forbidden', reason: 'access_limit', domain: 'notion_read' });
+    expect(read({ maximumNotionReadsPerDay: 0 })).toMatchObject({ decision: 'forbidden', reason: 'access_limit' });
+    expect(read({ notionReadsToday: undefined, maximumNotionReadsPerDay: undefined })).toMatchObject({ decision: 'forbidden', reason: 'access_limit' });
+    // The switches and the prohibitions come first, as for every domain.
+    expect(read({ paused: true })).toMatchObject({ decision: 'forbidden', reason: 'paused' });
+    expect(read({ enabled: false })).toMatchObject({ decision: 'forbidden', reason: 'disabled' });
+    expect(decide({ domain: 'notion_read', spendsMoney: true }).reason).toBe('spending');
+    // The public-read limit and the Notion limit are counted apart.
+    expect(read({ publicReadsToday: 200 }).decision).toBe('allow');
+    expect(decide({ domain: 'public_read', urls: ['https://example.org/a'] }, { notionReadsToday: 100 }).decision).toBe('allow');
   });
 
   it('refuses malformed input of any shape', () => {
