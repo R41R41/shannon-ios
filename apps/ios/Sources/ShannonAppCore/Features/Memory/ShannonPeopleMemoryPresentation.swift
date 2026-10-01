@@ -37,6 +37,23 @@ struct ShannonPeopleMemoryPresentation: Equatable {
         return "\(last)・覚えていること \(count)件"
     }
 
+    /// 「音声・Discord」, or nothing for a server that does not say.
+    static func sources(for person: ShannonRememberedPersonDTO) -> String? {
+        guard let sources = person.sources, !sources.isEmpty else { return nil }
+        return sources.joined(separator: "・")
+    }
+
+    /// Whether the person is known from anywhere other than a voice call.
+    static func knownFromPlatform(_ person: ShannonRememberedPersonDTO) -> Bool {
+        (person.sources ?? []).contains { $0 != "音声" }
+    }
+
+    /// 「同じ名前のミキさん（Discord）と統合…」
+    static func mergeSuggestionTitle(_ suggestion: ShannonPersonMergeSuggestionDTO) -> String {
+        let place = suggestion.sources.isEmpty ? "" : "（\(suggestion.sources.joined(separator: "・"))）"
+        return "同じ名前の\(suggestion.displayName)さん\(place)と統合…"
+    }
+
     /// 「ミキさんと一緒の時・2026/10/2・機微」: who was there, when, and how the item is handled.
     static func caption(for item: ShannonPersonMemoryItemDTO) -> String {
         if item.isForgotten { return "忘れるよう指定済み・\(item.audience)" }

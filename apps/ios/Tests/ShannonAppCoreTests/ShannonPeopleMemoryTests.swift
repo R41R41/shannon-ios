@@ -52,6 +52,39 @@ struct ShannonPeopleMemoryTests {
         #expect(ShannonPeopleMemoryPresentation(people: .empty).isEmpty)
     }
 
+    @Test("A person shows where she knows them from and a same-name suggestion; an older server's person has neither")
+    func platformSources() throws {
+        let payload = """
+        {"people":[
+          {"id":"p1","displayName":"ミキ","aliases":[],"howKnown":"「友人も一緒」の通話で名前を聞いた","createdAt":"2026-10-01T03:00:00.000Z",
+           "forgotten":false,"items":[],"sources":["音声"],
+           "mergeSuggestions":[{"personId":"p9","displayName":"ミキ","sources":["Discord"]}]},
+          {"id":"p9","displayName":"ミキ","aliases":[],"howKnown":"Discordで会った人","createdAt":"2026-10-02T03:00:00.000Z",
+           "forgotten":false,"sources":["Discord"],"mergeSuggestions":[{"personId":"p1","displayName":"ミキ","sources":["音声"]}],"items":[
+            {"id":"i9","kind":"fact","kindLabel":"その人のこと","text":"ミキさんは辛いものが苦手","observedAt":"2026-10-02T03:00:00.000Z",
+             "audience":"友人グループ（Discord）で話した時","sensitivity":"sensitive","decidedBy":"rule","reason":"","status":"active"}]}],
+         "unnamed":[]}
+        """
+        let people = try JSONDecoder().decode(ShannonPeopleMemoryDTO.self, from: Data(payload.utf8)).people
+        #expect(ShannonPeopleMemoryPresentation.sources(for: people[0]) == "音声")
+        #expect(!ShannonPeopleMemoryPresentation.knownFromPlatform(people[0]))
+        #expect(ShannonPeopleMemoryPresentation.knownFromPlatform(people[1]))
+        let suggestion = try #require(people[0].mergeSuggestions?.first)
+        #expect(ShannonPeopleMemoryPresentation.mergeSuggestionTitle(suggestion) == "同じ名前のミキさん（Discord）と統合…")
+        #expect(ShannonPeopleMemoryPresentation.caption(for: people[1].items[0]).hasPrefix("友人グループ（Discord）で話した時・"))
+        // Forgetting and merging use the same requests whatever the source.
+        #expect(ShannonPeopleMemoryChange.merge(personID: "p9", intoPersonID: "p1").request(scopeKey: "owner").intoPersonId == "p1")
+        #expect(ShannonPeopleMemoryChange.forgetItem("i9").request(scopeKey: "owner").action == "forget-item")
+
+        let older = try Self.people().people[0]
+        #expect(older.sources == nil && older.mergeSuggestions == nil)
+        #expect(ShannonPeopleMemoryPresentation.sources(for: older) == nil)
+        #expect(!ShannonPeopleMemoryPresentation.knownFromPlatform(older))
+        #expect(ShannonPeopleMemoryCopy.platformIdentity.contains("推測することはしません"))
+        #expect(ShannonPeopleMemoryCopy.mergeSuggestionFooter.contains("自分でまとめることはしません"))
+        #expect(ShannonPeopleMemoryCopy.rule.contains("Discord"))
+    }
+
     @Test("Each change is one request the server understands")
     func changeRequests() throws {
         func body(_ change: ShannonPeopleMemoryChange) throws -> [String: String] {

@@ -67,6 +67,20 @@ function harness(options: { enabled?: boolean; limits?: Partial<typeof DEFAULT_P
 }
 
 describe('contract: the requests in docs/platform-people-contract.md', () => {
+  it('the document shows the fixtures verbatim and names every field, error and reason the server uses', () => {
+    const document = readFileSync(join(import.meta.dirname, '../../../docs/platform-people-contract.md'), 'utf8');
+    for (const name of ['owner-turn.request.json', 'person-turn.request.json', 'context.request.json']) {
+      expect(document).toContain(`\`\`\`json\n${JSON.stringify(fixture(name), null, 2)}\n\`\`\``);
+    }
+    for (const name of ['person-turn.request.json', 'overheard-turn.request.json', 'bot-turn.request.json', 'dm-turn.request.json',
+      'context.request.json', 'dm-context.request.json', 'person-turn.response.json', 'bot-turn.response.json']) {
+      for (const field of Object.keys(fixture(name))) expect(document).toContain(`\`${field}\``);
+    }
+    for (const word of ['BAD_REQUEST', 'PLATFORM_BRIDGE_UNAUTHORIZED', 'PLATFORM_CONVERSATION_DENIED', 'PLATFORM_ACTOR_DENIED',
+      'PLATFORM_PEOPLE_DISABLED', 'PLATFORM_TURN_CONFLICT', 'RATE_LIMITED', 'PLATFORM_BRIDGE_NOT_CONFIGURED',
+      'conversation_cap', 'daily_cap', 'forgotten_person', 'SHANNON_PLATFORM_PEOPLE_INGEST']) expect(document).toContain(word);
+  });
+
   it('today\'s owner turn keeps working unchanged and is stored exactly as before', async () => {
     const { bridge, store, peopleStore, background, close } = harness();
     const request = fixture('owner-turn.request.json');

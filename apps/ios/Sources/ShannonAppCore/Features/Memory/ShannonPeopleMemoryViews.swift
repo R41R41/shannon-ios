@@ -189,6 +189,7 @@ struct ShannonPersonDetailPage: View {
         }
     }
 
+    @ViewBuilder
     private func header(_ person: ShannonRememberedPersonDTO, _ palette: ShannonPalette) -> some View {
         Section {
             if person.forgotten {
@@ -199,8 +200,26 @@ struct ShannonPersonDetailPage: View {
             LabeledContent("最後に話した日", value: person.lastTalkedAt.map(displayDate) ?? "記録なし")
             if !person.aliases.isEmpty { LabeledContent("ほかの呼び方", value: person.aliases.joined(separator: "、")) }
             if !person.howKnown.isEmpty { LabeledContent("知ったきっかけ", value: person.howKnown) }
+            if let sources = ShannonPeopleMemoryPresentation.sources(for: person) { LabeledContent("話した場所", value: sources) }
         } footer: {
-            Text("名前は通話の中の言葉で聞いたものです。声で人を確かめることはしません。")
+            Text(ShannonPeopleMemoryPresentation.knownFromPlatform(person)
+                ? ShannonPeopleMemoryCopy.platformIdentity : ShannonPeopleMemoryCopy.voiceIdentity)
+        }
+        let suggestions = (person.mergeSuggestions ?? []).compactMap { suggestion in
+            model.people?.people.first { $0.id == suggestion.personId }.map { (suggestion, $0) }
+        }
+        if !suggestions.isEmpty {
+            Section {
+                ForEach(suggestions, id: \.0.personId) { suggestion, other in
+                    Button { mergeTarget = other } label: {
+                        Label(ShannonPeopleMemoryPresentation.mergeSuggestionTitle(suggestion), systemImage: "arrow.triangle.merge")
+                            .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("people-merge-suggestion-\(suggestion.personId)")
+                }
+            } footer: {
+                Text(ShannonPeopleMemoryCopy.mergeSuggestionFooter)
+            }
         }
     }
 
