@@ -9,6 +9,7 @@ import type { ConversationStore } from './conversationStore.js';
 import { configuredBackgroundBudgetUsd, estimatedOpenAICostUsd, responseUsage, utcMonthKey, type LlmUsageStore } from './llmUsage.js';
 import type { ShannonKnowledgeStore } from './sqliteShannonKnowledge.js';
 import { usableKnowledgeFor } from './turnKnowledgeRecall.js';
+import { MemoryWithholding } from './memoryVisibility.js';
 
 export interface KnowledgeOperation {
   operation: 'create' | 'update' | 'retire';
@@ -64,8 +65,10 @@ export class ShannonKnowledgeConsolidator {
     if (!this.analyzer) return { ...result, status: 'disabled' };
     const at = this.options.now?.() ?? new Date().toISOString();
     const snapshot = this.stateStore.snapshot(scopeKey);
-    const visible = this.conversations.experienceCandidates(scopeKey)
-      .filter(item => visibleMemoryText(snapshot, item.id, item.summary) !== null);
+    const candidates = this.conversations.experienceCandidates(scopeKey);
+    // A turn whose reply used a forgotten item is not a source for new knowledge either.
+    const withholding = new MemoryWithholding(snapshot, this.conversations, scopeKey, candidates);
+    const visible = candidates.filter(item => visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item));
     const today = visible.filter(item => item.observedAt >= startAt && item.observedAt < endAt).slice(-60);
     if (!today.length) return result;
     // Earlier related experiences let the analyzer see repetition across days.

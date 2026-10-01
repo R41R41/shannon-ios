@@ -302,7 +302,7 @@ function correctKnowledgeAsOwner(
     // An answer whose fact left the bounded state still needs the same durable boundary.
     dependencies.stateStore.apply(scopeKey, { type: 'memory-control-upserted', control: {
       memoryId: known.answerId, kind: 'user-fact', status: 'active', pinned: false, updatedAt: at,
-      changeReason: 'ユーザーが内容を訂正', overrideText: text, contextInvalidatedAt: at,
+      changeReason: 'ユーザーが内容を訂正', overrideText: text, contextInvalidatedAt: at, withheldText: known.answer,
       ...(known.evidence.find(item => item.source !== 'user') ? { sourceEvidence: known.evidence.find(item => item.source !== 'user')!.quote } : {}),
     } });
   }

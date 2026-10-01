@@ -28,7 +28,7 @@ struct ShannonMemoryLibraryView: View {
                         }
                     }
                     if section == .hidden {
-                        Text("一覧から詳細を開くと復元できます。元の会話や根拠を消す操作ではありません。")
+                        Text(ShannonMemoryWithholdingCopy.hiddenList)
                             .font(.caption)
                             .foregroundStyle(palette.textSecondary)
                     }

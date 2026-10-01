@@ -2,6 +2,7 @@ import { visibleMemoryText, type CompanionStateStore } from '@shannon/cognition'
 import { configuredBackgroundBudgetUsd, utcMonthKey } from './llmUsage.js';
 import type { MemoryModelGateway } from './memoryModels.js';
 import type { MemoryEmbeddingIndex, PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
+import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';
 
 export type MemoryEmbeddingRunResult = 'disabled' | 'idle' | 'budget' | 'worked' | 'failed';
 
@@ -16,8 +17,9 @@ export interface MemoryEmbeddingWorkerOptions {
 /**
  * Background embedding of experience summaries, thread summaries and Shannon
  * knowledge. It never runs on the response path, stays inside the monthly
- * background budget, and never sends a forgotten/hidden source to the model:
- * such a source is recorded as withheld and re-evaluated after state changes.
+ * background budget, and never sends a forgotten/hidden source to the model,
+ * nor a reply that used one or a summary built from one: such a source is
+ * recorded as withheld and re-evaluated after state changes.
  */
 export class MemoryEmbeddingWorker {
   private readonly batchSize: number;
@@ -45,9 +47,12 @@ export class MemoryEmbeddingWorker {
       const pending = this.index.pendingEmbeddingSources(scopeKey, model, snapshot.version, this.batchSize);
       if (!pending.length) continue;
       const updatedAt = this.now();
+      const withholding = new MemoryWithholding(snapshot, conversationStoreOf(this.index), scopeKey);
       const visible = pending.filter(source => {
         const recallId = source.kind === 'thread' ? `thread:${source.sourceId}` : source.kind === 'knowledge' ? `knowledge:${source.sourceId}` : source.sourceId;
         const allowed = visibleMemoryText(snapshot, recallId, source.text) !== null
+          && !(source.kind === 'thread' && withholding.withholdsThreadSummary(source.sourceId, source.text))
+          && !(source.kind === 'experience' && withholding.withholdsExperience({ id: source.sourceId, summary: source.text }))
           && (this.options.isSourceEligible?.(scopeKey, source) ?? true);
         if (!allowed) this.index.withholdEmbedding(source, model, snapshot.version, updatedAt);
         return allowed;

@@ -137,6 +137,8 @@ export interface ShannonMemoryStore {
   mutate(scopeKey: string, mutation: MemoryMutation): MemoryDashboard;
 }
 
+const UNKNOWN_MEMORY_TEXT = '元の内容を一覧で取得できない記憶';
+
 export class ShannonMemoryService implements ShannonMemoryStore {
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -218,7 +220,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       items.push(buildItem({
         id: control.memoryId,
         kind: control.kind,
-        text: control.overrideText ?? control.sourceEvidence ?? '元の内容を一覧で取得できない記憶',
+        text: control.overrideText ?? control.sourceEvidence ?? UNKNOWN_MEMORY_TEXT,
         observedAt: control.updatedAt,
         ...(control.sourceEvidence ? { evidence: control.sourceEvidence } : {}),
       }, control, metadata.get(control.memoryId)));
@@ -234,7 +236,11 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     return Object.freeze({
       generatedAt,
       currentState: state,
-      knowledge: this.knowledgeStore?.knowledgeAnswers(scopeKey) ?? Object.freeze([]),
+      // 「覚えていること」 lists what is in use: a forgotten or rejected answer moves to 記憶の管理 until restored.
+      knowledge: Object.freeze((this.knowledgeStore?.knowledgeAnswers(scopeKey) ?? []).filter(answer => {
+        const source = state.userFacts.find(fact => fact.id === answer.answerId)?.sourceExperienceId;
+        return (controls.get(answer.answerId)?.status ?? 'active') === 'active' && (!source || (controls.get(source)?.status ?? 'active') === 'active');
+      })),
       personalityProfile: this.knowledgeStore?.personalityProfile(scopeKey) ?? null,
       activity: isActivityHistorySource(this.history)
         ? this.history.activityTimeline(scopeKey)
@@ -278,10 +284,23 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       return this.dashboard(scopeKey);
     }
     const source = this.history?.experienceCandidates(scopeKey).find(value => value.id === (promise?.sourceExperienceId ?? item.id));
-    const control = { ...actionControl(item, previous, mutation, timestamp),
+    const hiding = mutation.action === 'forget' || mutation.action === 'reject';
+    const statusBefore = previous && previous.status !== 'active' ? previous.commitmentStatusBefore : promise?.status;
+    // Kept on the control so the rule survives the item leaving the bounded state.
+    // A conversation turn is identified by the owner's utterance (sourceEvidence), not by its two-sided summary.
+    const withheldText = previous?.withheldText ?? ((hiding || mutation.action === 'correct') && !previous?.overrideText
+      && (item.kind !== 'experience' || promise) && item.text !== UNKNOWN_MEMORY_TEXT ? item.text : undefined);
+    const control: MemoryControl = { ...actionControl(item, previous, mutation, timestamp),
       sourceEvidence: previous?.sourceEvidence ?? source?.userMessage ?? item.evidence[0]?.quote,
-      contextInvalidatedAt: ['forget', 'reject', 'correct'].includes(mutation.action) ? timestamp : previous?.contextInvalidatedAt };
+      contextInvalidatedAt: hiding || mutation.action === 'correct' ? timestamp : previous?.contextInvalidatedAt,
+      ...(withheldText ? { withheldText } : {}),
+      ...(previous?.causedBy && mutation.action !== 'restore' ? { causedBy: previous.causedBy } : {}),
+      ...(hiding && statusBefore ? { commitmentStatusBefore: statusBefore } : {}) };
     events.push({ type: 'memory-control-upserted', control });
+    // Everything hidden together with this item: its source turn and the promises made in that turn.
+    const sourceID = promise?.sourceExperienceId ?? item.id;
+    const together = [sourceID, ...state.prospectiveMemories.filter(memory => memory.sourceExperienceId === sourceID).map(memory => memory.id)]
+      .filter((id, index, ids) => id !== item.id && ids.indexOf(id) === index);
     if (promise && mutation.action === 'correct' && control.overrideText) {
       const { dueAt: _at, dueDate: _date, dueHint: _hint, remindAfter: _remind, ...retained } = promise;
       events.push({ type: 'prospective-memory-upserted', replace: true, memory: {
@@ -293,12 +312,40 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       events.push({ type: 'prospective-memory-status-changed', memoryId: promise.id,
         status: mutation.action === 'complete' ? 'completed' : 'dismissed' });
     }
-    if (mutation.action === 'forget' || mutation.action === 'reject') {
-      const sourceID = promise?.sourceExperienceId ?? item.id;
-      const related = state.prospectiveMemories.filter(memory => memory.sourceExperienceId === sourceID);
-      for (const id of new Set([sourceID, ...related.map(memory => memory.id)])) {
-        events.push({ type: 'memory-control-upserted', control: { ...control, memoryId: id, kind: 'experience' } });
-        events.push({ type: 'prospective-memory-status-changed', memoryId: id, status: 'dismissed' });
+    if (hiding) {
+      for (const id of together) {
+        const existing = memoryControlFor(state, id);
+        // A control the owner set on that item directly stays theirs; restoring this item must not lift it.
+        if (existing && existing.status !== 'active') continue;
+        const memory = state.prospectiveMemories.find(candidate => candidate.id === id);
+        events.push({ type: 'memory-control-upserted', control: {
+          memoryId: id, kind: 'experience', status: control.status, pinned: false, updatedAt: timestamp,
+          changeReason: control.changeReason, contextInvalidatedAt: timestamp, causedBy: item.id,
+          ...(control.sourceEvidence ? { sourceEvidence: control.sourceEvidence } : {}),
+          ...(existing?.overrideText ? { overrideText: existing.overrideText } : {}),
+          ...(memory ? { commitmentStatusBefore: memory.status } : {}),
+        } });
+        if (memory) events.push({ type: 'prospective-memory-status-changed', memoryId: id, status: 'dismissed' });
+      }
+    }
+    if (mutation.action === 'restore') {
+      // One forget hides a group; restoring any member lifts that group and nothing the owner hid separately.
+      const origin = previous?.causedBy ?? item.id;
+      const reopen = (memory: typeof promise, before: MemoryControl | undefined) => {
+        if (!memory || !before || before.status === 'active') return;
+        const status = before.commitmentStatusBefore ?? (memory.status === 'dismissed' ? 'pending' : memory.status);
+        if (status !== memory.status) events.push({ type: 'prospective-memory-status-changed', memoryId: memory.id, status });
+      };
+      reopen(promise, previous);
+      for (const lifted of state.memoryControls) {
+        // Controls written before `causedBy` existed are recognised by the shared instant and reason of that forget.
+        const sameForget = !lifted.causedBy && previous && !previous.causedBy && previous.status !== 'active' && together.includes(lifted.memoryId)
+          && lifted.updatedAt === previous.updatedAt && lifted.changeReason === previous.changeReason;
+        if (lifted.memoryId === item.id || lifted.status === 'active') continue;
+        if (lifted.memoryId !== origin && lifted.causedBy !== origin && !sameForget) continue;
+        const { causedBy: _cause, commitmentStatusBefore: _before, ...kept } = lifted;
+        events.push({ type: 'memory-control-upserted', control: { ...kept, status: 'active', updatedAt: timestamp, changeReason: control.changeReason } });
+        reopen(state.prospectiveMemories.find(memory => memory.id === lifted.memoryId), lifted);
       }
     }
     if (item.kind === 'user-fact' && mutation.action === 'correct' && control.overrideText) {

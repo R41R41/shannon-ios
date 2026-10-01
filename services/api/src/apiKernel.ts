@@ -62,7 +62,7 @@ import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { conversationCapabilityPrompt } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
 import { executeConversationCommand } from './conversationCommands.js';
-import { visibleConversationHistory, mayUseThreadSummary } from './memoryVisibility.js';
+import { visibleConversationHistory, usableThreadSummary } from './memoryVisibility.js';
 import type { TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
@@ -406,7 +406,7 @@ export class ShannonApiKernel {
           } satisfies ChatResponse,
         };
       }
-      const priorThreadSummary = mayUseThreadSummary(captured) ? this.conversationStore.threadSummary(body.scopeKey, threadId) : undefined;
+      const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId);
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
@@ -448,7 +448,7 @@ export class ShannonApiKernel {
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
-        completedAt: occurredAt,
+        completedAt: occurredAt, recalledMemoryIds: cognitiveContext.frame.recalledMemoryIDs, summaryContinuesChain: Boolean(priorThreadSummary && completion.threadSummary),
       };
       const experience = this.background.recordTurn(completedTurn);
       response.turnId = experience.id;

@@ -1,6 +1,6 @@
 import { visibleMemoryText, type CompanionStateSnapshot, type SemanticRecallHit } from '@shannon/cognition';
 import type { MemoryModelGateway } from './memoryModels.js';
-import { mayUseThreadSummary } from './memoryVisibility.js';
+import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';
 import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './sqliteMemoryEmbeddings.js';
 
 export interface SemanticMemoryConfig {
@@ -49,7 +49,8 @@ export interface SemanticRecallInput {
 /**
  * Model-assisted recall. It reads only; every failure or timeout yields an
  * empty result so the caller answers from deterministic recall. Forgotten or
- * invalidated sources are filtered before any text is sent to a model.
+ * invalidated sources, replies that used them, and summaries built from them
+ * are filtered before any text is sent to a model.
  */
 export class SemanticMemoryRecall {
   constructor(
@@ -85,11 +86,20 @@ export class SemanticMemoryRecall {
       modelCalls += 1;
       const queryVectors = await gateway.embed(input.scopeKey, queries, 'memory', signal);
       signal.throwIfAborted();
-      const shortlist = this.eligibleCandidates(input, gateway.embeddingModel)
+      const withholding = new MemoryWithholding(input.snapshot, conversationStoreOf(this.index), input.scopeKey);
+      const shortlist: Array<{ candidate: StoredEmbeddingCandidate; similarity: number }> = [];
+      // Withholding is decided lazily, in rank order, so only the candidates that could be used are examined.
+      for (const row of this.eligibleCandidates(input, gateway.embeddingModel)
         .map(candidate => ({ candidate, similarity: Math.max(...queryVectors.map(vector => cosineSimilarity(vector, candidate.vector))) }))
         .filter(row => row.similarity >= this.config.minimumSimilarity)
-        .sort((left, right) => right.similarity - left.similarity || right.candidate.observedAt.localeCompare(left.candidate.observedAt))
-        .slice(0, this.config.rerankCandidates);
+        .sort((left, right) => right.similarity - left.similarity || right.candidate.observedAt.localeCompare(left.candidate.observedAt))) {
+        if (shortlist.length >= this.config.rerankCandidates) break;
+        const { candidate } = row;
+        const withheld = candidate.kind === 'thread'
+          ? withholding.withholdsThreadSummary(candidate.threadId ?? candidate.sourceId, candidate.summary, candidate.observedAt)
+          : candidate.kind === 'experience' && withholding.withholdsExperience(candidate);
+        if (!withheld) shortlist.push(row);
+      }
       if (!shortlist.length) return finish('empty');
       let scores = new Map(shortlist.map(row => [row.candidate.id, row.similarity]));
       if (modelCalls < budget) {
@@ -112,10 +122,9 @@ export class SemanticMemoryRecall {
   }
 
   private eligibleCandidates(input: SemanticRecallInput, model: string): StoredEmbeddingCandidate[] {
-    const threadSummariesAllowed = mayUseThreadSummary(input.snapshot);
     return this.index!.embeddingCandidates(input.scopeKey, model, this.config.scanLimit).filter(candidate => {
       if (input.excludeIds?.has(candidate.id)) return false;
-      if (candidate.kind === 'thread' && (!threadSummariesAllowed || candidate.threadId === input.threadId)) return false;
+      if (candidate.kind === 'thread' && candidate.threadId === input.threadId) return false;
       if (candidate.kind === 'knowledge' && !input.isEligible) return false;
       if (input.isEligible && !input.isEligible(candidate)) return false;
       return visibleMemoryText(input.snapshot, candidate.id, candidate.summary) !== null;

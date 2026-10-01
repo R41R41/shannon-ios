@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
 import type { ShannonConversationItem } from './chatModel.js';
 import {
+  boundedRecalledMemoryIds,
   threadNavigation,
+  type ThreadSummaryLineage,
   type ConversationStore,
   type ConversationThread,
   type PlatformTurnPersistenceInput,
@@ -34,6 +37,32 @@ function boundedStoredThreadSummary(value: string | null | undefined): string | 
   if (!compact) return undefined;
   const characters = Array.from(compact);
   return characters.length <= 180 ? compact : `${characters.slice(0, 179).join('')}…`;
+}
+
+/** A thread longer than this is judged on its most recent turns. */
+const MAXIMUM_LINEAGE_MESSAGES = 4_000;
+
+/** Additive and outside the numbered migrations, so an older API binary still opens the database. */
+export function ensureSummaryLineageSchema(database: DatabaseSync): void {
+  const columns = database.prepare("PRAGMA table_info('conversation_threads')").all() as unknown as Array<{ name: string }>;
+  if (columns.length && !columns.some(column => column.name === 'summary_chain_started_at')) {
+    database.exec('ALTER TABLE conversation_threads ADD COLUMN summary_chain_started_at TEXT;');
+  }
+}
+
+function experienceFromRow(row: EventRow): ShannonExperience[] {
+  const payload = parseTurnPayload(row.payload_json);
+  if (!payload) return [];
+  const recalledMemoryIds = boundedRecalledMemoryIds(payload.recalledMemoryIds);
+  return [Object.freeze({
+    id: row.event_id,
+    userMessage: payload.userMessage,
+    shannonReply: payload.shannonReply,
+    summary: payload.summary,
+    observedAt: row.observed_at,
+    ...(payload.timeZone ? { timeZone: payload.timeZone } : {}),
+    ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
+  })];
 }
 
 export class SQLiteConversationRepository implements ConversationStore {
@@ -185,18 +214,17 @@ export class SQLiteConversationRepository implements ConversationStore {
       ORDER BY sequence DESC
       LIMIT ?
     `).all(scopeKey, this.context.maximumExperiences) as unknown as EventRow[];
-    return Object.freeze(rows.reverse().flatMap(row => {
-      const payload = parseTurnPayload(row.payload_json);
-      if (!payload) return [];
-      return [Object.freeze({
-        id: row.event_id,
-        userMessage: payload.userMessage,
-        shannonReply: payload.shannonReply,
-        summary: payload.summary,
-        observedAt: row.observed_at,
-        ...(payload.timeZone ? { timeZone: payload.timeZone } : {}),
-      })];
-    }));
+    return Object.freeze(rows.reverse().flatMap(experienceFromRow));
+  }
+
+  experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
+    const ids = [...new Set(experienceIds)].slice(0, 200);
+    if (!ids.length) return Object.freeze([]);
+    const rows = this.context.database.prepare(`
+      SELECT sequence, event_id, scope_key, event_type, observed_at, payload_json FROM experience_events
+      WHERE scope_key = ? AND event_type = 'turn.completed' AND event_id IN (${ids.map(() => '?').join(', ')})
+    `).all(scopeKey, ...ids) as unknown as EventRow[];
+    return Object.freeze(rows.flatMap(experienceFromRow));
   }
 
   appendTurn(
@@ -214,10 +242,12 @@ export class SQLiteConversationRepository implements ConversationStore {
     const threadSummary = context?.threadSummary ?? threadNavigation([
       { role: 'assistant', content: shannonReply },
     ]).summary ?? null;
+    const recalledMemoryIds = boundedRecalledMemoryIds(context?.recalledMemoryIds);
     const payload: TurnPayload = {
       userMessage,
       shannonReply,
       summary,
+      ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
       ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
       ...(context ? {
         capturedStateVersion: context.capturedStateVersion,
@@ -233,9 +263,12 @@ export class SQLiteConversationRepository implements ConversationStore {
           WHERE scope_key = ? AND thread_id = ? AND title_origin = 'pending' AND archived_at IS NULL
         `).run(initialThreadTitle(context?.threadTitle, userMessage), scopeKey, effectiveThreadId);
       }
+      // A summary written without the stored prior summary starts a fresh chain built from visible history only.
       this.context.database.prepare(`
-        UPDATE conversation_threads SET updated_at = ?, summary = ? WHERE scope_key = ? AND thread_id = ?
-      `).run(observedAt, threadSummary, scopeKey, effectiveThreadId);
+        UPDATE conversation_threads SET updated_at = ?, summary = ?,
+          summary_chain_started_at = CASE WHEN ? THEN summary_chain_started_at ELSE ? END
+        WHERE scope_key = ? AND thread_id = ?
+      `).run(observedAt, threadSummary, context?.summaryContinuesChain ? 1 : 0, observedAt, scopeKey, effectiveThreadId);
       const insert = this.context.database.prepare(`
         INSERT INTO conversation_messages
           (message_id, scope_key, thread_id, turn_id, ordinal, role, content, observed_at, metadata_json)
@@ -256,6 +289,7 @@ export class SQLiteConversationRepository implements ConversationStore {
           messageEmotion: context.messageEmotion,
           ...(context.taskDecision ? { taskDecision: context.taskDecision } : {}),
           ...(context.artifacts?.length ? { artifacts: context.artifacts } : {}),
+          ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
         } satisfies MessageMetadata) : null,
       );
       this.context.insertEvent(scopeKey, 'turn.completed', observedAt, payload, turnId);
@@ -340,6 +374,22 @@ export class SQLiteConversationRepository implements ConversationStore {
         input.observedAt,
       );
       return { duplicate: false, experience };
+    });
+  }
+
+  threadSummaryLineage(scopeKey: string, threadId: string): ThreadSummaryLineage {
+    const thread = this.context.database.prepare(`
+      SELECT summary_chain_started_at, updated_at FROM conversation_threads WHERE scope_key = ? AND thread_id = ?
+    `).get(scopeKey, threadId) as unknown as { summary_chain_started_at: string | null; updated_at: string } | undefined;
+    const rows = this.context.database.prepare(`
+      SELECT message_id, thread_id, turn_id, role, content, observed_at, metadata_json
+      FROM conversation_messages WHERE scope_key = ? AND thread_id = ?
+      ORDER BY sequence DESC LIMIT ?
+    `).all(scopeKey, threadId, MAXIMUM_LINEAGE_MESSAGES) as unknown as MessageRow[];
+    return Object.freeze({
+      ...(thread?.summary_chain_started_at ? { chainStartedAt: thread.summary_chain_started_at } : {}),
+      ...(thread ? { updatedAt: thread.updated_at } : {}),
+      messages: Object.freeze(rows.map(row => freezeStoredMessage(row))),
     });
   }
 

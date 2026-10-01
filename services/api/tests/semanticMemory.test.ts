@@ -154,9 +154,11 @@ describe('memory embedding worker', () => {
     const statuses = () => Object.fromEntries((raw.prepare('SELECT source_id, status, source_revision FROM memory_embeddings').all() as Array<{ source_id: string; status: string; source_revision: number }>)
       .map(row => [row.source_id, `${row.status}@${row.source_revision}`]));
     expect(statuses()[secret.id]).toBe('withheld@1');
-    expect(statuses()[thread]).toBe('embedded@1');
+    // The summary was written by the forgotten turn, so it is withheld with it.
+    expect(statuses()[thread]).toBe('withheld@1');
     expect(await worker.runOnce()).toBe('idle');
-    persistent.appendTurn('owner', thread, '次の話', 'うん', at, context('新しい計画の相談'));
+    // A later turn rewrites the summary from visible history only: a fresh chain, embedded again.
+    persistent.appendTurn('owner', thread, '次の話', 'うん', '2026-09-30T04:00:00.000Z', context('新しい計画の相談'));
     expect(await worker.runOnce()).toBe('worked');
     expect(statuses()[thread]).toBe('embedded@2');
     raw.close();
