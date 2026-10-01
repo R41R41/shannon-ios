@@ -43,6 +43,17 @@ export function placeSkillReply(reply: ShannonChatModelResult, skill: PlaceDisco
     combinedPlaceSources(skill, reply.webSources));
 }
 
+/** A place card carries navigable links; the voice reply must stay speakable even if synthesis emits one. */
+export function spokenPlaceReply(reply: string): string {
+  return reply
+    .replace(/\[([^\]\r\n]+)\]\(https?:\/\/[^\s)]+\)/giu, '$1')
+    .replace(/<?https?:\/\/[^\s<>()]+>?/giu, '')
+    .replace(/[ \t]{2,}/gu, ' ')
+    .replace(/[ \t]+([。、！？,.!?])/gu, '$1')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim();
+}
+
 export function combinedPlaceSources(skill: PlaceDiscoverySkillResult | null,
   finalSources: readonly ShannonWebSource[] = []): ShannonWebSource[] {
   const seen = new Set<string>();

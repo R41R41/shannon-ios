@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { wantsNearbyPlaces, wantsPlaceDiscovery } from './placeDiscovery.js';
-import { combinedPlaceSources, runPlaceDiscoverySkill } from './placeDiscoverySkill.js';
+import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from './placeDiscoverySkill.js';
 import {
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
@@ -400,7 +400,7 @@ async function completeLiveVoiceDelegation(
   } : undefined);
   const reply = confirmedImplementationRequest
     ? 'よし、ライ氏。実装提案を画面に出しました。「始める」を押せば、作業を進められます。'
-    : completion.reply;
+    : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,

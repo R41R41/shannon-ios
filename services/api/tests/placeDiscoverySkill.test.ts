@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
-import { combinedPlaceSources, placeSkillReply, runPlaceDiscoverySkill } from '../src/placeDiscoverySkill.js';
+import { combinedPlaceSources, placeSkillReply, runPlaceDiscoverySkill, spokenPlaceReply } from '../src/placeDiscoverySkill.js';
 
 describe('place discovery skill', () => {
   it('returns bounded candidate data for later skills without sending private history', async () => {
@@ -33,5 +33,10 @@ describe('place discovery skill', () => {
     expect(result.prompt).toContain('Candidates: []');
     expect(placeSkillReply({ mode: 'openai', model: 'test', reply: '現在地を教えてください。' }, result))
       .toBe('現在地を教えてください。');
+  });
+
+  it('keeps place names and weather while removing generated links from speech', () => {
+    expect(spokenPlaceReply('浜松城公園です。[地図で開く](https://maps.apple.com/?q=hamamatsu) 今日の天気は晴れです。参照: https://weather.example/today'))
+      .toBe('浜松城公園です。地図で開く 今日の天気は晴れです。参照:');
   });
 });

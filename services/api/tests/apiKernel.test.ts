@@ -11,6 +11,7 @@ class RecordingChatModel implements ShannonChatModel {
   readonly model = 'test-model';
   readonly requests: ShannonChatModelRequest[] = [];
   webSources: Array<{ title: string; url: string }> = [];
+  replyOverride?: string;
   artifacts: Array<{ name: string; mimeType: string; content: string; summary?: string }> = [];
   places: Array<{ name: string; address: string; reason: string; mapQuery: string; mapUrl: string }> = [];
   taskProposal?: { title: string; goal: string; hostHint?: string; projectHint?: string; risk?: string };
@@ -21,7 +22,7 @@ class RecordingChatModel implements ShannonChatModel {
     return {
       mode: this.mode,
       model: this.model,
-      reply: `返答${this.requests.length}`,
+      reply: this.replyOverride ?? `返答${this.requests.length}`,
       ...(this.webSources.length ? { webSources: this.webSources } : {}),
       ...(this.artifacts.length ? { artifacts: this.artifacts } : {}),
       ...(this.places.length ? { places: this.places } : {}),
@@ -83,13 +84,14 @@ describe('Shannon local API kernel', () => {
 
   it('passes place skill results into voice synthesis and keeps map links out of speech', async () => {
     const model = new VoiceAwareRecordingModel();
+    model.replyOverride = '浜松城公園です。[地図](https://maps.apple.com/?q=hamamatsu) 今日の天気は晴れです。';
     model.places = [{ name: '浜松城公園', address: '静岡県浜松市', reason: '散歩できる',
       mapQuery: '浜松城公園 静岡県浜松市', mapUrl: 'https://maps.apple.com/?q=hamamatsu' }];
     const api = createLocalApiKernel(() => '2026-09-22T01:38:00.000Z', { chatModel: model });
     const result = await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: {
       scopeKey: 'owner-a', transcript: '浜松の公園を地図で探して、今日の天気も教えて',
     } });
-    expect(result).toMatchObject({ status: 200, body: { reply: '返答2',
+    expect(result).toMatchObject({ status: 200, body: { reply: '浜松城公園です。地図 今日の天気は晴れです。',
       uiBlocks: [{ type: 'place_search', places: [expect.objectContaining({ name: '浜松城公園' })] }] } });
     expect(model.requests[0]).toMatchObject({ useWebSearch: true, placeSearch: { spoken: true } });
     expect(model.requests[1]?.systemPrompt).toContain('浜松城公園');
