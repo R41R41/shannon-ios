@@ -5,6 +5,7 @@ import UIKit
 import AppKit
 #endif
 
+/// iPhone conversation list: search on top, three destination tiles, then threads grouped by date.
 struct ShannonThreadListSheet: View {
     let model: ShannonConversationModel
     let selectedThreadId: String?
@@ -16,6 +17,8 @@ struct ShannonThreadListSheet: View {
     let close: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State var isCreating = false
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
@@ -38,11 +41,30 @@ struct ShannonThreadListSheet: View {
         return visibleThreads.filter { !model.initiativeThreadIDs.contains($0.threadId) }
     }
 
+    var destinations: [ShannonThreadListDestination] {
+        [
+            ShannonThreadListDestination(
+                title: "作業",
+                symbol: "point.3.connected.trianglepath.dotted",
+                badge: model.unreadAgentTaskCount,
+                action: openWork
+            ),
+            ShannonThreadListDestination(title: "頭の中", symbol: "brain.head.profile", badge: nil, action: openMemory),
+            ShannonThreadListDestination(title: "設定", symbol: "gearshape", badge: nil, action: openSettings),
+        ]
+    }
+
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
+        let now = Date()
+        let calendar = Calendar.current
 
         NavigationStack {
             List {
+                if !isSearching {
+                    destinationsSection(palette: palette)
+                }
+
                 if visibleThreads.isEmpty {
                     Group {
                         if isSearching {
@@ -57,55 +79,37 @@ struct ShannonThreadListSheet: View {
                     }
                         .frame(maxWidth: .infinity, minHeight: 220)
                         .listRowBackground(Color.clear)
+                } else if isSearching {
+                    Section("検索結果") {
+                        ForEach(conversationThreads, id: \.threadId) { thread in
+                            threadRow(thread, now: now, calendar: calendar, palette: palette)
+                        }
+                    }
                 } else {
                     if !initiativeThreads.isEmpty {
                         Section {
                             ForEach(initiativeThreads, id: \.threadId) { thread in
-                                threadRow(thread, palette: palette)
+                                threadRow(thread, now: now, calendar: calendar, palette: palette)
                             }
                         } header: {
                             Label("シャノンから", systemImage: "sparkles")
                         }
                     }
 
-                    if !conversationThreads.isEmpty {
-                        Section(isSearching ? "検索結果" : "トーク") {
-                            ForEach(conversationThreads, id: \.threadId) { thread in
-                                threadRow(thread, palette: palette)
+                    ForEach(ShannonThreadDateGrouping.sections(
+                        for: conversationThreads,
+                        now: now,
+                        calendar: calendar
+                    )) { section in
+                        Section(section.title) {
+                            ForEach(section.threads, id: \.threadId) { thread in
+                                threadRow(thread, now: now, calendar: calendar, palette: palette)
                             }
                         }
                     }
                 }
-
-                Section("画面") {
-                    destinationButton(
-                        title: "作業全体",
-                        detail: model.agentTasks.isEmpty ? "進行中の作業はありません" : "いま・これから・完了",
-                        symbol: "point.3.connected.trianglepath.dotted",
-                        badge: model.unreadAgentTaskCount,
-                        palette: palette,
-                        action: openWork
-                    )
-                    destinationButton(
-                        title: "頭の中",
-                        detail: "いま・知識・日記",
-                        symbol: "brain.head.profile",
-                        badge: nil,
-                        palette: palette,
-                        action: openMemory
-                    )
-                    destinationButton(
-                        title: "設定",
-                        detail: nil,
-                        symbol: "gearshape",
-                        badge: nil,
-                        palette: palette,
-                        action: openSettings
-                    )
-                }
-
             }
-            .searchable(text: $searchText, prompt: "トークを検索")
+            .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
             .navigationTitle("シャノン")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -150,87 +154,130 @@ struct ShannonThreadListSheet: View {
         }
     }
 
-    func destinationButton(
-        title: String,
-        detail: String?,
-        symbol: String,
-        badge: Int?,
-        palette: ShannonPalette,
-        action: @escaping () -> Void
+    /// Three equal tiles; accessibility text sizes fall back to full-width native rows.
+    @ViewBuilder
+    func destinationsSection(palette: ShannonPalette) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Section {
+                ForEach(destinations) { destination in
+                    Button(action: destination.action) {
+                        ShannonDrawerDestinationRow(
+                            title: destination.title,
+                            detail: nil,
+                            symbol: destination.symbol,
+                            badge: destination.badge,
+                            palette: palette
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(destination.accessibilityLabel)
+                    .accessibilityAddTraits(.isButton)
+                }
+            }
+        } else {
+            Section {
+                HStack(spacing: ShannonSpacing.small) {
+                    ForEach(destinations) { destination in
+                        Button(action: destination.action) {
+                            ShannonThreadListDestinationTile(destination: destination, palette: palette)
+                        }
+                        .buttonStyle(ShannonChipPressStyle(reduceMotion: reduceMotion))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(destination.accessibilityLabel)
+                        .accessibilityAddTraits(.isButton)
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+    func threadRow(
+        _ thread: ChatThreadDTO,
+        now: Date,
+        calendar: Calendar,
+        palette: ShannonPalette
     ) -> some View {
-        Button(action: action) {
-            ShannonDrawerDestinationRow(
-                title: title,
-                detail: detail,
-                symbol: symbol,
-                badge: badge,
+        let isCurrent = thread.threadId == selectedThreadId
+        return Button {
+            Task {
+                await model.selectThread(thread.threadId)
+                openTalk()
+            }
+        } label: {
+            ShannonThreadListRow(
+                title: thread.title,
+                timeLabel: ShannonThreadDateGrouping.relativeLabel(
+                    for: ShannonThreadDateGrouping.date(from: thread.updatedAt),
+                    now: now,
+                    calendar: calendar
+                ),
+                detail: detailText(for: thread),
+                isCurrent: isCurrent,
+                isInitiative: model.initiativeThreadIDs.contains(thread.threadId),
                 palette: palette
             )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if canArchive {
+                Button {
+                    Task { await model.archiveThread(thread.threadId) }
+                } label: {
+                    Label("アーカイブ", systemImage: "archivebox")
+                }
+                .tint(palette.danger)
+            }
+            Button {
+                editingThread = thread
+            } label: {
+                Label("タイトルを編集", systemImage: "pencil")
+            }
+            .tint(palette.action)
+        }
+        .contextMenu { threadActions(for: thread) }
     }
 
-    func threadRow(_ thread: ChatThreadDTO, palette: ShannonPalette) -> some View {
-        HStack(spacing: 0) {
-            Button {
-                Task {
-                    await model.selectThread(thread.threadId)
-                    openTalk()
-                }
-            } label: {
-                HStack(spacing: ShannonSpacing.medium) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(thread.title)
-                            .font(.body.weight(thread.threadId == selectedThreadId ? .semibold : .regular))
-                            .foregroundStyle(palette.textPrimary)
-                            .lineLimit(2)
-                        if let context = ShannonThreadSearch.matchContext(for: thread, query: searchText) {
-                            Text(context)
-                                .font(.caption)
-                                .foregroundStyle(palette.textSecondary)
-                                .lineLimit(2)
-                        } else {
-                            HStack(spacing: 6) {
-                                Text(threadUpdatedLabel(thread.updatedAt))
-                                Text("·")
-                                Text("\(thread.messageCount)件")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(palette.textSecondary)
-                        }
-                    }
-                    Spacer()
-                    if model.initiativeThreadIDs.contains(thread.threadId) {
-                        Image(systemName: "sparkles")
-                            .font(.caption)
-                            .foregroundStyle(palette.brandPresence)
-                            .accessibilityLabel("シャノンからの新しい話")
-                    }
-                    if thread.threadId == selectedThreadId {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(palette.action)
-                    }
-                }
-                .padding(.leading, ShannonSpacing.medium)
-                .padding(.vertical, ShannonSpacing.extraSmall)
-                .frame(minHeight: 58)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(thread.threadId == selectedThreadId ? .isSelected : [])
-            .contextMenu { threadActions(for: thread) }
+    var canArchive: Bool { model.threads.count > 1 }
 
-            Menu {
-                threadActions(for: thread)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(palette.textSecondary)
-                    .frame(width: ShannonTouchTarget.minimum, height: 58)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel("\(thread.title)の操作")
+    /// Keeps the conversation search field at the top of the sheet on iPhone.
+    static var searchPlacement: SearchFieldPlacement {
+#if os(iOS)
+        .navigationBarDrawer(displayMode: .always)
+#else
+        .automatic
+#endif
+    }
+
+    /// Search context, then the last locally known message, then the message count.
+    func detailText(for thread: ChatThreadDTO) -> String {
+        if let context = ShannonThreadSearch.matchContext(for: thread, query: searchText) {
+            return context
         }
+        let last = lastKnownMessage(for: thread.threadId)
+        if let preview = ShannonThreadDateGrouping.preview(
+            lastMessageText: last?.text,
+            lastMessageDate: last?.sentAt,
+            threadUpdatedAt: ShannonThreadDateGrouping.date(from: thread.updatedAt)
+        ) {
+            return preview
+        }
+        return "\(thread.messageCount)件"
+    }
+
+    /// Reads only the on-device display cache; never triggers a network load.
+    func lastKnownMessage(for threadId: String) -> (text: String, sentAt: Date)? {
+        if threadId == model.selectedThreadId, let message = model.messages.last {
+            return (message.text, message.sentAt)
+        }
+        if let cached = model.cachedHistories[threadId]?.last {
+            return (cached.text, cached.sentAt)
+        }
+        return nil
     }
 
     @ViewBuilder
@@ -246,54 +293,7 @@ struct ShannonThreadListSheet: View {
         } label: {
             Label("アーカイブ", systemImage: "archivebox")
         }
-        .disabled(model.threads.count <= 1)
-    }
-}
-
-struct ShannonDrawerDestinationRow: View {
-    let title: String
-    let detail: String?
-    let symbol: String
-    let badge: Int?
-    let palette: ShannonPalette
-
-    var body: some View {
-        HStack(spacing: ShannonSpacing.medium) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(palette.brandPresence)
-                .frame(width: 28, height: 28)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(palette.textPrimary)
-                if let detail {
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(palette.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if let badge, badge > 0 {
-                Text(badge > 9 ? "9+" : "\(badge)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(palette.onAction)
-                    .padding(.horizontal, 6)
-                    .frame(minWidth: 20, minHeight: 20)
-                    .background(palette.action, in: Capsule())
-            }
-
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.textSecondary)
-        }
-        .padding(.horizontal, ShannonSpacing.medium)
-        .frame(minHeight: 52)
-        .contentShape(Rectangle())
+        .disabled(!canArchive)
     }
 }
 
