@@ -14,6 +14,6 @@ struct ShannonVoiceGuestModeTests {
     @Test("Guest captions avoid claiming a single identified speaker")
     func transcriptLabels() {
         #expect(ShannonVoiceParticipantMode.owner.transcriptSpeakerName == "あなた")
-        #expect(ShannonVoiceParticipantMode.guest.transcriptSpeakerName == "参加者")
+        #expect(ShannonVoiceParticipantMode.guest.transcriptSpeakerName == "話し手")
     }
 }

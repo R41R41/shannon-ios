@@ -82,3 +82,44 @@ struct ShannonSpeechEchoGuard {
         Set(pairList(of: text))
     }
 }
+
+/// Decides when a transcript has to be compared with Shannon's own speech.
+///
+/// Recognition lags, so her last words can arrive just after playback ends; that grace period
+/// stays. A short transcript whose speech *began* after she had finished is a person answering
+/// her — 「はじめまして」 back to 「はじめまして、シャノンです」 — and is not compared at all.
+/// Longer transcripts keep the full check, because an echo delayed by a slow network is long.
+struct ShannonVoiceEchoWindow: Equatable, Sendable {
+    enum Origin: Equatable, Sendable { case unknown, duringPlayback, afterPlayback }
+
+    static let graceSeconds: TimeInterval = 5
+    /// Speaker output and room echo trail the last scheduled sample slightly.
+    static let playbackTailSeconds: TimeInterval = 0.25
+
+    private(set) var playbackEndedAt: TimeInterval?
+    private(set) var origin: Origin = .unknown
+
+    mutating func playbackEnded(at now: TimeInterval) {
+        playbackEndedAt = now
+    }
+
+    /// The first speech start since the last transcript decides where that transcript came from.
+    mutating func speechStarted(isSpeaking: Bool, now: TimeInterval) {
+        guard origin == .unknown else { return }
+        let inTail = playbackEndedAt.map { now < $0 + Self.playbackTailSeconds } ?? false
+        origin = isSpeaking || inTail ? .duringPlayback : .afterPlayback
+    }
+
+    mutating func shouldCompare(_ transcript: String, isSpeaking: Bool, now: TimeInterval) -> Bool {
+        defer { origin = .unknown }
+        if isSpeaking { return true }
+        guard let playbackEndedAt, now < playbackEndedAt + Self.graceSeconds else { return false }
+        let short = ShannonSpeechEchoGuard.normalized(transcript).count < ShannonSpeechEchoGuard.fuzzyMinimumCharacters
+        return !(origin == .afterPlayback && short)
+    }
+
+    mutating func reset() {
+        playbackEndedAt = nil
+        origin = .unknown
+    }
+}

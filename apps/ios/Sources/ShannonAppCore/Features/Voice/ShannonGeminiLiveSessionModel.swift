@@ -46,8 +46,11 @@ public final class ShannonGeminiLiveSessionModel {
     private var duckRestoreTask: Task<Void, Never>?
     var echoGuard = ShannonSpeechEchoGuard()
     /// Recognition lags speech, so Shannon's own last words can arrive as a transcript after playback ends.
-    private var echoGraceUntil: TimeInterval = 0
+    var echoWindow = ShannonVoiceEchoWindow()
+    /// This call's 「友人も一緒」 turns. Memory only; dropped when the call ends.
+    var guestCall = ShannonVoiceGuestCallState()
     private var bargeCandidateStartedAt: TimeInterval?
+    private var heardRightAfterShannon = false
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
     var responseCommitTask: Task<Bool, Never>?
@@ -82,7 +85,10 @@ public final class ShannonGeminiLiveSessionModel {
         let retained = sameCall ? pendingTurns : ShannonPendingVoiceTurns()
         let retainedMute = sameCall && isMicrophoneMuted
         let retainedStart = sameCall ? callStartedAt : nil
+        let retainedGuestCall = sameCall ? guestCall : ShannonVoiceGuestCallState()
         stop()
+        guestCall = retainedGuestCall
+        setKeepsScreenAwake(true)
         pendingTurns = retained
         isMicrophoneMuted = retainedMute
         callStartedAt = retainedStart
@@ -97,7 +103,7 @@ public final class ShannonGeminiLiveSessionModel {
         self.participantMode = participantMode
         self.speechProvider = speechProvider
         resetMeasurements()
-        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
+        userTranscript = pendingTurns.displayText
         errorMessage = nil
         failureRecovery = nil
         phase = .requestingPermission
@@ -173,6 +179,8 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
+        guestCall = ShannonVoiceGuestCallState()
+        setKeepsScreenAwake(false)
         finalizeTask = nil
         duckRestoreTask = nil
         if session != nil { recordSessionSummary() }
@@ -219,8 +227,8 @@ public final class ShannonGeminiLiveSessionModel {
             return false
         }
         interruptResponse()
-        pendingTurns.append(rawText: value, text: value, source: .typed)
-        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
+        appendUtterance(rawText: value, text: value, source: .typed)
+        userTranscript = pendingTurns.displayText
         textSendState = .sending(text: value)
         beginResponse()
         return true
@@ -288,11 +296,17 @@ public final class ShannonGeminiLiveSessionModel {
             phase = .listening
             if callStartedAt == nil { callStartedAt = Date() }
         case .speechStarted:
+            echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
         case .speechStopped:
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
             if discardsAsEcho(text) { return }
+            if !turnAssembler.hasFinalText {
+                heardRightAfterShannon = ShannonVoiceGuestCallState.follows(
+                    shannonTurnEndedAt: echoWindow.playbackEndedAt, isSpeaking: responseTask != nil,
+                    now: ProcessInfo.processInfo.systemUptime)
+            }
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
@@ -308,18 +322,19 @@ public final class ShannonGeminiLiveSessionModel {
     private func discardsAsEcho(_ text: String) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
         let speaking = responseTask != nil
-        guard speaking || now < echoGraceUntil, echoGuard.isEcho(text, now: now) else { return false }
+        guard echoWindow.shouldCompare(text, isSpeaking: speaking, now: now),
+              echoGuard.isEcho(text, now: now) else { return false }
         ShannonVoiceDiagnostics.shared.record("gemini.input.echo.discarded",
             metadata: ["characters": String(text.count), "during_playback": String(speaking)])
         return true
     }
 
     func markPlaybackEnded() {
-        echoGraceUntil = ProcessInfo.processInfo.systemUptime + 5
+        echoWindow.playbackEnded(at: ProcessInfo.processInfo.systemUptime)
     }
 
     private func previewInput(_ current: String) -> String {
-        (pendingTurns.turns.map(\.rawText) + [current]).joined(separator: "\n")
+[pendingTurns.displayText, current].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
@@ -361,9 +376,10 @@ public final class ShannonGeminiLiveSessionModel {
         finalizeTask = nil
         guard let envelope = turnAssembler.finish() else { return }
         ShannonVoiceTurnDiagnostics.recordAssembled(envelope, turnComplete: turnComplete)
-        userTranscript = envelope.normalizedText
-        pendingTurns.append(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText, source: .speech)
-        userTranscript = pendingTurns.turns.map(\.rawText).joined(separator: "\n")
+        appendUtterance(id: envelope.id, rawText: envelope.rawText, text: envelope.normalizedText,
+            source: .speech, addressedByName: envelope.addressee == "shannon",
+            followsShannonTurn: heardRightAfterShannon)
+        userTranscript = pendingTurns.displayText
         beginResponse()
     }
     /// A sound heard while Shannon speaks may be her own voice returning through the microphone, so
@@ -391,7 +407,7 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    private func interruptResponse() {
+    func interruptResponse() {
         guard responseTask != nil else { return }
         ShannonVoiceDiagnostics.shared.record("gemini.response.interrupted",
             sessionID: responseGenerationID?.uuidString,
@@ -415,6 +431,14 @@ public final class ShannonGeminiLiveSessionModel {
         phase = .listening
     }
 
+    /// Speech heard but not yet turned into a turn must not cross a participant switch.
+    func discardUnfinalizedInput() {
+        finalizeTask?.cancel()
+        finalizeTask = nil
+        turnAssembler.reset()
+        heardRightAfterShannon = false
+    }
+
     func updateCost() {
         estimatedCostUsd = inputAudioSeconds / 60 * (session?.inputUsdPerMinute ?? 0) + ttsCostUsd
     }
@@ -424,7 +448,7 @@ public final class ShannonGeminiLiveSessionModel {
         shannonTranscript = ""
         turnAssembler.reset()
         echoGuard.reset()
-        echoGraceUntil = 0
+        echoWindow.reset()
         inputAudioSeconds = 0
         outputAudioSeconds = 0
         ttsCostUsd = 0

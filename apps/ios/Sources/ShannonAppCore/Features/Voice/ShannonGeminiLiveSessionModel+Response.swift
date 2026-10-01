@@ -45,11 +45,15 @@ extension ShannonGeminiLiveSessionModel {
                 if let previousCommit { _ = await previousCommit.value }
                 try requireCurrentResponse(generation)
                 // Authorization remains the last actual utterance, never an LLM reconstruction.
+                // 「友人も一緒」 sends this call's own turns; an owner turn never carries them.
                 let utterance = ShannonVoiceUserUtteranceDTO(
                     id: batch.id.uuidString, text: batch.turns[batch.turns.count - 1].text,
-                    source: batch.source, rawText: batch.rawText
+                    source: batch.source, rawText: batch.rawText.isEmpty ? nil : batch.rawText,
+                    callContext: mode == .guest ? guestCall.requestContext(
+                        addressedByName: batch.addressedByName, followsShannonTurn: batch.followsShannonTurn) : nil
                 )
-                let response = try await performStreamingDelegation(batch.text, utterance, mode) {
+                let localReply = mode == .owner ? batch.localReply : nil
+                let onSegment: ShannonVoiceSegmentHandler = {
                     [weak self] segment, plan in
                     guard let self, self.responseGenerationID == generation, !Task.isCancelled else { return }
                     let firstText = self.latencyMeasurements.firstTextMilliseconds == nil
@@ -63,12 +67,24 @@ extension ShannonGeminiLiveSessionModel {
                     self.echoGuard.recordSpoken(segment, at: ProcessInfo.processInfo.systemUptime)
                     await coordinator.enqueue(segment, plan: plan)
                 }
+                let response = if let localReply {
+                    await ShannonVoiceLocalReply.deliver(localReply, onSegment: onSegment)
+                } else {
+                    try await performStreamingDelegation(batch.text, utterance, mode, onSegment)
+                }
                 try requireCurrentResponse(generation)
                 try responseDelivery.complete(response, batch: batch, ledger: &pendingTurns)
                 shannonTranscript = response.reply
                 textSendState = .idle
                 latencyMeasurements.recordServerMetrics(response.voiceMetrics)
-                handleDelegationResponse?(response)
+                if mode == .guest {
+                    // Kept for this call only; a later owner turn never sees it.
+                    guestCall.record(participant: batch.rawText, shannon: response.reply)
+                } else if localReply != nil {
+                    guestCall.askedAboutCompanion(now: ProcessInfo.processInfo.systemUptime)
+                } else {
+                    handleDelegationResponse?(response)
+                }
                 ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,
                     metadata: ["acknowledged_input_count": String(batch.turns.count)])
                 if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
@@ -143,7 +159,7 @@ extension ShannonGeminiLiveSessionModel {
                 phase = .listening
                 errorMessage = responseDelivery.failureMessage
                 if responseDelivery.response == nil,
-                   let text = batch.turns.last(where: { $0.source == .typed })?.text {
+                   let text = batch.turns.last(where: { $0.source == .typed && !$0.isIntroductionCue })?.text {
                     textSendState = .failed(text: text, message: "入力を保持しています。次の発話にも引き継ぎます。")
                 }
             }
