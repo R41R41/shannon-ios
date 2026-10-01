@@ -18,7 +18,7 @@ import type { ConversationStore } from './conversationStore.js';
 import type { DailyMindReader } from './dailyMind.js';
 import type { KnowledgeStore } from './knowledgeStore.js';
 import type { ShannonChatModel } from './chatModel.js';
-import type { VoiceDecisionGateway, VoiceTurnDecision } from './voiceDecision.js';
+import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDecision } from './voiceDecision.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from './turnMemoryRecall.js';
 import { visibleConversationHistory } from './memoryVisibility.js';
@@ -182,7 +182,12 @@ async function completeLiveVoiceDelegation(
   const routingHistory = temporaryGuest ? guestHistory
     : visibleConversationHistory(routingState!, dependencies.conversationStore, scopeKey, threadId);
   const rawTranscript = deviceContext?.userUtterance?.rawText ?? transcript;
-  let decision = await dependencies.voiceDecision.decide({
+  // At a shared table Shannon answers when addressed and otherwise stays quiet. Overheard
+  // talk is settled by local rules, so it costs no router or reply model call.
+  const address = temporaryGuest
+    ? guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source) : null;
+  const router = address && !address.respond ? new LocalVoiceDecisionGateway() : dependencies.voiceDecision;
+  let decision = await router.decide({
     scopeKey, transcript, rawTranscript, participantMode,
     context: boundedVoiceHistory(routingHistory, 4),
     requestedLocation: deviceContext?.requestedLocation ?? false,
@@ -196,10 +201,7 @@ async function completeLiveVoiceDelegation(
   if (uncertainTranscript && !decision.shouldRespond) {
     decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
   }
-  // At a shared table Shannon answers when addressed and otherwise stays quiet.
-  if (temporaryGuest) {
-    decision = applyGuestAddressing(decision, guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source));
-  }
+  if (address) decision = applyGuestAddressing(decision, address);
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !temporaryGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;

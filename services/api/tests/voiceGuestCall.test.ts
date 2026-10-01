@@ -3,6 +3,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { InMemoryOrganizeStore } from '../src/organize.js';
+import { LocalVoiceDecisionGateway } from '../src/voiceDecision.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import {
   VOICE_CALL_SUMMARY_HEADING, VOICE_CALL_SUMMARY_PATH, acceptedSummary, fallbackVoiceCallSummary,
@@ -210,6 +211,20 @@ describe('友人も一緒: answering only when addressed', () => {
     expect(response).toMatchObject({ status: 200, body: { reply: '', voicePlan: { shouldRespond: false } } });
     expect(model.voiceRequests).toHaveLength(0);
     expect(model.requests).toHaveLength(0);
+  });
+
+  it('does not call the router model for overheard talk', async () => {
+    const local = new LocalVoiceDecisionGateway();
+    const routed: string[] = [];
+    const api = createLocalApiKernel(() => at, { chatModel: new RecordingModel(), voiceDecision: {
+      mode: 'openai', model: 'router-test',
+      decide: input => { routed.push(input.transcript); return local.decide(input); },
+    } });
+    await api.dispatch({ method: 'POST', path: delegations,
+      body: guestBody('thread', '声とか返答のモデルは外部のものを使ってる。', quiet) });
+    expect(routed).toEqual([]);
+    await api.dispatch({ method: 'POST', path: delegations, body: guestBody('thread', 'シャノン、何ができるの？', quiet) });
+    expect(routed).toEqual(['シャノン、何ができるの？']);
   });
 
   it('greets when the owner switches by the control and nobody has spoken yet', async () => {
