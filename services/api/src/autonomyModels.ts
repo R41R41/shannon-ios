@@ -33,7 +33,7 @@ export interface AutonomyModel {
 export const AUTONOMY_FAIL_SAFE_USD_PER_MILLION = Object.freeze({ input: 5, output: 30 });
 
 export const AUTONOMY_MODELS: readonly AutonomyModel[] = Object.freeze([
-  { id: 'gemini-3.8-flash', provider: 'google', label: 'Gemini 3.8 Flash', purposes: ['prose', 'research_reading', 'critique'], usdPerMillion: null },
+  { id: 'gemini-3.8-flash', provider: 'google', label: 'Gemini 3.8 Flash', purposes: ['prose', 'research_reading', 'planning', 'critique'], usdPerMillion: null },
   { id: 'gpt-5.6-luna', provider: 'openai', label: 'GPT-5.6 Luna', purposes: ['research_reading', 'planning'], usdPerMillion: null },
   { id: 'gpt-5.6-terra', provider: 'openai', label: 'GPT-5.6 Terra', purposes: ['prose', 'planning', 'critique'], usdPerMillion: null },
   { id: 'gpt-5.6-sol', provider: 'openai', label: 'GPT-5.6 Sol', purposes: ['prose', 'critique'], usdPerMillion: null },

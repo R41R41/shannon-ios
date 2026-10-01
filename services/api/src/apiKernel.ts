@@ -203,7 +203,7 @@ export class ShannonApiKernel {
       stateStore: this.stateStore,
       conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore,
-      dailyMind: this.dailyMind,
+      dailyMind: this.dailyMind, autonomy: this.autonomy,
       now: this.now,
       voice: this.voiceIdentity.read(scopeKey).effectiveVoice,
       cognitiveIntents: this.cognitiveIntents,
@@ -369,8 +369,8 @@ export class ShannonApiKernel {
       });
       const cognitiveContext = this.memoryRecall && !explicitCommand && !isOrganizeCommand(message)
         ? await this.memoryRecall.enrich(deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : deterministicContext;
-      const basePrompt = this.knowledgeStore?.promptProjection(body.scopeKey)
-        ?? assembleShannonSystemPrompt(captured);
+      const basePrompt = this.autonomy.identityProjection(body.scopeKey, this.knowledgeStore?.promptProjection(body.scopeKey)
+        ?? assembleShannonSystemPrompt(captured));
       const capabilityContext = explicitCommand ? '' : conversationCapabilityPrompt(body.scopeKey, message,
         { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog });
       const capabilityPrompt = typeof capabilityContext === 'string' ? capabilityContext : await capabilityContext;
@@ -479,7 +479,7 @@ export class ShannonApiKernel {
     return {
       chatModel: this.chatModel, voiceDecision: this.voiceDecision,
       stateStore: this.stateStore, conversationStore: this.conversationStore,
-      knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, agentTasks: this.agentTasks,
+      knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, autonomy: this.autonomy, agentTasks: this.agentTasks,
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,

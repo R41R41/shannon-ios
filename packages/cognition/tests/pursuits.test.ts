@@ -6,7 +6,12 @@ import {
   SHANNON_SEED_PURSUITS,
   autonomyDomain,
   autonomyDomainLabel,
+  buildShannonOwnWorkPrompt,
   buildShannonPursuitsPrompt,
+  shannonAutonomyRuleLines,
+  shannonCapabilityPrompt,
+  shannonIdentityPrompt,
+  withAutonomyRunning,
   isSeedPursuitId,
   seedPursuits,
   shannonPersonaPrompt,
@@ -75,5 +80,61 @@ describe('autonomy domains', () => {
     expect(autonomyDomain(undefined)).toBeNull();
     expect(autonomyDomainLabel('anything_else')).toBe('不明な範囲');
     expect(autonomyDomainLabel('system')).toBe('設定と承認');
+  });
+});
+
+describe('her own work in an owner prompt', () => {
+  it('is absent when she has done and made nothing', () => {
+    expect(buildShannonOwnWorkPrompt(null)).toBe('');
+    expect(buildShannonOwnWorkPrompt(undefined)).toBe('');
+    expect(buildShannonOwnWorkPrompt({ today: [], pieces: [] })).toBe('');
+  });
+
+  it('says what she did today and what she is making, without the title of a piece she has not shown', () => {
+    const prompt = buildShannonOwnWorkPrompt({
+      today: ['次にすることを考えた', '公開ページを2つ読んだ', 'メモを2つ書いた'],
+      pieces: [{ stage: '下書き・第2稿' }, { title: '傘のある駅', stage: '第1稿・見せた' }],
+    });
+    expect(prompt.split('\n')).toEqual([
+      '[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）',
+      '- 今日したこと: 次にすることを考えた、公開ページを2つ読んだ、メモを2つ書いた',
+      '- 作っている物語: 下書き・第2稿（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）',
+      '- 物語「傘のある駅」: 第1稿・見せた',
+    ]);
+  });
+
+  it('stays bounded', () => {
+    const long = buildShannonOwnWorkPrompt({
+      today: Array.from({ length: 20 }, (_, index) => `とても長い説明${'あ'.repeat(40)}${index}`),
+      pieces: Array.from({ length: 9 }, (_, index) => ({ title: `題${'い'.repeat(100)}${index}`, stage: '第1稿・見せた' })),
+    });
+    expect(long.length).toBeLessThanOrEqual(320);
+    expect(buildShannonOwnWorkPrompt({ today: ['考えた'], pieces: [] }, { maximumCharacters: 20 })).toBe('');
+  });
+});
+
+describe('autonomy wording while the loop runs', () => {
+  it('replaces only the line that says the mechanism is being prepared', () => {
+    const preparing = shannonAutonomyRuleLines('owner');
+    const running = shannonAutonomyRuleLines('owner', { running: true });
+    expect(preparing[0]).toContain('仕組みは準備中');
+    expect(running[0]).toBe('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライ氏が止められる）:');
+    expect(running.slice(1)).toEqual(preparing.slice(1));
+    // A guest hears neither.
+    expect(shannonAutonomyRuleLines('guest', { running: true })).toEqual(shannonAutonomyRuleLines('guest'));
+    expect(shannonAutonomyRuleLines('guest').join('')).not.toMatch(/準備中|ひとりの時間/u);
+  });
+
+  it('gives the same result on an assembled prompt and leaves other prompts alone', () => {
+    const identity = shannonIdentityPrompt('owner');
+    const running = withAutonomyRunning(identity);
+    expect(running).not.toContain('仕組みは準備中');
+    expect(running).toContain(shannonAutonomyRuleLines('owner', { running: true }).join('\n'));
+    expect(running.replace(shannonAutonomyRuleLines('owner', { running: true })[0]!, shannonAutonomyRuleLines('owner')[0]!)).toBe(identity);
+    expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
+    expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
+    // The running wording still fits the response-path budget of the capability block.
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(1_400);
+    expect(running.length).toBeLessThanOrEqual(2_350);
   });
 });

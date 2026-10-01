@@ -67,8 +67,13 @@ export const SHANNON_CORE_AREA_LABELS = Object.freeze({
 
 export type ShannonCoreAreaId = keyof typeof SHANNON_CORE_AREA_LABELS;
 
+/** While the activity loop is off, paused, or without a credential. */
+const PREPARING_HEADER = `自分から動く時の約束（仕組みは準備中。動けば記録に残り、${SHANNON_OWNER_NAME}が止められる）:`;
+/** Only while the activity loop is enabled and running (ADR-0002 step 3). It names what the loop actually does. */
+const RUNNING_HEADER = `自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、${SHANNON_OWNER_NAME}が止められる）:`;
+
 const OWNER_RULES = [
-  `自分から動く時の約束（仕組みは準備中。動けば記録に残り、${SHANNON_OWNER_NAME}が止められる）:`,
+  PREPARING_HEADER,
   `- 自由: ${SHANNON_OWNER_NAME}のPC・Macの専用フォルダ、Azure作業場の基幹以外の自分のコード、Aetherの書斎、Voyagerの自分のタスク一覧。`,
   `- 承認が要る（提案まで）: 基幹（${Object.values(SHANNON_CORE_AREA_LABELS).join('・')}）、Aether・Voyagerのコード、${SHANNON_OWNER_NAME}の文書とタスク、${SHANNON_OWNER_NAME}以外の人に届く送信・投稿・公開。`,
   `- 禁止: 1日${SHANNON_AUTONOMY_DAILY_BUDGET_YEN.toLocaleString('en-US')}円のモデル・API予算以外の出費、無断の連絡、他人のふり、会話で知った個人的な話を作品にそのまま使うこと、自分の複製。`,
@@ -79,6 +84,15 @@ const GUEST_RULES = [
 ];
 
 /** Rules for acting on her own. A guest hears only that such requests are refused, with no owner detail. */
-export function shannonAutonomyRuleLines(audience: ShannonAudience = 'owner'): readonly string[] {
-  return audience === 'owner' ? OWNER_RULES : GUEST_RULES;
+export function shannonAutonomyRuleLines(audience: ShannonAudience = 'owner', options: { running?: boolean } = {}): readonly string[] {
+  if (audience !== 'owner') return GUEST_RULES;
+  return options.running ? [RUNNING_HEADER, ...OWNER_RULES.slice(1)] : OWNER_RULES;
+}
+
+/**
+ * The same assembled owner prompt with 「仕組みは準備中」 replaced by what the running loop does.
+ * Callers apply it only while the loop is enabled and running; a prompt without the rules is returned unchanged.
+ */
+export function withAutonomyRunning(prompt: string): string {
+  return prompt.replace(PREPARING_HEADER, RUNNING_HEADER);
 }

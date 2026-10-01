@@ -98,3 +98,34 @@ export function buildShannonPursuitsPrompt(
   }
   return result === header ? '' : result;
 }
+
+/**
+ * What she is doing in her own time, from the activity record and her study: facts, not
+ * wishes. A piece she has not shown yet has no title here, so the reply cannot give it
+ * away before she decides to.
+ */
+export interface ShannonOwnWork {
+  /** What she did today, each already a short phrase such as 「公開ページを2つ読んだ」. */
+  readonly today: readonly string[];
+  readonly pieces: readonly { readonly title?: string; readonly stage: string }[];
+}
+
+/** Compact, bounded lines for an owner one-to-one prompt. Empty when there is nothing to say. */
+export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefined, options: { maximumCharacters?: number } = {}): string {
+  if (!work) return '';
+  const maximumCharacters = Math.max(0, options.maximumCharacters ?? 320);
+  const lines = [
+    ...(work.today.length ? [`- 今日したこと: ${work.today.slice(0, 6).join('、')}`] : []),
+    ...work.pieces.slice(0, 3).map(piece => (piece.title
+      ? `- 物語「${piece.title.slice(0, 40)}」: ${piece.stage}`
+      : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),
+  ];
+  if (!lines.length) return '';
+  const header = '[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）';
+  let result = header;
+  for (const line of lines) {
+    if (result.length + 1 + line.length > maximumCharacters) break;
+    result += `\n${line}`;
+  }
+  return result === header ? '' : result;
+}

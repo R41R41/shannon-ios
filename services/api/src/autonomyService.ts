@@ -1,6 +1,8 @@
 import {
   SHANNON_AUTONOMY_SYSTEM_DOMAIN,
+  buildShannonOwnWorkPrompt,
   buildShannonPursuitsPrompt,
+  withAutonomyRunning,
   type ShannonPursuit,
   type ShannonPursuitLink,
   type ShannonPursuitStatus,
@@ -8,6 +10,7 @@ import {
 import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from './autonomyActivity.js';
 import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
+import { autonomyLoopStatus, type AutonomyLoopStatus } from './autonomyDayLog.js';
 import {
   autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd,
   type AutonomyBudgetStatus, type AutonomyConfig,
@@ -21,13 +24,14 @@ import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyD
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
+import { StudyDesk } from './studyDesk.js';
 
 /**
  * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current
  * stop switch and budget, writes every decision to the activity record, and offers
  * the only functions through which Shannon's own activity may write (each one asks the
- * gate first). The owner-side functions back the HTTP routes. No activity loop calls
- * the Shannon-side functions yet (ADR-0002 step 3).
+ * gate first). The owner-side functions back the HTTP routes. The activity loop
+ * (`autonomyLoop.ts`, its own process) is the only caller of the Shannon-side functions.
  */
 export interface AutonomyServiceDependencies {
   store: SQLiteAutonomyStore;
@@ -50,6 +54,8 @@ export type AutonomyControlLabel = 'disabled' | 'paused' | 'active';
 
 export interface AutonomyOverview {
   control: { state: AutonomyControlLabel; enabled: boolean; paused: boolean; changedAt: string | null };
+  /** What the activity loop is doing, in the words the owner's screens show. */
+  loop: AutonomyLoopStatus;
   budget: AutonomyBudgetStatus;
   budgetRequest: AutonomyBudgetRequest | null;
   maximumExtraYen: number;
@@ -79,6 +85,8 @@ export class ShannonAutonomyService {
   private readonly now: () => string;
   private readonly announcer: AutonomyAnnouncer;
   private readonly resolvePath: AutonomyPathResolver;
+  /** The owner's side of her study: reading, reacting, asking her to put a piece away. */
+  readonly study: StudyDesk;
 
   constructor(private readonly dependencies: AutonomyServiceDependencies) {
     this.store = dependencies.store;
@@ -86,6 +94,7 @@ export class ShannonAutonomyService {
     this.now = dependencies.now;
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
+    this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now);
   }
 
   // MARK: The gate
@@ -260,12 +269,17 @@ export class ShannonAutonomyService {
     const dayKey = autonomyDayKey(at, this.config);
     const control = this.store.control(scopeKey);
     const proposals = this.store.proposals.list(scopeKey);
+    const budget = this.budget(scopeKey, dayKey);
     return Object.freeze({
       control: {
         state: !this.config.enabled ? 'disabled' as const : control.paused ? 'paused' as const : 'active' as const,
         enabled: this.config.enabled, paused: control.paused, changedAt: control.changedAt,
       },
-      budget: this.budget(scopeKey, dayKey),
+      loop: autonomyLoopStatus({
+        enabled: this.config.enabled, paused: control.paused, heartbeat: this.store.loop.heartbeat(), at,
+        budgetStopped: budget.exhausted || this.store.loop.budgetBlocked(scopeKey, dayKey, budget.capYen),
+      }),
+      budget,
       budgetRequest: this.store.budgetRequest(scopeKey, dayKey),
       maximumExtraYen: this.config.maximumExtraYenPerDay,
       pursuits: this.store.pursuits.list(scopeKey, at),
@@ -367,9 +381,26 @@ export class ShannonAutonomyService {
 
   // MARK: Prompt
 
-  /** Bounded projection of her current pursuits for an owner response prompt. Empty when there is nothing to add. */
+  /**
+   * Bounded projection for an owner one-to-one prompt: her current pursuits and, once she has done
+   * or made something, a few lines of what she is working on. Empty when there is nothing to add.
+   */
   pursuitPrompt(scopeKey: string): string {
-    try { return buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, this.now())); } catch { return ''; }
+    try {
+      const at = this.now();
+      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at)), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at))]
+        .filter(Boolean).join('\n\n');
+    } catch { return ''; }
+  }
+
+  /** The owner prompt as it is, or without 「仕組みは準備中」 while the activity loop is enabled and running. */
+  identityProjection(scopeKey: string, prompt: string): string {
+    // The server switch is read first: while it is off the wording cannot change and nothing else is looked up.
+    if (!this.config.enabled) return prompt;
+    try {
+      const state = this.overview(scopeKey).loop.state;
+      return state === 'running' || state === 'budget_exhausted' ? withAutonomyRunning(prompt) : prompt;
+    } catch { return prompt; }
   }
 
   private budget(scopeKey: string, dayKey: string): AutonomyBudgetStatus {

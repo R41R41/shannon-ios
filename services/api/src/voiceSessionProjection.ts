@@ -22,6 +22,8 @@ export interface VoiceSessionDependencies {
   conversationStore: ConversationStore;
   knowledgeStore: KnowledgeStore | null;
   dailyMind: DailyMindReader | null;
+  /** Her own pursuits and work, and the autonomy wording of the identity block. Owner sessions only. */
+  autonomy?: { pursuitPrompt(scopeKey: string): string; identityProjection(scopeKey: string, prompt: string): string };
   now: CompanionClock;
   voice: string;
   cognitiveIntents: CognitiveIntentStore;
@@ -54,9 +56,11 @@ export function realtimeVoiceSessionProjection(
   }
   const threadId = dependencies.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
   const captured = dependencies.stateStore.snapshot(scopeKey);
-  const basePrompt = dependencies.knowledgeStore?.promptProjection(scopeKey)
+  const identity = dependencies.knowledgeStore?.promptProjection(scopeKey)
     ?? assembleShannonSystemPrompt(captured);
-  const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
+  const basePrompt = dependencies.autonomy?.identityProjection(scopeKey, identity) ?? identity;
+  const dailyMindPrompt = [dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '', dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '']
+    .filter(Boolean).join('\n\n');
   const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, OWNER_AUDIENCE));
   const occurredAt = dependencies.now();
   const primaryIntent = selectPrimaryIntent('', threadId, dependencies.cognitiveIntents.list(scopeKey, 'active'), occurredAt);

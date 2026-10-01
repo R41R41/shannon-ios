@@ -68,6 +68,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   conversationStore: ConversationStore;
   knowledgeStore: KnowledgeStore | null;
   dailyMind: DailyMindReader | null;
+  /** Her own pursuits and work, and the autonomy wording of the identity block. */
+  autonomy?: { pursuitPrompt(scopeKey: string): string; identityProjection(scopeKey: string, prompt: string): string };
   agentTasks: AgentTaskStore;
   now: CompanionClock;
   cognitiveIntents: CognitiveIntentStore;
@@ -274,15 +276,16 @@ async function completeLiveVoiceDelegation(
     ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
+  const ownerIdentity = (prompt: string) => dependencies.autonomy?.identityProjection(scopeKey, prompt) ?? prompt;
   const basePrompt = temporaryGuest
     ? [shannonIdentityPrompt('guest'), voiceConversationInstructions(true, false, false), temporaryGuestVoiceInstructions,
       guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0)].join('\n\n')
     : [
       // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
       // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
-      selectedSkills.has('conversation_memory') && alone
+      ownerIdentity(selectedSkills.has('conversation_memory') && alone
         ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured)
-        : shannonIdentityPrompt('owner'),
+        : shannonIdentityPrompt('owner')),
       voiceConversationInstructions(true),
     ].join('\n\n');
   // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
@@ -308,6 +311,8 @@ async function completeLiveVoiceDelegation(
     // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
     guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
     dailyMindPrompt,
+    // What she is doing in her own time: only when the owner is alone with her.
+    alone && !temporaryGuest && !legacyGuest ? dependencies.autonomy?.pursuitPrompt(scopeKey) : '',
     taskPrompt,
     capabilityPrompt,
     [

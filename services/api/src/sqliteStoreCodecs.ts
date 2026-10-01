@@ -6,7 +6,7 @@ import { reminderReference, type ReminderReference } from './turnCaptures.js';
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
 export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
-export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; }
+export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; studyPiece?: { id: string; title: string }; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
   return restoreCompanionState(expectedScopeKey, parseJson(raw), nowIso);
@@ -30,6 +30,7 @@ export function freezeStoredMessage(row: MessageRow): StoredConversationMessage 
     ...(metadata?.sourceAttribution ? {
       sourceAttribution: Object.freeze({ ...metadata.sourceAttribution }),
     } : {}),
+    ...(metadata?.studyPiece ? { studyPiece: Object.freeze({ ...metadata.studyPiece }) } : {}),
     ...(metadata?.reminder ? { reminder: Object.freeze({ ...metadata.reminder }) } : {}),
     ...(metadata?.recalledMemoryIds ? { recalledMemoryIds: metadata.recalledMemoryIds } : {}),
   });
@@ -45,11 +46,18 @@ export function parseMessageMetadata(raw: string): MessageMetadata | null {
     ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),
     ...(validGeneratedArtifacts(row.artifacts) ? { artifacts: row.artifacts } : {}),
     ...(validSourceAttribution(row.sourceAttribution) ? { sourceAttribution: row.sourceAttribution } : {}),
+    ...(validStudyPiece(row.studyPiece) ? { studyPiece: { id: row.studyPiece.id, title: row.studyPiece.title } } : {}),
     // Every reminder already stores its initiative source reference, so older rows resolve too.
     ...(reminderReference((value as { sourceItemId?: unknown }).sourceItemId)
       ? { reminder: reminderReference((value as { sourceItemId?: unknown }).sourceItemId)! } : {}),
     ...(boundedRecalledMemoryIds(row.recalledMemoryIds) ? { recalledMemoryIds: boundedRecalledMemoryIds(row.recalledMemoryIds)! } : {}),
   };
+}
+
+export function validStudyPiece(value: unknown): value is { id: string; title: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as { id?: unknown; title?: unknown };
+  return typeof row.id === 'string' && /^[A-Za-z0-9-]{1,80}$/u.test(row.id) && typeof row.title === 'string' && row.title.length <= 120;
 }
 
 export function validSourceAttribution(value: unknown): value is ShannonSourceAttribution {
