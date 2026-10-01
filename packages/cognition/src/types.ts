@@ -55,6 +55,37 @@ export interface ShannonExpressiveEmotion {
   overrideReason?: ShannonEmotionOverrideReason;
 }
 
+/** Who was present when something was said to Shannon. The owner is always part of it. */
+export type MemoryAudience =
+  | { kind: 'owner' }
+  /** The owner plus these remembered people; `unknownGuest` marks someone present whose name was never established. */
+  | { kind: 'people'; personIds: readonly string[]; unknownGuest?: boolean }
+  /** One platform conversation (a channel or group) as a unit. */
+  | { kind: 'group'; groupKey: string };
+
+export type MemorySensitivity = 'sensitive' | 'ordinary';
+
+export const MEMORY_SENSITIVITY_CATEGORIES = [
+  'secret', 'health', 'mental', 'money', 'contact', 'romance_family', 'work', 'legal', 'schedule',
+  'third_party', 'unknown_audience',
+] as const;
+export type MemorySensitivityCategory = typeof MEMORY_SENSITIVITY_CATEGORIES[number];
+
+/**
+ * The audience and sensitivity recorded when an item is stored. An item without one is
+ * owner-only and sensitive; see `disclosure.ts` for the rule that reads it.
+ */
+export interface MemoryDisclosure {
+  audience?: MemoryAudience;
+  sensitivity?: MemorySensitivity;
+  category?: MemorySensitivityCategory;
+  /** Why the rule decided so, for example the matched word. Shown to the owner. */
+  reason?: string;
+  decidedBy?: 'rule' | 'owner';
+  /** Who spoke the user side of a turn. Absent: the owner when the audience is owner-only, otherwise unknown. */
+  speaker?: 'owner' | 'unknown';
+}
+
 export interface UserFact {
   id: string;
   statement: string;
@@ -62,6 +93,7 @@ export interface UserFact {
   observedAt: string;
   evidence?: string;
   sourceExperienceId?: string;
+  disclosure?: MemoryDisclosure;
 }
 
 export interface ActiveMemory {
@@ -78,6 +110,7 @@ export interface RelationshipInsight {
   observedAt: string;
   evidence?: string;
   sourceExperienceId?: string;
+  disclosure?: MemoryDisclosure;
 }
 
 export interface ProspectiveMemory {
@@ -94,6 +127,7 @@ export interface ProspectiveMemory {
   evidence?: string;
   /** Set when the owner answers a reminder with 「あとで」: no further reminder before this instant. */
   remindAfter?: string;
+  disclosure?: MemoryDisclosure;
 }
 
 export type MemoryKind = 'user-fact' | 'interest' | 'experience' | 'relationship';
@@ -119,6 +153,8 @@ export interface MemoryControl {
   causedBy?: string;
   /** A promise's status before a forget or reject dismissed it, so restore can put it back. */
   commitmentStatusBefore?: ProspectiveMemory['status'];
+  /** The owner's own choice of 機微／ふつう for this item. It wins over the stored rule decision. */
+  sensitivity?: MemorySensitivity;
 }
 
 export interface CompanionStateSnapshot {

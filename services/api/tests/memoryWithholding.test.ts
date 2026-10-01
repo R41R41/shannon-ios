@@ -1,3 +1,4 @@
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,7 +58,7 @@ function longThread(state: CompanionStateStore, history: ConversationStore, thre
 }
 
 const assistantReplies = (state: CompanionStateStore, history: ConversationStore, thread: string) =>
-  visibleConversationHistory(state.snapshot('owner'), history, 'owner', thread).filter(item => item.role === 'assistant').map(item => item.content);
+  visibleConversationHistory(state.snapshot('owner'), history, 'owner', thread, OWNER_AUDIENCE).filter(item => item.role === 'assistant').map(item => item.content);
 
 describe('forgetting one item withholds only what used it (TM-01)', () => {
   it('keeps unrelated earlier replies, withholds the source turn and the reply that restated the fact, and restores them', () => {
@@ -69,7 +70,7 @@ describe('forgetting one item withholds only what used it (TM-01)', () => {
     const service = new ShannonMemoryService(state, history, () => forgetAt);
     service.mutate('owner', { memoryId: scenario.fact.id, action: 'forget' });
 
-    const visible = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a');
+    const visible = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE);
     const replies = visible.filter(item => item.role === 'assistant').map(item => item.content);
     // (a) every unrelated earlier reply is still model history
     for (const [, reply] of unrelated) expect(replies).toContain(`${reply}（0）`);
@@ -109,7 +110,7 @@ describe('forgetting one item withholds only what used it (TM-01)', () => {
     const service = new ShannonMemoryService(state, history, () => forgetAt);
     service.mutate('owner', { memoryId: vague.id, action: 'forget' });
     expect(assistantReplies(state, history, 'thread-a')).toEqual([]);
-    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread-a')).toBeUndefined();
+    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toBeUndefined();
     history.appendTurn('owner', 'thread-a', '続きです', '了解です。', minute(600));
     expect(assistantReplies(state, history, 'thread-a')).toEqual(['了解です。']);
     service.mutate('owner', { memoryId: vague.id, action: 'restore' });
@@ -159,11 +160,11 @@ describe('the same rule from every entrance', () => {
       state.apply('owner', { type: 'memory-control-upserted', control: legacy });
     }
     expect(state.snapshot('owner').memoryControls.every(item => !item.causedBy && item.status === 'forgotten')).toBe(true);
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toEqual([]);
     service.mutate('owner', { memoryId: promise.id, action: 'restore' });
     expect(state.snapshot('owner').memoryControls.every(item => item.status === 'active')).toBe(true);
     expect(state.snapshot('owner').prospectiveMemories[0]!.status).toBe('pending');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toHaveLength(2);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toHaveLength(2);
   });
 
   it('does not lift a control the owner set separately', () => {
@@ -179,7 +180,7 @@ describe('the same rule from every entrance', () => {
     service.mutate('owner', { memoryId: promise.id, action: 'forget' });
     service.mutate('owner', { memoryId: promise.id, action: 'restore' });
     expect(state.snapshot('owner').memoryControls.find(item => item.memoryId === source.id)?.status).toBe('forgotten');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toEqual([]);
   });
 
   it('restoring any item of one forget lifts the whole group', () => {
@@ -194,7 +195,7 @@ describe('the same rule from every entrance', () => {
     service.mutate('owner', { memoryId: promise.id, action: 'restore' });
     expect(state.snapshot('owner').memoryControls.every(item => item.status === 'active' && !item.causedBy)).toBe(true);
     expect(state.snapshot('owner').prospectiveMemories[0]!.status).toBe('pending');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toHaveLength(2);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toHaveLength(2);
   });
 });
 
@@ -208,7 +209,7 @@ describe('summaries follow the turns they were built from', () => {
     return { a: a!, b: b!, c: c!, d: d!, fact: state.snapshot('owner').userFacts[0]! };
   }
   const recalled = (state: CompanionStateStore, history: ConversationStore, thread: string, message: string) =>
-    prepareTurnCognitiveContext(state.snapshot('owner'), history, { scopeKey: 'owner', message, occurredAt: minute(700), channel: 'text', threadId: thread }).frame.recalledMemoryIDs;
+    prepareTurnCognitiveContext(state.snapshot('owner'), history, { present: OWNER_AUDIENCE, scopeKey: 'owner', message, occurredAt: minute(700), channel: 'text', threadId: thread }).frame.recalledMemoryIDs;
 
   it.each(['memory', 'sqlite'] as const)('(c) keeps an unrelated thread summary and drops the tainted ones (%s store)', kind => {
     const persistent = kind === 'sqlite' ? sqlite().store : null;
@@ -220,23 +221,23 @@ describe('summaries follow the turns they were built from', () => {
     service.mutate('owner', { memoryId: fact.id, action: 'forget' });
     const snapshot = () => state.snapshot('owner');
     // unrelated: still the prior summary of its own thread and still recalled from another thread
-    expect(usableThreadSummary(snapshot(), history, 'owner', b)).toBe('Xcodeの署名設定を整理した');
+    expect(usableThreadSummary(snapshot(), history, 'owner', b, OWNER_AUDIENCE)).toBe('Xcodeの署名設定を整理した');
     expect(recalled(state, history, c, 'Xcodeの署名設定どうなった？')).toContain(`thread:${b}`);
     // built from the forgotten turn, or restating the forgotten term: dropped
-    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBeUndefined();
+    expect(usableThreadSummary(snapshot(), history, 'owner', a, OWNER_AUDIENCE)).toBeUndefined();
     expect(recalled(state, history, c, 'ドリンクの好みは？')).not.toContain(`thread:${a}`);
     expect(recalled(state, history, c, '紅茶の銘柄はどれがいい？')).not.toContain(`thread:${d}`);
     // (d) restore brings the summaries back
     service.mutate('owner', { memoryId: fact.id, action: 'restore' });
-    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBe('ドリンクの好みを聞いた');
+    expect(usableThreadSummary(snapshot(), history, 'owner', a, OWNER_AUDIENCE)).toBe('ドリンクの好みを聞いた');
     expect(recalled(state, history, c, 'ドリンクの好みは？')).toContain(`thread:${a}`);
     service.mutate('owner', { memoryId: fact.id, action: 'forget' });
     // the next turn rebuilds the summary from visible history only; it is usable again without a restore
     history.appendTurn('owner', a, '散歩コースを考えたい', '川沿いを北へ歩く案はどうですか。', minute(800), turnContext({ threadSummary: '散歩コースを相談した' }));
-    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBe('散歩コースを相談した');
+    expect(usableThreadSummary(snapshot(), history, 'owner', a, OWNER_AUDIENCE)).toBe('散歩コースを相談した');
     // a continued chain keeps its start, so a later forget is still judged against the whole chain
     history.appendTurn('owner', a, '距離は？', '約3キロです。', minute(801), turnContext({ threadSummary: '散歩コースと距離を相談した', summaryContinuesChain: true }));
-    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBe('散歩コースと距離を相談した');
+    expect(usableThreadSummary(snapshot(), history, 'owner', a, OWNER_AUDIENCE)).toBe('散歩コースと距離を相談した');
     persistent?.close();
   });
 
@@ -294,7 +295,7 @@ describe('recall, search, embeddings and private knowledge never surface the for
     new ShannonMemoryService(store, store, () => forgetAt).mutate('owner', { memoryId: fact.id, action: 'forget' });
     const snapshot = store.snapshot('owner');
 
-    const lexical = (message: string) => prepareTurnCognitiveContext(snapshot, store, { scopeKey: 'owner', message, occurredAt: minute(700), channel: 'text', threadId: 'elsewhere' });
+    const lexical = (message: string) => prepareTurnCognitiveContext(snapshot, store, { present: OWNER_AUDIENCE, scopeKey: 'owner', message, occurredAt: minute(700), channel: 'text', threadId: 'elsewhere' });
     expect(lexical('差し入れは何がいい？').frame.recalledMemoryIDs).not.toContain(restated.id);
     expect(lexical('午後の休憩どうしよう').frame.recalledMemoryIDs).not.toContain(paraphrased.id);
     expect(lexical('差し入れの相談と午後の休憩').frame.recalledMemoryIDs).toEqual(expect.not.arrayContaining([`thread:${b}`, `thread:${c}`]));
@@ -302,7 +303,7 @@ describe('recall, search, embeddings and private knowledge never surface the for
     expect(lexical('飲み物の好みと差し入れと休憩').prompt).not.toContain('紅茶');
 
     const semantic = new SemanticMemoryRecall(new DeterministicMemoryModelGateway(), store, undefined);
-    const hits = async (query: string) => (await semantic.recall({ scopeKey: 'owner', query, snapshot, threadId: 'elsewhere' })).hits.map(hit => hit.id);
+    const hits = async (query: string) => (await semantic.recall({ present: OWNER_AUDIENCE, scopeKey: 'owner', query, snapshot, threadId: 'elsewhere' })).hits.map(hit => hit.id);
     expect(await hits('差し入れは何がいい 紅茶 茶葉')).toEqual(expect.not.arrayContaining([restated.id, `thread:${a}`, `thread:${b}`]));
     expect(await hits('午後の休憩 温かい一杯')).toEqual(expect.not.arrayContaining([paraphrased.id, `thread:${c}`]));
     // an unrelated experience and an unrelated thread summary are still candidates after the forget
@@ -359,7 +360,7 @@ describe('old data and restart safety', () => {
     // provenance survived the restart: one of the two identical paraphrases is withheld, the legacy-shaped one is kept
     expect(replies.filter(reply => reply === '温かい一杯を用意しましょうか。')).toHaveLength(1);
     expect(replies).toHaveLength(scenario.turns - 3);
-    expect(usableThreadSummary(reopened.snapshot('owner'), reopened, 'owner', thread)).toBeUndefined();
+    expect(usableThreadSummary(reopened.snapshot('owner'), reopened, 'owner', thread, OWNER_AUDIENCE)).toBeUndefined();
     const check = new DatabaseSync(first.path);
     expect(Number(check.prepare('SELECT COUNT(*) AS n FROM conversation_messages').get()!.n)).toBe(count);
     expect((check.prepare("PRAGMA table_info('conversation_threads')").all() as Array<{ name: string }>).map(row => row.name)).toContain('summary_chain_started_at');
@@ -391,11 +392,11 @@ describe('listing and promise restore', () => {
     const service = new ShannonMemoryService(state, history, () => forgetAt);
     service.mutate('owner', { memoryId: promise.id, action: 'forget' });
     expect(state.snapshot('owner').prospectiveMemories[0]!.status).toBe('dismissed');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toEqual([]);
     const restored = service.mutate('owner', { memoryId: promise.id, action: 'restore' });
     expect(restored.items.find(item => item.id === promise.id)).toMatchObject({ status: 'active', commitment: { status: 'pending' } });
     expect(buildCompanionStatePrompt(state.snapshot('owner'))).toContain('プレゼン');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toHaveLength(2);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a', OWNER_AUDIENCE)).toHaveLength(2);
     // a promise that was already completed keeps that state through forget and restore
     service.mutate('owner', { memoryId: promise.id, action: 'complete' });
     service.mutate('owner', { memoryId: promise.id, action: 'forget' });

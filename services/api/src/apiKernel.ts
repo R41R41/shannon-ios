@@ -1,5 +1,5 @@
 import {
-  InMemoryCompanionStateStore,
+  InMemoryCompanionStateStore, OWNER_AUDIENCE,
   assembleShannonSystemPrompt,
   resolveReplyEmotion,
   type CompanionClock,
@@ -357,7 +357,7 @@ export class ShannonApiKernel {
       const captured = this.stateStore.snapshot(body.scopeKey);
       const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
       const deterministicContext = prepareTurnCognitiveContext(captured, this.conversationStore, {
-        scopeKey: body.scopeKey, message, occurredAt, channel: 'text',
+        scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: OWNER_AUDIENCE,
         threadId,
         intents: this.cognitiveIntents.list(body.scopeKey, 'active'),
         provisionalIntent,
@@ -404,12 +404,12 @@ export class ShannonApiKernel {
           } satisfies ChatResponse,
         };
       }
-      const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId);
+      const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, OWNER_AUDIENCE);
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
-        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId),
+        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, OWNER_AUDIENCE),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),

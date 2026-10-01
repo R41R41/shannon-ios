@@ -1,4 +1,5 @@
-import { visibleMemoryText, type CompanionStateSnapshot, type SemanticRecallHit } from '@shannon/cognition';
+import { visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience, type SemanticRecallHit } from '@shannon/cognition';
+import { DisclosureGate } from './memoryDisclosure.js';
 import type { MemoryModelGateway } from './memoryModels.js';
 import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';
 import { cosineSimilarity, type MemoryEmbeddingIndex, type StoredEmbeddingCandidate } from './sqliteMemoryEmbeddings.js';
@@ -39,6 +40,8 @@ export interface SemanticRecallInput {
   scopeKey: string;
   query: string;
   snapshot: CompanionStateSnapshot;
+  /** Who can hear or read the reply. Candidates they may not hear are dropped before any model sees them. */
+  present: MemoryAudience;
   threadId?: string;
   excludeIds?: ReadonlySet<string>;
   signal?: AbortSignal;
@@ -122,8 +125,10 @@ export class SemanticMemoryRecall {
   }
 
   private eligibleCandidates(input: SemanticRecallInput, model: string): StoredEmbeddingCandidate[] {
+    const gate = new DisclosureGate(input.present, input.snapshot, conversationStoreOf(this.index), input.scopeKey);
     return this.index!.embeddingCandidates(input.scopeKey, model, this.config.scanLimit).filter(candidate => {
       if (input.excludeIds?.has(candidate.id)) return false;
+      if (!gate.allowsRecallId(candidate.id)) return false;
       if (candidate.kind === 'thread' && candidate.threadId === input.threadId) return false;
       if (candidate.kind === 'knowledge' && !input.isEligible) return false;
       if (input.isEligible && !input.isEligible(candidate)) return false;

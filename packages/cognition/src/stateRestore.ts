@@ -24,6 +24,13 @@ import {
   isCommitmentStatus,
 } from './state.js';
 import { restoreSharedDays } from './temperament.js';
+import { normalizeDisclosure } from './disclosure.js';
+
+/** A label that cannot be read is dropped, which the disclosure rule treats as owner-only and sensitive. */
+function restoredDisclosure(value: unknown) {
+  const disclosure = normalizeDisclosure(value);
+  return disclosure ? { disclosure } : {};
+}
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -105,6 +112,7 @@ export function restoreCompanionState(
       observedAt: restoredTimestamp(value.observedAt, nowIso),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
       ...(restoredText(value.sourceExperienceId, 120) ? { sourceExperienceId: restoredText(value.sourceExperienceId, 120) } : {}),
+      ...restoredDisclosure(value.disclosure),
     });
   }, item => item.id);
   const activeMemories = normalizeMemories(restoredItems(row.activeMemories, MAX_ACTIVE_MEMORIES * 2, value => {
@@ -129,6 +137,7 @@ export function restoreCompanionState(
       observedAt: restoredTimestamp(value.observedAt, nowIso),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
       ...(restoredText(value.sourceExperienceId, 120) ? { sourceExperienceId: restoredText(value.sourceExperienceId, 120) } : {}),
+      ...restoredDisclosure(value.disclosure),
     });
   }, item => item.id);
   const prospectiveMemories = restoredItems(row.prospectiveMemories, MAX_PROSPECTIVE_MEMORIES, value => {
@@ -150,6 +159,7 @@ export function restoreCompanionState(
       ...(typeof value.sourceExperienceId === 'string' ? { sourceExperienceId: value.sourceExperienceId } : {}),
       ...(restoredText(value.evidence, 320) ? { evidence: restoredText(value.evidence, 320) } : {}),
       ...(typeof value.remindAfter === 'string' ? { remindAfter: value.remindAfter } : {}),
+      ...restoredDisclosure(value.disclosure),
     });
   }, item => item.id);
   const memoryControls = restoredItems(row.memoryControls, MAX_MEMORY_CONTROLS, value => {
@@ -173,6 +183,7 @@ export function restoreCompanionState(
       ...(restoredText(value.withheldText, 320) ? { withheldText: restoredText(value.withheldText, 320) } : {}),
       ...(restoredText(value.causedBy, 120) ? { causedBy: restoredText(value.causedBy, 120) } : {}),
       ...(isCommitmentStatus(value.commitmentStatusBefore) ? { commitmentStatusBefore: value.commitmentStatusBefore } : {}),
+      ...(value.sensitivity === 'sensitive' || value.sensitivity === 'ordinary' ? { sensitivity: value.sensitivity } : {}),
     });
   }, item => item.memoryId);
 

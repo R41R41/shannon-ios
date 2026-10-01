@@ -1,3 +1,4 @@
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,7 +36,7 @@ describe('evidence and privacy trust repair', () => {
     new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, at);
     const fact = state.snapshot('owner').userFacts[0]!;
     new ShannonMemoryService(state, history, () => at).mutate('owner', {memoryId: fact.id, action: 'correct', text: 'ユーザーはコーヒーが好き'});
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE)).toEqual([]);
     const result = await consolidateSleepMemory({mode: 'openai', analyze: async () => [{statement: 'ユーザーは紅茶を好む', evidence: '私は紅茶が好き'}]},
       [{content: source.userMessage, observedAt: at, sourceExperienceId: source.id}], state.snapshot('owner'), at);
     expect(result.facts).toEqual([]);
@@ -53,13 +54,13 @@ describe('evidence and privacy trust repair', () => {
     const fact = state.snapshot('owner').userFacts[0]!;
     const service = new ShannonMemoryService(state, history, () => '2026-09-25T02:00:00.000Z');
     service.mutate('owner', {memoryId: fact.id, action: 'forget'});
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread').filter(x => x.role === 'assistant')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE).filter(x => x.role === 'assistant')).toEqual([]);
     expect(history.conversationHistory('owner', 'thread')).toHaveLength(4);
     service.mutate('owner', {memoryId: fact.id, action: 'restore'});
     history.appendTurn('owner', 'thread', 'おはよう', 'おはよう！', '2026-09-25T03:00:00.000Z');
-    const visible = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread');
+    const visible = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE);
     expect(visible.filter(x => x.role === 'assistant').map(x => x.content)).toEqual(['紅茶が好きなんだね。', 'あなたの好みは紅茶です。', 'おはよう！']);
-    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread')).toBe('おはよう！');
+    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE)).toBe('おはよう！');
   });
 
   it('does not invalidate conversation context for pin/unpin alone', () => {
@@ -69,8 +70,8 @@ describe('evidence and privacy trust repair', () => {
     const service = new ShannonMemoryService(state, history, () => at);
     service.mutate('owner', {memoryId: source.id, action: 'pin'});
     service.mutate('owner', {memoryId: source.id, action: 'unpin'});
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread')).toHaveLength(2);
-    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread')).toBe('覚えたよ');
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE)).toHaveLength(2);
+    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE)).toBe('覚えたよ');
   });
 
   it('does not derive an interest or pinned recall from forgotten source experience', () => {
@@ -119,7 +120,7 @@ describe('evidence and privacy trust repair', () => {
     expect(state.snapshot('owner').userFacts[0]).toMatchObject({sourceExperienceId: source.id});
     new ShannonMemoryService(state, history, () => at).mutate('owner', {memoryId: source.id, action: 'forget'});
     expect(buildCompanionStatePrompt(state.snapshot('owner'))).not.toContain('紅茶');
-    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread')).toEqual([]);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE)).toEqual([]);
     const result = await consolidateSleepMemory(new LocalRuleSleepMemoryAnalyzer(), [{content: source.userMessage, observedAt: at}], state.snapshot('owner'), at);
     expect(result.facts).toEqual([]);
   });
@@ -133,7 +134,7 @@ describe('evidence and privacy trust repair', () => {
     const fact = state.snapshot('owner').userFacts[0]!;
     state.apply('owner', {type: 'memory-activated', memory: {id: source.id, summary: source.summary, observedAt: at, relevance: 1}});
     new ShannonMemoryService(state, history, () => at).mutate('owner', {memoryId: fact.id, action: 'forget'});
-    const remaining = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread');
+    const remaining = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread', OWNER_AUDIENCE);
     // Only the source turn is withheld; the unrelated reply before the forget stays model history.
     expect(remaining).toEqual([{role: 'user', content: 'おはよう'}, {role: 'assistant', content: 'おはよう！'}]);
     expect(JSON.stringify(remaining)).not.toContain('紅茶');
@@ -207,7 +208,7 @@ describe('evidence and privacy trust repair', () => {
     expect(store.promptProjection('owner')).toContain('ユーザーはコーヒーが好き');
     expect(store.promptProjection('owner')).not.toContain('紅茶');
     expect(store.snapshot('owner').memoryControls.find(c => c.memoryId === fact.id)?.contextInvalidatedAt).toBe(at);
-    expect(visibleConversationHistory(store.snapshot('owner'), store, 'owner', thread)).toEqual([]);
+    expect(visibleConversationHistory(store.snapshot('owner'), store, 'owner', thread, OWNER_AUDIENCE)).toEqual([]);
     store.close();
   });
 

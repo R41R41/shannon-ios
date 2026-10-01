@@ -1,6 +1,11 @@
 import {
+  SENSITIVITY_CATEGORY_LABELS,
+  describeAudience,
   memoryIdentifier,
+  resolveDisclosure,
+  type CompanionStateSnapshot,
   type MemoryControl,
+  type MemoryDisclosure,
   type MemoryKind,
   type MemoryStatus,
 } from '@shannon/cognition';
@@ -10,6 +15,7 @@ import type {
   ActivityItem,
   MemoryHistoryEvent,
   MemoryHistorySource,
+  MemoryDisclosureView,
   MemoryItem,
   MemoryMutation,
   SleepChange,
@@ -67,6 +73,7 @@ export function actionControl(
   let status = previous?.status ?? item.status;
   let pinned = previous?.pinned ?? item.pinned;
   let overrideText = previous?.overrideText;
+  let sensitivity = previous?.sensitivity;
   let changeReason: string;
   switch (mutation.action) {
     case 'complete':
@@ -109,6 +116,14 @@ export function actionControl(
       status = 'active';
       changeReason = 'ユーザーが記憶を復元';
       break;
+    case 'mark-sensitive':
+      sensitivity = 'sensitive';
+      changeReason = 'ユーザーが機微な内容に指定';
+      break;
+    case 'mark-ordinary':
+      sensitivity = 'ordinary';
+      changeReason = 'ユーザーがふつうの内容に指定';
+      break;
   }
   return {
     memoryId: item.id,
@@ -118,6 +133,21 @@ export function actionControl(
     updatedAt: timestamp,
     changeReason,
     ...(overrideText ? { overrideText } : {}),
+    ...(sensitivity ? { sensitivity } : {}),
+  };
+}
+
+/** How an item's audience and sensitivity are shown to the owner in the memory detail. */
+export function disclosureView(state: CompanionStateSnapshot, memoryId: string, stored: MemoryDisclosure | undefined): MemoryDisclosureView {
+  const resolved = resolveDisclosure(state, memoryId, stored);
+  const known = stored?.sensitivity !== undefined || resolved.decidedBy === 'owner';
+  return {
+    audience: describeAudience(resolved.audience),
+    sensitivity: resolved.sensitivity ?? 'sensitive',
+    decidedBy: resolved.decidedBy === 'owner' ? 'owner' : known ? 'rule' : 'default',
+    reason: resolved.decidedBy === 'owner' ? 'ライ氏が選んだ扱い'
+      : !known ? '区別を記録する前の記憶のため、守る側にしています'
+        : resolved.category ? `${SENSITIVITY_CATEGORY_LABELS[resolved.category]}（${resolved.reason ?? ''}）` : resolved.reason ?? '',
   };
 }
 

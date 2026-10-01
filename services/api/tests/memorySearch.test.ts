@@ -1,3 +1,4 @@
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,7 +83,7 @@ describe('experience full-text search', () => {
     const old = store.appendTurn('owner', thread, 'ペンギン水族館の年パスを買った', 'いいね', '2026-01-01T00:00:00.000Z');
     for (let index = 0; index < 12; index += 1) store.appendTurn('owner', thread, `雑談${index}`, 'うん', at);
     expect(store.experienceCandidates('owner').map(item => item.id)).not.toContain(old.id);
-    const context = () => prepareTurnCognitiveContext(store.snapshot('owner'), store, {
+    const context = () => prepareTurnCognitiveContext(store.snapshot('owner'), store, { present: OWNER_AUDIENCE,
       scopeKey: 'owner', message: 'ペンギン水族館ってどうだった？', occurredAt: at, channel: 'text', threadId: thread,
     });
     expect(context().frame.recalledMemoryIDs).toContain(old.id);

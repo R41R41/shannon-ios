@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { normalizeDisclosure, ownerSpoke } from '@shannon/cognition';
 import { reconcileSleepOutcome } from './sleepCommitmentReview.js';
 import type { BackgroundJobPayload, BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from './backgroundJobStore.js';
 import type { SleepConsolidationOutcome } from './sleepConsolidation.js';
@@ -167,13 +168,16 @@ export class SQLiteBackgroundJobRepository implements BackgroundJobStore {
 
   dailyUserMessages(scopeKey: string, startAt: string, endAt: string): readonly DailyUserMessage[] {
     const rows = this.context.database.prepare(`
-      SELECT content, observed_at, turn_id
-      FROM conversation_messages
-      WHERE scope_key = ? AND role = 'user' AND observed_at >= ? AND observed_at < ?
-      ORDER BY sequence ASC
+      SELECT cm.content, cm.observed_at, cm.turn_id, e.payload_json
+      FROM conversation_messages cm
+      LEFT JOIN experience_events e ON e.event_id = cm.turn_id AND e.scope_key = cm.scope_key
+      WHERE cm.scope_key = ? AND cm.role = 'user' AND cm.observed_at >= ? AND cm.observed_at < ?
+      ORDER BY cm.sequence ASC
       LIMIT 200
-    `).all(scopeKey, startAt, endAt) as unknown as Array<{ content: string; observed_at: string; turn_id: string }>;
-    return Object.freeze(rows.map(row => Object.freeze({ content: row.content, observedAt: row.observed_at, sourceExperienceId: row.turn_id })));
+    `).all(scopeKey, startAt, endAt) as unknown as Array<{ content: string; observed_at: string; turn_id: string; payload_json: string | null }>;
+    // The sleep batch learns about the owner only from turns the owner spoke alone or as the verified author.
+    return Object.freeze(rows.filter(row => ownerSpoke(normalizeDisclosure(row.payload_json ? parseTurnPayload(row.payload_json)?.disclosure : undefined)))
+      .map(row => Object.freeze({ content: row.content, observedAt: row.observed_at, sourceExperienceId: row.turn_id })));
   }
 
   applySleepOutcome(

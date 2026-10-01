@@ -6,6 +6,8 @@ export interface VoiceDeviceContext {
   userUtterance?: UserUtterance;
   /** In-call context of a 「友人も一緒」 call; never persisted. */
   guestCall?: GuestCallContext | null;
+  /** Owner mode: the owner said someone else is with him and the call was not switched. */
+  companionPresent?: boolean;
   timeZoneIdentifier: string;
   requestedLocation: boolean;
   location: { latitude: number; longitude: number; accuracyMeters: number } | null;
@@ -33,8 +35,10 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     ...(utterance.source !== undefined ? { source: utterance.source } : {}),
     ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
   } as UserUtterance;
+  if (value.companionPresent !== undefined && typeof value.companionPresent !== 'boolean') return false;
+  const companion = value.companionPresent === true ? { companionPresent: true } : {};
   if (value.location === undefined || value.location === null) {
-    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance, guestCall };
+    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance, guestCall, ...companion };
   }
   if (!value.requestedLocation || !objectBody(value.location)) return false;
   const { latitude, longitude, accuracyMeters, observedAt } = value.location;
@@ -50,6 +54,7 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     requestedLocation: true,
     userUtterance,
     guestCall,
+    ...companion,
     location: { latitude, longitude, accuracyMeters },
   };
 }

@@ -1,3 +1,4 @@
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,7 +52,7 @@ describe('semantic memory recall', () => {
   it('finds a paraphrased experience that deterministic recall misses, and marks it as a candidate', async () => {
     const { persistent, thread, trip } = await seeded();
     const message = '旅の予定どうなったっけ？';
-    const deterministic = prepareTurnCognitiveContext(persistent.snapshot('owner'), persistent, {
+    const deterministic = prepareTurnCognitiveContext(persistent.snapshot('owner'), persistent, { present: OWNER_AUDIENCE,
       scopeKey: 'owner', message, occurredAt: at, channel: 'text', threadId: 'other-thread',
     });
     expect(deterministic.frame.recalledMemoryIDs).not.toContain(trip.id);
@@ -70,7 +71,7 @@ describe('semantic memory recall', () => {
   it('respects the per-turn model-call ceiling', async () => {
     const { persistent } = await seeded();
     const snapshot = persistent.snapshot('owner');
-    const base = prepareTurnCognitiveContext(snapshot, persistent, { scopeKey: 'owner', message: '前に決めた旅行計画', occurredAt: at, channel: 'text' });
+    const base = prepareTurnCognitiveContext(snapshot, persistent, { present: OWNER_AUDIENCE, scopeKey: 'owner', message: '前に決めた旅行計画', occurredAt: at, channel: 'text' });
     for (const [limit, calls] of [[1, ['embed']], [2, ['embed', 'rerank']], [0, []]] as const) {
       const gateway = new DeterministicMemoryModelGateway();
       await recall(persistent, gateway, { maximumModelCallsPerTurn: limit, minimumSimilarity: 0 }).enrich(base, { scopeKey: 'owner', message: '前に決めた旅行計画', snapshot });
@@ -83,7 +84,7 @@ describe('semantic memory recall', () => {
     const { persistent } = await seeded();
     const snapshot = persistent.snapshot('owner');
     const message = '旅の予定どうなったっけ？';
-    const base = prepareTurnCognitiveContext(snapshot, persistent, { scopeKey: 'owner', message, occurredAt: at, channel: 'text' });
+    const base = prepareTurnCognitiveContext(snapshot, persistent, { present: OWNER_AUDIENCE, scopeKey: 'owner', message, occurredAt: at, channel: 'text' });
     const failed = await recall(persistent, new DeterministicMemoryModelGateway({ fail: 'embed' })).enrich(base, { scopeKey: 'owner', message, snapshot });
     expect(failed.memoryRecall.status).toBe('failed');
     expect(failed.prompt).toBe(base.prompt);
@@ -105,7 +106,7 @@ describe('semantic memory recall', () => {
     const snapshot = persistent.snapshot('owner');
     const message = '旅の予定どうなったっけ？';
     const gateway = new DeterministicMemoryModelGateway({ rewrites: { [message]: ['旅行計画 沖縄'] } });
-    const base = prepareTurnCognitiveContext(snapshot, persistent, { scopeKey: 'owner', message, occurredAt: at, channel: 'text' });
+    const base = prepareTurnCognitiveContext(snapshot, persistent, { present: OWNER_AUDIENCE, scopeKey: 'owner', message, occurredAt: at, channel: 'text' });
     const enriched = await recall(persistent, gateway).enrich(base, { scopeKey: 'owner', message, snapshot });
     expect(enriched.frame.recalledMemoryIDs).not.toContain(trip.id);
     expect(enriched.prompt).not.toContain('沖縄');
@@ -116,7 +117,7 @@ describe('semantic memory recall', () => {
     const { persistent } = await seeded();
     const gateway = new DeterministicMemoryModelGateway();
     const snapshot = persistent.snapshot('owner');
-    const base = prepareTurnCognitiveContext(snapshot, persistent, { scopeKey: 'owner', message: '今日は暑いね', occurredAt: at, channel: 'text' });
+    const base = prepareTurnCognitiveContext(snapshot, persistent, { present: OWNER_AUDIENCE, scopeKey: 'owner', message: '今日は暑いね', occurredAt: at, channel: 'text' });
     expect((await recall(persistent, gateway).enrich(base, { scopeKey: 'owner', message: '今日は暑いね', snapshot })).memoryRecall.status).toBe('skipped');
     expect(gateway.calls).toEqual([]);
     persistent.close();

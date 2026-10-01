@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { searchMemoryDocuments, type RecallCandidate, type ShannonMessageEmotion } from '@shannon/cognition';
+import {
+  disclosureFor, searchMemoryDocuments,
+  type MemoryAudience, type MemoryDisclosure, type RecallCandidate, type ShannonMessageEmotion,
+} from '@shannon/cognition';
 import type { MemorySearchHit } from './sqliteMemorySearch.js';
 import type { ShannonConversationItem, ShannonGeneratedArtifact } from './chatModel.js';
 import type { ShannonTaskDecision } from './chatModel.js';
@@ -12,6 +15,13 @@ export interface ShannonExperience extends RecallCandidate {
   shannonReply: string;
   /** Memory, knowledge and summary IDs recalled into this turn's prompt. Absent on turns recorded before provenance. */
   recalledMemoryIds?: readonly string[];
+  /** Who was present and whether the turn is sensitive. Absent on turns recorded before labels: owner-only, sensitive. */
+  disclosure?: MemoryDisclosure;
+}
+
+/** The label a completed turn is stored with: decided here, when it is written, by deterministic rules. */
+export function turnDisclosure(userMessage: string, shannonReply: string, context?: Pick<TurnPersistenceContext, 'audience' | 'speaker'>): MemoryDisclosure {
+  return disclosureFor(`${userMessage}\n${shannonReply}`, context?.audience, context?.speaker ? { speaker: context.speaker } : {});
 }
 
 /** What a thread's rolling summary was built from: when its chain last started fresh, and the thread's turns. */
@@ -76,6 +86,10 @@ export interface TurnPersistenceContext {
   recalledMemoryIds?: readonly string[];
   /** True only when the model was given the stored prior summary and wrote the next one from it. */
   summaryContinuesChain?: boolean;
+  /** Who was present for this turn. Absent: the owner alone. */
+  audience?: MemoryAudience;
+  /** Who spoke the user side. Absent: the owner when alone, otherwise unknown. */
+  speaker?: 'owner' | 'unknown';
 }
 
 export interface PlatformTurnPersistenceInput {
@@ -340,6 +354,7 @@ export class InMemoryConversationStore implements ConversationStore {
       observedAt,
       ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
       ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
+      disclosure: turnDisclosure(userMessage, shannonReply, context),
     });
     experiences.push(experience);
     this.experiences.set(scopeKey, experiences.slice(-this.maximumExperiences));

@@ -1,5 +1,7 @@
 import {
+  isOwnerOnly,
   normalizeKnowledgeDraft,
+  ownerSpoke,
   visibleMemoryText,
   type CompanionStateStore,
   type ShannonKnowledgeDocument,
@@ -68,7 +70,9 @@ export class ShannonKnowledgeConsolidator {
     const candidates = this.conversations.experienceCandidates(scopeKey);
     // A turn whose reply used a forgotten item is not a source for new knowledge either.
     const withholding = new MemoryWithholding(snapshot, this.conversations, scopeKey, candidates);
-    const visible = candidates.filter(item => visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item));
+    // Shannon's private notes carry no audience of their own, so they are built only from turns the owner had alone.
+    const visible = candidates.filter(item => isOwnerOnly(item.disclosure?.audience) && ownerSpoke(item.disclosure)
+      && visibleMemoryText(snapshot, item.id, item.summary) !== null && !withholding.withholdsExperience(item));
     const today = visible.filter(item => item.observedAt >= startAt && item.observedAt < endAt).slice(-60);
     if (!today.length) return result;
     // Earlier related experiences let the analyzer see repetition across days.

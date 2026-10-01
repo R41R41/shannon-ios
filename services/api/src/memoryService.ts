@@ -21,6 +21,7 @@ import type { DailyMindFocus, DailyMindReader } from './dailyMind.js';
 
 import {
   actionControl,
+  disclosureView,
   buildActivity,
   buildItem,
   buildMetadata,
@@ -49,6 +50,17 @@ export interface MemoryItem {
   changeReason: string;
   evidence: readonly MemoryEvidence[];
   commitment?: { status: 'pending' | 'completed' | 'dismissed'; dueAt?: string; dueDate?: string; dueHint?: string; timeZone?: string; remindAfter?: string };
+  /** Who was present and whether it is 機微 or ふつう. Absent for interests, which are never shown to others. */
+  disclosure?: MemoryDisclosureView;
+}
+
+export interface MemoryDisclosureView {
+  /** 「ライ氏と二人の時」「ミキさんと一緒の時」「グループの会話」 */
+  audience: string;
+  sensitivity: 'sensitive' | 'ordinary';
+  /** `default`: recorded before labels existed, so it is treated as sensitive. */
+  decidedBy: 'rule' | 'owner' | 'default';
+  reason: string;
 }
 
 export interface SleepChange {
@@ -109,7 +121,8 @@ export interface ActivityItem {
   occurredAt: string;
 }
 
-export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore' | 'complete' | 'dismiss' | 'snooze';
+export type MemoryAction = 'correct' | 'forget' | 'pin' | 'unpin' | 'reject' | 'restore' | 'complete' | 'dismiss' | 'snooze'
+  | 'mark-sensitive' | 'mark-ordinary';
 
 export interface MemoryMutation {
   memoryId: string;
@@ -168,18 +181,19 @@ export class ShannonMemoryService implements ShannonMemoryStore {
         updatedAt: controls.get(memory.id)?.updatedAt ?? memory.updatedAt,
         commitment: { status: memory.status, dueAt: memory.dueAt, dueDate: memory.dueDate,
           dueHint: memory.dueHint, timeZone: memory.timeZone, remindAfter: memory.remindAfter },
+        disclosure: disclosureView(state, memory.id, memory.disclosure),
       });
     }
 
     for (const fact of state.userFacts) {
-      items.push(buildItem({
+      items.push({ ...buildItem({
         id: fact.id,
         kind: 'user-fact',
         text: fact.statement,
         confidence: fact.confidence,
         observedAt: fact.observedAt,
         evidence: fact.evidence,
-      }, controls.get(fact.id), metadata.get(fact.id)));
+      }, controls.get(fact.id), metadata.get(fact.id)), disclosure: disclosureView(state, fact.id, fact.disclosure) });
     }
     for (const interest of state.interests) {
       const id = memoryIdentifier('interest', interest);
@@ -192,27 +206,27 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       }, controls.get(id), eventMeta));
     }
     for (const relationship of state.relationships) {
-      items.push(buildItem({
+      items.push({ ...buildItem({
         id: relationship.id,
         kind: 'relationship',
         text: relationship.statement,
         confidence: relationship.confidence,
         observedAt: relationship.observedAt,
         evidence: relationship.evidence,
-      }, controls.get(relationship.id), metadata.get(relationship.id)));
+      }, controls.get(relationship.id), metadata.get(relationship.id)), disclosure: disclosureView(state, relationship.id, relationship.disclosure) });
     }
     // Overview pagination must never orphan a durable control or pinned item.
     const managedExperiences = experiences.filter((experience, index) =>
       index >= experiences.length - 80 || controls.has(experience.id));
     for (const experience of managedExperiences.reverse()) {
-      items.push(buildItem({
+      items.push({ ...buildItem({
         id: experience.id,
         kind: 'experience',
         text: experience.summary,
         observedAt: experience.observedAt,
         evidence: experience.userMessage,
         relevance: state.activeMemories.find(memory => memory.id === experience.id)?.relevance,
-      }, controls.get(experience.id), metadata.get(experience.id)));
+      }, controls.get(experience.id), metadata.get(experience.id)), disclosure: disclosureView(state, experience.id, experience.disclosure) });
     }
 
     const known = new Set(items.map(item => item.id));

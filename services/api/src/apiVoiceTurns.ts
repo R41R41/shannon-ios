@@ -1,4 +1,4 @@
-import { resolveReplyEmotion, type CompanionStateStore } from '@shannon/cognition';
+import { UNKNOWN_GUEST_PRESENCE, resolveReplyEmotion, type CompanionStateStore } from '@shannon/cognition';
 import { presentCompanionState } from './companionPresence.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
@@ -37,8 +37,11 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   // emotion of this reply. Older clients send none; the reply's own cues decide instead.
   const { messageEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage, reply: shannonReply, now: completedAt,
     ...(decidedEmotion(request.body.emotion) ?? {}) });
+  if (request.body.companionPresent !== undefined && typeof request.body.companionPresent !== 'boolean') return badRequest('companionPresent is invalid');
+  // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
+  const companion = request.body.companionPresent === true ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
-    messageEmotion, completedAt, timeZone };
+    messageEmotion, completedAt, timeZone, ...companion };
   const experience = dependencies.background.recordTurn(turn);
   dependencies.background.schedule(turn, experience.id);
   return { status: 201, body: { threadId, turnId: experience.id, messageEmotion, state: presentCompanionState(captured, completedAt) } };
