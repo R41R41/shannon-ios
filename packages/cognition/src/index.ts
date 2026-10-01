@@ -137,6 +137,7 @@ export {
   normalizeKnowledgeDraft,
   parseKnowledgeHeadingTree,
   selectKnowledgeSections,
+  looksSecret,
   selectRelevantKnowledge,
   usableShannonKnowledge,
   type AetherDecisionReference,

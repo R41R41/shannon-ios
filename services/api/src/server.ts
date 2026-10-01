@@ -51,6 +51,9 @@ import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
+import { opsIngestEnabled } from './opsContract.js';
+import { SQLiteOpsStore } from './opsStore.js';
+import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -124,6 +127,13 @@ const deviceAuth = authMode === 'paired'
   ? new SQLiteDeviceAuthStore({ path: configuredDatabasePath(), pepper: configuredAuthPepper() })
   : null;
 const pairingRoute = createPairingRoute(authMode, deviceAuth);
+// Operations console (docs/ops-contract.md). This store is held by the ops route only, never by the kernel.
+const opsStore = new SQLiteOpsStore(configuredDatabasePath());
+const opsRoute = createOpsRoute({
+  store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
+  device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
+    : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
+});
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -171,6 +181,10 @@ const server = createServer(async (request, response) => {
         body: hostBody,
       });
       sendJson(response, result.status, result.body);
+      return;
+    }
+    if (isOpsPath(url.pathname)) {
+      await opsRoute(url.pathname, request, response, url.searchParams);
       return;
     }
     if (isPlatformBridgePath(url.pathname)) {
@@ -307,6 +321,7 @@ function shutdown(): void {
     peopleMemoryStore.close();
     autonomyAnnouncer.close();
     bodyStore.close();
+    opsStore.close();
     autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;

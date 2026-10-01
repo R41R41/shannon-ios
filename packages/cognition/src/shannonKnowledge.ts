@@ -125,7 +125,8 @@ export function normalizeKnowledgeDraft(
   }) };
 }
 
-function looksSecret(text: string): boolean {
+/** Credential-shaped text: known key prefixes, private keys, JWTs, and "password: …" style pairs. */
+export function looksSecret(text: string): boolean {
   return /(?:sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})/u.test(text)
     || /(?:パスワード|password|api[ _-]?key|トークン)\s*[:：=は]\s*\S{6,}/iu.test(text);
 }
