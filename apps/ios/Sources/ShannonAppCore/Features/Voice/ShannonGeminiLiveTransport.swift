@@ -12,7 +12,7 @@ private struct ShannonGeminiLiveOutgoingPayload: Sendable {
 }
 @MainActor
 final class ShannonGeminiLiveTransport {
-    typealias EventHandler = @MainActor @Sendable (ShannonGeminiLiveServerEvent) -> Void
+    typealias EventHandler = @MainActor @Sendable (ShannonTranscriptionEvent) -> Void
     typealias CaptureHandler = @MainActor @Sendable (
         _ rms: Float,
         _ capturedSeconds: Double,
@@ -61,16 +61,16 @@ final class ShannonGeminiLiveTransport {
         self.captureHandler = captureHandler
         self.inputStateHandler = inputStateHandler
     }
-    func start(resumptionHandle: String? = nil) async throws {
+    func start() async throws {
         stopped = false
         sentAudioSeconds = 0
         didRecordFirstAudioSend = false
         try configureAudioSession()
-        let url = try ShannonGeminiLiveProtocol.webSocketURL(token: session.token)
+        let request = try ShannonOpenAITranscriptionProtocol.webSocketRequest(token: session.token)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
         let nextURLSession = URLSession(configuration: configuration)
-        let nextSocket = nextURLSession.webSocketTask(with: url)
+        let nextSocket = nextURLSession.webSocketTask(with: request)
         urlSession = nextURLSession
         socket = nextSocket
         var streamContinuation: AsyncStream<ShannonGeminiLiveOutgoingPayload>.Continuation?
@@ -83,9 +83,9 @@ final class ShannonGeminiLiveTransport {
             do {
                 for await payload in stream {
                     try Task.checkCancellation()
-                    try await nextSocket.send(.data(payload.data))
+                    try await nextSocket.send(.string(String(decoding: payload.data, as: UTF8.self)))
                     if payload.kind == .audio {
-                        self?.sentAudioSeconds += Double(payload.audioByteCount) / 32_000
+                        self?.sentAudioSeconds += Double(payload.audioByteCount) / 48_000
                         if self?.didRecordFirstAudioSend == false {
                             self?.didRecordFirstAudioSend = true
                             ShannonVoiceDiagnostics.shared.record(
@@ -111,8 +111,8 @@ final class ShannonGeminiLiveTransport {
                     case let .string(value): data = Data(value.utf8)
                     @unknown default: continue
                     }
-                    for event in try ShannonGeminiLiveProtocol.events(from: data) {
-                        if case .setupComplete = event, !self.audioStarted {
+                    for event in try ShannonOpenAITranscriptionProtocol.events(from: data) {
+                        if case .sessionReady = event, !self.audioStarted {
                             do {
                                 try self.startAudioEngine()
                                 self.audioStarted = true
@@ -129,10 +129,6 @@ final class ShannonGeminiLiveTransport {
                 self.eventHandler(.goAway(nil))
             }
         }
-        send(try ShannonGeminiLiveProtocol.setupMessage(session: session, resumptionHandle: resumptionHandle))
-    }
-    func finishAudioStream() throws {
-        send(try ShannonGeminiLiveProtocol.audioStreamEndMessage())
     }
     func discardPlayback() {
         playbackDrain.cancel()
@@ -431,14 +427,14 @@ final class ShannonGeminiLiveTransport {
             let frameCount = Int(buffer.frameLength)
             let sampleCount = frameCount * channelStride
             let samples = UnsafeBufferPointer(start: data, count: sampleCount)
-            let pcm = ShannonGeminiLivePCM.pcm16Mono16k(
+            let pcm = ShannonGeminiLivePCM.pcm16Mono(
                 samples: samples,
                 sampleRate: sampleRate,
                 stride: channelStride
             )
             let chunks = captureChunker.append(pcm)
             for chunk in chunks {
-                if let payload = try? ShannonGeminiLiveProtocol.audioMessage(chunk) {
+                if let payload = try? ShannonOpenAITranscriptionProtocol.audioMessage(chunk) {
                     outgoing?.yield(.init(data: payload, kind: .audio, audioByteCount: chunk.count))
                 }
             }
@@ -456,10 +452,6 @@ final class ShannonGeminiLiveTransport {
                 )
             }
         }
-    }
-
-    private func send(_ data: Data) {
-        outgoing?.yield(.init(data: data, kind: .control, audioByteCount: 0))
     }
 
     private func play(_ pcm: Data) throws {

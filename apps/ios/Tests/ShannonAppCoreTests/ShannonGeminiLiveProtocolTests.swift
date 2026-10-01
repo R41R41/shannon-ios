@@ -2,56 +2,68 @@ import XCTest
 @testable import ShannonAppCore
 
 final class ShannonGeminiLiveProtocolTests: XCTestCase {
-    func testSetupUsesJapaneseTranscriptionOnlySession() throws {
-        let session = ShannonGeminiLiveSessionDTO(
-            token: "auth_tokens/temporary",
-            model: "gemini-3.5-transcribe-live",
-            voice: "voice_shannon",
-            threadId: "thread-a",
-            instructions: "あなたはシャノン。",
-            expiresAt: "2026-09-25T03:20:00.000Z",
-            inputUsdPerMinute: 0.005,
-            outputUsdPerMinute: 0.018
-        )
-        let data = try ShannonGeminiLiveProtocol.setupMessage(session: session)
-        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let setup = try XCTUnwrap(root["setup"] as? [String: Any])
-        XCTAssertEqual(setup["model"] as? String, "models/gemini-3.5-transcribe-live")
-        let generation = try XCTUnwrap(setup["generationConfig"] as? [String: Any])
-        XCTAssertEqual(generation["responseModalities"] as? [String], ["TEXT"])
-        let transcription = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
-        XCTAssertEqual(transcription["languageCodes"] as? [String], ["ja-JP"])
-        XCTAssertEqual(
-            transcription["customVocabulary"] as? [String],
-            [
-                "シャノン", "ライ",
-                "Aether", "エーテル",
-                "Voyager", "ボイジャー",
-                "Syzygy", "Jev", "Minebot", "Codex", "SwiftUI", "TestFlight",
-            ]
-        )
-        let realtime = try XCTUnwrap(setup["realtimeInputConfig"] as? [String: Any])
-        let detection = try XCTUnwrap(realtime["automaticActivityDetection"] as? [String: Any])
-        XCTAssertEqual(detection["silenceDurationMs"] as? Int, 360)
-        XCTAssertNotNil(setup["sessionResumption"])
-        XCTAssertNil(setup["speechConfig"])
-        XCTAssertNil(setup["tools"])
+    func testWebSocketRequestAuthorizesWithTheEphemeralSecretOnly() throws {
+        let request = try ShannonOpenAITranscriptionProtocol.webSocketRequest(token: "ek_synthetic_secret")
+        XCTAssertEqual(request.url?.absoluteString, "wss://api.openai.com/v1/realtime?intent=transcription")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ek_synthetic_secret")
+        XCTAssertNil(request.url?.query?.range(of: "ek_"))
+        // A permanent key or an old server's Gemini token must never be sent to OpenAI.
+        XCTAssertThrowsError(try ShannonOpenAITranscriptionProtocol.webSocketRequest(token: "sk-permanent"))
+        XCTAssertThrowsError(try ShannonOpenAITranscriptionProtocol.webSocketRequest(token: "auth_tokens/x"))
+        XCTAssertThrowsError(try ShannonOpenAITranscriptionProtocol.webSocketRequest(token: ""))
     }
 
-    func testServerEventsDecodeInterimFinalTranscriptAndTurn() throws {
-        let message: [String: Any] = [
-            "serverContent": [
-                "interimInputTranscription": ["text": "明日"],
-                "inputTranscription": ["text": "明日は"],
-                "turnComplete": true,
-            ],
-        ]
-        let data = try JSONSerialization.data(withJSONObject: message)
-        XCTAssertEqual(try ShannonGeminiLiveProtocol.events(from: data), [
-            .interimInputTranscript("明日"),
-            .inputTranscript("明日は"),
-            .turnComplete,
-        ])
+    func testAudioMessageAppendsBase64PCMToTheInputBuffer() throws {
+        let pcm = Data([0x01, 0x02, 0x03, 0x04])
+        let data = try ShannonOpenAITranscriptionProtocol.audioMessage(pcm)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(root["type"] as? String, "input_audio_buffer.append")
+        XCTAssertEqual(root["audio"] as? String, pcm.base64EncodedString())
+        XCTAssertEqual(root.count, 2)
+    }
+
+    func testServerEventsDecodeReadinessSpeechBoundariesAndFinalTranscript() throws {
+        func events(_ message: [String: Any]) throws -> [ShannonTranscriptionEvent] {
+            try ShannonOpenAITranscriptionProtocol.events(from: JSONSerialization.data(withJSONObject: message))
+        }
+        XCTAssertEqual(try events(["type": "session.created", "session": ["type": "transcription"]]), [.sessionReady])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_started"]), [.speechStarted])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.speech_stopped"]), [.speechStopped])
+        XCTAssertEqual(try events([
+            "type": "conversation.item.input_audio_transcription.completed",
+            "transcript": " 明日は晴れるかな。\n",
+        ]), [.inputTranscript("明日は晴れるかな。")])
+    }
+
+    func testServerEventsIgnoreLiveDeltasEmptyTranscriptsAndUnrelatedMessages() throws {
+        func events(_ message: [String: Any]) throws -> [ShannonTranscriptionEvent] {
+            try ShannonOpenAITranscriptionProtocol.events(from: JSONSerialization.data(withJSONObject: message))
+        }
+        // Shannon shows no live caption, so a transcript delta never reaches the session.
+        XCTAssertEqual(try events(["type": "conversation.item.input_audio_transcription.delta", "delta": "明"]), [])
+        XCTAssertEqual(try events(["type": "conversation.item.input_audio_transcription.completed", "transcript": "  "]), [])
+        XCTAssertEqual(try events(["type": "input_audio_buffer.committed"]), [])
+        XCTAssertEqual(try events(["type": "session.updated"]), [])
+        // A non-fatal error must not drop the call; only the socket closing does.
+        XCTAssertEqual(try events(["type": "error", "error": ["code": "input_audio_buffer_commit_empty"]]), [])
+        XCTAssertEqual(try events(["noType": true]), [])
+        XCTAssertEqual(try ShannonOpenAITranscriptionProtocol.events(from: Data("[]".utf8)), [])
+    }
+
+    func testSessionDTORequiresOpenAIProviderAndAcceptsOnlyTranscriptionModels() throws {
+        let json = """
+        {"token":"ek_x","model":"gpt-4o-mini-transcribe","voice":"Aoede","threadId":"t",\
+        "instructions":"i","expiresAt":"2026-10-01T00:00:00.000Z",\
+        "inputUsdPerMinute":0.003,"outputUsdPerMinute":0.018,"transcriptionProvider":"openai"}
+        """
+        let dto = try JSONDecoder().decode(ShannonGeminiLiveSessionDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.transcriptionProvider, "openai")
+        XCTAssertTrue(ShannonOpenAITranscriptionProtocol.acceptedModels.contains(dto.model))
+        XCTAssertFalse(ShannonOpenAITranscriptionProtocol.acceptedModels.contains("whisper-1"))
+        XCTAssertFalse(ShannonOpenAITranscriptionProtocol.acceptedModels.contains("gemini-3.5-transcribe-live"))
+        // An old server omits the field; the client treats that as unusable.
+        let legacy = json.replacingOccurrences(of: ",\"transcriptionProvider\":\"openai\"", with: "")
+        XCTAssertNil(try JSONDecoder().decode(ShannonGeminiLiveSessionDTO.self, from: Data(legacy.utf8)).transcriptionProvider)
     }
 
     func testCascadeSpeechSegmentsAndAdaptsStyle() {
@@ -239,16 +251,26 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         XCTAssertEqual(measurements.firstAudioMilliseconds, 800)
     }
 
-    func testPCMResamplesToSixteenKilohertzAndClamps() {
+    func testPCMResamplesToTwentyFourKilohertzAndClamps() {
         let samples: [Float] = [-2, -1, 0, 1, 2, 0]
         let data = samples.withUnsafeBufferPointer {
-            ShannonGeminiLivePCM.pcm16Mono16k(samples: $0, sampleRate: 48_000)
+            ShannonGeminiLivePCM.pcm16Mono(samples: $0, sampleRate: 48_000)
         }
-        XCTAssertEqual(data.count, 4)
+        XCTAssertEqual(data.count, 6)
         let values = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
-        XCTAssertEqual(values.count, 2)
-        XCTAssertEqual(values[0], Int16.min + 1)
-        XCTAssertEqual(values[1], Int16.max)
+        XCTAssertEqual(values, [Int16.min + 1, 0, Int16.max])
+    }
+
+    func testPCMKeepsTheRequestedOutputRate() {
+        let samples = [Float](repeating: 0.5, count: 480)
+        let sixteen = samples.withUnsafeBufferPointer {
+            ShannonGeminiLivePCM.pcm16Mono(samples: $0, sampleRate: 48_000, outputSampleRate: 16_000)
+        }
+        let twentyFour = samples.withUnsafeBufferPointer {
+            ShannonGeminiLivePCM.pcm16Mono(samples: $0, sampleRate: 48_000)
+        }
+        XCTAssertEqual(sixteen.count, 160 * MemoryLayout<Int16>.size)
+        XCTAssertEqual(twentyFour.count, 240 * MemoryLayout<Int16>.size)
     }
 
     func testPCMRootMeanSquareReadsGeminiPlaybackSamples() {
@@ -264,7 +286,7 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
     func testPCMUsesFirstChannelFromInterleavedMicrophoneFrames() {
         let stereoSamples: [Float] = [-1, 0.75, 0, 0.75, 1, 0.75]
         let data = stereoSamples.withUnsafeBufferPointer {
-            ShannonGeminiLivePCM.pcm16Mono16k(samples: $0, sampleRate: 48_000, stride: 2)
+            ShannonGeminiLivePCM.pcm16Mono(samples: $0, sampleRate: 48_000, stride: 2)
         }
         let values = data.withUnsafeBytes { Array($0.bindMemory(to: Int16.self)) }
         XCTAssertEqual(values, [Int16.min + 1])
@@ -274,16 +296,17 @@ final class ShannonGeminiLiveProtocolTests: XCTestCase {
         XCTAssertEqual(rms, Float((2.0 / 3.0).squareRoot()), accuracy: 0.0001)
     }
 
-    func testAudioChunkerEmitsHundredMillisecondChunks() {
+    func testAudioChunkerEmitsHundredMillisecondChunks() throws {
         let chunker = ShannonGeminiLiveAudioChunker()
         XCTAssertTrue(chunker.append(Data(repeating: 1, count: 1_200)).isEmpty)
 
-        let chunks = chunker.append(Data(repeating: 2, count: 5_600))
-        XCTAssertEqual(chunks.map(\.count), [3_200, 3_200])
-        XCTAssertEqual(chunks[0].prefix(1_200), Data(repeating: 1, count: 1_200))
+        let chunks = chunker.append(Data(repeating: 2, count: 8_400))
+        XCTAssertEqual(chunks.map(\.count), [4_800, 4_800])
+        let firstChunk = try XCTUnwrap(chunks.first)
+        XCTAssertEqual(firstChunk.prefix(1_200), Data(repeating: 1, count: 1_200))
 
         chunker.reset()
-        XCTAssertTrue(chunker.append(Data(repeating: 3, count: 3_199)).isEmpty)
-        XCTAssertEqual(chunker.append(Data(repeating: 4, count: 1)).first?.count, 3_200)
+        XCTAssertTrue(chunker.append(Data(repeating: 3, count: 4_799)).isEmpty)
+        XCTAssertEqual(chunker.append(Data(repeating: 4, count: 1)).first?.count, 4_800)
     }
 }

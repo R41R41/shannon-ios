@@ -8,7 +8,7 @@ public enum ShannonGeminiLivePhase: String, Equatable, Sendable {
         switch self {
         case .idle: "音声会話を開始"
         case .requestingPermission: "マイクを準備中"
-        case .connecting: "Geminiへ接続中"
+        case .connecting: "音声会話へ接続中"
         case .listening: "聞いています"
         case .thinking: "考えています"
         case .speaking: "シャノンが話しています"

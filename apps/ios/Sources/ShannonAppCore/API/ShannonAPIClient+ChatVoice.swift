@@ -246,8 +246,8 @@ extension ShannonAPIClient {
             throw ShannonAPIError.rejected(status: http.statusCode)
         }
         let result = try JSONDecoder().decode(ShannonGeminiLiveSessionDTO.self, from: data)
-        guard !result.token.isEmpty,
-              result.model == "gemini-3.5-transcribe-live",
+        guard result.transcriptionProvider == "openai", result.token.hasPrefix("ek_"),
+              ShannonOpenAITranscriptionProtocol.acceptedModels.contains(result.model),
               !result.voice.isEmpty,
               !result.threadId.isEmpty,
               !result.instructions.isEmpty else { throw ShannonAPIError.invalidResponse }
@@ -496,4 +496,5 @@ private struct GeminiSpeechRequestDTO: Encodable {
 private struct GeminiLiveSessionRequestDTO: Encodable {
     let threadId: String?
     let participantMode: ShannonVoiceParticipantMode
+    var transcriptionProvider = "openai"
 }

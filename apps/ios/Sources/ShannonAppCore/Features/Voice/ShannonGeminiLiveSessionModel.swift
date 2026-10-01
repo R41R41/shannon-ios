@@ -8,7 +8,7 @@ public final class ShannonGeminiLiveSessionModel {
     public internal(set) var phase: ShannonGeminiLivePhase = .idle
     public private(set) var userTranscript = ""
     public internal(set) var shannonTranscript = ""
-    public private(set) var model = "gemini-3.5-transcribe-live"
+    public private(set) var model = "gpt-4o-mini-transcribe"
     public internal(set) var voice = "Shannon"
     public internal(set) var errorMessage: String?
     public private(set) var failureRecovery: ShannonGeminiLiveFailureRecovery?
@@ -40,6 +40,7 @@ public final class ShannonGeminiLiveSessionModel {
     var responseTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
+    private var sustainedSpeechTask: Task<Void, Never>?
     private var bargeCandidateStartedAt: TimeInterval?
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
@@ -141,7 +142,7 @@ public final class ShannonGeminiLiveSessionModel {
             ShannonVoiceDiagnostics.shared.record("gemini.session.start.failed",
                 metadata: ["stage": failedStage, "domain": (error as NSError).domain, "code": String(code)])
             fail(failedStage == "session"
-                ? "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+                ? "音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
                 : "マイクや音声の準備ができませんでした。ほかのアプリがマイクを使っていないか確認して、もう一度お試しください。",
                 recovery: .reconnect)
         }
@@ -156,6 +157,8 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask?.cancel()
         finalizeTask?.cancel()
         duckRestoreTask?.cancel()
+        sustainedSpeechTask?.cancel()
+        sustainedSpeechTask = nil
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
@@ -258,26 +261,37 @@ public final class ShannonGeminiLiveSessionModel {
         beginResponse()
     }
 
-    private func handle(_ event: ShannonGeminiLiveServerEvent) {
+    private func handle(_ event: ShannonTranscriptionEvent) {
         switch event {
-        case .setupComplete:
+        case .sessionReady:
             phase = .listening
-        case let .interimInputTranscript(text):
-            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty else { return }
-            userTranscript = previewInput(turnAssembler.preview(interim: value))
+        case .speechStarted:
+            // No live caption is shown. Speech sustained for the barge-in window still
+            // interrupts the reply; a shorter sound only ducks playback until it ends.
             handleBargeIn(hasFinalText: false)
+            scheduleSustainedSpeechInterruption()
+        case .speechStopped:
+            sustainedSpeechTask?.cancel()
+            sustainedSpeechTask = nil
         case let .inputTranscript(text):
+            sustainedSpeechTask?.cancel()
+            sustainedSpeechTask = nil
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             handleBargeIn(hasFinalText: true)
             scheduleFinalization(turnComplete: false)
-        case .turnComplete:
-            scheduleFinalization(turnComplete: true)
-        case .sessionHandle:
-            break
         case .goAway:
-            fail("Geminiとの接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+            fail("音声認識との接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+        }
+    }
+
+    private func scheduleSustainedSpeechInterruption() {
+        sustainedSpeechTask?.cancel()
+        guard responseTask != nil else { return }
+        sustainedSpeechTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(340)) } catch { return }
+            self?.sustainedSpeechTask = nil
+            self?.interruptResponse()
         }
     }
 
@@ -449,7 +463,7 @@ public final class ShannonGeminiLiveSessionModel {
             errorMessage = responseDelivery.failureMessage
         } else if arguments.contains("-ShannonPreviewVoiceFailed") {
             phase = .failed
-            errorMessage = "Gemini音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
+            errorMessage = "音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
             failureRecovery = .reconnect
             textSendState = .failed(
                 text: "続きはテキストで送って",

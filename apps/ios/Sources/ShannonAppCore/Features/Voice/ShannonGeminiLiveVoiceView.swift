@@ -87,7 +87,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             Button("友人も一緒") { switchParticipantMode(to: .guest) }
             Button("キャンセル", role: .cancel) {}
         } message: {
-            Text("「友人も一緒」では所有者の履歴や記憶を使わず、この通話を保存しません。切り替えるとGeminiへつなぎ直します。")
+            Text("「友人も一緒」では所有者の履歴や記憶を使わず、この通話を保存しません。切り替えると音声会話をつなぎ直します。")
         }
         .task {
 #if DEBUG
@@ -345,7 +345,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             case .reconnect, .none:
                 Button("もう一度つなぐ") { Task { await model.retry() } }
                     .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Geminiへ再接続")
+                    .accessibilityLabel("音声会話へ再接続")
             }
         }
         .controlSize(.large)

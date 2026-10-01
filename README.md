@@ -91,11 +91,11 @@ pnpm worker
 実際のLLMを使う場合は`.env.example`を参考に、リポジトリ直下の`.env`または起動するshellへ`OPENAI_API_KEY`を設定する。v1の既定モデルは`gpt-5.6-luna`。
 
 Gemini音声は、[`docs/gemini-3.8-tts-lab.md`](docs/gemini-3.8-tts-lab.md) の試聴ハーネスと、
-iPhoneの単一の音声会話で評価できる。iPhoneは16 kHz PCMを`gemini-3.5-transcribe-live`へ連続送信し、
+iPhoneの単一の音声会話で評価できる。iPhoneは24 kHz PCMをOpenAI Realtime文字起こし（既定`gpt-4o-mini-transcribe`）へ連続送信し、
 通常のShannon返答を文単位でGemini 3.8 TTSへ渡し、設定済みのカスタム音声を24 kHz raw PCMで
 生成途中からストリーミング再生する。旧クライアント用のWAV一括endpointも互換経路として残す。
-発話中も認識を続け、割り込み候補では音量を下げ、音声が確定した時点で生成と再生を中断する。Azureは
-永続APIキーを`0600`の秘密ファイルだけに保持し、端末へ返すのは1回限りの短寿命認識トークンだけである。
+発話中も認識を続けるが、確定前の文字は表示しない。発話開始で音量を下げ、340 ms続くか文字が確定した時点で生成と再生を中断する。Azureは
+永続APIキーを`0600`の秘密ファイルだけに保持し、端末へ返すのは短寿命の認識クライアントシークレットだけである。
 OpenAIの音声通話と音声選択UIは廃止し、通常のテキスト会話モデルとは独立して音声プロバイダーをGeminiへ一本化した。
 音声ターンの分類・複数スキル採点・感情・読み方は、TypeSafeキーがない間は軽量な
 `gpt-5.6-luna`のstrict structured outputで判定し、キー設定後は同じ契約のJevへ自動的に切り替わる。
