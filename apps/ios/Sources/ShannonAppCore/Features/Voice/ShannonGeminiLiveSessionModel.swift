@@ -447,6 +447,5 @@ public final class ShannonGeminiLiveSessionModel {
         errorMessage = message
         failureRecovery = recovery
     }
-
 }
 #endif
