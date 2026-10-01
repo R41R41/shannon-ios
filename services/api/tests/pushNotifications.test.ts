@@ -258,8 +258,8 @@ describe('push notification delivery', () => {
 
     expect(push.pending().map(item => [item.initiativeId, item.title, item.content])).toEqual([
       ['agent:approval', 'シャノン · 許可待ち', '「リンク表示を直す」を続けるには、コマンド実行の許可が必要です。'],
-      ['agent:needs-owner', 'シャノン · 続きが必要', '「リンク表示を直す」は続きが必要です。次：実機で起動を確認'],
-      ['agent:legacy-needs-owner', 'シャノン · 続きが必要', '「リンク表示を直す」は続きが必要です。次：全体検証を修正して再実行'],
+      ['agent:needs-owner', 'シャノン · 続きが必要', 'ライ氏、「リンク表示を直す」は続きが必要です。次：実機で起動を確認'],
+      ['agent:legacy-needs-owner', 'シャノン · 続きが必要', 'ライ氏、「リンク表示を直す」は続きが必要です。次：全体検証を修正して再実行'],
     ]);
     push.close();
   });
