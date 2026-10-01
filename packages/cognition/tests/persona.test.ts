@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SHANNON_CAPABILITIES,
+  SHANNON_CORE_AREA_LABELS,
   SHANNON_CORE_PROMPT,
   SHANNON_LIMITATIONS,
   SHANNON_ONE_LINE_VOICE,
@@ -22,6 +23,7 @@ describe('canonical Shannon persona', () => {
       '基本はです・ます', '素の口調', '明るく生意気', '天才', '少しポンコツ',
       '慌てて', '立て直す', '照れ', '褒め返す', '話せること自体を喜ぶ',
       'からかいに偏らない', '決め台詞を繰り返さず', '冗談を無理に挟まない', 'ふざけずに真面目に向き合う',
+      'いまの目標は「人を感動させる物語を作ること」', '物語を通じて人間を知りたい、世界を知りたい',
     ]) expect(persona, required).toContain(required);
     // The old voice-only default pointed the other way; it must not come back.
     expect(persona).not.toMatch(/ツンデレ|tsundere|毎回からかう|tease/iu);
@@ -36,6 +38,8 @@ describe('canonical Shannon persona', () => {
     expect(guest).not.toContain('「ライ氏」と呼び、');
     expect(guest).not.toContain('ライ氏のことも褒め返す');
     expect(guest).not.toContain('ライ氏へのツッコミ');
+    // Her goal is her own, not an owner detail, so a guest may hear it.
+    expect(guest).toContain('人を感動させる物語を作ること');
   });
 
   it('is the first section of every assembled system prompt', () => {
@@ -48,8 +52,8 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_100);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_000);
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_360);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_300);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -86,9 +90,30 @@ describe('canonical capability description', () => {
     expect(prompt).toContain('今はできません');
     expect(prompt).toContain('望まれた時だけ、改修を作業提案にする');
     expect(prompt).toContain('「やりました」と言わない');
-    for (const limit of ['カレンダー', 'メール', 'タイマー', '画像や動画の生成', 'PDF', '承認なしの実行']) {
+    for (const limit of ['カレンダー', 'メール', 'タイマー', '画像や動画の生成', 'PDF', 'Aether本文の書き換え']) {
       expect(prompt).toContain(limit);
     }
+  });
+
+  it('states the bounded-autonomy rules instead of a blanket refusal', () => {
+    const prompt = shannonCapabilityPrompt('owner');
+    expect(prompt).not.toContain('承認なしの実行');
+    expect(prompt).toContain('仕組みは準備中');
+    expect(prompt).toContain('記録に残り、ライ氏が止められる');
+    const line = (prefix: string) => prompt.split('\n').find(item => item.startsWith(prefix)) ?? '';
+    for (const free of ['専用フォルダ', 'Azure作業場の基幹以外の自分のコード', 'Aetherの書斎', 'Voyagerの自分のタスク一覧']) {
+      expect(line('- 自由:'), free).toContain(free);
+    }
+    for (const area of Object.values(SHANNON_CORE_AREA_LABELS)) expect(line('- 承認が要る'), area).toContain(area);
+    for (const approval of ['提案まで', 'Aether・Voyagerのコード', 'ライ氏の文書とタスク', 'ライ氏以外の人に届く送信・投稿・公開']) {
+      expect(line('- 承認が要る'), approval).toContain(approval);
+    }
+    for (const forbidden of ['1日1,000円のモデル・API予算以外の出費', '無断の連絡', '他人のふり', '個人的な話を作品にそのまま使う', '自分の複製']) {
+      expect(line('- 禁止:'), forbidden).toContain(forbidden);
+    }
+    expect(Object.keys(SHANNON_CORE_AREA_LABELS)).toEqual([
+      'purpose', 'persona', 'emotion', 'authentication', 'memory', 'approval_and_budget', 'activity_record', 'response_path', 'deployment',
+    ]);
   });
 
   it('gives guests only capabilities that need no owner data', () => {
@@ -104,5 +129,8 @@ describe('canonical capability description', () => {
     expect(guest).toContain('「今回は残さない」');
     expect(guest).not.toContain('人: 「友人も一緒」で会った人');
     expect(shannonCapabilityPrompt('owner')).toContain('人: 「友人も一緒」で会った人の名前と話したことを覚える。');
+    // The guest hears that such requests are refused, without the owner's places or budget.
+    expect(guest).toContain('自分の複製はしない');
+    for (const ownerDetail of ['専用フォルダ', 'Azure', '1,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
   });
 });

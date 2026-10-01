@@ -46,6 +46,8 @@ extension ShannonDesktopRootView {
                 }
             }
 
+            ShannonAutonomySettingsSection(model: memory.autonomy)
+
             Section("Shannon Desk") {
                 LabeledContent("バージョン", value: appVersionDescription)
                 LabeledContent("会話と記憶", value: "iPhoneと共通")

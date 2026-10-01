@@ -77,7 +77,7 @@ describe('Shannon capability description', () => {
     expect(sources).not.toMatch(/EventKit|caldav|icalendar|smtp|sendmail|nodemailer/iu);
     // Not machine-checked: commitment reminders go through the throttled initiative loop,
     // approvals stay explicit, and no speaker identification exists. Reviewed by hand.
-    for (const id of ['exact_time_alarm', 'unapproved_action', 'speaker_identification'] as const) {
+    for (const id of ['exact_time_alarm', 'owner_content_write', 'speaker_identification'] as const) {
       expect(limitations.has(id)).toBe(true);
     }
   });

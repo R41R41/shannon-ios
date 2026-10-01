@@ -14,6 +14,7 @@ struct ShannonMemoryHubList: View {
             nowSection(overview, palette: palette)
             errorSection(model.cognitionErrorMessage, palette: palette)
             errorSection(model.errorMessage, palette: palette)
+            ShannonAutonomyHubSection(model: model.autonomy, palette: palette)
             categorySection(overview, palette: palette)
             Section {
                 NavigationLink {

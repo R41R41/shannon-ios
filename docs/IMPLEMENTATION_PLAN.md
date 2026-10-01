@@ -87,7 +87,7 @@ The following are future product ideas and are not missing release work:
 - background voice activation;
 - continuous camera/live-world conversation and person recognition;
 - Live2D runtime and animated widgets;
-- autonomous source-code rewriting;
+- applying a source-code change without the owner's approval (Shannon may propose one; Syzygy ADR-0002);
 - per-user fine-tuning or prediction-error training.
 
 They require separate privacy, battery, permission, cost, and interaction-design

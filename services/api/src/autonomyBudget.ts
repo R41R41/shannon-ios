@@ -1,0 +1,141 @@
+import { delimiter, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { SHANNON_AUTONOMY_DAILY_BUDGET_YEN } from '@shannon/cognition';
+import { ownerDay } from './companionPresence.js';
+import { configuredAutonomyModelPrices, type AutonomyModelPrices } from './autonomyModels.js';
+
+/**
+ * Server-side configuration of bounded autonomy. Nothing Shannon can write through
+ * the autonomy service changes these values; they come from the deployment
+ * environment, which is core (deployment).
+ */
+export interface AutonomyPlaces {
+  /** Her own folder on each named host (owner's Mac, Windows PC). */
+  hostFolders: Readonly<Record<string, string>>;
+  /** Her workspace on the Azure VM, apart from the production service. */
+  workspaceRoot: string | null;
+  /** Deployed source of the running service. Everything inside needs approval. */
+  productionRoots: readonly string[];
+  /** Shannon repository checkouts, where the core path map applies. */
+  repositoryRoots: readonly string[];
+  /** Runtime files that are core wherever they live: the database and the secret store. */
+  protectedPaths: readonly string[];
+}
+
+export interface AutonomyConfig {
+  /** Master switch from the deployment environment. Off until the owner enables step 3. */
+  enabled: boolean;
+  dailyBudgetYen: number;
+  /** Largest increase the owner can approve for one day. */
+  maximumExtraYenPerDay: number;
+  /** Conversion used for the yen cap. Set above the market rate so the count errs high. */
+  yenPerUsd: number;
+  timeZone: string;
+  maximumPublicReadsPerDay: number;
+  modelPrices: AutonomyModelPrices;
+  places: AutonomyPlaces;
+}
+
+const SERVICE_REPOSITORY_ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
+
+export function configuredAutonomy(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  runtime: { databasePath?: string } = {},
+): AutonomyConfig {
+  const roots = (value: string | undefined) => (value ?? '').split(delimiter).map(item => item.trim()).filter(Boolean);
+  const databasePath = runtime.databasePath && runtime.databasePath !== ':memory:' ? [resolve(runtime.databasePath, '..')] : [];
+  return Object.freeze({
+    enabled: environment.SHANNON_AUTONOMY_ENABLED?.trim() === 'true',
+    dailyBudgetYen: boundedNumber(environment.SHANNON_AUTONOMY_DAILY_BUDGET_YEN, 0, 100_000, SHANNON_AUTONOMY_DAILY_BUDGET_YEN),
+    maximumExtraYenPerDay: boundedNumber(environment.SHANNON_AUTONOMY_MAX_EXTRA_YEN, 0, 100_000, 3_000),
+    yenPerUsd: boundedNumber(environment.SHANNON_AUTONOMY_YEN_PER_USD, 50, 1_000, 160),
+    timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || 'Asia/Tokyo',
+    maximumPublicReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_PUBLIC_READS, 0, 10_000, 200)),
+    modelPrices: configuredAutonomyModelPrices(environment),
+    places: Object.freeze({
+      hostFolders: hostFolders(environment.SHANNON_AUTONOMY_HOST_FOLDERS_JSON),
+      workspaceRoot: environment.SHANNON_AUTONOMY_WORKSPACE_ROOT?.trim() || null,
+      productionRoots: Object.freeze([SERVICE_REPOSITORY_ROOT, ...roots(environment.SHANNON_AUTONOMY_PRODUCTION_ROOTS)]),
+      repositoryRoots: Object.freeze([SERVICE_REPOSITORY_ROOT, ...roots(environment.SHANNON_AUTONOMY_REPOSITORY_ROOTS)]),
+      protectedPaths: Object.freeze([...databasePath, ...roots(environment.SHANNON_AUTONOMY_PROTECTED_PATHS)]),
+    }),
+  });
+}
+
+export interface AutonomyBudgetStatus {
+  dayKey: string;
+  /** The configured daily cap. */
+  baseCapYen: number;
+  /** What the owner added for this day only. */
+  extraYen: number;
+  capYen: number;
+  spentYen: number;
+  remainingYen: number;
+  exhausted: boolean;
+  yenPerUsd: number;
+}
+
+export function autonomyDayKey(at: string, config: Pick<AutonomyConfig, 'timeZone'>): string {
+  return ownerDay(at, config.timeZone);
+}
+
+export function autonomyBudgetStatus(
+  dayKey: string,
+  spentYen: number,
+  approvedExtraYen: number,
+  config: Pick<AutonomyConfig, 'dailyBudgetYen' | 'maximumExtraYenPerDay' | 'yenPerUsd'>,
+): AutonomyBudgetStatus {
+  const extraYen = Math.max(0, Math.min(config.maximumExtraYenPerDay, finite(approvedExtraYen)));
+  const capYen = config.dailyBudgetYen + extraYen;
+  const spent = roundYen(Math.max(0, finite(spentYen)));
+  return Object.freeze({
+    dayKey,
+    baseCapYen: config.dailyBudgetYen,
+    extraYen,
+    capYen,
+    spentYen: spent,
+    remainingYen: roundYen(Math.max(0, capYen - spent)),
+    exhausted: spent >= capYen,
+    yenPerUsd: config.yenPerUsd,
+  });
+}
+
+/** Whether a paid step of the estimated size still fits in the day. */
+export function fitsAutonomyBudget(budget: Pick<AutonomyBudgetStatus, 'capYen' | 'spentYen'>, estimatedCostYen: number): boolean {
+  if (!Number.isFinite(estimatedCostYen) || estimatedCostYen < 0) return false;
+  return budget.spentYen < budget.capYen && budget.spentYen + estimatedCostYen <= budget.capYen;
+}
+
+/** Yen for a USD cost, rounded up to a hundredth of a yen so the count never errs low. */
+export function yenFromUsd(costUsd: number, config: Pick<AutonomyConfig, 'yenPerUsd'>): number {
+  return Math.ceil(Math.max(0, finite(costUsd)) * config.yenPerUsd * 100 - 1e-9) / 100;
+}
+
+export function roundYen(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function hostFolders(raw: string | undefined): Readonly<Record<string, string>> {
+  if (!raw?.trim()) return Object.freeze({});
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return Object.freeze({});
+    const folders: Record<string, string> = {};
+    for (const [host, folder] of Object.entries(parsed as Record<string, unknown>)) {
+      if (/^[a-z0-9][a-z0-9-]{0,39}$/u.test(host) && typeof folder === 'string' && folder.trim()) folders[host] = folder.trim();
+    }
+    return Object.freeze(folders);
+  } catch {
+    return Object.freeze({});
+  }
+}
+
+function boundedNumber(value: string | undefined, minimum: number, maximum: number, fallback: number): number {
+  if (!value?.trim()) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function finite(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
