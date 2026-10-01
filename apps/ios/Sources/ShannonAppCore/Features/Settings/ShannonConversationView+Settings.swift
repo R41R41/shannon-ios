@@ -15,73 +15,94 @@ extension ShannonConversationView {
     func settingsSheetContent(_ palette: ShannonPalette) -> some View {
         NavigationStack {
             List {
-                Section("Shannon") {
-                    settingsButton(
-                        title: "シャノンの状態",
-                        detail: model.state == nil
-                            ? model.currentExpression.japaneseName
-                            : "\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)",
-                        symbol: "waveform.path.ecg"
-                    ) { showsStateDetails = true }
+                Section {
+                    settingsProfileRow(palette)
                 }
 
-                Section("表示") {
-                    settingsButton(
-                        title: "アプリアイコン",
-                        detail: appIconModel.activeTitle,
-                        symbol: "app.dashed"
-                    ) { showsAppIconSettings = true }
-                    settingsButton(
+                Section("見た目") {
+                    settingsValueButton(
                         title: "外観",
-                        detail: savedAppearanceMode.japaneseName,
-                        symbol: savedAppearanceMode.symbolName
+                        value: ShannonSettingsSummary.appearanceLabel(savedAppearanceMode),
+                        symbol: savedAppearanceMode.symbolName,
+                        palette: palette
                     ) { showsAppearanceSettings = true }
-                    Picker("チャットのシャノンのアイコン", selection: $chatAvatarStyleRawValue) {
+                    settingsValueButton(
+                        title: "アプリアイコン",
+                        value: ShannonSettingsSummary.appIconLabel(appIconModel.activeChoice),
+                        symbol: "app.dashed",
+                        palette: palette
+                    ) { showsAppIconSettings = true }
+                    Picker(selection: $chatAvatarStyleRawValue) {
                         ForEach(ShannonChatAvatarStyle.allCases, id: \.rawValue) { style in
                             Text(style.japaneseName).tag(style.rawValue)
                         }
+                    } label: {
+                        settingsLabel("アバター", symbol: "person.crop.circle", palette: palette)
                     }
-                    .accessibilityHint("シャノンの返答横に表示するアイコンを切り替えます")
+                    .accessibilityHint("チャットでシャノンの返答横に表示するアイコンを切り替えます。ホーム画面のアプリアイコンは変わりません")
                 }
 
-                Section("音声と情報") {
-                    Picker("シャノンの読み上げ", selection: $speechProviderRawValue) {
+                Section {
+                    LabeledContent {
+                        Text(settingsVoiceLabel)
+                            .foregroundStyle(palette.textSecondary)
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("声")
+                                Text("次の通話から反映")
+                                    .font(.footnote)
+                                    .foregroundStyle(palette.textSecondary)
+                            }
+                        } icon: {
+                            Image(systemName: "speaker.wave.2").foregroundStyle(palette.action)
+                        }
+                    }
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+                    .accessibilityElement(children: .combine)
+                    Picker(selection: $speechProviderRawValue) {
                         ForEach(ShannonSpeechProvider.allCases) { provider in
                             Text(provider.japaneseName).tag(provider.rawValue)
                         }
+                    } label: {
+                        settingsLabel("読み上げ", symbol: "waveform", palette: palette)
                     }
-                    .accessibilityHint("次に開始する音声会話から適用します")
-                    Text("Geminiで作った声／ElevenLabsのShannonクローンを切り替えます。次の通話から適用されます。")
-                        .font(.footnote)
-                        .foregroundStyle(palette.textSecondary)
-                    settingsButton(
-                        title: "情報源",
-                        detail: worldSubscriptionModel.summary,
-                        symbol: "newspaper"
-                    ) { showsWorldSubscriptions = true }
+                    .accessibilityHint("Geminiで作った声とElevenLabsのShannonクローンを切り替えます。次に開始する音声会話から適用します")
+                } header: {
+                    Text("声と会話")
+                } footer: {
+                    Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
                 }
 
-                Section("接続と配信") {
+                Section("接続と詳細") {
                     if let connectionModel {
-                        settingsButton(
+                        settingsValueButton(
                             title: "接続",
-                            detail: connectionModel.statusLabel,
-                            symbol: "link"
+                            value: ShannonSettingsSummary.connectionLabel(connectionModel.status),
+                            symbol: "link",
+                            palette: palette
                         ) { showsConnectionDetails = true }
                     }
-                    settingsButton(
-                        title: "アプリの更新",
-                        detail: "TestFlightの配信状況と履歴",
-                        symbol: "arrow.down.app"
+                    settingsValueButton(
+                        title: "情報源",
+                        value: worldSubscriptionModel.summary,
+                        symbol: "newspaper",
+                        palette: palette
+                    ) { showsWorldSubscriptions = true }
+                    settingsValueButton(
+                        title: "配信",
+                        value: "TestFlight",
+                        symbol: "arrow.down.app",
+                        palette: palette
                     ) { showsTestFlightDelivery = true }
-                }
-
-                Section("詳細") {
-                    settingsButton(
-                        title: "音声診断",
-                        detail: "音声の処理時間を確認・コピー",
-                        symbol: "waveform.badge.magnifyingglass"
+                    .accessibilityHint("アプリの更新、TestFlightの配信状況と履歴を開きます")
+                    settingsValueButton(
+                        title: "診断",
+                        value: "音声",
+                        symbol: "waveform.badge.magnifyingglass",
+                        palette: palette
                     ) { showsVoiceDiagnostics = true }
+                    .accessibilityHint("音声の処理時間を確認・コピーします")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -128,15 +149,100 @@ extension ShannonConversationView {
         }
     }
 
-    func settingsButton(
+    var settingsSpeechProvider: ShannonSpeechProvider {
+        ShannonSpeechProvider(rawValue: speechProviderRawValue) ?? .gemini
+    }
+
+    var settingsVoiceLabel: String {
+#if os(iOS)
+        ShannonSettingsSummary.voiceLabel(
+            provider: settingsSpeechProvider,
+            lastSessionProvider: geminiLiveVoiceModel.speechProvider,
+            lastSessionVoice: geminiLiveVoiceModel.voice
+        )
+#else
+        ShannonSettingsSummary.voiceLabel(
+            provider: settingsSpeechProvider,
+            lastSessionProvider: settingsSpeechProvider,
+            lastSessionVoice: ""
+        )
+#endif
+    }
+
+    /// Shannon's profile: current avatar, name, voice and provider. Opens the
+    /// existing state details. No audition button: the only preview endpoint
+    /// belonged to the retired realtime voice identity.
+    func settingsProfileRow(_ palette: ShannonPalette) -> some View {
+        Button {
+            showsStateDetails = true
+        } label: {
+            HStack(spacing: ShannonSpacing.medium) {
+                ShannonChatAvatarView(expression: model.currentExpression, size: 56)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("シャノン")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(palette.textPrimary)
+                    Text(ShannonSettingsSummary.profileSubtitle(
+                        voice: settingsVoiceLabel,
+                        provider: settingsSpeechProvider
+                    ))
+                    .font(.subheadline)
+                    .foregroundStyle(palette.textSecondary)
+                    Text(model.state == nil
+                        ? "いま：\(model.currentExpression.japaneseName)"
+                        : "いま：\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)")
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                }
+                Spacer(minLength: ShannonSpacing.small)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
+            .padding(.vertical, ShannonSpacing.extraSmall)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("シャノンの状態を表示します")
+        .accessibilityIdentifier("settings-shannon-profile")
+    }
+
+    func settingsValueButton(
         title: String,
-        detail: String,
+        value: String,
         symbol: String,
+        palette: ShannonPalette,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            ShannonSettingsRow(title: title, detail: detail, symbol: symbol)
+            LabeledContent {
+                HStack(spacing: ShannonSpacing.small) {
+                    Text(value)
+                        .foregroundStyle(palette.textSecondary)
+                        .multilineTextAlignment(.trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(palette.textSecondary)
+                        .accessibilityHidden(true)
+                }
+            } label: {
+                settingsLabel(title, symbol: symbol, palette: palette)
+            }
+            .frame(minHeight: ShannonTouchTarget.minimum)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+
+    func settingsLabel(_ title: String, symbol: String, palette: ShannonPalette) -> some View {
+        Label {
+            Text(title).foregroundStyle(palette.textPrimary)
+        } icon: {
+            Image(systemName: symbol).foregroundStyle(palette.action)
+        }
     }
 }

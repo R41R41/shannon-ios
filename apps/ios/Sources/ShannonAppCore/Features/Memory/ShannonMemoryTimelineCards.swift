@@ -40,25 +40,31 @@ struct ShannonDiaryCard: View {
         }
     }
 
-    var title: String {
-        if let interest = report.interestChanges.first { return interest.text }
-        if let learned = report.learned.first { return learned.text }
-        if let updated = report.updated.first { return updated.text }
-        if !report.contradictions.isEmpty { return "まだ決めずに置いておくこと" }
+    var title: String { report.diaryTitle }
+
+    var summary: String { report.diarySummary }
+}
+
+extension ShannonSleepReportDTO {
+    var diaryTitle: String {
+        if let interest = interestChanges.first { return interest.text }
+        if let learned = learned.first { return learned.text }
+        if let updated = updated.first { return updated.text }
+        if !contradictions.isEmpty { return "まだ決めずに置いておくこと" }
         return "静かに整理した夜"
     }
 
-    var summary: String {
-        if let interest = report.interestChanges.first {
+    var diarySummary: String {
+        if let interest = interestChanges.first {
             return "「\(interest.text)」が、今日は少し心に残った。"
         }
-        if let learned = report.learned.first {
+        if let learned = learned.first {
             return "あなたについて「\(learned.text)」を新しく覚えた。"
         }
-        if let updated = report.updated.first {
+        if let updated = updated.first {
             return "「\(updated.text)」について、前より少し理解が深まった。"
         }
-        if !report.contradictions.isEmpty {
+        if !contradictions.isEmpty {
             return "まだ決めつけずに置いておきたいことがあった。"
         }
         return "今日は大きく書き換えず、静かに覚えている。"

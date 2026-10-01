@@ -122,14 +122,8 @@ struct ShannonCurrentStateCard: View {
     }
 
     var dominantState: (label: String, symbol: String, value: Double) {
-        let candidates = [
-            ("好奇心が強い", "sparkles", state.temperament.curiosity),
-            ("心を開いている", "heart.circle.fill", state.emotion.openness),
-            ("元気がある", "bolt.fill", state.emotion.arousal),
-            ("穏やか", "cloud.sun.fill", state.temperament.calmness),
-            ("距離が近い", "person.2.fill", state.temperament.closeness),
-        ]
-        return candidates.max(by: { $0.2 < $1.2 }) ?? candidates[0]
+        let mood = ShannonMemoryOverview.mood(for: state)
+        return (mood.label, mood.symbol, mood.value)
     }
 }
 
