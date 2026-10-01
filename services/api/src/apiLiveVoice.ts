@@ -30,7 +30,8 @@ import { visibleConversationHistory } from './memoryVisibility.js';
 import { executeConversationCommand, type ConversationCommandDependencies } from './conversationCommands.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
-import { conversationCapabilityPrompt, type ConversationReadCapabilities } from './conversationCapabilities.js';
+import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type ConversationReadCapabilities } from './conversationCapabilities.js';
+import { asksAboutNotion } from './notionConversation.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import { voicePlanResponse } from './voiceEmotionPlan.js';
 import { transcriptNeedsInterpretation, voiceTranscriptInterpretationPrompt } from './voiceTranscriptContext.js';
@@ -172,6 +173,9 @@ async function completeLiveVoiceDelegation(
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
   if (semanticMemoryTurn) decision = withMemorySearchLatency(decision);
   if (decision.selectedSkills.includes('place_discovery')) decision = withMemorySearchLatency(decision);
+  // Notion is the owner's private material: read only when he is alone, by a fixed rule on his words.
+  const notionTurn = alone && !temporaryGuest && decision.shouldRespond && asksAboutNotion(transcript);
+  if (notionTurn && dependencies.notion?.connected) decision = withMemorySearchLatency(decision);
   let orchestrationState = !alone || uncertainTranscript ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
@@ -293,12 +297,14 @@ async function completeLiveVoiceDelegation(
   const taskPrompt = legacyGuest || !selectedSkills.has('agent_status')
     ? ''
     : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
-  const capabilityPrompt = legacyGuest
-    ? ''
-    : await conversationCapabilityPrompt(scopeKey, transcript, dependencies, {
+  const capability = legacyGuest
+    ? NO_CAPABILITY_CONTEXT
+    : await conversationCapabilityContext(scopeKey, transcript, dependencies, {
       aetherNotes: selectedSkills.has('aether_notes'),
       voyagerTasks: selectedSkills.has('voyager_tasks'),
+      notion: notionTurn,
     });
+  const capabilityPrompt = capability.prompt;
   observer?.signal?.throwIfAborted();
   // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
   const includeCognitiveContext = temporaryGuest ? !legacyGuest : selectedSkills.has('conversation_memory');
@@ -440,7 +446,7 @@ async function completeLiveVoiceDelegation(
       threadId,
       model: completion.model,
       reply: reply.trim(),
-      webSources: combinedPlaceSources(placeSkill, completion.webSources),
+      webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
       ...(uiBlocks ? { uiBlocks } : {}),
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
       ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),

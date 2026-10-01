@@ -13,6 +13,10 @@ import { GENERATED_ARTIFACT_INSTRUCTIONS, WEB_SEARCH_INSTRUCTIONS, agentTaskInst
 import { executeConversationCommand } from '../src/conversationCommands.js';
 import { prepareConversationOrganize } from '../src/conversationOrganize.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
+import { readNotionForActivity } from '../src/notionAutonomousRead.js';
+import { NOTION_READ_ENDPOINTS, notionReadOperation } from '../src/notionClient.js';
+import { asksAboutNotion, notionTurnProjection } from '../src/notionConversation.js';
+import { BoundedNotionSource, configuredNotionSource } from '../src/notionSource.js';
 import { isOrganizeCommand } from '../src/organizeSupport.js';
 import { PeopleMemory } from '../src/peopleMemory.js';
 import { establishedGuestName } from '../src/voiceGuestNames.js';
@@ -46,6 +50,12 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
       { name: `${index}.txt`, mimeType: 'text/plain', text: 'x' }))) === null
     && GENERATED_ARTIFACT_INSTRUCTIONS.includes('[生成物]'),
   aether_read: () => voiceSkill('aether_notes') && exists(FileAetherContextReader, FileAetherProposalStore),
+  // Read-only: the reader exists, the routing rule fires on the story's name, and no write request is on the allowlist.
+  notion_read: () => exists(BoundedNotionSource.prototype.search, BoundedNotionSource.prototype.readPage,
+    BoundedNotionSource.prototype.queryDatabase, notionTurnProjection, readNotionForActivity)
+    && asksAboutNotion('ウサカテの伏線を見て') && !asksAboutNotion('おはよう')
+    && configuredNotionSource({}).connected === false
+    && NOTION_READ_ENDPOINTS.length === 6 && notionReadOperation('PATCH', '/v1/pages/44444444444444444444444444444444') === null,
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),

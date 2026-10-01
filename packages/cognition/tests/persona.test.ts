@@ -52,7 +52,7 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_400);
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_420);
     expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_350);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });

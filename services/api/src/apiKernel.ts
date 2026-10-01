@@ -59,7 +59,7 @@ import { validatedPlaceSearchOptions } from './placeDiscovery.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
-import { conversationCapabilityPrompt } from './conversationCapabilities.js';
+import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
 import { executeConversationCommand } from './conversationCommands.js';
 import { visibleConversationHistory, usableThreadSummary } from './memoryVisibility.js';
@@ -100,10 +100,7 @@ import {
   type VoyagerCatalog,
   type VoyagerTaskProjection,
 } from './organize.js';
-import {
-  InMemoryVoiceIdentityStore,
-  type ShannonVoiceIdentityStore,
-} from './voiceIdentity.js';
+import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './voiceIdentity.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;
@@ -131,6 +128,7 @@ export interface ShannonApiKernelOptions {
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
   autonomy?: ShannonAutonomyService;
+  notion?: NotionTurnReader;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -158,6 +156,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
+  private readonly notion: NotionTurnReader | null;
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -190,6 +189,7 @@ export class ShannonApiKernel {
     this.cognitiveIntents = options.cognitiveIntents ?? new InMemoryCognitiveIntentStore();
     this.conversationOrchestration = options.conversationOrchestration ?? new InMemoryConversationOrchestrationStore();
     this.memoryRecall = options.memoryRecall ?? null;
+    this.notion = options.notion ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
   }
@@ -371,12 +371,12 @@ export class ShannonApiKernel {
         ? await this.memoryRecall.enrich(deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : deterministicContext;
       const basePrompt = this.knowledgeStore?.promptProjection(body.scopeKey)
         ?? assembleShannonSystemPrompt(captured);
-      const capabilityContext = explicitCommand ? '' : conversationCapabilityPrompt(body.scopeKey, message,
-        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog });
-      const capabilityPrompt = typeof capabilityContext === 'string' ? capabilityContext : await capabilityContext;
+      const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
+        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion });
+      const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
       const dailyMindPrompt = [this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey)].filter(Boolean).join('\n\n');
       const systemPrompt = [
-        basePrompt, cognitiveContext.prompt, peopleRecall.prompt, dailyMindPrompt, capabilityPrompt,
+        basePrompt, cognitiveContext.prompt, peopleRecall.prompt, dailyMindPrompt, capability.prompt,
         buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),
         agentTaskPromptProjection(this.agentTasks.list(body.scopeKey), threadId),
       ].filter(Boolean).join('\n\n');
@@ -420,7 +420,7 @@ export class ShannonApiKernel {
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
-      const reply = placeSkillReply(completion, placeSkill);
+      const reply = placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
       const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
       // Her feeling for this reply, from state already in hand; it is stored after the response.
       const { messageEmotion, expressiveEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt });
@@ -480,7 +480,7 @@ export class ShannonApiKernel {
       chatModel: this.chatModel, voiceDecision: this.voiceDecision,
       stateStore: this.stateStore, conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, agentTasks: this.agentTasks,
-      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog,
+      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people,

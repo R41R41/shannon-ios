@@ -34,6 +34,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',
     text: 'Aether: 共有された範囲のノート（題名と短い抜粋）だけ読む。「〜をノートに残して」で保存案を提案受信箱へ送る。' },
+  { id: 'notion_read', audience: 'owner',
+    text: 'Notion: 共有されたページを読む（読むだけ）。' },
   { id: 'voyager_tasks', audience: 'owner',
     text: 'Voyager: タスクを検索して読む。「〜をタスクにして」「整理して」でタスク案を作り、確認カードで選ばれた分だけ反映される。' },
   { id: 'agent_tasks', audience: 'owner',

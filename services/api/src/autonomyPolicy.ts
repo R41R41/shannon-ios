@@ -65,6 +65,9 @@ export interface AutonomyPolicyContext {
   resolvePath: AutonomyPathResolver;
   publicReadsToday: number;
   maximumPublicReadsPerDay: number;
+  /** For `notion_read`: reads of the owner's shared Notion pages. Absent means none are allowed. */
+  notionReadsToday?: number;
+  maximumNotionReadsPerDay?: number;
 }
 
 export interface AutonomyDecision {
@@ -121,6 +124,10 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
     if (context.publicReadsToday + Math.max(1, request.urls?.length ?? 0) > context.maximumPublicReadsPerDay) {
       return refuse('forbidden', 'access_limit', domainId, '今日の外部アクセスが節度の上限に達したため、実行しません。');
     }
+  }
+  // Reading is all this domain covers; the reader itself has no write request.
+  if (domainId === 'notion_read' && (context.notionReadsToday ?? 0) + 1 > (context.maximumNotionReadsPerDay ?? 0)) {
+    return refuse('forbidden', 'access_limit', domainId, '今日のNotionの読み取りが上限に達したため、実行しません。');
   }
   if (request.paid) {
     if (!context.isKnownModel(request.paid.model)) {

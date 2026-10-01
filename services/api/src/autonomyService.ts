@@ -107,6 +107,8 @@ export class ShannonAutonomyService {
       resolvePath: this.resolvePath,
       publicReadsToday: this.store.activity.countForDay(scopeKey, dayKey, 'public_read', 'allowed'),
       maximumPublicReadsPerDay: this.config.maximumPublicReadsPerDay,
+      notionReadsToday: this.store.activity.countForDay(scopeKey, dayKey, 'notion_read', 'allowed'),
+      maximumNotionReadsPerDay: this.config.maximumNotionReadsPerDay,
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {
