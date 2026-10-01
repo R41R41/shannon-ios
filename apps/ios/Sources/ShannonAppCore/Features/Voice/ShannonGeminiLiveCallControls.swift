@@ -48,7 +48,8 @@ struct ShannonGeminiLiveCallControls: View {
     }
 
     private func row(_ items: [Control], spacing: CGFloat) -> some View {
-        HStack(alignment: .top, spacing: spacing) {
+        // Labels share one baseline even though マイク has the larger circle.
+        HStack(alignment: .lastTextBaseline, spacing: spacing) {
             ForEach(items, id: \.self) { item in
                 control(item).frame(maxWidth: .infinity)
             }
@@ -144,7 +145,8 @@ struct ShannonGeminiLiveCallControls: View {
         fill: Color? = nil,
         foreground: Color? = nil
     ) -> some View {
-        let size = min(max(diameter ?? controlDiameter, ShannonTouchTarget.minimum), 104)
+        // Capped so large text keeps room for the eye and status; マイク stays larger.
+        let size = min(max(diameter ?? controlDiameter, ShannonTouchTarget.minimum), diameter == nil ? 80 : 96)
         let neutral = fill == nil
         return VStack(spacing: ShannonSpacing.extraSmall) {
             Image(systemName: systemImage)
