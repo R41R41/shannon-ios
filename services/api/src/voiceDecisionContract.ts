@@ -1,5 +1,6 @@
 export const VOICE_SKILLS = [
   'current_web',
+  'place_discovery',
   'conversation_memory',
   'daily_mind',
   'aether_notes',
@@ -73,6 +74,7 @@ export interface VoiceDecisionGateway {
 
 export const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
   current_web: 'Does answering this utterance require current or externally verified web information, such as weather, news, schedules, transit, opening hours, prices, or current public facts?',
+  place_discovery: 'Does the user want to find, compare, or use specific places, shops, facilities, or map locations, possibly together with weather, travel, memory, or tasks?',
   conversation_memory: 'Does answering well require the owner\'s remembered preferences, prior experiences, promises, relationships, or earlier conversation context?',
   daily_mind: 'Would Shannon\'s current daily reflection or ongoing personal context materially improve this reply?',
   aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether?',

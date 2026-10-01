@@ -40,7 +40,7 @@ The response path is intentionally short and uses one immutable state snapshot:
    - Voice classifies such a turn as `under_10s` or longer so the existing waiting phrase plays first; Talk shows 「記憶を探しています」 while a memory turn is pending.
 4. Select one owner-visible active intention using current-turn evidence, thread affinity, priority, and recency. An explicitly stated goal in the current utterance participates provisionally so the same reply can honor it, but is persisted only after the turn succeeds.
 5. Assemble the minimal identity prompt, prompt projection, turn-specific recalled memories, selected intention, relevant Aether context, active agent-task projection, and bounded conversation history.
-6. Call the fixed chat model once with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work.
+6. Call the fixed chat model with adaptive-depth response guidance: lead with the outcome, stay concise for simple questions, and preserve enough Markdown-structured detail for explanation, design, research, and implementation work. Ordinary turns use one model call. A place-discovery turn first runs the read-only place skill, then passes its bounded candidate and source data into the normal final synthesis alongside other selected capabilities.
 7. Store the assistant reply and its selected expression, then persist the explicit intention and a bounded cognitive-cycle receipt containing only visible inputs, selected IDs, action class, outcome, and summary. It never stores hidden chain-of-thought.
 8. Enqueue non-blocking emotion, durable memory, prospective-memory, and activity work.
 
@@ -49,6 +49,12 @@ For a newly created thread without an explicit title, the first successful user/
 SQLite schema v8 adds `conversation_threads.title_origin` (`pending`, `automatic`, or `manual`). Migration preserves all existing titles as manual because older rows have no edit provenance. Only newly created untitled threads are eligible for automatic naming. The migration is additive and runs inside the existing restart-safe migration transaction.
 
 Emotion and memory updates affect the next reply after they commit. Prediction-error processing is not part of v1.
+
+## Place discovery skill
+
+Text chat recognizes a place request; the live-voice router selects `place_discovery` independently of `current_web`, memory, device context, and other skills. The skill searches for up to five places without sending conversation history or private context. Its normalized names, addresses, reasons, Apple Maps queries, and bounded source links become lower-trust reference data for the final reply. Final synthesis can also use current web search and the usual selected app capabilities, so a request such as “近くのカフェと今日の天気” keeps the place candidates available while answering the weather part. The map card comes from the skill result, not a second extraction from final prose. Text history retains map links; voice speaks without URLs and saves the links in the owner thread.
+
+Only a nearby-place request forwards a fresh, one-time device location to the skill. If location or candidate evidence is missing, Shannon asks for the area or states the uncertainty instead of inventing a position, route, opening hour, or weather. This is an app response skill and does not give the model permission to book, navigate, or write to an external service.
 
 ## Intention and cognitive-cycle lane
 

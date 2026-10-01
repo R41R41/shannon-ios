@@ -26,6 +26,7 @@ export const voiceDecisionEvaluationCases: readonly VoiceDecisionEvaluationCase[
   { id: 'agent-progress', transcript: 'Codexの実装、どこまで終わった？', expectedClasses: ['skill_simple'], expectedSkills: ['agent_status'], expectedLatency: ['under_3s', 'under_10s'], shouldRespond: true },
   { id: 'device-time', transcript: '今何時？', expectedClasses: ['skill_simple'], expectedSkills: ['current_web', 'device_context'], expectedLatency: ['under_3s', 'under_10s'], shouldRespond: true },
   { id: 'location', transcript: 'ここから一番近い駅は？', expectedClasses: ['skill_simple'], expectedSkills: ['current_web', 'device_context'], expectedLatency: ['under_3s', 'under_10s'], shouldRespond: true },
+  { id: 'place-weather', transcript: '近くのカフェを探して、今日の天気も教えて', expectedClasses: ['skill_complex'], expectedSkills: ['place_discovery', 'current_web', 'device_context'], expectedLatency: ['under_10s', 'over_10s'], shouldRespond: true },
   { id: 'implementation', transcript: 'この設計を実装する計画を立てて', expectedClasses: ['direct', 'skill_complex'], expectedSkills: [], expectedLatency: ['under_3s', 'under_10s', 'over_10s'], shouldRespond: true },
   { id: 'friend-intro', transcript: '友達に自己紹介して', expectedClasses: ['direct'], expectedSkills: [], expectedLatency: ['under_3s'], shouldRespond: true },
   { id: 'discord', transcript: 'Discordのみんなとの会話に自然に入ってきて', expectedClasses: ['direct'], expectedSkills: [], expectedLatency: ['under_3s'], shouldRespond: true },

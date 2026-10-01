@@ -1,3 +1,4 @@
+import { wantsPlaceDiscovery } from './placeDiscovery.js';
 import {
   mandatorySkillPatterns, VOICE_SKILLS,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
@@ -11,6 +12,7 @@ export function applyMandatorySkillFloors(
     if (mandatorySkillPatterns[skill]?.test(input.transcript)) scores[skill] = Math.max(scores[skill], 1);
   }
   if (input.requestedLocation) scores.device_context = 1;
+  if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {
     scores.conversation_memory = 0;
     scores.daily_mind = 0;

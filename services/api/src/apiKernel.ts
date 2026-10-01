@@ -21,7 +21,6 @@ import {
   type VoiceParticipantMode,
 } from './apiLiveVoice.js';
 import {
-  appendWebSources,
   badRequest,
   objectBody,
   validAgentCommandType,
@@ -59,7 +58,8 @@ import {
   type HostAgentEvent,
 } from './agentTaskStore.js';
 import { randomUUID } from 'node:crypto';
-import { placeReply, validatedPlaceSearchOptions } from './placeDiscovery.js';
+import { validatedPlaceSearchOptions } from './placeDiscovery.js';
+import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { conversationCapabilityPrompt } from './conversationCapabilities.js';
@@ -410,18 +410,18 @@ export class ShannonApiKernel {
         };
       }
       const priorThreadSummary = mayUseThreadSummary(captured) ? this.conversationStore.threadSummary(body.scopeKey, threadId) : undefined;
+      const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
-        systemPrompt,
+        systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
         history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),
-        ...(body.webSearch === true || placeOptions.placeSearch ? { useWebSearch: true } : {}),
-        ...placeOptions,
+        ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
-      const reply = appendWebSources(placeReply(completion.reply, completion.places ?? []), completion.webSources ?? []);
+      const reply = placeSkillReply(completion, placeSkill);
       const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
@@ -439,7 +439,7 @@ export class ShannonApiKernel {
         state: captured,
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
-      if (completion.places?.length) response.uiBlocks = [{ type: 'place_search', places: completion.places }];
+      if (placeSkill?.places.length) response.uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
       const completedTurn = {
         scopeKey: body.scopeKey,
         threadId,

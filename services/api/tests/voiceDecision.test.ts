@@ -29,6 +29,15 @@ function jevAnswers(overrides: Record<string, unknown> = {}): Record<string, unk
 }
 
 describe('Jev voice decision routing', () => {
+  it('selects place discovery alongside current web for a combined voice request', async () => {
+    const decision = await new LocalVoiceDecisionGateway().decide({
+      scopeKey: 'owner-a', transcript: '近くのカフェを探して、今日の天気も教えて',
+      participantMode: 'owner', requestedLocation: true, hasFreshLocation: true,
+    });
+    expect(decision.selectedSkills).toEqual(expect.arrayContaining(['current_web', 'place_discovery', 'device_context']));
+    expect(decision.conversationClass).toBe('skill_complex');
+  });
+
   it('selects a bounded waiting line and independent emotional delivery in the same Jev call', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body));

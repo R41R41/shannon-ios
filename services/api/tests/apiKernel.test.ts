@@ -55,36 +55,46 @@ class StreamingVoiceRecordingModel extends VoiceAwareRecordingModel {
 }
 
 describe('Shannon local API kernel', () => {
-  it('uses one-time location for text place discovery and returns a map card with durable links', async () => {
+  it('passes one-time place skill results into text synthesis with durable map links', async () => {
     const model = new RecordingChatModel();
     model.places = [{ name: '浜松城公園', address: '静岡県浜松市中央区元城町100-2',
       reason: '散歩できる', mapQuery: '浜松城公園 静岡県浜松市',
       mapUrl: 'https://maps.apple.com/?q=%E6%B5%9C%E6%9D%BE%E5%9F%8E%E5%85%AC%E5%9C%92' }];
     const api = createLocalApiKernel(() => '2026-09-22T01:38:00.000Z', { chatModel: model });
     const result = await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
-      scopeKey: 'owner-a', message: 'この近くの公園を地図で探して',
+      scopeKey: 'owner-a', message: 'この近くの公園を地図で探して、今日の天気も教えて',
       placeLocation: { latitude: 34.7038, longitude: 137.7346, accuracyMeters: 24,
         observedAt: '2026-09-22T01:37:55.000Z' },
     } });
     expect(result).toMatchObject({ status: 200, body: {
-      uiBlocks: [{ type: 'place_search', places: model.places }],
+      uiBlocks: [{ type: 'place_search', places: [expect.objectContaining({ name: '浜松城公園',
+        mapUrl: expect.stringMatching(/^https:\/\/maps\.apple\.com\//) })] }],
     } });
     expect((result.body as { reply: string }).reply).toContain('https://maps.apple.com/');
     expect(model.requests[0]).toMatchObject({ useWebSearch: true,
       placeSearch: { latitude: 34.7038, longitude: 137.7346 } });
+    expect(model.requests[0]?.history).toEqual([]);
+    expect(model.requests[1]).toMatchObject({ useWebSearch: true,
+      message: 'この近くの公園を地図で探して、今日の天気も教えて' });
+    expect(model.requests[1]?.placeSearch).toBeUndefined();
+    expect(model.requests[1]?.systemPrompt).toContain('浜松城公園');
+    expect(model.requests[1]?.systemPrompt).toContain('Place discovery skill result');
   });
 
-  it('returns spoken text and a map card separately for a voice place request', async () => {
+  it('passes place skill results into voice synthesis and keeps map links out of speech', async () => {
     const model = new VoiceAwareRecordingModel();
     model.places = [{ name: '浜松城公園', address: '静岡県浜松市', reason: '散歩できる',
       mapQuery: '浜松城公園 静岡県浜松市', mapUrl: 'https://maps.apple.com/?q=hamamatsu' }];
     const api = createLocalApiKernel(() => '2026-09-22T01:38:00.000Z', { chatModel: model });
     const result = await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body: {
-      scopeKey: 'owner-a', transcript: '浜松の公園を地図で探して',
+      scopeKey: 'owner-a', transcript: '浜松の公園を地図で探して、今日の天気も教えて',
     } });
-    expect(result).toMatchObject({ status: 200, body: { reply: '返答1',
-      uiBlocks: [{ type: 'place_search', places: model.places }] } });
+    expect(result).toMatchObject({ status: 200, body: { reply: '返答2',
+      uiBlocks: [{ type: 'place_search', places: [expect.objectContaining({ name: '浜松城公園' })] }] } });
     expect(model.requests[0]).toMatchObject({ useWebSearch: true, placeSearch: { spoken: true } });
+    expect(model.requests[1]?.systemPrompt).toContain('浜松城公園');
+    expect(model.requests[1]?.systemPrompt).toContain('Selected capabilities: current_web, place_discovery');
+    expect(model.requests[1]?.placeSearch).toBeUndefined();
     expect(model.voiceRequests).toHaveLength(0);
   });
   it('uses the lightweight voice model without web tools for a direct conversation', async () => {
@@ -254,7 +264,7 @@ describe('Shannon local API kernel', () => {
         solutionWantedProbability: 0.1, conversationClass: 'no_response', latencyClass: 'under_1s',
         affect: 'neutral', affectIntensity: 0.2, delivery: 'conversational',
         selectedSkills: [], skillScores: {
-          current_web: 0, conversation_memory: 0, daily_mind: 0, aether_notes: 0,
+          current_web: 0, place_discovery: 0, conversation_memory: 0, daily_mind: 0, aether_notes: 0,
           voyager_tasks: 0, agent_status: 0, device_context: 0,
         }, elapsedMilliseconds: 72,
       }) },

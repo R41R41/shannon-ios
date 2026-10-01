@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { wantsPlaceDiscovery } from './placeDiscovery.js';
+import { wantsNearbyPlaces, wantsPlaceDiscovery } from './placeDiscovery.js';
+import { combinedPlaceSources, runPlaceDiscoverySkill } from './placeDiscoverySkill.js';
 import {
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
@@ -194,6 +195,7 @@ async function completeLiveVoiceDelegation(
   const semanticMemoryTurn = !temporaryGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
   if (semanticMemoryTurn) decision = withMemorySearchLatency(decision);
+  if (decision.selectedSkills.includes('place_discovery')) decision = withMemorySearchLatency(decision);
   let orchestrationState = temporaryGuest || uncertainTranscript ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
@@ -337,19 +339,19 @@ async function completeLiveVoiceDelegation(
   const fullHistory = temporaryGuest ? []
     : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId);
   const historyLimit = selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
+  const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
+    ? await runPlaceDiscoverySkill(dependencies.chatModel, { scopeKey, message: transcript, context: {
+      ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {
+        latitude: deviceContext.location.latitude, longitude: deviceContext.location.longitude,
+      } : {}), spoken: true,
+    } }) : null;
+  observer?.signal?.throwIfAborted();
   const modelRequest = {
     scopeKey,
-    systemPrompt,
+    systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
     history: boundedVoiceHistory(fullHistory, historyLimit),
     message: transcript,
-    useWebSearch: selectedSkills.has('current_web') || wantsPlaceDiscovery(transcript),
-    ...(wantsPlaceDiscovery(transcript) ? { placeSearch: {
-      ...(deviceContext?.location ? {
-        latitude: deviceContext.location.latitude,
-        longitude: deviceContext.location.longitude,
-      } : {}),
-      spoken: true,
-    } } : {}),
+    useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
   const modelStartedAt = performance.now();
@@ -361,7 +363,7 @@ async function completeLiveVoiceDelegation(
     && (orchestrationState.pendingAction.status === 'pending'
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
-  const completion = wantsPlaceDiscovery(transcript) || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
+  const completion = placeSkill || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? await dependencies.chatModel.generateVoiceStreaming(
@@ -422,8 +424,8 @@ async function completeLiveVoiceDelegation(
     }, provisionalIntent ? completion.intentPlan : undefined);
   }
   let uiBlocks: Array<Record<string, unknown>> | undefined;
-  if (completion.places?.length) {
-    uiBlocks = [{ type: 'place_search', places: completion.places }];
+  if (placeSkill?.places.length) {
+    uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
   }
   if (!temporaryGuest && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
@@ -444,7 +446,7 @@ async function completeLiveVoiceDelegation(
       threadId,
       model: completion.model,
       reply: reply.trim(),
-      webSources: completion.webSources ?? [],
+      webSources: combinedPlaceSources(placeSkill, completion.webSources),
       ...(uiBlocks ? { uiBlocks } : {}),
       voicePlan,
       voiceMetrics: {

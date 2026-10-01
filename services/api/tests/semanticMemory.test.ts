@@ -182,7 +182,7 @@ function memoryDecision(): VoiceTurnDecision {
     source: 'jev', shouldRespond: true, replyRequiredProbability: 0.95, solutionWantedProbability: 0.6,
     conversationClass: 'skill_simple', latencyClass: 'under_3s', affect: 'neutral', affectIntensity: 0.2,
     delivery: 'conversational', selectedSkills: ['conversation_memory'], skillScores: {
-      current_web: 0, conversation_memory: 0.95, daily_mind: 0, aether_notes: 0,
+      current_web: 0, place_discovery: 0, conversation_memory: 0.95, daily_mind: 0, aether_notes: 0,
       voyager_tasks: 0, agent_status: 0, device_context: 0,
     }, elapsedMilliseconds: 40,
   };
