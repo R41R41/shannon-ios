@@ -1,6 +1,8 @@
 import type { ShannonAutonomyDomainId } from '@shannon/cognition';
 import { yenFromUsd, type AutonomyConfig } from './autonomyBudget.js';
+import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
+import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
 import { planFromThought, storyNotes, thinkingMaterials, withNoteAfterReading, type Thought } from './autonomyLoopPlan.js';
 import {
   AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, parsedModelObject, revisePrompt, thinkingPrompt, type AutonomyPrompt,
@@ -49,6 +51,7 @@ interface BoundAdapters {
   reader?: AutonomyPublicReader;
   notion?: AutonomyNotionReader;
   showing?: StudyShowing;
+  folder?: HostFolderDesk;
 }
 
 export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domain'>, dependencies: StepDependencies): BoundAdapters {
@@ -58,6 +61,7 @@ export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domai
     case 'public_read': return { reader: dependencies.reader };
     case 'owner_message': return { showing: dependencies.showing };
     case NOTION_READ_DOMAIN: return dependencies.notion ? { notion: dependencies.notion } : {};
+    case 'host_folder': return { folder: dependencies.service.folder };
     default: return {};
   }
 }
@@ -105,6 +109,7 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'revise': return prepareRevision(dependencies, cycle, step);
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
+    case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
     default: return null;
   }
 }
@@ -144,6 +149,7 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
     at, localTime: localTime(at, config.timeZone), remainingYen: overview.budget.remainingYen,
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
+    folderAvailable: service.folder.available(cycle.scopeKey, at),
   });
   const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials), OUTPUT_TOKENS.think);
   if (!call) return null;
@@ -156,7 +162,7 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       const thought: Thought = planFromThought(reply, {
         pursuits: materials.pursuits, pieces: store.study.list(cycle.scopeKey), unnotedReadingIds: materials.unnotedReadings.map(item => item.id),
         placeUrls: materials.places.map(place => place.url),
-      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable });
+      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true });
       return {
         outcome: 'done', usage,
         summary: thought.text ? `次に何をするか考えました。「${thought.text}」` : '次に何をするか考えました。',

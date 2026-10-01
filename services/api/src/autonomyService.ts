@@ -19,6 +19,7 @@ import {
   autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
   type AutonomyModelChoice,
 } from './autonomyModels.js';
+import { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
@@ -87,6 +88,8 @@ export class ShannonAutonomyService {
   private readonly resolvePath: AutonomyPathResolver;
   /** The owner's side of her study: reading, reacting, asking her to put a piece away. */
   readonly study: StudyDesk;
+  /** Her folder on the owner's machines: the queue she fills and the bound device empties. Both ends ask the gate. */
+  readonly folder: HostFolderDesk;
 
   constructor(private readonly dependencies: AutonomyServiceDependencies) {
     this.store = dependencies.store;
@@ -95,6 +98,7 @@ export class ShannonAutonomyService {
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now);
+    this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
   }
 
   // MARK: The gate

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { AutonomyActivityRecord } from './autonomyActivity.js';
 import { roundYen } from './autonomyBudget.js';
+import { AutonomyHostFolderSteps } from './autonomyHostFolderSteps.js';
 import { AutonomyLoopState } from './autonomyLoopState.js';
 import { AutonomyProposalLedger } from './autonomyProposals.js';
 import { AutonomyPursuitLedger } from './autonomyPursuits.js';
@@ -62,6 +63,8 @@ export class SQLiteAutonomyStore {
   /** Her study and the activity loop's journal share this connection, so a step and its record commit together. */
   readonly study: StudyStore;
   readonly loop: AutonomyLoopState;
+  /** Work queued for her folder on the owner's machines. */
+  readonly hostSteps: AutonomyHostFolderSteps;
 
   constructor(private readonly path: string) {
     this.database = new DatabaseSync(path);
@@ -119,6 +122,7 @@ export class SQLiteAutonomyStore {
     this.proposals = new AutonomyProposalLedger(this.database);
     this.study = new StudyStore(this.database);
     this.loop = new AutonomyLoopState(this.database);
+    this.hostSteps = new AutonomyHostFolderSteps(this.database);
     secureDatabaseFiles(path);
   }
 

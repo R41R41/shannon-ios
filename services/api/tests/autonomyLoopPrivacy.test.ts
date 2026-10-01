@@ -97,10 +97,12 @@ describe('what reaches the prompts of her own activity', () => {
     const sourceDirectory = join(import.meta.dirname, '../src');
     const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
-      'autonomyLoop.ts', 'autonomyLoopConfig.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoop.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
     ]);
     const allowed = new Set([
       'node:crypto', 'node:sqlite', '@shannon/cognition',
+      // Her folder on the owner's machines: checked below to reach nothing but her study and its own queue.
+      './autonomyHostFolderDesk.js', './autonomyHostFolderPath.js', './autonomyLoopFolderStep.js',
       './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
       './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
       './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',
@@ -113,13 +115,25 @@ describe('what reaches the prompts of her own activity', () => {
       expect(source, name).not.toMatch(/assembleShannonSystemPrompt|buildCompanionPrompt|promptProjection|CompanionState|conversationHistory|knowledgeAnswers|PeopleMemory|recall/u);
     }
     // The loop's journal and her study share the autonomy database connection, and name no table but their own.
-    for (const [name, prefix] of [['autonomyLoopState.ts', 'autonomy_loop_'], ['studyStore.ts', 'study_']] as const) {
+    for (const [name, prefix] of [['autonomyLoopState.ts', 'autonomy_loop_'], ['studyStore.ts', 'study_'], ['autonomyHostFolderSteps.ts', 'autonomy_host_']] as const) {
       const source = readFileSync(join(sourceDirectory, name), 'utf8');
       const tables = [...source.matchAll(/\b(?:FROM|INTO|UPDATE|TABLE IF NOT EXISTS|ON)\s+([a-z_]+)\b(?=\s|\()/gu)].map(match => match[1]!)
         .filter(table => table !== 'conflict');
       expect(tables.length, name).toBeGreaterThan(5);
       for (const table of tables) expect(table.startsWith(prefix), `${name} touches ${table}`).toBe(true);
     }
+    // What leaves for her folder is built from a study piece and nothing else: these modules import no private store,
+    // no prompt, no persona, and no file system, and the text of a step has a single source.
+    const folderAllowed = new Set([
+      'node:crypto', 'node:sqlite', './autonomyActivity.js', './autonomyBudget.js', './autonomyHostFolderPath.js', './autonomyHostFolderSteps.js',
+      './autonomyPolicy.js', './autonomyService.js', './autonomyStore.js', './studyStore.js',
+    ]);
+    for (const name of ['autonomyHostFolderDesk.ts', 'autonomyHostFolderPath.ts', 'autonomyHostFolderSteps.ts']) {
+      const source = readFileSync(join(sourceDirectory, name), 'utf8');
+      for (const match of source.matchAll(/from '([^']+)'/gu)) expect(folderAllowed.has(match[1]!), `${name} imports ${match[1]}`).toBe(true);
+      expect(source, name).not.toMatch(/shannonPersonaPrompt|capabilit|promptProjection|CompanionState|conversation|PeopleMemory|recall|readFile|node:fs|node:child_process/iu);
+    }
+    expect(readFileSync(join(sourceDirectory, 'autonomyHostFolderDesk.ts'), 'utf8').match(/studyCopyContent\(/gu)).toHaveLength(1);
     // The only module of the loop that opens the conversation tables answers with an outcome, never with content.
     const showing = readFileSync(join(sourceDirectory, 'autonomyShowing.ts'), 'utf8');
     expect(showing).not.toMatch(/SELECT\s+(?:content|\*)[^`]*FROM conversation_messages/u);
