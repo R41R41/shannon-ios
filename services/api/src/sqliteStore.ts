@@ -23,7 +23,7 @@ import type {
 import type { KnowledgeAnswer, KnowledgeRevision, KnowledgeSource, KnowledgeStore, PersonalityProfile } from './knowledgeStore.js';
 import { SQLiteBackgroundJobRepository } from './sqliteBackgroundJobRepository.js';
 import { SQLiteCompanionRepository } from './sqliteCompanionRepository.js';
-import { SQLiteConversationRepository } from './sqliteConversationRepository.js';
+import { ensureSummaryLineageSchema, SQLiteConversationRepository } from './sqliteConversationRepository.js';
 import { SQLiteStoreContext, secureDatabaseFiles } from './sqliteStoreContext.js';
 import { SQLiteStoreMigrator } from './sqliteMigrations.js';
 import { SQLiteMemorySearchRepository, type MemorySearchHit } from './sqliteMemorySearch.js';
@@ -53,6 +53,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     ensureTurnCaptureSchema(this.context.database);
+    ensureSummaryLineageSchema(this.context.database);
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
@@ -110,6 +111,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string) { return this.conversations.appendNote(scopeKey, threadId, content, observedAt, noteKind); }
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]) { return this.conversations.recordTurnCaptures(scopeKey, captures); }
   turnCaptures(scopeKey: string, turnIds: readonly string[]) { return this.conversations.turnCaptures(scopeKey, turnIds); }
+  threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
+  experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 

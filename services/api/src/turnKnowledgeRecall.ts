@@ -12,6 +12,7 @@ import {
 } from '@shannon/cognition';
 import type { MemoryModelGateway } from './memoryModels.js';
 import type { ShannonKnowledgeStore } from './sqliteShannonKnowledge.js';
+import { conversationStoreOf, MemoryWithholding } from './memoryVisibility.js';
 
 /** Documents longer than this are navigated by heading instead of projected whole. */
 export const LONG_KNOWLEDGE_CHARACTERS = 1_500;
@@ -29,8 +30,11 @@ export function isExperienceSourceVisible(snapshot: CompanionStateSnapshot, expe
   return !control || (control.status === 'active' && !control.overrideText);
 }
 
+/** Knowledge also stops being used while a source turn's reply is withheld, or while its text restates a withheld item. */
 export function usableKnowledgeFor(store: ShannonKnowledgeStore, scopeKey: string, snapshot: CompanionStateSnapshot): readonly ShannonKnowledgeDocument[] {
-  return usableShannonKnowledge(store.listShannonKnowledge(scopeKey), id => isExperienceSourceVisible(snapshot, id));
+  const usable = usableShannonKnowledge(store.listShannonKnowledge(scopeKey), id => isExperienceSourceVisible(snapshot, id));
+  const withholding = new MemoryWithholding(snapshot, conversationStoreOf(store), scopeKey);
+  return withholding.inactive ? usable : usable.filter(document => !withholding.withholdsKnowledge(document));
 }
 
 /**

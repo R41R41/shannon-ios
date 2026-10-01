@@ -1,12 +1,12 @@
 import { restoreCompanionState, type CompanionStateSnapshot, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { BackgroundJobPayload } from './backgroundJobStore.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
-import type { ShannonSourceAttribution, StoredConversationMessage } from './conversationStore.js';
+import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredConversationMessage } from './conversationStore.js';
 import { reminderReference, type ReminderReference } from './turnCaptures.js';
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
-export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; }
-export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; reminder?: ReminderReference; }
+export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; }
+export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {
   return restoreCompanionState(expectedScopeKey, parseJson(raw), nowIso);
@@ -31,6 +31,7 @@ export function freezeStoredMessage(row: MessageRow): StoredConversationMessage 
       sourceAttribution: Object.freeze({ ...metadata.sourceAttribution }),
     } : {}),
     ...(metadata?.reminder ? { reminder: Object.freeze({ ...metadata.reminder }) } : {}),
+    ...(metadata?.recalledMemoryIds ? { recalledMemoryIds: metadata.recalledMemoryIds } : {}),
   });
 }
 
@@ -47,6 +48,7 @@ export function parseMessageMetadata(raw: string): MessageMetadata | null {
     // Every reminder already stores its initiative source reference, so older rows resolve too.
     ...(reminderReference((value as { sourceItemId?: unknown }).sourceItemId)
       ? { reminder: reminderReference((value as { sourceItemId?: unknown }).sourceItemId)! } : {}),
+    ...(boundedRecalledMemoryIds(row.recalledMemoryIds) ? { recalledMemoryIds: boundedRecalledMemoryIds(row.recalledMemoryIds)! } : {}),
   };
 }
 

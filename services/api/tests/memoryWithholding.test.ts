@@ -131,7 +131,7 @@ describe('forgetting one item withholds only what used it (TM-01)', () => {
 describe('summaries follow the turns they were built from', () => {
   function threads(state: CompanionStateStore, history: ConversationStore) {
     const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(() => history.createThread('owner'));
-    const source = history.appendTurn('owner', a!, '私は紅茶が好き。', '覚えておきます。', minute(1), turnContext({ threadSummary: '飲み物の好みを聞いた' }));
+    const source = history.appendTurn('owner', a!, '私は紅茶が好き。', '覚えておきます。', minute(1), turnContext({ threadSummary: 'ドリンクの好みを聞いた' }));
     new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, source.observedAt);
     history.appendTurn('owner', b!, 'Xcodeの署名で止まる', '証明書の期限を確認しましょう。', minute(2), turnContext({ threadSummary: 'Xcodeの署名設定を整理した' }));
     history.appendTurn('owner', d!, '銘柄を比べたい', '香りと渋みで分けて考えましょう。', minute(3), turnContext({ threadSummary: '紅茶の銘柄を比較した' }));
@@ -145,7 +145,7 @@ describe('summaries follow the turns they were built from', () => {
     const state: CompanionStateStore = persistent ?? new InMemoryCompanionStateStore(() => forgetAt);
     const history: ConversationStore = persistent ?? new InMemoryConversationStore();
     const { a, b, c, d, fact } = threads(state, history);
-    expect(recalled(state, history, c, '飲み物の好みは？')).toContain(`thread:${a}`);
+    expect(recalled(state, history, c, 'ドリンクの好みは？')).toContain(`thread:${a}`);
     const service = new ShannonMemoryService(state, history, () => forgetAt);
     service.mutate('owner', { memoryId: fact.id, action: 'forget' });
     const snapshot = () => state.snapshot('owner');
@@ -154,12 +154,12 @@ describe('summaries follow the turns they were built from', () => {
     expect(recalled(state, history, c, 'Xcodeの署名設定どうなった？')).toContain(`thread:${b}`);
     // built from the forgotten turn, or restating the forgotten term: dropped
     expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBeUndefined();
-    expect(recalled(state, history, c, '飲み物の好みは？')).not.toContain(`thread:${a}`);
+    expect(recalled(state, history, c, 'ドリンクの好みは？')).not.toContain(`thread:${a}`);
     expect(recalled(state, history, c, '紅茶の銘柄はどれがいい？')).not.toContain(`thread:${d}`);
     // (d) restore brings the summaries back
     service.mutate('owner', { memoryId: fact.id, action: 'restore' });
-    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBe('飲み物の好みを聞いた');
-    expect(recalled(state, history, c, '飲み物の好みは？')).toContain(`thread:${a}`);
+    expect(usableThreadSummary(snapshot(), history, 'owner', a)).toBe('ドリンクの好みを聞いた');
+    expect(recalled(state, history, c, 'ドリンクの好みは？')).toContain(`thread:${a}`);
     service.mutate('owner', { memoryId: fact.id, action: 'forget' });
     // the next turn rebuilds the summary from visible history only; it is usable again without a restore
     history.appendTurn('owner', a, '散歩コースを考えたい', '川沿いを北へ歩く案はどうですか。', minute(800), turnContext({ threadSummary: '散歩コースを相談した' }));
@@ -188,7 +188,8 @@ describe('summaries follow the turns they were built from', () => {
     await api.waitForBackground('owner');
     const saved = store.conversationHistory('owner', b).at(-1)!;
     expect(Array.isArray(saved.recalledMemoryIds)).toBe(true);
-    const history = await api.dispatch({ method: 'GET', path: '/v1/history', query: { scopeKey: 'owner', threadId: b } });
+    const history = await api.dispatch({ method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: 'owner', threadId: b }) });
+    expect(history.status).toBe(200);
     expect(JSON.stringify(history.body)).not.toContain('recalledMemoryIds');
     store.close();
   });
@@ -198,14 +199,15 @@ describe('recall, search, embeddings and private knowledge never surface the for
   async function seeded() {
     const { store, path } = sqlite();
     const [a, b, c] = [store.createThread('owner'), store.createThread('owner'), store.createThread('owner')];
-    const source = store.appendTurn('owner', a, '私は紅茶が好き。', '覚えておきます。', minute(1), turnContext({ threadSummary: '飲み物の好みを聞いた' }));
+    const source = store.appendTurn('owner', a, '私は紅茶が好き。', '覚えておきます。', minute(1), turnContext({ threadSummary: 'ドリンクの好みを聞いた' }));
     new TurnRefinementProcessor(store, store).process('owner', source.userMessage, source.id, source.observedAt);
     const fact = store.snapshot('owner').userFacts[0]!;
     const restated = store.appendTurn('owner', b, '差し入れは何がいい？', 'ライ氏は紅茶が好きなので茶葉にしましょう。', minute(2), turnContext({ threadSummary: '差し入れの相談をした' }));
     const paraphrased = store.appendTurn('owner', c, '午後の休憩どうしよう', '温かい一杯で一息つきましょう。', minute(3),
       turnContext({ threadSummary: '午後の休憩を相談した', recalledMemoryIds: [fact.id] }));
-    const trip = store.appendTurn('owner', store.createThread('owner'), '旅行計画は沖縄にする', '了解、沖縄で組みましょう。', minute(4), turnContext({ threadSummary: '沖縄旅行の計画を決めた' }));
-    return { store, path, a, b, c, source, fact, restated, paraphrased, trip };
+    const tripThread = store.createThread('owner');
+    const trip = store.appendTurn('owner', tripThread, '旅行計画は沖縄にする', '了解、沖縄で組みましょう。', minute(4), turnContext({ threadSummary: '沖縄旅行の計画を決めた' }));
+    return { store, path, a, b, c, source, fact, restated, paraphrased, trip, tripThread };
   }
   const statuses = (path: string) => {
     const raw = new DatabaseSync(path);
@@ -215,7 +217,7 @@ describe('recall, search, embeddings and private knowledge never surface the for
   };
 
   it('(e) filters full-text and semantic candidates and never embeds a withheld source', async () => {
-    const { store, path, a, b, c, fact, restated, paraphrased, trip } = await seeded();
+    const { store, path, a, b, c, fact, restated, paraphrased, trip, tripThread } = await seeded();
     const embedder = new DeterministicMemoryModelGateway();
     const worker = new MemoryEmbeddingWorker(store, store, embedder, store, { now: () => forgetAt });
     expect(await worker.runOnce()).toBe('worked');
@@ -233,7 +235,8 @@ describe('recall, search, embeddings and private knowledge never surface the for
     const hits = async (query: string) => (await semantic.recall({ scopeKey: 'owner', query, snapshot, threadId: 'elsewhere' })).hits.map(hit => hit.id);
     expect(await hits('差し入れは何がいい 紅茶 茶葉')).toEqual(expect.not.arrayContaining([restated.id, `thread:${a}`, `thread:${b}`]));
     expect(await hits('午後の休憩 温かい一杯')).toEqual(expect.not.arrayContaining([paraphrased.id, `thread:${c}`]));
-    expect(await hits('沖縄旅行の計画')).toEqual(expect.arrayContaining([trip.id]));
+    // an unrelated experience and an unrelated thread summary are still candidates after the forget
+    expect(await hits('沖縄旅行の計画')).toEqual(expect.arrayContaining([trip.id, `thread:${tripThread}`]));
     const enriched = await new ShannonTurnMemoryRecall(semantic).enrich(lexical('前に話した沖縄旅行の計画を覚えてる？'),
       { scopeKey: 'owner', message: '前に話した沖縄旅行の計画を覚えてる？', snapshot, threadId: 'elsewhere' });
     expect(enriched.prompt).not.toContain('紅茶');
@@ -280,7 +283,7 @@ describe('old data and restart safety', () => {
     raw.exec('ALTER TABLE conversation_threads DROP COLUMN summary_chain_started_at');
     const count = Number(raw.prepare('SELECT COUNT(*) AS n FROM conversation_messages').get()!.n);
     raw.close();
-    const reopened = new SQLiteShannonStore({ path: first.path, now: () => forgetAt, maximumModelConversationItems: 400, maximumDisplayedConversationItems: 400 });
+    const reopened = new SQLiteShannonStore({ path: first.path, now: () => forgetAt, maximumModelConversationItems: 100, maximumDisplayedConversationItems: 400 });
     const replies = assistantReplies(reopened, reopened, thread);
     expect(replies.join('\n')).not.toContain('紅茶');
     // provenance survived the restart: one of the two identical paraphrases is withheld, the legacy-shaped one is kept

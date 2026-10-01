@@ -210,7 +210,7 @@ export function conversationWithCaptures(
   const reminders = resolveReminders(messages.map(message => ({ id: message.id,
     ...(message.reminder && 'revision' in message.reminder ? { reminder: message.reminder } : {}) })), state);
   return Object.freeze(messages.map(message => {
-    const { reminder: _reference, captures: _stale, ...plain } = message;
+    const { reminder: _reference, captures: _stale, recalledMemoryIds: _provenance, ...plain } = message;
     const captured = message.role === 'assistant' && message.sourceExperienceId ? captures?.get(message.sourceExperienceId) : undefined;
     const reminder = reminders.get(message.id);
     return Object.freeze({ ...plain, ...(captured?.length ? { captures: Object.freeze(captured) } : {}), ...(reminder ? { reminder } : {}) });

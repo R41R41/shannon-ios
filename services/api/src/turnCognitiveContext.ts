@@ -13,7 +13,7 @@ import {
   type ShannonSituationSnapshot,
 } from '@shannon/cognition';
 import type { ConversationStore } from './conversationStore.js';
-import { mayUseThreadSummary } from './memoryVisibility.js';
+import { MemoryWithholding } from './memoryVisibility.js';
 
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;
@@ -57,9 +57,10 @@ export function prepareTurnCognitiveContext(
     memory.status === 'pending' && visibleMemoryText(snapshot, memory.id, memory.summary)
     && memory.summary.split(/[、のをは]/u).some(piece => piece.length >= 3 && input.message.includes(piece)))?.summary;
   const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
+  const withholding = new MemoryWithholding(snapshot, conversationStore, input.scopeKey, recentExperiences);
   const candidates = [
-    ...recentExperiences,
-    ...fullTextCandidates(snapshot, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
+    ...recentExperiences.filter(item => !withholding.withholdsExperience(item)),
+    ...fullTextCandidates(withholding, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
     ...snapshot.userFacts.map(fact => ({ id: fact.id, summary: fact.statement, observedAt: fact.observedAt })),
     ...snapshot.relationships.map(item => ({ id: item.id, summary: item.statement, observedAt: item.observedAt })),
     ...snapshot.prospectiveMemories.filter(memory => !memory.sourceExperienceId || visibleMemoryText(snapshot, memory.sourceExperienceId, memory.summary))
@@ -133,20 +134,21 @@ function turnPrompt(
 
 /**
  * Deterministic FTS recall over the whole experience log and other threads'
- * rolling summaries. It is read-only and calls no model. Thread summaries have
- * no span-level provenance, so they follow the same invalidation boundary as
- * the prior-thread summary.
+ * rolling summaries. It is read-only and calls no model. An experience whose
+ * reply used a forgotten item, and a summary built from a withheld turn, are
+ * dropped; unrelated ones stay.
  */
 function fullTextCandidates(
-  snapshot: CompanionStateSnapshot,
+  withholding: MemoryWithholding,
   conversationStore: ConversationStore,
   input: { scopeKey: string; message: string; threadId?: string },
   known: ReadonlySet<string>,
 ): Array<{ id: string; summary: string; observedAt: string }> {
   const hits = conversationStore.searchMemory?.(input.scopeKey, input.message) ?? [];
-  const threadSummariesAllowed = mayUseThreadSummary(snapshot);
   return hits.filter(hit => !known.has(hit.id) && (hit.kind === 'experience'
-    || (hit.kind === 'thread' && threadSummariesAllowed && hit.threadId !== input.threadId)))
+    ? !withholding.withholdsExperience(hit)
+    : hit.kind === 'thread' && hit.threadId !== input.threadId
+      && !withholding.withholdsThreadSummary(hit.threadId ?? hit.sourceId, hit.summary, hit.observedAt)))
     .map(hit => ({
       id: hit.id,
       summary: hit.kind === 'thread' ? `[別の会話の要約] ${hit.summary}` : hit.summary,

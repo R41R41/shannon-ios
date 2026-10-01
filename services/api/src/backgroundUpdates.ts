@@ -31,6 +31,9 @@ export interface CompletedTurn {
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
   completedAt: string;
+  /** Provenance of the reply: IDs recalled into the prompt that produced it. */
+  recalledMemoryIds?: readonly string[];
+  summaryContinuesChain?: boolean;
 }
 
 export interface TurnBackgroundService {
@@ -161,6 +164,8 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
         ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
         ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
+        ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
+        ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
       },
     );
   }
@@ -214,6 +219,8 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
         ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
         ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
         ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
+        ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
+        ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
       },
     );
   }

@@ -80,6 +80,10 @@ function cleanRelationship(relationship: RelationshipInsight): RelationshipInsig
   });
 }
 
+function isCommitmentStatus(value: unknown): value is ProspectiveMemory['status'] {
+  return value === 'pending' || value === 'completed' || value === 'dismissed';
+}
+
 function cleanControl(control: MemoryControl): MemoryControl {
   return Object.freeze({
     memoryId: cleanText(control.memoryId, 120),
@@ -91,6 +95,8 @@ function cleanControl(control: MemoryControl): MemoryControl {
     ...(control.overrideText ? { overrideText: cleanText(control.overrideText, 320) } : {}),
     ...(control.sourceEvidence ? { sourceEvidence: cleanText(control.sourceEvidence, 8_000) } : {}),
     ...(control.contextInvalidatedAt && Number.isFinite(Date.parse(control.contextInvalidatedAt)) ? { contextInvalidatedAt: control.contextInvalidatedAt } : {}),
+    ...(control.causedBy ? { causedBy: cleanText(control.causedBy, 120) } : {}),
+    ...(isCommitmentStatus(control.commitmentStatusBefore) ? { commitmentStatusBefore: control.commitmentStatusBefore } : {}),
   });
 }
 
@@ -269,7 +275,9 @@ export function reduceCompanionState(
         && previous.changeReason === control.changeReason
         && previous.overrideText === control.overrideText
         && previous.sourceEvidence === control.sourceEvidence
-        && previous.contextInvalidatedAt === control.contextInvalidatedAt) return current;
+        && previous.contextInvalidatedAt === control.contextInvalidatedAt
+        && previous.causedBy === control.causedBy
+        && previous.commitmentStatusBefore === control.commitmentStatusBefore) return current;
       const memoryControls = [control, ...current.memoryControls.filter(item => item.memoryId !== control.memoryId)]
         .slice(0, MAX_MEMORY_CONTROLS);
       next = { ...current, memoryControls };
@@ -444,6 +452,8 @@ export function restoreCompanionState(
       ...(restoredText(value.overrideText, 320) ? { overrideText: restoredText(value.overrideText, 320) } : {}),
       ...(restoredText(value.sourceEvidence, 8_000) ? { sourceEvidence: restoredText(value.sourceEvidence, 8_000) } : {}),
       ...(typeof value.contextInvalidatedAt === 'string' ? { contextInvalidatedAt: value.contextInvalidatedAt } : {}),
+      ...(restoredText(value.causedBy, 120) ? { causedBy: restoredText(value.causedBy, 120) } : {}),
+      ...(isCommitmentStatus(value.commitmentStatusBefore) ? { commitmentStatusBefore: value.commitmentStatusBefore } : {}),
     });
   }, item => item.memoryId);
 

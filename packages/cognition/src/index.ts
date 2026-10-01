@@ -128,3 +128,4 @@ export type {
 } from './types.js';
 export { SHANNON_EMOTION_KINDS } from './types.js';
 export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
+export { memoryKeyTerms, memoryWithholdingRules, restatesWithheldMemory, ruleWithholdsText, type MemoryWithholdingRule } from './withholding.js';

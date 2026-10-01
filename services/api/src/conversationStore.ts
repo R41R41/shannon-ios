@@ -10,6 +10,24 @@ export interface ShannonExperience extends RecallCandidate {
   timeZone?: string;
   userMessage: string;
   shannonReply: string;
+  /** Memory, knowledge and summary IDs recalled into this turn's prompt. Absent on turns recorded before provenance. */
+  recalledMemoryIds?: readonly string[];
+}
+
+/** What a thread's rolling summary was built from: when its chain last started fresh, and the thread's turns. */
+export interface ThreadSummaryLineage {
+  /** Absent for summaries written before lineage was recorded: the chain may reach back to the first turn. */
+  chainStartedAt?: string;
+  updatedAt?: string;
+  messages: readonly StoredConversationMessage[];
+}
+
+export const MAXIMUM_RECALLED_MEMORY_IDS = 40;
+
+export function boundedRecalledMemoryIds(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return Object.freeze(value.filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200)
+    .slice(0, MAXIMUM_RECALLED_MEMORY_IDS));
 }
 
 export interface ShannonSourceAttribution {
@@ -42,6 +60,8 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   reminder?: ReminderReference | ReminderView;
   /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */
   captures?: readonly TurnCaptureView[];
+  /** Provenance of a reply: IDs recalled into its prompt. Server-side only; never sent to clients. */
+  recalledMemoryIds?: readonly string[];
 }
 
 export interface TurnPersistenceContext {
@@ -52,6 +72,10 @@ export interface TurnPersistenceContext {
   capturedStateVersion: number;
   taskDecision?: ShannonTaskDecision;
   artifacts?: readonly ShannonGeneratedArtifact[];
+  /** IDs of the memories, knowledge and summaries recalled into this turn's prompt. */
+  recalledMemoryIds?: readonly string[];
+  /** True only when the model was given the stored prior summary and wrote the next one from it. */
+  summaryContinuesChain?: boolean;
 }
 
 export interface PlatformTurnPersistenceInput {
@@ -101,6 +125,10 @@ export interface ConversationStore {
   /** Durable per-turn capture records. Optional so lightweight stores stay valid. */
   recordTurnCaptures?(scopeKey: string, captures: readonly TurnCaptureRecord[]): void;
   turnCaptures?(scopeKey: string, turnIds: readonly string[]): readonly TurnCaptureRecord[];
+  /** Lineage of a thread's rolling summary. A store without it cannot prove a summary clean. */
+  threadSummaryLineage?(scopeKey: string, threadId: string): ThreadSummaryLineage;
+  /** Completed turns by ID, including ones older than the recent candidate window. */
+  experiencesById?(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[];
 }
 
 export class InMemoryConversationStore implements ConversationStore {
@@ -114,6 +142,7 @@ export class InMemoryConversationStore implements ConversationStore {
 
   private readonly defaultThreadCache = new Map<string, string>();
   private readonly captures = new Map<string, Map<string, TurnCaptureRecord>>();
+  private readonly summaryChains = new Map<string, string>();
 
   constructor(
     private readonly maximumConversationItems = 200,
@@ -277,6 +306,8 @@ export class InMemoryConversationStore implements ConversationStore {
     ]).summary;
     if (nextSummary) summaries.set(resolvedThreadId, nextSummary);
     this.threadSummaries.set(scopeKey, summaries);
+    if (!context?.summaryContinuesChain) this.summaryChains.set(`${scopeKey}\u0000${resolvedThreadId}`, observedAt);
+    const recalledMemoryIds = boundedRecalledMemoryIds(context?.recalledMemoryIds);
     conversation.push(
       { id: randomUUID(), sourceExperienceId: turnId, role: 'user', content: userMessage, observedAt },
       {
@@ -285,6 +316,7 @@ export class InMemoryConversationStore implements ConversationStore {
         role: 'assistant',
         content: shannonReply,
         observedAt,
+        ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
         ...(context ? {
           messageEmotion: Object.freeze({ ...context.messageEmotion }),
           stateVersion: context.capturedStateVersion,
@@ -307,6 +339,7 @@ export class InMemoryConversationStore implements ConversationStore {
       summary: summarizeExperience(userMessage, shannonReply),
       observedAt,
       ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
+      ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
     });
     experiences.push(experience);
     this.experiences.set(scopeKey, experiences.slice(-this.maximumExperiences));
@@ -324,6 +357,18 @@ export class InMemoryConversationStore implements ConversationStore {
     threads.set(resolvedThreadId, conversation.slice(-this.maximumConversationItems));
     this.conversations.set(scopeKey, threads);
     return Object.freeze({ ...note });
+  }
+
+  threadSummaryLineage(scopeKey: string, threadId: string): ThreadSummaryLineage {
+    const messages = this.conversations.get(scopeKey)?.get(threadId) ?? [];
+    const chainStartedAt = this.summaryChains.get(`${scopeKey}\u0000${threadId}`);
+    const updatedAt = messages.at(-1)?.observedAt;
+    return Object.freeze({ ...(chainStartedAt ? { chainStartedAt } : {}), ...(updatedAt ? { updatedAt } : {}), messages: Object.freeze([...messages]) });
+  }
+
+  experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
+    const wanted = new Set(experienceIds);
+    return Object.freeze((this.experiences.get(scopeKey) ?? []).filter(item => wanted.has(item.id)));
   }
 
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]): void {

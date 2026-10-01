@@ -8,7 +8,7 @@ import { captureImmediateExplicitMemory, consolidateSleepMemory, LocalRuleSleepM
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
-import { mayUseThreadSummary, visibleConversationHistory } from '../src/memoryVisibility.js';
+import { usableThreadSummary, visibleConversationHistory } from '../src/memoryVisibility.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 
 const at = '2026-09-25T01:00:00.000Z';
@@ -44,7 +44,7 @@ describe('evidence and privacy trust repair', () => {
     expect(prompt).not.toContain('紅茶');
   });
 
-  it('invalidates old assistant paraphrases across forget/restore while preserving raw history and later replies', () => {
+  it('withholds old assistant paraphrases while the fact is forgotten, preserves raw history, and restore brings them back', () => {
     const state = new InMemoryCompanionStateStore(() => at);
     const history = new InMemoryConversationStore();
     const source = history.appendTurn('owner', 'thread', '私は紅茶が好き。', '紅茶が好きなんだね。', at);
@@ -58,8 +58,8 @@ describe('evidence and privacy trust repair', () => {
     service.mutate('owner', {memoryId: fact.id, action: 'restore'});
     history.appendTurn('owner', 'thread', 'おはよう', 'おはよう！', '2026-09-25T03:00:00.000Z');
     const visible = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread');
-    expect(visible.filter(x => x.role === 'assistant')).toEqual([{role: 'assistant', content: 'おはよう！'}]);
-    expect(mayUseThreadSummary(state.snapshot('owner'))).toBe(false);
+    expect(visible.filter(x => x.role === 'assistant').map(x => x.content)).toEqual(['紅茶が好きなんだね。', 'あなたの好みは紅茶です。', 'おはよう！']);
+    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread')).toBe('おはよう！');
   });
 
   it('does not invalidate conversation context for pin/unpin alone', () => {
@@ -70,7 +70,7 @@ describe('evidence and privacy trust repair', () => {
     service.mutate('owner', {memoryId: source.id, action: 'pin'});
     service.mutate('owner', {memoryId: source.id, action: 'unpin'});
     expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread')).toHaveLength(2);
-    expect(mayUseThreadSummary(state.snapshot('owner'))).toBe(true);
+    expect(usableThreadSummary(state.snapshot('owner'), history, 'owner', 'thread')).toBe('覚えたよ');
   });
 
   it('does not derive an interest or pinned recall from forgotten source experience', () => {
@@ -134,8 +134,8 @@ describe('evidence and privacy trust repair', () => {
     state.apply('owner', {type: 'memory-activated', memory: {id: source.id, summary: source.summary, observedAt: at, relevance: 1}});
     new ShannonMemoryService(state, history, () => at).mutate('owner', {memoryId: fact.id, action: 'forget'});
     const remaining = visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread');
-    // User context stays available; pre-mutation assistant text has no safe lineage.
-    expect(remaining).toEqual([{role: 'user', content: 'おはよう'}]);
+    // Only the source turn is withheld; the unrelated reply before the forget stays model history.
+    expect(remaining).toEqual([{role: 'user', content: 'おはよう'}, {role: 'assistant', content: 'おはよう！'}]);
     expect(JSON.stringify(remaining)).not.toContain('紅茶');
     expect(buildCompanionStatePrompt(state.snapshot('owner'))).not.toContain('紅茶');
   });
