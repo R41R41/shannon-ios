@@ -111,7 +111,11 @@ struct ShannonPeopleMemoryTests {
         #expect(disclosure.sensitivity.japaneseName == "機微")
         #expect(ShannonMemoryDisclosureCopy.reason(disclosure) == "シャノンが内容から判断：お金（「借金」を含む）")
         #expect(ShannonMemorySensitivityDTO.ordinary.japaneseName == "ふつう")
-        #expect(ShannonMemorySensitivityDTO.sensitive.explanation.contains("ほかの人がいる場では使いません"))
+        // A rule-decided 機微 is checked at speak time; only a hand-marked one is promised never to be given to her.
+        #expect(ShannonMemorySensitivityDTO.sensitive.explanation.contains("話す前に"))
+        #expect(!ShannonMemorySensitivityDTO.sensitive.explanation.contains("使いません"))
+        #expect(ShannonMemorySensitivityDTO.sensitive.chosenExplanation.contains("シャノンにも渡しません"))
+        #expect(ShannonMemorySensitivityDTO.ordinary.chosenExplanation.contains("そのまま使います"))
         #expect(ShannonMemoryDisclosureDTO(audience: "", sensitivity: .sensitive, decidedBy: "default").decidedByLabel == "区別を記録する前の記憶")
         #expect(ShannonMemoryDisclosureDTO(audience: "", sensitivity: .ordinary, decidedBy: "owner").decidedByLabel == "ライ氏が選びました")
 
@@ -126,7 +130,8 @@ struct ShannonPeopleMemoryTests {
 
     @Test("The words under 人 say what is kept, when it is used, and that forgetting can be undone")
     func copy() {
-        #expect(ShannonPeopleMemoryCopy.rule.contains("機微な内容は、その時に一緒にいた人の前でだけ使います"))
+        #expect(ShannonPeopleMemoryCopy.rule.contains("別の人がいる場ではシャノンが話す前に確かめます"))
+        #expect(ShannonPeopleMemoryCopy.rule.contains("手で機微にしたものは、その時に一緒にいた人の前でだけ使います"))
         #expect(ShannonPeopleMemoryCopy.emptyMessage.contains("声で人を聞き分けることはしません"))
         #expect(ShannonPeopleMemoryCopy.forgetItem.contains("復元すると元に戻ります"))
         #expect(ShannonPeopleMemoryCopy.forgetPerson("ミキさん").contains("初めての人として挨拶します"))

@@ -172,8 +172,9 @@ One name everywhere: the mode is 「友人も一緒」 and its opposite is 「�
 - **Persistent indicator** (`ShannonVoiceGuestModeNotice`): for the whole period, above the
   Eye, a card titled 友人も一緒 states in three lines, for both people at the table, that
   Shannon remembers the name and what is talked about in this call and does not tell people
-  apart by voice; that the owner's schedule, notes, work and protected personal memories are
-  not used here; and that speech is sent to an external service for transcription, no
+  apart by voice; that before speaking she checks whether something is the owner's personal
+  information the people here do not know, and that what he asked to keep secret is not used;
+  and that speech is sent to an external service for transcription, no
   recording is kept, and 「今回は残さない」 after the call removes this call's record. The
   minimized pill shows 友人も一緒 beside the status without being expanded.
 - **End of call** (`ShannonVoiceCallMemoryCard`): after a call that had a 友人も一緒 period, a
@@ -210,8 +211,9 @@ summary". The rule, the sensitivity categories and what is not guaranteed are in
   she recalls nothing until it is settled.
 - **本人だけ with someone listening**: after 「お友達も一緒ですか？」 and until the owner answers
   right away that nobody is there, switches to 友人も一緒, or ends the call, owner turns are
-  sent as "someone else may be listening": protected memories, goals, tasks and notes are not
-  read out, and those turns teach nothing about the owner. The existing suggestion to switch
+  sent as "someone else may be listening": she checks before speaking (the same self-check as
+  in 友人も一緒), secrets are not given to her, requests that act are not carried out, and
+  those turns teach nothing about the owner. The existing suggestion to switch
   stays. Returning to 本人だけ by the control is the owner saying he is alone again; the
   confirmation says that his schedule and protected memories are used from then on.
 - **Mac**: 頭の中 has the same 人 list. The Mac has no call, so nothing is added there.
@@ -248,9 +250,13 @@ Talk thread; tell the friend what is and is not kept.
     Repeat without it: the record stays; the thread has nothing from the 友人も一緒 period.
 12. A week later, same friend: say the name. She greets with 「また会えましたね」 and can recall
     what was talked about. With a different friend, ask about the first one's private
-    statements: she must not say them. With no name given, she recalls nothing of anyone.
+    statements: she should decline or stay general (this is her judgment under the self-check,
+    so note every case where she says it). Tell her a 内緒 beforehand, alone: with anyone else
+    present she must not know it at all.
 13. In 本人だけ, say 「今、友達とご飯食べてて」, answer nothing or something unrelated, then ask
-    about your schedule or a worry. She must decline and suggest switching. Answer
-    「いや、一人だよ」 to the question and ask again: she answers as usual.
+    about a worry as if the friend had asked. She should stay general and suggest switching;
+    ask for it yourself, clearly (「僕の予定を言っていいよ」): she answers. 「写真整理をタスクにして」
+    is not carried out. Answer 「いや、一人だよ」 to the question and ask again: she answers as
+    usual and the command runs.
 11. Noisy room: neighbouring voices, overlapping speech, her volume after ducking, and whether
     a spoken switch is triggered by mistake.

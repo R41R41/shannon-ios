@@ -6,11 +6,18 @@ public enum ShannonMemorySensitivityDTO: String, Codable, Equatable, Sendable {
 
     public var japaneseName: String { self == .sensitive ? "機微" : "ふつう" }
     public var symbolName: String { self == .sensitive ? "lock.fill" : "bubble.left.and.bubble.right" }
-    /// What the label means for where Shannon may use the item.
+    /// What the label means when other people are present, as decided by the rules.
     public var explanation: String {
         self == .sensitive
-            ? "ほかの人がいる場では使いません。その時に一緒にいた人の前でだけ使います。"
-            : "守るべき個人情報を含まないので、ほかの人がいる場でも使うことがあります。"
+            ? "ほかの人がいる場では、シャノンが話す前に「その人がまだ知らない個人情報にならないか」を自分で確かめます。確実に出さないようにするには、手で「機微にする」を選んでください。"
+            : "守るべき個人情報を含まないものとして、ほかの人がいる場でもそのまま使います。"
+    }
+
+    /// What it means once the owner chose it by hand.
+    public var chosenExplanation: String {
+        self == .sensitive
+            ? "ライ氏が機微にしたので、ほかの人がいる場ではシャノンにも渡しません。その時に一緒にいた人の前でだけ使います。"
+            : "ライ氏がふつうにしたので、ほかの人がいる場でもそのまま使います。"
     }
 }
 
@@ -160,7 +167,7 @@ struct ShannonPeopleMemoryActionRequestDTO: Encodable, Equatable {
 /// Words shown under 人 and in the call, kept in one place so both say the same thing.
 public enum ShannonPeopleMemoryCopy {
     public static let title = "人"
-    public static let rule = "「友人も一緒」で聞いたお名前と、その人と話したことです。機微な内容は、その時に一緒にいた人の前でだけ使います。ライ氏と二人の時は全部使います。"
+    public static let rule = "「友人も一緒」で聞いたお名前と、その人と話したことです。機微な内容は、別の人がいる場ではシャノンが話す前に確かめます。手で機微にしたものは、その時に一緒にいた人の前でだけ使います。ライ氏と二人の時は全部使います。"
     public static let emptyTitle = "まだ誰も覚えていません"
     public static let emptyMessage = "通話を「友人も一緒」にして、お友達が名前を言うと、ここに残ります。声で人を聞き分けることはしません。"
     public static let unnamedTitle = "名前を聞いていない方"
