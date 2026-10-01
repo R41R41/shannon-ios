@@ -3,6 +3,7 @@ import {
   type ShannonEmotionKind,
   type ShannonExpressiveEmotion,
 } from './types.js';
+import { accuracyOverrideApplies, supportOverrideFor } from './emotionOverrides.js';
 
 const EMOTION_SET = new Set<string>(SHANNON_EMOTION_KINDS);
 const PLAYFUL = new Set<ShannonEmotionKind>([
@@ -26,27 +27,44 @@ const NEGATIVE = new Set<ShannonEmotionKind>([
   'lamenting', 'panic', 'blocked', 'tired', 'apologetic',
 ]);
 
+/**
+ * Cues in Shannon's own completed reply. They describe how she just spoke, so
+ * they are evidence of her feeling; the speaker's words are never matched here.
+ * The first matching rule wins, so the character's core reactions come first.
+ */
 const FINAL_CUES: readonly { emotion: ShannonEmotionKind; pattern: RegExp }[] = [
+  { emotion: 'flustered', pattern: /(?:あわわ|わわっ|はわわ|ち、違|ちょ、ちょっと待|そ、そんなはず|慌て)/u },
   { emotion: 'bashful', pattern: /(?:えへへ|照れ|恥ずか|赤くな|そんなこと言われ)/u },
+  { emotion: 'smug', pattern: /(?:えっへん|ふふん|どやっ|ドヤ|さすがボク|ボクにかかれば|天才ですから|ボクは天才)/u },
   { emotion: 'giggle', pattern: /(?:ふふ|くすっ|笑っちゃ|おかしい)/u },
   { emotion: 'mischievous', pattern: /(?:企ん|悪戯|いたずら|内緒です|さては)/u },
-  { emotion: 'cuteAngry', pattern: /(?:もうっ|むー|ぷん|まったく|困ります)/u },
+  { emotion: 'cuteAngry', pattern: /(?:もうっ|むー|ぷんぷん|ぷんすか|まったくもう)/u },
   { emotion: 'jealous', pattern: /(?:嫉妬|やきもち|ほかの子|他の子)/u },
-  { emotion: 'sulky', pattern: /(?:拗ね|すね|別にいいですけど)/u },
+  // 「すね」 alone also matches every 「ですね」, so the kana form needs its verb ending.
+  { emotion: 'sulky', pattern: /(?:拗ね|(?<![でま])すね(?:ちゃ|て|ます|る)|別にいいですけど)/u },
   { emotion: 'surprised', pattern: /(?:えっ|まさか|びっくり|驚き)/u },
   { emotion: 'speechless', pattern: /(?:言葉が出|唖然|なんですって)/u },
   { emotion: 'apologetic', pattern: /(?:ごめん|申し訳|すみません)/u },
-  { emotion: 'caring', pattern: /(?:大丈夫|無理しない|心配|そばにい)/u },
+  { emotion: 'caring', pattern: /(?:大丈夫ですか|大丈夫[？?]|無理しない|無理は禁物|心配です|心配し|そばにい)/u },
   { emotion: 'determined', pattern: /(?:任せて|やります|取りかか|書くぞ|進めます)/u },
   { emotion: 'triumphant', pattern: /(?:やった|成功|完成|できました|天才)/u },
   { emotion: 'excited', pattern: /(?:楽しみ|わくわく|最高|嬉しい|うれしい)/u },
+  { emotion: 'fun', pattern: /(?:爆笑|大笑い|笑いが止まら|あはは)/u },
+  { emotion: 'deadpan', pattern: /(?:ジト目|呆れ|やれやれ)/u },
+  { emotion: 'selfDeprecating', pattern: /(?:苦笑|はは…)/u },
+  { emotion: 'annoyed', pattern: /(?:むっと|納得いきません|納得いかない)/u },
+  { emotion: 'relief', pattern: /(?:ほっと|安心しました|よかったです|助かりました)/u },
+  { emotion: 'curiosity', pattern: /(?:気になります|気になる|興味深|知りたいです|面白そう)/u },
   { emotion: 'sad', pattern: /(?:悲しい|寂しい|つらい|残念)/u },
   { emotion: 'confused', pattern: /(?:分からない|わからない|混乱|どういうこと)/u },
+  { emotion: 'focused', pattern: /(?:考えてみます|整理します|検討します|うーん)/u },
+  { emotion: 'sleepy', pattern: /(?:眠い|ふわぁ|おやすみなさい)/u },
+  { emotion: 'gratitude', pattern: /(?:ありがとうございます|感謝)/u },
 ];
 
-const EMERGENCY = /(?:死にたい|自殺|殺され|息ができない|意識がない|出血|火事|助けて|緊急|救急|危険)/u;
-const GRIEF = /(?:亡くな|死んだ|死別|お葬式|重い病気|余命|喪失)/u;
-const SENSITIVE_FACT = /(?:健康|病気|薬|金銭|お金|送金|支払|人物情報|個人情報|記憶|覚えて|進捗|完了|配布|デプロイ|安全)/u;
+/** Below this carry-over a previous feeling no longer continues into a new turn. */
+export const SHANNON_EMOTION_CARRY_THRESHOLD = 0.28;
+const SETTLED_CAUSE = '前の気持ちは時間とともに落ち着いた';
 
 export const INITIAL_SHANNON_EXPRESSIVE_EMOTION: Readonly<ShannonExpressiveEmotion> = Object.freeze({
   primary: 'neutral', secondary: Object.freeze([]), intensity: 0.15,
@@ -84,6 +102,7 @@ export function normalizeShannonExpressiveEmotion(
     arousal: clamp(emotion.arousal, 0, 1), valence: clamp(emotion.valence, -1, 1), visibility,
     startedAt: Number.isFinite(Date.parse(emotion.startedAt)) ? emotion.startedAt : new Date(0).toISOString(),
     decay: clamp(emotion.decay, 0, 1), carryover: clamp(emotion.carryover, 0, 1),
+    ...(emotion.updatedAt && Number.isFinite(Date.parse(emotion.updatedAt)) ? { updatedAt: emotion.updatedAt } : {}),
     ...(overrideReason ? { overrideReason } : {}),
   });
 }
@@ -116,6 +135,7 @@ export function restoreShannonExpressiveEmotion(
     visibility: row.visibility === 'subtle' || row.visibility === 'expressed' ? row.visibility : 'hidden',
     startedAt: typeof row.startedAt === 'string' ? row.startedAt : fallback.startedAt,
     decay: number(row.decay, fallback.decay), carryover: number(row.carryover, fallback.carryover),
+    ...(typeof row.updatedAt === 'string' ? { updatedAt: row.updatedAt } : {}),
     ...(typeof row.overrideReason === 'string'
       ? { overrideReason: row.overrideReason as ShannonExpressiveEmotion['overrideReason'] } : {}),
   });
@@ -127,18 +147,19 @@ export function resolveShannonEmotionState(
   const transcript = compact(input.transcript, 2_000);
   const reply = compact(input.reply ?? '', 2_000);
   const combined = `${transcript}\n${reply}`;
-  const previous = decayedPrevious(input.previous, input.now);
+  const previous = input.previous ? carriedShannonEmotion(input.previous, input.now) : undefined;
   let primary = isShannonEmotionKind(input.provisionalPrimary) ? input.provisionalPrimary : 'neutral';
   let intensity = clamp(input.provisionalIntensity, 0, 1);
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
   let cause = reply ? '生成した応答の内容と会話文脈' : 'Jevの暫定判断と会話文脈';
 
-  if (EMERGENCY.test(combined)) {
+  const support = supportOverrideFor(transcript);
+  if (support === 'emergency') {
     primary = 'protective';
     intensity = Math.max(0.78, intensity);
     overrideReason = 'emergency';
     cause = '相手の安全を最優先する必要がある';
-  } else if (GRIEF.test(combined)) {
+  } else if (support === 'grief') {
     primary = 'caring';
     intensity = Math.max(0.68, intensity);
     overrideReason = 'grief';
@@ -148,14 +169,15 @@ export function resolveShannonEmotionState(
     if (finalCue) {
       primary = finalCue.emotion;
       intensity = Math.max(intensity, 0.52);
-    } else if (primary === 'neutral' && previous && previous.carryover >= 0.28) {
+    } else if (primary === 'neutral' && previous && previous.primary !== 'neutral'
+      && previous.carryover >= SHANNON_EMOTION_CARRY_THRESHOLD) {
       primary = previous.primary;
       intensity = Math.max(intensity, previous.intensity * previous.carryover);
       cause = '直前の感情が自然に続いている';
     }
   }
 
-  if (SENSITIVE_FACT.test(combined) && (PLAYFUL.has(primary) || ATTACHMENT.has(primary))) {
+  if (accuracyOverrideApplies(combined, primary, PLAYFUL.has(primary) || ATTACHMENT.has(primary))) {
     primary = /(?:ごめん|申し訳|失敗)/u.test(combined) ? 'apologetic' : 'focused';
     intensity = Math.min(0.72, Math.max(0.45, intensity));
     overrideReason = 'safety';
@@ -179,12 +201,56 @@ export function resolveShannonEmotionState(
     cause,
     arousal: profile.arousal,
     valence: profile.valence,
-    visibility: intensity < 0.3 ? 'hidden' : intensity < 0.62 ? 'subtle' : 'expressed',
+    visibility: visibilityFor(intensity),
     startedAt: sameEpisode ? previous.startedAt : validTimestamp(input.now),
     decay,
     carryover,
+    updatedAt: validTimestamp(input.now),
     ...(overrideReason ? { overrideReason } : {}),
   });
+}
+
+/**
+ * The one carry-over rule shared by text and voice. A stored feeling loses
+ * `decay` of carry-over per 30 minutes since it was last expressed (at most
+ * 0.85), measured from `updatedAt` (older snapshots: `startedAt`).
+ */
+export function carriedShannonEmotion(
+  emotion: ShannonExpressiveEmotion,
+  now: string,
+): ShannonExpressiveEmotion {
+  const elapsed = Math.max(0, Date.parse(now) - Date.parse(emotion.updatedAt ?? emotion.startedAt));
+  if (!Number.isFinite(elapsed)) return emotion;
+  const timeDecay = Math.min(0.85, elapsed / 1_800_000 * emotion.decay);
+  return { ...emotion, carryover: clamp(emotion.carryover - timeDecay, 0, 1) };
+}
+
+/**
+ * What Shannon feels at `now` when nothing new has happened: the stored
+ * feeling at the share of its carry-over that remains, or the settled baseline
+ * once the carry-over is below the threshold. Prompts, the state sheet and message
+ * expressions all read the stored state through this function.
+ */
+export function currentShannonEmotion(
+  stored: ShannonExpressiveEmotion | undefined,
+  now: string,
+): ShannonExpressiveEmotion {
+  const carried = stored ? carriedShannonEmotion(stored, now) : undefined;
+  if (!carried || carried.primary === 'neutral' || carried.carryover < SHANNON_EMOTION_CARRY_THRESHOLD) {
+    return Object.freeze({
+      ...INITIAL_SHANNON_EXPRESSIVE_EMOTION,
+      cause: carried && carried.primary !== 'neutral' ? SETTLED_CAUSE : INITIAL_SHANNON_EXPRESSIVE_EMOTION.cause,
+      startedAt: validTimestamp(now),
+    });
+  }
+  // Full strength at the moment it was expressed, fading with the carry-over that remains.
+  const remaining = stored!.carryover > 0 ? carried.carryover / stored!.carryover : 0;
+  const intensity = clamp(carried.intensity * remaining, 0, 1);
+  return Object.freeze({ ...carried, intensity, visibility: visibilityFor(intensity) });
+}
+
+function visibilityFor(intensity: number): ShannonExpressiveEmotion['visibility'] {
+  return intensity < 0.3 ? 'hidden' : intensity < 0.62 ? 'subtle' : 'expressed';
 }
 
 export function buildExpressiveEmotionPrompt(
@@ -201,17 +267,6 @@ export function buildExpressiveEmotionPrompt(
     'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');
-}
-
-function decayedPrevious(
-  previous: ShannonExpressiveEmotion | undefined,
-  now: string,
-): ShannonExpressiveEmotion | undefined {
-  if (!previous) return undefined;
-  const elapsed = Math.max(0, Date.parse(now) - Date.parse(previous.startedAt));
-  if (!Number.isFinite(elapsed)) return previous;
-  const timeDecay = Math.min(0.85, elapsed / 1_800_000 * previous.decay);
-  return { ...previous, carryover: clamp(previous.carryover - timeDecay, 0, 1) };
 }
 
 function emotionProfile(primary: ShannonEmotionKind, intensity: number): { valence: number; arousal: number } {

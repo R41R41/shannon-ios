@@ -106,17 +106,6 @@ public struct ShannonConversationView: View {
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
             await pollAgentTasksWhileActive()
         }
-        .onChange(of: model.currentExpression) {
-            Task { await appIconModel.updateAutomatically(for: model.currentExpression) }
-        }
-        .onChange(of: activeColorScheme) {
-            Task {
-                await appIconModel.updateForAppearance(appIconAppearance(for: activeColorScheme))
-            }
-        }
-        .task(id: appIconModel.nextRefreshAt) {
-            await refreshAppIconAtNextDeadline()
-        }
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }

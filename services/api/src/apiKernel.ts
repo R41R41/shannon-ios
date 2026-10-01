@@ -1,13 +1,13 @@
 import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
-  createShannonMessageEmotion,
-  projectEmotionReaction,
+  resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
+import { commitReplyEmotionLater, presentCompanionState } from './companionPresence.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
@@ -214,7 +214,7 @@ export class ShannonApiKernel {
     if (request.method === 'GET' && request.path === '/v1/state') {
       const scopeKey = request.query?.get('scopeKey');
       if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-      return { status: 200, body: this.stateStore.snapshot(scopeKey) };
+      return { status: 200, body: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()) };
     }
 
     if (request.method === 'GET' && request.path === '/v1/conversation') {
@@ -227,7 +227,7 @@ export class ShannonApiKernel {
         body: {
           threadId: resolvedThreadId,
           messages: conversationWithCaptures({ conversationStore: this.conversationStore, stateStore: this.stateStore, cognitiveIntents: this.cognitiveIntents }, scopeKey, resolvedThreadId),
-          state: this.stateStore.snapshot(scopeKey),
+          state: presentCompanionState(this.stateStore.snapshot(scopeKey), this.now()),
         },
       };
     }
@@ -381,10 +381,8 @@ export class ShannonApiKernel {
           ? { session: explicitCommand.organizeSession, reply: explicitCommand.reply }
           : await prepareConversationOrganize(body.scopeKey, threadId, occurredAt,
             this.conversationStore, this.organizeStore, this.organizeExtractor);
-        const messageEmotion = createShannonMessageEmotion(
-          projectEmotionReaction(captured, message), captured.temperament,
-          { userMessage: message, shannonReply: reply },
-        );
+        // A fixed command reply shows her face but does not change the stored feeling.
+        const { messageEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt });
         const completedTurn = {
           scopeKey: body.scopeKey, threadId, capturedState: captured, userMessage: message, shannonReply: reply,
           messageEmotion, completedAt: occurredAt,
@@ -400,7 +398,7 @@ export class ShannonApiKernel {
           status: 200,
           body: {
             mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId, turnId: experience.id,
-            snapshotVersion: captured.version, messageEmotion, systemPrompt, state: captured,
+            snapshotVersion: captured.version, messageEmotion, systemPrompt, state: presentCompanionState(captured, occurredAt),
             thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId),
             ...(session ? { uiBlocks: [{ type: 'organize_session' as const, session }] } : {}),
           } satisfies ChatResponse,
@@ -420,11 +418,8 @@ export class ShannonApiKernel {
       });
       const reply = placeSkillReply(completion, placeSkill);
       const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
-      const messageEmotion = createShannonMessageEmotion(
-        projectEmotionReaction(captured, message),
-        captured.temperament,
-        { userMessage: message, shannonReply: reply },
-      );
+      // Her feeling for this reply, from state already in hand; it is stored after the response.
+      const { messageEmotion, expressiveEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt });
       const response: ChatResponse = {
         mode: completion.mode,
         model: completion.model,
@@ -433,7 +428,7 @@ export class ShannonApiKernel {
         snapshotVersion: captured.version,
         messageEmotion,
         systemPrompt,
-        state: captured,
+        state: presentCompanionState(captured, occurredAt, expressiveEmotion),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
       if (placeSkill?.places.length) response.uiBlocks = [{ type: 'place_search', places: placeSkill.places }];
@@ -470,6 +465,7 @@ export class ShannonApiKernel {
       }
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
+      commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
       return { status: 200, body: response };
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };

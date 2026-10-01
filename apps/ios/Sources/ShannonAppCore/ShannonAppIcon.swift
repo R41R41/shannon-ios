@@ -59,11 +59,6 @@ public enum ShannonAppIconChoice: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public enum ShannonAppIconAppearance: String, Equatable, Sendable {
-    case light
-    case dark
-}
-
 enum ShannonAppIconAssets {
 #if canImport(AppKit)
     static let macApplicationIconBodyScale = 0.84375
@@ -133,7 +128,6 @@ public final class ShannonAppIconModel {
     public private(set) var activeChoice: ShannonAppIconChoice
     public private(set) var isUpdating = false
     public private(set) var errorMessage: String?
-    public private(set) var nextRefreshAt: Date?
     private let defaults: UserDefaults
 
     enum Keys {
@@ -174,16 +168,9 @@ public final class ShannonAppIconModel {
         "\(activeChoice.levelName)・\(activeChoice.japaneseName)"
     }
 
-    public func activate(
-        for expression: ShannonExpressionDTO,
-        appearance: ShannonAppIconAppearance,
-        now: Date = Date(),
-        recordsLateNightUse: Bool = true
-    ) async {
-        _ = expression
-        _ = appearance
-        _ = now
-        _ = recordsLateNightUse
+    /// Re-applies the owner's chosen level at launch. The icon never follows Shannon's
+    /// emotion or the appearance; the owner picks one of the three levels in Settings.
+    public func activate() async {
         await apply(choice: selectedChoice)
     }
 
@@ -191,24 +178,6 @@ public final class ShannonAppIconModel {
         selectedChoice = choice
         defaults.set(choice.rawValue, forKey: Keys.selectedChoice)
         await apply(choice: choice)
-    }
-
-    public func updateAutomatically(
-        for expression: ShannonExpressionDTO,
-        now: Date = Date(),
-        force: Bool = false
-    ) async {
-        _ = expression
-        _ = now
-        _ = force
-    }
-
-    public func updateForAppearance(
-        _ appearance: ShannonAppIconAppearance,
-        now: Date = Date()
-    ) async {
-        _ = appearance
-        _ = now
     }
 
     public func dismissError() { errorMessage = nil }

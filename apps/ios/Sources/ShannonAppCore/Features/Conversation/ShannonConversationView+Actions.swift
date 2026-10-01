@@ -10,10 +10,7 @@ extension ShannonConversationView {
         connectionModel?.refreshFromKeychain()
         await model.loadConversationIfNeeded()
         await model.refreshInitiatives()
-        await appIconModel.activate(
-            for: model.currentExpression,
-            appearance: appIconAppearance(for: activeColorScheme)
-        )
+        await appIconModel.activate()
     }
 
 #if DEBUG
@@ -121,10 +118,6 @@ extension ShannonConversationView {
         case .light: .light
         case .dark: .dark
         }
-    }
-
-    func appIconAppearance(for colorScheme: ColorScheme) -> ShannonAppIconAppearance {
-        colorScheme == .dark ? .dark : .light
     }
 
     var latestShannonMessageID: UUID? {

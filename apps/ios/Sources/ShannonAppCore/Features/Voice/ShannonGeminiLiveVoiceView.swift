@@ -152,7 +152,11 @@ public struct ShannonGeminiLiveVoiceView: View {
                 ShannonVoiceGuestModeNotice(palette: palette)
                     .frame(maxWidth: 560)
             }
-            ShannonWaterlightEyeView(expression: expression, activity: eyeActivity, size: eyeSize)
+            // The call's own per-turn emotion; before the first reply, the thread's last face.
+            ShannonWaterlightEyeView(
+                expression: model.callFace?.expression ?? expression, activity: eyeActivity, size: eyeSize,
+                feeling: model.callFace?.feeling
+            )
                 .frame(maxWidth: 440)
             VStack(spacing: ShannonSpacing.medium) {
                 ShannonGeminiLiveStatusView(

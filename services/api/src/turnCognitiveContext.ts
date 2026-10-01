@@ -128,7 +128,7 @@ function turnPrompt(
 ): string {
   return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
     // KnowledgeStore projections may not yet contain the commitment extension.
-    buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200 }),
+    buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200, now: situation.occurredAt }),
   ].join('\n\n');
 }
 

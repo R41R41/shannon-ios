@@ -51,13 +51,7 @@ extension ShannonConversationModel {
                 id: organizeSession?.commandThroughMessageId.flatMap(UUID.init(uuidString:)) ?? UUID(),
                 role: .shannon,
                 text: response.reply,
-                emotionSnapshot: ConversationMessage.EmotionSnapshot(
-                    valence: emotion.valence,
-                    arousal: emotion.arousal,
-                    openness: emotion.openness,
-                    expression: emotion.expression,
-                    stateVersion: response.snapshotVersion
-                ),
+                emotionSnapshot: ConversationMessage.EmotionSnapshot(emotion, stateVersion: response.snapshotVersion),
                 artifacts: response.artifacts ?? [],
                 places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? [],
                 turnID: response.turnId

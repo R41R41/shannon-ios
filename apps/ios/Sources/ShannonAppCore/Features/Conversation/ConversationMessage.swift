@@ -17,6 +17,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         public let arousal: Double
         public let openness: Double
         public let expression: ShannonExpressionDTO
+        /// A core feeling that borrows `expression`'s face (得意げ, 慌てている, 申し訳なさそう).
+        public let feeling: ShannonFeelingDTO?
         public let stateVersion: Int
 
         public init(
@@ -24,12 +26,14 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             arousal: Double,
             openness: Double,
             expression: ShannonExpressionDTO,
+            feeling: ShannonFeelingDTO? = nil,
             stateVersion: Int
         ) {
             self.valence = valence
             self.arousal = arousal
             self.openness = openness
             self.expression = expression
+            self.feeling = feeling
             self.stateVersion = stateVersion
         }
     }

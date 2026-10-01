@@ -1,3 +1,4 @@
+import { presentCompanionState } from './companionPresence.js';
 import {
   memoryControlFor,
   memoryIdentifier,
@@ -235,7 +236,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const backgroundCostUsd = this.usageReader?.backgroundLlmCostUsd(monthKey) ?? 0;
     return Object.freeze({
       generatedAt,
-      currentState: state,
+      currentState: presentCompanionState(state, generatedAt),
       // 「覚えていること」 lists what is in use: a forgotten or rejected answer moves to 記憶の管理 until restored.
       knowledge: Object.freeze((this.knowledgeStore?.knowledgeAnswers(scopeKey) ?? []).filter(answer => {
         const source = state.userFacts.find(fact => fact.id === answer.answerId)?.sourceExperienceId;

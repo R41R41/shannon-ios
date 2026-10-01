@@ -637,7 +637,7 @@ describe('Shannon local API kernel', () => {
       status: 200,
       body: { mode: 'local-stub', snapshotVersion: 0, messageEmotion: { expression: 'calm' } },
     });
-    expect(second).toMatchObject({ status: 200, body: { mode: 'local-stub', snapshotVersion: 2 } });
+    expect(second).toMatchObject({ status: 200, body: { mode: 'local-stub', snapshotVersion: 3 } });
     expect(JSON.stringify(first.body)).not.toContain('脳科学');
     expect(JSON.stringify(second.body)).toContain('脳科学');
   });
@@ -657,7 +657,7 @@ describe('Shannon local API kernel', () => {
       { role: 'user', content: '最初' },
       { role: 'assistant', content: '返答1' },
     ]);
-    expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v1]');
+    expect(model.requests[1]?.systemPrompt).toContain('[Shannon shared state v2]');
   });
 
   it('recalls a related past turn before generating the current response', async () => {
@@ -1072,7 +1072,7 @@ describe('Shannon local API kernel', () => {
     const second = await api.dispatch({
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '創作の続きを考えたい' },
     });
-    expect(second).toMatchObject({ body: { snapshotVersion: 1 } });
+    expect(second).toMatchObject({ body: { snapshotVersion: 2 } });
     await api.waitForBackground('owner-a');
     const state = await api.dispatch({
       method: 'GET', path: '/v1/state', query: new URLSearchParams({ scopeKey: 'owner-a' }),
@@ -1080,7 +1080,10 @@ describe('Shannon local API kernel', () => {
     expect(state).toMatchObject({
       status: 200,
       body: {
-        version: 4,
+        // Two emotion deltas, recall, the interest, and two shared-time recalibrations.
+        version: 6,
+        temperament: { closeness: 0.17, curiosity: 0.53 },
+        presence: { mood: { expression: expect.any(String) }, temperamentReasons: { closeness: 'この30日で1日話した' } },
         interests: ['創作'],
         activeMemories: [{ summary: expect.stringContaining('創作を進められて嬉しい') }],
       },
@@ -1100,7 +1103,7 @@ describe('Shannon local API kernel', () => {
 
     const session = api.realtimeVoiceSession('owner-a', threadId);
     expect(session.threadId).toBe(threadId);
-    expect(session.instructions).toContain('[Shannon shared state v1]');
+    expect(session.instructions).toContain('[Shannon shared state v2]');
     expect(session.instructions).toContain('音声で続きを話したい');
     expect(session.instructions).toContain('[Live voice conversation]');
     expect(session.instructions).toContain('primarily speaks Japanese');

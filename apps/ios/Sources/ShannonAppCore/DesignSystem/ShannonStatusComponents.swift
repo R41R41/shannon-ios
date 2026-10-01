@@ -116,7 +116,7 @@ struct ShannonVoiceStatusBar: View {
 
 struct ShannonStateSheet: View {
     let state: CompanionStateDTO?
-    let expression: ShannonExpressionDTO
+    let face: ShannonFace
 
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -128,20 +128,35 @@ struct ShannonStateSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                     HStack(spacing: ShannonSpacing.large) {
-                        ShannonAvatarView(expression: expression, size: 72)
+                        ShannonAvatarView(expression: face.expression, size: 72)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(expression.japaneseName)
+                            Text(face.japaneseName)
                                 .font(.title2.weight(.semibold))
                             Text("シャノンのいま")
                                 .font(.body)
                                 .foregroundStyle(palette.textSecondary)
+                            if let cause = state?.presence?.mood.cause, !cause.isEmpty {
+                                Text(cause)
+                                    .font(.callout)
+                                    .foregroundStyle(palette.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
+                    .accessibilityElement(children: .combine)
 
                     if let state {
                         VStack(spacing: ShannonSpacing.medium) {
-                            StateMeter(label: "好奇心", value: state.temperament.curiosity, palette: palette)
-                            StateMeter(label: "親密さ", value: state.temperament.closeness, palette: palette)
+                            // Traits move with stored evidence; the line under each bar says which.
+                            StateMeter(
+                                label: "親密さ", value: state.temperament.closeness, palette: palette,
+                                reason: state.presence?.temperamentReasons.closeness
+                            )
+                            StateMeter(
+                                label: "好奇心", value: state.temperament.curiosity, palette: palette,
+                                reason: state.presence?.temperamentReasons.curiosity
+                            )
                             StateMeter(label: "活性", value: state.emotion.arousal, palette: palette)
                             StateMeter(label: "心の開き", value: state.emotion.openness, palette: palette)
                         }
@@ -182,9 +197,11 @@ struct StateMeter: View {
     let label: String
     let value: Double
     let palette: ShannonPalette
+    /// What the value is made of, when the server explains it.
+    var reason: String? = nil
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(label).font(.callout.weight(.medium))
                 Spacer()
@@ -192,9 +209,19 @@ struct StateMeter: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
-            ProgressView(value: value)
+            ProgressView(value: min(1, max(0, value)))
                 .tint(palette.action)
+            if let reason, !reason.isEmpty {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue([value.formatted(.percent.precision(.fractionLength(0))), reason]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "、"))
     }
 }
 

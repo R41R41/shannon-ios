@@ -6,6 +6,8 @@ public struct ShannonWaterlightEyeView: View {
     public let size: CGFloat
     public let reactionTrigger: Int
     public let allowsTracking: Bool
+    /// A core feeling that borrows this expression's eye shape; it changes only the spoken name.
+    public let feeling: ShannonFeelingDTO?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -26,13 +28,15 @@ public struct ShannonWaterlightEyeView: View {
         activity: ShannonDialogueActivity = .idle,
         size: CGFloat = 96,
         reactionTrigger: Int = 0,
-        allowsTracking: Bool = true
+        allowsTracking: Bool = true,
+        feeling: ShannonFeelingDTO? = nil
     ) {
         self.expression = expression
         self.activity = activity
         self.size = size
         self.reactionTrigger = reactionTrigger
         self.allowsTracking = allowsTracking
+        self.feeling = feeling
     }
     public var body: some View {
         Group {
@@ -51,7 +55,9 @@ public struct ShannonWaterlightEyeView: View {
             y: size / 30
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(expression.accessibilityDescription)、\(activity.japaneseLabel)")
+        .accessibilityLabel(
+            "\(ShannonFace(expression: expression, feeling: feeling).accessibilityDescription)、\(activity.japaneseLabel)"
+        )
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { triggerReaction() }
         .simultaneousGesture(faceGesture)

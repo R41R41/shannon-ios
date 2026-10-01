@@ -83,6 +83,13 @@ public protocol ShannonVoiceServing: Sendable {
         userTranscript: String,
         shannonTranscript: String
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
+    func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO
     func saveVoiceCallSummary(
         scopeKey: String,
         threadId: String?,

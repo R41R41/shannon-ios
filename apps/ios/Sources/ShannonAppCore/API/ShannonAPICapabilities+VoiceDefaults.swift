@@ -160,6 +160,20 @@ public extension ShannonAPIClientProtocol {
         throw ShannonAPIError.invalidResponse
     }
 
+    /// A client that does not carry the emotion still stores the turn.
+    func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
+        try await commitRealtimeVoiceTurn(
+            scopeKey: scopeKey, threadId: threadId,
+            userTranscript: userTranscript, shannonTranscript: shannonTranscript
+        )
+    }
+
     func saveVoiceCallSummary(
         scopeKey: String,
         threadId: String?,

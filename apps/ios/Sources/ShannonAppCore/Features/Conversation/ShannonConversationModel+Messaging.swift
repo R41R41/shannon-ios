@@ -198,7 +198,8 @@ extension ShannonConversationModel {
     public func commitRealtimeVoiceTurn(
         userTranscript: String,
         shannonTranscript: String,
-        threadID: String? = nil
+        threadID: String? = nil,
+        emotion: ShannonVoiceTurnEmotionDTO? = nil
     ) async throws {
         let requestedThreadID = threadID ?? selectedThreadId
         let userText = userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,20 +209,15 @@ extension ShannonConversationModel {
             scopeKey: scopeKey,
             threadId: requestedThreadID,
             userTranscript: userText,
-            shannonTranscript: shannonText
+            shannonTranscript: shannonText,
+            emotion: emotion
         )
         state = response.state
         let emotion = response.messageEmotion
         let pair = [ConversationMessage(role: .user, text: userText), ConversationMessage(
             role: .shannon,
             text: shannonText,
-            emotionSnapshot: ConversationMessage.EmotionSnapshot(
-                valence: emotion.valence,
-                arousal: emotion.arousal,
-                openness: emotion.openness,
-                expression: emotion.expression,
-                stateVersion: response.state.version
-            ),
+            emotionSnapshot: ConversationMessage.EmotionSnapshot(emotion, stateVersion: response.state.version),
             turnID: response.turnId
         )]
         if selectedThreadId == requestedThreadID || selectedThreadId == response.threadId {

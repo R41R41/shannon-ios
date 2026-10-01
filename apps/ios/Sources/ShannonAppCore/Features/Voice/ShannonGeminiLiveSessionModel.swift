@@ -49,6 +49,9 @@ public final class ShannonGeminiLiveSessionModel {
     var echoWindow = ShannonVoiceEchoWindow()
     /// This call's 「友人も一緒」 turns. Memory only; dropped when the call ends.
     var guestCall = ShannonVoiceGuestCallState()
+    /// The face of the emotion the voice is acting with now. Memory only; 「友人も一緒」 stores nothing.
+    public internal(set) var callFace: ShannonFace?
+    var replyEmotion: ShannonVoiceTurnEmotionDTO?
     private var bargeCandidateStartedAt: TimeInterval?
     private var heardRightAfterShannon = false
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
@@ -180,6 +183,8 @@ public final class ShannonGeminiLiveSessionModel {
         responseGenerationID = nil
         pendingTurns.reset()
         guestCall = ShannonVoiceGuestCallState()
+        callFace = nil
+        replyEmotion = nil
         setKeepsScreenAwake(false)
         finalizeTask = nil
         duckRestoreTask = nil

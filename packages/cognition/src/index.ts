@@ -4,8 +4,16 @@ export {
   createInitialCompanionState,
   freezeSnapshot,
   reduceCompanionState,
-  restoreCompanionState,
 } from './state.js';
+export { restoreCompanionState } from './stateRestore.js';
+export {
+  SHARED_DAY_WINDOW,
+  calibrateTemperament,
+  explainTemperament,
+  temperamentEvidence,
+  type ShannonTemperamentEvidence,
+  type ShannonTemperamentReasons,
+} from './temperament.js';
 export { InMemoryCompanionStateStore, type CompanionClock } from './store.js';
 export {
   SHANNON_FIRST_PERSON,
@@ -38,15 +46,29 @@ export {
 } from './prompt.js';
 export {
   createShannonMessageEmotion,
-  deriveShannonExpression,
+  deriveShannonFace,
+  faceForEmotionKind,
+  faceForMood,
   type ShannonExpression,
-  type ShannonExpressionContext,
+  type ShannonFace,
+  type ShannonFeeling,
   type ShannonMessageEmotion,
 } from './expression.js';
+export {
+  presentShannonMood,
+  resolveReplyEmotion,
+  type ReplyEmotion,
+  type ReplyEmotionInput,
+  type ShannonPresentMood,
+} from './replyEmotion.js';
+export { supportOverrideFor } from './emotionOverrides.js';
 export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';
 export {
   INITIAL_SHANNON_EXPRESSIVE_EMOTION,
+  SHANNON_EMOTION_CARRY_THRESHOLD,
   buildExpressiveEmotionPrompt,
+  carriedShannonEmotion,
+  currentShannonEmotion,
   isShannonEmotionKind,
   resolveShannonEmotionState,
   type ResolveShannonEmotionInput,

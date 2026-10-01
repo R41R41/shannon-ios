@@ -4,6 +4,12 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * Reviewed synthetic baseline with the additive expressive-emotion state schema.
  * Successful assertion detail is omitted; fingerprints bind the full output.
  * This file is never rewritten automatically to make a regression pass.
+ *
+ * 2026-10-02: the six memory-* fingerprints were re-recorded by hand. Their
+ * output is the state prompt, whose text changed on purpose: the trait line is
+ * split into evidence-driven and fixed traits, and the conversational-feeling
+ * line now appears only when the caller supplies a turn clock. Every scenario
+ * still passes its own assertions.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '8b988f47',
@@ -12,12 +18,12 @@ const resultFingerprints = {
   'state-interest-limit': 'fa0b8f1d',
   'state-active-memory-limit': 'b5e8f593',
   'state-unresolved-commitments-preserved': '3ed66540',
-  'memory-forgotten-excluded': 'bd830009',
-  'memory-rejected-excluded': 'b17568d1',
-  'memory-correction-uses-override': '55205018',
-  'memory-restore-does-not-revive-paraphrase': 'a1ad2329',
-  'memory-pinned-correction-visible': 'f84ddbe8',
-  'memory-unrelated-evidence-visible': '57730c13',
+  'memory-forgotten-excluded': '9f99fbf3',
+  'memory-rejected-excluded': '1950227b',
+  'memory-correction-uses-override': '0ac69dbc',
+  'memory-restore-does-not-revive-paraphrase': '79d935cd',
+  'memory-pinned-correction-visible': 'fa8fb30c',
+  'memory-unrelated-evidence-visible': '1cc355c5',
   'recall-word-match': '7364bd3b',
   'recall-related-term': '75d07eeb',
   'recall-participant': 'fc5b8c62',

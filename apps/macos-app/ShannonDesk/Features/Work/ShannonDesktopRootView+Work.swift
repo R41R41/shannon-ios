@@ -144,7 +144,7 @@ extension ShannonDesktopRootView {
                         }
                         DesktopInspectorSection(title: "シャノンの様子") {
                             Label(
-                                DesktopExpressionLabel.stateDescription(for: task.expression),
+                                DesktopExpressionLabel.stateDescription(for: ShannonFace(expression: task.expression)),
                                 systemImage: "sparkles"
                             )
                             .foregroundStyle(.secondary)
