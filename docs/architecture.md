@@ -465,6 +465,15 @@ Shannon's body is the Live2D desktop application on the owner's Windows PC; her 
 - **Nudges** (`GET /v1/body/nudges`): five fixed seed lines (`bodyNudges.ts`, awaiting the owner's review) with a scene, face, and voice direction, and the limits the body must keep (not during a conversation or 15 minutes after one, 2 an hour, 10 a day). No model is called.
 - `SHANNON_BODY_INGEST=off` refuses events and keeps stored ones out of conversation turns.
 
+## Operations console
+
+The legacy platform runtime reports its operational status and the owner's desktop management window reads it; the contract is `docs/ops-contract.md` (`opsContract.ts`, `opsStore.ts`, `serverOpsRoutes.ts`). Stage 1 is read-only.
+
+- **Report** (`POST /v1/platform/ops/snapshot`, platform bridge credential): runtime release and start time, services, Minecraft bots and their task steps, schedules, daily counters, and skills. Fields are closed, bounded (64 KiB, short labels of at most 120 characters), free of control characters and of credential-shaped strings, and carry no conversation text. Only the latest snapshot per scope is kept (`ops_snapshots`, one row, replaced), under the scope the bridge is bound to.
+- **Read** (`GET /v1/ops`, device token): the latest snapshot, when it arrived, and `stale` when none arrived for 180 seconds (the VM is a Spot instance). Nothing received, or ingest off, is `200` with `snapshot: null`. `commands: []` and `commandsSupported: false` are fixed until stage 2.
+- The desktop never connects to the legacy runtime and the server never calls it. `server.ts` dispatches both paths to the ops route before the kernel; the store is held by that route alone, so the snapshot is in no prompt and no worker reads it.
+- `SHANNON_PLATFORM_OPS_INGEST=off` refuses reports and hides a stored snapshot. Commands (start, stop, run a schedule) are a proposal in the contract and are not built.
+
 ## Durable store
 
 | Concern | Tables |
@@ -480,6 +489,7 @@ Shannon's body is the Live2D desktop application on the owner's Windows PC; her 
 | Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Retired realtime voice allowance ledger (migration compatibility only) | `realtime_voice_session_reservations` |
 | Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
+| Operations console | `ops_snapshots` (latest snapshot per scope; created outside the numbered migrations; schema version unchanged) |
 | Person identity registry | `people`, `person_platform_identities`, `person_identity_events` |
 | People and what was talked about | `people` (`aliases_json`, `how_known`, `forgotten_at`), `person_calls` (`source`, `label`), `person_memory_items`, `person_platform_links`, `person_platform_turns` (idempotency receipts and daily counts; no message text) (created outside the numbered migrations; schema version unchanged) |
 | Intention and cognitive audit | `cognitive_intents`, `cognitive_cycle_receipts` |
