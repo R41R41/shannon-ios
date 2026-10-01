@@ -5,6 +5,8 @@ import {
   type CompanionStateSnapshot,
   type MemoryAudience,
 } from '@shannon/cognition';
+import type { PresentedCompanionState } from './companionPresence.js';
+import type { ChatResponse } from './contracts.js';
 import type { ConversationCapabilitySelection } from './conversationCapabilities.js';
 import type { ConversationStore } from './conversationStore.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
@@ -47,6 +49,28 @@ export interface ChatAudienceTurn {
   identity(ownerProfile: () => string): string;
   /** Today's focus and her own pursuits, as the owner voice path gives them to this audience. */
   ownFocus(focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string): string;
+  /** The response body as this audience may receive it. The owner's is returned untouched. */
+  visible(response: ChatResponse): ChatResponse;
+}
+
+/**
+ * The response of a turn other people can see. No guest projection of the companion state
+ * existed (guest voice returns none), so only what renders the reply is kept: her traits,
+ * emotion values and present face. Collections keep their keys, empty, because deployed
+ * decoders require them. The prompt and the thread row (title, rolling summary, sections)
+ * are owner material and are not returned.
+ */
+function sharedChatResponse(response: ChatResponse): ChatResponse {
+  const { thread: _thread, state, ...rest } = response;
+  const presence = (state as PresentedCompanionState).presence;
+  const reduced: PresentedCompanionState = {
+    scopeKey: state.scopeKey, version: state.version, updatedAt: state.updatedAt,
+    temperament: state.temperament, emotion: state.emotion,
+    interests: [], userFacts: [], activeMemories: [], relationships: [], prospectiveMemories: [], memoryControls: [],
+    // The cause of a feeling may quote an earlier one-to-one turn; the face itself stays.
+    presence: { mood: { ...presence.mood, cause: '' }, temperamentReasons: { closeness: '', curiosity: '', confidenceAboutUser: '' } },
+  };
+  return { ...rest, systemPrompt: '', state: reduced };
 }
 
 const OWNER_TURN: ChatAudienceTurn = Object.freeze({
@@ -54,6 +78,7 @@ const OWNER_TURN: ChatAudienceTurn = Object.freeze({
   instructions: '', turnLabel: Object.freeze({}),
   identity: (ownerProfile: () => string) => ownerProfile(),
   ownFocus: (focus: string, pursuits: string) => [focus, pursuits].filter(Boolean).join('\n\n'),
+  visible: (response: ChatResponse) => response,
 });
 
 const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
@@ -65,6 +90,7 @@ const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
   // What she does in her own time is told to the owner alone.
   ownFocus: (focus: string, _pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) =>
     sharedDailyFocus(new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, store, scopeKey), focus),
+  visible: sharedChatResponse,
 });
 
 /** The turn policy for a request value. Absent is the owner alone; anything else unknown is refused (null). */

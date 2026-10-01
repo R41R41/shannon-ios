@@ -469,7 +469,7 @@ export class ShannonApiKernel {
       this.background.schedule(completedTurn, experience.id);
       // Her stored feeling toward the owner moves only on a turn that is his alone.
       if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
-      return { status: 200, body: response };
+      return { status: 200, body: audience.visible(response) };
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }

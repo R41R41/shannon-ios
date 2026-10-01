@@ -167,6 +167,37 @@ describe('POST /v1/chat audience — others', () => {
     store.close();
   });
 
+  it('returns a response with no owner material: no prompt, no thread row, a state reduced to her face and traits', async () => {
+    const { store, chat } = await seeded();
+    // What the owner-alone response of the same thread carries, to prove the strings exist to be leaked.
+    const alone = await chat('前に話したローンのこと覚えてる？', 'thread') as unknown as Record<string, any>;
+    const aloneJson = JSON.stringify(alone);
+    for (const word of ['紅茶', 'ミズクラゲ銀行', 'ウォンバット会', 'アルマジロ', '[Shannon shared state']) expect(aloneJson, word).toContain(word);
+    expect(alone.thread.title).toContain('ミズクラゲ銀行');
+    expect(alone.systemPrompt.length).toBeGreaterThan(100);
+    expect(alone.thread.threadId).toBe('thread');
+    expect(alone.state.userFacts.length).toBeGreaterThan(0);
+
+    for (const [message, thread] of [['前に話したこと覚えてる？', 'thread'], ['前に話したこと覚えてる？', 'private'], ['こんにちは', 'new-thread']] as const) {
+      const body = await chat(message, thread, { audience: 'others' }) as unknown as Record<string, any>;
+      const json = JSON.stringify(body);
+      for (const word of [...HARD, '紅茶', 'ミズクラゲ銀行', '借金', '返済の段取り', '内緒', '置物', '病院', 'Shannon shared state', '【機微', 'ライ氏についての記憶']) {
+        expect(json, `${thread} → ${word}`).not.toContain(word);
+      }
+      expect(Object.keys(body).sort()).toEqual(['audience', 'messageEmotion', 'mode', 'model', 'reply', 'snapshotVersion', 'state', 'systemPrompt', 'threadId', 'turnId']);
+      expect(body.systemPrompt).toBe('');
+      expect(body.thread).toBeUndefined();
+      expect(Object.keys(body.state).sort()).toEqual(['activeMemories', 'emotion', 'interests', 'memoryControls', 'presence', 'prospectiveMemories',
+        'relationships', 'scopeKey', 'temperament', 'updatedAt', 'userFacts', 'version']);
+      for (const key of ['activeMemories', 'interests', 'memoryControls', 'prospectiveMemories', 'relationships', 'userFacts']) expect(body.state[key]).toEqual([]);
+      expect(body.state.presence.mood.cause).toBe('');
+      expect(body.state.presence.mood.expression).toEqual(expect.any(String));
+      expect(body.state.presence.temperamentReasons).toEqual({ closeness: '', curiosity: '', confidenceAboutUser: '' });
+      expect(body.state.temperament).toEqual(alone.state.temperament);
+    }
+    store.close();
+  });
+
   it('does not run a command that acts', async () => {
     const { store, model, chat } = await seeded();
     const before = model.requests.length;
