@@ -197,16 +197,17 @@ export function visibleConversationHistory(
 
 /**
  * The prior summary of a thread for the model, or nothing when it was built from a withheld
- * turn. Only text chat, which is the owner alone, uses it; `present` is stated so a future
- * caller has to decide.
+ * turn. With anyone else present it is also nothing when the thread holds a turn they must
+ * not hear, and otherwise carries the marker for unlabelled text.
  */
 export function usableThreadSummary(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
   present: MemoryAudience,
 ): string | undefined {
+  const gate = new DisclosureGate(present, state, store, scopeKey);
+  if (!gate.allowsThreadSummary(threadId)) return undefined;
   const summary = new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
-  const marker = new DisclosureGate(present, state, store, scopeKey).unlabelledMarker;
-  return summary && marker ? `${marker}${summary}` : summary;
+  return summary && gate.unlabelledMarker ? `${gate.unlabelledMarker}${summary}` : summary;
 }
 
 export function isForgottenCommitmentEvidence(state: CompanionStateSnapshot, evidence: string): boolean {

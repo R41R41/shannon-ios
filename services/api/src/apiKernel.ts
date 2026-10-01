@@ -1,5 +1,5 @@
 import {
-  InMemoryCompanionStateStore, OWNER_AUDIENCE,
+  InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
   resolveReplyEmotion,
   type CompanionClock,
@@ -58,6 +58,7 @@ import { randomUUID } from 'node:crypto';
 import { validatedPlaceSearchOptions } from './placeDiscovery.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
+import { chatAudienceTurn } from './chatAudience.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -331,9 +332,10 @@ export class ShannonApiKernel {
       if (attachments === null) {
         return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
       }
-      if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') {
-        return badRequest('webSearch must be a boolean');
-      }
+      if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return badRequest('webSearch must be a boolean');
+      // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
+      const audience = chatAudienceTurn(body.audience);
+      if (!audience) return badRequest('audience is invalid');
       const message = body.message.trim();
       const placeOptions = validatedPlaceSearchOptions(message, body.placeLocation, this.now());
       if (placeOptions === false) return badRequest('placeLocation is invalid');
@@ -341,11 +343,11 @@ export class ShannonApiKernel {
       const occurredAt = this.now();
       let orchestrationState = observeConversationTurn({
         previous: this.conversationOrchestration.read(body.scopeKey, threadId),
-        scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: 'owner',
+        scopeKey: body.scopeKey, threadId, message, occurredAt, participantMode: audience.participantMode,
         tasks: this.agentTasks.list(body.scopeKey),
       });
       if (orchestrationState) orchestrationState = this.conversationOrchestration.save(orchestrationState);
-      const explicitCommand = executeConversationCommand(body.scopeKey, threadId,
+      const explicitCommand = !audience.alone ? null : executeConversationCommand(body.scopeKey, threadId,
         { id: randomUUID(), text: message }, occurredAt, {
           stateStore: this.stateStore, conversationStore: this.conversationStore,
           organizeStore: this.organizeStore, aetherProposals: this.aetherProposals, agentTasks: this.agentTasks,
@@ -357,30 +359,31 @@ export class ShannonApiKernel {
         );
       }
       const captured = this.stateStore.snapshot(body.scopeKey);
-      const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
+      const provisionalIntent = audience.alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
       // What she talked about with other people is recalled here too; alone with the owner all of it may be used.
-      const peopleRecall = this.people.recall(body.scopeKey, captured, message, OWNER_AUDIENCE);
+      const peopleRecall = this.people.recall(body.scopeKey, captured, message, audience.present);
       const deterministicContext = prepareTurnCognitiveContext(captured, this.conversationStore, {
-        scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: OWNER_AUDIENCE,
+        scopeKey: body.scopeKey, message, occurredAt, channel: 'text', present: audience.present,
         threadId, additionalCandidates: peopleRecall.candidates,
         intents: this.cognitiveIntents.list(body.scopeKey, 'active'),
         provisionalIntent,
         participants: this.personIdentities.list(body.scopeKey).filter(person => person.status === 'active' && message.includes(person.displayName)).map(person => person.displayName),
       });
-      const cognitiveContext = this.memoryRecall && !explicitCommand && !isOrganizeCommand(message)
+      const organizeTurn = audience.alone && isOrganizeCommand(message);
+      const cognitiveContext = this.memoryRecall && !explicitCommand && !organizeTurn
         ? await this.memoryRecall.enrich(deterministicContext, { scopeKey: body.scopeKey, message, snapshot: captured, threadId }) : deterministicContext;
-      const basePrompt = this.autonomy.identityProjection(body.scopeKey, this.knowledgeStore?.promptProjection(body.scopeKey)
-        ?? assembleShannonSystemPrompt(captured));
+      const basePrompt = this.autonomy.identityProjection(body.scopeKey, audience.identity(() => this.knowledgeStore?.promptProjection(body.scopeKey)
+        ?? assembleShannonSystemPrompt(captured)));
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
-        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion });
+        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion }, audience.capabilities);
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
-      const dailyMindPrompt = [this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey)].filter(Boolean).join('\n\n');
+      const dailyMindPrompt = audience.ownFocus(this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), captured, this.conversationStore, body.scopeKey);
       const systemPrompt = [
         basePrompt, cognitiveContext.prompt, peopleRecall.prompt, dailyMindPrompt, capability.prompt,
         buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),
-        agentTaskPromptProjection(this.agentTasks.list(body.scopeKey), threadId),
+        agentTaskPromptProjection(this.agentTasks.list(body.scopeKey), threadId), audience.instructions,
       ].filter(Boolean).join('\n\n');
-      if (explicitCommand || isOrganizeCommand(message)) {
+      if (explicitCommand || organizeTurn) {
         let { session, reply } = explicitCommand
           ? { session: explicitCommand.organizeSession, reply: explicitCommand.reply }
           : await prepareConversationOrganize(body.scopeKey, threadId, occurredAt,
@@ -403,17 +406,17 @@ export class ShannonApiKernel {
           body: {
             mode: this.chatModel.mode, model: this.chatModel.model, reply, threadId, turnId: experience.id,
             snapshotVersion: captured.version, messageEmotion, systemPrompt, state: presentCompanionState(captured, occurredAt),
-            thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId),
+            thread: this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId), audience: audience.audience,
             ...(session ? { uiBlocks: [{ type: 'organize_session' as const, session }] } : {}),
           } satisfies ChatResponse,
         };
       }
-      const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, OWNER_AUDIENCE);
+      const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await this.chatModel.generate({
         scopeKey: body.scopeKey,
         systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
-        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, OWNER_AUDIENCE),
+        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, audience.present),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),
@@ -421,17 +424,12 @@ export class ShannonApiKernel {
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
       const reply = placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
-      const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
+      const suppressAgentTaskProposal = !audience.alone || isExplicitVoyagerUpdateRequest(message);
       // Her feeling for this reply, from state already in hand; it is stored after the response.
       const { messageEmotion, expressiveEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt });
       const response: ChatResponse = {
-        mode: completion.mode,
-        model: completion.model,
-        reply,
-        threadId,
-        snapshotVersion: captured.version,
-        messageEmotion,
-        systemPrompt,
+        mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
+        snapshotVersion: captured.version, messageEmotion, systemPrompt,
         state: presentCompanionState(captured, occurredAt, expressiveEmotion),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
@@ -443,7 +441,7 @@ export class ShannonApiKernel {
         userMessage: message,
         shannonReply: reply,
         ...(completion.threadTitle ? { threadTitle: completion.threadTitle } : {}),
-        ...(completion.threadSummary ? { threadSummary: completion.threadSummary } : {}),
+        ...(completion.threadSummary ? { threadSummary: completion.threadSummary } : {}), ...audience.turnLabel,
         messageEmotion: response.messageEmotion,
         ...(completion.taskDecision ? { taskDecision: completion.taskDecision } : {}),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
@@ -469,7 +467,8 @@ export class ShannonApiKernel {
       }
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
       this.background.schedule(completedTurn, experience.id);
-      commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
+      // Her stored feeling toward the owner moves only on a turn that is his alone.
+      if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
       return { status: 200, body: response };
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };

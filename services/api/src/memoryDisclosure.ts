@@ -200,3 +200,12 @@ export function sharedProfilePrompt(gate: DisclosureGate, maximumItems = 16, ope
     ...(interests.length ? [`- ${gate.unlabelledMarker}最近の関心: ${interests.join('、')}`] : []),
   ].join('\n');
 }
+
+/**
+ * Today's focus for a context with other people present. It is built from the owner's interests,
+ * which carry no label: dropped when it repeats a withheld item, otherwise marked.
+ */
+export function sharedDailyFocus(gate: DisclosureGate, focus: string): string {
+  if (!focus || gate.ownerOnly) return focus;
+  return gate.mentionsWithheld(focus) ? '' : `${UNLABELLED_DISCLOSURE_MARKER}\n${focus}`;
+}

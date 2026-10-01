@@ -4,7 +4,6 @@ import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from '
 import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
-  UNLABELLED_DISCLOSURE_MARKER,
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
   isOwnerOnly,
@@ -58,7 +57,7 @@ export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voi
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 import type { PeopleMemory } from './peopleMemory.js';
-import { DisclosureGate } from './memoryDisclosure.js';
+import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
@@ -294,8 +293,7 @@ async function completeLiveVoiceDelegation(
     ].join('\n\n');
   // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
   const focus = legacyGuest || !selectedSkills.has('daily_mind') ? '' : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const dailyMindPrompt = !focus || alone ? focus
-    : new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey).mentionsWithheld(focus) ? '' : `${UNLABELLED_DISCLOSURE_MARKER}\n${focus}`;
+  const dailyMindPrompt = sharedDailyFocus(new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey), focus);
   // Agent work, notes and tasks keep their bounded projections; the speak-time check says how far to go aloud.
   const taskPrompt = legacyGuest || !selectedSkills.has('agent_status')
     ? ''

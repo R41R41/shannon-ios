@@ -48,6 +48,7 @@ the sleep batch, or knowledge consolidation. They live only in `person_memory_it
 | Context | Present |
 | --- | --- |
 | Text chat; owner-mode voice | `owner` |
+| Text chat sent with `audience: "others"` (the reply can be seen or heard by someone else) | `people { unknownGuest }` |
 | Owner-mode voice after the owner said someone is with him and the call was not switched | `people { unknownGuest }` |
 | 「友人も一緒」 before a name is established, or while the name matches more than one person | `people { unknownGuest }` |
 | 「友人も一緒」 after a name is established | `people { personIds: [that person] }` |

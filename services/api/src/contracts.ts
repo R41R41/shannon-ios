@@ -22,6 +22,8 @@ export interface ChatRequest {
   attachments?: ShannonChatAttachment[];
   webSearch?: boolean;
   placeLocation?: { latitude: number; longitude: number; accuracyMeters: number; observedAt: string };
+  /** Who can see or hear the reply. Absent: the owner alone. `others`: someone else may, as in a call with someone listening. */
+  audience?: 'owner' | 'others';
 }
 
 export interface ChatThread {
@@ -44,6 +46,8 @@ export interface ChatResponse {
   model: string;
   reply: string;
   threadId: string;
+  /** The audience the server applied to this turn. */
+  audience: 'owner' | 'others';
   /** The completed turn; clients use it to attach captures that the worker records after the reply. */
   turnId?: string;
   snapshotVersion: number;
