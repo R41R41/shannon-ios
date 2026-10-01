@@ -153,15 +153,3 @@ struct ShannonThinkingDots: View {
         }
     }
 }
-
-func threadUpdatedLabel(_ value: String) -> String {
-    let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
-    let date = (try? fractional.parse(value)) ?? (try? Date.ISO8601FormatStyle().parse(value))
-    guard let date else { return "更新日時不明" }
-    let calendar = Calendar.current
-    if calendar.isDateInToday(date) {
-        return date.formatted(date: .omitted, time: .shortened)
-    }
-    if calendar.isDateInYesterday(date) { return "昨日" }
-    return date.formatted(.dateTime.month(.abbreviated).day())
-}
