@@ -86,8 +86,7 @@ export class SQLiteBodyStore {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, event.id, deviceId, event.type, event.audience, event.occurredAt, receivedAt, dayKey,
       event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null, hash);
-    if (Number(result.changes) > 0) return 'stored';
-    return this.seen(scopeKey, event);
+    return Number(result.changes) > 0 ? 'stored' : this.known(scopeKey, event) ?? 'conflict';
   }
 
   /** How a key that may already be stored relates to this event; null when the key is new. */
@@ -147,9 +146,5 @@ export class SQLiteBodyStore {
 
   close(): void {
     this.database.close();
-  }
-
-  private seen(scopeKey: string, event: BodyEvent): BodyEventOutcome {
-    return this.known(scopeKey, event) ?? 'conflict';
   }
 }
