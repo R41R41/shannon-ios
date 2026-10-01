@@ -13,7 +13,7 @@ extension ShannonMemoryDetailView {
                 Label(disclosure.sensitivity.japaneseName, systemImage: disclosure.sensitivity.symbolName)
                     .foregroundStyle(disclosure.sensitivity == .sensitive ? palette.attention : palette.textPrimary)
             }
-            Text(disclosure.sensitivity.explanation)
+            Text(disclosure.decidedBy == "owner" ? disclosure.sensitivity.chosenExplanation : disclosure.sensitivity.explanation)
                 .font(.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(ShannonMemoryDisclosureCopy.reason(disclosure))
@@ -28,7 +28,7 @@ extension ShannonMemoryDetailView {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.mutatingMemoryID != nil)
-                .accessibilityHint(next.explanation)
+                .accessibilityHint(next.chosenExplanation)
             }
         }
         .padding(ShannonSpacing.large)

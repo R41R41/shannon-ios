@@ -1,4 +1,5 @@
 import {
+  UNLABELLED_DISCLOSURE_MARKER,
   isMemoryInquiry,
   isOwnerOnly,
   mergeSemanticMemories,
@@ -18,6 +19,8 @@ import {
 import type { MemoryEmbeddingIndex } from './sqliteMemoryEmbeddings.js';
 import type { ShannonKnowledgeStore } from './sqliteShannonKnowledge.js';
 import { recallShannonKnowledge, usableKnowledgeFor } from './turnKnowledgeRecall.js';
+import { DisclosureGate } from './memoryDisclosure.js';
+import { conversationStoreOf } from './memoryVisibility.js';
 import { withRecalledMemories, type TurnCognitiveContext } from './turnCognitiveContext.js';
 
 export interface TurnMemoryRecallInput {
@@ -60,9 +63,11 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
   }
 
   async enrich(context: TurnCognitiveContext, input: TurnMemoryRecallInput): Promise<EnrichedTurnContext> {
-    // Shannon's private notes have no audience label: they are used only when the owner is alone.
     const ownerOnly = isOwnerOnly(context.present);
-    const usable = this.knowledge && ownerOnly ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [];
+    // A note built from a turn that must not reach the model with these people present is left out with it.
+    const gate = new DisclosureGate(context.present, input.snapshot, conversationStoreOf(this.knowledge), input.scopeKey);
+    const usable = (this.knowledge ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [])
+      .filter(document => document.sourceExperienceIds.every(id => gate.allowsExperience(id)));
     const usableIds = new Set(usable.map(document => document.id));
     const outcome: SemanticRecallOutcome = this.willSearch(input) ? await this.semantic.recall({
       scopeKey: input.scopeKey, query: input.message, snapshot: input.snapshot, present: context.present,
@@ -80,6 +85,8 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
       timeoutMilliseconds: this.semantic.timeoutMilliseconds,
       ...(input.signal ? { signal: input.signal } : {}),
     }) : { ids: [], prompt: '', modelCalls: 0, documents: [] };
+    // Shannon's notes are built from one-to-one talk and have no label of their own.
+    if (!ownerOnly && knowledge.prompt) knowledge.prompt = `${UNLABELLED_DISCLOSURE_MARKER}\n${knowledge.prompt}`;
     const inquiry = isMemoryInquiry(input.message) ? inquiryPrompt(memories, knowledge.documents) : '';
     const supplemental = [memories.length > context.memories.length ? semanticGuidance : '', knowledge.prompt, inquiry]
       .filter(Boolean).join('\n\n');

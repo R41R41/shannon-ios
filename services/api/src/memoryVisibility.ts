@@ -191,19 +191,22 @@ export function visibleConversationHistory(
   const gate = new DisclosureGate(present, state, store, scopeKey);
   return store.conversationHistory(scopeKey, threadID).slice(-count)
     .filter(message => gate.allowsMessage(message) && !withholding.withholdsMessage(message))
-    .map(({ role, content }) => ({ role, content }));
+    // A protected turn is replayed with its marker so she can check before repeating it aloud.
+    .map(message => ({ role: message.role, content: message.role === 'user' ? `${gate.markerForMessage(message)}${message.content}` : message.content }));
 }
 
 /**
  * The prior summary of a thread for the model, or nothing when it was built from a withheld
- * turn. A rolling summary has no audience label, so it is used only when the owner is alone.
+ * turn. Only text chat, which is the owner alone, uses it; `present` is stated so a future
+ * caller has to decide.
  */
 export function usableThreadSummary(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
   present: MemoryAudience,
 ): string | undefined {
-  if (!new DisclosureGate(present, state, store, scopeKey).allowsUnlabelled()) return undefined;
-  return new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
+  const summary = new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
+  const marker = new DisclosureGate(present, state, store, scopeKey).unlabelledMarker;
+  return summary && marker ? `${marker}${summary}` : summary;
 }
 
 export function isForgottenCommitmentEvidence(state: CompanionStateSnapshot, evidence: string): boolean {

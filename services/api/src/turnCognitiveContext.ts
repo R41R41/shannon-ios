@@ -65,10 +65,11 @@ export function prepareTurnCognitiveContext(
   const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
   const gate = new DisclosureGate(input.present, snapshot, conversationStore, input.scopeKey, recentExperiences);
   const full = snapshot;
-  // From here on only what the people present may hear is in scope.
+  // From here on items that must not reach the model with these people present are out of scope.
   snapshot = gate.snapshot();
-  // The owner's goals carry no audience label: they are his alone.
-  const intentCandidates = (gate.allowsUnlabelled() ? [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])] : [])
+  // A goal stated in a withheld turn is withheld with it.
+  const intentCandidates = [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])]
+    .filter(intent => !intent.sourceExperienceId || gate.allowsExperience(intent.sourceExperienceId))
     .filter((intent, index, rows) => rows.findIndex(candidate => candidate.id === intent.id) === index);
   const primaryIntent = selectPrimaryIntent(
     input.message,
@@ -82,19 +83,21 @@ export function prepareTurnCognitiveContext(
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
   const withholding = new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   const candidates = [
-    ...recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item)),
+    ...recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item))
+      .map(item => ({ ...item, marker: gate.markerForTurn(item) })),
     ...fullTextCandidates(withholding, gate, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
     ...(input.additionalCandidates ?? []).filter(item => gate.allows(item.id, item.disclosure))
-      .map(item => ({ id: item.id, summary: item.summary, observedAt: item.observedAt })),
-    ...snapshot.userFacts.map(fact => ({ id: fact.id, summary: fact.statement, observedAt: fact.observedAt })),
-    ...snapshot.relationships.map(item => ({ id: item.id, summary: item.statement, observedAt: item.observedAt })),
+      .map(item => ({ id: item.id, summary: item.summary, observedAt: item.observedAt, marker: gate.marker(item.id, item.disclosure) })),
+    ...snapshot.userFacts.map(fact => ({ id: fact.id, summary: fact.statement, observedAt: fact.observedAt, marker: gate.marker(fact.id, fact.disclosure) })),
+    ...snapshot.relationships.map(item => ({ id: item.id, summary: item.statement, observedAt: item.observedAt, marker: gate.marker(item.id, item.disclosure) })),
     ...snapshot.prospectiveMemories.filter(memory => !memory.sourceExperienceId || visibleMemoryText(full, memory.sourceExperienceId, memory.summary))
-      .map(memory => ({ id: memory.id, summary: memory.summary, observedAt: memory.createdAt })),
+      .map(memory => ({ id: memory.id, summary: memory.summary, observedAt: memory.createdAt, marker: gate.marker(memory.id, memory.disclosure) })),
   ].flatMap(candidate => {
     const text = visibleMemoryText(full, candidate.id, candidate.summary);
     const promise = snapshot.prospectiveMemories.find(memory => memory.id === candidate.id);
     const summary = promise ? `[約束 status=${promise.status}; 期限=${promise.dueAt ?? promise.dueDate ?? promise.dueHint ?? '未定'}] ${text}` : text;
-    return text ? [{ ...candidate, summary: summary! }] : [];
+    // A protected item reaches the model with its marker, so she can check before speaking.
+    return text ? [{ id: candidate.id, observedAt: candidate.observedAt, summary: `${candidate.marker}${summary!}` }] : [];
   });
   const memories = selectContextualMemories({
     text: input.message,
@@ -122,7 +125,7 @@ export function prepareTurnCognitiveContext(
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: turnPrompt(snapshot, situation, memories, frame, gate.ownerOnly),
+    prompt: turnPrompt(snapshot, situation, memories, frame, gate),
     present: input.present,
   });
 }
@@ -143,7 +146,7 @@ export function withRecalledMemories(
     situation: context.situation,
     memories: Object.freeze([...memories]),
     frame,
-    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate.ownerOnly), supplementalPrompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate), supplementalPrompt].filter(Boolean).join('\n\n'),
     present: context.present,
   });
 }
@@ -153,10 +156,14 @@ function turnPrompt(
   situation: ShannonSituationSnapshot,
   memories: readonly ContextualMemory[],
   frame: ShannonCognitiveFrame,
-  ownerOnly: boolean,
+  gate: DisclosureGate,
 ): string {
-  // With anyone else present the snapshot is already the disclosed one: no goals, no owner state block.
-  if (!ownerOnly) return [buildTurnCognitivePrompt(situation, memories), sharedProfilePrompt(snapshot)].join('\n\n');
+  // With anyone else present the profile is listed line by line so each protected line carries its marker.
+  if (!gate.ownerOnly) {
+    const intent = buildIntentPrompt(frame);
+    return [buildTurnCognitivePrompt(situation, memories), intent ? `${gate.unlabelledMarker}\n${intent}` : '',
+      sharedProfilePrompt(gate)].filter(Boolean).join('\n\n');
+  }
   return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
     // KnowledgeStore projections may not yet contain the commitment extension.
     buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200, now: situation.occurredAt }),
@@ -175,7 +182,7 @@ function fullTextCandidates(
   conversationStore: ConversationStore,
   input: { scopeKey: string; message: string; threadId?: string },
   known: ReadonlySet<string>,
-): Array<{ id: string; summary: string; observedAt: string }> {
+): Array<{ id: string; summary: string; observedAt: string; marker: string }> {
   const hits = conversationStore.searchMemory?.(input.scopeKey, input.message) ?? [];
   return hits.filter(hit => !known.has(hit.id) && gate.allowsRecallId(hit.id) && (hit.kind === 'experience'
     ? !withholding.withholdsExperience(hit)
@@ -185,6 +192,7 @@ function fullTextCandidates(
       id: hit.id,
       summary: hit.kind === 'thread' ? `[別の会話の要約] ${hit.summary}` : hit.summary,
       observedAt: hit.observedAt,
+      marker: gate.markerForRecallId(hit.id),
     }));
 }
 

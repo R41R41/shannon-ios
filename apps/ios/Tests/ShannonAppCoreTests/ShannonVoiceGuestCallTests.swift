@@ -246,6 +246,10 @@ struct ShannonVoiceGuestCallTests {
         #expect(notice.contains("お名前と、この通話で話したことをシャノンが覚えます"))
         #expect(notice.contains("声で人を聞き分けることはしません"))
         #expect(notice.contains("録音は残しません"))
+        // The card promises a check before speaking, and certainty only for what was called a secret.
+        #expect(notice.contains("シャノンが話す前に確かめ"))
+        #expect(notice.contains("内緒と言われたことは使いません"))
+        #expect(!notice.contains("記憶は、この場では使いません"))
         #expect(notice.contains("「今回は残さない」"))
         #expect(!notice.contains("保存しません"))
         #expect(ShannonVoiceGuestModeCopy.switchToGuestMessage.contains("お名前とこの通話で話したことをシャノンが覚えます"))

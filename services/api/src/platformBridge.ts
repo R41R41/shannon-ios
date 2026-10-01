@@ -139,10 +139,11 @@ export class PlatformBridgeService {
     const snapshot = this.stateStore.snapshot(this.configuration.scopeKey);
     const present = platformAudience(binding, request);
     const gate = new DisclosureGate(present, snapshot, this.conversationStore, this.configuration.scopeKey);
-    // A conversation other people can read gets only what they may be told: ordinary items and what was said there.
+    // A conversation other people can read: items that must not reach a model are removed, protected ones are
+    // marked, and the projection carries the check to make before saying them.
     const projection = gate.ownerOnly
       ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
-      : [SHARED_AUDIENCE_HEADER, sharedProfilePrompt(gate.snapshot())].join('\n').slice(0, 2_400);
+      : [SHARED_AUDIENCE_HEADER, sharedProfilePrompt(gate)].join('\n').slice(0, 2_400);
     return Object.freeze({
       schemaVersion: 1 as const,
       stateVersion: gate.ownerOnly ? snapshot.version : 0,
@@ -220,7 +221,7 @@ export function configuredPlatformBridge(
   return Object.freeze({ token, scopeKey, bindings, prefixBindings: Object.freeze(prefixBindings) });
 }
 
-const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。今この会話で共有された内容と、下に載っている記憶だけを使って自然に応答してください。\n載っていない個人アプリの記憶・約束・関係性・関心は、この場では共有されていません。覚えているふりをしないでください。';
+const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。この会話はライ氏以外の人も読みます。発言する前に、その内容がこの場の人がまだ知らない個人情報にならないかを自分で確かめ、なるなら言わないか、一般的な言い方にしてください。ライ氏本人がこの場ではっきり求めた時は、本人の判断なので答えて構いません。控えていること自体は、聞かれない限り言わないでください。\n下に載っていない記憶は、覚えているふりをしないでください。';
 
 /**
  * Who can read a bound conversation. Only an exact conversation the server marked

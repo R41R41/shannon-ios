@@ -8,6 +8,8 @@ import {
   describeAudience,
   disclosureFor,
   discloseSnapshot,
+  disclosureDecision,
+  disclosureMarker,
   groupAudience,
   mayDisclose,
   normalizeAudience,
@@ -32,55 +34,80 @@ const label = (sensitivity: 'sensitive' | 'ordinary' | undefined, audience = OWN
   audience, ...(sensitivity ? { sensitivity } : {}),
 });
 
+const secret = (audience = OWNER_AUDIENCE): MemoryDisclosure => ({ audience, sensitivity: 'sensitive', category: 'secret', decidedBy: 'rule' });
+const byHand = (sensitivity: 'sensitive' | 'ordinary', audience = OWNER_AUDIENCE): MemoryDisclosure => ({ audience, sensitivity, decidedBy: 'owner' });
+
 describe('disclosure rule', () => {
-  it('lets the owner alone use everything, labelled or not', () => {
-    for (const disclosure of [undefined, label('sensitive'), label('sensitive', withA), label(undefined, discord)]) {
+  it('lets the owner alone use everything, labelled or not, with no marker', () => {
+    for (const disclosure of [undefined, label('sensitive'), secret(), byHand('sensitive'), label('sensitive', withA), label(undefined, discord)]) {
+      expect(disclosureDecision(disclosure, OWNER_AUDIENCE)).toBe('open');
       expect(mayDisclose(disclosure, OWNER_AUDIENCE)).toBe(true);
+      expect(disclosureMarker(disclosure, OWNER_AUDIENCE)).toBe('');
     }
   });
 
-  it('withholds a sensitive one-to-one item from a friend, an unknown guest and a group', () => {
+  it('guards a sensitive one-to-one item with others present: it reaches the model, marked', () => {
     for (const present of [withA, UNKNOWN_GUEST_PRESENCE, discord]) {
-      expect(mayDisclose(label('sensitive'), present)).toBe(false);
+      const money: MemoryDisclosure = { ...label('sensitive'), category: 'money' };
+      expect(disclosureDecision(money, present)).toBe('guarded');
+      expect(mayDisclose(money, present)).toBe(true);
+      expect(disclosureMarker(money, present)).toBe('【機微:お金・ライ氏だけが知っている】');
     }
   });
 
-  it('lets an ordinary item be used with anyone present', () => {
+  it('never lets a secret, a hand-marked 機微 item, or an unnamed guest\'s call reach the model with others present', () => {
+    const unnamedCall: MemoryDisclosure = { audience: UNKNOWN_GUEST_PRESENCE, sensitivity: 'sensitive', category: 'unknown_audience' };
     for (const present of [withA, UNKNOWN_GUEST_PRESENCE, discord]) {
-      expect(mayDisclose(label('ordinary'), present)).toBe(true);
-      expect(mayDisclose(label('ordinary', withB), present)).toBe(true);
+      for (const disclosure of [secret(), byHand('sensitive'), unnamedCall]) {
+        expect(disclosureDecision(disclosure, present)).toBe('withheld');
+        expect(mayDisclose(disclosure, present)).toBe(false);
+        expect(disclosureMarker(disclosure, present)).toBe('');
+      }
+    }
+    // A secret told in front of A is not a secret from A.
+    expect(disclosureDecision(secret(withA), withA)).toBe('open');
+    expect(disclosureDecision(secret(withA), withB)).toBe('withheld');
+    // The owner's ふつう wins even over a secret word.
+    expect(disclosureDecision({ ...secret(), sensitivity: 'ordinary', decidedBy: 'owner' }, withB)).toBe('open');
+  });
+
+  it('uses an ordinary item freely with anyone present', () => {
+    for (const present of [withA, UNKNOWN_GUEST_PRESENCE, discord]) {
+      expect(disclosureDecision(label('ordinary'), present)).toBe('open');
+      expect(disclosureDecision(label('ordinary', withB), present)).toBe('open');
+      expect(disclosureMarker(label('ordinary'), present)).toBe('');
     }
   });
 
-  it('uses what was said with A when A is present and withholds it when only B is', () => {
-    const saidWithA = label('sensitive', withA);
-    expect(mayDisclose(saidWithA, withA)).toBe(true);
-    expect(mayDisclose(saidWithA, withB)).toBe(false);
+  it('opens what was said with A when A is present and guards it when only B is', () => {
+    const saidWithA: MemoryDisclosure = { ...label('sensitive', withA), category: 'third_party' };
+    const nameOf = (id: string) => ({ 'person-a': 'ミキ' } as Record<string, string>)[id];
+    expect(disclosureDecision(saidWithA, withA)).toBe('open');
+    expect(disclosureDecision(saidWithA, withB)).toBe('guarded');
+    expect(disclosureMarker(saidWithA, withB, nameOf)).toBe('【機微:ほかの人のこと・ミキさんと一緒の時に聞いた】');
+    expect(disclosureMarker(saidWithA, withB)).toBe('【機微:ほかの人のこと・別の人と一緒の時に聞いた】');
     // B was not there, so A and B together have not all heard it.
-    expect(mayDisclose(saidWithA, withAandB)).toBe(false);
-    // Said in front of both: either of them, or both, may hear it again.
-    expect(mayDisclose(label('sensitive', withAandB), withA)).toBe(true);
-    expect(mayDisclose(label('sensitive', withAandB), withAandB)).toBe(true);
+    expect(disclosureDecision(saidWithA, withAandB)).toBe('guarded');
+    expect(disclosureDecision(label('sensitive', withAandB), withA)).toBe('open');
   });
 
-  it('fails closed on everything unknown', () => {
-    // Unknown sensitivity is sensitive; unknown audience is the owner alone.
-    expect(mayDisclose(undefined, withA)).toBe(false);
-    expect(mayDisclose({}, withA)).toBe(false);
-    expect(mayDisclose({ sensitivity: 'sensitive' }, withA)).toBe(false);
-    expect(mayDisclose(label(undefined, withA), withB)).toBe(false);
+  it('treats everything unknown as protected, never as open', () => {
+    for (const disclosure of [undefined, {}, { sensitivity: 'sensitive' as const }, label(undefined, withA)]) {
+      expect(disclosureDecision(disclosure, withB)).toBe('guarded');
+    }
+    expect(disclosureMarker(undefined, withA)).toBe('【機微:未分類・ライ氏だけが知っている】');
     // An unidentified guest is in no audience, not even one recorded with an unidentified guest.
     expect(audienceCovers(UNKNOWN_GUEST_PRESENCE, UNKNOWN_GUEST_PRESENCE)).toBe(false);
     expect(audienceCovers(peopleAudience(['person-a'], true), peopleAudience(['person-a'], true))).toBe(false);
-    expect(mayDisclose(label('sensitive', peopleAudience(['person-a'], true)), withA)).toBe(true);
+    expect(disclosureDecision(label('sensitive', peopleAudience(['person-a'], true)), withA)).toBe('open');
   });
 
   it('treats a platform conversation as one audience', () => {
     const saidThere = label('sensitive', discord);
-    expect(mayDisclose(saidThere, discord)).toBe(true);
-    expect(mayDisclose(saidThere, groupAudience('discord:channel-2'))).toBe(false);
-    expect(mayDisclose(saidThere, withA)).toBe(false);
-    expect(mayDisclose(label('sensitive', withA), discord)).toBe(false);
+    expect(disclosureDecision(saidThere, discord)).toBe('open');
+    expect(disclosureDecision(saidThere, groupAudience('discord:channel-2'))).toBe('guarded');
+    expect(disclosureMarker(saidThere, withA)).toBe('【機微:未分類・別のグループの会話で出た】');
+    expect(disclosureDecision(label('sensitive', withA), discord)).toBe('guarded');
   });
 
   it('reads malformed stored labels as the safe side', () => {
@@ -93,7 +120,7 @@ describe('disclosure rule', () => {
     // An audience that cannot be read does not vouch for the owner having spoken.
     expect(ownerSpoke(normalizeDisclosure({ audience: { kind: 'everyone' }, sensitivity: 'ordinary', speaker: 'owner' }))).toBe(false);
     expect(ownerSpoke(normalizeDisclosure({ audience: { kind: 'owner' }, sensitivity: 'ordinary' }))).toBe(true);
-    expect(mayDisclose(normalizeDisclosure({ sensitivity: 'public' }), withA)).toBe(false);
+    expect(disclosureDecision(normalizeDisclosure({ sensitivity: 'public' }), withA)).toBe('guarded');
   });
 
   it('knows whose words a turn holds', () => {
@@ -187,16 +214,18 @@ describe('labels in the companion snapshot', () => {
     expect(discloseSnapshot(state, OWNER_AUDIENCE)).toBe(state);
   });
 
-  it('keeps only ordinary items and items the people present already heard', () => {
-    const state = seeded();
+  it('removes only what must not reach the model; protected items stay to be marked', () => {
+    let state = seeded();
+    state = reduceCompanionState(state, { type: 'user-fact-upserted', fact: { id: 'fact-secret', statement: 'ユーザーは内緒で貯めている',
+      confidence: 0.8, observedAt: at, disclosure: disclosureFor('内緒で貯めている') } }, at);
     const forB = discloseSnapshot(state, withB);
-    expect(forB.userFacts.map(item => item.id)).toEqual(['fact-tea']);
-    expect(forB.relationships).toEqual([]);
-    expect(forB.prospectiveMemories).toEqual([]);
-    expect(forB.interests).toEqual([]);
+    expect(forB.userFacts.map(item => item.id).sort()).toEqual(['fact-debt', 'fact-old', 'fact-tea']);
+    expect(forB.relationships.map(item => item.id)).toEqual(['rel-a']);
+    expect(forB.prospectiveMemories.map(item => item.id)).toEqual(['promise-1']);
+    expect(forB.interests).toEqual(['登山']);
     expect(forB.activeMemories).toEqual([]);
-    expect(discloseSnapshot(state, withA).relationships.map(item => item.id)).toEqual(['rel-a']);
-    expect(discloseSnapshot(state, discord).userFacts.map(item => item.id)).toEqual(['fact-tea']);
+    expect(discloseSnapshot(state, discord).userFacts.map(item => item.id)).not.toContain('fact-secret');
+    expect(discloseSnapshot(state, OWNER_AUDIENCE).userFacts.map(item => item.id)).toContain('fact-secret');
   });
 
   it('lets the owner mark an item 機微 or ふつう, and that choice wins over the rule', () => {
@@ -206,7 +235,10 @@ describe('labels in the companion snapshot', () => {
       changeReason: 'ユーザーが扱いを変更', sensitivity } });
     state = reduceCompanionState(state, control('fact-tea', 'sensitive'), at);
     state = reduceCompanionState(state, control('fact-old', 'ordinary'), at);
-    expect(discloseSnapshot(state, withB).userFacts.map(item => item.id).sort()).toEqual(['fact-old']);
+    // 機微 by hand is withheld outright; ふつう by hand is open even though it had no label.
+    expect(discloseSnapshot(state, withB).userFacts.map(item => item.id)).not.toContain('fact-tea');
+    const old = state.userFacts.find(item => item.id === 'fact-old');
+    expect(disclosureDecision(resolveDisclosure(state, 'fact-old', old?.disclosure), withB)).toBe('open');
     expect(resolveDisclosure(state, 'fact-tea', state.userFacts.find(item => item.id === 'fact-tea')?.disclosure))
       .toMatchObject({ sensitivity: 'sensitive', decidedBy: 'owner' });
   });
@@ -219,8 +251,9 @@ describe('labels in the companion snapshot', () => {
     state = reduceCompanionState(state, { type: 'user-fact-upserted', fact: { id: 'fact-debt', statement: 'ユーザーには借金がある',
       confidence: 0.9, observedAt: at, disclosure: disclosureFor('ユーザーには借金がある', withA) } }, at);
     expect(state.userFacts.find(item => item.id === 'fact-debt')?.disclosure?.audience).toEqual(withA);
-    expect(discloseSnapshot(state, withA).userFacts.map(item => item.id)).toContain('fact-debt');
-    expect(discloseSnapshot(state, withB).userFacts.map(item => item.id)).not.toContain('fact-debt');
+    const debt = state.userFacts.find(item => item.id === 'fact-debt')?.disclosure;
+    expect(disclosureDecision(debt, withA)).toBe('open');
+    expect(disclosureDecision(debt, withB)).toBe('guarded');
   });
 
   it('survives persistence, and a snapshot written before labels existed is owner-only', () => {
@@ -233,7 +266,8 @@ describe('labels in the companion snapshot', () => {
       userFacts: [{ id: 'old', statement: 'ユーザーは紅茶が好き', confidence: 0.8, observedAt: at, disclosure: { sensitivity: 'public' } }],
       relationships: [], prospectiveMemories: [], memoryControls: [], interests: [], activeMemories: [] }, at);
     expect(legacy.userFacts[0]?.disclosure).toBeUndefined();
-    expect(discloseSnapshot(legacy, withA).userFacts).toEqual([]);
+    expect(discloseSnapshot(legacy, withA).userFacts).toHaveLength(1);
+    expect(disclosureMarker(resolveDisclosure(legacy, 'old', undefined), withA)).toBe('【機微:未分類・ライ氏だけが知っている】');
     expect(discloseSnapshot(legacy, OWNER_AUDIENCE).userFacts).toHaveLength(1);
   });
 });
