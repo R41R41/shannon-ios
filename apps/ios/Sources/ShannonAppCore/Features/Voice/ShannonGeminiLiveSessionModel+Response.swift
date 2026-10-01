@@ -88,6 +88,7 @@ extension ShannonGeminiLiveSessionModel {
                 } else if localReply != nil {
                     guestCall.askedAboutCompanion(now: ProcessInfo.processInfo.systemUptime)
                 } else {
+                    if response.companionPresent == true { guestCall.companionReported() }
                     handleDelegationResponse?(response)
                 }
                 ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,

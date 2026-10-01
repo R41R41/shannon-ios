@@ -61,13 +61,19 @@ export function isSensitivityCategory(value: unknown): value is MemorySensitivit
 export function normalizeDisclosure(value: unknown): MemoryDisclosure | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;
+  // An audience that is present but unreadable cannot vouch for whose words the turn holds.
+  const audienceRow = row.audience as Record<string, unknown> | null | undefined;
+  const unreadableAudience = row.audience !== undefined && !(audienceRow && typeof audienceRow === 'object'
+    && (audienceRow.kind === 'owner' || (audienceRow.kind === 'people' && Array.isArray(audienceRow.personIds))
+      || (audienceRow.kind === 'group' && typeof audienceRow.groupKey === 'string' && audienceRow.groupKey.trim() !== '')));
   const disclosure: MemoryDisclosure = {
     ...(row.audience !== undefined ? { audience: normalizeAudience(row.audience) } : {}),
     ...(row.sensitivity === 'sensitive' || row.sensitivity === 'ordinary' ? { sensitivity: row.sensitivity } : {}),
     ...(isSensitivityCategory(row.category) ? { category: row.category } : {}),
     ...(typeof row.reason === 'string' && row.reason.trim() ? { reason: row.reason.trim().slice(0, 80) } : {}),
     ...(row.decidedBy === 'rule' || row.decidedBy === 'owner' ? { decidedBy: row.decidedBy } : {}),
-    ...(row.speaker === 'owner' || row.speaker === 'unknown' ? { speaker: row.speaker } : {}),
+    ...(unreadableAudience ? { speaker: 'unknown' as const }
+      : row.speaker === 'owner' || row.speaker === 'unknown' ? { speaker: row.speaker } : {}),
   };
   return Object.keys(disclosure).length ? Object.freeze(disclosure) : undefined;
 }
@@ -101,11 +107,15 @@ export function resolveDisclosure(
   memoryId: string,
   stored: MemoryDisclosure | undefined,
 ): MemoryDisclosure {
-  const chosen = memoryControlFor(snapshot as CompanionStateSnapshot, memoryId)?.sensitivity;
+  const control = memoryControlFor(snapshot as CompanionStateSnapshot, memoryId);
+  const chosen = control?.sensitivity;
+  // A correction replaces the text the label was decided on: the corrected wording is judged by the same rules.
+  const corrected = !chosen && control?.overrideText ? classifySensitivity(control.overrideText) : undefined;
   return Object.freeze({
     ...stored,
     audience: stored?.audience ?? OWNER_AUDIENCE,
-    sensitivity: chosen ?? stored?.sensitivity ?? 'sensitive',
+    sensitivity: chosen ?? (corrected?.sensitivity === 'sensitive' ? 'sensitive' : stored?.sensitivity ?? 'sensitive'),
+    ...(corrected?.sensitivity === 'sensitive' ? { category: corrected.category, reason: corrected.reason } : {}),
     ...(chosen ? { decidedBy: 'owner' as const } : {}),
   });
 }

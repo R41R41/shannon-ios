@@ -90,6 +90,9 @@ describe('disclosure rule', () => {
     expect(normalizeAudience({ kind: 'people', personIds: ['b', 'a', 'a', 7] })).toEqual({ kind: 'people', personIds: ['a', 'b'] });
     expect(normalizeDisclosure({ sensitivity: 'public', category: 'nothing' })).toBeUndefined();
     expect(normalizeDisclosure('ordinary')).toBeUndefined();
+    // An audience that cannot be read does not vouch for the owner having spoken.
+    expect(ownerSpoke(normalizeDisclosure({ audience: { kind: 'everyone' }, sensitivity: 'ordinary', speaker: 'owner' }))).toBe(false);
+    expect(ownerSpoke(normalizeDisclosure({ audience: { kind: 'owner' }, sensitivity: 'ordinary' }))).toBe(true);
     expect(mayDisclose(normalizeDisclosure({ sensitivity: 'public' }), withA)).toBe(false);
   });
 

@@ -143,7 +143,10 @@ exactly that. The audience rule and the forgetting boundary are independent: an 
 | The owner speaks in a 「友人も一緒」 call | His first-person statement is stored as the friend's fact. The owner can forget that item. |
 | The app is killed before the period ends | Nothing of that period is stored. |
 | The summary model fails or quotes speech | A deterministic summary without model text is stored. |
-| The owner says someone is present but does not switch | Sensitive memories, tasks, notes and intentions are withheld for the rest of the call; turns are stored as "someone else was present" and are not used to learn owner facts. Voice commands still run. |
+| The owner says someone is present but does not switch | Sensitive memories, tasks, notes, intentions and today's focus are withheld; turns are stored as "someone else was present", teach nothing about the owner, do not move Shannon's stored feeling, and are themselves not replayed as history while anyone is listening. The current iPhone build keeps this for the rest of the call. A build that predates it is protected only on the turns whose own words say so. Voice commands still run. |
+| A name is mentioned, not introduced (「友達のミキさんが転職したらしい」) | No name is established: only a present-tense introduction or a self-introduction from the start of the utterance counts. |
+| A correction changes what a memory says | The corrected wording is judged by the same rules; a memory that was protected stays protected when it is stated again in plainer words. |
+| One fact about a person is forgotten | That item and replies that used it are withheld. The call's summary and exchanges that say the same thing in other words stay until they are forgotten too. |
 
 ## What is not guaranteed
 

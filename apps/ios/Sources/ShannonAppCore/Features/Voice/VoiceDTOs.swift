@@ -283,6 +283,8 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     public let uiBlocks: [ShannonUIBlockDTO]?
     public let voicePlan: ShannonVoicePlanDTO?
     public let voiceMetrics: ShannonVoiceServerMetricsDTO?
+    /// The server answered this owner turn as if someone else may be listening.
+    public var companionPresent: Bool? = nil
 
     public init(
         threadId: String,

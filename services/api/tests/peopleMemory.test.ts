@@ -104,6 +104,14 @@ describe('how a name is established', () => {
   it.each([
     ['ミキです', ''], ['元気です', 'お名前、聞いてもいいですか？'], ['シャノンって呼んで', ''], ['私は学生です', ''],
     ['声、可愛いね', ''], ['ライ氏と言います', ''], ['名前は何ですか？', ''], ['友達の話を聞いて', ''],
+    // Talking about someone who is not here is not an introduction.
+    ['同僚の佐藤さんが転職したらしい', ''], ['田中さんを紹介してもらった', ''], ['友達のミキさんが昨日来た', ''],
+    ['ミキさんって知ってる', ''], ['ミキさんは元気かな', ''], ['この前ケンさんを紹介された', ''],
+    // Ordinary sentences that look like the patterns.
+    ['こちらこそ、よろしくお願いします', ''], ['こっちは雨です', ''], ['こっちがいいです', ''], ['友達の奥さんが来る', ''],
+    ['犬の名前はポチです', ''], ['名前はちょっと。', ''], ['これは日本語で桜と言います', ''], ['先生って呼んでください', ''],
+    ['ありがとう', 'お名前、聞いてもいいですか？'], ['わからない', 'お名前、聞いてもいいですか？'],
+    ['あとで', 'お名前、聞いてもいいですか？'], ['いやです', 'お名前、聞いてもいいですか？'],
   ])('%s establishes no name', (utterance, previous) => {
     expect(establishedGuestName(utterance, previous)).toBeNull();
   });
@@ -278,6 +286,77 @@ describe('using what she remembers', () => {
     const after = await overview();
     expect(after.people).toHaveLength(2);
     expect(after.unnamed.length).toBeGreaterThan(0);
+    peopleStore.close();
+  });
+});
+
+describe('review regressions', () => {
+  it('mentioning a remembered person who is absent does not make them present', async () => {
+    const { guestCall, peopleStore } = harness();
+    await guestCall('call-0001', mikiCall);
+    const other = await guestCall('call-0002', ['こんにちは', '友達のミキさんが転職したらしい', 'ミキさんの苦手なものって何？'], { remember: false });
+    for (const prompt of other.prompts) {
+      expect(prompt).not.toContain('you have talked with them before');
+      expect(prompt).not.toContain('辛いものが苦手');
+      expect(prompt).toContain('No name has been established yet');
+    }
+    expect(peopleStore.listPeople('owner')).toHaveLength(1);
+    peopleStore.close();
+  });
+
+  it('a discard that arrives while the summary is being written wins', async () => {
+    const { model, guestCall, post, overview, peopleStore } = harness();
+    const { turns } = await guestCall('call-0001', mikiCall, { remember: false });
+    const original = model.generateVoice.bind(model);
+    model.generateVoice = async request => {
+      if (request.systemPrompt.startsWith('You write Shannon\'s own short memory')) {
+        await post('/v1/voice/gemini/cascade/calls/discard', { callId: 'call-0001' });
+      }
+      return original(request);
+    };
+    const late = await post(calls, { callId: 'call-0001', threadId: 'thread', turns });
+    expect(late.status).toBe(409);
+    expect(await overview()).toEqual({ people: [], unnamed: [] });
+    expect(peopleStore.items('owner')).toEqual([]);
+    expect(peopleStore.listPeople('owner')).toEqual([]);
+    peopleStore.close();
+  });
+
+  it('saving the same period again keeps a forgotten item forgotten and the owner\'s ふつう', async () => {
+    const { guestCall, post, overview, act, peopleStore } = harness();
+    const { turns } = await guestCall('call-0001', mikiCall);
+    const before = (await overview()).people[0]!.items;
+    const fact = before.find(item => item.kind === 'fact')!;
+    const promise = before.find(item => item.kind === 'promise')!;
+    await act({ action: 'forget-item', itemId: fact.id });
+    await act({ action: 'mark-ordinary', itemId: promise.id });
+    expect((await post(calls, { callId: 'call-0001', threadId: 'thread', turns })).status).toBe(201);
+    const after = (await overview()).people[0]!.items;
+    expect(after.map(item => item.id).sort()).toEqual(before.map(item => item.id).sort());
+    expect(after.find(item => item.id === fact.id)?.status).toBe('forgotten');
+    expect(after.find(item => item.id === promise.id)).toMatchObject({ sensitivity: 'ordinary', decidedBy: 'owner' });
+    peopleStore.close();
+  });
+
+  it('a person named earlier in the call and then forgotten leaves the call with an unknown guest', async () => {
+    const { guestCall, overview, act, chat, peopleStore } = harness();
+    await chat('私は紅茶が好き');
+    await guestCall('call-0001', mikiCall);
+    const miki = (await overview()).people[0]!;
+    const second = await guestCall('call-0002', ['ミキと言います'], { remember: false });
+    expect(second.prompts[0]).toContain('ミキさんは辛いものが苦手');
+    await act({ action: 'forget-person', personId: miki.id });
+    const after = await guestCall('call-0002', ['苦手な食べ物の話、前にした？'], { remember: false });
+    expect(after.prompts[0]).not.toContain('辛いものが苦手');
+    expect(after.prompts[0]).toContain('No name has been established yet');
+    peopleStore.close();
+  });
+
+  it('a name from a period that was never saved is not listed as a person', async () => {
+    const { guestCall, overview, peopleStore } = harness();
+    await guestCall('call-0001', mikiCall, { remember: false });
+    expect(peopleStore.listPeople('owner')).toHaveLength(1);
+    expect(await overview()).toEqual({ people: [], unnamed: [] });
     peopleStore.close();
   });
 });

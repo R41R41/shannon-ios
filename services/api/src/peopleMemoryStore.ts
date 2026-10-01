@@ -238,6 +238,11 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
 
   replaceCallItems(scopeKey: string, callId: string, items: readonly Omit<PersonMemoryItem, 'callId'>[]): void {
     this.transaction(() => {
+      // The owner's own 機微／ふつう on an item survives the same period being saved again.
+      const chosen = new Map((this.database.prepare('SELECT item_id, disclosure_json FROM person_memory_items WHERE scope_key = ? AND call_id = ?')
+        .all(scopeKey, callId) as unknown as ItemRow[]).map(row => [row.item_id, parsedDisclosure(row.disclosure_json)] as const)
+        .filter(([, disclosure]) => disclosure.decidedBy === 'owner'));
+      items = items.map(item => chosen.has(item.id) ? { ...item, disclosure: { ...item.disclosure, sensitivity: chosen.get(item.id)!.sensitivity, decidedBy: 'owner' as const, reason: 'ライ氏が選んだ扱い' } } : item);
       this.database.prepare('DELETE FROM person_memory_items WHERE scope_key = ? AND call_id = ?').run(scopeKey, callId);
       const insert = this.database.prepare(`
         INSERT INTO person_memory_items (scope_key, item_id, call_id, kind, person_id, text, evidence, disclosure_json, observed_at, ordinal)

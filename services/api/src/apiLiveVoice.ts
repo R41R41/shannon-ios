@@ -278,7 +278,8 @@ async function completeLiveVoiceDelegation(
         : shannonIdentityPrompt('owner'),
       voiceConversationInstructions(true),
     ].join('\n\n');
-  const dailyMindPrompt = temporaryGuest || !selectedSkills.has('daily_mind')
+  // Today's focus is built from the owner's interests, which carry no label.
+  const dailyMindPrompt = !alone || !selectedSkills.has('daily_mind')
     ? ''
     : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
   // Agent work, notes and tasks stay with the owner whenever anyone else can hear, whatever their content.
@@ -396,7 +397,8 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
   voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood);
-  if (!temporaryGuest) {
+  // Her stored feeling toward the owner moves only on his own words.
+  if (alone) {
     dependencies.stateStore.apply(scopeKey, {
       type: 'expressive-emotion-updated',
       emotion: expressiveEmotion,
@@ -433,6 +435,8 @@ async function completeLiveVoiceDelegation(
       reply: reply.trim(),
       webSources: combinedPlaceSources(placeSkill, completion.webSources),
       ...(uiBlocks ? { uiBlocks } : {}),
+      // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
+      ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,
       voiceMetrics: {
         decisionMilliseconds: decision.elapsedMilliseconds,

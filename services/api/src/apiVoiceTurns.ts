@@ -6,6 +6,7 @@ import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ShannonChatModel } from './chatModel.js';
 import { dispatchVoiceCallSummary } from './apiVoiceCallSummary.js';
+import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
 
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
@@ -39,7 +40,8 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     ...(decidedEmotion(request.body.emotion) ?? {}) });
   if (request.body.companionPresent !== undefined && typeof request.body.companionPresent !== 'boolean') return badRequest('companionPresent is invalid');
   // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
-  const companion = request.body.companionPresent === true ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
+  const companion = request.body.companionPresent === true || ownerSaysCompanionPresent(userMessage)
+    ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion, completedAt, timeZone, ...companion };
   const experience = dependencies.background.recordTurn(turn);

@@ -114,6 +114,9 @@ struct ShannonVoiceGuestCallState: Equatable, Sendable {
         companionSuspected = true
     }
 
+    /// The server recognised the owner saying someone is with him; keep marking this call's turns.
+    mutating func companionReported() { companionSuspected = true }
+
     /// The owner answered that nobody else is there.
     mutating func companionDenied() { companionSuspected = false }
 

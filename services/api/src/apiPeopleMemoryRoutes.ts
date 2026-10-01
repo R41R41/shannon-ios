@@ -68,7 +68,8 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
   };
   const items = people.allItems(scopeKey);
   return {
-    people: persons.map(person => {
+    // Only people with a remembered call: not a platform identity, and not a name from a period that was never saved.
+    people: persons.filter(person => items.some(item => item.personId === person.id || audiencePeople(item).includes(person.id))).map(person => {
       const own = items.filter(item => item.personId === person.id || audiencePeople(item).includes(person.id));
       const lastTalkedAt = own.map(item => item.observedAt).sort().at(-1);
       return { id: person.id, displayName: person.displayName, aliases: person.aliases, howKnown: person.howKnown,

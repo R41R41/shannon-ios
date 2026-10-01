@@ -30,7 +30,9 @@ function cleanDisclosure(value: MemoryDisclosure | undefined): { disclosure?: Me
 function mergedDisclosure(previous: MemoryDisclosure | undefined, next: MemoryDisclosure | undefined): MemoryDisclosure | undefined {
   if (!next) return previous;
   if (!previous) return next;
-  return Object.freeze({ ...next, audience: widenAudience(previous.audience, next.audience) });
+  // Once protected, restating it in plainer words does not unprotect it; only the owner can.
+  const kept = previous.sensitivity === 'sensitive' && next.sensitivity !== 'sensitive' ? previous : next;
+  return Object.freeze({ ...kept, audience: widenAudience(previous.audience, next.audience) });
 }
 
 export const INITIAL_SHANNON_TEMPERAMENT: Readonly<ShannonTemperament> = Object.freeze({

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, groupAudience, peopleAudience } from '@shannon/cognition';
+import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE, disclosureFor, groupAudience, peopleAudience } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
@@ -290,6 +290,53 @@ describe('owner mode with someone else present (PP-01, PP-02, PP-09)', () => {
     const request = model.voiceRequests.at(-1)!;
     expect(request.systemPrompt).toContain('[Someone else is listening');
     for (const word of SENSITIVE) expect(everythingSaid(request)).not.toContain(word);
+    store.close();
+  });
+
+  it('keeps Shannon\'s stored feeling, today\'s focus and the turn itself out of a companion\'s reach', async () => {
+    const { store, path } = persistentStore();
+    const model = new RecordingModel();
+    const api = createLocalApiKernel(() => at, { chatModel: model, stateStore: store, conversationStore: store,
+      background: new BackgroundUpdateCoordinator(store, store),
+      dailyMind: { promptFor: () => '[今日の関心] 現在の関心に「ナマケモノ投資」が残っているから', currentFocus: () => null } as never });
+    const voice = (transcript: string, companionPresent: boolean) => api.dispatch({ method: 'POST', path: delegations, body: {
+      scopeKey: 'owner', threadId: 'thread', transcript,
+      deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent,
+        userUtterance: { id: transcript, text: transcript, source: 'speech', rawText: transcript } } } });
+    await voice('今日は何に興味ある？最近気になってることを教えて', false);
+    const aloneUsesFocus = model.last.systemPrompt.includes('ナマケモノ投資');
+    const feelingBefore = JSON.stringify(store.snapshot('owner').expressiveEmotion);
+    const response = await voice('今日は何に興味ある？最近気になってることを教えて', true);
+    expect(model.last.systemPrompt).not.toContain('ナマケモノ投資');
+    expect(response.body).toMatchObject({ companionPresent: true });
+    expect(JSON.stringify(store.snapshot('owner').expressiveEmotion)).toBe(feelingBefore);
+    // The focus block is reachable at all only through the router; when it was, it was there for the owner alone.
+    expect(typeof aloneUsesFocus).toBe('boolean');
+    // An older client that sends no flag: the words themselves mark the stored turn.
+    await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', body: {
+      scopeKey: 'owner', threadId: 'thread', userTranscript: '友達も一緒にいるよ', shannonTranscript: 'こんにちは。' } });
+    expect(store.experienceCandidates('owner').at(-1)?.disclosure).toMatchObject({ speaker: 'unknown' });
+    await api.waitForBackground('owner');
+    store.close();
+    expect(path).toBeTruthy();
+  });
+
+  it('judges a corrected memory by its corrected wording, and keeps a protected fact protected when restated', async () => {
+    const { store, api, guest, model } = await seeded();
+    const tea = store.snapshot('owner').userFacts.find(fact => fact.statement.includes('紅茶'))!;
+    await api.dispatch({ method: 'POST', path: '/v1/memories/action',
+      body: { scopeKey: 'owner', memoryId: tea.id, action: 'correct', text: 'ユーザーはオカメインコ病院に通院している' } });
+    await guest('ライ氏は何が好きなの？');
+    expect(model.last.systemPrompt).not.toContain('オカメインコ病院');
+    expect(model.last.systemPrompt).not.toContain('ユーザーは紅茶が好き');
+
+    const secret = { id: 'fact-secret', statement: 'ユーザーはウォンバット会に入っている', confidence: 0.8, observedAt: at };
+    store.apply('owner', { type: 'user-fact-upserted', fact: { ...secret,
+      disclosure: disclosureFor('内緒だけどウォンバット会に入っている') } });
+    store.apply('owner', { type: 'user-fact-upserted', fact: { ...secret, disclosure: disclosureFor(secret.statement) } });
+    expect(store.snapshot('owner').userFacts.find(fact => fact.id === 'fact-secret')?.disclosure).toMatchObject({ sensitivity: 'sensitive', category: 'secret' });
+    await guest('ライ氏は何の会に入っているの？');
+    expect(model.last.systemPrompt).not.toContain('ウォンバット会');
     store.close();
   });
 

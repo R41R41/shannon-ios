@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   describeAudience,
   disclosureFor,
@@ -102,7 +102,9 @@ export class PeopleMemory {
     const returning = people.filter(person => !call.createdPersonIds.includes(person.id)
       && earlier.some(item => audiencePeople(item).includes(person.id)));
     return {
-      present: peopleAudience(people.map(person => person.id), people.length === 0 || Boolean(call.pendingName)),
+      // Someone named earlier who has since been forgotten or merged away is an unknown guest again, not absent.
+      present: peopleAudience(people.map(person => person.id),
+        people.length === 0 || people.length !== call.personIds.length || Boolean(call.pendingName)),
       people, returning, recorded: true,
       ...(newlyNamed ? { newlyNamed } : {}),
       ...(call.pendingName ? { ambiguousName: call.pendingName } : {}),
@@ -129,17 +131,25 @@ export class PeopleMemory {
     if (!call || !input.turns.some(turn => turn.role === 'participant')) {
       return { status: 'empty', callId: input.callId, people: [], summary: '', itemCount: 0 };
     }
-    const people = call.personIds.flatMap(id => this.store.person(scopeKey, id) ?? []);
-    const audience = peopleAudience(people.map(person => person.id), people.length === 0 || Boolean(call.pendingName));
+    const people = call.personIds.flatMap(id => this.store.person(scopeKey, id) ?? []).filter(person => !person.forgottenAt);
+    const audience = peopleAudience(people.map(person => person.id),
+      people.length === 0 || people.length !== call.personIds.length || Boolean(call.pendingName));
     const single = people.length === 1 && !call.pendingName ? people[0]! : undefined;
     const subject = single ? `${single.displayName}さん` : people.length ? people.map(person => `${person.displayName}さん`).join('・') : '同席していた方';
     const items: Omit<PersonMemoryItem, 'callId'>[] = [];
+    // The same period saved again yields the same item IDs, so an earlier forget still applies to it.
+    const itemId = (kind: string, text: string) => createHash('sha256')
+      .update(`${input.callId}\u0000${kind}\u0000${items.filter(item => item.kind === kind).length}\u0000${text}`).digest('hex').slice(0, 32);
     const add = (kind: PersonMemoryItem['kind'], text: string, extra: Partial<PersonMemoryItem> = {}, force?: 'third_party') => items.push({
-      id: randomUUID(), kind, text: text.replace(/\s+/gu, ' ').trim().slice(0, 600), observedAt: at,
+      id: itemId(kind, kind === 'summary' ? '' : text), kind, text: text.replace(/\s+/gu, ' ').trim().slice(0, 600), observedAt: at,
       disclosure: disclosureFor(text, audience, force ? { force } : {}), ...extra,
     });
     const names = people.map(person => person.displayName);
     const summary = (await summarize?.(input.turns, names).catch(() => null)) ?? fallbackCallSummary(input.turns, subject);
+    // 「今回は残さない」 may have arrived while the summary was being written. It wins.
+    if (this.store.call(scopeKey, input.callId)?.status === 'discarded') {
+      return { status: 'discarded', callId: input.callId, people: [], summary: '', itemCount: 0 };
+    }
     add('summary', summary);
     let pending: string[] = [];
     // An exchange in which someone states a fact about themselves is as protected as the fact drawn from it.
