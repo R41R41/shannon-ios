@@ -6,14 +6,14 @@ import Observation
 @Observable
 public final class ShannonGeminiLiveSessionModel {
     public internal(set) var phase: ShannonGeminiLivePhase = .idle
-    public private(set) var userTranscript = ""
+    public internal(set) var userTranscript = ""
     public internal(set) var shannonTranscript = ""
-    public private(set) var model = "gemini-3.5-transcribe-live"
+    public private(set) var model = "gpt-4o-mini-transcribe"
     public internal(set) var voice = "Shannon"
     public internal(set) var errorMessage: String?
-    public private(set) var failureRecovery: ShannonGeminiLiveFailureRecovery?
+    public internal(set) var failureRecovery: ShannonGeminiLiveFailureRecovery?
     public internal(set) var textSendState: ShannonGeminiTextSendState = .idle
-    public private(set) var audioLevel: Float = 0
+    public internal(set) var audioLevel: Float = 0
     public internal(set) var playbackLevel: Double = 0
     public var firstAudioLatencyMilliseconds: Int? { latencyMeasurements.firstAudioMilliseconds }
     public var firstTextLatencyMilliseconds: Int? { latencyMeasurements.firstTextMilliseconds }
@@ -23,14 +23,14 @@ public final class ShannonGeminiLiveSessionModel {
     public private(set) var estimatedCostUsd: Double = 0
     public private(set) var inputAudioSeconds: Double = 0
     public internal(set) var outputAudioSeconds: Double = 0
-    public private(set) var participantMode: ShannonVoiceParticipantMode = .owner
+    public internal(set) var participantMode: ShannonVoiceParticipantMode = .owner
     public private(set) var speechProvider: ShannonSpeechProvider = .gemini
     public internal(set) var ttsCostEstimateAvailable = true
     public private(set) var inputState: ShannonVoiceInputState
     /// User-chosen mute. It survives a reconnect of the same call and resets when the call ends.
-    public private(set) var isMicrophoneMuted = false
+    public internal(set) var isMicrophoneMuted = false
     /// When the call first became ready to listen; kept across a reconnect of the same call.
-    public private(set) var callStartedAt: Date?
+    public internal(set) var callStartedAt: Date?
     public internal(set) var microphonePrimerPhase: ShannonPermissionPrimerPhase?
     var microphonePrimerContinuation: CheckedContinuation<Bool, Never>?
     var microphonePermission: @MainActor () -> ShannonMediaPermission = ShannonMediaPermission.currentMicrophone
@@ -44,6 +44,7 @@ public final class ShannonGeminiLiveSessionModel {
     var responseTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var duckRestoreTask: Task<Void, Never>?
+    private var sustainedSpeechTask: Task<Void, Never>?
     private var bargeCandidateStartedAt: TimeInterval?
     var latencyMeasurements = ShannonVoiceLatencyMeasurements()
     var responseDelivery = ShannonVoiceResponseDelivery()
@@ -167,6 +168,8 @@ public final class ShannonGeminiLiveSessionModel {
         responseTask?.cancel()
         finalizeTask?.cancel()
         duckRestoreTask?.cancel()
+        sustainedSpeechTask?.cancel()
+        sustainedSpeechTask = nil
         responseTask = nil
         responseGenerationID = nil
         pendingTurns.reset()
@@ -279,27 +282,38 @@ public final class ShannonGeminiLiveSessionModel {
         beginResponse()
     }
 
-    private func handle(_ event: ShannonGeminiLiveServerEvent) {
+    private func handle(_ event: ShannonTranscriptionEvent) {
         switch event {
-        case .setupComplete:
+        case .sessionReady:
             phase = .listening
             if callStartedAt == nil { callStartedAt = Date() }
-        case let .interimInputTranscript(text):
-            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty else { return }
-            userTranscript = previewInput(turnAssembler.preview(interim: value))
+        case .speechStarted:
+            // No live caption is shown. Speech sustained for the barge-in window still
+            // interrupts the reply; a shorter sound only ducks playback until it ends.
             handleBargeIn(hasFinalText: false)
+            scheduleSustainedSpeechInterruption()
+        case .speechStopped:
+            sustainedSpeechTask?.cancel()
+            sustainedSpeechTask = nil
         case let .inputTranscript(text):
+            sustainedSpeechTask?.cancel()
+            sustainedSpeechTask = nil
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             handleBargeIn(hasFinalText: true)
             scheduleFinalization(turnComplete: false)
-        case .turnComplete:
-            scheduleFinalization(turnComplete: true)
-        case .sessionHandle:
-            break
         case .goAway:
             fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+        }
+    }
+
+    private func scheduleSustainedSpeechInterruption() {
+        sustainedSpeechTask?.cancel()
+        guard responseTask != nil else { return }
+        sustainedSpeechTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(340)) } catch { return }
+            self?.sustainedSpeechTask = nil
+            self?.interruptResponse()
         }
     }
 
@@ -434,59 +448,5 @@ public final class ShannonGeminiLiveSessionModel {
         failureRecovery = recovery
     }
 
-#if DEBUG
-    func prepareDesignPreview() {
-        let arguments = ProcessInfo.processInfo.arguments
-        participantMode = arguments.contains("-ShannonPreviewVoiceGuest") ? .guest : .owner
-        userTranscript = "シャノン、今日の予定を一緒に整理して"
-        shannonTranscript = "もちろん。まず優先したいことから確認しよう。"
-        audioLevel = 0.34
-        playbackLevel = 0.58
-        errorMessage = nil
-        failureRecovery = nil
-        textSendState = .idle
-        isMicrophoneMuted = arguments.contains("-ShannonPreviewVoiceMuted")
-        callStartedAt = Date().addingTimeInterval(-83)
-        if arguments.contains("-ShannonPreviewMicrophonePrimer") {
-            phase = .requestingPermission
-            let denied = arguments.contains("-ShannonPreviewPrimerDenied")
-            microphonePrimerPhase = denied ? .denied : .explain
-            if denied { fail("設定でマイクを許可すると、音声で話せます。", recovery: .openSettings) }
-            return
-        }
-        if arguments.contains("-ShannonPreviewVoiceAudioFailed") {
-            phase = .listening
-            var fixtureLedger = ShannonPendingVoiceTurns()
-            fixtureLedger.append(rawText: userTranscript, text: userTranscript, source: .speech)
-            if let batch = fixtureLedger.batch() {
-                do {
-                    try responseDelivery.complete(.init(threadId: "synthetic-preview", model: "synthetic",
-                        reply: shannonTranscript), batch: batch, ledger: &fixtureLedger)
-                } catch { preconditionFailure("Invalid synthetic voice preview") }
-            }
-            errorMessage = responseDelivery.failureMessage
-        } else if arguments.contains("-ShannonPreviewVoicePartialFailed") {
-            phase = .listening
-            responseDelivery = ShannonVoiceResponseDelivery()
-            responseDelivery.scheduledAudio(seconds: 1)
-            shannonTranscript = "まず優先したいことから……"
-            errorMessage = responseDelivery.failureMessage
-        } else if arguments.contains("-ShannonPreviewVoiceFailed") {
-            phase = .failed
-            errorMessage = "音声会話へ接続できませんでした。通信を確認して、もう一度お試しください。"
-            failureRecovery = .reconnect
-            textSendState = .failed(
-                text: "続きはテキストで送って",
-                message: "テキストを送信できませんでした。入力は保持されています。"
-            )
-        } else if arguments.contains("-ShannonPreviewVoiceReconnecting") {
-            phase = .reconnecting
-        } else if arguments.contains("-ShannonPreviewVoiceListening") {
-            phase = .listening
-        } else {
-            phase = .speaking
-        }
-    }
-#endif
 }
 #endif

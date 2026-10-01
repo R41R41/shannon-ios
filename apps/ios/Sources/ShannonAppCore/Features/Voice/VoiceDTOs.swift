@@ -61,6 +61,9 @@ public struct ShannonGeminiLiveSessionDTO: Codable, Equatable, Sendable {
     public let expiresAt: String
     public let inputUsdPerMinute: Double
     public let outputUsdPerMinute: Double
+    /// `openai` for the Realtime transcription session. An old server omits it and replies with a
+    /// Gemini token this build cannot use, so the client rejects a missing or different value.
+    public let transcriptionProvider: String?
 
     public init(
         token: String,
@@ -70,7 +73,8 @@ public struct ShannonGeminiLiveSessionDTO: Codable, Equatable, Sendable {
         instructions: String,
         expiresAt: String,
         inputUsdPerMinute: Double,
-        outputUsdPerMinute: Double
+        outputUsdPerMinute: Double,
+        transcriptionProvider: String? = nil
     ) {
         self.token = token
         self.model = model
@@ -80,6 +84,7 @@ public struct ShannonGeminiLiveSessionDTO: Codable, Equatable, Sendable {
         self.expiresAt = expiresAt
         self.inputUsdPerMinute = inputUsdPerMinute
         self.outputUsdPerMinute = outputUsdPerMinute
+        self.transcriptionProvider = transcriptionProvider
     }
 }
 

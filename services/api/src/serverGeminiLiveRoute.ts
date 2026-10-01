@@ -5,6 +5,10 @@ import {
   createConfiguredGeminiLiveGateway,
   GeminiLiveError,
 } from './geminiLive.js';
+import {
+  createConfiguredOpenAITranscriptionGateway,
+  OpenAITranscriptionError,
+} from './openaiTranscriptionSession.js';
 import { readJson, sendJson } from './serverHttp.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
@@ -15,6 +19,9 @@ export function createGeminiLiveRoute(
   consumeAllowance: ConsumeAllowance,
 ) {
   const gateway = createConfiguredGeminiLiveGateway(environment);
+  const openAIGateway = createConfiguredOpenAITranscriptionGateway(environment);
+  const speechVoice = configuredSpeechVoice(environment.SHANNON_GEMINI_TTS_VOICE);
+  const outputUsdPerMinute = configuredNumber(environment.SHANNON_GEMINI_LIVE_OUTPUT_USD_PER_MINUTE, 0, 10, 0.018);
 
   return async function handleGeminiLiveSession(
     request: IncomingMessage,
@@ -23,12 +30,6 @@ export function createGeminiLiveRoute(
   ): Promise<void> {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
     if (!principal) return sendJson(response, 403, { error: 'PAIRED_DEVICE_REQUIRED' });
-    if (!gateway) {
-      return sendJson(response, 503, {
-        error: 'GEMINI_LIVE_NOT_CONFIGURED',
-        message: 'Gemini音声会話は現在利用できません。',
-      });
-    }
     if (!consumeAllowance(principal.deviceId)) {
       return sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度お試しください。' });
     }
@@ -37,6 +38,17 @@ export function createGeminiLiveRoute(
     const requestBody = body && typeof body === 'object' && !Array.isArray(body)
       ? body as Record<string, unknown>
       : {};
+    // Clients that predate OpenAI transcription omit the field and keep the Gemini session.
+    const transcriptionProvider = requestBody.transcriptionProvider ?? 'gemini';
+    if (transcriptionProvider !== 'gemini' && transcriptionProvider !== 'openai') {
+      return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'transcription provider is invalid' });
+    }
+    if (transcriptionProvider === 'openai' ? !openAIGateway : !gateway) {
+      return sendJson(response, 503, {
+        error: transcriptionProvider === 'openai' ? 'OPENAI_TRANSCRIPTION_NOT_CONFIGURED' : 'GEMINI_LIVE_NOT_CONFIGURED',
+        message: '音声会話は現在利用できません。',
+      });
+    }
     const requestedThreadId = typeof requestBody.threadId === 'string' && requestBody.threadId.length <= 200
       ? requestBody.threadId
       : undefined;
@@ -50,15 +62,35 @@ export function createGeminiLiveRoute(
     });
 
     try {
-      const result = await gateway.createSession({
-        scopeKey: principal.scopeKey,
-        threadId: session.threadId,
-        instructions: session.instructions,
-      });
+      const result = transcriptionProvider === 'openai' && openAIGateway
+        ? {
+          ...await openAIGateway.createSession(),
+          voice: speechVoice,
+          threadId: session.threadId,
+          instructions: session.instructions,
+          outputUsdPerMinute,
+          transcriptionProvider: 'openai' as const,
+        }
+        : await gateway!.createSession({
+          scopeKey: principal.scopeKey,
+          threadId: session.threadId,
+          instructions: session.instructions,
+        });
       response.setHeader('cache-control', 'no-store');
       response.setHeader('pragma', 'no-cache');
       sendJson(response, 200, result);
     } catch (error) {
+      if (error instanceof OpenAITranscriptionError) {
+        console.warn('Shannon OpenAI transcription token failed', {
+          code: error.code,
+          upstreamStatus: error.upstreamStatus,
+          upstreamCode: error.upstreamCode,
+        });
+        return sendJson(response, 502, {
+          error: error.code,
+          message: '音声認識へ接続できませんでした。少し待ってもう一度お試しください。',
+        });
+      }
       if (!(error instanceof GeminiLiveError)) throw error;
       console.warn('Shannon Gemini transcription token failed', {
         code: error.code,
@@ -71,4 +103,14 @@ export function createGeminiLiveRoute(
       });
     }
   };
+}
+
+function configuredSpeechVoice(value: string | undefined): string {
+  const voice = value?.trim() ?? '';
+  return /^[A-Za-z][A-Za-z0-9._-]{0,79}$/.test(voice) ? voice : 'Aoede';
+}
+
+function configuredNumber(value: string | undefined, minimum: number, maximum: number, fallback: number): number {
+  const number = value?.trim() ? Number(value) : Number.NaN;
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : fallback;
 }
