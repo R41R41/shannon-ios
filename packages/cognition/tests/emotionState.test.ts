@@ -85,5 +85,9 @@ describe('expressive emotion state', () => {
     expect(restoredLegacy.expressiveEmotion?.primary).toBe('neutral');
     expect(buildExpressiveEmotionPrompt(emotion)).toContain('ライ氏');
     expect(buildExpressiveEmotionPrompt(emotion)).toContain('never induce guilt');
+    const guestPrompt = buildExpressiveEmotionPrompt(emotion, 'guest');
+    expect(guestPrompt).toContain('do not address them as ライ氏');
+    expect(guestPrompt).not.toContain('address the owner as ライ氏');
+    expect(guestPrompt).toContain('never induce guilt');
   });
 });

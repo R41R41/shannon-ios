@@ -421,7 +421,8 @@ describe('Shannon local API kernel', () => {
     expect(session.threadId).toBe('temporary-guest-session');
     expect(session.instructions).toContain('[Temporary guest voice session]');
     expect(session.instructions).toContain('do not assume any guest participant is ライ');
-    expect(session.instructions).not.toContain('conversation partner is ライ');
+    expect(session.instructions).not.toContain('「ライ氏」と呼び、');
+    expect(session.instructions).toContain('相手を「ライ氏」と呼ばない');
     expect(session.instructions).not.toContain('[Shannon shared state v1]');
     expect(session.instructions).not.toContain('ミズクラゲ');
 
@@ -1077,9 +1078,10 @@ describe('Shannon local API kernel', () => {
     expect(session.instructions).toContain('音声で続きを話したい');
     expect(session.instructions).toContain('[Live voice conversation]');
     expect(session.instructions).toContain('primarily speaks Japanese');
-    expect(session.instructions).toContain('slightly clumsy maid AI');
-    expect(session.instructions).toContain('katakana first-person pronoun ボク');
-    expect(session.instructions).toContain('conversation partner is ライ');
+    expect(session.instructions).toContain('少しポンコツなメイドAI');
+    expect(session.instructions).toContain('一人称は必ずカタカナの「ボク」');
+    expect(session.instructions).toContain('「ライ氏」と呼び');
+    expect(session.instructions).not.toContain('tsundere');
 
     const brightSession = api.realtimeVoiceSession('owner-a', threadId, { brightVoice: true });
     expect(brightSession.voice).toBe(session.voice);
