@@ -50,5 +50,5 @@ export function groundedWorldOpening(opening: string | undefined, title: string,
   const claimsSharedPast = text && /昨日|前に|この前|さっき|覚えて|(?:話|会話).*(?:つなが|繋が|重な)|(?:君|あなた).*(?:好き|興味)/u.test(text);
   const anchored = text && (normalized(text).includes(normalized(title))
     || (interest && normalized(text).includes(normalized(interest))));
-  return text && anchored && !claimsSharedPast ? text : 'これ、少し気になった。';
+  return text && anchored && !claimsSharedPast ? text : 'これ、少し気になりました。';
 }

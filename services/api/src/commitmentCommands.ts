@@ -21,11 +21,11 @@ export function resolveCommitmentCommand(state: CompanionStateSnapshot, message:
     && visibleMemoryText(state, memory.id, memory.summary));
   const candidates = pending.filter(memory => target.length >= 2 && normalize(memory.summary).includes(target));
   // Do not guess what "that promise" refers to, even if there is only one stored.
-  if (candidates.length !== 1) return { clarification: 'どの約束を変更するか、約束の内容を短く指定してください。まだ変更していません。' };
+  if (candidates.length !== 1) return { clarification: 'どの約束のことか、約束の内容を短く教えてもらえますか。まだ変更していません。' };
   const memory = candidates[0]!;
   if (action === 'correct') {
     const due = message.match(/(?:明後日|あさって|明日|あした|今日|(?:来週の?)?[月火水木金土日]曜(?:日)?|(?:\d{4}年)?\d{1,2}月\d{1,2}日)(?:(?:の|\s)*(?:午前|午後)?\d{1,2}時(?:\d{1,2}分|半)?)?/u)?.[0];
-    if (!due) return { clarification: '変更先の日付を教えてください。元の約束はまだ変更していません。' };
+    if (!due) return { clarification: '変更先の日付を教えてもらえますか。元の約束はまだ変更していません。' };
     const topic = memory.summary.replace(/^(?:明日|あした|今日|明後日|あさって|(?:来週の?)?[月火水木金土日]曜(?:日)?|(?:\d{4}年)?\d{1,2}月\d{1,2}日)(?:(?:の|\s)*(?:午前|午後)?\d{1,2}時(?:\d{1,2}分|半)?)?[、\s]*/u, '');
     return { mutation: { memoryId: memory.id, action, text: `${due}、${topic}` } };
   }

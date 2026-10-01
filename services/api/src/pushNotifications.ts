@@ -183,8 +183,8 @@ export class SQLitePushNotificationStore {
       const content = eventType === 'host.approval_requested'
         ? `「${taskTitle}」を続けるため、確認が必要です。`
         : eventType === 'host.completed'
-          ? (detail || `「${taskTitle}」が完了しました。`)
-          : (detail || `「${taskTitle}」を完了できませんでした。`);
+          ? (detail || `ライ氏、「${taskTitle}」の作業が終わりました。`)
+          : (detail || `ライ氏、「${taskTitle}」の作業を最後まで進められませんでした。作業カードで状況を確認できます。`);
       return {
         kind: 'agent_task',
         initiativeId: `agent:${String(row.event_id)}`,
@@ -234,7 +234,7 @@ export class SQLitePushNotificationStore {
       deviceToken: String(row.device_token),
       environment: String(row.environment) as APNsEnvironment,
       threadId: 'testflight-delivery',
-      content: '新しいビルドの配信で少しつまずいてる。設定から確認できるよ。',
+      content: 'ライ氏、新しいビルドの配信で少しつまずいています。設定から状況を確認できます。',
       expression: 'concerned',
       createdAt: String(row.opened_at),
       badgeCount: Math.max(1, Math.min(99, Number(row.initiative_badge_count) + 1)),

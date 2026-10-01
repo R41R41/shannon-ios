@@ -11,7 +11,7 @@ export async function prepareConversationOrganize(
   const drafts = await extractor.extract(scopeKey, source.map(item => ({ role: item.role, content: item.content })));
   const session = organizeStore.create({ scopeKey, threadId, sourceMessageIds: source.map(item => item.id), drafts }, at);
   const reply = drafts.length
-    ? `Voyagerへ送るTask案を${drafts.length}件まとめたよ。内容を確認して、採用する案を選んでください。`
-    : '今回の範囲には、Voyagerへ送るTask案は見つかりませんでした。';
+    ? `Voyagerへ送るタスク案を${drafts.length}件まとめました。内容を確認して、採用する案を選んでください。`
+    : '今回の範囲には、Voyagerへ送るタスク案は見つかりませんでした。';
   return { session, reply };
 }

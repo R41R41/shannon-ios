@@ -402,7 +402,7 @@ async function completeLiveVoiceDelegation(
     title: '依頼された機能の実装', goal: confirmedImplementationRequest,
   } : undefined);
   const reply = confirmedImplementationRequest
-    ? 'よし、ライ氏。実装提案を画面に出しました。「始める」を押せば、作業を進められます。'
+    ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,

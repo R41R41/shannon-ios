@@ -187,7 +187,7 @@ export function parseReason(value: string): string | null {
 
 export function notificationBody(value: string): string {
   const firstParagraph = value.split(/\n\s*\n/u)[0]?.replace(/\s+/gu, ' ').trim() ?? '';
-  const compact = firstParagraph || '少し話したいことがあるよ。';
+  const compact = firstParagraph || '少し話したいことがあります。';
   return compact.length <= 180 ? compact : `${compact.slice(0, 179)}…`;
 }
 

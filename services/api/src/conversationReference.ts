@@ -36,7 +36,7 @@ export function resolveConversationContent(
   if (!containsUnresolvedConversationReference(content)) {
     return { content, sourceMessageIds: [], referenced: false };
   }
-  const clarify = { clarification: 'どの内容を残すか、保存したい部分をそのまま教えてくれる？ この依頼では新しい保存・変更はしていないよ。' };
+  const clarify = { clarification: 'どの内容を残すか、保存したい部分をそのまま教えてもらえますか？ この依頼では、新しい保存や変更はしていません。' };
   if (!isBareConversationReference(content) || /^(?:昨日|先日|この前)/u.test(content)) return clarify;
   const recent = store.conversationHistory(scopeKey, threadId).slice(-8);
   const source = recent.filter(message => message.role === 'user').at(-1);

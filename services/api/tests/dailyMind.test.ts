@@ -97,7 +97,7 @@ describe('daily Shannon mind', () => {
 
     expect(model.calls).toBe(1);
     expect(first.get('owner')).toMatchObject({
-      dayKey: '2026-09-05', topic: 'AIエージェントの記憶', sourceItemId: 'memory', openingLine: 'これ、少し気になった。',
+      dayKey: '2026-09-05', topic: 'AIエージェントの記憶', sourceItemId: 'memory', openingLine: 'これ、少し気になりました。',
     });
     expect(second.get('owner')).toEqual(first.get('owner'));
     expect(daily.promptFor('owner')).toContain('topic: AIエージェントの記憶');

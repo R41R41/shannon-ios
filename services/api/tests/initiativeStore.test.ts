@@ -95,7 +95,7 @@ describe('Shannon initiative loop', () => {
         sourceAttribution: {
           title: 'Hacker News',
           url: 'https://example.com/agents',
-          reason: '今日の関心「AI agents」と近いから。',
+          reason: '今日の関心「AI agents」と近いからです。',
         },
       }),
     ]);
@@ -147,7 +147,7 @@ describe('Shannon initiative loop', () => {
       .toContain('A small agent learns to remember');
     expect(state.conversationHistory('owner', threadId).at(-1)?.content).not.toContain('昨日の話');
     expect(state.conversationHistory('owner', threadId).at(-1)?.sourceAttribution)
-      .toEqual({ title: 'Hacker News', url: 'https://example.com/focus', reason: 'シャノン自身が気になったから。' });
+      .toEqual({ title: 'Hacker News', url: 'https://example.com/focus', reason: 'ボクが気になったからです。' });
 
     initiatives.close();
     world.close();

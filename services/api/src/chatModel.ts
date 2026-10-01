@@ -120,7 +120,7 @@ export interface ShannonChatModel {
   ): Promise<ShannonChatModelResult>;
 }
 
-const LOCAL_REPLY = 'うん、聞いてるよ。LLMの鍵を設定すると、ここからShannonとして会話できるようになる。';
+const LOCAL_REPLY = 'はい、聞こえています。LLMの鍵を設定すると、ここからボクが会話できるようになります。';
 
 export class LocalStubChatModel implements ShannonChatModel {
   readonly mode = 'local-stub' as const;
