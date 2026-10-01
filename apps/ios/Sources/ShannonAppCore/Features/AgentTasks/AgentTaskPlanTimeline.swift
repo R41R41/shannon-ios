@@ -50,6 +50,47 @@ public enum ShannonAgentPlanTimeline {
         }
     }
 
+    /// A displayed row in a compact timeline: either one plan step or the
+    /// collapsed run of steps that were already completed.
+    public enum Row: Equatable, Identifiable, Sendable {
+        case completedGroup(count: Int, isExpanded: Bool, isLast: Bool)
+        case entry(Entry)
+
+        public static let completedGroupID = "completed-group"
+
+        public var id: String {
+            switch self {
+            case .completedGroup: Self.completedGroupID
+            case .entry(let entry): entry.id
+            }
+        }
+    }
+
+    /// Fewest leading completed steps that are folded into one row.
+    public static let minimumCollapsedCompletedCount = 2
+
+    public static func completedGroupTitle(count: Int) -> String {
+        "\(count)工程を完了"
+    }
+
+    /// Folds the leading run of completed steps into one disclosure row.
+    ///
+    /// Only the leading run is folded so plan order is never rearranged. When
+    /// `showsCompleted` is true the group row stays as the disclosure and the
+    /// completed steps follow it. Running and upcoming steps are always listed.
+    public static func rows(for entries: [Entry], showsCompleted: Bool) -> [Row] {
+        let leading = entries.prefix { $0.status == .completed }
+        guard leading.count >= minimumCollapsedCompletedCount else {
+            return entries.map(Row.entry)
+        }
+        let remaining = entries.dropFirst(leading.count)
+        let groupIsLast = remaining.isEmpty && !showsCompleted
+        var rows: [Row] = [.completedGroup(count: leading.count, isExpanded: showsCompleted, isLast: groupIsLast)]
+        if showsCompleted { rows.append(contentsOf: leading.map(Row.entry)) }
+        rows.append(contentsOf: remaining.map(Row.entry))
+        return rows
+    }
+
     public static func summary(for task: ShannonAgentTask) -> String {
         "全\(task.plan.count)工程中 \(task.completedPlanCount)工程完了"
     }

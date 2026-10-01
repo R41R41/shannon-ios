@@ -44,6 +44,11 @@ struct ShannonAgentTaskRoomView: View {
                 }
             }
             .navigationTitle(task.title)
+            .modifier(AgentTaskRoomSubtitle(
+                title: task.title,
+                subtitle: ShannonAgentTaskRoomPresentation.subtitle(for: task),
+                palette: palette
+            ))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -100,100 +105,25 @@ struct ShannonAgentTaskRoomView: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: task.status)
     }
 
+    static let topAnchor = "agent-task-room-top"
+
     func progressView(_ palette: ShannonPalette) -> some View {
         ZStack {
             palette.canvas.ignoresSafeArea()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
-                    AgentTaskHero(task: task, palette: palette)
-
-                    if let actionError {
-                        AgentTaskActionErrorCard(
-                            message: actionError,
-                            palette: palette,
-                            dismiss: dismissActionError
-                        )
-                    }
-
-                    AgentTaskSection(title: "シャノンの作業段階", symbol: "point.3.connected.trianglepath.dotted", palette: palette) {
-                        AgentTaskStageProgressView(task: task, palette: palette)
-                    }
-
-                    if !task.plan.isEmpty {
-                        AgentTaskSection(title: "計画", symbol: "list.bullet.clipboard", palette: palette) {
-                            Text(ShannonAgentPlanTimeline.summary(for: task))
-                                .font(.caption)
-                                .foregroundStyle(palette.textSecondary)
-                            AgentTaskPlanTimelineView(task: task, palette: palette)
-                        }
-                    }
-
-                    if let command = task.latestCommandActivity {
-                        AgentTaskCommandActivityCard(event: command, palette: palette)
-                    }
-
-                    if !task.timeline.isEmpty {
-                        let recentEvents = Array(
-                            task.timeline
-                                .sorted(by: { $0.sequence < $1.sequence })
-                                .suffix(3)
-                        )
-                        AgentTaskSection(title: "最新の動き", symbol: "clock", palette: palette) {
-                            VStack(spacing: 0) {
-                                ForEach(recentEvents) { event in
-                                    AgentTaskTimelineRow(
-                                        event: event,
-                                        showsConnector: event.id != recentEvents.last?.id,
-                                        palette: palette
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if !task.timeline.isEmpty {
-                        DisclosureGroup(isExpanded: $showsDetailedProgress) {
-                            AgentTaskSection(title: "作業記録", symbol: "clock.arrow.circlepath", palette: palette) {
-                                VStack(spacing: 0) {
-                                    let sortedEvents = task.timeline.sorted(by: { $0.sequence < $1.sequence })
-                                    ForEach(sortedEvents) { event in
-                                        AgentTaskTimelineRow(
-                                            event: event,
-                                            showsConnector: event.id != sortedEvents.last?.id,
-                                            palette: palette
-                                        )
-                                    }
-                                }
-                            }
-                            .padding(.top, ShannonSpacing.medium)
-                        } label: {
-                            Label("全作業記録を表示", systemImage: "list.bullet")
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(palette.textSecondary)
-                        }
-                        .tint(palette.action)
-                    }
-
-                    if let approval = task.pendingApproval {
-                        AgentTaskApprovalCard(
-                            approval: approval,
-                            palette: palette,
-                            isSubmitting: actionIsInFlight,
-                            acceptOnce: { resolveApproval(true, false) },
-                            acceptForSession: { resolveApproval(true, true) },
-                            decline: { resolveApproval(false, false) }
-                        )
-                    }
-
-                    if !task.changes.isEmpty || !task.tests.isEmpty {
-                        AgentTaskResultSection(task: task, palette: palette)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    progressContent(palette)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: task.pendingApproval?.id) { _, approvalID in
+                    // A newly arrived decision is brought into view even if the
+                    // user had scrolled down to the plan or results.
+                    guard approvalID != nil else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) {
+                        proxy.scrollTo(Self.topAnchor, anchor: .top)
                     }
                 }
-                .padding(.horizontal, ShannonSpacing.large)
-                .padding(.top, ShannonSpacing.medium)
-                .padding(.bottom, task.status.isActive ? 122 : ShannonSpacing.huge)
             }
-            .scrollIndicators(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if task.status.isActive {
@@ -207,12 +137,99 @@ struct ShannonAgentTaskRoomView: View {
         }
     }
 
+    /// Room order: decision (or status row), action error, plan, then the
+    /// existing activity, history, and result blocks.
+    func progressContent(_ palette: ShannonPalette) -> some View {
+        LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
+            // A pending decision is always the first thing in the room;
+            // otherwise a compact status row stands in for it.
+            Group {
+                if let approval = task.pendingApproval {
+                    AgentTaskApprovalCard(
+                        approval: approval,
+                        palette: palette,
+                        isSubmitting: actionIsInFlight,
+                        acceptOnce: { resolveApproval(true, false) },
+                        acceptForSession: { resolveApproval(true, true) },
+                        decline: { resolveApproval(false, false) }
+                    )
+                } else {
+                    AgentTaskStatusRow(task: task, palette: palette)
+                }
+            }
+            .id(Self.topAnchor)
+
+            if let actionError {
+                AgentTaskActionErrorCard(
+                    message: actionError,
+                    palette: palette,
+                    dismiss: dismissActionError
+                )
+            }
+
+            if !task.plan.isEmpty {
+                AgentTaskPlanSection(task: task, palette: palette)
+            }
+
+            if let command = task.latestCommandActivity {
+                AgentTaskCommandActivityCard(event: command, palette: palette)
+            }
+
+            if !task.timeline.isEmpty {
+                let recentEvents = Array(
+                    task.timeline
+                        .sorted(by: { $0.sequence < $1.sequence })
+                        .suffix(3)
+                )
+                AgentTaskSection(title: "最新の動き", symbol: "clock", palette: palette) {
+                    VStack(spacing: 0) {
+                        ForEach(recentEvents) { event in
+                            AgentTaskTimelineRow(
+                                event: event,
+                                showsConnector: event.id != recentEvents.last?.id,
+                                palette: palette
+                            )
+                        }
+                    }
+                }
+            }
+
+            if !task.timeline.isEmpty {
+                DisclosureGroup(isExpanded: $showsDetailedProgress) {
+                    AgentTaskSection(title: "作業記録", symbol: "clock.arrow.circlepath", palette: palette) {
+                        VStack(spacing: 0) {
+                            let sortedEvents = task.timeline.sorted(by: { $0.sequence < $1.sequence })
+                            ForEach(sortedEvents) { event in
+                                AgentTaskTimelineRow(
+                                    event: event,
+                                    showsConnector: event.id != sortedEvents.last?.id,
+                                    palette: palette
+                                )
+                            }
+                        }
+                    }
+                    .padding(.top, ShannonSpacing.medium)
+                } label: {
+                    Label("全作業記録を表示", systemImage: "list.bullet")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(palette.textSecondary)
+                }
+                .tint(palette.action)
+            }
+
+            if !task.changes.isEmpty || !task.tests.isEmpty {
+                AgentTaskResultSection(task: task, palette: palette)
+            }
+        }
+        .padding(.horizontal, ShannonSpacing.large)
+        .padding(.top, ShannonSpacing.medium)
+        .padding(.bottom, ShannonSpacing.huge)
+    }
+
     func configurationForm(_ palette: ShannonPalette) -> some View {
         Form {
             Section {
-                AgentTaskHero(task: task, palette: palette)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                AgentTaskStatusRow(task: task, palette: palette)
             }
 
             Section {
@@ -369,37 +386,6 @@ private extension String {
     var nilIfEmpty: String? {
         let value = trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
-    }
-}
-
-struct AgentTaskHero: View {
-    let task: ShannonAgentTask
-    let palette: ShannonPalette
-
-    var body: some View {
-        HStack(alignment: .center, spacing: ShannonSpacing.large) {
-            ShannonAvatarView(expression: task.expression, size: 68)
-            VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                Text(task.stageDescription)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(palette.textPrimary)
-                Text(task.summary)
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
-                    .lineLimit(3)
-                AgentTaskStatusBadge(task: task, palette: palette)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(ShannonSpacing.large)
-        .background(
-            LinearGradient(
-                colors: [palette.intelligenceSoft.opacity(0.72), palette.readingSurface],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge, style: .continuous)
-        )
     }
 }
 
