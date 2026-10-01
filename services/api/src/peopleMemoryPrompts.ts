@@ -17,7 +17,7 @@ const ordered = (items: readonly VisiblePersonItem[]) => [...items].sort((left, 
   right.observedAt.localeCompare(left.observedAt) || KIND_ORDER[left.kind] - KIND_ORDER[right.kind]);
 
 /** 「さっき誰と何を話した？」「友達と何を話した？」: the owner asks about a call, not about one person by name. */
-const PEOPLE_INQUIRY = /誰と(?:何を|なにを|どんな)?(?:話|しゃべ|会)|(?:お友達|友達|友だち|友人)と(?:は)?(?:何|なに|どんな|話)|さっきの(?:通話|電話|人|方|友達|お友達)|紹介した(?:人|友達|友だち|友人)|友人も一緒|会った人/u;
+const PEOPLE_INQUIRY = /誰と(?:何を|なにを|どんな)?(?:話|しゃべ|会)|(?:お友達|友達|友だち|友人)と(?:は)?(?:何|なに|どんな|話)|さっきの(?:通話|電話|人|方|友達|お友達)|紹介した(?:人|友達|友だち|友人)|友人も一緒|会った人|(?:discord|ディスコード|line|ライン|minecraft|マイクラ)で(?:誰|何|だれ|なに|どんな)/iu;
 
 function mentioned(message: string, people: readonly RememberedPerson[]): RememberedPerson[] {
   const text = personNameKey(message);

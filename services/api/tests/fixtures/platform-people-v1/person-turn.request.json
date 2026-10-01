@@ -1,0 +1,12 @@
+{
+  "platform": "discord",
+  "requestId": "discord:1002",
+  "conversationId": "discord:111:222",
+  "conversationKind": "channel",
+  "sourceUserId": "900000000000000002",
+  "sourceDisplayName": "ミキ",
+  "sourceKind": "person",
+  "userMessage": "私は辛いものが苦手。明日映画に行こうね",
+  "shannonReply": "いいですね、楽しんできてください。",
+  "observedAt": "2026-10-02T03:01:00.000Z"
+}

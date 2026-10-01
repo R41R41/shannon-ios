@@ -1,0 +1,10 @@
+{
+  "platform": "discord",
+  "requestId": "discord:1003",
+  "conversationId": "discord:111:222",
+  "conversationKind": "channel",
+  "sourceUserId": "900000000000000003",
+  "sourceDisplayName": "ケン",
+  "userMessage": "猫が好き",
+  "observedAt": "2026-10-02T03:02:00.000Z"
+}

@@ -16,10 +16,14 @@ export interface RememberedPerson {
 
 export type PersonCallStatus = 'open' | 'remembered' | 'discarded';
 
-/** One 「友人も一緒」 period of a call. */
+/** One 「友人も一緒」 period of a call, or one day of a platform conversation. */
 export interface PersonCall {
   callId: string;
   threadId?: string;
+  /** Where it took place: absent for a voice call, otherwise the platform (`discord`, `line`, …). */
+  source?: string;
+  /** How the place is shown to the owner, for example 「友人グループ（Discord）」. */
+  label?: string;
   status: PersonCallStatus;
   personIds: readonly string[];
   /** People this call created; removed again if the owner chooses 「今回は残さない」. */
@@ -59,12 +63,50 @@ export interface PeopleMemoryStore {
   discardCall(scopeKey: string, callId: string, at: string): boolean;
   items(scopeKey: string): readonly PersonMemoryItem[];
   setItemDisclosure(scopeKey: string, itemId: string, disclosure: MemoryDisclosure): boolean;
+  /** Adds items to a call, or rewrites the text of an item that already exists. The owner's own label is kept. */
+  upsertCallItems(scopeKey: string, callId: string, items: readonly Omit<PersonMemoryItem, 'callId'>[]): void;
+  /** Remembered platform conversation periods that were updated inside a window. */
+  platformCalls(scopeKey: string, startAt: string, endAt: string): readonly PersonCall[];
+  /** The person a platform account belongs to, if it has been seen. */
+  platformPerson(scopeKey: string, platform: string, userId: string): PlatformPersonLink | null;
+  linkPlatformPerson(scopeKey: string, link: PlatformPersonLink): void;
+  platformLinks(scopeKey: string): readonly PlatformPersonLink[];
+  /** The owner-managed identity registry: the person an account was registered for, and a candidate row for a new one. */
+  registryPersonId(scopeKey: string, platform: string, userId: string): string | null;
+  recordRegistryCandidate(scopeKey: string, platform: string, userId: string, personId: string, at: string): void;
+  /** Records one mirrored message once. Returns the earlier record when the request was already seen. */
+  platformReceipt(scopeKey: string, platform: string, requestId: string): PlatformTurnReceipt | null;
+  recordPlatformReceipt(scopeKey: string, receipt: PlatformTurnReceipt): void;
+  /** Stored non-owner messages of one local day: in one conversation, and in all. */
+  platformTurnCounts(scopeKey: string, dayKey: string, threadKey: string): { conversation: number; total: number };
+}
+
+export interface PlatformPersonLink {
+  platform: string;
+  userId: string;
+  personId: string;
+  displayName: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface PlatformTurnReceipt {
+  platform: string;
+  requestId: string;
+  payloadHash: string;
+  threadKey: string;
+  dayKey: string;
+  /** Empty when the message was received but not stored (a bot, a cap, a forgotten person). */
+  itemId: string;
+  outcome: string;
+  createdAt: string;
 }
 
 interface PersonRow { person_id: string; display_name: string; aliases_json: string | null; how_known: string | null;
   created_at: string; updated_at: string; forgotten_at: string | null; }
 interface CallRow { call_id: string; thread_id: string | null; status: PersonCallStatus; person_ids_json: string;
-  created_person_ids_json: string; pending_name: string | null; started_at: string; updated_at: string; }
+  created_person_ids_json: string; pending_name: string | null; started_at: string; updated_at: string; source?: string | null; label?: string | null; }
+interface LinkRow { platform: string; external_user_id: string; person_id: string; display_name: string; first_seen_at: string; last_seen_at: string; }
 interface ItemRow { item_id: string; call_id: string; kind: PersonMemoryKind; person_id: string | null; text: string;
   evidence: string | null; disclosure_json: string; observed_at: string; }
 
@@ -126,11 +168,40 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
         PRIMARY KEY (scope_key, item_id)
       );
       CREATE INDEX IF NOT EXISTS person_memory_items_call ON person_memory_items(scope_key, call_id, ordinal);
+      CREATE TABLE IF NOT EXISTS person_platform_links (
+        scope_key TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        external_user_id TEXT NOT NULL,
+        person_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, platform, external_user_id)
+      );
+      CREATE TABLE IF NOT EXISTS person_platform_turns (
+        scope_key TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        request_id TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        thread_key TEXT NOT NULL,
+        day_key TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, platform, request_id)
+      );
+      CREATE INDEX IF NOT EXISTS person_platform_turns_day ON person_platform_turns(scope_key, day_key, thread_key);
     `);
-    const columns = new Set((this.database.prepare("PRAGMA table_info('people')").all() as unknown as Array<{ name: string }>).map(column => column.name));
-    for (const column of ['aliases_json', 'how_known', 'forgotten_at']) {
+    this.addColumns('person_calls', ['source', 'label']);
+    this.addColumns('people', ['aliases_json', 'how_known', 'forgotten_at']);
+  }
+
+  /** Additive, nullable columns only, so an older API binary keeps opening the database. */
+  private addColumns(table: 'people' | 'person_calls', names: readonly string[]): void {
+    const columns = new Set((this.database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>).map(column => column.name));
+    for (const column of names) {
       if (columns.has(column)) continue;
-      try { this.database.exec(`ALTER TABLE people ADD COLUMN ${column} TEXT;`); } catch (error) {
+      try { this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT;`); } catch (error) {
         // Another process added it between the check and the statement.
         if (!(error instanceof Error && error.message.includes('duplicate column'))) throw error;
       }
@@ -202,6 +273,7 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
         this.database.prepare('UPDATE person_memory_items SET person_id = ?, disclosure_json = ? WHERE scope_key = ? AND item_id = ?')
           .run(row.person_id === fromId ? intoId : row.person_id, JSON.stringify(next), scopeKey, row.item_id);
       }
+      this.database.prepare('UPDATE person_platform_links SET person_id = ? WHERE scope_key = ? AND person_id = ?').run(intoId, scopeKey, fromId);
       // A platform identity of the merged person moves with it when the registry table exists and has no clash.
       try {
         this.database.prepare('UPDATE OR IGNORE person_platform_identities SET person_id = ? WHERE scope_key = ? AND person_id = ?')
@@ -214,25 +286,112 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
 
   call(scopeKey: string, callId: string): PersonCall | null {
     const row = this.database.prepare(`
-      SELECT call_id, thread_id, status, person_ids_json, created_person_ids_json, pending_name, started_at, updated_at
+      SELECT call_id, thread_id, status, person_ids_json, created_person_ids_json, pending_name, started_at, updated_at, source, label
       FROM person_calls WHERE scope_key = ? AND call_id = ?
     `).get(scopeKey, callId) as unknown as CallRow | undefined;
-    return row ? Object.freeze({
-      callId: row.call_id, status: row.status, personIds: Object.freeze(strings(row.person_ids_json)),
-      createdPersonIds: Object.freeze(strings(row.created_person_ids_json)), startedAt: row.started_at, updatedAt: row.updated_at,
-      ...(row.thread_id ? { threadId: row.thread_id } : {}), ...(row.pending_name ? { pendingName: row.pending_name } : {}),
-    }) : null;
+    return row ? callOf(row) : null;
+  }
+
+  platformCalls(scopeKey: string, startAt: string, endAt: string): readonly PersonCall[] {
+    return Object.freeze((this.database.prepare(`
+      SELECT call_id, thread_id, status, person_ids_json, created_person_ids_json, pending_name, started_at, updated_at, source, label
+      FROM person_calls WHERE scope_key = ? AND status = 'remembered' AND source IS NOT NULL AND updated_at >= ? AND updated_at < ?
+      ORDER BY updated_at ASC LIMIT 200
+    `).all(scopeKey, startAt, endAt) as unknown as CallRow[]).map(callOf));
+  }
+
+  upsertCallItems(scopeKey: string, callId: string, items: readonly Omit<PersonMemoryItem, 'callId'>[]): void {
+    this.transaction(() => {
+      const next = (this.database.prepare('SELECT COALESCE(MAX(ordinal), -1) + 1 AS next FROM person_memory_items WHERE scope_key = ? AND call_id = ?')
+        .get(scopeKey, callId) as unknown as { next: number }).next;
+      const statement = this.database.prepare(`
+        INSERT INTO person_memory_items (scope_key, item_id, call_id, kind, person_id, text, evidence, disclosure_json, observed_at, ordinal)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(scope_key, item_id) DO UPDATE SET text = excluded.text, observed_at = excluded.observed_at,
+          disclosure_json = CASE WHEN json_extract(person_memory_items.disclosure_json, '$.decidedBy') = 'owner'
+            THEN person_memory_items.disclosure_json ELSE excluded.disclosure_json END
+      `);
+      items.forEach((item, index) => statement.run(scopeKey, item.id, callId, item.kind, item.personId ?? null, item.text.slice(0, 600),
+        item.evidence?.slice(0, 600) ?? null, JSON.stringify(item.disclosure), item.observedAt, Number(next) + index));
+    });
+  }
+
+  platformPerson(scopeKey: string, platform: string, userId: string): PlatformPersonLink | null {
+    const row = this.database.prepare(`
+      SELECT platform, external_user_id, person_id, display_name, first_seen_at, last_seen_at
+      FROM person_platform_links WHERE scope_key = ? AND platform = ? AND external_user_id = ?
+    `).get(scopeKey, platform, userId) as unknown as LinkRow | undefined;
+    return row ? linkOf(row) : null;
+  }
+
+  platformLinks(scopeKey: string): readonly PlatformPersonLink[] {
+    return Object.freeze((this.database.prepare(`
+      SELECT platform, external_user_id, person_id, display_name, first_seen_at, last_seen_at
+      FROM person_platform_links WHERE scope_key = ?
+    `).all(scopeKey) as unknown as LinkRow[]).map(linkOf));
+  }
+
+  registryPersonId(scopeKey: string, platform: string, userId: string): string | null {
+    try {
+      const row = this.database.prepare(`SELECT person_id FROM person_platform_identities
+        WHERE scope_key = ? AND platform = ? AND external_user_id = ? AND verification_status <> 'revoked'`).get(scopeKey, platform, userId);
+      return typeof row?.person_id === 'string' ? row.person_id : null;
+    } catch { return null; }
+  }
+
+  recordRegistryCandidate(scopeKey: string, platform: string, userId: string, personId: string, at: string): void {
+    // Unconfirmed until the owner confirms it in the registry. The registry accepts Discord only; others keep the link alone.
+    try {
+      this.database.prepare(`INSERT OR IGNORE INTO person_platform_identities
+        (scope_key, person_id, platform, external_user_id, verification_status, revision, created_at, updated_at, confirmed_at, revoked_at)
+        VALUES (?, ?, ?, ?, 'candidate', 1, ?, ?, NULL, NULL)`).run(scopeKey, personId, platform, userId, at, at);
+    } catch { /* the registry table is absent, or the platform is not one it accepts */ }
+  }
+
+  linkPlatformPerson(scopeKey: string, link: PlatformPersonLink): void {
+    this.database.prepare(`
+      INSERT INTO person_platform_links (scope_key, platform, external_user_id, person_id, display_name, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_key, platform, external_user_id) DO UPDATE SET person_id = excluded.person_id,
+        display_name = excluded.display_name, last_seen_at = excluded.last_seen_at
+    `).run(scopeKey, link.platform, link.userId, link.personId, link.displayName.slice(0, 80), link.firstSeenAt, link.lastSeenAt);
+  }
+
+  platformReceipt(scopeKey: string, platform: string, requestId: string): PlatformTurnReceipt | null {
+    const row = this.database.prepare(`
+      SELECT platform, request_id, payload_hash, thread_key, day_key, item_id, outcome, created_at
+      FROM person_platform_turns WHERE scope_key = ? AND platform = ? AND request_id = ?
+    `).get(scopeKey, platform, requestId) as unknown as { platform: string; request_id: string; payload_hash: string; thread_key: string;
+      day_key: string; item_id: string; outcome: string; created_at: string } | undefined;
+    return row ? { platform: row.platform, requestId: row.request_id, payloadHash: row.payload_hash, threadKey: row.thread_key,
+      dayKey: row.day_key, itemId: row.item_id, outcome: row.outcome, createdAt: row.created_at } : null;
+  }
+
+  recordPlatformReceipt(scopeKey: string, receipt: PlatformTurnReceipt): void {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO person_platform_turns (scope_key, platform, request_id, payload_hash, thread_key, day_key, item_id, outcome, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, receipt.platform, receipt.requestId, receipt.payloadHash, receipt.threadKey, receipt.dayKey, receipt.itemId,
+      receipt.outcome, receipt.createdAt);
+  }
+
+  platformTurnCounts(scopeKey: string, dayKey: string, threadKey: string): { conversation: number; total: number } {
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN thread_key = ? THEN 1 ELSE 0 END), 0) AS conversation
+      FROM person_platform_turns WHERE scope_key = ? AND day_key = ? AND outcome = 'stored'
+    `).get(threadKey, scopeKey, dayKey) as unknown as { total: number; conversation: number };
+    return { conversation: Number(row.conversation), total: Number(row.total) };
   }
 
   saveCall(scopeKey: string, call: PersonCall): PersonCall {
     this.database.prepare(`
-      INSERT INTO person_calls (scope_key, call_id, thread_id, status, person_ids_json, created_person_ids_json, pending_name, started_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO person_calls (scope_key, call_id, thread_id, status, person_ids_json, created_person_ids_json, pending_name, started_at, updated_at, source, label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(scope_key, call_id) DO UPDATE SET thread_id = excluded.thread_id, status = excluded.status,
         person_ids_json = excluded.person_ids_json, created_person_ids_json = excluded.created_person_ids_json,
-        pending_name = excluded.pending_name, updated_at = excluded.updated_at
+        pending_name = excluded.pending_name, updated_at = excluded.updated_at, source = excluded.source, label = excluded.label
     `).run(scopeKey, call.callId, call.threadId ?? null, call.status, JSON.stringify(call.personIds),
-      JSON.stringify(call.createdPersonIds), call.pendingName ?? null, call.startedAt, call.updatedAt);
+      JSON.stringify(call.createdPersonIds), call.pendingName ?? null, call.startedAt, call.updatedAt, call.source ?? null, call.label ?? null);
     return this.call(scopeKey, call.callId)!;
   }
 
@@ -301,6 +460,20 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
       throw error;
     }
   }
+}
+
+function callOf(row: CallRow): PersonCall {
+  return Object.freeze({
+    callId: row.call_id, status: row.status, personIds: Object.freeze(strings(row.person_ids_json)),
+    createdPersonIds: Object.freeze(strings(row.created_person_ids_json)), startedAt: row.started_at, updatedAt: row.updated_at,
+    ...(row.thread_id ? { threadId: row.thread_id } : {}), ...(row.pending_name ? { pendingName: row.pending_name } : {}),
+    ...(row.source ? { source: row.source } : {}), ...(row.label ? { label: row.label } : {}),
+  });
+}
+
+function linkOf(row: LinkRow): PlatformPersonLink {
+  return Object.freeze({ platform: row.platform, userId: row.external_user_id, personId: row.person_id, displayName: row.display_name,
+    firstSeenAt: row.first_seen_at, lastSeenAt: row.last_seen_at });
 }
 
 function uniqueNames(values: readonly string[]): string[] {

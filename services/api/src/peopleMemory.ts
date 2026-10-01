@@ -186,12 +186,20 @@ export class PeopleMemory {
   visibleItems(scopeKey: string, snapshot: CompanionStateSnapshot): readonly VisiblePersonItem[] {
     const people = new Map(this.store.listPeople(scopeKey).map(person => [person.id, person]));
     const usable = (id: string) => { const person = people.get(id); return Boolean(person && !person.forgottenAt); };
+    const calls = new Map<string, PersonCall | null>();
+    const callOf = (id: string) => { if (!calls.has(id)) calls.set(id, this.store.call(scopeKey, id)); return calls.get(id) ?? null; };
     return this.store.items(scopeKey).flatMap(item => {
       const ids = [...audiencePeople(item), ...(item.personId ? [item.personId] : [])];
       if (!ids.every(usable) || visibleMemoryText(snapshot, personMemoryId(item.id), item.text) === null) return [];
       const nameOf = (id: string) => people.get(id)?.displayName;
-      return [{ ...item, recallId: personMemoryId(item.id), audienceLabel: describeAudience(item.disclosure.audience, nameOf),
-        people: audiencePeople(item).flatMap(id => people.get(id) ?? []) }];
+      const call = callOf(item.callId);
+      // A period's summary names everyone who spoke in it, so it goes when any of them is forgotten.
+      if (call?.source && !item.personId && !call.personIds.every(usable)) return [];
+      // A platform conversation is named by where it took place; its people are those who spoke in it that day.
+      const members = call?.source ? (item.personId ? [item.personId] : call.personIds.filter(usable)) : audiencePeople(item);
+      return [{ ...item, recallId: personMemoryId(item.id),
+        audienceLabel: placeLabel(call) ?? describeAudience(item.disclosure.audience, nameOf),
+        people: members.flatMap(id => people.get(id) ?? []) }];
     });
   }
 
@@ -271,12 +279,19 @@ export class PeopleMemory {
 
   allItems(scopeKey: string): readonly PersonMemoryItem[] { return this.store.items(scopeKey); }
 
+  call(scopeKey: string, callId: string): PersonCall | null { return this.store.call(scopeKey, callId); }
+
   private forgetControl(item: PersonMemoryItem, at: string): MemoryControl {
     return {
       memoryId: personMemoryId(item.id), kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at,
       changeReason: FORGET_REASON, sourceEvidence: item.evidence ?? item.text, withheldText: item.text, contextInvalidatedAt: at,
     };
   }
+}
+
+/** 「友人グループ（Discord）で話した時」 for a platform conversation; nothing for a voice call. */
+export function placeLabel(call: Pick<PersonCall, 'source' | 'label'> | null | undefined): string | undefined {
+  return call?.source ? `${call.label ?? call.source}で話した時` : undefined;
 }
 
 export function audiencePeople(item: Pick<PersonMemoryItem, 'disclosure'>): readonly string[] {

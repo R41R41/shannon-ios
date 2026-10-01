@@ -1,0 +1,9 @@
+{
+  "platform": "discord",
+  "requestId": "discord:1001",
+  "conversationId": "discord:111:222",
+  "sourceUserId": "900000000000000001",
+  "userMessage": "今日はここまでにするね",
+  "shannonReply": "お疲れさまでした、ライ氏。",
+  "observedAt": "2026-10-02T03:00:00.000Z"
+}

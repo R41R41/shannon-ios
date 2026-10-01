@@ -1,0 +1,21 @@
+[
+  {
+    "platform": "discord",
+    "conversationIdPrefix": "discord:111:",
+    "ownerUserId": "900000000000000001",
+    "title": "友人グループ"
+  },
+  {
+    "platform": "discord",
+    "conversationId": "dm:900000000000000002",
+    "ownerUserId": "900000000000000001",
+    "title": "ミキさんとのDM"
+  },
+  {
+    "platform": "discord",
+    "conversationId": "dm:owner",
+    "ownerUserId": "900000000000000001",
+    "title": "ライ氏とのDM",
+    "audience": "owner-private"
+  }
+]

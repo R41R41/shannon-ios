@@ -9,6 +9,10 @@ import {
   type MemoryAudience,
 } from '@shannon/cognition';
 import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
+import {
+  platformConversationLabel, platformPeopleEnabled,
+  type PlatformConversationKind, type PlatformPeople, type PlatformSourceKind,
+} from './platformPeople.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 
@@ -43,12 +47,21 @@ export interface PlatformTurnRequest {
   userMessage: string;
   shannonReply: string;
   observedAt: string;
+  /** Present only on a turn written by someone other than the owner. */
+  sourceDisplayName?: string;
+  conversationKind?: PlatformConversationKind;
+  sourceKind?: PlatformSourceKind;
 }
 
 export interface PlatformTurnResponse {
   duplicate: boolean;
   threadId: string;
+  /** The stored turn. Empty when the message was received and deliberately not stored. */
   experienceId: string;
+  /** Why a non-owner message was not stored: `bot`, `system`, `conversation_cap`, `daily_cap`, `forgotten_person`. */
+  ignored?: string;
+  /** The person a non-owner message was attributed to. */
+  personId?: string;
 }
 
 export interface PlatformContextResponse {
@@ -60,8 +73,9 @@ export interface PlatformContextResponse {
 
 export class PlatformBridgeError extends Error {
   constructor(
-    readonly code: 'BAD_REQUEST' | 'PLATFORM_CONVERSATION_DENIED' | 'PLATFORM_ACTOR_DENIED' | 'PLATFORM_TURN_CONFLICT',
-    readonly status: 400 | 403 | 409,
+    readonly code: 'BAD_REQUEST' | 'PLATFORM_CONVERSATION_DENIED' | 'PLATFORM_ACTOR_DENIED' | 'PLATFORM_TURN_CONFLICT'
+      | 'PLATFORM_PEOPLE_DISABLED' | 'RATE_LIMITED',
+    readonly status: 400 | 403 | 409 | 429,
     message: string,
   ) {
     super(message);
@@ -76,11 +90,17 @@ export class PlatformBridgeService {
     private readonly conversationStore: ConversationStore,
     private readonly background: TurnBackgroundService,
     private readonly now: CompanionClock,
+    /** People met on platforms. Without it, and while the kill switch is off, only the owner's turns are accepted. */
+    private readonly people: PlatformPeople | null = null,
+    private readonly peopleEnabled: () => boolean = () => platformPeopleEnabled(),
   ) {}
+
+  private readonly recentPeopleTurns: number[] = [];
 
   ingest(value: unknown): PlatformTurnResponse {
     const request = validatedPlatformTurn(value, this.now());
-    const binding = this.authorizedBinding(request);
+    const binding = this.boundConversation(request);
+    if (request.sourceUserId !== binding.ownerUserId) return this.ingestPersonTurn(request, binding);
 
     const threadId = platformBridgeThreadId(request.platform, request.conversationId);
     const capturedState = this.stateStore.snapshot(this.configuration.scopeKey);
@@ -133,17 +153,67 @@ export class PlatformBridgeService {
     };
   }
 
+  /**
+   * A message written by someone other than the owner. It is attributed to the person behind the platform
+   * account and kept as person memory with the conversation as its audience; nothing reaches the owner's
+   * threads, experience log, profile, promises or goals.
+   */
+  private ingestPersonTurn(request: PlatformTurnRequest, binding: PlatformBridgeBinding): PlatformTurnResponse {
+    const threadId = platformBridgeThreadId(request.platform, request.conversationId);
+    // Without the new fields this is the request shape that has always been refused.
+    if (!request.conversationKind || !request.sourceDisplayName || platformAudience(binding, request).kind === 'owner') throw actorDenied();
+    if (!this.people || !this.peopleEnabled()) {
+      throw new PlatformBridgeError('PLATFORM_PEOPLE_DISABLED', 403, 'Turns from people other than the owner are not being accepted.');
+    }
+    const now = Date.parse(this.now());
+    while (this.recentPeopleTurns.length && now - this.recentPeopleTurns[0]! >= 60_000) this.recentPeopleTurns.shift();
+    if (this.recentPeopleTurns.length >= PEOPLE_TURNS_PER_MINUTE) {
+      throw new PlatformBridgeError('RATE_LIMITED', 429, 'Too many turns from people other than the owner. Retry after a minute.');
+    }
+    this.recentPeopleTurns.push(now);
+    try {
+      const result = this.people.ingest(this.configuration.scopeKey, {
+        platform: request.platform, requestId: request.requestId, payloadHash: platformTurnPayloadHash(request), threadKey: threadId,
+        label: platformConversationLabel(request.platform, binding.title), conversationKind: request.conversationKind,
+        sourceUserId: request.sourceUserId, sourceDisplayName: request.sourceDisplayName, sourceKind: request.sourceKind ?? 'person',
+        message: request.userMessage, shannonReply: request.shannonReply, observedAt: request.observedAt,
+      });
+      return { duplicate: result.duplicate, threadId, experienceId: result.itemId,
+        ...(result.outcome === 'stored' ? {} : { ignored: result.outcome }), ...(result.personId ? { personId: result.personId } : {}) };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'PLATFORM_TURN_CONFLICT') {
+        throw new PlatformBridgeError('PLATFORM_TURN_CONFLICT', 409, 'The requestId was already used for different platform turn content.');
+      }
+      throw error;
+    }
+  }
+
   context(value: unknown): PlatformContextResponse {
     const request = validatedPlatformContext(value);
-    const binding = this.authorizedBinding(request);
-    const snapshot = this.stateStore.snapshot(this.configuration.scopeKey);
-    const present = platformAudience(binding, request);
-    const gate = new DisclosureGate(present, snapshot, this.conversationStore, this.configuration.scopeKey);
+    const binding = this.boundConversation(request);
+    const scopeKey = this.configuration.scopeKey;
+    const snapshot = this.stateStore.snapshot(scopeKey);
+    const ownerWrote = request.sourceUserId === binding.ownerUserId;
+    const friend = ownerWrote ? null : this.people && this.peopleEnabled() && request.conversationKind
+      ? this.people.person(scopeKey, request.platform, request.sourceUserId) : null;
+    if (!ownerWrote && (!request.conversationKind || !this.people || !this.peopleEnabled())) throw actorDenied();
+    const threadId = platformBridgeThreadId(request.platform, request.conversationId);
+    // A DM with a friend is that friend alone; any other conversation is one audience as a whole.
+    const present = ownerWrote ? platformAudience(binding, request) : this.people!.audience(request.conversationKind!, threadId, friend?.id);
+    // The owner's private conversation is never projected for anyone else.
+    if (!ownerWrote && platformAudience(binding, request).kind === 'owner') throw actorDenied();
+    const gate = new DisclosureGate(present, snapshot, this.conversationStore, scopeKey);
+    // In a friend's DM the owner is not there to release anything, so protected owner lines are left out entirely.
+    const ownerPresent = ownerWrote || request.conversationKind !== 'dm';
+    const userIds = [...new Set([...(ownerWrote ? [] : [request.sourceUserId]), ...(request.participants ?? [])])]
+      .filter(id => id !== binding.ownerUserId).slice(0, MAXIMUM_CONTEXT_PARTICIPANTS);
+    const peopleLines = this.people && this.peopleEnabled() && !gate.ownerOnly
+      ? this.people.contextLines(scopeKey, request.platform, userIds, present, ownerPresent) : [];
     // A conversation other people can read: items that must not reach a model are removed, protected ones are
     // marked, and the projection carries the check to make before saying them.
     const projection = gate.ownerOnly
       ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
-      : [SHARED_AUDIENCE_HEADER, sharedProfilePrompt(gate)].join('\n').slice(0, 2_400);
+      : [SHARED_AUDIENCE_HEADER, ...peopleLines, sharedProfilePrompt(gate, 16, !ownerPresent)].join('\n').slice(0, 2_400);
     return Object.freeze({
       schemaVersion: 1 as const,
       stateVersion: gate.ownerOnly ? snapshot.version : 0,
@@ -152,11 +222,7 @@ export class PlatformBridgeService {
     });
   }
 
-  private authorizedBinding(request: {
-    platform: ShannonPlatform;
-    conversationId: string;
-    sourceUserId: string;
-  }): PlatformBridgeBinding {
+  private boundConversation(request: { platform: ShannonPlatform; conversationId: string }): PlatformBridgeBinding {
     const binding = bindingFor(this.configuration, request.platform, request.conversationId);
     if (!binding) {
       throw new PlatformBridgeError(
@@ -165,15 +231,16 @@ export class PlatformBridgeService {
         'This platform conversation is not allowlisted.',
       );
     }
-    if (request.sourceUserId !== binding.ownerUserId) {
-      throw new PlatformBridgeError(
-        'PLATFORM_ACTOR_DENIED',
-        403,
-        'This external actor is not bound to the Shannon owner.',
-      );
-    }
     return binding;
   }
+}
+
+/** Non-owner turns accepted per minute over all conversations. */
+const PEOPLE_TURNS_PER_MINUTE = 120;
+const MAXIMUM_CONTEXT_PARTICIPANTS = 20;
+
+function actorDenied(): PlatformBridgeError {
+  return new PlatformBridgeError('PLATFORM_ACTOR_DENIED', 403, 'This external actor is not bound to the Shannon owner.');
 }
 
 export function configuredPlatformBridge(
@@ -249,6 +316,8 @@ function platformTurnPayloadHash(request: PlatformTurnRequest): string {
     request.userMessage,
     request.shannonReply,
     request.observedAt,
+    // Appended only for turns that carry them, so the hash of today's owner turns is unchanged.
+    ...(request.conversationKind ? [request.sourceDisplayName ?? '', request.conversationKind, request.sourceKind ?? 'person'] : []),
   ])).digest('hex');
 }
 
@@ -259,7 +328,10 @@ function validatedPlatformTurn(value: unknown, now: string): PlatformTurnRequest
   if (!boundedIdentifier(value.conversationId, 240)) throw badRequest('conversationId is invalid.');
   if (!boundedIdentifier(value.sourceUserId, 160)) throw badRequest('sourceUserId is invalid.');
   if (!boundedText(value.userMessage, 8_000)) throw badRequest('userMessage is invalid.');
-  if (!boundedText(value.shannonReply, 12_000)) throw badRequest('shannonReply is invalid.');
+  const people = validatedPeopleFields(value);
+  // A message Shannon saw without answering has no reply; the owner's mirrored turn always has one.
+  const silent = people.conversationKind !== undefined && (value.shannonReply === undefined || value.shannonReply === '');
+  if (!silent && !boundedText(value.shannonReply, 12_000)) throw badRequest('shannonReply is invalid.');
   if (typeof value.observedAt !== 'string' || !validObservedAt(value.observedAt, now)) {
     throw badRequest('observedAt is invalid or outside the 30-day ingestion window.');
   }
@@ -269,20 +341,42 @@ function validatedPlatformTurn(value: unknown, now: string): PlatformTurnRequest
     conversationId: value.conversationId.trim(),
     sourceUserId: value.sourceUserId.trim(),
     userMessage: value.userMessage.trim(),
-    shannonReply: value.shannonReply.trim(),
+    shannonReply: silent ? '' : (value.shannonReply as string).trim(),
     observedAt: new Date(value.observedAt).toISOString(),
+    ...people,
   };
 }
 
-function validatedPlatformContext(value: unknown): Pick<PlatformTurnRequest, 'platform' | 'conversationId' | 'sourceUserId'> {
+/** The optional fields that let a turn or a context request be about someone other than the owner. */
+function validatedPeopleFields(value: Record<string, unknown>): Pick<PlatformTurnRequest, 'sourceDisplayName' | 'conversationKind' | 'sourceKind'> {
+  // Text only: files, images and embeds are never accepted, whoever wrote the message.
+  for (const forbidden of ['attachments', 'embeds', 'files']) {
+    if (value[forbidden] !== undefined) throw badRequest(`${forbidden} must not be sent.`);
+  }
+  if (value.conversationKind !== undefined && !['dm', 'group', 'channel'].includes(String(value.conversationKind))) throw badRequest('conversationKind is invalid.');
+  if (value.sourceKind !== undefined && !['person', 'bot', 'system'].includes(String(value.sourceKind))) throw badRequest('sourceKind is invalid.');
+  if (value.sourceDisplayName !== undefined && !boundedText(value.sourceDisplayName, 80)) throw badRequest('sourceDisplayName is invalid.');
+  return {
+    ...(typeof value.sourceDisplayName === 'string' ? { sourceDisplayName: value.sourceDisplayName.trim() } : {}),
+    ...(value.conversationKind !== undefined ? { conversationKind: value.conversationKind as PlatformConversationKind } : {}),
+    ...(value.sourceKind !== undefined ? { sourceKind: value.sourceKind as PlatformSourceKind } : {}),
+  };
+}
+
+function validatedPlatformContext(value: unknown): Pick<PlatformTurnRequest, 'platform' | 'conversationId' | 'sourceUserId' | 'conversationKind'> & { participants?: readonly string[] } {
   if (!recordValue(value)) throw badRequest('JSON object body is required.');
   if (!isPlatform(value.platform)) throw badRequest('platform is invalid.');
   if (!boundedIdentifier(value.conversationId, 240)) throw badRequest('conversationId is invalid.');
   if (!boundedIdentifier(value.sourceUserId, 160)) throw badRequest('sourceUserId is invalid.');
+  const { conversationKind } = validatedPeopleFields(value);
+  if (value.participants !== undefined && (!Array.isArray(value.participants) || value.participants.length > 50
+    || !value.participants.every(id => boundedIdentifier(id, 160)))) throw badRequest('participants is invalid.');
   return {
     platform: value.platform,
     conversationId: value.conversationId.trim(),
     sourceUserId: value.sourceUserId.trim(),
+    ...(conversationKind ? { conversationKind } : {}),
+    ...(Array.isArray(value.participants) ? { participants: (value.participants as string[]).map(id => id.trim()) } : {}),
   };
 }
 
