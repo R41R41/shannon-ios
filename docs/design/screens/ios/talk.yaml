@@ -111,6 +111,8 @@ accessibility:
   reduce_motion: "入力欄とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形を保つ。小さな音量表示も静止させる。返信待ちの行バーの光は止め、文言と経過秒で待機中を伝える。コードの展開、話題候補の出現、説明シートの項目表示は移動なしの短い切替にする"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-turn-captures-light-v1.png"
+    - "docs/screenshots/shannon-ios-turn-captures-dark-v1.png"
     - "docs/screenshots/shannon-ios-place-map-card-light-v1.png"
     - "docs/screenshots/shannon-ios-place-map-card-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-call-pill-light-v1.png"
