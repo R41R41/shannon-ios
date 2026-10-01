@@ -1,6 +1,7 @@
 import type { CompanionStateEvent, CompanionStateSnapshot, ShannonMessageEmotion } from '@shannon/cognition';
 import type { ShannonChatAttachment, ShannonChatMode, ShannonGeneratedArtifact } from './chatModel.js';
 import type { OrganizeSession } from './organize.js';
+import type { ShannonPlace } from './placeDiscovery.js';
 
 export interface ApiRequest {
   method: 'GET' | 'POST';
@@ -20,6 +21,7 @@ export interface ChatRequest {
   threadId?: string;
   attachments?: ShannonChatAttachment[];
   webSearch?: boolean;
+  placeLocation?: { latitude: number; longitude: number; accuracyMeters: number; observedAt: string };
 }
 
 export interface ChatThread {
@@ -59,6 +61,9 @@ export interface ChatResponse {
   } | {
     type: 'organize_session';
     session: OrganizeSession;
+  } | {
+    type: 'place_search';
+    places: ShannonPlace[];
   }>;
 }
 

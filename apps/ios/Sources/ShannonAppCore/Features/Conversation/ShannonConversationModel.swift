@@ -303,6 +303,17 @@ public final class ShannonConversationModel {
         model.didAttemptInitialLoad = true
         model.didAttemptThreadsLoad = true
         model.isDesignPreview = true
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewPlaces") {
+            model.messages = [
+                ConversationMessage(role: .user, text: "浜松の公園を地図で探して"),
+                ConversationMessage(role: .shannon, text: "散歩しやすい公園を見つけたよ。", places: [
+                    ShannonPlaceDTO(name: "浜松城公園", address: "静岡県浜松市中央区元城町100-2",
+                                    reason: "街なかで散歩しやすい", mapQuery: "浜松城公園 静岡県浜松市",
+                                    mapUrl: "https://maps.apple.com/?q=%E6%B5%9C%E6%9D%BE%E5%9F%8E%E5%85%AC%E5%9C%92"),
+                ]),
+            ]
+            model.agentTasks = []
+        }
         return model
     }
 #endif

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { wantsPlaceDiscovery } from './placeDiscovery.js';
 import {
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
@@ -341,7 +342,14 @@ async function completeLiveVoiceDelegation(
     systemPrompt,
     history: boundedVoiceHistory(fullHistory, historyLimit),
     message: transcript,
-    useWebSearch: selectedSkills.has('current_web'),
+    useWebSearch: selectedSkills.has('current_web') || wantsPlaceDiscovery(transcript),
+    ...(wantsPlaceDiscovery(transcript) ? { placeSearch: {
+      ...(deviceContext?.location ? {
+        latitude: deviceContext.location.latitude,
+        longitude: deviceContext.location.longitude,
+      } : {}),
+      spoken: true,
+    } } : {}),
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,
   };
   const modelStartedAt = performance.now();
@@ -353,7 +361,7 @@ async function completeLiveVoiceDelegation(
     && (orchestrationState.pendingAction.status === 'pending'
       || (orchestrationState.pendingAction.status === 'proposed'
         && /^(?:あと|それと|それも|ついでに|追加で|もう一つ|違う|ちがう|訂正|そうじゃなく|そうではなく)/u.test(transcript)));
-  const completion = provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
+  const completion = wantsPlaceDiscovery(transcript) || provisionalIntent || requiresStructuredTaskDecision || confirmedImplementationRequest
     ? await dependencies.chatModel.generate({ ...modelRequest, generateThreadTitle: false })
     : observer && dependencies.chatModel.generateVoiceStreaming
       ? await dependencies.chatModel.generateVoiceStreaming(
@@ -414,13 +422,16 @@ async function completeLiveVoiceDelegation(
     }, provisionalIntent ? completion.intentPlan : undefined);
   }
   let uiBlocks: Array<Record<string, unknown>> | undefined;
+  if (completion.places?.length) {
+    uiBlocks = [{ type: 'place_search', places: completion.places }];
+  }
   if (!temporaryGuest && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
         orchestrationState, taskProposal.goal, occurredAt,
       ));
     }
-    uiBlocks = [{
+    uiBlocks = [...(uiBlocks ?? []), {
       type: 'agent_task_proposal',
       proposalId: orchestrationState?.resumeToken ?? randomUUID(),
       ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),

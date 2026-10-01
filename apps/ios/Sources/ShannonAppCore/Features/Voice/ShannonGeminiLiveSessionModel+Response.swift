@@ -74,7 +74,9 @@ extension ShannonGeminiLiveSessionModel {
                 if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
                     let task = Task { @MainActor in
                         do {
-                            try await commitTurn(batch.rawText, response.reply)
+                            let places = response.uiBlocks?.flatMap { $0.places ?? [] } ?? []
+                            try await commitTurn(batch.rawText,
+                                ShannonPlaceLinks.appending(places, to: response.reply))
                             return true
                         } catch {
                             ShannonVoiceDiagnostics.shared.record("gemini.response.history.failed",

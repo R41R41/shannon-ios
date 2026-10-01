@@ -192,6 +192,10 @@ struct ShannonMessageRow: View {
                 .tint(palette.action)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            if !message.places.isEmpty {
+                ShannonPlaceMapCard(places: message.places)
+            }
+
             ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in
                 ShannonGeneratedArtifactCard(artifact: artifact, palette: palette)
             }

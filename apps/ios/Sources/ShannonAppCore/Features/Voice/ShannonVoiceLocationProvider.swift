@@ -13,6 +13,13 @@ enum ShannonVoiceLocationIntent {
     }
 }
 
+enum ShannonPlaceIntent {
+    static func wantsNearbyPlaces(_ text: String) -> Bool {
+        ["近く", "この辺", "周辺", "最寄り", "ここから", "現在地", "今いる場所", "near me", "nearby"]
+            .contains { text.localizedCaseInsensitiveContains($0) }
+    }
+}
+
 #if os(iOS)
 import CoreLocation
 

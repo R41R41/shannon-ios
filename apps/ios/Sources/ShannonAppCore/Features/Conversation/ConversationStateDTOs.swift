@@ -79,19 +79,22 @@ public struct ChatRequestDTO: Codable, Equatable, Sendable {
     public let threadId: String?
     public let attachments: [ShannonChatAttachmentDTO]?
     public let webSearch: Bool?
+    public let placeLocation: ShannonVoiceDeviceLocationDTO?
 
     public init(
         scopeKey: String,
         message: String,
         threadId: String? = nil,
         attachments: [ShannonChatAttachmentDTO] = [],
-        webSearch: Bool = false
+        webSearch: Bool = false,
+        placeLocation: ShannonVoiceDeviceLocationDTO? = nil
     ) {
         self.scopeKey = scopeKey
         self.message = message
         self.threadId = threadId
         self.attachments = attachments.isEmpty ? nil : attachments
         self.webSearch = webSearch ? true : nil
+        self.placeLocation = placeLocation
     }
 }
 
@@ -159,6 +162,7 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
     public let projectHint: String?
     public let risk: String?
     public let session: ShannonOrganizeSessionDTO?
+    public let places: [ShannonPlaceDTO]?
 
     public init(
         type: String = "agent_task_proposal",
@@ -169,7 +173,8 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
         hostHint: String? = nil,
         projectHint: String? = nil,
         risk: String? = nil,
-        session: ShannonOrganizeSessionDTO? = nil
+        session: ShannonOrganizeSessionDTO? = nil,
+        places: [ShannonPlaceDTO]? = nil
     ) {
         self.type = type
         self.proposalId = proposalId
@@ -180,5 +185,24 @@ public struct ShannonUIBlockDTO: Codable, Equatable, Sendable {
         self.projectHint = projectHint
         self.risk = risk
         self.session = session
+        self.places = places
+    }
+}
+
+public struct ShannonPlaceDTO: Codable, Equatable, Identifiable, Sendable {
+    public let name: String
+    public let address: String
+    public let reason: String
+    public let mapQuery: String
+    public let mapUrl: String
+
+    public var id: String { mapUrl }
+
+    public init(name: String, address: String, reason: String, mapQuery: String, mapUrl: String) {
+        self.name = name
+        self.address = address
+        self.reason = reason
+        self.mapQuery = mapQuery
+        self.mapUrl = mapUrl
     }
 }

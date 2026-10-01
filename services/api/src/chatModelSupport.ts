@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizedThreadTitle } from './threadTitle.js';
+import { validatedPlaces, type ShannonPlace } from './placeDiscovery.js';
 import type {
   ShannonChatAttachment,
   ShannonGeneratedArtifact,
@@ -63,6 +64,7 @@ export function parseStructuredTurn(raw: string): {
   taskProposal: ShannonTaskProposal | null;
   intentPlan: ShannonIntentPlan | null;
   artifacts: ShannonGeneratedArtifact[];
+  places: ShannonPlace[];
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -82,13 +84,14 @@ export function parseStructuredTurn(raw: string): {
     reason: rawDecision.reason.trim(),
   };
   const artifacts = validatedGeneratedArtifacts(object.artifacts);
+  const places = validatedPlaces(object.places);
   const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
   if (object.taskProposal === null) {
     if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
     return {
-      reply: object.reply.trim(), taskDecision, taskProposal: null, intentPlan, artifacts,
+      reply: object.reply.trim(), taskDecision, taskProposal: null, intentPlan, artifacts, places,
       ...(threadTitle ? { threadTitle } : {}),
       ...(threadSummary ? { threadSummary } : {}),
     };
@@ -109,6 +112,7 @@ export function parseStructuredTurn(raw: string): {
     taskDecision,
     intentPlan,
     artifacts,
+    places,
     taskProposal: {
       title: proposal.title.trim(),
       goal: proposal.goal.trim(),

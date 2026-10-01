@@ -59,6 +59,7 @@ import {
   type HostAgentEvent,
 } from './agentTaskStore.js';
 import { randomUUID } from 'node:crypto';
+import { placeReply, validatedPlaceSearchOptions } from './placeDiscovery.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { conversationCapabilityPrompt } from './conversationCapabilities.js';
@@ -128,7 +129,6 @@ export interface ShannonApiKernelOptions {
   conversationOrchestration?: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall;
 }
-
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
   private readonly voiceDecision: VoiceDecisionGateway;
@@ -153,7 +153,6 @@ export class ShannonApiKernel {
   private readonly cognitiveIntents: CognitiveIntentStore;
   private readonly conversationOrchestration: ConversationOrchestrationStore;
   private readonly memoryRecall: TurnMemoryRecall | null;
-
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -337,6 +336,8 @@ export class ShannonApiKernel {
         return badRequest('webSearch must be a boolean');
       }
       const message = body.message.trim();
+      const placeOptions = validatedPlaceSearchOptions(message, body.placeLocation, this.now());
+      if (placeOptions === false) return badRequest('placeLocation is invalid');
       const threadId = this.conversationStore.threadId(body.scopeKey, body.threadId?.trim());
       const occurredAt = this.now();
       let orchestrationState = observeConversationTurn({
@@ -416,10 +417,11 @@ export class ShannonApiKernel {
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}),
-        ...(body.webSearch === true ? { useWebSearch: true } : {}),
+        ...(body.webSearch === true || placeOptions.placeSearch ? { useWebSearch: true } : {}),
+        ...placeOptions,
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
-      const reply = appendWebSources(completion.reply, completion.webSources ?? []);
+      const reply = appendWebSources(placeReply(completion.reply, completion.places ?? []), completion.webSources ?? []);
       const suppressAgentTaskProposal = isExplicitVoyagerUpdateRequest(message);
       const messageEmotion = createShannonMessageEmotion(
         projectEmotionReaction(captured, message),
@@ -437,6 +439,7 @@ export class ShannonApiKernel {
         state: captured,
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
+      if (completion.places?.length) response.uiBlocks = [{ type: 'place_search', places: completion.places }];
       const completedTurn = {
         scopeKey: body.scopeKey,
         threadId,
@@ -460,7 +463,7 @@ export class ShannonApiKernel {
             orchestrationState, completion.taskProposal.goal, occurredAt,
           ));
         }
-        response.uiBlocks = [{
+        response.uiBlocks = [...(response.uiBlocks ?? []), {
           type: 'agent_task_proposal',
           proposalId: orchestrationState?.resumeToken ?? randomUUID(),
           ...(completedIntent ? { cognitiveIntentID: completedIntent.id } : {}),

@@ -3,6 +3,26 @@ import { OpenAIResponsesChatModel, createConfiguredChatModel } from '../src/chat
 import type { LlmUsageEvent, LlmUsageStore } from '../src/llmUsage.js';
 
 describe('OpenAI Responses chat adapter', () => {
+  it('requests verified places through web search and parses bounded map candidates', async () => {
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.tools).toEqual([{ type: 'web_search', search_context_size: 'medium' }]);
+      expect(body.tool_choice).toEqual({ type: 'web_search' });
+      expect(body.text.format.schema.required).toContain('places');
+      expect(body.instructions).toContain('ユーザーが今回だけ許可した現在地');
+      return new Response(JSON.stringify({ output_text: JSON.stringify({
+        reply: '公園を見つけたよ。', places: [{ name: '浜松城公園', address: '浜松市',
+          reason: '散歩向き', mapQuery: '浜松城公園 浜松市' }],
+        taskDecision: { disposition: 'none', reason: '場所探し' }, taskProposal: null,
+      }) }));
+    });
+    const model = new OpenAIResponsesChatModel({ apiKey: 'test-only', fetcher: fetcher as typeof fetch });
+    const result = await model.generate({ scopeKey: 'owner', systemPrompt: 'system', history: [],
+      message: '近くの公園を探して', placeSearch: { latitude: 34.7, longitude: 137.7 } });
+    expect(result.places).toMatchObject([{ name: '浜松城公園',
+      mapUrl: expect.stringMatching(/^https:\/\/maps\.apple\.com\//) }]);
+  });
+
   it('uses a compact unstructured response path for ordinary voice turns', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));

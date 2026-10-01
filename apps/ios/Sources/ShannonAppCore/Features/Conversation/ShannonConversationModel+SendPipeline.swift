@@ -36,7 +36,8 @@ extension ShannonConversationModel {
                 scopeKey: scopeKey,
                 threadId: selectedThreadId,
                 attachments: referenceAttachments,
-                webSearch: webSearch
+                webSearch: webSearch,
+                placeLocation: await requestedPlaceLocation(for: text)
             )
             updateDeliveryState(for: userMessageID, to: .sent)
             pendingAttachmentsByMessageID.removeValue(forKey: userMessageID)
@@ -57,7 +58,8 @@ extension ShannonConversationModel {
                     expression: emotion.expression,
                     stateVersion: response.snapshotVersion
                 ),
-                artifacts: response.artifacts ?? []
+                artifacts: response.artifacts ?? [],
+                places: response.uiBlocks?.flatMap { $0.places ?? [] } ?? []
             )
             messages.append(replyMessage)
             installAgentTaskProposals(
@@ -99,6 +101,15 @@ extension ShannonConversationModel {
         }
         isSending = false
         return nil
+    }
+
+    private func requestedPlaceLocation(for text: String) async -> ShannonVoiceDeviceLocationDTO? {
+#if os(iOS)
+        guard ShannonPlaceIntent.wantsNearbyPlaces(text) else { return nil }
+        return await ShannonVoiceLocationProvider.shared.currentLocation()
+#else
+        return nil
+#endif
     }
 
     static func messageText(

@@ -42,6 +42,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
     public let emotionSnapshot: EmotionSnapshot?
     public let artifacts: [ShannonGeneratedArtifactDTO]
     public let sourceAttribution: ShannonSourceAttributionDTO?
+    public let places: [ShannonPlaceDTO]
 
     public init(
         id: UUID = UUID(),
@@ -51,7 +52,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         deliveryState: DeliveryState = .sent,
         emotionSnapshot: EmotionSnapshot? = nil,
         artifacts: [ShannonGeneratedArtifactDTO] = [],
-        sourceAttribution: ShannonSourceAttributionDTO? = nil
+        sourceAttribution: ShannonSourceAttributionDTO? = nil,
+        places: [ShannonPlaceDTO] = []
     ) {
         self.id = id
         self.role = role
@@ -61,6 +63,7 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
         self.emotionSnapshot = emotionSnapshot
         self.artifacts = artifacts
         self.sourceAttribution = sourceAttribution
+        self.places = places.isEmpty ? ShannonPlaceLinks.places(in: text) : places
     }
 
     public func withDeliveryState(_ deliveryState: DeliveryState) -> ConversationMessage {
@@ -72,7 +75,8 @@ public struct ConversationMessage: Equatable, Identifiable, Sendable {
             deliveryState: deliveryState,
             emotionSnapshot: emotionSnapshot,
             artifacts: artifacts,
-            sourceAttribution: sourceAttribution
+            sourceAttribution: sourceAttribution,
+            places: places
         )
     }
 }

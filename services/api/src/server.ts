@@ -56,8 +56,9 @@ const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
 const conversationOrchestrationStore = new SQLiteConversationOrchestrationStore(configuredDatabasePath());
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
+const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
-  chatModel: createConfiguredChatModel(process.env, persistentStore),
+  chatModel,
   voiceDecision: createConfiguredVoiceDecisionGateway(process.env, persistentStore),
   stateStore: persistentStore,
   conversationStore: persistentStore,
@@ -88,7 +89,7 @@ const kernel = createLocalApiKernel(now, {
   conversationOrchestration: conversationOrchestrationStore,
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
 });
-const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now);
+const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel);
 const port = parsePort(process.env.SHANNON_API_PORT);
 const host = parseHost(process.env.SHANNON_API_HOST);
 const authMode = configuredAuthMode(host);

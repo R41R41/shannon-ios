@@ -2,8 +2,8 @@ schema_version: 1
 screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
-last_verified_at: 2026-09-30
-verification_scope: "2026-09-30〜10-01（Swift Pieces取り込み）: iOS 27.0 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで、返信コード（Dark、Light）、返信待ち（Light、Reduce Motionで光が静止）、空の会話の話題候補（Light、Accessibility Extra LargeのDark）、マイク説明シート（Light、Accessibility Extra Large）、拒否済み（Dark）、カメラ説明シート（Light）を表示確認。大きい文字の返信コードと返信待ちはスクロール位置の都合で画面外となり未確認。コピー・展開・チップ選択・説明シートの続けるの実タップ、VoiceOver実読み上げ、実機のシステム許可ダイアログは未確認。以前の記録: 既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
+last_verified_at: 2026-10-01
+verification_scope: "2026-10-01: iOS 26.5 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで場所カードのMapKit描画とリンク表示をLight/Darkで確認。地図シートの実タップ、VoiceOver実読み上げ、実機位置取得、実API検索は未確認。2026-09-30〜10-01（Swift Pieces取り込み）: iOS 27.0 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで、返信コード（Dark、Light）、返信待ち（Light、Reduce Motionで光が静止）、空の会話の話題候補（Light、Accessibility Extra LargeのDark）、マイク説明シート（Light、Accessibility Extra Large）、拒否済み（Dark）、カメラ説明シート（Light）を表示確認。大きい文字の返信コードと返信待ちはスクロール位置の都合で画面外となり未確認。コピー・展開・チップ選択・説明シートの続けるの実タップ、VoiceOver実読み上げ、実機のシステム許可ダイアログは未確認。以前の記録: 既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -43,6 +43,8 @@ improve:
   - "ユーザーが話し始めたら再生を弱め、発話確定後に生成と再生を破棄する。未回答の入力は保持し、次の発話と時系列で合わせて回答する。誤検知では音量を戻す"
   - "対話表示はShannon返答をMarkdownとして読みやすい行幅で表示し、長い会話は44ポイント以上の『会話全体を読む』操作から履歴へ戻れる"
   - "Gemini音声中のテキスト送信は接続失敗や再接続をまたいでも元の入力文を保持し、同じ文を選択・再試行できる"
+  - "場所探しの返答は候補名・住所・Apple Mapsリンクに加え、同じ会話内で操作できるMapKitカードを示す。音声はリンクを読み上げず、履歴に残す"
+  - "『近く』の場所探しだけ端末の既存位置許可を使って今回の位置を取得し、失敗時は現在地を推測せず地域を尋ねる"
   - "音声画面の『小さく』と『終了』を区別し、他のトーク・作業・頭の中・設定を開いても通話を継続する"
   - "小さくした通話はナビゲーションの上の小さなピル（状態・通話時間・赤い終了ボタン）で示す。ピルをタップするとその場で広がり、参加者と継続の説明、詳細を開く・ミュート・作業への移動を出す。終了ボタンは常に見えるが、確認してから終了する。大きい文字では常に広げた形で表示する"
   - "本人音声の実装案から内容・実行環境の確認と明示的な開始へ進める。提案と実行中を混同せず、ゲストには表示しない"
@@ -76,6 +78,7 @@ states:
   camera_error: "画像と音声セッションを保ったまま、安全な再試行メッセージを示す"
   voice_guest: "ゲストモードを常時表示し、切替時は再接続を説明する。字幕は参加者と表示し、カメラ共有を提供しない"
   voice_text: "送信中、送信失敗、再試行を音声接続と分離し、失敗時も入力文を失わない"
+  place_search: "候補の検索中は地図を準備中と示す。MapKitで位置を確認できない候補はピンを出さず、Apple Mapsリンクから確認できる。候補ゼロでは空の地図を出さない"
   dialogue_history: "返答を読み終えた位置から、明示操作で会話履歴全体へ戻れる"
   voice_input_route: "選択希望と実際の入力経路を区別して示し、切断された外部マイクは選択不可にする。保存した選択のマイクが未接続なら通話を失敗させず自動の経路で始め、『使用中: 〈実際のマイク〉（〈選択〉が未接続）』と示す。選択は保持し、再接続時に戻す"
   voice_input_level: "実マイク入力に小さな5本のバーで反応し、処理・発話時は静止する。状態文言とWaterlight Eyeを置き換えない"
@@ -89,12 +92,14 @@ states:
   voice_implementation_review: "音声の実装案から既存の確認・設定・開始画面へ進む。画面を開いただけではAgent Hostに送らない"
 accessibility:
   dynamic_type: "複数行入力、添付名、生成物名は必要に応じて伸長または安全に省略する。アクセシビリティ文字サイズでは対話の補助ラベルと作業通知の副文を省き、回答・Waterlight Eye・入力操作を優先する"
-  voiceover: "返信内コードは『〈言語〉のコード、N行』として含まれるコピー・展開操作へ個別に到達できる。返信待ちは『シャノンが考えています』と経過秒を値で伝える。話題候補は入力欄に入れるだけで送信しないことをヒントで伝える。入力、添付、Web検索、音声会話開始、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、ライブラリ選択、選び直し、写真共有、チャットアイコン選択の役割を個別に読み上げる"
+  voiceover: "返信内コードは『〈言語〉のコード、N行』として含まれるコピー・展開操作へ個別に到達できる。場所カードは候補名・住所、地図を開く操作を個別に読み上げる。返信待ちは『シャノンが考えています』と経過秒を値で伝える。話題候補は入力欄に入れるだけで送信しないことをヒントで伝える。入力、添付、Web検索、音声会話開始、送信、生成物保存、参加者モード、入力マイク、使用中の入力名、写真撮影、ライブラリ選択、選び直し、写真共有、チャットアイコン選択の役割を個別に読み上げる"
   target_size: "主要操作のヒット領域を44ポイント以上にする"
   focus: "入力中にTextFieldを破棄せず、会話外の明示操作ではキーボードを閉じて最初のタップをその操作へ渡す"
   reduce_motion: "入力欄とWaterlight EyeはReduce Motion時に空間移動・軌道・反復運動を行わず、状態固有の目の形を保つ。小さな音量表示も静止させる。返信待ちの行バーの光は止め、文言と経過秒で待機中を伝える。コードの展開、話題候補の出現、説明シートの項目表示は移動なしの短い切替にする"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-place-map-card-light-v1.png"
+    - "docs/screenshots/shannon-ios-place-map-card-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-call-pill-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-call-pill-dark-v1.png"
     - "docs/screenshots/shannon-ios-task-notice-approve-light-v1.png"

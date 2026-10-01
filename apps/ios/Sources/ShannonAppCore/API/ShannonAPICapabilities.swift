@@ -15,6 +15,14 @@ public protocol ShannonChatServing: Sendable {
         attachments: [ShannonChatAttachmentDTO],
         webSearch: Bool
     ) async throws -> ChatResponseDTO
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool,
+        placeLocation: ShannonVoiceDeviceLocationDTO?
+    ) async throws -> ChatResponseDTO
 }
 
 public protocol ShannonVoiceServing: Sendable {
@@ -291,6 +299,19 @@ public extension ShannonAPIClientProtocol {
             threadId: threadId,
             attachments: attachments
         )
+    }
+
+    func send(
+        message: String,
+        scopeKey: String,
+        threadId: String?,
+        attachments: [ShannonChatAttachmentDTO],
+        webSearch: Bool,
+        placeLocation: ShannonVoiceDeviceLocationDTO?
+    ) async throws -> ChatResponseDTO {
+        guard placeLocation == nil else { throw ShannonAPIError.invalidResponse }
+        return try await send(message: message, scopeKey: scopeKey, threadId: threadId,
+                              attachments: attachments, webSearch: webSearch)
     }
 
     func loadConversation(scopeKey: String, threadId: String? = nil) async throws -> ConversationHistoryResponseDTO {

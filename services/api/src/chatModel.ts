@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizedThreadTitle } from './threadTitle.js';
+import { placeSearchInstructions, placeSearchSchema, type PlaceSearchContext, type ShannonPlace } from './placeDiscovery.js';
 import {
   estimatedOpenAICostUsd,
   responseUsage,
@@ -50,6 +51,7 @@ export interface ShannonChatModelRequest {
   message: string;
   attachments?: readonly ShannonChatAttachment[];
   useWebSearch?: boolean;
+  placeSearch?: PlaceSearchContext;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -80,6 +82,7 @@ export interface ShannonChatModelResult {
   model: string;
   reply: string;
   webSources?: ShannonWebSource[];
+  places?: ShannonPlace[];
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;
@@ -170,7 +173,8 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         model: this.model,
         instructions: [request.systemPrompt, SHANNON_PERSONA_INSTRUCTIONS, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
           ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
-          ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+          ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
+          ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
           GENERATED_ARTIFACT_INSTRUCTIONS,
           INTENT_PLAN_INSTRUCTIONS,
           agentTaskInstructions(this.options.agentHostHint),
@@ -275,13 +279,14 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
                     },
                   ],
                 },
+                ...(request.placeSearch ? { places: placeSearchSchema } : {}),
               },
-              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
             },
           },
         },
         max_output_tokens: 2_200,
-        ...(request.useWebSearch ? {
+        ...(request.useWebSearch || request.placeSearch ? {
           tools: [{ type: 'web_search', search_context_size: 'medium' }],
           tool_choice: { type: 'web_search' },
           include: ['web_search_call.action.sources'],
@@ -309,13 +314,14 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
-    const webSources = request.useWebSearch ? extractWebSources(json) : [];
+    const webSources = request.useWebSearch || request.placeSearch ? extractWebSources(json) : [];
     return {
       mode: this.mode,
       model: this.model,
       reply: structured.reply,
       ...(structured.threadSummary ? { threadSummary: structured.threadSummary } : {}),
       ...(webSources.length ? { webSources } : {}),
+      ...(structured.places.length ? { places: structured.places } : {}),
       ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
       ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
       taskDecision: structured.taskDecision,
