@@ -5,7 +5,7 @@ baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
 last_verified_at: 2026-10-01
 user_job: "複数の作業を把握し、対象プロジェクト・実行先・モデルを選んで安全にCodexへ依頼する"
 primary_action: "開始前の作業環境を確認し、この設定で作業を始める"
-verification_scope: "2026-10-01（止まった作業と終了した作業）: 状態語の統一、続きが必要の先頭カードと再開ボタン、終了作業の『次にできること』、変更／検証／未解決の報告、許可しないの意味と確認、確認済みの扱いをSwift単体テスト（ShannonAgentTaskAttentionTests）とiOS／Macビルドで確認。新しいカードと確認ダイアログの実表示・実タップ・Dark・VoiceOver・大きい文字・Reduce Motion、実ホストでの『許可しない』後の継続は未確認。下の証跡画像は変更前の文言（判断待ち、判断が必要）を写している。2026-10-01（判断を最上部に）: 個別作業画面の並び替え、サブタイトル、完了工程の畳み込み、指示欄の見た目変更をSwift単体テスト（サブタイトル文言・完了工程の行構成）、iOS／Macのビルド、iOS 27.0 Simulator（iPhone 17、Light）の合成承認と合成計画（完了5・実行中1・未着手2）の表示で確認。標準サブタイトル、承認カードが先頭に来ること、完了工程が一行に畳まれること、指示欄の見た目を目視した。実タップでの開閉、Dark、VoiceOver、大きい文字、Reduce Motionは未確認。下の証跡画像は変更前の並びを写しており、新しい画像は保存していない。2026-10-01: 承認カードの長押し確認をiOS 27.0 Simulatorの合成承認で確認。外部接続の承認（Light）とコマンド承認（Dark）の表示、『この作業中』の実タップで確認ダイアログが開くこと、1.2秒の実長押しでダイアログなしに決定処理が呼ばれること（プレビューは通信先がないため送信失敗の表示になる）を確認。作業提案カードのボタンが標準・特大文字とも1行で縦積みになることを確認。Reduce Motion中の長押し表示とVoiceOver操作は未確認。2026-09-30〜10-01: 個別作業の計画タイムラインをiOS 27.0 Simulatorの合成タスクでLight／Darkの表示確認（完了5・実行中1・未着手2）。実行中工程の詳細展開部と大きい文字での計画は画面外で未確認。展開・折りたたみの実タップとVoiceOver実読み上げは未確認。以前の記録: 既存の表示証跡はbaselineのもの。2026-09-29の音声通話からの作業確認・開始導線と小型通話バーは新規変更で、実表示・実タップ確認は未完了。提案・明示開始・重複配送と状態保持はSwift回帰で別途確認する"
+verification_scope: "2026-10-01（止まった作業と終了した作業）: 状態語の統一、続きが必要の先頭カードと再開ボタン、終了作業の『次にできること』、変更／検証／未解決の報告、許可しないの意味と確認、確認済みの扱いをSwift単体テスト（ShannonAgentTaskAttentionTests）とiOS／Macビルドで確認。iOS 27.0 Simulator（iPhone 17e、Light）の合成タスクで、続きが必要の作業画面（次にあなたがすること・作業を再開・変更／検証／未解決）と失敗した作業画面（次にできること・報告）の表示を目視。確認ダイアログ、実タップ、Dark、VoiceOver、大きい文字、Reduce Motion、実ホストでの『許可しない』後の継続は未確認。下の証跡画像は変更前の文言（判断待ち、判断が必要）を写している。2026-10-01（判断を最上部に）: 個別作業画面の並び替え、サブタイトル、完了工程の畳み込み、指示欄の見た目変更をSwift単体テスト（サブタイトル文言・完了工程の行構成）、iOS／Macのビルド、iOS 27.0 Simulator（iPhone 17、Light）の合成承認と合成計画（完了5・実行中1・未着手2）の表示で確認。標準サブタイトル、承認カードが先頭に来ること、完了工程が一行に畳まれること、指示欄の見た目を目視した。実タップでの開閉、Dark、VoiceOver、大きい文字、Reduce Motionは未確認。下の証跡画像は変更前の並びを写しており、新しい画像は保存していない。2026-10-01: 承認カードの長押し確認をiOS 27.0 Simulatorの合成承認で確認。外部接続の承認（Light）とコマンド承認（Dark）の表示、『この作業中』の実タップで確認ダイアログが開くこと、1.2秒の実長押しでダイアログなしに決定処理が呼ばれること（プレビューは通信先がないため送信失敗の表示になる）を確認。作業提案カードのボタンが標準・特大文字とも1行で縦積みになることを確認。Reduce Motion中の長押し表示とVoiceOver操作は未確認。2026-09-30〜10-01: 個別作業の計画タイムラインをiOS 27.0 Simulatorの合成タスクでLight／Darkの表示確認（完了5・実行中1・未着手2）。実行中工程の詳細展開部と大きい文字での計画は画面外で未確認。展開・折りたたみの実タップとVoiceOver実読み上げは未確認。以前の記録: 既存の表示証跡はbaselineのもの。2026-09-29の音声通話からの作業確認・開始導線と小型通話バーは新規変更で、実表示・実タップ確認は未完了。提案・明示開始・重複配送と状態保持はSwift回帰で別途確認する"
 vocabulary:
   rule: "1つの状態に1つの語。iPhone、Mac、通知、プッシュ、会話プロンプトの作業投影で同じ語を使う。実装は ShannonAgentTaskStatus.japaneseName と ShannonAgentTask.stateName、サーバーは agentTaskVocabulary.ts"
   states:
@@ -89,6 +89,8 @@ accessibility:
   reduce_motion: "状態変化をアニメーションだけで伝えない。計画の連結線とブロックはReduce Motion時に短い切替にし、脈動させない。計画と完了工程の開閉は0.35秒の減衰スプリング、Reduce Motion時は0.15秒のease-outにする。承認到着時の先頭への移動はReduce Motion時にアニメーションしない"
 evidence:
   current:
+    - "docs/screenshots/shannon-ios-task-room-needs-owner-light-v1.png"
+    - "docs/screenshots/shannon-ios-task-room-failed-follow-up-light-v1.png"
     - "docs/screenshots/shannon-ios-task-room-approval-first-light-v1.png"
     - "docs/screenshots/shannon-ios-task-room-plan-fold-light-v1.png"
     - "docs/screenshots/shannon-ios-approval-hold-network-light-v1.png"

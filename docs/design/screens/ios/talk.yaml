@@ -3,7 +3,7 @@ screen_id: shannon-ios-talk
 platform: ios
 baseline_commit: 3a8751a7d4c5f433a881b0bbb13107eafc95ab29
 last_verified_at: 2026-10-01
-verification_scope: "2026-10-01（作業通知の見直し）: 作業通知の内容（状態語：作業名、許可対象または次の一手の副行）、その場の「許可」を出す条件、確認済みの扱い、送信失敗の文言はSwift単体テストとiOS／Macビルドで確認。新しい通知の実表示・実タップ・Dark・VoiceOver・大きい文字は未確認で、証跡画像 shannon-ios-task-notice-approve-light-v1.png は変更前（合成の質問文タイトル、対象なし）を写している。2026-10-01: iOS 26.5 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで場所カードのMapKit描画とリンク表示をLight/Darkで確認。地図シートの実タップ、VoiceOver実読み上げ、実機位置取得、実API検索は未確認。2026-09-30〜10-01（Swift Pieces取り込み）: iOS 27.0 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで、返信コード（Dark、Light）、返信待ち（Light、Reduce Motionで光が静止）、空の会話の話題候補（Light、Accessibility Extra LargeのDark）、マイク説明シート（Light、Accessibility Extra Large）、拒否済み（Dark）、カメラ説明シート（Light）を表示確認。大きい文字の返信コードと返信待ちはスクロール位置の都合で画面外となり未確認。コピー・展開・チップ選択・説明シートの続けるの実タップ、VoiceOver実読み上げ、実機のシステム許可ダイアログは未確認。以前の記録: 既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
+verification_scope: "2026-10-01（作業通知の見直し）: 作業通知の内容（状態語：作業名、許可対象または次の一手の副行）、その場の「許可」を出す条件、確認済みの扱い、送信失敗の文言はSwift単体テストとiOS／Macビルドで確認。iOS 27.0 Simulator（iPhone 17e、Light）の合成コマンド承認で、通知が『許可待ち：作業名』と対象コマンドの全文、「許可」を表示することを目視（shannon-ios-task-notice-approve-light-v2.png）。実タップ・Dark・VoiceOver・大きい文字・続きが必要の通知の実表示は未確認。2026-10-01: iOS 26.5 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで場所カードのMapKit描画とリンク表示をLight/Darkで確認。地図シートの実タップ、VoiceOver実読み上げ、実機位置取得、実API検索は未確認。2026-09-30〜10-01（Swift Pieces取り込み）: iOS 27.0 Simulator（iPhone 17 Pro）の合成DEBUG fixtureで、返信コード（Dark、Light）、返信待ち（Light、Reduce Motionで光が静止）、空の会話の話題候補（Light、Accessibility Extra LargeのDark）、マイク説明シート（Light、Accessibility Extra Large）、拒否済み（Dark）、カメラ説明シート（Light）を表示確認。大きい文字の返信コードと返信待ちはスクロール位置の都合で画面外となり未確認。コピー・展開・チップ選択・説明シートの続けるの実タップ、VoiceOver実読み上げ、実機のシステム許可ダイアログは未確認。以前の記録: 既存iOS 26.5 Simulatorの非個人DEBUG fixtureでラベル付き操作、Lightの待受、Darkの複数行入力・キーボードと接続失敗、ゲスト再接続のAccessibility Extra Large Textを確認。Build 92の音声のみ失敗・生成途中失敗の通知は入力欄と重ならない。2026-09-29追加の通話小型化・画面移動・実装案確認の実表示と実タップは、Mac UI操作のタイムアウトにより未検証。以前の画像を新規UIの証拠としない。マイク・写真・人物の実タップ、Reduce Motion実表示、実機音声Smokeも未確認"
 user_job: "シャノンとの会話を読み、必要な資料やWeb調査を添えて同じトークを続ける"
 primary_action: "入力欄からメッセージを送信する"
 preserve:
@@ -105,7 +105,7 @@ evidence:
     - "docs/screenshots/shannon-ios-place-map-card-dark-v1.png"
     - "docs/screenshots/shannon-ios-voice-call-pill-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-call-pill-dark-v1.png"
-    - "docs/screenshots/shannon-ios-task-notice-approve-light-v1.png"
+    - "docs/screenshots/shannon-ios-task-notice-approve-light-v2.png"
     - "docs/screenshots/shannon-ios-voice-ambient-light-v1.png"
     - "docs/screenshots/shannon-ios-voice-ambient-dark-v1.png"
     - "docs/screenshots/shannon-ios-talk-empty-greeting-light-v1.png"
