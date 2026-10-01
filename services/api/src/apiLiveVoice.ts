@@ -2,17 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { wantsNearbyPlaces, wantsPlaceDiscovery } from './placeDiscovery.js';
 import { combinedPlaceSources, runPlaceDiscoverySkill, spokenPlaceReply } from './placeDiscoverySkill.js';
 import {
+  OWNER_AUDIENCE,
+  UNKNOWN_GUEST_PRESENCE,
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
-  buildIntentPrompt,
+  isOwnerOnly,
   projectEmotionReaction,
   resolveShannonEmotionState,
-  selectPrimaryIntent,
   shannonIdentityPrompt,
   type CompanionClock,
   type CompanionStateStore,
+  type MemoryAudience,
 } from '@shannon/cognition';
-import { agentTaskPromptProjection, voiceHistoryProjection } from './apiPromptProjection.js';
+import { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { badRequest, objectBody, validBoundedString, validScopeKey } from './apiValidation.js';
 import type { AgentTaskStore } from './agentTaskStore.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
@@ -50,65 +52,11 @@ export { voiceConversationInstructions } from './voiceConversationInstructions.j
 import { temporaryGuestVoiceInstructions, voiceConversationInstructions } from './voiceConversationInstructions.js';
 import { guestSpeakerReminder, guestTurnPositionInstruction, ownerCompanionPresenceInstructions } from './voiceIntroductionInstructions.js';
 import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CALL_MODEL_TURNS } from './voiceGuestCall.js';
-export type VoiceParticipantMode = 'owner' | 'guest';
-interface VoiceSessionDependencies {
-  stateStore: CompanionStateStore;
-  conversationStore: ConversationStore;
-  knowledgeStore: KnowledgeStore | null;
-  dailyMind: DailyMindReader | null;
-  now: CompanionClock;
-  voice: string;
-  cognitiveIntents: CognitiveIntentStore;
-}
-
-export function realtimeVoiceSessionProjection(
-  scopeKey: string,
-  requestedThreadId: string | undefined,
-  options: {
-    clientDelegation?: boolean;
-    participantMode?: VoiceParticipantMode;
-    brightVoice?: boolean;
-  },
-  dependencies: VoiceSessionDependencies,
-): { threadId: string; instructions: string; voice: string } {
-  if (options.participantMode === 'guest') {
-    return {
-      threadId: requestedThreadId?.trim() || 'temporary-guest-session',
-      instructions: [
-        shannonIdentityPrompt('guest'),
-        voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true, false),
-        temporaryGuestVoiceInstructions,
-      ].join('\n\n'),
-      voice: dependencies.voice,
-    };
-  }
-  const threadId = dependencies.conversationStore.threadId(scopeKey, requestedThreadId?.trim());
-  const captured = dependencies.stateStore.snapshot(scopeKey);
-  const basePrompt = dependencies.knowledgeStore?.promptProjection(scopeKey)
-    ?? assembleShannonSystemPrompt(captured);
-  const dailyMindPrompt = dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const history = voiceHistoryProjection(visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId));
-  const occurredAt = dependencies.now();
-  const primaryIntent = selectPrimaryIntent('', threadId, dependencies.cognitiveIntents.list(scopeKey, 'active'), occurredAt);
-  const intentionPrompt = primaryIntent ? buildIntentPrompt(Object.freeze({
-    situation: Object.freeze({ occurredAt, channel: 'voice' as const }),
-    primaryIntent,
-    supportingIntentIDs: Object.freeze([]),
-    recalledMemoryIDs: Object.freeze([]),
-    responseMode: 'answer' as const,
-  })) : '';
-  return {
-    threadId,
-    instructions: [
-      basePrompt,
-      intentionPrompt,
-      dailyMindPrompt,
-      history,
-      voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true),
-    ].filter(Boolean).join('\n\n'),
-    voice: dependencies.voice,
-  };
-}
+export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
+import type { VoiceParticipantMode } from './voiceSessionProjection.js';
+import { companionPresentInstructions, ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
+import type { PeopleMemory } from './peopleMemory.js';
+import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   personIdentities?: PersonIdentityStore;
@@ -123,6 +71,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   cognitiveIntents: CognitiveIntentStore;
   conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall | null;
+  people?: PeopleMemory;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -178,12 +127,20 @@ async function completeLiveVoiceDelegation(
     ? requestedThreadId || 'temporary-guest-session'
     : dependencies.conversationStore.threadId(scopeKey, requestedThreadId);
   const occurredAt = dependencies.now();
-  const routingState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  // 「友人も一緒」 remembers only this call's own turns, which the device holds and sends each turn.
+  const routingState = dependencies.stateStore.snapshot(scopeKey);
+  // 「友人も一緒」 follows this call's own turns, which the device holds and sends each turn.
   const guestCall = temporaryGuest ? deviceContext?.guestCall ?? null : null;
   const guestHistory = guestCallHistory(guestCall);
+  // Who can hear the reply decides what every later step may read. Unknown people are never assumed away.
+  // In 「友人も一緒」 a person is present only once their name has been said; until then the guest is unknown.
+  const guestPresence = temporaryGuest ? dependencies.people?.resolveCall(scopeKey, {
+    transcript, turns: guestCall?.turns ?? [], ...(guestCall?.callId ? { callId: guestCall.callId } : {}),
+    ...(requestedThreadId ? { threadId: requestedThreadId } : {}) }, occurredAt) ?? null : null;
+  const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
+    : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
+  const alone = isOwnerOnly(present);
   const routingHistory = temporaryGuest ? guestHistory
-    : visibleConversationHistory(routingState!, dependencies.conversationStore, scopeKey, threadId);
+    : visibleConversationHistory(routingState, dependencies.conversationStore, scopeKey, threadId, present);
   const rawTranscript = deviceContext?.userUtterance?.rawText ?? transcript;
   // At a shared table Shannon answers when addressed and otherwise stays quiet. Overheard
   // talk is settled by local rules, so it costs no router or reply model call.
@@ -198,7 +155,7 @@ async function completeLiveVoiceDelegation(
   });
   observer?.signal?.throwIfAborted();
   const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance);
-  const confirmedImplementationRequest = temporaryGuest || uncertainTranscript ? null
+  const confirmedImplementationRequest = !alone || uncertainTranscript ? null
     : confirmedVoiceImplementationRequest(transcript, routingHistory,
       dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
   if (uncertainTranscript && !decision.shouldRespond) {
@@ -210,7 +167,7 @@ async function completeLiveVoiceDelegation(
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
   if (semanticMemoryTurn) decision = withMemorySearchLatency(decision);
   if (decision.selectedSkills.includes('place_discovery')) decision = withMemorySearchLatency(decision);
-  let orchestrationState = temporaryGuest || uncertainTranscript ? null : observeConversationTurn({
+  let orchestrationState = !alone || uncertainTranscript ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey),
@@ -229,9 +186,9 @@ async function completeLiveVoiceDelegation(
     }
     const captured = dependencies.stateStore.snapshot(scopeKey);
     const message = deviceContext?.userUtterance?.text ?? transcript;
-    const provisionalIntent = extractExplicitUserIntent(message, threadId, occurredAt);
+    const provisionalIntent = alone ? extractExplicitUserIntent(message, threadId, occurredAt) : null;
     const cognitiveContext = prepareTurnCognitiveContext(captured, dependencies.conversationStore, {
-      scopeKey, message, occurredAt, channel: 'voice', threadId,
+      scopeKey, message, occurredAt, channel: 'voice', threadId, present,
       intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
     });
     recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
@@ -279,7 +236,7 @@ async function completeLiveVoiceDelegation(
     ...(!temporaryGuest ? [
       '- Shannon can propose a Codex implementation task, including adding a new capability or changing Shannon itself. A user starts the visible proposal before code work runs. Never claim this capability is unavailable.',
       '- If an ASR-uncertain request sounds like an implementation request, briefly confirm the intended feature before proposing it. Do not treat uncertain speech as execution authorization.',
-      ownerCompanionPresenceInstructions,
+      alone ? ownerCompanionPresenceInstructions : companionPresentInstructions,
     ] : []),
     ...(selectedSkills.has('current_web') ? [
       '- For transit, search current operator or route sources. Ask for a missing origin or destination. Give no exact departure, arrival, fare, or disruption claim without a current source; distinguish timetable from live operating status.',
@@ -289,21 +246,25 @@ async function completeLiveVoiceDelegation(
       ? [voiceDeviceContextPrompt(dependencies.now(), deviceContext)] : []),
   ].join('\n');
   // Refresh after the classifier await so a concurrent forget/hide is respected.
-  const captured = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const provisionalIntent = temporaryGuest || uncertainTranscript ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
-  const deterministicContext = temporaryGuest ? null : prepareTurnCognitiveContext(
-    captured!,
+  const captured = dependencies.stateStore.snapshot(scopeKey);
+  // A goal is the owner's own; with anyone else present the words may not be his.
+  const provisionalIntent = !alone || uncertainTranscript ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
+  // Every mode builds its memory through the same gate; `present` decides what passes.
+  // While a name is unresolved between two remembered people, nothing about anyone is recalled.
+  const peopleRecall = guestPresence?.ambiguousName ? undefined : dependencies.people?.recall(scopeKey, captured, transcript, present);
+  const deterministicContext = prepareTurnCognitiveContext(
+    captured,
     dependencies.conversationStore,
-    { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId,
-      intents: dependencies.cognitiveIntents.list(scopeKey, 'active'), provisionalIntent,
-      timeZone: deviceContext?.timeZoneIdentifier,
-      participants: dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
+    { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId, present,
+      intents: alone ? dependencies.cognitiveIntents.list(scopeKey, 'active') : [], provisionalIntent,
+      timeZone: deviceContext?.timeZoneIdentifier, additionalCandidates: peopleRecall?.candidates ?? [],
+      participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
   const complexTurn = decision.conversationClass === 'skill_complex';
-  const recalled = deterministicContext && dependencies.memoryRecall
+  const recalled = !temporaryGuest && dependencies.memoryRecall
     && (semanticMemoryTurn || complexTurn || decision.selectedSkills.includes('conversation_memory'))
-    ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured!, threadId,
+    ? await dependencies.memoryRecall.enrich(deterministicContext, { scopeKey, message: transcript, snapshot: captured, threadId,
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   const basePrompt = temporaryGuest
@@ -311,28 +272,34 @@ async function completeLiveVoiceDelegation(
       guestTurnPositionInstruction(guestCall?.introductionStart === true || guestHistory.length === 0)].join('\n\n')
     : [
       // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
-      selectedSkills.has('conversation_memory')
-        ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
+      // The full profile block is for the owner alone; otherwise the disclosed block in the turn context stands in.
+      selectedSkills.has('conversation_memory') && alone
+        ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured)
         : shannonIdentityPrompt('owner'),
       voiceConversationInstructions(true),
     ].join('\n\n');
-  const dailyMindPrompt = temporaryGuest || !selectedSkills.has('daily_mind')
+  // Today's focus is built from the owner's interests, which carry no label.
+  const dailyMindPrompt = !alone || !selectedSkills.has('daily_mind')
     ? ''
     : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const taskPrompt = temporaryGuest || !selectedSkills.has('agent_status')
+  // Agent work, notes and tasks stay with the owner whenever anyone else can hear, whatever their content.
+  const taskPrompt = !alone || !selectedSkills.has('agent_status')
     ? ''
     : agentTaskPromptProjection(dependencies.agentTasks.list(scopeKey), threadId);
-  const capabilityPrompt = temporaryGuest
+  const capabilityPrompt = !alone
     ? ''
     : await conversationCapabilityPrompt(scopeKey, transcript, dependencies, {
       aetherNotes: selectedSkills.has('aether_notes'),
       voyagerTasks: selectedSkills.has('voyager_tasks'),
     });
   observer?.signal?.throwIfAborted();
-  const includeCognitiveContext = !temporaryGuest && selectedSkills.has('conversation_memory');
+  // A client that predates people memory tells the friend that no owner memory is used; keep that promise for it.
+  const includeCognitiveContext = temporaryGuest ? guestPresence?.recorded === true : selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
-    includeCognitiveContext ? cognitiveContext?.prompt : complexTurn ? recalled?.knowledgePrompt : '',
+    includeCognitiveContext ? cognitiveContext.prompt : complexTurn ? recalled?.knowledgePrompt : '',
+    // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
+    guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
     dailyMindPrompt,
     taskPrompt,
     capabilityPrompt,
@@ -355,7 +322,7 @@ async function completeLiveVoiceDelegation(
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
   const fullHistory = temporaryGuest ? guestHistory
-    : visibleConversationHistory(captured!, dependencies.conversationStore, scopeKey, threadId);
+    : visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, present);
   const historyLimit = temporaryGuest ? GUEST_CALL_MODEL_TURNS
     : selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
   const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
@@ -430,14 +397,15 @@ async function completeLiveVoiceDelegation(
     target: temporaryGuest ? '現在の話者' : 'ライ氏',
   });
   voicePlan = voicePlanResponse(decision, expressiveEmotion, voiceMood);
-  if (!temporaryGuest) {
+  // Her stored feeling toward the owner moves only on his own words.
+  if (alone) {
     dependencies.stateStore.apply(scopeKey, {
       type: 'expressive-emotion-updated',
       emotion: expressiveEmotion,
     });
   }
   let completedIntent = provisionalIntent;
-  if (!temporaryGuest && cognitiveContext) {
+  if (!temporaryGuest) {
     completedIntent = recordCompletedCognitiveCycle(dependencies.cognitiveIntents, scopeKey, cognitiveContext.frame, provisionalIntent, undefined, {
       threadId, channel: 'voice', action: 'delegate', summary: 'ライブ音声からバックエンドへ委譲し、検証可能な返答を生成した。', occurredAt,
     }, provisionalIntent ? completion.intentPlan : undefined);
@@ -467,6 +435,8 @@ async function completeLiveVoiceDelegation(
       reply: reply.trim(),
       webSources: combinedPlaceSources(placeSkill, completion.webSources),
       ...(uiBlocks ? { uiBlocks } : {}),
+      // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
+      ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,
       voiceMetrics: {
         decisionMilliseconds: decision.elapsedMilliseconds,

@@ -1,11 +1,11 @@
-import { restoreCompanionState, type CompanionStateSnapshot, type ShannonMessageEmotion } from '@shannon/cognition';
+import { restoreCompanionState, type CompanionStateSnapshot, type MemoryDisclosure, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { BackgroundJobPayload } from './backgroundJobStore.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
 import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredConversationMessage } from './conversationStore.js';
 import { reminderReference, type ReminderReference } from './turnCaptures.js';
 
 export interface MessageRow { message_id: string; thread_id: string; turn_id: string; role: string; content: string; observed_at: string; metadata_json: string | null; }
-export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; }
+export interface TurnPayload { userMessage: string; shannonReply: string; summary: string; timeZone?: string; capturedStateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; recalledMemoryIds?: readonly string[]; disclosure?: MemoryDisclosure; }
 export interface MessageMetadata { stateVersion?: number; messageEmotion?: ShannonMessageEmotion; taskDecision?: ShannonTaskDecision; artifacts?: readonly ShannonGeneratedArtifact[]; sourceAttribution?: ShannonSourceAttribution; reminder?: ReminderReference; recalledMemoryIds?: readonly string[]; }
 
 export function parseSnapshot(raw: string, expectedScopeKey: string, nowIso: string): CompanionStateSnapshot {

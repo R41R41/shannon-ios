@@ -4,11 +4,14 @@ import {
   selectActiveMemories,
   visibleMemoryText,
   isMemoryEvidenceVisible,
+  disclosureFor,
+  ownerSpoke,
   type CompanionStateSnapshot,
   type CompanionStateStore,
+  type MemoryAudience,
   type ShannonMessageEmotion,
 } from '@shannon/cognition';
-import type { ConversationStore } from './conversationStore.js';
+import type { ConversationStore, TurnPersistenceContext } from './conversationStore.js';
 import type { ShannonExperience } from './conversationStore.js';
 import type { BackgroundJobStore } from './backgroundJobStore.js';
 import { captureImmediateExplicitMemory, type UserFactProposal } from './sleepConsolidation.js';
@@ -35,6 +38,26 @@ export interface CompletedTurn {
   /** Provenance of the reply: IDs recalled into the prompt that produced it. */
   recalledMemoryIds?: readonly string[];
   summaryContinuesChain?: boolean;
+  /** Who was present. Absent: the owner alone. */
+  audience?: MemoryAudience;
+  /** Who spoke the user side. Absent: the owner when alone, otherwise unknown. */
+  speaker?: 'owner' | 'unknown';
+}
+
+function turnPersistenceContext(turn: CompletedTurn): TurnPersistenceContext {
+  return {
+    messageEmotion: turn.messageEmotion,
+    capturedStateVersion: turn.capturedState.version,
+    ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
+    ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
+    ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
+    ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
+    ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
+    ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
+    ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
+    ...(turn.audience ? { audience: turn.audience } : {}),
+    ...(turn.speaker ? { speaker: turn.speaker } : {}),
+  };
 }
 
 export interface TurnBackgroundService {
@@ -60,14 +83,20 @@ export class TurnRefinementProcessor {
   ): void {
     const source = recordedExperienceId
       ? this.conversationStore.experienceCandidates(scopeKey).find(item => item.id === recordedExperienceId)
+        ?? this.conversationStore.experiencesById?.(scopeKey, [recordedExperienceId])[0]
       : undefined;
     const sourceTime = source?.observedAt ?? observedAt ?? new Date().toISOString();
     if (recordedExperienceId && !visibleMemoryText(this.stateStore.snapshot(scopeKey), recordedExperienceId, 'visible')) return;
+    // With anyone else present the words may be theirs: nothing becomes an owner fact, promise, goal or feeling.
+    if (source && !ownerSpoke(source.disclosure)) return;
+    // Derived items inherit who heard the turn; their own text decides whether they are sensitive.
+    const audience = source?.disclosure?.audience;
+    const labelled = (text: string) => ({ disclosure: disclosureFor(text, audience) });
     applyExplicitCommitmentCommand(this.stateStore, this.conversationStore, scopeKey, userMessage, sourceTime);
     const current = this.stateStore.snapshot(scopeKey);
     if (!isMemoryEvidenceVisible(current, userMessage)) return;
     const candidates = this.conversationStore.experienceCandidates(scopeKey)
-      .filter(candidate => candidate.id !== recordedExperienceId
+      .filter(candidate => candidate.id !== recordedExperienceId && ownerSpoke(candidate.disclosure)
         && visibleMemoryText(current, candidate.id, candidate.summary)
         && isMemoryEvidenceVisible(current, candidate.userMessage));
     const recalled = selectActiveMemories(userMessage, candidates);
@@ -96,19 +125,21 @@ export class TurnRefinementProcessor {
     };
     for (const fact of immediate.facts) {
       this.stateStore.apply(scopeKey, { type: 'user-fact-upserted',
-        fact: { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
+        fact: { ...fact, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
+          ...labelled(`${fact.statement}\n${fact.evidence ?? ''}`) }, source: 'conversation' });
       learned(fact.id, fact.statement, current.userFacts.some(item => item.id === fact.id));
     }
     for (const relationship of immediate.relationships) {
       this.stateStore.apply(scopeKey, { type: 'relationship-upserted',
-        relationship: { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}) }, source: 'conversation' });
+        relationship: { ...relationship, ...(recordedExperienceId ? { sourceExperienceId: recordedExperienceId } : {}),
+          ...labelled(`${relationship.statement}\n${relationship.evidence ?? ''}`) }, source: 'conversation' });
       learned(relationship.id, relationship.statement, current.relationships.some(item => item.id === relationship.id));
     }
     for (const interest of immediate.interests) {
       this.stateStore.apply(scopeKey, { type: 'interest-observed', interest, source: 'conversation' });
     }
     for (const promise of extractPromiseCaptures(userMessage, sourceTime, recordedExperienceId, source?.timeZone ?? timeZone)) {
-      const { memory } = promise;
+      const memory = { ...promise.memory, ...labelled(`${promise.memory.summary}\n${promise.memory.evidence ?? ''}`) };
       this.stateStore.apply(scopeKey, { type: 'prospective-memory-upserted', memory });
       capture('commitment', memory.id, promise.topic, { itemId: memory.id,
         ...(memory.dueDate ? { dueDate: memory.dueDate } : {}), ...(memory.dueAt ? { dueAt: memory.dueAt } : {}),
@@ -159,17 +190,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
       turn.userMessage,
       turn.shannonReply,
       turn.completedAt,
-      {
-        messageEmotion: turn.messageEmotion,
-        capturedStateVersion: turn.capturedState.version,
-        ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
-        ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
-        ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
-        ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
-        ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
-        ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
-        ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
-      },
+      turnPersistenceContext(turn),
     );
   }
 
@@ -214,17 +235,7 @@ export class DurableBackgroundDispatcher implements TurnBackgroundService {
       turn.userMessage,
       turn.shannonReply,
       turn.completedAt,
-      {
-        messageEmotion: turn.messageEmotion,
-        capturedStateVersion: turn.capturedState.version,
-        ...(turn.timeZone ? { timeZone: turn.timeZone } : {}),
-        ...(turn.threadTitle ? { threadTitle: turn.threadTitle } : {}),
-        ...(turn.threadSummary ? { threadSummary: turn.threadSummary } : {}),
-        ...(turn.taskDecision ? { taskDecision: turn.taskDecision } : {}),
-        ...(turn.artifacts?.length ? { artifacts: turn.artifacts } : {}),
-        ...(turn.recalledMemoryIds ? { recalledMemoryIds: turn.recalledMemoryIds } : {}),
-        ...(turn.summaryContinuesChain ? { summaryContinuesChain: true } : {}),
-      },
+      turnPersistenceContext(turn),
     );
   }
 

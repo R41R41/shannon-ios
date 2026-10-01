@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ShannonConversationItem } from './chatModel.js';
+import { normalizeDisclosure } from '@shannon/cognition';
 import {
   boundedRecalledMemoryIds,
   threadNavigation,
+  turnDisclosure,
   type ThreadSummaryLineage,
   type ConversationStore,
   type ConversationThread,
@@ -50,10 +52,12 @@ export function ensureSummaryLineageSchema(database: DatabaseSync): void {
   }
 }
 
-function experienceFromRow(row: EventRow): ShannonExperience[] {
+function experienceFromRow(row: Pick<EventRow, 'event_id' | 'observed_at' | 'payload_json'>): ShannonExperience[] {
   const payload = parseTurnPayload(row.payload_json);
   if (!payload) return [];
   const recalledMemoryIds = boundedRecalledMemoryIds(payload.recalledMemoryIds);
+  // An unreadable or absent label stays absent: owner-only and sensitive.
+  const disclosure = normalizeDisclosure(payload.disclosure);
   return [Object.freeze({
     id: row.event_id,
     userMessage: payload.userMessage,
@@ -62,6 +66,7 @@ function experienceFromRow(row: EventRow): ShannonExperience[] {
     observedAt: row.observed_at,
     ...(payload.timeZone ? { timeZone: payload.timeZone } : {}),
     ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
+    ...(disclosure ? { disclosure } : {}),
   })];
 }
 
@@ -243,10 +248,12 @@ export class SQLiteConversationRepository implements ConversationStore {
       { role: 'assistant', content: shannonReply },
     ]).summary ?? null;
     const recalledMemoryIds = boundedRecalledMemoryIds(context?.recalledMemoryIds);
+    const disclosure = turnDisclosure(userMessage, shannonReply, context);
     const payload: TurnPayload = {
       userMessage,
       shannonReply,
       summary,
+      disclosure,
       ...(recalledMemoryIds ? { recalledMemoryIds } : {}),
       ...(context?.timeZone ? { timeZone: context.timeZone } : {}),
       ...(context ? {
@@ -295,7 +302,7 @@ export class SQLiteConversationRepository implements ConversationStore {
       this.context.insertEvent(scopeKey, 'turn.completed', observedAt, payload, turnId);
       this.context.insertActivity(scopeKey, 'conversation', 'トーク', summary, observedAt, { threadId: effectiveThreadId });
     });
-    return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt });
+    return Object.freeze({ id: turnId, userMessage, shannonReply, summary, observedAt, disclosure });
   }
 
   appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string): StoredConversationMessage {
@@ -339,18 +346,9 @@ export class SQLiteConversationRepository implements ConversationStore {
           observed_at: string;
           payload_json: string;
         } | undefined;
-        const turn = event ? parseTurnPayload(event.payload_json) : null;
-        if (!event || !turn) throw new Error('PLATFORM_TURN_RECEIPT_CORRUPT');
-        return {
-          duplicate: true,
-          experience: Object.freeze({
-            id: previous.experience_id,
-            userMessage: turn.userMessage,
-            shannonReply: turn.shannonReply,
-            summary: turn.summary,
-            observedAt: event.observed_at,
-          }),
-        };
+        const experience = event ? experienceFromRow({ event_id: previous.experience_id, ...event })[0] : undefined;
+        if (!experience) throw new Error('PLATFORM_TURN_RECEIPT_CORRUPT');
+        return { duplicate: true, experience };
       }
       const experience = this.appendTurn(
         input.scopeKey,

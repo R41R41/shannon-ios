@@ -1,33 +1,45 @@
 import Foundation
 
-public struct ShannonVoiceCallSummaryRequestDTO: Codable, Equatable, Sendable {
-    public var timeZone: String = TimeZone.current.identifier
-    public let scopeKey: String
-    public let threadId: String?
-    public let turns: [ShannonVoiceCallContextTurnDTO]
+/// What the server answers once a 「友人も一緒」 period has been remembered.
+public struct ShannonRememberedVoiceCallDTO: Codable, Equatable, Sendable {
+    public struct Person: Codable, Equatable, Sendable {
+        public let id: String
+        public let displayName: String
 
-    public init(scopeKey: String, threadId: String?, turns: [ShannonVoiceCallContextTurnDTO]) {
-        self.scopeKey = scopeKey
-        self.threadId = threadId
-        self.turns = turns
+        public init(id: String, displayName: String) {
+            self.id = id
+            self.displayName = displayName
+        }
     }
-}
 
-public struct ShannonVoiceCallSummaryResponseDTO: Codable, Equatable, Sendable {
-    public let threadId: String
-    public let messageId: String?
-    public let summary: String
-    public let observedAt: String?
+    public let callId: String
+    public let status: String
+    public let people: [Person]
+    public let summary: String?
 
-    public init(threadId: String, messageId: String? = nil, summary: String, observedAt: String? = nil) {
-        self.threadId = threadId
-        self.messageId = messageId
+    public init(callId: String, status: String = "remembered", people: [Person] = [], summary: String? = nil) {
+        self.callId = callId
+        self.status = status
+        self.people = people
         self.summary = summary
-        self.observedAt = observedAt
     }
 }
 
-/// The note a 「友人も一緒」 call may leave in the owner's thread, and how the timeline recognises it.
+struct ShannonVoiceRememberCallRequestDTO: Encodable {
+    var timeZone: String = TimeZone.current.identifier
+    let scopeKey: String
+    let callId: String
+    let threadId: String?
+    let turns: [ShannonVoiceCallContextTurnDTO]
+}
+
+struct ShannonVoiceDiscardCallRequestDTO: Encodable {
+    let scopeKey: String
+    let callId: String
+}
+
+/// A note an earlier build could leave in the owner's thread. New calls are remembered under
+/// 頭の中 › 人 instead; this only keeps old notes readable in the timeline.
 public enum ShannonVoiceCallSummaryNote {
     public static let heading = "【友人も一緒の通話の要約】"
     public static let label = "通話の要約"
@@ -44,34 +56,87 @@ public enum ShannonVoiceCallSummaryNote {
     }
 }
 
-/// What remains of an ended call until the owner answers 「この通話の要約をトークに残しますか？」.
-/// It is held in memory only: declining, dismissing, a new call, or quitting the app discards it.
-struct ShannonVoiceCallSummaryDraft: Equatable, Sendable {
-    let threadID: String?
-    let turns: [ShannonVoiceCallContextTurnDTO]
-}
+/// The card shown in the call pill's place after a call that had a 「友人も一緒」 period. The call
+/// is remembered by default; the card says so and offers 「今回は残さない」.
+struct ShannonVoiceCallMemoryState: Equatable, Sendable {
+    enum Phase: Equatable, Sendable {
+        /// The device is still handing the period to the server.
+        case remembering
+        case remembered
+        /// The server could not store it. Nothing was kept.
+        case rememberFailed
+        case discarding
+        case discarded
+        /// 「今回は残さない」 did not reach the server; the record still exists.
+        case discardFailed
+    }
 
-enum ShannonVoiceCallSummaryPromptState: Equatable, Sendable {
-    case asking(ShannonVoiceCallSummaryDraft)
-    case saving(ShannonVoiceCallSummaryDraft)
-    case failed(ShannonVoiceCallSummaryDraft)
-    case saved
+    /// Every 「友人も一緒」 period of the ended call, in order.
+    var callIDs: [String] = []
+    /// Periods whose turns could not be stored yet, kept in memory only so they can be retried.
+    var unsaved: [ShannonVoiceGuestPeriod] = []
+    /// Names the server established from the words said, without duplicates.
+    var names: [String] = []
+    var phase: Phase = .remembering
+    /// Periods still being sent.
+    var pending = 0
 
-    static let question = "この通話の要約をトークに残しますか？"
+    static let discardLabel = "今回は残さない"
 
-    var draft: ShannonVoiceCallSummaryDraft? {
-        switch self {
-        case let .asking(draft), let .saving(draft), let .failed(draft): draft
-        case .saved: nil
+    mutating func began(_ period: ShannonVoiceGuestPeriod) {
+        if !callIDs.contains(period.callID) { callIDs.append(period.callID) }
+        pending += 1
+        if phase != .discarding && phase != .discarded { phase = .remembering }
+    }
+
+    mutating func finished(_ period: ShannonVoiceGuestPeriod, people: [String]?) {
+        pending = max(0, pending - 1)
+        unsaved.removeAll { $0.callID == period.callID }
+        if let people {
+            for name in people where !names.contains(name) { names.append(name) }
+        } else {
+            unsaved.append(period)
+        }
+        guard pending == 0, phase == .remembering || phase == .rememberFailed else { return }
+        phase = unsaved.isEmpty ? .remembered : .rememberFailed
+    }
+
+    var title: String {
+        switch phase {
+        case .remembering: "この通話を覚えています…"
+        case .remembered: "この通話を覚えました"
+        case .rememberFailed: "この通話を覚えられませんでした"
+        case .discarding: "この通話の記録を消しています…"
+        case .discarded: "今回の通話は残しませんでした"
+        case .discardFailed: "記録を消せませんでした"
         }
     }
 
     var detail: String {
-        switch self {
-        case .asking: "残すのは短い要約だけです。会話そのものは保存しません。選ばなければ何も残りません。"
-        case .saving: "要約を作っています…"
-        case .failed: "要約を残せませんでした。もう一度試すか、残さずに閉じられます。"
-        case .saved: "要約をトークに残しました。"
+        switch phase {
+        case .remembering:
+            "お名前と話したことを保存しています。"
+        case .remembered:
+            names.isEmpty
+                ? "お名前は聞いていないので、話したことだけを覚えました。ライ氏と二人の時にだけ使います。頭の中の「人」で確認できます。"
+                : "\(names.map { "\($0)さん" }.joined(separator: "・"))のお名前と、話したことを覚えました。頭の中の「人」で確認できます。"
+        case .rememberFailed:
+            "接続を確認して、もう一度お試しください。このままでは何も残りません。"
+        case .discarding:
+            "少しお待ちください。"
+        case .discarded:
+            "この通話で聞いたお名前と会話は残っていません。"
+        case .discardFailed:
+            "この通話の記録はまだ残っています。もう一度お試しください。"
+        }
+    }
+
+    var symbol: String {
+        switch phase {
+        case .remembering, .discarding: "person.2"
+        case .remembered: "person.2.fill"
+        case .rememberFailed, .discardFailed: "exclamationmark.bubble"
+        case .discarded: "checkmark.circle"
         }
     }
 }

@@ -27,8 +27,9 @@ final class ShannonVoiceWorkspaceState {
     var isLoadingLibraryPhoto = false
     var cameraPrimerPhase: ShannonPermissionPrimerPhase?
     var showsPhotoUnavailable = false
-    /// Set when a call that had a 「友人も一緒」 period ends; memory only.
-    var callSummaryPrompt: ShannonVoiceCallSummaryPromptState?
+    /// What the last call's 「友人も一緒」 periods left behind. Filled as each period ends and
+    /// shown in the pill's place once the call is over.
+    var callMemory: ShannonVoiceCallMemoryState?
 
     func clearPhoto() {
         showsPhotoSource = false
@@ -41,6 +42,47 @@ final class ShannonVoiceWorkspaceState {
         isSharingCameraSnapshot = false
         isLoadingLibraryPhoto = false
         cameraPrimerPhase = nil
+    }
+}
+
+extension ShannonVoiceWorkspaceState {
+    /// Hands one finished 「友人も一緒」 period to the server. An empty period only clears server state.
+    func remember(_ period: ShannonVoiceGuestPeriod, threadID: String?, using model: ShannonConversationModel) {
+        guard !period.isEmpty else {
+            Task { try? await model.discardVoiceCalls([period.callID]) }
+            return
+        }
+        var memory = callMemory ?? ShannonVoiceCallMemoryState()
+        memory.began(period)
+        callMemory = memory
+        Task {
+            let people = try? await model.rememberVoiceCall(period, threadID: threadID).people.map(\.displayName)
+            // A new call may have replaced the card in the meantime.
+            guard callMemory?.callIDs.contains(period.callID) == true else { return }
+            callMemory?.finished(period, people: people)
+        }
+    }
+
+    func retryCallMemory(using model: ShannonConversationModel) {
+        guard let unsaved = callMemory?.unsaved, !unsaved.isEmpty else { return }
+        callMemory?.unsaved = []
+        for period in unsaved { remember(period, threadID: threadContext?.threadID, using: model) }
+    }
+
+    /// 「今回は残さない」: removes every period of the ended call from the server.
+    func discardCallMemory(using model: ShannonConversationModel) {
+        guard let callIDs = callMemory?.callIDs, !callIDs.isEmpty else { return }
+        callMemory?.phase = .discarding
+        Task {
+            do {
+                try await model.discardVoiceCalls(callIDs)
+                guard callMemory?.callIDs == callIDs else { return }
+                callMemory?.phase = .discarded
+                callMemory?.unsaved = []
+            } catch {
+                if callMemory?.callIDs == callIDs { callMemory?.phase = .discardFailed }
+            }
+        }
     }
 }
 

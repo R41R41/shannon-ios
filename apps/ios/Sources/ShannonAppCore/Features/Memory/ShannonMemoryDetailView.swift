@@ -17,6 +17,7 @@ struct ShannonMemoryDetailView: View {
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                     detailHeader(item, palette)
                     if let confidence = item.confidence { confidenceCard(confidence, palette) }
+                    if let disclosure = item.disclosure { disclosureCard(item, disclosure, palette) }
                     evidenceSection(item, palette)
                     historySection(item, palette)
                     actions(item, palette)

@@ -149,5 +149,27 @@ export type {
   UserFact,
 } from './types.js';
 export { SHANNON_EMOTION_KINDS } from './types.js';
+export {
+  OWNER_AUDIENCE,
+  SENSITIVITY_CATEGORY_LABELS,
+  UNKNOWN_GUEST_PRESENCE,
+  audienceCovers,
+  classifySensitivity,
+  describeAudience,
+  disclosureFor,
+  discloseSnapshot,
+  groupAudience,
+  isOwnerOnly,
+  mayDisclose,
+  normalizeAudience,
+  normalizeDisclosure,
+  ownerSpoke,
+  peopleAudience,
+  resolveDisclosure,
+  widenAudience,
+  type SensitivityDecision,
+} from './disclosure.js';
+export { MEMORY_SENSITIVITY_CATEGORIES } from './types.js';
+export type { MemoryAudience, MemoryDisclosure, MemorySensitivity, MemorySensitivityCategory } from './types.js';
 export { memoryIdentifier, visibleMemoryText, memoryControlFor, isMemoryEvidenceVisible, isOwnerMemoryEvidence } from './memory.js';
 export { memoryKeyTerms, memoryWithholdingRules, restatesWithheldMemory, ruleWithholdsText, type MemoryWithholdingRule } from './withholding.js';

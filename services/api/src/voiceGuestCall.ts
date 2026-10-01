@@ -18,6 +18,8 @@ export interface GuestCallContext {
   followsShannonTurn: boolean;
   /** First request after the owner switched to 「友人も一緒」. */
   introductionStart: boolean;
+  /** Identifies this 「友人も一緒」 period so it can be remembered. Absent from clients that predate people memory. */
+  callId?: string;
 }
 
 export const GUEST_CALL_MODEL_TURNS = 24;
@@ -47,7 +49,9 @@ export function validatedGuestCallContext(value: unknown): GuestCallContext | nu
   for (const flag of ['addressedByName', 'followsShannonTurn', 'introductionStart'] as const) {
     if (value[flag] !== undefined && typeof value[flag] !== 'boolean') return false;
   }
+  if (value.callId !== undefined && (typeof value.callId !== 'string' || !/^[A-Za-z0-9-]{8,80}$/u.test(value.callId))) return false;
   return {
+    ...(typeof value.callId === 'string' ? { callId: value.callId } : {}),
     turns,
     addressedByName: value.addressedByName === true,
     followsShannonTurn: value.followsShannonTurn === true,

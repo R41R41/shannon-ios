@@ -43,6 +43,20 @@ export interface TestFlightDeliveryDashboard {
   readonly release: TestFlightReleaseProgress;
 }
 
+/** What a client sees before any delivery has been recorded. */
+export const WAITING_TESTFLIGHT_DASHBOARD = Object.freeze({
+  condition: 'waiting',
+  latestBuildVersion: null,
+  lastCheckedAt: null,
+  activeFailureCode: null,
+  history: [],
+  release: {
+    platform: 'ios', buildVersion: null,
+    gates: ['build', 'archive', 'upload', 'processing', 'assignment', 'install', 'smoke']
+      .map(key => ({ key, status: 'pending', completedAt: null })),
+  },
+});
+
 export interface TestFlightDeliveryReader {
   dashboard(limit?: number, scopeKey?: string): TestFlightDeliveryDashboard;
   confirmGate?(

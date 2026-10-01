@@ -28,9 +28,11 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             if geminiVoiceModel.phase != .idle {
                 ShannonVoiceSessionBar(model: geminiVoiceModel, task: voiceTask,
                     showDetails: { isPresented = true }, end: endCall, openTask: openTask)
-            } else if let prompt = workspace.callSummaryPrompt {
-                ShannonVoiceCallSummaryPrompt(state: prompt, keep: keepCallSummary,
-                    discard: { workspace.callSummaryPrompt = nil })
+            } else if let memory = workspace.callMemory {
+                ShannonVoiceCallMemoryCard(state: memory,
+                    retry: { workspace.retryCallMemory(using: conversationModel) },
+                    discard: { workspace.discardCallMemory(using: conversationModel) },
+                    close: { workspace.callMemory = nil })
             }
             content
         }
@@ -66,42 +68,23 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
 #if DEBUG
         .task {
-            // Synthetic fixture for the end-of-call question; no call, model, or network.
+            // Synthetic fixture for the end-of-call card; no call, model, or network.
             guard ProcessInfo.processInfo.arguments.contains("-ShannonPreviewVoiceCallSummary"),
-                  workspace.callSummaryPrompt == nil, geminiVoiceModel.phase == .idle else { return }
-            workspace.callSummaryPrompt = .asking(.init(threadID: nil, turns: [
-                .init(role: .participant, text: "はじめまして"), .init(role: .shannon, text: "はじめまして、シャノンです。"),
-            ]))
+                  workspace.callMemory == nil, geminiVoiceModel.phase == .idle else { return }
+            workspace.callMemory = .init(callIDs: ["preview"], names: ["ミキ"], phase: .remembered)
         }
 #endif
     }
 
     private func endCall() {
         workspace.connectionRequestID = nil
-        // Ending never saves anything. A call with a 「友人も一緒」 period only leaves a question.
-        let summaryTurns = geminiVoiceModel.callSummaryTurns
-        let threadID = workspace.threadContext?.threadID
+        // A 「友人も一緒」 period that is still running ends with the call and is remembered;
+        // the card that replaces the pill says so and offers 「今回は残さない」.
+        geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
         workspace.threadContext = nil
         isPresented = false
         workspace.clearPhoto()
-        workspace.callSummaryPrompt = summaryTurns.map { .asking(.init(threadID: threadID, turns: $0)) }
-    }
-
-    private func keepCallSummary() {
-        guard let draft = workspace.callSummaryPrompt?.draft else { return }
-        workspace.callSummaryPrompt = .saving(draft)
-        Task {
-            do {
-                try await conversationModel.saveVoiceCallSummary(draft)
-                guard workspace.callSummaryPrompt == .saving(draft) else { return }
-                workspace.callSummaryPrompt = .saved
-                try? await Task.sleep(for: .seconds(4))
-                if workspace.callSummaryPrompt == .saved { workspace.callSummaryPrompt = nil }
-            } catch {
-                if workspace.callSummaryPrompt == .saving(draft) { workspace.callSummaryPrompt = .failed(draft) }
-            }
-        }
     }
 
     private func beginCall(_ mode: ShannonVoiceParticipantMode) {
@@ -112,14 +95,19 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             return
         }
 #endif
+        // A call that failed without being ended may still hold a period; it is remembered like any other.
+        geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()
         let context = ShannonVoiceThreadContext(threadID: conversationModel.selectedThreadId)
         let requestID = UUID()
         workspace.connectionRequestID = requestID
         workspace.threadContext = context
         workspace.clearPhoto()
-        // An unanswered summary question from the previous call is a "no".
-        workspace.callSummaryPrompt = nil
+        // The previous call stays remembered; its card makes room for the new call.
+        workspace.callMemory = nil
+        geminiVoiceModel.guestPeriodEnded = { [workspace, conversationModel] period in
+            workspace.remember(period, threadID: context.threadID, using: conversationModel)
+        }
         // Session-owned, not sheet-owned: minimization must not cancel startup.
         Task {
             guard workspace.connectionRequestID == requestID else { return }
@@ -158,7 +146,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                         userTranscript: user,
                         shannonTranscript: shannon,
                         threadID: context.threadID,
-                        emotion: geminiVoiceModel.replyEmotion
+                        emotion: geminiVoiceModel.replyEmotion,
+                        companionPresent: geminiVoiceModel.companionSuspected
                     )
                 },
                 handleDelegationResponse: { response in

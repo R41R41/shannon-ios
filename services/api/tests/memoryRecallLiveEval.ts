@@ -1,3 +1,4 @@
+import { OWNER_AUDIENCE } from '@shannon/cognition';
 /**
  * Opt-in, billable comparison of the current deterministic recall and Memory
  * V2 (full-text + semantic) on synthetic data. Run deliberately with
@@ -38,7 +39,7 @@ try {
   for (const testCase of memoryRecallEvaluationCases) {
     const snapshot = store.snapshot(scopeKey);
     const startedAt = performance.now();
-    const baseline = prepareTurnCognitiveContext(snapshot, store, { scopeKey, message: testCase.question, occurredAt: now, channel: 'text', threadId: 'eval-new-thread' });
+    const baseline = prepareTurnCognitiveContext(snapshot, store, { present: OWNER_AUDIENCE, scopeKey, message: testCase.question, occurredAt: now, channel: 'text', threadId: 'eval-new-thread' });
     const baselineMilliseconds = performance.now() - startedAt;
     const before = cost(store, 'memory');
     const enriched = await recall.enrich(baseline, { scopeKey, message: testCase.question, snapshot, threadId: 'eval-new-thread', memoryTurn: true });

@@ -1,21 +1,16 @@
 import Foundation
 
 extension ShannonConversationModel {
-    /// Saves the summary the owner asked for and shows it in the call's thread as Shannon's note.
-    /// Nothing is sent for a call the owner declined, so there is no "discard" request.
-    func saveVoiceCallSummary(_ draft: ShannonVoiceCallSummaryDraft) async throws {
-        guard !draft.turns.isEmpty else { throw ShannonAPIError.invalidResponse }
-        let response = try await client.saveVoiceCallSummary(
-            scopeKey: scopeKey, threadId: draft.threadID, turns: draft.turns)
-        let note = ConversationMessage(role: .shannon, text: response.summary)
-        if selectedThreadId == response.threadId || (draft.threadID != nil && selectedThreadId == draft.threadID) {
-            messages.append(note)
-            cacheCurrentHistory()
-        } else {
-            // The owner may be reading another thread; never append to the visible one.
-            cachedHistories[response.threadId, default: []].append(ShannonConversationCache.CachedMessage(note))
-        }
-        persistDisplayCache()
-        await loadThreads(force: true)
+    /// Stores one ended 「友人も一緒」 period: the name said in it and what was talked about.
+    /// It goes to 頭の中 › 人, never into the owner's thread, profile, promises or goals.
+    func rememberVoiceCall(_ period: ShannonVoiceGuestPeriod, threadID: String?) async throws -> ShannonRememberedVoiceCallDTO {
+        guard !period.isEmpty else { throw ShannonAPIError.invalidResponse }
+        return try await client.rememberVoiceCall(
+            scopeKey: scopeKey, callId: period.callID, threadId: threadID, turns: period.turns)
+    }
+
+    /// 「今回は残さない」 for every period of one call. The first failure is reported; nothing is retried silently.
+    func discardVoiceCalls(_ callIDs: [String]) async throws {
+        for callID in callIDs { try await client.discardVoiceCall(scopeKey: scopeKey, callId: callID) }
     }
 }

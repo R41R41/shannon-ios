@@ -7,6 +7,8 @@ import {
   visibleMemoryText,
   type CompanionStateSnapshot,
   type ContextualMemory,
+  type MemoryAudience,
+  type MemoryDisclosure,
   type ShannonExperienceChannel,
   type ShannonCognitiveFrame,
   type ShannonIntent,
@@ -14,12 +16,23 @@ import {
 } from '@shannon/cognition';
 import type { ConversationStore } from './conversationStore.js';
 import { MemoryWithholding } from './memoryVisibility.js';
+import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
 
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;
   memories: readonly ContextualMemory[];
   frame: ShannonCognitiveFrame;
   prompt: string;
+  /** Who can hear or read the reply this context was built for. Later recall stages obey it. */
+  present: MemoryAudience;
+}
+
+/** A labelled memory from outside the conversation log, such as what was talked about with a person. */
+export interface LabelledRecallCandidate {
+  id: string;
+  summary: string;
+  observedAt: string;
+  disclosure?: MemoryDisclosure;
 }
 
 /**
@@ -34,6 +47,10 @@ export function prepareTurnCognitiveContext(
     message: string;
     occurredAt: string;
     channel: ShannonExperienceChannel;
+    /** Who can hear or read the reply. Every path states it; nothing defaults to the owner alone. */
+    present: MemoryAudience;
+    /** Further labelled candidates (person memories). They pass the same gate as everything else. */
+    additionalCandidates?: readonly LabelledRecallCandidate[];
     participants?: readonly string[];
     locationLabels?: readonly string[];
     currentGoal?: string;
@@ -45,7 +62,13 @@ export function prepareTurnCognitiveContext(
 ): TurnCognitiveContext {
   // Current locations come only from an explicit utterance, never an old memory.
   const locations = input.locationLabels ?? [...input.message.matchAll(/(?:今は?|現在)[、\s]*([^、。\s]{2,24}?)(?:にいる|に来て|に着|です)/gu)].map(match => match[1]!);
-  const intentCandidates = [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])]
+  const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
+  const gate = new DisclosureGate(input.present, snapshot, conversationStore, input.scopeKey, recentExperiences);
+  const full = snapshot;
+  // From here on only what the people present may hear is in scope.
+  snapshot = gate.snapshot();
+  // The owner's goals carry no audience label: they are his alone.
+  const intentCandidates = (gate.allowsUnlabelled() ? [...input.intents ?? [], ...(input.provisionalIntent ? [input.provisionalIntent] : [])] : [])
     .filter((intent, index, rows) => rows.findIndex(candidate => candidate.id === intent.id) === index);
   const primaryIntent = selectPrimaryIntent(
     input.message,
@@ -54,19 +77,21 @@ export function prepareTurnCognitiveContext(
     input.occurredAt,
   );
   const currentGoal = input.currentGoal ?? primaryIntent?.desiredOutcome ?? snapshot.prospectiveMemories.find(memory =>
-    memory.status === 'pending' && visibleMemoryText(snapshot, memory.id, memory.summary)
+    memory.status === 'pending' && visibleMemoryText(full, memory.id, memory.summary)
     && memory.summary.split(/[、のをは]/u).some(piece => piece.length >= 3 && input.message.includes(piece)))?.summary;
-  const recentExperiences = conversationStore.experienceCandidates(input.scopeKey);
-  const withholding = new MemoryWithholding(snapshot, conversationStore, input.scopeKey, recentExperiences);
+  // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
+  const withholding = new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   const candidates = [
-    ...recentExperiences.filter(item => !withholding.withholdsExperience(item)),
-    ...fullTextCandidates(withholding, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
+    ...recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item)),
+    ...fullTextCandidates(withholding, gate, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
+    ...(input.additionalCandidates ?? []).filter(item => gate.allows(item.id, item.disclosure))
+      .map(item => ({ id: item.id, summary: item.summary, observedAt: item.observedAt })),
     ...snapshot.userFacts.map(fact => ({ id: fact.id, summary: fact.statement, observedAt: fact.observedAt })),
     ...snapshot.relationships.map(item => ({ id: item.id, summary: item.statement, observedAt: item.observedAt })),
-    ...snapshot.prospectiveMemories.filter(memory => !memory.sourceExperienceId || visibleMemoryText(snapshot, memory.sourceExperienceId, memory.summary))
+    ...snapshot.prospectiveMemories.filter(memory => !memory.sourceExperienceId || visibleMemoryText(full, memory.sourceExperienceId, memory.summary))
       .map(memory => ({ id: memory.id, summary: memory.summary, observedAt: memory.createdAt })),
   ].flatMap(candidate => {
-    const text = visibleMemoryText(snapshot, candidate.id, candidate.summary);
+    const text = visibleMemoryText(full, candidate.id, candidate.summary);
     const promise = snapshot.prospectiveMemories.find(memory => memory.id === candidate.id);
     const summary = promise ? `[約束 status=${promise.status}; 期限=${promise.dueAt ?? promise.dueDate ?? promise.dueHint ?? '未定'}] ${text}` : text;
     return text ? [{ ...candidate, summary: summary! }] : [];
@@ -97,7 +122,8 @@ export function prepareTurnCognitiveContext(
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: turnPrompt(snapshot, situation, memories, frame),
+    prompt: turnPrompt(snapshot, situation, memories, frame, gate.ownerOnly),
+    present: input.present,
   });
 }
 
@@ -112,11 +138,13 @@ export function withRecalledMemories(
   const frame: ShannonCognitiveFrame = Object.freeze({
     ...context.frame, recalledMemoryIDs: Object.freeze([...new Set([...memories.map(memory => memory.id), ...additionalRecalledIds])]),
   });
+  const gate = new DisclosureGate(context.present, snapshot, null, snapshot.scopeKey);
   return Object.freeze({
     situation: context.situation,
     memories: Object.freeze([...memories]),
     frame,
-    prompt: [turnPrompt(snapshot, context.situation, memories, frame), supplementalPrompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate.ownerOnly), supplementalPrompt].filter(Boolean).join('\n\n'),
+    present: context.present,
   });
 }
 
@@ -125,7 +153,10 @@ function turnPrompt(
   situation: ShannonSituationSnapshot,
   memories: readonly ContextualMemory[],
   frame: ShannonCognitiveFrame,
+  ownerOnly: boolean,
 ): string {
+  // With anyone else present the snapshot is already the disclosed one: no goals, no owner state block.
+  if (!ownerOnly) return [buildTurnCognitivePrompt(situation, memories), sharedProfilePrompt(snapshot)].join('\n\n');
   return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
     // KnowledgeStore projections may not yet contain the commitment extension.
     buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200, now: situation.occurredAt }),
@@ -140,12 +171,13 @@ function turnPrompt(
  */
 function fullTextCandidates(
   withholding: MemoryWithholding,
+  gate: DisclosureGate,
   conversationStore: ConversationStore,
   input: { scopeKey: string; message: string; threadId?: string },
   known: ReadonlySet<string>,
 ): Array<{ id: string; summary: string; observedAt: string }> {
   const hits = conversationStore.searchMemory?.(input.scopeKey, input.message) ?? [];
-  return hits.filter(hit => !known.has(hit.id) && (hit.kind === 'experience'
+  return hits.filter(hit => !known.has(hit.id) && gate.allowsRecallId(hit.id) && (hit.kind === 'experience'
     ? !withholding.withholdsExperience(hit)
     : hit.kind === 'thread' && hit.threadId !== input.threadId
       && !withholding.withholdsThreadSummary(hit.threadId ?? hit.sourceId, hit.summary, hit.observedAt)))

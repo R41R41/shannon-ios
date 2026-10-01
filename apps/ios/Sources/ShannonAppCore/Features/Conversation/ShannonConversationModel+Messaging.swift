@@ -199,7 +199,8 @@ extension ShannonConversationModel {
         userTranscript: String,
         shannonTranscript: String,
         threadID: String? = nil,
-        emotion: ShannonVoiceTurnEmotionDTO? = nil
+        emotion: ShannonVoiceTurnEmotionDTO? = nil,
+        companionPresent: Bool = false
     ) async throws {
         let requestedThreadID = threadID ?? selectedThreadId
         let userText = userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -210,7 +211,8 @@ extension ShannonConversationModel {
             threadId: requestedThreadID,
             userTranscript: userText,
             shannonTranscript: shannonText,
-            emotion: emotion
+            emotion: emotion,
+            companionPresent: companionPresent
         )
         state = response.state
         let emotion = response.messageEmotion

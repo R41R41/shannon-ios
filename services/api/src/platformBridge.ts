@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto';
 import {
+  OWNER_AUDIENCE,
   buildCompanionStatePrompt,
+  groupAudience,
   resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateStore,
+  type MemoryAudience,
 } from '@shannon/cognition';
+import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
 
@@ -91,6 +95,9 @@ export class PlatformBridgeService {
       shannonReply: request.shannonReply,
       messageEmotion,
       completedAt: request.observedAt,
+      // Everyone in that conversation saw it; the verified owner wrote the user side.
+      audience: platformAudience(binding, request),
+      speaker: 'owner' as const,
     };
     let persisted;
     try {
@@ -104,6 +111,8 @@ export class PlatformBridgeService {
           threadTitle: binding.title,
           messageEmotion,
           capturedStateVersion: capturedState.version,
+          audience: completedTurn.audience,
+          speaker: completedTurn.speaker,
         },
       });
     } catch (error) {
@@ -127,15 +136,18 @@ export class PlatformBridgeService {
   context(value: unknown): PlatformContextResponse {
     const request = validatedPlatformContext(value);
     const binding = this.authorizedBinding(request);
-    const snapshot = binding.audience === 'owner-private' && binding.conversationId
-      ? this.stateStore.snapshot(this.configuration.scopeKey) : null;
+    const snapshot = this.stateStore.snapshot(this.configuration.scopeKey);
+    const present = platformAudience(binding, request);
+    const gate = new DisclosureGate(present, snapshot, this.conversationStore, this.configuration.scopeKey);
+    // A conversation other people can read gets only what they may be told: ordinary items and what was said there.
+    const projection = gate.ownerOnly
+      ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
+      : [SHARED_AUDIENCE_HEADER, sharedProfilePrompt(gate.snapshot())].join('\n').slice(0, 2_400);
     return Object.freeze({
       schemaVersion: 1 as const,
-      stateVersion: snapshot?.version ?? 0,
-      updatedAt: snapshot?.updatedAt ?? this.now(),
-      projection: snapshot
-        ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
-        : '[Shannon shared audience]\nあなたはシャノンです。今この会話で共有された内容だけを使って自然に応答してください。\n個人アプリの記憶・約束・関係性・関心は、この場では共有されていません。覚えているふりをしないでください。',
+      stateVersion: gate.ownerOnly ? snapshot.version : 0,
+      updatedAt: gate.ownerOnly ? snapshot.updatedAt : this.now(),
+      projection,
     });
   }
 
@@ -206,6 +218,21 @@ export function configuredPlatformBridge(
     }
   }
   return Object.freeze({ token, scopeKey, bindings, prefixBindings: Object.freeze(prefixBindings) });
+}
+
+const SHARED_AUDIENCE_HEADER = '[Shannon shared audience]\nあなたはシャノンです。今この会話で共有された内容と、下に載っている記憶だけを使って自然に応答してください。\n載っていない個人アプリの記憶・約束・関係性・関心は、この場では共有されていません。覚えているふりをしないでください。';
+
+/**
+ * Who can read a bound conversation. Only an exact conversation the server marked
+ * `owner-private` is the owner alone; every other binding is a group, identified by the
+ * same opaque key as its thread.
+ */
+export function platformAudience(
+  binding: PlatformBridgeBinding,
+  request: { platform: ShannonPlatform; conversationId: string },
+): MemoryAudience {
+  return binding.audience === 'owner-private' && binding.conversationId
+    ? OWNER_AUDIENCE : groupAudience(platformBridgeThreadId(request.platform, request.conversationId));
 }
 
 export function platformBridgeThreadId(platform: ShannonPlatform, conversationId: string): string {

@@ -15,6 +15,25 @@ import {
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
+import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
+import type { MemoryDisclosure } from './types.js';
+
+function cleanDisclosure(value: MemoryDisclosure | undefined): { disclosure?: MemoryDisclosure } {
+  const disclosure = normalizeDisclosure(value);
+  return disclosure ? { disclosure } : {};
+}
+
+/**
+ * A re-observed item keeps its label when the new observation carries none, and its
+ * audience grows to everyone who has now heard it.
+ */
+function mergedDisclosure(previous: MemoryDisclosure | undefined, next: MemoryDisclosure | undefined): MemoryDisclosure | undefined {
+  if (!next) return previous;
+  if (!previous) return next;
+  // Once protected, restating it in plainer words does not unprotect it; only the owner can.
+  const kept = previous.sensitivity === 'sensitive' && next.sensitivity !== 'sensitive' ? previous : next;
+  return Object.freeze({ ...kept, audience: widenAudience(previous.audience, next.audience) });
+}
 
 export const INITIAL_SHANNON_TEMPERAMENT: Readonly<ShannonTemperament> = Object.freeze({
   curiosity: 0.65,
@@ -57,6 +76,7 @@ export function cleanFact(fact: UserFact): UserFact {
     observedAt: fact.observedAt,
     ...(fact.evidence ? { evidence: cleanText(fact.evidence, 320) } : {}),
     ...(fact.sourceExperienceId ? { sourceExperienceId: cleanText(fact.sourceExperienceId, 120) } : {}),
+    ...cleanDisclosure(fact.disclosure),
   });
 }
 
@@ -77,6 +97,7 @@ export function cleanRelationship(relationship: RelationshipInsight): Relationsh
     observedAt: relationship.observedAt,
     ...(relationship.evidence ? { evidence: cleanText(relationship.evidence, 320) } : {}),
     ...(relationship.sourceExperienceId ? { sourceExperienceId: cleanText(relationship.sourceExperienceId, 120) } : {}),
+    ...cleanDisclosure(relationship.disclosure),
   });
 }
 
@@ -98,6 +119,7 @@ export function cleanControl(control: MemoryControl): MemoryControl {
     ...(control.withheldText ? { withheldText: cleanText(control.withheldText, 320) } : {}),
     ...(control.causedBy ? { causedBy: cleanText(control.causedBy, 120) } : {}),
     ...(isCommitmentStatus(control.commitmentStatusBefore) ? { commitmentStatusBefore: control.commitmentStatusBefore } : {}),
+    ...(control.sensitivity === 'sensitive' || control.sensitivity === 'ordinary' ? { sensitivity: control.sensitivity } : {}),
   });
 }
 
@@ -115,6 +137,7 @@ export function cleanProspectiveMemory(memory: ProspectiveMemory): ProspectiveMe
     ...(memory.sourceExperienceId ? { sourceExperienceId: cleanText(memory.sourceExperienceId, 120) } : {}),
     ...(memory.evidence ? { evidence: cleanText(memory.evidence, 320) } : {}),
     ...(memory.remindAfter && Number.isFinite(Date.parse(memory.remindAfter)) ? { remindAfter: memory.remindAfter } : {}),
+    ...cleanDisclosure(memory.disclosure),
   });
 }
 
@@ -216,38 +239,44 @@ export function reduceCompanionState(
       break;
     }
     case 'user-fact-upserted': {
-      const fact = cleanFact(event.fact);
-      if (!fact.id || !fact.statement) return current;
-      const previous = current.userFacts.find(item => item.id === fact.id);
+      const candidate = cleanFact(event.fact);
+      if (!candidate.id || !candidate.statement) return current;
+      const previous = current.userFacts.find(item => item.id === candidate.id);
+      const fact = cleanFact({ ...candidate, disclosure: mergedDisclosure(previous?.disclosure, candidate.disclosure) });
       if (previous
         && previous.statement === fact.statement
         && previous.confidence === fact.confidence
         && previous.observedAt === fact.observedAt
         && previous.evidence === fact.evidence
-        && previous.sourceExperienceId === fact.sourceExperienceId) return current;
+        && previous.sourceExperienceId === fact.sourceExperienceId
+        && sameDisclosure(previous.disclosure, fact.disclosure)) return current;
       const userFacts = [fact, ...current.userFacts.filter(item => item.id !== fact.id)].slice(0, MAX_USER_FACTS);
       next = { ...current, userFacts };
       break;
     }
     case 'relationship-upserted': {
-      const relationship = cleanRelationship(event.relationship);
-      if (!relationship.id || !relationship.statement) return current;
-      const previous = current.relationships.find(item => item.id === relationship.id);
+      const candidate = cleanRelationship(event.relationship);
+      if (!candidate.id || !candidate.statement) return current;
+      const previous = current.relationships.find(item => item.id === candidate.id);
+      const relationship = cleanRelationship({ ...candidate, disclosure: mergedDisclosure(previous?.disclosure, candidate.disclosure) });
       if (previous
         && previous.statement === relationship.statement
         && previous.confidence === relationship.confidence
         && previous.observedAt === relationship.observedAt
         && previous.evidence === relationship.evidence
-        && previous.sourceExperienceId === relationship.sourceExperienceId) return current;
+        && previous.sourceExperienceId === relationship.sourceExperienceId
+        && sameDisclosure(previous.disclosure, relationship.disclosure)) return current;
       const relationships = [relationship, ...current.relationships.filter(item => item.id !== relationship.id)]
         .slice(0, MAX_RELATIONSHIPS);
       next = { ...current, relationships };
       break;
     }
     case 'prospective-memory-upserted': {
-      const memory = cleanProspectiveMemory(event.memory);
-      if (!memory.id || !memory.summary) return current;
-      const previous = current.prospectiveMemories.find(item => item.id === memory.id);
+      const candidate = cleanProspectiveMemory(event.memory);
+      if (!candidate.id || !candidate.summary) return current;
+      const previous = current.prospectiveMemories.find(item => item.id === candidate.id);
+      // A correction or snooze rewrites the promise; who heard it and its label stay.
+      const memory = candidate.disclosure || !previous?.disclosure ? candidate : cleanProspectiveMemory({ ...candidate, disclosure: previous.disclosure });
       // A background-job retry must not resurrect a completed/cancelled promise
       // or overwrite a later explicit correction.
       if (previous && !event.replace) return current;
@@ -257,7 +286,8 @@ export function reduceCompanionState(
         && previous.createdAt === memory.createdAt
         && previous.updatedAt === memory.updatedAt
         && previous.dueHint === memory.dueHint
-        && previous.evidence === memory.evidence) return current;
+        && previous.evidence === memory.evidence
+        && sameDisclosure(previous.disclosure, memory.disclosure)) return current;
       const prospectiveMemories = [memory, ...current.prospectiveMemories.filter(item => item.id !== memory.id)]
         .slice(0, MAX_PROSPECTIVE_MEMORIES);
       next = { ...current, prospectiveMemories };
@@ -287,7 +317,8 @@ export function reduceCompanionState(
         && previous.contextInvalidatedAt === control.contextInvalidatedAt
         && previous.withheldText === control.withheldText
         && previous.causedBy === control.causedBy
-        && previous.commitmentStatusBefore === control.commitmentStatusBefore) return current;
+        && previous.commitmentStatusBefore === control.commitmentStatusBefore
+        && previous.sensitivity === control.sensitivity) return current;
       const memoryControls = [control, ...current.memoryControls.filter(item => item.memoryId !== control.memoryId)]
         .slice(0, MAX_MEMORY_CONTROLS);
       next = { ...current, memoryControls };

@@ -50,6 +50,8 @@ public struct ShannonMemoryItemDTO: Codable, Equatable, Identifiable, Sendable {
     public let changeReason: String
     public let evidence: [ShannonMemoryEvidenceDTO]
     public var commitment: ShannonCommitmentDTO? = nil
+    /// Who was present and whether it is 機微 or ふつう. Absent from older servers and for interests.
+    public var disclosure: ShannonMemoryDisclosureDTO? = nil
 }
 
 public struct ShannonCommitmentDTO: Codable, Equatable, Sendable {
@@ -260,6 +262,9 @@ public enum ShannonMemoryActionDTO: String, Codable, Equatable, Sendable {
     case dismiss
     /// 「あとで」: one more reminder later, inside the same daily slot.
     case snooze
+    /// The owner's own choice of 機微／ふつう for one item.
+    case markSensitive = "mark-sensitive"
+    case markOrdinary = "mark-ordinary"
 }
 
 public struct ShannonMemoryMutationDTO: Codable, Equatable, Sendable {

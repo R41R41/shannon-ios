@@ -1,5 +1,6 @@
 import {
   isMemoryInquiry,
+  isOwnerOnly,
   mergeSemanticMemories,
   needsSemanticMemoryRecall,
   type CompanionStateSnapshot,
@@ -59,10 +60,12 @@ export class ShannonTurnMemoryRecall implements TurnMemoryRecall {
   }
 
   async enrich(context: TurnCognitiveContext, input: TurnMemoryRecallInput): Promise<EnrichedTurnContext> {
-    const usable = this.knowledge ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [];
+    // Shannon's private notes have no audience label: they are used only when the owner is alone.
+    const ownerOnly = isOwnerOnly(context.present);
+    const usable = this.knowledge && ownerOnly ? usableKnowledgeFor(this.knowledge, input.scopeKey, input.snapshot) : [];
     const usableIds = new Set(usable.map(document => document.id));
     const outcome: SemanticRecallOutcome = this.willSearch(input) ? await this.semantic.recall({
-      scopeKey: input.scopeKey, query: input.message, snapshot: input.snapshot,
+      scopeKey: input.scopeKey, query: input.message, snapshot: input.snapshot, present: context.present,
       ...(input.threadId ? { threadId: input.threadId } : {}),
       excludeIds: new Set(context.memories.map(memory => memory.id)),
       isEligible: candidate => candidate.kind !== 'knowledge' || usableIds.has(candidate.sourceId),

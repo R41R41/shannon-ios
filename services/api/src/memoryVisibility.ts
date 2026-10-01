@@ -5,11 +5,13 @@ import {
   ruleWithholdsText,
   visibleMemoryText,
   type CompanionStateSnapshot,
+  type MemoryAudience,
   type MemoryWithholdingRule,
   type ShannonKnowledgeDocument,
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience, StoredConversationMessage } from './conversationStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
+import { DisclosureGate } from './memoryDisclosure.js';
 
 /** A Shannon reply (or the Shannon side of an experience summary) as the withholding rule sees it. */
 export interface WithholdableReply {
@@ -175,22 +177,32 @@ export function conversationStoreOf(value: unknown): ConversationStore | null {
     && typeof candidate.threadSummary === 'function' ? candidate as ConversationStore : null;
 }
 
-/** Keep the durable transcript intact, but don't re-feed forgotten evidence. */
+/**
+ * Keep the durable transcript intact, but don't re-feed forgotten evidence, and with
+ * anyone else present re-feed only the turns they may hear.
+ */
 export function visibleConversationHistory(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadID: string,
+  present: MemoryAudience,
 ): readonly ShannonConversationItem[] {
   const count = store.history(scopeKey, threadID).length;
   if (!count) return [];
   const withholding = new MemoryWithholding(state, store, scopeKey);
+  const gate = new DisclosureGate(present, state, store, scopeKey);
   return store.conversationHistory(scopeKey, threadID).slice(-count)
-    .filter(message => !withholding.withholdsMessage(message))
+    .filter(message => gate.allowsMessage(message) && !withholding.withholdsMessage(message))
     .map(({ role, content }) => ({ role, content }));
 }
 
-/** The prior summary of a thread for the model, or nothing when it was built from a withheld turn. */
+/**
+ * The prior summary of a thread for the model, or nothing when it was built from a withheld
+ * turn. A rolling summary has no audience label, so it is used only when the owner is alone.
+ */
 export function usableThreadSummary(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
+  present: MemoryAudience,
 ): string | undefined {
+  if (!new DisclosureGate(present, state, store, scopeKey).allowsUnlabelled()) return undefined;
   return new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
 }
 

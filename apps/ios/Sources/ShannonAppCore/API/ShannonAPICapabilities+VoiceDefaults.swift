@@ -174,11 +174,31 @@ public extension ShannonAPIClientProtocol {
         )
     }
 
-    func saveVoiceCallSummary(
+    /// A client that does not carry the flag still stores the turn as the owner's.
+    func commitRealtimeVoiceTurn(
         scopeKey: String,
         threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?,
+        companionPresent: Bool
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
+        try await commitRealtimeVoiceTurn(
+            scopeKey: scopeKey, threadId: threadId,
+            userTranscript: userTranscript, shannonTranscript: shannonTranscript, emotion: emotion
+        )
+    }
+
+    func rememberVoiceCall(
+        scopeKey: String,
+        callId: String,
+        threadId: String?,
         turns: [ShannonVoiceCallContextTurnDTO]
-    ) async throws -> ShannonVoiceCallSummaryResponseDTO {
+    ) async throws -> ShannonRememberedVoiceCallDTO {
+        throw ShannonAPIError.invalidResponse
+    }
+
+    func discardVoiceCall(scopeKey: String, callId: String) async throws {
         throw ShannonAPIError.invalidResponse
     }
 }

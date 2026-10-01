@@ -36,16 +36,56 @@ struct ShannonVoiceGuestCallTests {
         ])
     }
 
-    @Test("An owner-only call never offers a summary; a one-sided guest period does not either")
-    func summaryNeedsAGuestConversation() {
+    @Test("A period has its own call id, hands its turns over once, and a new period starts clean")
+    func periodLifecycle() {
         var call = ShannonVoiceGuestCallState()
-        #expect(call.summaryTurns == nil)
-        call.beginGuestPeriod()
-        #expect(call.summaryTurns == nil)
+        #expect(call.endGuestPeriod() == nil)
+        #expect(call.requestContext(addressedByName: false, followsShannonTurn: false).callId == nil)
+
+        call.beginGuestPeriod(callID: "call-0001")
+        #expect(call.requestContext(addressedByName: false, followsShannonTurn: false).callId == "call-0001")
         call.record(participant: "", shannon: "はじめまして")
-        #expect(call.summaryTurns == nil)
-        call.record(participant: "こんにちは", shannon: "こんにちは")
-        #expect(call.summaryTurns?.count == 3)
+        // Nobody but Shannon spoke: there is nothing to remember.
+        #expect(call.endGuestPeriod()?.isEmpty == true)
+
+        call.beginGuestPeriod(callID: "call-0002")
+        call.record(participant: "ミキと言います", shannon: "ミキさん、よろしくお願いします。")
+        let period = call.endGuestPeriod()
+        #expect(period == ShannonVoiceGuestPeriod(callID: "call-0002", turns: [
+            .init(role: .participant, text: "ミキと言います"), .init(role: .shannon, text: "ミキさん、よろしくお願いします。"),
+        ]))
+        #expect(period?.isEmpty == false)
+        #expect(call.turns.isEmpty)
+        #expect(call.endGuestPeriod() == nil)
+        #expect(call.hadGuestPeriod)
+
+        call.beginGuestPeriod()
+        #expect(call.callID != nil && call.callID != "call-0002")
+        #expect(call.turns.isEmpty)
+    }
+
+    @Test("Someone may be listening from the question until the owner says nobody is there")
+    func companionSuspicion() {
+        var call = ShannonVoiceGuestCallState()
+        #expect(!call.companionSuspected)
+        call.askedAboutCompanion(now: 10)
+        #expect(call.companionSuspected)
+        #expect(ShannonVoiceCompanionCue.denies("いや、一人だよ"))
+        #expect(ShannonVoiceCompanionCue.denies("いないよ"))
+        #expect(!ShannonVoiceCompanionCue.denies("うん"))
+        #expect(!ShannonVoiceCompanionCue.denies("今日の予定を教えて"))
+        call.companionDenied()
+        #expect(!call.companionSuspected)
+        call.askedAboutCompanion(now: 20)
+        call.beginGuestPeriod()
+        #expect(!call.companionSuspected)
+
+        let marked = ShannonVoiceUserUtteranceDTO(id: "u", text: "予定は？", companionPresent: true)
+        let json = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(marked)) as? [String: Any]
+        #expect(json?["companionPresent"] as? Bool == true)
+        let plain = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ShannonVoiceUserUtteranceDTO(id: "u", text: "予定は？"))) as? [String: Any]
+        #expect(plain?["companionPresent"] == nil)
     }
 
     @Test("The call context is sent only inside the utterance and omitted for owner turns")
@@ -61,6 +101,8 @@ struct ShannonVoiceGuestCallTests {
         let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(guest)) as? [String: Any])
         let context = try #require(object["callContext"] as? [String: Any])
         #expect(context["followsShannonTurn"] as? Bool == true)
+        // A context without a call id stays valid for a server that predates people memory.
+        #expect(context["callId"] == nil)
         #expect((context["turns"] as? [[String: String]])?.first == ["role": "participant", "text": "声可愛いね"])
     }
 
@@ -199,7 +241,15 @@ struct ShannonVoiceGuestCallTests {
             speakerName: ShannonVoiceParticipantMode.guest.transcriptSpeakerName,
             userTranscript: "声、可愛いね", shannonTranscript: "えへへ")
         #expect(lines.user == "話し手：声、可愛いね")
-        #expect(ShannonVoiceGuestModeCopy.lines.joined().contains("保存しません"))
+        // Both people at the table can read what is kept and how to take it back.
+        let notice = ShannonVoiceGuestModeCopy.lines.joined()
+        #expect(notice.contains("お名前と、この通話で話したことをシャノンが覚えます"))
+        #expect(notice.contains("声で人を聞き分けることはしません"))
+        #expect(notice.contains("録音は残しません"))
+        #expect(notice.contains("「今回は残さない」"))
+        #expect(!notice.contains("保存しません"))
+        #expect(ShannonVoiceGuestModeCopy.switchToGuestMessage.contains("お名前とこの通話で話したことをシャノンが覚えます"))
+        #expect(ShannonVoiceGuestModeCopy.switchToOwnerMessage.contains("ここまでの分を覚えます"))
         #expect(!ShannonVoiceGuestModeCopy.switchToGuestMessage.contains("つなぎ直"))
     }
 
@@ -212,45 +262,84 @@ struct ShannonVoiceGuestCallTests {
         #expect(ShannonVoiceCallSummaryNote.body(of: "今日はいい日ですね") == "今日はいい日ですね")
     }
 
-    @Test("Saving on yes adds one Shannon note to the call's thread; declining sends nothing")
-    func summaryChoice() async throws {
-        let client = CallSummaryClient()
+    @Test("The end card says the call was remembered, names who, and offers 今回は残さない")
+    func callMemoryCard() {
+        let first = ShannonVoiceGuestPeriod(callID: "call-0001", turns: [.init(role: .participant, text: "ミキと言います")])
+        let second = ShannonVoiceGuestPeriod(callID: "call-0002", turns: [.init(role: .participant, text: "こんにちは")])
+        var card = ShannonVoiceCallMemoryState()
+        card.began(first)
+        card.began(second)
+        #expect(card.phase == .remembering)
+        #expect(card.callIDs == ["call-0001", "call-0002"])
+        card.finished(first, people: ["ミキ"])
+        #expect(card.phase == .remembering)
+        card.finished(second, people: ["ミキ"])
+        #expect(card.phase == .remembered)
+        #expect(card.title == "この通話を覚えました")
+        #expect(card.detail.contains("ミキさんのお名前と、話したことを覚えました"))
+        #expect(card.detail.contains("頭の中の「人」"))
+        #expect(ShannonVoiceCallMemoryState.discardLabel == "今回は残さない")
+
+        var unnamed = ShannonVoiceCallMemoryState()
+        unnamed.began(second)
+        unnamed.finished(second, people: [])
+        #expect(unnamed.detail.contains("お名前は聞いていない"))
+        #expect(unnamed.detail.contains("ライ氏と二人の時にだけ使います"))
+
+        var failed = ShannonVoiceCallMemoryState()
+        failed.began(first)
+        failed.finished(first, people: nil)
+        #expect(failed.phase == .rememberFailed)
+        #expect(failed.unsaved == [first])
+        #expect(failed.detail.contains("このままでは何も残りません"))
+
+        var discarded = card
+        discarded.phase = .discarded
+        #expect(discarded.title == "今回の通話は残しませんでした")
+        #expect(discarded.detail.contains("残っていません"))
+    }
+
+    @Test("Ending a period remembers it once; 今回は残さない discards every period of the call")
+    func rememberAndDiscard() async throws {
+        let client = CallMemoryClient()
         let model = ShannonConversationModel(client: client, usesDisplayCache: false)
         model.selectedThreadId = "browsed"
         model.messages = [.init(role: .user, text: "別の会話")]
-        let draft = ShannonVoiceCallSummaryDraft(threadID: "call", turns: [
-            .init(role: .participant, text: "はじめまして"), .init(role: .shannon, text: "はじめまして、シャノンです。"),
+        let period = ShannonVoiceGuestPeriod(callID: "call-0001", turns: [
+            .init(role: .participant, text: "ミキと言います"), .init(role: .shannon, text: "ミキさん、よろしくお願いします。"),
         ])
 
-        // Declining or dismissing is purely local: the prompt state is dropped and no request exists.
-        var prompt: ShannonVoiceCallSummaryPromptState? = .asking(draft)
-        #expect(prompt?.draft == draft)
-        prompt = nil
-        #expect(await client.requests.isEmpty)
+        let remembered = try await model.rememberVoiceCall(period, threadID: "call-thread")
+        #expect(remembered.people.map(\.displayName) == ["ミキ"])
+        #expect(await client.remembered == ["call-0001"])
+        // Nothing of a 「友人も一緒」 period is added to any thread on the device.
         #expect(model.messages.map(\.text) == ["別の会話"])
-        #expect(model.cachedHistories["call"] == nil)
+        #expect(model.cachedHistories["call-thread"] == nil)
 
-        try await model.saveVoiceCallSummary(draft)
-        #expect(await client.requests == [draft.turns])
-        #expect(model.messages.map(\.text) == ["別の会話"])
-        let saved = try #require(model.cachedHistories["call"])
-        #expect(saved.count == 1)
-        #expect(ShannonVoiceCallSummaryNote.isNote(saved[0].text))
-        #expect(saved[0].role == "shannon")
+        await #expect(throws: ShannonAPIError.self) {
+            try await model.rememberVoiceCall(ShannonVoiceGuestPeriod(callID: "empty", turns: []), threadID: nil)
+        }
+        try await model.discardVoiceCalls(["call-0001", "call-0002"])
+        #expect(await client.discarded == ["call-0001", "call-0002"])
     }
 }
 
-private actor CallSummaryClient: ShannonAPIClientProtocol {
-    private(set) var requests: [[ShannonVoiceCallContextTurnDTO]] = []
+private actor CallMemoryClient: ShannonAPIClientProtocol {
+    private(set) var remembered: [String] = []
+    private(set) var discarded: [String] = []
 
     func send(message: String, scopeKey: String, threadId: String?) async throws -> ChatResponseDTO {
         throw ShannonAPIError.invalidResponse
     }
 
-    func saveVoiceCallSummary(
-        scopeKey: String, threadId: String?, turns: [ShannonVoiceCallContextTurnDTO]
-    ) async throws -> ShannonVoiceCallSummaryResponseDTO {
-        requests.append(turns)
-        return .init(threadId: threadId ?? "new", summary: "【友人も一緒の通話の要約】\n相手: お友達")
+    func rememberVoiceCall(
+        scopeKey: String, callId: String, threadId: String?, turns: [ShannonVoiceCallContextTurnDTO]
+    ) async throws -> ShannonRememberedVoiceCallDTO {
+        remembered.append(callId)
+        return .init(callId: callId, people: [.init(id: "p1", displayName: "ミキ")], summary: "相手: ミキさん")
+    }
+
+    func discardVoiceCall(scopeKey: String, callId: String) async throws {
+        discarded.append(callId)
     }
 }
