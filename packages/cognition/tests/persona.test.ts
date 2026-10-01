@@ -98,6 +98,10 @@ describe('canonical capability description', () => {
     for (const privateWord of ['Aether:', 'Voyager:', '開発作業', '記憶と約束', '作業提案にする']) {
       expect(guest).not.toContain(privateWord);
     }
-    expect(guest).toContain('持ち主の記憶・ノート・タスク・作業は見ないし使わない');
+    expect(guest).toContain('持ち主のノート・タスク・作業は見ないし使わない');
+    expect(guest).toContain('守るべき個人情報を含まないものと、いま一緒にいる人と前に話したことだけを使う');
+    expect(guest).toContain('「今回は残さない」');
+    expect(guest).not.toContain('人: 「友人も一緒」で会った人');
+    expect(shannonCapabilityPrompt('owner')).toContain('人: 「友人も一緒」で会った人の名前と話したことを覚える。');
   });
 });

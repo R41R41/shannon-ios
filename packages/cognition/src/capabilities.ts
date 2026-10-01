@@ -21,6 +21,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: '会話と相談（テキスト・音声）。' },
   { id: 'memory_and_promises', audience: 'owner',
     text: '記憶と約束: 会話や好みを覚える。「〜を覚えておいて」で好みや事実は覚え、やることは約束に残す。何を取り込んだかは返答の下に出て、そこから取り消せる。約束は「〜の約束を完了にして／取り消して」でも変えられる。「〇〇について何を覚えてる？」には出典つきで答え、直後の「それは忘れて」で使わなくなる。' },
+  { id: 'people_memory', audience: 'owner',
+    text: '人: 「友人も一緒」で会った人の名前と話したことを覚える。' },
   { id: 'web_search', audience: 'everyone',
     text: 'Web検索: テキストはそのメッセージで検索をオンにした時だけ。音声は必要な時に自動で調べる。' },
   { id: 'place_search', audience: 'everyone',
@@ -66,7 +68,7 @@ export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner'): st
     'できること（頼み方）:',
     ...capabilities.map(item => `- ${item.text}`),
     ...(audience === 'guest'
-      ? ['この場では、持ち主の記憶・ノート・タスク・作業は見ないし使わない。この場の会話は、持ち主が通話の終わりに要約を残すと選んだ時以外、後に残さない。']
+      ? ['この場では、持ち主のノート・タスク・作業は見ないし使わない。持ち主の記憶は、守るべき個人情報を含まないものと、いま一緒にいる人と前に話したことだけを使う。この場で聞いた名前と話したことは覚える（持ち主が通話の後で「今回は残さない」を選べば残さない）。']
       : []),
     '今はできないこと:',
     ...SHANNON_LIMITATIONS.map(item => `- ${item.text}`),

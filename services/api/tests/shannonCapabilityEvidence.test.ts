@@ -14,6 +14,8 @@ import { executeConversationCommand } from '../src/conversationCommands.js';
 import { prepareConversationOrganize } from '../src/conversationOrganize.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { isOrganizeCommand } from '../src/organizeSupport.js';
+import { PeopleMemory } from '../src/peopleMemory.js';
+import { establishedGuestName } from '../src/voiceGuestNames.js';
 import { wantsPlaceDiscovery } from '../src/placeDiscovery.js';
 import { distributeLatestInternalBuild } from '../src/testflightDistributor.js';
 import { VOICE_SKILLS, mandatorySkillPatterns, type VoiceSkill } from '../src/voiceDecisionContract.js';
@@ -33,6 +35,8 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     OpenAIResponsesChatModel.prototype.generateVoiceStreaming),
   memory_and_promises: () => voiceSkill('conversation_memory') && exists(executeConversationCommand)
     && isForgetCitedMemoriesCommand('それは忘れて'),
+  people_memory: () => exists(PeopleMemory.prototype.rememberCall, PeopleMemory.prototype.recall, PeopleMemory.prototype.forgetPerson)
+    && establishedGuestName('はじめまして、ミキと言います') === 'ミキ',
   web_search: () => voiceSkill('current_web') && WEB_SEARCH_INSTRUCTIONS.includes('Web検索が有効')
     && mandatorySkillPatterns.current_web!.test('今日の天気を調べて'),
   place_search: () => voiceSkill('place_discovery') && wantsPlaceDiscovery('近くのカフェを探して'),

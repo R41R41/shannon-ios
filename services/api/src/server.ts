@@ -39,6 +39,8 @@ import {
 } from './voiceTranscription.js';
 import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPlatformBridgePath } from './serverPlatformBridgeRoute.js';
 import { SQLitePersonIdentityStore } from './personIdentity.js';
+import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
+import { VOICE_CALL_MEMORY_PATH } from './apiPeopleMemoryRoutes.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
 const now = () => new Date().toISOString();
@@ -53,6 +55,7 @@ const organizeStore = new SQLiteOrganizeStore(configuredDatabasePath());
 const voiceTranscriber = createConfiguredVoiceTranscriber(process.env, persistentStore);
 const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
+const peopleMemoryStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
 const conversationOrchestrationStore = new SQLiteConversationOrchestrationStore(configuredDatabasePath());
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
@@ -84,6 +87,7 @@ const kernel = createLocalApiKernel(now, {
   voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   personIdentities: personIdentityStore,
+  peopleMemory: peopleMemoryStore,
   worldSubscriptions: worldStore,
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
@@ -192,7 +196,8 @@ const server = createServer(async (request, response) => {
       await handleVoiceVisionSnapshot(request, response, principal, { gateway: voiceVisionGateway, kernel });
       return;
     }
-    const body = request.method === 'POST' ? await readJson(request, 64 * 1024) : undefined;
+    // One ended 「友人も一緒」 period carries up to sixty turns of text.
+    const body = request.method === 'POST' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {
@@ -266,6 +271,7 @@ function shutdown(): void {
     organizeStore.close();
     cognitiveIntentStore.close();
     conversationOrchestrationStore.close();
+    peopleMemoryStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

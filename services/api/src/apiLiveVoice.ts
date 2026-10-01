@@ -55,6 +55,8 @@ import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CAL
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
+import type { PeopleMemory } from './peopleMemory.js';
+import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   personIdentities?: PersonIdentityStore;
@@ -69,6 +71,7 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   cognitiveIntents: CognitiveIntentStore;
   conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall | null;
+  people?: PeopleMemory;
 }
 
 export interface LiveVoiceStreamObserver {
@@ -129,7 +132,11 @@ async function completeLiveVoiceDelegation(
   const guestCall = temporaryGuest ? deviceContext?.guestCall ?? null : null;
   const guestHistory = guestCallHistory(guestCall);
   // Who can hear the reply decides what every later step may read. Unknown people are never assumed away.
-  const present: MemoryAudience = temporaryGuest ? UNKNOWN_GUEST_PRESENCE
+  // In 「友人も一緒」 a person is present only once their name has been said; until then the guest is unknown.
+  const guestPresence = temporaryGuest ? dependencies.people?.resolveCall(scopeKey, {
+    transcript, turns: guestCall?.turns ?? [], ...(guestCall?.callId ? { callId: guestCall.callId } : {}),
+    ...(requestedThreadId ? { threadId: requestedThreadId } : {}) }, occurredAt) ?? null : null;
+  const present: MemoryAudience = temporaryGuest ? guestPresence?.present ?? UNKNOWN_GUEST_PRESENCE
     : deviceContext?.companionPresent === true || ownerSaysCompanionPresent(transcript) ? UNKNOWN_GUEST_PRESENCE : OWNER_AUDIENCE;
   const alone = isOwnerOnly(present);
   const routingHistory = temporaryGuest ? guestHistory
@@ -243,12 +250,14 @@ async function completeLiveVoiceDelegation(
   // A goal is the owner's own; with anyone else present the words may not be his.
   const provisionalIntent = !alone || uncertainTranscript ? null : extractExplicitUserIntent(transcript, threadId, occurredAt);
   // Every mode builds its memory through the same gate; `present` decides what passes.
+  // While a name is unresolved between two remembered people, nothing about anyone is recalled.
+  const peopleRecall = guestPresence?.ambiguousName ? undefined : dependencies.people?.recall(scopeKey, captured, transcript, present);
   const deterministicContext = prepareTurnCognitiveContext(
     captured,
     dependencies.conversationStore,
     { scopeKey, message: transcript, occurredAt, channel: 'voice', threadId, present,
       intents: alone ? dependencies.cognitiveIntents.list(scopeKey, 'active') : [], provisionalIntent,
-      timeZone: deviceContext?.timeZoneIdentifier,
+      timeZone: deviceContext?.timeZoneIdentifier, additionalCandidates: peopleRecall?.candidates ?? [],
       participants: temporaryGuest ? [] : dependencies.personIdentities?.list(scopeKey).filter(person => person.status === 'active' && transcript.includes(person.displayName)).map(person => person.displayName),
     },
   );
@@ -287,6 +296,8 @@ async function completeLiveVoiceDelegation(
   const systemPrompt = [
     basePrompt,
     includeCognitiveContext ? cognitiveContext.prompt : complexTurn ? recalled?.knowledgePrompt : '',
+    // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
+    guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
     dailyMindPrompt,
     taskPrompt,
     capabilityPrompt,

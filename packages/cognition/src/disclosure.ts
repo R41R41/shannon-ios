@@ -172,9 +172,8 @@ export function disclosureFor(
   return Object.freeze({
     audience,
     sensitivity: forced ? 'sensitive' as const : decision.sensitivity,
-    ...(forced && decision.sensitivity === 'ordinary' ? { category: forced } : decision.category ? { category: decision.category } : {}),
-    reason: forced && decision.sensitivity === 'ordinary'
-      ? (forced === 'unknown_audience' ? '相手の名前が分からない場での会話' : 'ほかの人についての情報') : decision.reason,
+    ...(forced ? { category: forced } : decision.category ? { category: decision.category } : {}),
+    reason: forced ? (forced === 'unknown_audience' ? '相手の名前が分からない場での会話' : 'ほかの人についての情報') : decision.reason,
     decidedBy: 'rule' as const,
     ...(options.speaker ? { speaker: options.speaker } : {}),
   });
