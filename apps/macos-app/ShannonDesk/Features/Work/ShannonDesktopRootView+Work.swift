@@ -24,7 +24,7 @@ extension ShannonDesktopRootView {
                 } else {
                     DesktopTaskSection(
                         title: "いま",
-                        subtitle: "進行・確認待ち・一時停止",
+                        subtitle: "作業中・許可待ち・続きが必要・一時停止中",
                         tasks: workProjection.active,
                         threads: conversation.threads,
                         selectedTaskID: selectedTaskID,
@@ -78,7 +78,7 @@ extension ShannonDesktopRootView {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("現在地")
                                     .font(.headline)
-                                Text(task.status.japaneseName)
+                                Text(task.stateName)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -129,11 +129,18 @@ extension ShannonDesktopRootView {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        DesktopInspectorSection(title: "次") {
+                        DesktopInspectorSection(title: task.needsOwnerToContinue ? "次にあなたがすること" : "次") {
                             DesktopExpandableText(
                                 ShannonDesktopWorkProjection.nextAction(for: task),
                                 collapsedLineLimit: 4
                             )
+                            if task.needsOwnerToContinue {
+                                Button("作業を再開") {
+                                    Task { await conversation.toggleAgentTaskPause(task.id) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(conversation.isAgentTaskActionInFlight(task.id))
+                            }
                         }
                         DesktopInspectorSection(title: "シャノンの様子") {
                             Label(
@@ -187,25 +194,7 @@ extension ShannonDesktopRootView {
                         }
 
                         if let approval = task.pendingApproval {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Label("あなたの確認が必要です", systemImage: "hand.raised.fill")
-                                    .font(.headline)
-                                Text(approval.title)
-                                Text(approval.reason)
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                HStack {
-                                    Button("許可") {
-                                        Task { await conversation.resolveAgentApproval(task.id, accepted: true) }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    Button("許可しない") {
-                                        Task { await conversation.resolveAgentApproval(task.id, accepted: false) }
-                                    }
-                                }
-                            }
-                            .padding(14)
-                            .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                            taskApprovalCard(task, approval: approval)
                         }
 
                         if !task.plan.isEmpty {
@@ -260,6 +249,15 @@ extension ShannonDesktopRootView {
                             }
                         }
 
+                        let unresolved = ShannonAgentTaskReport(task: task).unresolved
+                        if !unresolved.isEmpty {
+                            DesktopInspectorSection(title: "未解決") {
+                                ForEach(unresolved, id: \.self) { item in
+                                    Label(item, systemImage: "circle.dashed")
+                                }
+                            }
+                        }
+
                         if !task.tests.isEmpty {
                             DesktopInspectorSection(title: "検証") {
                                 ForEach(task.tests) { test in
@@ -308,7 +306,12 @@ extension ShannonDesktopRootView {
                                 Spacer()
                                 if policy.canCancel {
                                     Button(policy.canStart ? "今回は始めない" : "作業を中止", role: .destructive) {
-                                        Task { await conversation.cancelAgentTask(task.id) }
+                                        // Declining a proposal loses nothing; stopping started work is confirmed first.
+                                        if policy.canStart {
+                                            Task { await conversation.cancelAgentTask(task.id) }
+                                        } else {
+                                            taskStopConfirmation = .cancel(task.id)
+                                        }
                                     }
                                 }
                             }
@@ -316,6 +319,24 @@ extension ShannonDesktopRootView {
                         }
                     }
                     .padding(18)
+                }
+                // Seeing a result or a stop here is what acknowledges it. A pending approval stays until decided.
+                .task(id: "\(showsInspector)|\(auxiliaryPanel.rawValue)|\(task.id)|\(task.attention?.key ?? "")") {
+                    guard showsInspector, auxiliaryPanel == .task else { return }
+                    conversation.acknowledgeAgentTask(task.id)
+                }
+                .confirmationDialog(
+                    taskStopConfirmation?.title ?? "",
+                    isPresented: Binding(
+                        get: { taskStopConfirmation != nil },
+                        set: { if !$0 { taskStopConfirmation = nil } }
+                    ),
+                    presenting: taskStopConfirmation
+                ) { confirmation in
+                    Button(confirmation.actionTitle, role: .destructive) { performTaskStop(confirmation) }
+                    Button("戻る", role: .cancel) {}
+                } message: { confirmation in
+                    Text(confirmation.message)
                 }
             } else {
                 ContentUnavailableView(
@@ -326,5 +347,87 @@ extension ShannonDesktopRootView {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+/// A stop that cannot be undone is confirmed before it is sent.
+enum DesktopTaskStopConfirmation: Equatable {
+    case cancel(UUID)
+    case denyAndStop(UUID)
+
+    var title: String {
+        switch self {
+        case .cancel: "シャノンの作業を中止しますか？"
+        case .denyAndStop: "許可せずに、この作業を中止しますか？"
+        }
+    }
+
+    var actionTitle: String {
+        switch self {
+        case .cancel: "シャノンの作業を中止"
+        case .denyAndStop: "許可せず作業を中止"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .cancel: "シャノンが完了した工程は残りますが、自動では再開しません。"
+        case .denyAndStop: "この実行先では、許可しないと作業全体が止まり、再開できません。完了した工程は残ります。"
+        }
+    }
+}
+
+extension ShannonDesktopRootView {
+    /// Same decision material as iPhone: the task state word, the reason, and the concrete target.
+    func taskApprovalCard(_ task: ShannonAgentTask, approval: ShannonAgentApproval) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(ShannonAgentTaskStatus.waitingApproval.japaneseName, systemImage: "hand.raised.fill")
+                .font(.headline)
+            Text(approval.title)
+            Text(approval.reason)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if let target = approval.target {
+                Label(target, systemImage: "lock.fill")
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("許可する対象、\(target)")
+            }
+            HStack {
+                Button("今回だけ許可") {
+                    Task { await conversation.resolveAgentApproval(task.id, accepted: true) }
+                }
+                .buttonStyle(.borderedProminent)
+                if approval.denyStopsTask {
+                    Button("許可せず作業を中止", role: .destructive) {
+                        taskStopConfirmation = .denyAndStop(task.id)
+                    }
+                } else {
+                    Button("許可しない") {
+                        Task { await conversation.resolveAgentApproval(task.id, accepted: false) }
+                    }
+                    .help("この操作だけを断ります。作業は中止されません")
+                }
+            }
+            .disabled(conversation.isAgentTaskActionInFlight(task.id))
+            Text(approval.denyStopsTask
+                ? "この実行先では、許可しないと作業全体が止まります。"
+                : "「許可しない」はこの操作だけを断り、シャノンは別の進め方を探すか、次の一手を残して止まります。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    func performTaskStop(_ confirmation: DesktopTaskStopConfirmation) {
+        switch confirmation {
+        case .cancel(let id):
+            Task { await conversation.cancelAgentTask(id) }
+        case .denyAndStop(let id):
+            Task { await conversation.resolveAgentApproval(id, accepted: false) }
+        }
     }
 }

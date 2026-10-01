@@ -95,9 +95,11 @@ extension ShannonConversationModel {
             return response.reply
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)
-            errorMessage = photoJPEGData == nil
-                ? "シャノンに接続できませんでした。ローカルAPIを確認してください。"
-                : "写真を確認または送信できませんでした。再試行できます。"
+            errorMessage = ShannonFailureCopy.send(
+                error,
+                messageLength: text.count,
+                includesPhoto: photoJPEGData != nil
+            )
         }
         isSending = false
         return nil

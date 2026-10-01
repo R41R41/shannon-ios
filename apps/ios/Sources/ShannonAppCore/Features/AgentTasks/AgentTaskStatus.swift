@@ -12,13 +12,13 @@ public enum ShannonAgentTaskStage: String, CaseIterable, Equatable, Sendable {
 
     public var japaneseName: String {
         switch self {
-        case .proposal: "相談"
+        case .proposal: "提案"
         case .preparation: "準備"
         case .work: "作業"
-        case .review: "確認"
+        case .review: "許可"
         case .completion: "完了"
         case .paused: "一時停止"
-        case .failed: "問題が発生"
+        case .failed: "失敗"
         case .cancelled: "中止"
         }
     }
@@ -80,13 +80,15 @@ public enum ShannonAgentTaskStatus: String, Codable, CaseIterable, Equatable, Se
         }
     }
 
+    /// The one user-facing word for each state (see `vocabulary` in
+    /// `docs/design/screens/ios/work.yaml`). A paused task that needs the
+    /// owner reads 「続きが必要」 through `ShannonAgentTask.stateName`.
     public var japaneseName: String {
         switch self {
-        case .proposed: "作業候補"
-        case .queued: "待機中"
-        case .starting: "準備中"
+        case .proposed: "提案"
+        case .queued, .starting: "準備中"
         case .running: "作業中"
-        case .waitingApproval: "判断待ち"
+        case .waitingApproval: "許可待ち"
         case .paused: "一時停止中"
         case .completed: "完了"
         case .failed: "失敗"
@@ -119,6 +121,20 @@ public enum ShannonAgentTaskStatus: String, Codable, CaseIterable, Equatable, Se
         case .failed: .wry
         case .cancelled: .relieved
         }
+    }
+}
+
+extension ShannonAgentTask {
+    /// Word shown when the host stopped and is waiting for the owner.
+    public static let needsOwnerStateName = "続きが必要"
+
+    /// The state word for this task, telling an owner-requested pause from one that needs the owner.
+    public var stateName: String {
+        needsOwnerToContinue ? Self.needsOwnerStateName : status.japaneseName
+    }
+
+    public var stateSymbolName: String {
+        needsOwnerToContinue ? "arrow.uturn.forward.circle.fill" : status.symbolName
     }
 }
 

@@ -7,6 +7,8 @@ import AppKit
 
 struct ShannonSnackbar: View {
     let message: String
+    /// A failure by default; a plain notice passes an informational symbol.
+    var symbolName = "exclamationmark.circle"
     let showsRetry: Bool
     let retry: () -> Void
     let dismiss: () -> Void
@@ -17,10 +19,12 @@ struct ShannonSnackbar: View {
         let palette = ShannonPalette.resolve(colorScheme)
 
         HStack(spacing: ShannonSpacing.small) {
-            Image(systemName: "wifi.exclamationmark")
+            Image(systemName: symbolName)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.callout)
-                .lineLimit(2)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: ShannonSpacing.small)
             if showsRetry {
                 Button("再送", action: retry)

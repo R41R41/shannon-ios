@@ -448,7 +448,7 @@ async function completeLiveVoiceDelegation(
   if (!temporaryGuest && !uncertainTranscript && taskProposal && !isExplicitVoyagerUpdateRequest(transcript)) {
     if (orchestrationState) {
       orchestrationState = dependencies.conversationOrchestration.save(recordConversationProposal(
-        orchestrationState, taskProposal.goal, occurredAt,
+        orchestrationState, taskProposal.goal, occurredAt, dependencies.agentTasks.list(scopeKey),
       ));
     }
     uiBlocks = [...(uiBlocks ?? []), {

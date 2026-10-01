@@ -22,10 +22,12 @@ struct AgentTaskStatusRow: View {
                         .foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     if !task.summary.isEmpty {
+                        // Stopped and finished work shows its whole summary: it is the report, not a ticker.
                         Text(task.summary)
                             .font(.caption)
                             .foregroundStyle(palette.textSecondary)
-                            .lineLimit(2)
+                            .lineLimit(ShannonAgentTaskReport.leadsRoom(for: task) ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -11,10 +11,10 @@ enum ShannonAgentTaskOverviewFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "すべて"
-        case .attention: "要確認"
+        case .attention: "対応待ち"
         case .active: "進行中"
-        case .proposed: "未開始"
-        case .finished: "完了"
+        case .proposed: "提案"
+        case .finished: "終了"
         }
     }
 }
@@ -42,7 +42,8 @@ struct ShannonAgentTaskOverviewProjection {
             guard matchesQuery else { return false }
             switch filter {
             case .all: return true
-            case .attention: return task.status == .waitingApproval || task.status == .failed
+            case .attention:
+                return task.status == .waitingApproval || task.needsOwnerToContinue || task.status == .failed
             case .active: return task.status.isActive
             case .proposed: return task.status == .proposed
             case .finished: return task.status.isTerminal
@@ -97,9 +98,9 @@ struct ShannonAgentTaskOverviewView: View {
             }
 
             taskSection("ピン留め", detail: "大切な作業", tasks: projection.pinned, palette: palette)
-            taskSection("いま", detail: "進行・確認待ち・一時停止", tasks: projection.active, palette: palette)
-            taskSection("これから", detail: "開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
-            taskSection("完了", detail: "変更と検証結果", tasks: projection.finished, palette: palette)
+            taskSection("いま", detail: "作業中・許可待ち・続きが必要・一時停止中", tasks: projection.active, palette: palette)
+            taskSection("これから", detail: "シャノンからの提案。開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
+            taskSection("終了", detail: "完了・失敗・中止の結果と変更内容", tasks: projection.finished, palette: palette)
         }
 #if os(iOS)
         .listStyle(.insetGrouped)
@@ -182,8 +183,9 @@ struct ShannonAgentTaskOverviewView: View {
             openTask(task.id)
         } label: {
             HStack(alignment: .top, spacing: ShannonSpacing.medium) {
-                Image(systemName: task.status.symbolName)
-                    .foregroundStyle(task.status == .waitingApproval ? palette.attention : palette.brandPresence)
+                Image(systemName: task.stateSymbolName)
+                    .foregroundStyle(task.status == .waitingApproval || task.needsOwnerToContinue
+                        ? palette.attention : palette.brandPresence)
                     .frame(width: 24, height: 24)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
@@ -197,11 +199,11 @@ struct ShannonAgentTaskOverviewView: View {
                             .foregroundStyle(palette.textPrimary)
                             .lineLimit(2)
                         Spacer(minLength: ShannonSpacing.small)
-                        Text(task.status.japaneseName)
+                        Text(task.stateName)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(palette.textSecondary)
                     }
-                    Text(task.currentAction ?? task.summary)
+                    Text(task.nextAction.map { "次：\($0)" } ?? task.currentAction ?? task.summary)
                         .font(.callout)
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)

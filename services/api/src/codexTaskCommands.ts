@@ -116,7 +116,11 @@ export class CodexTaskCommandController {
     runtime.approvals.clear();
     runtime.pendingApprovalExternalRequestID = undefined;
     this.runtimes.save(runtime);
-    if (!cancel) await this.events.emit(command.taskId, 'paused', '作業を一時停止', '止めた場所を保存し、再開を待っている。');
+    if (!cancel) {
+      await this.events.emit(command.taskId, 'paused', '作業を一時停止', '止めた場所を保存し、再開を待っている。', {
+        pauseReason: 'owner',
+      });
+    }
   }
 
   private async resumeTask(command: ClaimedAgentCommand): Promise<void> {
@@ -157,13 +161,8 @@ export class CodexTaskCommandController {
     }
     runtime.approvals.delete(pending.externalRequestID);
 
-    if (accepted) {
-      runtime.pendingApprovalExternalRequestID = undefined;
-      this.runtimes.save(runtime);
-      await this.events.emit(command.taskId, 'progress', '判断をCodexへ送信', '許可した範囲だけで作業を続ける。', {
-        currentAction: '許可された操作を実行中',
-      });
-    } else {
+    if (!accepted && command.payload.denyContinues !== true) {
+      // The task store predates per-operation deny and has already cancelled the task: stop the turn too.
       runtime.suppressTerminalEvent = true;
       if (runtime.turnId) {
         await this.options.client.request('turn/interrupt', {
@@ -174,6 +173,20 @@ export class CodexTaskCommandController {
       runtime.turnId = undefined;
       runtime.pendingApprovalExternalRequestID = undefined;
       this.runtimes.save(runtime);
+      return;
+    }
+    runtime.pendingApprovalExternalRequestID = undefined;
+    this.runtimes.save(runtime);
+    if (accepted) {
+      await this.events.emit(command.taskId, 'progress', '許可をCodexへ送信', '許可した範囲だけで作業を続ける。', {
+        currentAction: '許可された操作を実行中',
+      });
+    } else {
+      // Codex `decline` denies only this operation and keeps the turn, so the task is not cancelled.
+      // The turn then continues another way, or ends with a result that pauses the task with a next action.
+      await this.events.emit(command.taskId, 'progress', '許可しない判断をCodexへ送信', 'この操作は実行せず、別の進め方を確認している。', {
+        currentAction: '許可されなかった操作を避けて続行中',
+      });
     }
   }
 

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SQLiteAgentTaskStore } from '../src/agentTaskStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
@@ -325,6 +326,125 @@ describe('SQLite Agent Task Store', () => {
     const reopened = new SQLiteAgentTaskStore(path);
     expect(reopened.get('owner-a', created.task.id)).toMatchObject({ isPinned: true, isArchived: true });
     reopened.close();
+  });
+
+  it('tells a pause that needs the owner from one the owner asked for, and each new pause apart', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const created = store.create('owner-a', {
+      idempotencyKey: 'start-key', conversationThreadID: 'thread-a', title: '配信', goal: '配信する', summary: '始める。',
+    }, '2026-09-04T00:00:00.000Z');
+    const taskId = created.task.id;
+    store.claim('mac-a', '2026-09-04T00:00:01.000Z');
+    const hostPause = (eventId: string, at: string, payload: Record<string, unknown>) => store.recordHostEvents('mac-a', [{
+      eventId, taskId, type: 'paused', title: '続きが必要です', detail: '検証が残っています。', occurredAt: at, payload,
+    }], at);
+
+    hostPause('pause-1', '2026-09-04T00:00:02.000Z', { pauseReason: 'needs_owner', currentAction: '実機で確認' });
+    const first = store.get('owner-a', taskId)!;
+    expect(first).toMatchObject({ status: 'paused', pauseReason: 'needs_owner', currentAction: '実機で確認' });
+    expect(first.pauseSequence).toBe(first.latestSequence);
+
+    store.enqueue('owner-a', taskId, { idempotencyKey: 'resume-1', type: 'resume' }, '2026-09-04T00:00:03.000Z');
+    expect(store.get('owner-a', taskId)).not.toHaveProperty('pauseReason');
+    store.recordHostEvents('mac-a', [{
+      eventId: 'resumed', taskId, type: 'started', title: '作業を再開', occurredAt: '2026-09-04T00:00:04.000Z',
+    }], '2026-09-04T00:00:04.000Z');
+
+    // An older host does not tag the pause; a next action still marks it as waiting for the owner.
+    hostPause('pause-2', '2026-09-04T00:00:05.000Z', { currentAction: 'もう一度実機で確認' });
+    const second = store.get('owner-a', taskId)!;
+    expect(second.pauseReason).toBe('needs_owner');
+    expect(second.pauseSequence).toBeGreaterThan(first.pauseSequence!);
+
+    store.enqueue('owner-a', taskId, { idempotencyKey: 'steer-1', type: 'steer', payload: { instruction: '続けて' } },
+      '2026-09-04T00:00:06.000Z');
+    store.enqueue('owner-a', taskId, { idempotencyKey: 'pause-by-owner', type: 'interrupt' }, '2026-09-04T00:00:07.000Z');
+    expect(store.get('owner-a', taskId)).toMatchObject({ status: 'paused', pauseReason: 'owner' });
+    hostPause('pause-3', '2026-09-04T00:00:08.000Z', { pauseReason: 'owner' });
+    expect(store.get('owner-a', taskId)).toMatchObject({ status: 'paused', pauseReason: 'owner' });
+    store.close();
+  });
+
+  it('keeps changes and failed checks when work stops or fails', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const evidence = {
+      changes: [{ id: 'change-1', displayName: 'Login.swift', summary: '変更', additions: 3, deletions: 1 }],
+      tests: [{ id: 'test-1', name: '全体検証', status: 'failed', detail: '失敗を検出' }],
+    };
+    for (const type of ['paused', 'failed'] as const) {
+      const created = store.create('owner-a', {
+        idempotencyKey: `start-${type}`, conversationThreadID: 'thread-a', title: '修正', goal: '直す', summary: '始める。',
+        hostHint: `host-${type}`,
+      }, '2026-09-04T00:00:00.000Z');
+      store.claim(`host-${type}`, '2026-09-04T00:00:01.000Z');
+      store.recordHostEvents(`host-${type}`, [{
+        eventId: `stopped-${type}`, taskId: created.task.id, type, title: '止まった', detail: '検証で問題が見つかった。',
+        occurredAt: '2026-09-04T00:00:02.000Z', payload: { ...evidence, currentAction: '全体検証を修正して再実行' },
+      }], '2026-09-04T00:00:02.000Z');
+      expect(store.get('owner-a', created.task.id)).toMatchObject({ status: type, ...evidence });
+    }
+    store.close();
+  });
+
+  it('denies only the one operation when the host supports it, and cancels the task otherwise', () => {
+    const store = new SQLiteAgentTaskStore(databasePath());
+    const requestApproval = (key: string, host: string, denyContinues: boolean) => {
+      const created = store.create('owner-a', {
+        idempotencyKey: key, conversationThreadID: 'thread-a', title: '調査', goal: '原因を知る', summary: '調べる。',
+        hostHint: host,
+      }, '2026-09-04T00:00:00.000Z');
+      store.claim(host, '2026-09-04T00:00:01.000Z');
+      store.recordHostEvents(host, [{
+        eventId: `approval-${key}`, taskId: created.task.id, type: 'approval_requested', title: 'コマンド実行の許可',
+        occurredAt: '2026-09-04T00:00:02.000Z', payload: { approval: {
+          externalRequestID: `request-${key}`, kind: 'command', title: 'コマンド実行の許可', reason: '必要',
+          resource: 'rm -rf build', ...(denyContinues ? { denyContinues: true } : {}),
+        } },
+      }], '2026-09-04T00:00:02.000Z');
+      return store.enqueue('owner-a', created.task.id, {
+        idempotencyKey: `deny-${key}`, type: 'resolve_approval',
+        payload: { decision: 'deny', externalRequestID: `request-${key}` },
+      }, '2026-09-04T00:00:03.000Z');
+    };
+
+    const continued = requestApproval('new-host', 'mac-new', true);
+    expect(continued.task).toMatchObject({ status: 'starting' });
+    expect(continued.task.pendingApproval).toBeUndefined();
+    expect(continued.command?.payload).toMatchObject({ decision: 'deny', denyContinues: true });
+    // The task is still alive, so the host's next event moves it on instead of being dropped.
+    store.recordHostEvents('mac-new', [{
+      eventId: 'after-deny', taskId: continued.task.id, type: 'progress', title: '許可しない判断をCodexへ送信',
+      occurredAt: '2026-09-04T00:00:04.000Z', payload: { currentAction: '別の進め方を確認中' },
+    }], '2026-09-04T00:00:04.000Z');
+    expect(store.get('owner-a', continued.task.id)).toMatchObject({ status: 'running' });
+
+    const cancelled = requestApproval('old-host', 'mac-old', false);
+    expect(cancelled.task).toMatchObject({ status: 'cancelled', summary: '許可されなかったので、作業を中止した。' });
+    expect(cancelled.command?.payload).not.toHaveProperty('denyContinues');
+    store.close();
+  });
+
+  it('adds the pause columns to an existing database without losing tasks', () => {
+    const path = databasePath();
+    let store = new SQLiteAgentTaskStore(path);
+    const created = store.create('owner-a', {
+      idempotencyKey: 'start-key', conversationThreadID: 'thread-a', title: '配信', goal: '配信する', summary: '始める。',
+    }, '2026-09-04T00:00:00.000Z');
+    store.claim('mac-a', '2026-09-04T00:00:01.000Z');
+    store.recordHostEvents('mac-a', [{
+      eventId: 'legacy-pause', taskId: created.task.id, type: 'paused', title: '続きが必要です',
+      occurredAt: '2026-09-04T00:00:02.000Z', payload: { currentAction: 'GitHubへの反映を承認' },
+    }], '2026-09-04T00:00:02.000Z');
+    store.close();
+    const legacy = new DatabaseSync(path);
+    legacy.exec('ALTER TABLE agent_tasks DROP COLUMN pause_reason; ALTER TABLE agent_tasks DROP COLUMN pause_sequence;');
+    legacy.close();
+
+    store = new SQLiteAgentTaskStore(path);
+    const restored = store.get('owner-a', created.task.id)!;
+    expect(restored).toMatchObject({ status: 'paused', pauseReason: 'needs_owner', currentAction: 'GitHubへの反映を承認' });
+    expect(restored).not.toHaveProperty('pauseSequence');
+    store.close();
   });
 });
 

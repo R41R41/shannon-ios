@@ -103,7 +103,7 @@ function executeAgentWorkCommand(
   if (candidates.length > 1) return { reply: 'どの作業への指示か、作業名をひとこと付けてもらえますか。変更はまだ送っていません。' };
   const task = candidates[0]!;
   if (command.type === 'steer' && task.status === 'waiting_approval') {
-    return { reply: `「${task.title}」は操作の確認待ちです。先に作業カードの確認へ答えてから、追加指示を送ってください。` };
+    return { reply: `「${task.title}」は許可待ちです。先に作業画面で許可するかを決めてから、追加指示を送ってください。` };
   }
   try {
     const result = tasks.enqueue(scopeKey, task.id, {

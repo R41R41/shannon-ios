@@ -148,11 +148,13 @@ final class ShannonAgentTaskTests: XCTestCase {
 
         XCTAssertEqual(store.load(scopeKey: "owner-a"), [task])
         XCTAssertTrue(store.load(scopeKey: "owner-b").isEmpty)
-        store.saveAcknowledgedTaskIDs([task.id], scopeKey: "owner-a")
-        XCTAssertEqual(store.loadAcknowledgedTaskIDs(scopeKey: "owner-a"), [task.id])
+        var acknowledgements = ShannonAgentTaskAcknowledgements()
+        acknowledgements.markSeen(ShannonAgentTaskFixtures.completed())
+        store.saveAcknowledgements(acknowledgements, scopeKey: "owner-a")
+        XCTAssertEqual(store.loadAcknowledgements(scopeKey: "owner-a", tasks: []), acknowledgements)
         store.remove(scopeKey: "owner-a")
         XCTAssertTrue(store.load(scopeKey: "owner-a").isEmpty)
-        XCTAssertTrue(store.loadAcknowledgedTaskIDs(scopeKey: "owner-a").isEmpty)
+        XCTAssertEqual(store.loadAcknowledgements(scopeKey: "owner-a", tasks: []), ShannonAgentTaskAcknowledgements())
     }
 
     func testStoreDropsTheLegacyDebugPreviewFromPersistedTasks() throws {
@@ -326,7 +328,8 @@ final class ShannonAgentTaskTests: XCTestCase {
         model.acknowledgeAgentTask(waitingID)
 
         XCTAssertEqual(Set(model.agentTaskNotices.map(\.id)), Set([waitingID, runningID]))
-        XCTAssertNil(model.latestAgentTaskNotice)
+        // Looking at a pending approval is not deciding it, so its notice stays.
+        XCTAssertEqual(model.latestAgentTaskNotice?.id, waitingID)
     }
 
     func testRunningTaskUsesHeaderMenuWithoutOccupyingComposerArea() {

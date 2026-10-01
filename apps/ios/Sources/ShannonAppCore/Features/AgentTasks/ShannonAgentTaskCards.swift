@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// How a task appears inside the conversation. Only a proposal, which needs the
-/// user's decision, keeps a full card; running work is a one-line summary and
+/// owner's decision to start, keeps a full card; running work is a one-line summary and
 /// finished work is a quiet line so the conversation stays readable.
 public struct ShannonAgentTaskCardPresentation: Equatable, Sendable {
     public enum Style: Equatable, Sendable {
@@ -27,50 +27,43 @@ public struct ShannonAgentTaskCardPresentation: Equatable, Sendable {
         switch task.status {
         case .proposed:
             style = .proposal
-            statusText = "提案"
+            statusText = task.stateName
             symbolName = "sparkles"
             tone = .action
         case .running:
             style = .active
             statusText = task.plan.isEmpty
-                ? task.status.japaneseName
-                : "\(task.status.japaneseName) \(task.completedPlanCount)/\(task.plan.count)"
+                ? task.stateName
+                : "\(task.stateName) \(task.completedPlanCount)/\(task.plan.count)"
             symbolName = "hammer"
             tone = .action
         case .waitingApproval:
             style = .active
-            statusText = "許可が必要"
+            statusText = task.stateName
             symbolName = "hand.raised.fill"
             tone = .attention
         case .queued, .starting, .paused:
+            // A pause that needs the owner asks for attention; one the owner asked for stays quiet.
             style = .active
-            statusText = task.status.japaneseName
-            symbolName = task.status.symbolName
-            tone = .action
+            statusText = task.stateName
+            symbolName = task.stateSymbolName
+            tone = task.needsOwnerToContinue ? .attention : .action
         case .completed:
             style = .quiet
-            statusText = "完了"
+            statusText = task.stateName
             symbolName = "checkmark.circle.fill"
             tone = .success
         case .failed:
             style = .quiet
-            statusText = "問題あり"
+            statusText = task.stateName
             symbolName = "exclamationmark.triangle.fill"
             tone = .danger
         case .cancelled:
             style = .quiet
-            statusText = "中止"
+            statusText = task.stateName
             symbolName = "xmark.circle"
             tone = .secondary
         }
-    }
-
-    /// A one-off command or file-change approval can be granted from the notice itself.
-    /// Network, permission and session-wide approvals keep the hold-to-confirm flow in the task room.
-    public static func quickApproval(for task: ShannonAgentTask) -> ShannonAgentApproval? {
-        guard task.status == .waitingApproval, let approval = task.pendingApproval,
-              !approval.kind.requiresHoldToConfirm(.once) else { return nil }
-        return approval
     }
 
     func color(_ palette: ShannonPalette) -> Color {
@@ -203,101 +196,5 @@ struct ShannonAgentTaskCardView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("シャノンの作業、\(task.title)、\(presentation.statusText)")
         .accessibilityHint("作業画面を開きます")
-    }
-}
-
-/// One-line notice under the navigation bar for work that finished or needs a decision.
-/// A one-off command or file-change approval adds a trailing 「許可」 so it can be granted in place.
-struct ShannonAgentTaskCapsule: View {
-    let task: ShannonAgentTask
-    var actionError: String?
-    let open: () -> Void
-    var approveOnce: (() -> Void)?
-
-    @Environment(\.colorScheme) var colorScheme
-    @State private var approvedCount = 0
-    /// The approval already sent from this notice, so a second tap cannot send it twice.
-    @State private var sentApprovalID: UUID?
-
-    var body: some View {
-        let palette = ShannonPalette.resolve(colorScheme)
-        let presentation = ShannonAgentTaskCardPresentation(task: task)
-        let tint = presentation.color(palette)
-        let tintBackground: Color = switch presentation.tone {
-        case .attention: palette.attentionTint
-        case .success: palette.successTint
-        case .danger: palette.dangerTint
-        default: palette.subtleSurface
-        }
-        let text: Color = switch presentation.tone {
-        case .attention: palette.onAttentionTint
-        case .success: palette.onSuccessTint
-        case .danger: palette.onDangerTint
-        default: palette.textPrimary
-        }
-        let approval = approveOnce == nil || actionError != nil
-            ? nil : ShannonAgentTaskCardPresentation.quickApproval(for: task)
-        let message = actionError != nil
-            ? "判断を送信できませんでした：\(task.title)"
-            : "\(presentation.statusText)：\(approval?.title ?? task.title)"
-
-        HStack(spacing: ShannonSpacing.small) {
-            Button(action: open) {
-                HStack(spacing: ShannonSpacing.small) {
-                    Image(systemName: actionError != nil ? "exclamationmark.triangle.fill" : presentation.symbolName)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(tint)
-                        .accessibilityHidden(true)
-                    Text(message)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(text)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    if approval == nil {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(text.opacity(0.7))
-                            .accessibilityHidden(true)
-                    }
-                }
-                .frame(minHeight: approval == nil ? 36 : ShannonTouchTarget.minimum)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("シャノンの作業、\(task.title)、\(actionError ?? presentation.statusText)")
-            .accessibilityHint("作業画面を開きます")
-
-            if let approval, let approveOnce {
-                Button {
-                    guard sentApprovalID != approval.id else { return }
-                    sentApprovalID = approval.id
-                    approvedCount += 1
-                    approveOnce()
-                } label: {
-                    Text("許可")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(tintBackground)
-                        .padding(.horizontal, ShannonSpacing.medium)
-                        .frame(minHeight: 30)
-                        .background(text, in: Capsule())
-                        .frame(minHeight: ShannonTouchTarget.minimum)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(sentApprovalID == approval.id)
-                .opacity(sentApprovalID == approval.id ? 0.5 : 1)
-                .accessibilityLabel("今回だけ許可、\(approval.title)")
-                .accessibilityHint("この\(approval.kind.japaneseName)を今回だけ許可します。内容は左の通知から開けます")
-            }
-        }
-        .padding(.leading, ShannonSpacing.medium)
-        .padding(.trailing, approval == nil ? ShannonSpacing.medium : ShannonSpacing.extraSmall + 2)
-        .background(tintBackground, in: Capsule())
-        .frame(minHeight: ShannonTouchTarget.minimum)
-        .padding(.horizontal, ShannonSpacing.large)
-        .sensoryFeedback(.success, trigger: approvedCount)
-        .onChange(of: actionError) {
-            if actionError != nil { sentApprovalID = nil }
-        }
     }
 }

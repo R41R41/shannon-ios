@@ -64,6 +64,33 @@ describe('conversation execution orchestration', () => {
     expect(state.sourceReferences).not.toContain('agent-task:older-task');
   });
 
+  it('gives a further proposal its own identity once the previous one became a durable task', () => {
+    let state = observeConversationTurn({ previous: null, scopeKey: 'owner', threadId: 'thread',
+      message: 'ログイン画面を修正して', occurredAt: at, participantMode: 'owner', tasks: [] })!;
+    state = recordConversationProposal(state, 'ログイン画面を修正する', at);
+    const firstProposalID = state.resumeToken!;
+    const started = [{
+      id: firstProposalID, title: 'ログイン修正', goal: 'ログイン画面を修正する', summary: '完了', status: 'completed' as const,
+      createdAt: at, updatedAt: at, conversationThreadID: 'thread',
+      plan: [], timeline: [], tests: [], changes: [], isPinned: false, isArchived: false, latestSequence: 1,
+    }];
+
+    // The wording matches no action rule, so the thread state still points at the finished task.
+    state = observeConversationTurn({ previous: state, scopeKey: 'owner', threadId: 'thread',
+      message: 'このバグも直せる？お願い', occurredAt: at, participantMode: 'owner', tasks: started })!;
+    expect(state.resumeToken).toBe(firstProposalID);
+    state = recordConversationProposal(state, '別のバグを直す', at, started);
+
+    expect(state.resumeToken).toBeTruthy();
+    expect(state.resumeToken).not.toBe(firstProposalID);
+    expect(state.pendingAction).toMatchObject({ status: 'proposed', summary: '別のバグを直す' });
+    expect(state.addedRequirements).toEqual([]);
+    // A follow-up before the new proposal starts keeps that new identity.
+    const secondProposalID = state.resumeToken;
+    state = recordConversationProposal(state, '別のバグを直す（履歴も残す）', at, started);
+    expect(state.resumeToken).toBe(secondProposalID);
+  });
+
   it('restores the bounded state from SQLite after restart', () => {
     const directory = mkdtempSync(join(tmpdir(), 'shannon-orchestration-'));
     directories.push(directory);

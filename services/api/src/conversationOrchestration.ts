@@ -97,11 +97,21 @@ export function observeConversationTurn(input: {
   return freezeState({ ...next, revision: base.revision + 1 });
 }
 
+/**
+ * A proposal for work that has not started keeps its identity across follow-ups. Once that identity
+ * belongs to a durable task, a further proposal in the same thread is new work and gets its own identity,
+ * so a client never receives a proposal that collides with a task it already started.
+ */
 export function recordConversationProposal(
   state: ConversationOrchestrationState,
   summary: string,
   occurredAt: string,
+  tasks: readonly AgentTask[] = [],
 ): ConversationOrchestrationState {
+  if (state.resumeToken && tasks.some(task => task.id === state.resumeToken)) {
+    state = { ...state, resumeToken: randomUUID(), pendingAction: undefined, approvedScope: [],
+      addedRequirements: [], corrections: [], interruptedAt: undefined };
+  }
   return freezeState({
     ...state,
     revision: state.revision + 1,

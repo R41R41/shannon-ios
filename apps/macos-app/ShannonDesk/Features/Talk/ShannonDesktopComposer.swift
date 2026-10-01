@@ -193,7 +193,7 @@ struct DesktopTaskSection: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
                                         Text(task.title).font(.headline)
-                                        Text(task.status.japaneseName)
+                                        Text(task.stateName)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }

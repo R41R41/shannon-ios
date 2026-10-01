@@ -24,7 +24,7 @@ final class ShannonAgentTaskCardPresentationTests: XCTestCase {
     func testApprovalUsesAttentionWordingNotColorAlone() {
         let presentation = ShannonAgentTaskCardPresentation(task: ShannonAgentTaskFixtures.waitingApproval())
         XCTAssertEqual(presentation.style, .active)
-        XCTAssertEqual(presentation.statusText, "許可が必要")
+        XCTAssertEqual(presentation.statusText, "許可待ち")
         XCTAssertEqual(presentation.tone, .attention)
         XCTAssertEqual(presentation.symbolName, "hand.raised.fill")
     }
@@ -39,36 +39,12 @@ final class ShannonAgentTaskCardPresentationTests: XCTestCase {
         failedTask.status = .failed
         let failed = ShannonAgentTaskCardPresentation(task: failedTask)
         XCTAssertEqual(failed.style, .quiet)
-        XCTAssertEqual(failed.statusText, "問題あり")
+        XCTAssertEqual(failed.statusText, "失敗")
         XCTAssertEqual(failed.tone, .danger)
 
         var cancelledTask = ShannonAgentTaskFixtures.completed()
         cancelledTask.status = .cancelled
         XCTAssertEqual(ShannonAgentTaskCardPresentation(task: cancelledTask).tone, .secondary)
-    }
-}
-
-final class ShannonAgentTaskQuickApprovalTests: XCTestCase {
-    func testOnlyOneOffCommandAndFileChangeApprovalsCanBeGrantedFromTheNotice() {
-        var task = ShannonAgentTaskFixtures.waitingApproval()
-        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task), "network needs the hold flow")
-
-        for kind in [ShannonAgentApprovalKind.command, .fileChange] {
-            task.pendingApproval?.kind = kind
-            XCTAssertEqual(ShannonAgentTaskCardPresentation.quickApproval(for: task)?.id, task.pendingApproval?.id)
-        }
-        task.pendingApproval?.kind = .permission
-        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
-    }
-
-    func testNoQuickApprovalWithoutAPendingRequestOrOutsideApprovalState() {
-        var task = ShannonAgentTaskFixtures.waitingApproval()
-        task.pendingApproval?.kind = .command
-        task.status = .running
-        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
-        task.status = .waitingApproval
-        task.pendingApproval = nil
-        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
     }
 }
 

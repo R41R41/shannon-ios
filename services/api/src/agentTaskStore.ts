@@ -7,6 +7,8 @@ export type AgentActivityKind = 'command';
 export type AgentActivityStatus = 'running' | 'completed' | 'failed';
 export type AgentHostKind = 'local' | 'cloud';
 export type AgentRoutingPreference = 'auto' | 'local' | 'cloud';
+/** Why a task is paused: the owner asked for it, or the host stopped and left a next action for the owner. */
+export type AgentPauseReason = 'owner' | 'needs_owner';
 export type AgentReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 import type {
@@ -108,6 +110,8 @@ export interface AgentApproval {
   title: string;
   reason: string;
   resource?: string;
+  /** True when denying declines only this operation and the task continues. Absent: denying cancels the task. */
+  denyContinues?: boolean;
   requestedAt: string;
 }
 
@@ -144,6 +148,10 @@ export interface AgentTask {
   status: AgentTaskStatus;
   summary: string;
   currentAction?: string;
+  /** Present only while paused. `needs_owner` pauses carry the next action in `currentAction`. */
+  pauseReason?: AgentPauseReason;
+  /** Timeline sequence of the host pause, so a client can tell a new pause from one already seen. */
+  pauseSequence?: number;
   plan: AgentPlanItem[];
   timeline: AgentTimelineEvent[];
   pendingApproval?: AgentApproval;

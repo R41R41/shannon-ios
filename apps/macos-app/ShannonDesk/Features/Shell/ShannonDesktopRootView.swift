@@ -30,6 +30,7 @@ public struct ShannonDesktopRootView: View {
     @State var requestedConversationAnchorID: String?
     @State var messageJumpRevision = 0
     @State var steeringText = ""
+    @State var taskStopConfirmation: DesktopTaskStopConfirmation?
     @State var activeConversationOutlineEntryID: String?
     @State var showsConnection = false
     @State var showsWorldSubscriptions = false

@@ -28,7 +28,7 @@ final class ShannonAgentTaskRoomPresentationTests: XCTestCase {
             plan: [.completed, .completed, .completed, .completed, .completed, .running, .pending, .pending],
             approval: true
         )
-        XCTAssertEqual(ShannonAgentTaskRoomPresentation.subtitle(for: value), "判断待ち・5/8工程")
+        XCTAssertEqual(ShannonAgentTaskRoomPresentation.subtitle(for: value), "許可待ち・5/8工程")
         XCTAssertEqual(ShannonAgentTaskRoomPresentation.planProgress(for: value), "5/8 完了")
     }
 
@@ -39,7 +39,7 @@ final class ShannonAgentTaskRoomPresentationTests: XCTestCase {
 
     func testPendingApprovalReadsAsWaitingEvenBeforeStatusCatchesUp() {
         let value = task(status: .running, plan: [.completed, .running], approval: true)
-        XCTAssertEqual(ShannonAgentTaskRoomPresentation.subtitle(for: value), "判断待ち・1/2工程")
+        XCTAssertEqual(ShannonAgentTaskRoomPresentation.subtitle(for: value), "許可待ち・1/2工程")
     }
 
     func testFoldsLeadingCompletedStepsIntoOneRow() {

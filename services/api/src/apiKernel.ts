@@ -460,7 +460,7 @@ export class ShannonApiKernel {
       if (completion.taskProposal && !suppressAgentTaskProposal) {
         if (orchestrationState) {
           orchestrationState = this.conversationOrchestration.save(recordConversationProposal(
-            orchestrationState, completion.taskProposal.goal, occurredAt,
+            orchestrationState, completion.taskProposal.goal, occurredAt, this.agentTasks.list(body.scopeKey),
           ));
         }
         response.uiBlocks = [...(response.uiBlocks ?? []), {

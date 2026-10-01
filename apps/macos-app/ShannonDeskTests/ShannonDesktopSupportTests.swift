@@ -272,12 +272,30 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
 
         XCTAssertEqual(
             ShannonDesktopWorkProjection.nextAction(for: approval),
-            "あなたの確認後に作業を再開"
+            "あなたが許可するかを決める"
         )
         XCTAssertEqual(
             ShannonDesktopWorkProjection.nextAction(for: running),
             "テストして結果をまとめる"
         )
+    }
+
+    func testStoppedWorkShowsTheHostNextActionAndCountsAsWaitingForTheOwner() {
+        var stopped = makeTask(
+            status: .paused,
+            plan: [.init(id: "verify", title: "テストして結果をまとめる", status: .pending)]
+        )
+        stopped.pauseReason = .needsOwner
+        stopped.currentAction = "実機で起動を確認"
+        var ownerPaused = makeTask(status: .paused)
+        ownerPaused.pauseReason = .owner
+
+        XCTAssertEqual(ShannonDesktopWorkProjection.nextAction(for: stopped), "実機で起動を確認")
+        XCTAssertEqual(stopped.stateName, "続きが必要")
+        XCTAssertEqual(ownerPaused.stateName, "一時停止中")
+        let attention = ShannonDesktopWorkProjection(tasks: [stopped, ownerPaused], filter: .attention)
+        XCTAssertEqual(attention.active.map(\.id), [stopped.id])
+        XCTAssertEqual(ShannonDesktopTaskFilter.attention.title, "対応待ち")
     }
 
     func testTaskConversationContextPreservesSourceAndResolvesThreadTitle() {

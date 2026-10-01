@@ -21,6 +21,7 @@ import type {
   AgentWorkspaceCatalog,
 } from './agentTaskStore.js';
 import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
+import { projectHostEvent } from './agentTaskHostProjection.js';
 import {
   AgentProjectProvisioningPersistence,
   type AgentProjectProvisioningEvent,
@@ -33,17 +34,15 @@ import {
 } from './agentWorkspaceResources.js';
 
 import {
-  arrayValue,
   commandTitle,
   isTrue,
   migrateAgentTasks,
-  normalizeApproval,
   parseArray,
   parseObject,
+  pauseProjection,
   prepareDatabaseLocation,
   projectedStatusForCommand,
   secureDatabaseFiles,
-  stringValue,
   timelineActivity,
   toneForHostEvent,
   validateCommandTransition,
@@ -160,18 +159,23 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         return;
       }
       validateCommandTransition(task, input.type, input.payload ?? {});
-      commandId = this.insertCommand(taskId, scopeKey, input.idempotencyKey, input.type, input.payload ?? {}, now);
-      const projection = projectedStatusForCommand(task.status, input.type, input.payload ?? {});
+      const projection = projectedStatusForCommand(task.status, input.type, input.payload ?? {}, task.pendingApproval);
+      // The host follows the projection made here, so a deny never continues a task this store cancelled.
+      const denyContinues = input.type === 'resolve_approval' && input.payload?.decision === 'deny'
+        && projection.status !== 'cancelled';
+      commandId = this.insertCommand(taskId, scopeKey, input.idempotencyKey, input.type,
+        { ...(input.payload ?? {}), ...(denyContinues ? { denyContinues: true } : {}) }, now);
       this.database.prepare(`
         UPDATE agent_tasks
-        SET status = ?, summary = ?, current_action = ?, pending_approval_json = ?, updated_at = ?
+        SET status = ?, summary = ?, current_action = ?, pending_approval_json = ?,
+          pause_reason = ?, pause_sequence = NULL, updated_at = ?
         WHERE task_id = ? AND scope_key = ?
       `).run(
         projection.status,
         projection.summary ?? task.summary,
         projection.currentAction ?? task.currentAction ?? null,
         projection.clearApproval ? null : task.pendingApproval ? JSON.stringify(task.pendingApproval) : null,
-        now, taskId, scopeKey,
+        projection.status === 'paused' ? 'owner' : null, now, taskId, scopeKey,
       );
       this.appendEvent(
         taskId,
@@ -256,7 +260,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         if (!row) continue;
         if (row.assigned_host_id !== hostId) throw new Error('AGENT_HOST_TASK_MISMATCH');
         if (['completed', 'failed', 'cancelled'].includes(row.status) && event.type !== 'command_completed') continue;
-        this.projectHostEvent(event, now);
+        projectHostEvent(this.database, event, now);
         this.appendEvent(
           event.taskId, `host.${event.type}`, event.title, event.detail,
           event.tone ?? toneForHostEvent(event.type), event.occurredAt, { ...(event.payload ?? {}), hostId }, event.eventId,
@@ -345,6 +349,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
       status: row.status,
       summary: row.summary,
       ...(row.current_action ? { currentAction: row.current_action } : {}),
+      ...pauseProjection(row),
       plan: parseArray<AgentPlanItem>(row.plan_json),
       timeline: eventRows.map(event => {
         const activity = timelineActivity(parseObject<Record<string, unknown>>(event.payload_json).activity);
@@ -435,55 +440,6 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
     `).run(eventId, taskId, sequence, type, title, detail ?? null, tone, occurredAt, JSON.stringify(payload));
     this.database.prepare(`UPDATE agent_tasks SET latest_sequence = ?, updated_at = ? WHERE task_id = ?`)
       .run(sequence, occurredAt, taskId);
-  }
-
-  private projectHostEvent(event: HostAgentEvent, now: string): void {
-    const payload = event.payload ?? {};
-    const clearPendingApproval = (): void => {
-      this.database.prepare('UPDATE agent_tasks SET pending_approval_json = NULL WHERE task_id = ?')
-        .run(event.taskId);
-    };
-    const update = (status: AgentTaskStatus, summary: string, currentAction?: string): void => {
-      this.database.prepare(`
-        UPDATE agent_tasks SET status = ?, summary = ?, current_action = ?, updated_at = ? WHERE task_id = ?
-      `).run(status, summary, currentAction ?? null, event.occurredAt || now, event.taskId);
-    };
-    switch (event.type) {
-      case 'started':
-        update('running', event.detail ?? '作業を始めた。', stringValue(payload.currentAction));
-        clearPendingApproval();
-        break;
-      case 'progress':
-        update('running', event.detail ?? event.title, stringValue(payload.currentAction));
-        if (Array.isArray(payload.plan)) this.database.prepare('UPDATE agent_tasks SET plan_json = ? WHERE task_id = ?')
-          .run(JSON.stringify(payload.plan), event.taskId);
-        break;
-      case 'output':
-        break;
-      case 'approval_requested': {
-        const approval = normalizeApproval(payload.approval, event.occurredAt);
-        update('waiting_approval', event.detail ?? '判断を待っています。', approval.title);
-        this.database.prepare('UPDATE agent_tasks SET pending_approval_json = ? WHERE task_id = ?')
-          .run(JSON.stringify(approval), event.taskId);
-        break;
-      }
-      case 'paused':
-        update('paused', event.detail ?? '作業を一時停止した。', stringValue(payload.currentAction));
-        clearPendingApproval();
-        break;
-      case 'completed':
-        update('completed', event.detail ?? '作業が完了した。');
-        this.database.prepare(`
-          UPDATE agent_tasks SET changes_json = ?, tests_json = ?, pending_approval_json = NULL WHERE task_id = ?
-        `).run(JSON.stringify(arrayValue(payload.changes)), JSON.stringify(arrayValue(payload.tests)), event.taskId);
-        break;
-      case 'failed':
-        update('failed', event.detail ?? '作業を完了できなかった。');
-        clearPendingApproval();
-        break;
-      case 'command_completed':
-        break;
-    }
   }
 
   private transaction(operation: () => void): void {

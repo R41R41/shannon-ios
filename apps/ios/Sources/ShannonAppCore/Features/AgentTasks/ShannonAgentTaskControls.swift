@@ -76,7 +76,7 @@ struct AgentTaskStatusBadge: View {
     let palette: ShannonPalette
 
     var body: some View {
-        Label(task.stage.japaneseName, systemImage: task.stage.symbolName)
+        Label(task.stateName, systemImage: task.needsOwnerToContinue ? task.stateSymbolName : task.stage.symbolName)
             .font(.caption2.weight(.bold))
             .foregroundStyle(foreground)
             .padding(.horizontal, ShannonSpacing.small)
@@ -90,6 +90,7 @@ struct AgentTaskStatusBadge: View {
         case .failed: palette.danger
         case .cancelled: palette.textSecondary
         case .review: palette.attention
+        case .paused: task.needsOwnerToContinue ? palette.attention : palette.action
         default: palette.action
         }
     }

@@ -164,7 +164,7 @@ extension ShannonDesktopRootView {
             HStack(spacing: 5) {
                 Image(systemName: task.status.symbolName)
                     .foregroundStyle(task.status.isTerminal ? Color.secondary : shannonActionColor)
-                Text(task.status.japaneseName)
+                Text(task.stateName)
                 if let project = task.projectHint, !project.isEmpty {
                     Text("· \(project)")
                 }
@@ -176,7 +176,7 @@ extension ShannonDesktopRootView {
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(task.title)
-        .accessibilityValue([task.status.japaneseName, task.projectHint].compactMap { $0 }.joined(separator: "、"))
+        .accessibilityValue([task.stateName, task.projectHint].compactMap { $0 }.joined(separator: "、"))
         .contextMenu {
             Button(task.isPinned ? "ピン留めを外す" : "ピン留め") {
                 Task { await conversation.toggleAgentTaskPinned(task.id) }
@@ -209,10 +209,10 @@ extension ShannonDesktopRootView {
             .frame(maxWidth: 520)
             Spacer(minLength: 0)
             if let task = selectedTask {
-                Label(task.status.japaneseName, systemImage: task.status.symbolName)
+                Label(task.stateName, systemImage: task.status.symbolName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("作業状態、\(task.status.japaneseName)")
+                    .accessibilityLabel("作業状態、\(task.stateName)")
             }
         }
         .padding(.horizontal, 12)
