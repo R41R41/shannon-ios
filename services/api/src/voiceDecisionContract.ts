@@ -73,12 +73,12 @@ export interface VoiceDecisionGateway {
 }
 
 export const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
-  current_web: 'Does answering this utterance require current or externally verified web information, such as weather, news, schedules, transit, opening hours, prices, or current public facts?',
+  current_web: 'Does answering this utterance require current or externally verified web information, such as weather, news, schedules, transit, opening hours, prices, or current public facts? The status of the owner\'s own apps Aether, Voyager, and Shannon is not on the public web.',
   place_discovery: 'Does the user want to find, compare, or use specific places, shops, facilities, or map locations, possibly together with weather, travel, memory, or tasks?',
   conversation_memory: 'Does answering well require the owner\'s remembered preferences, prior experiences, promises, relationships, or earlier conversation context?',
   daily_mind: 'Would Shannon\'s current daily reflection or ongoing personal context materially improve this reply?',
-  aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether?',
-  voyager_tasks: 'Does the utterance ask to find, inspect, discuss, or update tasks or to-do items stored in Voyager?',
+  aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether (エーテル), the owner\'s writing and notes app?',
+  voyager_tasks: 'Does the utterance ask to find, inspect, discuss, or update tasks or to-do items stored in Voyager (ボイジャー), the owner\'s task app?',
   agent_status: 'Does the utterance ask about the status, completion, failure, approval, or progress of Codex or agent work?',
   device_context: 'Does answering require the device\'s current local time, timezone, or one-time location?',
 };
@@ -102,13 +102,22 @@ export const mandatorySkillPatterns: Readonly<Partial<Record<VoiceSkill, RegExp>
   current_web: /(?:最新|天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート)/iu,
   conversation_memory: /(?:覚えて|前に|以前|この前|約束|好み|私の|僕の|過去の会話|思い出|目標|目的|続き|踏まえて|今まで)/iu,
   daily_mind: /(?:今日は何を考えて|今日.{0,8}考えてた|今日の関心|今日の気分)/iu,
-  aether_notes: /(?:aether|ノート|メモ)/iu,
-  voyager_tasks: /(?:voyager|タスク|to.?do|やること)/iu,
+  aether_notes: new RegExp(`(?:${suiteProductPattern('aether').source}|ノート|メモ)`, 'iu'),
+  voyager_tasks: new RegExp(`(?:${suiteProductPattern('voyager').source}|タスク|to.?do|やること)`, 'iu'),
   agent_status: /(?:(?:codex|エージェント).{0,20}(?:進捗|状況|完了|失敗|承認待ち)|(?:作業|実装|ビルド|デプロイ).{0,12}(?:進捗|状況|完了|終わった|どうなった|承認待ち))/iu,
   device_context: /(?:ここから|現在地|近く|周辺|いま何時|今何時|今日は何日|今日は何曜日)/iu,
 };
 
+/**
+ * Words that ask for something on the public web. `最新` is deliberately absent: on its own it
+ * says "fresh", not "public". The mandatory pattern above still treats it as a web cue for
+ * ordinary questions.
+ */
+export const explicitWebRequestPattern = /(?:天気|ニュース|運行|遅延|時刻表|何時|営業時間|価格|相場|検索|調べて|電車|バス|経路|ルート|ネット|ウェブ|web|公式|サイト|リリースノート|ストア)/iu;
+/** Freshness words that, next to a suite product name, mean the owner's own internal status. */
+export const internalStatusPattern = /(?:最新|開発状況|進捗|現状|状況|ステータス|どこまで)/u;
+
 export const emptySkillScores = (): Record<VoiceSkill, number> => Object.fromEntries(
   VOICE_SKILLS.map(skill => [skill, 0]),
 ) as Record<VoiceSkill, number>;
-import { SHANNON_EMOTION_KINDS, type ShannonEmotionKind } from '@shannon/cognition';
+import { SHANNON_EMOTION_KINDS, suiteProductPattern, type ShannonEmotionKind } from '@shannon/cognition';

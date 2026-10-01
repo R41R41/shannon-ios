@@ -86,18 +86,18 @@ function intentInitiativeMessage(title: string, status: string, row: Record<stri
   if (status === 'waiting_approval') {
     const approval = safeObject(row.pending_approval_json);
     const approvalTitle = typeof approval?.title === 'string' ? approval.title.trim() : '操作内容';
-    return `「${title}」の作業で「${approvalTitle}」の確認が必要だよ。内容を見て決める？`;
+    return `「${title}」の作業で「${approvalTitle}」の確認が必要です。内容を見て決めますか？`;
   }
   if (status === 'failed') {
-    return `「${title}」の作業で問題が見つかったよ。${current ? `いま分かっているのは「${current}」。` : ''}修正方針を一緒に決める？`;
+    return `「${title}」の作業で問題が見つかりました。${current ? `いま分かっているのは「${current}」です。` : ''}修正方針を一緒に決めませんか？`;
   }
   if (status === 'paused') {
-    return `「${title}」の作業は一時停止中だよ。${current ? `次は「${current}」。` : ''}続ける？`;
+    return `「${title}」の作業は一時停止中です。${current ? `次は「${current}」です。` : ''}続けますか？`;
   }
   if (status === 'completed') {
-    return `「${title}」に結び付いた作業は検証まで終わっているよ。結果を確認して、目的も完了にする？`;
+    return `「${title}」に結び付いた作業は、検証まで終わっています。結果を確認して、目的も完了にしますか？`;
   }
-  return `「${title}」という目的を覚えているよ。${current ? `次の一手は「${current}」。` : ''}今、少し進める？`;
+  return `「${title}」という目的を覚えています。${current ? `次の一手は「${current}」です。` : ''}今、少し進めますか？`;
 }
 
 function safeObject(value: unknown): Record<string, unknown> | null {

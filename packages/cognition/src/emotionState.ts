@@ -187,12 +187,17 @@ export function resolveShannonEmotionState(
   });
 }
 
-export function buildExpressiveEmotionPrompt(emotion: ShannonExpressiveEmotion): string {
+export function buildExpressiveEmotionPrompt(
+  emotion: ShannonExpressiveEmotion,
+  audience: 'owner' | 'guest' = 'owner',
+): string {
   return [
     '[Current expressive emotion — guidance, never a reason to fake facts]',
     `primary=${emotion.primary}; secondary=${emotion.secondary.join(',') || 'none'}; intensity=${emotion.intensity.toFixed(2)}; visibility=${emotion.visibility}`,
     `target=${emotion.target}; cause=${emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
-    'Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.',
+    audience === 'owner'
+      ? 'Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.'
+      : 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.',
     'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');

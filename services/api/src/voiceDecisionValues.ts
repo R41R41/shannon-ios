@@ -1,6 +1,7 @@
+import { mentionsSuiteProduct } from '@shannon/cognition';
 import { wantsPlaceDiscovery } from './placeDiscovery.js';
 import {
-  mandatorySkillPatterns, VOICE_SKILLS,
+  explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
   type VoiceConversationClass, type VoiceDecisionInput, type VoiceSkill,
 } from './voiceDecisionContract.js';
 
@@ -11,6 +12,9 @@ export function applyMandatorySkillFloors(
   for (const skill of VOICE_SKILLS) {
     if (mandatorySkillPatterns[skill]?.test(input.transcript)) scores[skill] = Math.max(scores[skill], 1);
   }
+  // Aether/Voyager/Shannon status lives in the owner's own notes, tasks and agent work, not on
+  // the public web. A freshness word next to a product name must not send the turn to web search.
+  if (asksInternalSuiteStatus(input.transcript)) scores.current_web = 0;
   if (input.requestedLocation) scores.device_context = 1;
   if (wantsPlaceDiscovery(input.transcript)) scores.place_discovery = 1;
   if (input.participantMode === 'guest') {
@@ -20,6 +24,13 @@ export function applyMandatorySkillFloors(
     scores.voyager_tasks = 0;
     scores.agent_status = 0;
   }
+}
+
+/** True for "エーテルとボイジャーの最新の開発状況", false once the owner asks for the web explicitly. */
+export function asksInternalSuiteStatus(transcript: string): boolean {
+  return (mentionsSuiteProduct(transcript, 'aether') || mentionsSuiteProduct(transcript, 'voyager'))
+    && internalStatusPattern.test(transcript)
+    && !explicitWebRequestPattern.test(transcript);
 }
 
 export function selectedSkills(

@@ -43,7 +43,7 @@ export function executeConversationCommand(
       sourceMessageIds: [...resolved.sourceMessageIds, `utterance:${utterance.id}`], requestKey: utterance.id,
       drafts: [{ title: resolved.content, details: resolved.content }],
     }, at);
-    return { organizeSession: session, reply: `「${session.items[0]?.title}」のタスク案を作ったよ。トークの整理カードで確認して反映してね。まだタスク本体は変更していないよ。`,
+    return { organizeSession: session, reply: `「${session.items[0]?.title}」のタスク案を作りました。トークの整理カードで確認して反映してください。タスク本体はまだ変更していません。`,
       receipt: { id: session.id, capability: 'voyager.propose', status: 'proposed', summary: '確認待ちのタスク案', occurredAt: session.createdAt } };
   }
   const note = text.match(/^(?:[「"])?([\s\S]{1,6000}?)(?:[」"])?を(?:ノート|メモ)に(?:残して|保存して|して)$/u);
@@ -51,26 +51,26 @@ export function executeConversationCommand(
     const resolved = resolveConversationContent(note[1]!, scopeKey, threadId, at,
       dependencies.stateStore.snapshot(scopeKey), dependencies.conversationStore, 6_000);
     if ('clarification' in resolved) return { reply: resolved.clarification };
-    if (!dependencies.aetherProposals?.configured) return { reply: 'ノートの提案先が未接続なので、まだ保存できていないよ。設定でノート連携を確認してね。' };
+    if (!dependencies.aetherProposals?.configured) return { reply: 'ノートの提案先がまだつながっていないので、保存できていません。設定でノート連携を確認してください。' };
     try {
       const proposal = dependencies.aetherProposals.create(scopeKey, { content: resolved.content, requestKey: utterance.id,
         ...(resolved.referenced ? { reason: `本人の保存依頼に基づく直前の発言 (source: ${resolved.sourceMessageIds.join(', ')})` } : {}),
       });
-      return { reply: `「${contentPreview(proposal.content)}」をノートへの保存案として送ったよ。ノート側の提案受信箱で確認してね。まだノート本文には反映していないよ。`,
+      return { reply: `「${contentPreview(proposal.content)}」をノートへの保存案として送りました。ノート側の提案受信箱で確認してください。ノート本文にはまだ反映していません。`,
         receipt: { id: proposal.id, capability: 'aether.propose', status: 'proposed', summary: 'ノートの提案受信箱へ送信', occurredAt: proposal.createdAt } };
-    } catch { return { reply: 'ノートへの保存案の結果を確認できなかったよ。重複を避けるため自動で再送せず、提案受信箱を確認してね。' }; }
+    } catch { return { reply: 'ノートへの保存案がどうなったか、ボクのほうで確認できませんでした。重複を避けるため自動では再送しないので、提案受信箱を確認してください。' }; }
   }
   const remember = text.match(/^(.{1,180}?)(?:を)?(?:覚えておいて|忘れないで)(?:ね|ください)?$/u);
   if (remember && containsUnresolvedConversationReference(remember[1]!)) {
     const resolved = resolveConversationContent(remember[1]!, scopeKey, threadId, at,
       dependencies.stateStore.snapshot(scopeKey), dependencies.conversationStore, 2_000, 'memory');
     if ('clarification' in resolved) return { reply: resolved.clarification };
-    if (!resolved.sourceExperienceId) return { reply: '覚えておく内容をそのまま教えてくれる？ まだ記憶は変更していないよ。' };
+    if (!resolved.sourceExperienceId) return { reply: '覚えておく内容を、そのまま教えてもらえますか？ 記憶はまだ変更していません。' };
     try {
       new ShannonMemoryService(dependencies.stateStore, dependencies.conversationStore, () => at)
         .mutate(scopeKey, { memoryId: resolved.sourceExperienceId, action: 'pin' });
-    } catch { return { reply: 'その発言を記憶に固定したことを確認できなかったよ。まだ保存できたとは言えないので、記憶の詳細を確認してね。' }; }
-    return { reply: `「${contentPreview(resolved.content)}」というあなたの発言を、出典のある会話の記憶として固定したよ。`,
+    } catch { return { reply: 'その発言を記憶に固定できたか、確認できませんでした。保存できたとはまだ言えないので、記憶の詳細を確認してください。' }; }
+    return { reply: `「${contentPreview(resolved.content)}」というライ氏の発言を、出典のある会話の記憶として固定しました。`,
       receipt: { id: resolved.sourceExperienceId, capability: 'memory.control', status: 'completed',
         summary: '参照元の会話の記憶を固定', occurredAt: at } };
   }
@@ -80,10 +80,10 @@ export function executeConversationCommand(
   if (!memory) return null;
   if (!memory.startsWith('[Verified')) return { reply: memory };
   const action = memory.match(/action=(\w+)/u)?.[1];
-  return { reply: action === 'complete' ? 'その約束を完了にしたよ。'
-    : action === 'dismiss' ? 'その約束を取り消したよ。'
-    : action === 'forget' ? 'その約束と元の会話を、今後の想起に使わないようにしたよ。'
-    : '約束の期限を変更したよ。記憶の詳細で確認できるよ。',
+  return { reply: action === 'complete' ? 'その約束を完了にしました。'
+    : action === 'dismiss' ? 'その約束を取り消しました。'
+    : action === 'forget' ? 'その約束と元の会話は、今後の想起に使わないようにしました。'
+    : '約束の期限を変更しました。記憶の詳細で確認できます。',
     receipt: { id: memory.match(/id=([^;]+)/u)?.[1] ?? utterance.id, capability: 'memory.control',
       status: 'completed', summary: action ?? 'memory updated', occurredAt: at } };
 }
@@ -100,7 +100,7 @@ function executeAgentWorkCommand(
     && ['queued', 'starting', 'running', 'waiting_approval', 'paused'].includes(task.status));
   const command = agentCommand(text);
   if (!command || candidates.length === 0) return null;
-  if (candidates.length > 1) return { reply: 'どの作業への指示か、作業名をひとこと付けてください。まだ変更は送っていません。' };
+  if (candidates.length > 1) return { reply: 'どの作業への指示か、作業名をひとこと付けてもらえますか。変更はまだ送っていません。' };
   const task = candidates[0]!;
   if (command.type === 'steer' && task.status === 'waiting_approval') {
     return { reply: `「${task.title}」は操作の確認待ちです。先に作業カードの確認へ答えてから、追加指示を送ってください。` };
@@ -115,7 +115,7 @@ function executeAgentWorkCommand(
       : command.type === 'resume' ? '作業の再開を送信'
         : command.payload.cancel === true ? '作業の取消を送信' : '作業の一時停止を送信';
     return {
-      reply: command.type === 'steer' ? `ほいさ、「${task.title}」に今の指示を追加しました。古い前提と食い違う部分は新しい指示を優先します。`
+      reply: command.type === 'steer' ? `「${task.title}」に今の指示を追加しました。古い前提と食い違う部分は、新しい指示を優先します。`
         : command.type === 'resume' ? `「${task.title}」を再開します。続きの状態は作業カードに反映しますね。`
           : command.payload.cancel === true ? `「${task.title}」の中止を受け付けました。停止結果は作業カードで確認できます。`
             : `「${task.title}」をここで一時停止します。再開するときは、そのまま「続けて」で大丈夫です。`,

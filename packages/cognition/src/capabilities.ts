@@ -1,0 +1,76 @@
+import type { ShannonAudience } from './persona.js';
+
+/**
+ * The single source of truth for what Shannon can and cannot do today.
+ *
+ * Text and voice receive the same description. Every capability id must have a
+ * matching code-path flag in `services/api/src/shannonCapabilityEvidence.ts`; the
+ * API test suite fails when a described capability has no flag or a flag is false.
+ * When agent work adds or removes an ability, update this table in the same change.
+ */
+export interface ShannonCapability {
+  readonly id: string;
+  /** `everyone` capabilities stay available in a temporary guest voice session. */
+  readonly audience: 'owner' | 'everyone';
+  /** What she can do and how it is invoked. */
+  readonly text: string;
+}
+
+export const SHANNON_CAPABILITIES = Object.freeze([
+  { id: 'conversation', audience: 'everyone',
+    text: '会話と相談（テキスト・音声）。' },
+  { id: 'memory_and_promises', audience: 'owner',
+    text: '記憶と約束: 会話や好みを覚える。「〜を覚えておいて」で約束に残し、「〜の約束を完了にして／取り消して」で変える。「〇〇について何を覚えてる？」には出典つきで答え、直後の「それは忘れて」で使わなくなる。' },
+  { id: 'web_search', audience: 'everyone',
+    text: 'Web検索: テキストはそのメッセージで検索をオンにした時だけ。音声は必要な時に自動で調べる。' },
+  { id: 'place_search', audience: 'everyone',
+    text: '場所探し: お店や施設の候補を地図リンクつきで出す。「近くの」は端末がその時だけ渡した位置を使う。' },
+  { id: 'photo_understanding', audience: 'owner',
+    text: '写真: iPhoneで選んだ1枚の内容を見る。' },
+  { id: 'text_attachments', audience: 'owner',
+    text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
+  { id: 'aether_read', audience: 'owner',
+    text: 'Aether: 共有された範囲のノート（題名と短い抜粋）だけ読む。「〜をノートに残して」で保存案を提案受信箱へ送る。' },
+  { id: 'voyager_tasks', audience: 'owner',
+    text: 'Voyager: タスクを検索して読む。「〜をタスクにして」「整理して」でタスク案を作り、確認カードで選ばれた分だけ反映される。' },
+  { id: 'agent_tasks', audience: 'owner',
+    text: '開発作業: コードの修正・調査・ボク自身の改修を作業提案に出し、開始が押されるとCodexが実行する。途中の追加指示・一時停止・再開・中止ができ、頼まれればTestFlight配信まで進める。' },
+  { id: 'initiative', audience: 'owner',
+    text: 'ボクから話しかける: 期日の来た約束や気になった記事を、多くて1日1回。' },
+] as const satisfies readonly ShannonCapability[]);
+
+export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
+
+/** Things the code has no path for. Keep in sync with the capability evidence test. */
+export const SHANNON_LIMITATIONS = Object.freeze([
+  { id: 'calendar_mail', text: 'カレンダーの参照・登録、メールやメッセージの送信、電話、予約、購入。' },
+  { id: 'exact_time_alarm', text: 'タイマーや時刻ぴったりのアラーム（約束の声かけは時刻を保証しない）。' },
+  { id: 'media_generation', text: '画像や動画の生成。' },
+  { id: 'binary_documents', text: 'PDF・Office文書・動画・連続したカメラ映像を読むこと。' },
+  { id: 'unapproved_action', text: '承認なしの実行、Aether本文の書き換え、Voyagerタスクの状態・期限・優先度の変更や削除。' },
+  { id: 'speaker_identification', text: '声で話者を聞き分けること。' },
+] as const);
+
+const answeringRules = (audience: ShannonAudience) => [
+  '- 何ができるか聞かれたら、この一覧の範囲で自分の言葉で答える。一覧にないことを、できると言わない。',
+  `- できないことは「今はできません」とはっきり言い、いちばん近いできることを一つ示す。${audience === 'owner'
+    ? 'できるようにしたいと望まれた時だけ、改修を作業提案にする。' : ''}`,
+  '- 受付や完了の記録がない操作を「やりました」と言わない。提案は提案と伝え、この文脈に結果がないノート・タスク・記憶を読んだことにしない。',
+];
+
+/** One description for text and voice. Guests see only capabilities that need no owner data. */
+export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner'): string {
+  const capabilities = SHANNON_CAPABILITIES.filter(item => audience === 'owner' || item.audience === 'everyone');
+  return [
+    '[ボクにできること・できないこと]',
+    'できること（頼み方）:',
+    ...capabilities.map(item => `- ${item.text}`),
+    ...(audience === 'guest'
+      ? ['この場では、持ち主の記憶・ノート・タスク・作業は見ないし使わない。この場の会話も後に残さない。']
+      : []),
+    '今はできないこと:',
+    ...SHANNON_LIMITATIONS.map(item => `- ${item.text}`),
+    '答え方:',
+    ...answeringRules(audience),
+  ].join('\n');
+}

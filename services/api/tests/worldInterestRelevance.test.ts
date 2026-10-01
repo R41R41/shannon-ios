@@ -19,8 +19,8 @@ describe('world source grounding', () => {
     expect(groundedWorldOpening('写真の光の捉え方、ちょっと気になる。', '写真の撮り方', '写真'))
       .toBe('写真の光の捉え方、ちょっと気になる。');
     expect(groundedWorldOpening('昨日の写真の話とつながっていた。', '写真の撮り方', '写真'))
-      .toBe('これ、少し気になった。');
+      .toBe('これ、少し気になりました。');
     expect(groundedWorldOpening('最近、どんな写真を撮ってる？', 'Biome lint rule', null))
-      .toBe('これ、少し気になった。');
+      .toBe('これ、少し気になりました。');
   });
 });

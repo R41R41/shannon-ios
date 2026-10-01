@@ -9,7 +9,7 @@ import { createConfiguredVoiceDecisionGateway, LocalVoiceDecisionGateway,
   type VoiceSkill } from '../src/voiceDecision.js';
 import { VoiceRequestAllowances } from '../src/serverHttp.js';
 
-const cases: Array<{ id: string; transcript: string; skills: VoiceSkill[] }> = [
+const cases: Array<{ id: string; transcript: string; skills: VoiceSkill[]; forbidden?: VoiceSkill[] }> = [
   // Product definitions should not require reading private notes/tasks.
   { id: 'latin-both', transcript: 'AetherとVoyagerの使い分けを教えて', skills: [] },
   { id: 'kana-both', transcript: 'エーテルとボイジャーの使い分けを教えて', skills: [] },
@@ -17,7 +17,9 @@ const cases: Array<{ id: string; transcript: string; skills: VoiceSkill[] }> = [
   { id: 'kana-voyager', transcript: 'ボイジャーに登録した予定を見たい', skills: ['voyager_tasks'] },
   { id: 'kana-with-note', transcript: 'エーテルのノートを確認して', skills: ['aether_notes'] },
   { id: 'kana-with-task', transcript: 'ボイジャーのタスクを確認して', skills: ['voyager_tasks'] },
-  { id: 'kana-latest', transcript: 'エーテルとボイジャーの最新の開発状況を確認したい', skills: ['aether_notes', 'voyager_tasks'] },
+  // Internal development status is not public web freshness.
+  { id: 'kana-latest', transcript: 'エーテルとボイジャーの最新の開発状況を確認したい', skills: ['aether_notes', 'voyager_tasks'],
+    forbidden: ['current_web'] },
 ];
 const live = process.env.SHANNON_AUDIT_LIVE === '1';
 if (live && (!process.env.OPENAI_API_KEY || !process.env.TYPESAFE_API_KEY)) {
@@ -54,6 +56,7 @@ for (const item of cases) {
       participantMode: 'owner', deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false,
         userUtterance: { id: item.id, text: item.transcript, rawText: item.transcript, source: 'typed' } } } });
   const missingSkills = item.skills.filter(skill => !decision.selectedSkills.includes(skill));
+  const forbiddenSkills = (item.forbidden ?? []).filter(skill => decision.selectedSkills.includes(skill));
   const missingReads = item.skills.filter(skill => (
     (skill === 'aether_notes' && reads.notes === 0)
     || (skill === 'voyager_tasks' && reads.tasks === 0)
@@ -64,10 +67,10 @@ for (const item of cases) {
   };
   const body = result.body as { reply?: string };
   results.push({ id: item.id, source: decision.source, selectedSkills: decision.selectedSkills,
-    missingSkills, missingReads, definitions, reads, httpStatus: result.status,
+    missingSkills, forbiddenSkills, missingReads, definitions, reads, httpStatus: result.status,
     decisionMilliseconds: decision.elapsedMilliseconds,
     ...(generateAnswer ? { syntheticReply: body.reply } : {}),
-    passed: result.status === 200 && !missingSkills.length && !missingReads.length
+    passed: result.status === 200 && !missingSkills.length && !forbiddenSkills.length && !missingReads.length
       && definitions.aether && definitions.voyager });
 }
 // Characterize the production voice allowances using synthetic, in-memory requests only.

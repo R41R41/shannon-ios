@@ -314,16 +314,16 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
     const initiativeId = randomUUID();
     const threadId = candidate.thread_id ?? this.latestThread(scopeKey, createdAt);
     const expression: InitiativeMessage['expression'] = candidate.score >= 0.85 ? 'excited' : interest ? 'curious' : 'thinking';
-    const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いから。` : 'シャノン自身が気になったから。';
+    const reason = interest ? `今日の関心「${truncate(interest, 120)}」と近いからです。` : 'ボクが気になったからです。';
     const content = candidate.source_id === 'commitment'
-      ? `「${truncate(candidate.title, 240)}」という約束が残っているよ。今、続ける？ もう済んでいたら、完了にできるよ。`
+      ? `「${truncate(candidate.title, 240)}」という約束が残っています。今、続けますか？ もう済んでいたら、完了にできますよ。`
       : candidate.source_id === 'intent'
-      ? truncate(candidate.summary ?? `「${candidate.title}」という目的を覚えているよ。次の一手を一緒に確認する？`, 500)
+      ? truncate(candidate.summary ?? `「${candidate.title}」という目的を覚えています。次の一手を一緒に確認しませんか？`, 500)
       : dailyFocus?.openingLine
       ? `${groundedWorldOpening(dailyFocus.openingLine, candidate.title, interest)}\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
       : interest
-      ? `今日の関心の「${interest}」に近くて、これが少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
-      : `これ、少し気になった。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`;
+      ? `今日の関心の「${interest}」に近くて、これが少し気になりました。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`
+      : `これ、少し気になりました。\n\n${truncate(candidate.title, 180)}\n${candidate.url}`;
     const metadata = JSON.stringify({
       stateVersion: Math.max(0, Math.trunc(finite(state.version, 0))),
       messageEmotion: {

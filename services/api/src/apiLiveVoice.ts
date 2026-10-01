@@ -7,6 +7,7 @@ import {
   buildIntentPrompt,
   resolveShannonEmotionState,
   selectPrimaryIntent,
+  shannonIdentityPrompt,
   type CompanionClock,
   type CompanionStateStore,
 } from '@shannon/cognition';
@@ -71,6 +72,7 @@ export function realtimeVoiceSessionProjection(
     return {
       threadId: requestedThreadId?.trim() || 'temporary-guest-session',
       instructions: [
+        shannonIdentityPrompt('guest'),
         temporaryGuestVoiceInstructions,
         voiceConversationInstructions(options.clientDelegation === true, options.brightVoice === true, false),
       ].join('\n\n'),
@@ -257,9 +259,9 @@ async function completeLiveVoiceDelegation(
   const contextStartedAt = performance.now();
   const selectedSkills = new Set(decision.selectedSkills);
   const backendInstructions = [
-    '[GPT-Live client delegation backend]',
+    '[Voice turn grounding]',
     '- The input is a potentially imperfect live Japanese transcript. Use the latest correction and do not invent missing details.',
-    '- Return concise verified facts for Shannon to paraphrase aloud. Avoid Markdown tables and long URLs.',
+    '- Your reply is spoken aloud as Shannon herself. State verified facts concisely in her voice; avoid Markdown tables and long URLs.',
     '- This lane is read-only unless an explicit user command has already returned a verified proposal receipt. Do not claim that a purchase, booking, deployment, file write, or other external mutation completed.',
     '- If an external mutation or approval is needed, explain the exact next confirmation instead of performing it.',
     ...(!temporaryGuest ? [
@@ -292,13 +294,14 @@ async function completeLiveVoiceDelegation(
       memoryTurn: semanticMemoryTurn, complexTurn, ...(observer?.signal ? { signal: observer.signal } : {}) }) : null;
   const cognitiveContext = recalled ?? deterministicContext;
   const basePrompt = temporaryGuest
-    ? [temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
+    ? [shannonIdentityPrompt('guest'), temporaryGuestVoiceInstructions, voiceConversationInstructions(true, false, false)].join('\n\n')
     : [
+      // The slim path drops owner state, never the identity: persona, suite roles and capabilities stay.
       selectedSkills.has('conversation_memory')
         ? dependencies.knowledgeStore?.promptProjection(scopeKey) ?? assembleShannonSystemPrompt(captured!)
-        : '',
+        : shannonIdentityPrompt('owner'),
       voiceConversationInstructions(true),
-    ].filter(Boolean).join('\n\n');
+    ].join('\n\n');
   const dailyMindPrompt = temporaryGuest || !selectedSkills.has('daily_mind')
     ? ''
     : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
@@ -328,7 +331,7 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
-    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion),
+    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : 'owner'),
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     confirmedImplementationRequest
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
@@ -399,7 +402,7 @@ async function completeLiveVoiceDelegation(
     title: '依頼された機能の実装', goal: confirmedImplementationRequest,
   } : undefined);
   const reply = confirmedImplementationRequest
-    ? 'よし、ライ氏。実装提案を画面に出しました。「始める」を押せば、作業を進められます。'
+    ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,

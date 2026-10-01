@@ -11,7 +11,6 @@ import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
   INTENT_PLAN_INSTRUCTIONS,
-  SHANNON_PERSONA_INSTRUCTIONS,
   SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
   THREAD_SUMMARY_INSTRUCTIONS,
   THREAD_TITLE_INSTRUCTIONS,
@@ -121,7 +120,7 @@ export interface ShannonChatModel {
   ): Promise<ShannonChatModelResult>;
 }
 
-const LOCAL_REPLY = 'うん、聞いてるよ。LLMの鍵を設定すると、ここからShannonとして会話できるようになる。';
+const LOCAL_REPLY = 'はい、聞こえています。LLMの鍵を設定すると、ここからボクが会話できるようになります。';
 
 export class LocalStubChatModel implements ShannonChatModel {
   readonly mode = 'local-stub' as const;
@@ -171,7 +170,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       },
       body: JSON.stringify({
         model: this.model,
-        instructions: [request.systemPrompt, SHANNON_PERSONA_INSTRUCTIONS, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
+        instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
           ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
           ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
           ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
@@ -430,8 +429,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       model: this.model,
       instructions: [
         request.systemPrompt,
-        SHANNON_PERSONA_INSTRUCTIONS,
-        '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。',
+              '[音声専用の返答]\n自然な日本語の話し言葉で、最初に答えを置く。挨拶と通常会話は1〜2文、複雑な回答でも原則3文に収める。Markdown、URL一覧、内部処理の説明、JSONは使わない。聞き取りやすい短い文にし、必要がなければ末尾に質問を足さない。',
         ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [

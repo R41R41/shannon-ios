@@ -8,7 +8,27 @@ export {
 } from './state.js';
 export { InMemoryCompanionStateStore, type CompanionClock } from './store.js';
 export {
+  SHANNON_FIRST_PERSON,
+  SHANNON_ONE_LINE_VOICE,
+  SHANNON_OWNER_NAME,
+  SHANNON_SUITE_PRODUCTS,
+  mentionsSuiteProduct,
+  shannonPersonaPrompt,
+  shannonSuitePrompt,
+  suiteProductPattern,
+  type ShannonAudience,
+  type ShannonSuiteProductId,
+} from './persona.js';
+export {
+  SHANNON_CAPABILITIES,
+  SHANNON_LIMITATIONS,
+  shannonCapabilityPrompt,
+  type ShannonCapability,
+  type ShannonCapabilityId,
+} from './capabilities.js';
+export {
   SHANNON_CORE_PROMPT,
+  shannonIdentityPrompt,
   assembleShannonSystemPrompt,
   buildCompanionStatePrompt,
   buildIntentPrompt,

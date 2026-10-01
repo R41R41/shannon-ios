@@ -19,6 +19,7 @@ HTML files under `docs/archive/` are design history and operational evidence. Th
 - Keep the internal product, target, and scheme names as `ShannonApp` / `ShannonDesk`; the user-facing app and character display name is `シャノン`.
 - Ordinary chat must not wait for emotion updates, memory extraction, sleep consolidation, web exploration, push delivery, or self-improvement work.
 - v1 uses a fixed LLM. Personality, emotion, interests, user knowledge, recalled memories, and current task state are prompt/shared-state inputs. Do not introduce per-user fine-tuning or prediction-error training.
+- Shannon's persona, the suite role dictionary, and the description of what she can and cannot do have one source: `packages/cognition/src/persona.ts` and `capabilities.ts`. Do not restate them in a path-specific prompt. A change that adds or removes an ability updates `capabilities.ts` and `services/api/tests/shannonCapabilityEvidence.test.ts` in the same change. Fixed sentences spoken as Shannon use that voice (`ボク`, `ライ氏`, です・ます); status and error text stays neutral.
 - Aether data enters Shannon only through the bounded projection. Shannon writes suggestions to Aether's proposal inbox; it does not silently rewrite Aether.
 - Source-code modification is user-directed. Never start autonomous self-rewriting from background activity.
 - `agent_tasks` and their event stream are the durable authority for task status. Chat summaries are projections, not the source of truth.
