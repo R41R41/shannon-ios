@@ -373,41 +373,6 @@ struct ShannonThreadTitleEditor: View {
 }
 
 
-struct ShannonSettingsRow: View {
-    let title: String
-    let detail: String
-    let symbol: String
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        let palette = ShannonPalette.resolve(colorScheme)
-
-        HStack(spacing: ShannonSpacing.medium) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(palette.action)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(palette.textPrimary)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(palette.textSecondary)
-            }
-
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.textSecondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-    }
-}
-
 extension View {
     @ViewBuilder
     func shannonKeyboardDismissMode() -> some View {
