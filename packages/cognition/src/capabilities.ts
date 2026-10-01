@@ -20,7 +20,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'conversation', audience: 'everyone',
     text: '会話と相談（テキスト・音声）。' },
   { id: 'memory_and_promises', audience: 'owner',
-    text: '記憶と約束: 会話や好みを覚える。「〜を覚えておいて」で約束に残し、「〜の約束を完了にして／取り消して」で変える。「〇〇について何を覚えてる？」には出典つきで答え、直後の「それは忘れて」で使わなくなる。' },
+    text: '記憶と約束: 会話や好みを覚える。「〜を覚えておいて」で好みや事実は覚え、やることは約束に残す。何を取り込んだかは返答の下に出て、そこから取り消せる。約束は「〜の約束を完了にして／取り消して」でも変えられる。「〇〇について何を覚えてる？」には出典つきで答え、直後の「それは忘れて」で使わなくなる。' },
   { id: 'web_search', audience: 'everyone',
     text: 'Web検索: テキストはそのメッセージで検索をオンにした時だけ。音声は必要な時に自動で調べる。' },
   { id: 'place_search', audience: 'everyone',

@@ -155,7 +155,7 @@ struct ShannonVoiceSessionBar: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(task.title).font(.subheadline.weight(.medium))
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
-                            Text(task.status == .proposed ? "実装案 · 内容を確認して開始" : "\(task.status.japaneseName) · 作業を見る")
+                            Text(task.status == .proposed ? "実装案 · 内容を確認して開始" : "\(task.stateName) · 作業を見る")
                                 .font(.caption).foregroundStyle(palette.textSecondary)
                         }
                         Spacer(minLength: 0)
@@ -165,7 +165,7 @@ struct ShannonVoiceSessionBar: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(task.title)、\(task.status.japaneseName)、作業を開く")
+                .accessibilityLabel("\(task.title)、\(task.stateName)、作業を開く")
             }
         }
         .padding(.trailing, ShannonSpacing.small)

@@ -202,7 +202,7 @@ public struct ShannonGeminiLiveVoiceView: View {
     private func taskCard(_ task: ShannonAgentTask) -> some View {
         Button { composerIsFocused = false; openTask(task.id) } label: {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                Label(task.status == .proposed ? "実装案ができました" : task.status.japaneseName,
+                Label(task.status == .proposed ? "実装案ができました" : task.stateName,
                       systemImage: task.status.symbolName)
                     .font(.subheadline.weight(.semibold))
                 Text(task.title).font(.body).multilineTextAlignment(.leading)
