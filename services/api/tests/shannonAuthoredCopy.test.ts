@@ -14,7 +14,7 @@ import { groundedWorldOpening } from '../src/worldInterestRelevance.js';
 const SHANNON_VOICE_SOURCES = [
   'conversationCommands.ts', 'commitmentCommands.ts', 'conversationOrganize.ts', 'memoryForgetCommand.ts',
   'conversationReference.ts', 'initiativeStore.ts', 'initiativeIntentCandidates.ts', 'pushNotifications.ts',
-  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncer.ts', 'autonomyShowing.ts',
+  'pushNotificationSender.ts', 'voiceWaitingCue.ts', 'autonomyAnnouncer.ts', 'autonomyShowing.ts', 'bodyNudges.ts',
 ];
 
 // Casual sentence endings, second-person あなた, and third-person self-reference in her own speech.
