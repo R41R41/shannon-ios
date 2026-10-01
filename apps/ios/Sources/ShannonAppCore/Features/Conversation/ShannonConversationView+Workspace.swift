@@ -74,9 +74,12 @@ extension ShannonConversationView {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if let task = model.latestAgentTaskNotice {
-                ShannonAgentTaskCapsule(task: task) {
-                    openAgentTask(task.id)
-                }
+                ShannonAgentTaskCapsule(
+                    task: task,
+                    actionError: model.agentTaskActionError(task.id),
+                    open: { openAgentTask(task.id) },
+                    approveOnce: { Task { await model.resolveAgentApproval(task.id, accepted: true) } }
+                )
                 .padding(.bottom, ShannonSpacing.extraSmall)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }

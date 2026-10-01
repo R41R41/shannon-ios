@@ -56,6 +56,12 @@ extension ShannonConversationView {
                     ? .denied : .explain
             }
             showsGeminiLiveVoice = true
+            if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewVoiceMinimized") {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(900))
+                    showsGeminiLiveVoice = false
+                }
+            }
         }
 #endif
     }

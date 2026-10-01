@@ -47,3 +47,49 @@ final class ShannonAgentTaskCardPresentationTests: XCTestCase {
         XCTAssertEqual(ShannonAgentTaskCardPresentation(task: cancelledTask).tone, .secondary)
     }
 }
+
+final class ShannonAgentTaskQuickApprovalTests: XCTestCase {
+    func testOnlyOneOffCommandAndFileChangeApprovalsCanBeGrantedFromTheNotice() {
+        var task = ShannonAgentTaskFixtures.waitingApproval()
+        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task), "network needs the hold flow")
+
+        for kind in [ShannonAgentApprovalKind.command, .fileChange] {
+            task.pendingApproval?.kind = kind
+            XCTAssertEqual(ShannonAgentTaskCardPresentation.quickApproval(for: task)?.id, task.pendingApproval?.id)
+        }
+        task.pendingApproval?.kind = .permission
+        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
+    }
+
+    func testNoQuickApprovalWithoutAPendingRequestOrOutsideApprovalState() {
+        var task = ShannonAgentTaskFixtures.waitingApproval()
+        task.pendingApproval?.kind = .command
+        task.status = .running
+        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
+        task.status = .waitingApproval
+        task.pendingApproval = nil
+        XCTAssertNil(ShannonAgentTaskCardPresentation.quickApproval(for: task))
+    }
+}
+
+final class ShannonVoiceAmbientMotionTests: XCTestCase {
+    func testFailedAndIdleCallsKeepTheBackgroundStill() {
+        XCTAssertEqual(ShannonVoiceAmbientMotion.intensity(for: .failed), 0)
+        XCTAssertEqual(ShannonVoiceAmbientMotion.intensity(for: .idle), 0)
+        let still = ShannonVoiceAmbientMotion.drift(time: 1234, intensity: 0)
+        XCTAssertEqual(still.x, 0.5)
+        XCTAssertEqual(still.y, 0.5)
+        XCTAssertEqual(still.edge, 0)
+    }
+
+    func testSpeakingIsOnlySlightlyLivelierAndTheMeshNeverFolds() {
+        XCTAssertGreaterThan(ShannonVoiceAmbientMotion.intensity(for: .speaking),
+                             ShannonVoiceAmbientMotion.intensity(for: .listening))
+        for step in 0..<400 {
+            let drift = ShannonVoiceAmbientMotion.drift(time: Double(step) * 0.37, intensity: 5)
+            XCTAssertTrue((0.3...0.7).contains(drift.x))
+            XCTAssertTrue((0.3...0.7).contains(drift.y))
+            XCTAssertLessThan(abs(drift.edge), 0.1)
+        }
+    }
+}

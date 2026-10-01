@@ -139,3 +139,19 @@ voice operation to the call's captured thread rather than the currently browsed 
 - The active-call background audio entitlement, explicit microphone disclosure,
   retained scene lifetime, and interruption recovery compiled. Physical background
   capture and phone-call interruption remain unverified until TestFlight smoke.
+
+## Minimized call pill and ambient background (2026-10-01)
+
+- **Minimized call** (`ShannonVoiceSessionBar`): a compact pill above the navigation bar
+  with the single status title, elapsed call time and an always-present end control.
+  Tapping the pill expands it in place to the participant/continuity line, 詳細を開く,
+  ミュート and the linked work row. The end control always asks for confirmation. Large
+  accessibility text shows the expanded form permanently. The pill is stacked above the
+  hosted content rather than inset, because a NavigationStack keeps its bar under a top
+  safe-area inset.
+- **Ambient background** (`ShannonVoiceAmbientBackground`): on iOS 18+ without Reduce
+  Motion, a low-contrast 3×3 `MeshGradient` in `intelligenceSky`, `brandPresence` and
+  `intelligenceSoft` drifts behind the Eye. Motion intensity comes only from the call
+  phase (`ShannonVoiceAmbientMotion`): slightly livelier while speaking, still when the
+  call failed or ended. iOS 17 and Reduce Motion keep the still gradient. It carries no
+  state on its own; the status line and the Eye stay authoritative.

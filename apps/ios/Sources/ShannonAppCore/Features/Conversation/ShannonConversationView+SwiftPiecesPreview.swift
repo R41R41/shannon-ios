@@ -39,14 +39,16 @@ extension ShannonConversationView {
 
     /// Opens a synthetic approval with the plan and history cleared so the card is on screen.
     func applyApprovalPreviewState(_ arguments: [String]) {
-        guard arguments.contains("-ShannonPreviewApproval") || arguments.contains("-ShannonPreviewApprovalCommand") else {
+        let noticeOnly = arguments.contains("-ShannonPreviewApprovalNotice")
+        guard noticeOnly || arguments.contains("-ShannonPreviewApproval")
+            || arguments.contains("-ShannonPreviewApprovalCommand") else {
             return
         }
         var task = ShannonAgentTaskFixtures.waitingApproval(threadID: model.selectedThreadId ?? "design-preview")
         task.title = "接続テストを実行"
         task.plan = []
         task.timeline = []
-        if arguments.contains("-ShannonPreviewApprovalCommand"), var approval = task.pendingApproval {
+        if noticeOnly || arguments.contains("-ShannonPreviewApprovalCommand"), var approval = task.pendingApproval {
             approval.kind = .command
             approval.title = "テストを実行していい？"
             approval.reason = "変更したファイルの単体テストだけを実行します。"
@@ -54,6 +56,8 @@ extension ShannonConversationView {
             task.pendingApproval = approval
         }
         model.upsertAgentTask(task)
+        // The notice preview stays on Talk so the in-place 「許可」 is on screen.
+        guard !noticeOnly else { return }
         selectedPage = .work
         selectedAgentTaskID = task.id
     }

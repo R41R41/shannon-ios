@@ -48,12 +48,8 @@ public struct ShannonGeminiLiveVoiceView: View {
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
         ZStack {
-            LinearGradient(
-                colors: [palette.canvas, palette.intelligenceSoft.opacity(0.78), palette.canvas],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            ShannonVoiceAmbientBackground(phase: model.phase, palette: palette)
+                .ignoresSafeArea()
             VStack(spacing: ShannonSpacing.small) {
                 header(palette)
                 GeometryReader { proxy in

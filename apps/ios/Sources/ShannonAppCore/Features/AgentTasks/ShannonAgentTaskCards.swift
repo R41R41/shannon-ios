@@ -65,6 +65,14 @@ public struct ShannonAgentTaskCardPresentation: Equatable, Sendable {
         }
     }
 
+    /// A one-off command or file-change approval can be granted from the notice itself.
+    /// Network, permission and session-wide approvals keep the hold-to-confirm flow in the task room.
+    public static func quickApproval(for task: ShannonAgentTask) -> ShannonAgentApproval? {
+        guard task.status == .waitingApproval, let approval = task.pendingApproval,
+              !approval.kind.requiresHoldToConfirm(.once) else { return nil }
+        return approval
+    }
+
     func color(_ palette: ShannonPalette) -> Color {
         switch tone {
         case .action: palette.action
@@ -199,11 +207,17 @@ struct ShannonAgentTaskCardView: View {
 }
 
 /// One-line notice under the navigation bar for work that finished or needs a decision.
+/// A one-off command or file-change approval adds a trailing 「許可」 so it can be granted in place.
 struct ShannonAgentTaskCapsule: View {
     let task: ShannonAgentTask
+    var actionError: String?
     let open: () -> Void
+    var approveOnce: (() -> Void)?
 
     @Environment(\.colorScheme) var colorScheme
+    @State private var approvedCount = 0
+    /// The approval already sent from this notice, so a second tap cannot send it twice.
+    @State private var sentApprovalID: UUID?
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -221,32 +235,69 @@ struct ShannonAgentTaskCapsule: View {
         case .danger: palette.onDangerTint
         default: palette.textPrimary
         }
+        let approval = approveOnce == nil || actionError != nil
+            ? nil : ShannonAgentTaskCardPresentation.quickApproval(for: task)
+        let message = actionError != nil
+            ? "判断を送信できませんでした：\(task.title)"
+            : "\(presentation.statusText)：\(approval?.title ?? task.title)"
 
-        Button(action: open) {
-            HStack(spacing: ShannonSpacing.small) {
-                Image(systemName: presentation.symbolName)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(tint)
-                    .accessibilityHidden(true)
-                Text("\(presentation.statusText)：\(task.title)")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(text)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(text.opacity(0.7))
-                    .accessibilityHidden(true)
+        HStack(spacing: ShannonSpacing.small) {
+            Button(action: open) {
+                HStack(spacing: ShannonSpacing.small) {
+                    Image(systemName: actionError != nil ? "exclamationmark.triangle.fill" : presentation.symbolName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(tint)
+                        .accessibilityHidden(true)
+                    Text(message)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(text)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if approval == nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(text.opacity(0.7))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(minHeight: approval == nil ? 36 : ShannonTouchTarget.minimum)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, ShannonSpacing.medium)
-            .frame(minHeight: 36)
-            .background(tintBackground, in: Capsule())
-            .contentShape(Capsule())
+            .buttonStyle(.plain)
+            .accessibilityLabel("シャノンの作業、\(task.title)、\(actionError ?? presentation.statusText)")
+            .accessibilityHint("作業画面を開きます")
+
+            if let approval, let approveOnce {
+                Button {
+                    guard sentApprovalID != approval.id else { return }
+                    sentApprovalID = approval.id
+                    approvedCount += 1
+                    approveOnce()
+                } label: {
+                    Text("許可")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(tintBackground)
+                        .padding(.horizontal, ShannonSpacing.medium)
+                        .frame(minHeight: 30)
+                        .background(text, in: Capsule())
+                        .frame(minHeight: ShannonTouchTarget.minimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(sentApprovalID == approval.id)
+                .opacity(sentApprovalID == approval.id ? 0.5 : 1)
+                .accessibilityLabel("今回だけ許可、\(approval.title)")
+                .accessibilityHint("この\(approval.kind.japaneseName)を今回だけ許可します。内容は左の通知から開けます")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.leading, ShannonSpacing.medium)
+        .padding(.trailing, approval == nil ? ShannonSpacing.medium : ShannonSpacing.extraSmall + 2)
+        .background(tintBackground, in: Capsule())
         .frame(minHeight: ShannonTouchTarget.minimum)
         .padding(.horizontal, ShannonSpacing.large)
-        .accessibilityLabel("シャノンの作業、\(task.title)、\(presentation.statusText)")
-        .accessibilityHint("作業画面を開きます")
+        .sensoryFeedback(.success, trigger: approvedCount)
+        .onChange(of: actionError) {
+            if actionError != nil { sentApprovalID = nil }
+        }
     }
 }

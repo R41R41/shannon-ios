@@ -11,6 +11,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     var allowsTaskNavigation = true
     var openTask: (UUID) -> Void = { _ in }
     @State private var taskToOpen: UUID?
+    @Environment(\.colorScheme) private var colorScheme
 
     private var voiceTask: ShannonAgentTask? {
         guard allowsTaskNavigation, geminiVoiceModel.participantMode == .owner,
@@ -21,13 +22,16 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // A stack, not a top safe-area inset: a NavigationStack keeps its bar in place
+        // under an inset, which would put the pill on top of the title and toolbar.
+        VStack(spacing: 0) {
             if geminiVoiceModel.phase != .idle {
                 ShannonVoiceSessionBar(model: geminiVoiceModel, task: voiceTask,
                     showDetails: { isPresented = true }, end: endCall, openTask: openTask)
             }
+            content
         }
+        .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
         .sheet(isPresented: $isPresented, onDismiss: {
             // Minimizing while the microphone explanation waits must not strand the call.
             if geminiVoiceModel.microphonePrimerPhase == .explain { endCall() }
