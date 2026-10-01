@@ -28,7 +28,8 @@ public enum ShannonAgentApprovalKind: String, Codable, Equatable, Sendable {
 /// Which approval choices use hold-to-confirm. Frequent one-off command and file
 /// approvals stay a single tap; widening scope (for the whole task) or granting
 /// external access or permissions needs a hold, or a tap followed by confirmation.
-/// Declining is always a single tap.
+/// Declining one operation is a single tap; a decline that would stop the whole
+/// task is labelled as such and confirmed first.
 public enum ShannonAgentApprovalScope: Equatable, Sendable {
     case once
     case session
@@ -51,6 +52,9 @@ public struct ShannonAgentApproval: Codable, Equatable, Identifiable, Sendable {
     public var title: String
     public var reason: String
     public var resource: String?
+    /// True when declining refuses only this operation and the task goes on.
+    /// Absent (older hosts): declining stops the whole task.
+    public var denyContinues: Bool?
     public var requestedAt: Date
 
     public init(
@@ -60,6 +64,7 @@ public struct ShannonAgentApproval: Codable, Equatable, Identifiable, Sendable {
         title: String,
         reason: String,
         resource: String? = nil,
+        denyContinues: Bool? = nil,
         requestedAt: Date = Date()
     ) {
         self.id = id
@@ -68,8 +73,28 @@ public struct ShannonAgentApproval: Codable, Equatable, Identifiable, Sendable {
         self.title = title
         self.reason = reason
         self.resource = resource
+        self.denyContinues = denyContinues
         self.requestedAt = requestedAt
     }
+
+    /// Declining stops the whole task, which cannot be resumed.
+    public var denyStopsTask: Bool { denyContinues != true }
+
+    /// The concrete command, path, or destination being approved, when the host supplied one.
+    public var target: String? {
+        guard let value = resource?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
+
+    /// The target when it is short and complete enough to read in full inside a notice.
+    /// A target the host truncated, or one that spans lines, has to be read in the task room.
+    public var noticeTarget: String? {
+        guard let target, target.count <= Self.noticeTargetLimit,
+              !target.hasSuffix("…"), !target.contains(where: \.isNewline) else { return nil }
+        return target
+    }
+
+    public static let noticeTargetLimit = 80
 }
 
 public struct ShannonAgentChangeSummary: Codable, Equatable, Identifiable, Sendable {

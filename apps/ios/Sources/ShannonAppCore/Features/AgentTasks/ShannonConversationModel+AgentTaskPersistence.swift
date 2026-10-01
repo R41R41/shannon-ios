@@ -57,14 +57,22 @@ extension ShannonConversationModel {
     ) {
         for block in blocks where block.type == "agent_task_proposal" {
             guard let title = block.title, let goal = block.goal else { continue }
-            let id = block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID()
+            var id = block.proposalId.flatMap(UUID.init(uuidString:)) ?? UUID()
             let detail = [goal, block.risk].compactMap { value in
                 guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
                 return value
             }.joined(separator: "\n")
+            // Follow-ups can refine an unstarted proposal, but cannot reset durable work or
+            // replace the owner's reviewed execution settings. A proposal whose identity is
+            // already taken by started work (or by another thread) is still shown: it gets
+            // its own identity instead of being dropped. Only an exact repeat is skipped.
+            if let taken = agentTask(id: id),
+               taken.status != .proposed || taken.conversationThreadID != threadID {
+                guard taken.conversationThreadID != threadID || taken.title != title || taken.goal != goal
+                else { continue }
+                id = Self.separateProposalID(for: id, threadID: threadID, title: title, goal: goal)
+            }
             if var existing = agentTask(id: id) {
-                // Follow-ups can refine an unstarted proposal, but cannot reset
-                // durable work or replace the owner's reviewed execution settings.
                 guard existing.status == .proposed, existing.conversationThreadID == threadID else { continue }
                 let summary = detail.isEmpty ? goal : detail
                 guard existing.title != title || existing.goal != goal || existing.summary != summary else { continue }
@@ -92,6 +100,21 @@ extension ShannonConversationModel {
             )
             upsertAgentTask(task)
         }
+    }
+
+    /// A stable identity for a proposal that collided with started work, so a repeated
+    /// delivery of the same proposal refines one card instead of adding another.
+    static func separateProposalID(for id: UUID, threadID: String, title: String, goal: String) -> UUID {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in "\(id.uuidString)|\(threadID)|\(title)|\(goal)".utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3
+        }
+        var bytes = id.uuid
+        withUnsafeMutableBytes(of: &bytes) { buffer in
+            for index in 0..<8 { buffer[8 + index] ^= UInt8(truncatingIfNeeded: hash >> UInt64(index * 8)) }
+            buffer[0] ^= 0x5a
+        }
+        return UUID(uuid: bytes)
     }
 
     func upsertOrganizeSession(_ session: ShannonOrganizeSessionDTO) {

@@ -51,7 +51,7 @@ struct DesktopWorkStrip: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 10) {
-                Label(task.status.japaneseName, systemImage: task.status.symbolName)
+                Label(task.stateName, systemImage: task.stateSymbolName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -75,7 +75,7 @@ struct DesktopWorkStrip: View {
         .background(Color(nsColor: .textBackgroundColor))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "現在地、\(task.status.japaneseName)、\(task.currentAction ?? task.summary)。次、\(ShannonDesktopWorkProjection.nextAction(for: task))"
+            "現在地、\(task.stateName)、\(task.currentAction ?? task.summary)。次、\(ShannonDesktopWorkProjection.nextAction(for: task))"
         )
         .accessibilityHint("詳細を開く")
     }

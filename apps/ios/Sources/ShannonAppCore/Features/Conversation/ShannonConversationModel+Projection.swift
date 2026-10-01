@@ -17,17 +17,27 @@ extension ShannonConversationModel {
         selectedThreadAgentTasks.first(where: { $0.status.isActive })
     }
 
+    /// Whether the task is in an attention state the owner has not seen (or, for an approval, not decided).
+    public func agentTaskNeedsNotice(_ task: ShannonAgentTask) -> Bool {
+        !task.isArchived && agentTaskAcknowledgements.needsNotice(task)
+    }
+
+    /// The one task shown under the navigation bar: a pending approval first, then work
+    /// waiting for the owner, then a result; the most recent within each.
     public var latestAgentTaskNotice: ShannonAgentTask? {
-        agentTasks.first { task in
-            (task.status == .waitingApproval || task.status.isTerminal)
-                && !acknowledgedAgentTaskIDs.contains(task.id)
-        }
+        agentTasks
+            .filter(agentTaskNeedsNotice)
+            .min { left, right in
+                let leftPriority = left.attention?.noticePriority ?? .max
+                let rightPriority = right.attention?.noticePriority ?? .max
+                if leftPriority != rightPriority { return leftPriority < rightPriority }
+                return left.updatedAt > right.updatedAt
+            }
     }
 
     public var agentTaskNotices: [ShannonAgentTask] {
         agentTasks.filter { task in
-            task.status.isActive
-                || (task.status.isTerminal && !acknowledgedAgentTaskIDs.contains(task.id))
+            task.status.isActive || (task.status.isTerminal && agentTaskNeedsNotice(task))
         }
     }
 
@@ -37,8 +47,7 @@ extension ShannonConversationModel {
 
     public var unreadAgentTaskCount: Int {
         agentTasks.filter { task in
-            (task.status == .waitingApproval || task.status == .completed || task.status == .failed)
-                && !acknowledgedAgentTaskIDs.contains(task.id)
+            task.attention?.countsAsUnread == true && agentTaskNeedsNotice(task)
         }.count
     }
 

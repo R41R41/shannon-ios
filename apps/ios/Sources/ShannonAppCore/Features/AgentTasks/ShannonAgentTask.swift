@@ -25,6 +25,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
     public var status: ShannonAgentTaskStatus
     public var summary: String
     public var currentAction: String?
+    public var pauseReason: ShannonAgentTaskPauseReason?
+    public var pauseSequence: Int?
     public var plan: [ShannonAgentPlanItem]
     public var timeline: [ShannonAgentTimelineEvent]
     public var pendingApproval: ShannonAgentApproval?
@@ -49,6 +51,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         status: ShannonAgentTaskStatus,
         summary: String,
         currentAction: String? = nil,
+        pauseReason: ShannonAgentTaskPauseReason? = nil,
+        pauseSequence: Int? = nil,
         plan: [ShannonAgentPlanItem] = [],
         timeline: [ShannonAgentTimelineEvent] = [],
         pendingApproval: ShannonAgentApproval? = nil,
@@ -72,6 +76,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
         self.status = status
         self.summary = summary
         self.currentAction = currentAction
+        self.pauseReason = pauseReason
+        self.pauseSequence = pauseSequence
         self.plan = plan
         self.timeline = timeline
         self.pendingApproval = pendingApproval
@@ -147,13 +153,16 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
             }
         }
         switch stage {
-        case .proposal: return "シャノンが作業内容を確認します"
+        case .proposal: return "シャノンからの作業の提案です"
         case .preparation: return "シャノンが作業の準備をしています"
         case .work: return "シャノンが作業を進めています"
-        case .review: return "シャノンが確認を待っています"
+        case .review: return "シャノンが許可を待っています"
         case .completion: return "シャノンの作業が完了しました"
-        case .paused: return "シャノンの作業は一時停止中です"
-        case .failed: return "シャノンの作業で問題が発生しました"
+        case .paused:
+            return needsOwnerToContinue
+                ? "続きにはあなたの対応が必要です"
+                : "あなたが一時停止した作業です"
+        case .failed: return "シャノンの作業は失敗しました"
         case .cancelled: return "シャノンの作業は中止されました"
         }
     }
@@ -194,6 +203,8 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
             status: remote.status,
             summary: remote.summary,
             currentAction: remote.currentAction,
+            pauseReason: remote.status == .paused ? remote.pauseReason : nil,
+            pauseSequence: remote.status == .paused ? remote.pauseSequence : nil,
             plan: remote.plan,
             timeline: remote.timeline.map { event in
                 ShannonAgentTimelineEvent(
@@ -214,6 +225,7 @@ public struct ShannonAgentTask: Codable, Equatable, Identifiable, Sendable {
                     title: approval.title,
                     reason: approval.reason,
                     resource: approval.resource,
+                    denyContinues: approval.denyContinues,
                     requestedAt: Self.remoteDate(approval.requestedAt)
                 )
             },

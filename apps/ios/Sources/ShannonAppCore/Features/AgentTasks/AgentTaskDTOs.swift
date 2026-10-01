@@ -17,6 +17,7 @@ public struct ShannonAgentApprovalDTO: Codable, Equatable, Sendable {
     public let title: String
     public let reason: String
     public let resource: String?
+    public let denyContinues: Bool?
     public let requestedAt: String
 }
 
@@ -51,6 +52,8 @@ public struct ShannonAgentTaskRemoteDTO: Codable, Equatable, Sendable {
     public let status: ShannonAgentTaskStatus
     public let summary: String
     public let currentAction: String?
+    public let pauseReason: ShannonAgentTaskPauseReason?
+    public let pauseSequence: Int?
     public let plan: [ShannonAgentPlanItem]
     public let timeline: [ShannonAgentTimelineEventDTO]
     public let pendingApproval: ShannonAgentApprovalDTO?

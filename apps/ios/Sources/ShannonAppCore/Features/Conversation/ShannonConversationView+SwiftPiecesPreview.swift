@@ -26,6 +26,7 @@ extension ShannonConversationView {
             }
         }
         applyApprovalPreviewState(arguments)
+        applyTaskOutcomePreviewState(arguments)
         if arguments.contains("-ShannonPreviewPlanTimeline"),
            var task = model.agentTasks.first(where: { $0.status == .running }) {
             task.plan = task.plan.enumerated().map { index, item in
@@ -37,6 +38,24 @@ extension ShannonConversationView {
         }
     }
 
+    /// Opens synthetic stopped or failed work: `-ShannonPreviewTaskNeedsOwner` / `-ShannonPreviewTaskFailed`,
+    /// with `-ShannonPreviewTaskNotice` to stay on Talk and show the notice instead of the room.
+    func applyTaskOutcomePreviewState(_ arguments: [String]) {
+        let needsOwner = arguments.contains("-ShannonPreviewTaskNeedsOwner")
+        guard needsOwner || arguments.contains("-ShannonPreviewTaskFailed") else { return }
+        var task = ShannonAgentTaskFixtures.needsOwner(threadID: model.selectedThreadId ?? "design-preview")
+        if !needsOwner {
+            task.status = .failed
+            task.pauseReason = nil
+            task.currentAction = nil
+            task.summary = "iOSアプリのビルドが通らず、原因を特定できなかった。"
+        }
+        model.upsertAgentTask(task)
+        guard !arguments.contains("-ShannonPreviewTaskNotice") else { return }
+        selectedPage = .work
+        selectedAgentTaskID = task.id
+    }
+
     /// Opens a synthetic approval with the plan and history cleared so the card is on screen.
     func applyApprovalPreviewState(_ arguments: [String]) {
         let noticeOnly = arguments.contains("-ShannonPreviewApprovalNotice")
@@ -44,17 +63,15 @@ extension ShannonConversationView {
             || arguments.contains("-ShannonPreviewApprovalCommand") else {
             return
         }
-        var task = ShannonAgentTaskFixtures.waitingApproval(threadID: model.selectedThreadId ?? "design-preview")
-        task.title = "接続テストを実行"
+        // The fixtures carry the Agent Host's real approval titles, so the preview shows what ships.
+        let threadID = model.selectedThreadId ?? "design-preview"
+        var task = noticeOnly || arguments.contains("-ShannonPreviewApprovalCommand")
+            ? ShannonAgentTaskFixtures.waitingCommandApproval(threadID: threadID)
+            : ShannonAgentTaskFixtures.waitingApproval(threadID: threadID)
+        task.title = "コードの構文色を直す"
         task.plan = []
         task.timeline = []
-        if noticeOnly || arguments.contains("-ShannonPreviewApprovalCommand"), var approval = task.pendingApproval {
-            approval.kind = .command
-            approval.title = "テストを実行していい？"
-            approval.reason = "変更したファイルの単体テストだけを実行します。"
-            approval.resource = "swift test --filter ShannonCodeSyntaxTests"
-            task.pendingApproval = approval
-        }
+        if arguments.contains("-ShannonPreviewApprovalStopsTask") { task.pendingApproval?.denyContinues = nil }
         model.upsertAgentTask(task)
         // The notice preview stays on Talk so the in-place 「許可」 is on screen.
         guard !noticeOnly else { return }

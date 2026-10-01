@@ -183,7 +183,7 @@ extension ShannonConversationModel {
                 upsertAgentTask(remote)
             } catch {
                 upsertAgentTask(previous)
-                errorMessage = "作業を開始できませんでした。接続を確認してもう一度お試しください。"
+                errorMessage = ShannonFailureCopy.agentTaskStart(error)
             }
             return
         }
@@ -213,6 +213,8 @@ extension ShannonConversationModel {
                     optimistic.currentAction = "作業環境へ停止命令を送信中"
                 }
             )
+            // The owner stopped it here, so the cancellation is not news to them.
+            if agentTask(id: id)?.status == .cancelled { acknowledgeAgentTask(id) }
             return
         }
         task.status = .cancelled
@@ -221,6 +223,7 @@ extension ShannonConversationModel {
         task.pendingApproval = nil
         task.updatedAt = Date()
         upsertAgentTask(task)
+        acknowledgeAgentTask(id)
     }
 
     public func toggleAgentTaskPause(_ id: UUID) async {
@@ -237,6 +240,8 @@ extension ShannonConversationModel {
             return
         }
         task.status = target
+        task.pauseReason = target == .paused ? .owner : nil
+        task.pauseSequence = nil
         task.summary = target == .paused ? "ここでいったん止まってる。" : "作業を再開した。"
         task.currentAction = target == .paused ? nil : "既存の対話履歴を壊さないか確認中"
         task.timeline.append(.init(
@@ -270,16 +275,20 @@ extension ShannonConversationModel {
                 payload: ["decision": decision, "externalRequestID": externalRequestID],
                 failureMessage: "判断を送信できませんでした。通信状態を確認してもう一度お試しください。",
                 optimisticUpdate: { optimistic in
-                    optimistic.summary = accepted ? "許可を送信しています。" : "判断を送信しています。"
+                    optimistic.summary = accepted ? "許可を送信しています。" : "許可しない判断を送信しています。"
                     optimistic.currentAction = "作業環境へ判断を送信中"
                 }
             )
+            if !accepted, agentTask(id: id)?.status == .cancelled { acknowledgeAgentTask(id) }
             return
         }
+        // Declining stops the task only on a host that cannot decline a single operation.
+        let continues = accepted || task.pendingApproval?.denyStopsTask == false
         task.pendingApproval = nil
-        task.status = accepted ? .running : .cancelled
-        task.summary = accepted ? "許可を受け取った。続きから進めるね。" : "許可されなかったので、ここで止めた。"
-        task.currentAction = accepted ? "接続テストを実行中" : nil
+        task.status = continues ? .running : .cancelled
+        task.summary = accepted ? "許可を受け取った。続きから進めるね。"
+            : continues ? "この操作は許可されなかった。別の進め方を確認してる。" : "許可されなかったので、作業を中止した。"
+        task.currentAction = accepted ? "接続テストを実行中" : continues ? "許可されなかった操作を避けて続行中" : nil
         task.timeline.append(.init(
             sequence: nextAgentSequence(task),
             title: accepted
@@ -289,6 +298,7 @@ extension ShannonConversationModel {
         ))
         task.updatedAt = Date()
         upsertAgentTask(task)
+        if task.status == .cancelled { acknowledgeAgentTask(id) }
     }
 
     public func steerAgentTask(_ id: UUID, instruction: String) async {
@@ -328,6 +338,7 @@ extension ShannonConversationModel {
             }
             agentTasks = (remoteTasks + localOnly).sorted { $0.updatedAt > $1.updatedAt }
             persistAgentTasks()
+            agentTaskAcknowledgements.prune(keeping: Set(agentTasks.map(\.id)))
         } catch {
             // The on-device projection remains usable while the API is offline.
         }
@@ -345,9 +356,12 @@ extension ShannonConversationModel {
         }
     }
 
+    /// Records that the owner saw the task's current attention state (a result or a
+    /// pause that needs them). A pending approval is not cleared by looking at it:
+    /// it stays outstanding until the owner decides it.
     public func acknowledgeAgentTask(_ id: UUID) {
-        acknowledgedAgentTaskIDs.insert(id)
-        agentTaskStore?.saveAcknowledgedTaskIDs(acknowledgedAgentTaskIDs, scopeKey: scopeKey)
+        guard let task = agentTask(id: id), agentTaskAcknowledgements.markSeen(task) else { return }
+        agentTaskStore?.saveAcknowledgements(agentTaskAcknowledgements, scopeKey: scopeKey)
     }
 
     public func toggleAgentTaskPinned(_ id: UUID) async {

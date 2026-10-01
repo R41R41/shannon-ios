@@ -20,7 +20,7 @@ public enum ShannonAgentHostStatus: String, Codable, Sendable {
     public var japaneseName: String {
         switch self {
         case .available: "利用可能"
-        case .busy: "作業中"
+        case .busy: "使用中"
         case .offline: "オフライン"
         }
     }

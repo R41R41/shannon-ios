@@ -231,9 +231,9 @@ enum ShannonDesktopTaskFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "すべて"
-        case .attention: "要確認"
+        case .attention: "対応待ち"
         case .active: "進行中"
-        case .proposed: "未開始"
+        case .proposed: "提案"
         case .finished: "終了"
         }
     }
@@ -256,7 +256,7 @@ struct ShannonDesktopWorkProjection {
             guard matchesQuery else { return false }
             switch filter {
             case .all: return true
-            case .attention: return task.status == .waitingApproval || task.status == .failed
+            case .attention: return task.status == .waitingApproval || task.needsOwnerToContinue || task.status == .failed
             case .active: return task.status.isActive
             case .proposed: return task.status == .proposed
             case .finished: return task.status.isTerminal
@@ -275,7 +275,8 @@ struct ShannonDesktopWorkProjection {
     }
 
     static func nextAction(for task: ShannonAgentTask) -> String {
-        if task.status == .waitingApproval { return "あなたの確認後に作業を再開" }
+        if task.status == .waitingApproval { return "あなたが許可するかを決める" }
+        if let nextAction = task.nextAction { return nextAction }
         if let item = task.plan.first(where: { $0.status == .pending }) { return item.title }
         if task.status == .proposed { return "あなたが開始するかを選ぶ" }
         if task.status.isTerminal { return "結果を確認し、必要なら次の作業を決める" }

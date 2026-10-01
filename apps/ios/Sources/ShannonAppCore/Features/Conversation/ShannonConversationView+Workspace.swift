@@ -89,6 +89,7 @@ extension ShannonConversationView {
                 if let statusMessage = model.statusMessage {
                     ShannonSnackbar(
                         message: statusMessage,
+                        symbolName: "info.circle",
                         showsRetry: false,
                         retry: {},
                         dismiss: model.dismissStatus
@@ -131,6 +132,7 @@ extension ShannonConversationView {
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.id)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.attention?.key)
     }
 
     /// Empty scroll-mode conversation with nothing typed yet.

@@ -20,6 +20,10 @@ struct ShannonAgentTaskRoomView: View {
         ShannonAgentReasoningEffort?
     ) -> Void
     let advancePreview: (() -> Void)?
+    /// Title of the thread the work came from; nil when that thread is not on this device.
+    var sourceThreadTitle: String?
+    var openSourceThread: () -> Void = {}
+    var followUp: (ShannonAgentTaskFollowUp) -> Void = { _ in }
 
     @State var steerText = ""
     @State var showsCancelConfirmation = false
@@ -137,10 +141,11 @@ struct ShannonAgentTaskRoomView: View {
         }
     }
 
-    /// Room order: decision (or status row), action error, plan, then the
-    /// existing activity, history, and result blocks.
+    /// Room order: decision (or status row with what the owner does next), action
+    /// error, the report for stopped or finished work, plan, then activity and history.
     func progressContent(_ palette: ShannonPalette) -> some View {
-        LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
+        let reportLeads = ShannonAgentTaskReport.leadsRoom(for: task)
+        return LazyVStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
             // A pending decision is always the first thing in the room;
             // otherwise a compact status row stands in for it.
             Group {
@@ -159,12 +164,35 @@ struct ShannonAgentTaskRoomView: View {
             }
             .id(Self.topAnchor)
 
+            if task.pendingApproval == nil, task.needsOwnerToContinue {
+                AgentTaskNextActionCard(
+                    task: task,
+                    palette: palette,
+                    isBusy: actionIsInFlight,
+                    resume: togglePause
+                )
+            }
+
             if let actionError {
                 AgentTaskActionErrorCard(
                     message: actionError,
                     palette: palette,
                     dismiss: dismissActionError
                 )
+            }
+
+            if task.status.isTerminal {
+                AgentTaskFollowUpCard(
+                    task: task,
+                    sourceThreadTitle: sourceThreadTitle,
+                    palette: palette,
+                    followUp: followUp,
+                    openSourceThread: openSourceThread
+                )
+            }
+
+            if reportLeads, !ShannonAgentTaskReport(task: task).isEmpty {
+                AgentTaskResultSection(task: task, palette: palette)
             }
 
             if !task.plan.isEmpty {
@@ -217,7 +245,7 @@ struct ShannonAgentTaskRoomView: View {
                 .tint(palette.action)
             }
 
-            if !task.changes.isEmpty || !task.tests.isEmpty {
+            if !reportLeads, !task.changes.isEmpty || !task.tests.isEmpty {
                 AgentTaskResultSection(task: task, palette: palette)
             }
         }

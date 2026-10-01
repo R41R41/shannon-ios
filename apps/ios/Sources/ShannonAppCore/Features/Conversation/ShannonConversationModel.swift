@@ -49,7 +49,7 @@ public final class ShannonConversationModel {
     var didAttemptInitialLoad = false
     var didAttemptThreadsLoad = false
     var previewAgentTaskIDs: Set<UUID> = []
-    var acknowledgedAgentTaskIDs: Set<UUID>
+    var agentTaskAcknowledgements: ShannonAgentTaskAcknowledgements
     var threadListRevision = 0
     var historyLoadRevision = 0
     var titleEditRevisions: [String: Int] = [:]
@@ -69,10 +69,11 @@ public final class ShannonConversationModel {
         self.cache = shouldUseDisplayCache ? .standard : nil
         self.agentTaskStore = shouldUseDisplayCache ? .standard : nil
         let saved = shouldUseDisplayCache ? ShannonConversationCache.standard.load(scopeKey: scopeKey) : nil
-        self.agentTasks = shouldUseDisplayCache ? ShannonAgentTaskStore.standard.load(scopeKey: scopeKey) : []
-        self.acknowledgedAgentTaskIDs = shouldUseDisplayCache
-            ? ShannonAgentTaskStore.standard.loadAcknowledgedTaskIDs(scopeKey: scopeKey)
-            : []
+        let savedAgentTasks = shouldUseDisplayCache ? ShannonAgentTaskStore.standard.load(scopeKey: scopeKey) : []
+        self.agentTasks = savedAgentTasks
+        self.agentTaskAcknowledgements = shouldUseDisplayCache
+            ? ShannonAgentTaskStore.standard.loadAcknowledgements(scopeKey: scopeKey, tasks: savedAgentTasks)
+            : ShannonAgentTaskAcknowledgements()
         self.cachedHistories = saved?.histories ?? [:]
         self.threads = saved?.threads ?? []
         self.selectedThreadId = saved?.selectedThreadId

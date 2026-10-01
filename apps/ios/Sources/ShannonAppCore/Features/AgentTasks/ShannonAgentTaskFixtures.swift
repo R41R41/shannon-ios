@@ -48,16 +48,62 @@ public enum ShannonAgentTaskFixtures {
     ) -> ShannonAgentTask {
         var task = running(threadID: threadID, sourceMessageID: sourceMessageID, now: now)
         task.status = .waitingApproval
-        task.summary = "接続テストの前で待ってる。"
-        task.currentAction = "端末の認証情報を使う許可を待っています"
+        task.summary = "作業を続ける前に許可が必要です。"
+        task.currentAction = "ネットワーク接続の許可"
+        // Mirrors what the Agent Host sends: a fixed title per kind, with the concrete target in `resource`.
         task.pendingApproval = ShannonAgentApproval(
             externalRequestID: "fixture-approval",
             kind: .network,
-            title: "接続テストをしていい？",
-            reason: "外部への書き込みはせず、ログイン確認だけ行います。",
-            resource: "sh4nnon.com",
+            title: "ネットワーク接続の許可",
+            reason: "外部サービスへ接続する必要があります。",
+            resource: "https://sh4nnon.com:443",
+            denyContinues: true,
             requestedAt: now
         )
+        return task
+    }
+
+    /// A one-off command approval as the Agent Host sends it.
+    public static func waitingCommandApproval(
+        threadID: String = "fixture-thread",
+        sourceMessageID: UUID? = nil,
+        command: String = "swift test --filter ShannonCodeSyntaxTests",
+        now: Date = Date()
+    ) -> ShannonAgentTask {
+        var task = waitingApproval(threadID: threadID, sourceMessageID: sourceMessageID, now: now)
+        task.currentAction = "コマンド実行の許可"
+        task.pendingApproval = ShannonAgentApproval(
+            externalRequestID: "fixture-command-approval",
+            kind: .command,
+            title: "コマンド実行の許可",
+            reason: "通常の安全範囲を越える操作が必要です。",
+            resource: command,
+            denyContinues: true,
+            requestedAt: now
+        )
+        return task
+    }
+
+    /// Work the host stopped because it needs the owner, with the evidence it kept.
+    public static func needsOwner(
+        threadID: String = "fixture-thread",
+        sourceMessageID: UUID? = nil,
+        now: Date = Date()
+    ) -> ShannonAgentTask {
+        var task = running(threadID: threadID, sourceMessageID: sourceMessageID, now: now)
+        task.status = .paused
+        task.pauseReason = .needsOwner
+        task.pauseSequence = 4
+        task.summary = "修正は入れたが、実機での確認が残っている。"
+        task.currentAction = "iPhoneで再起動後にログインできるか確認して、結果を伝える"
+        task.timeline.append(.init(sequence: 4, title: "続きが必要です", detail: task.summary, occurredAt: now, tone: .warning))
+        task.changes = [
+            .init(displayName: "SessionStore.swift", summary: "履歴を消さずにセッションを更新", additions: 12, deletions: 4),
+        ]
+        task.tests = [
+            .init(name: "セッション復元", status: .passed, detail: "成功"),
+            .init(name: "iOSアプリビルド", status: .failed, detail: "失敗を検出"),
+        ]
         return task
     }
 

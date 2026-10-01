@@ -177,8 +177,26 @@ extension ShannonConversationView {
                     )
                     Task { await model.startAgentTask(task.id) }
                 },
-                advancePreview: nil
+                advancePreview: nil,
+                sourceThreadTitle: model.threads.first { $0.threadId == task.conversationThreadID }?.title,
+                openSourceThread: { openAgentTaskSourceThread(task, draft: nil) },
+                followUp: { kind in openAgentTaskSourceThread(task, draft: kind.draft(for: task)) }
             )
+            // Seeing a result or a stop in the room is what acknowledges it, also when the
+            // state changes while the room is open. A pending approval is not cleared by this.
+            .task(id: task.attention?.key) { model.acknowledgeAgentTask(task.id) }
+        }
+    }
+
+    /// Returns to the thread the work came from. A follow-up only fills the composer; the owner sends it.
+    func openAgentTaskSourceThread(_ task: ShannonAgentTask, draft: String?) {
+        selectedAgentTaskID = nil
+        selectedPage = .talk
+        Task {
+            await model.selectThread(task.conversationThreadID)
+            guard let draft else { return }
+            model.draft = draft
+            composerIsFocused = true
         }
     }
 
