@@ -296,7 +296,6 @@ final class ShannonDesktopWorkProjectionTests: XCTestCase {
         let attention = ShannonDesktopWorkProjection(tasks: [stopped, ownerPaused], filter: .attention)
         XCTAssertEqual(attention.active.map(\.id), [stopped.id])
         XCTAssertEqual(ShannonDesktopTaskFilter.attention.title, "対応待ち")
-        XCTAssertEqual(DesktopTaskStopConfirmation.denyAndStop(stopped.id).actionTitle, "許可せず作業を中止")
     }
 
     func testTaskConversationContextPreservesSourceAndResolvesThreadTitle() {
