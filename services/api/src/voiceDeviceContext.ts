@@ -1,8 +1,11 @@
 import { objectBody, validBoundedString } from './apiValidation.js';
 import type { UserUtterance } from './conversationCommands.js';
+import { validatedGuestCallContext, type GuestCallContext } from './voiceGuestCall.js';
 
 export interface VoiceDeviceContext {
   userUtterance?: UserUtterance;
+  /** In-call context of a 「友人も一緒」 call; never persisted. */
+  guestCall?: GuestCallContext | null;
   timeZoneIdentifier: string;
   requestedLocation: boolean;
   location: { latitude: number; longitude: number; accuracyMeters: number } | null;
@@ -23,9 +26,15 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     || !validBoundedString(utterance.text, 8_000)
     || (utterance.source !== undefined && !['speech', 'typed', 'camera'].includes(String(utterance.source)))
     || (utterance.rawText !== undefined && !validBoundedString(utterance.rawText, 12_000)))) return false;
-  const userUtterance = utterance as UserUtterance | undefined;
+  const guestCall = validatedGuestCallContext(objectBody(utterance) ? utterance.callContext : undefined);
+  if (guestCall === false) return false;
+  const userUtterance = utterance === undefined ? undefined : {
+    id: utterance.id, text: utterance.text,
+    ...(utterance.source !== undefined ? { source: utterance.source } : {}),
+    ...(utterance.rawText !== undefined ? { rawText: utterance.rawText } : {}),
+  } as UserUtterance;
   if (value.location === undefined || value.location === null) {
-    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance };
+    return { timeZoneIdentifier: value.timeZoneIdentifier, requestedLocation: value.requestedLocation, location: null, userUtterance, guestCall };
   }
   if (!value.requestedLocation || !objectBody(value.location)) return false;
   const { latitude, longitude, accuracyMeters, observedAt } = value.location;
@@ -40,6 +49,7 @@ export function validatedVoiceDeviceContext(value: unknown, nowIso: string): Voi
     timeZoneIdentifier: value.timeZoneIdentifier,
     requestedLocation: true,
     userUtterance,
+    guestCall,
     location: { latitude, longitude, accuracyMeters },
   };
 }

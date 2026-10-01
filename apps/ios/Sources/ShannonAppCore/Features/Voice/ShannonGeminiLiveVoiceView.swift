@@ -87,12 +87,25 @@ public struct ShannonGeminiLiveVoiceView: View {
             Button("写真ライブラリから選ぶ") { workspace.showsPhotoLibrary = true }
             Button("キャンセル", role: .cancel) {}
         }
-        .confirmationDialog("音声の参加者", isPresented: $workspace.showsParticipantModePicker, titleVisibility: .visible) {
-            Button("本人だけ") { switchParticipantMode(to: .owner) }
-            Button("友人も一緒") { switchParticipantMode(to: .guest) }
+        .confirmationDialog(
+            model.participantMode == .owner ? ShannonVoiceGuestModeCopy.switchToGuestTitle
+                : ShannonVoiceGuestModeCopy.switchToOwnerTitle,
+            isPresented: $workspace.showsParticipantModePicker, titleVisibility: .visible
+        ) {
+            if model.participantMode == .owner {
+                Button("友人も一緒にする") { switchParticipantMode(to: .guest) }
+            } else {
+                Button("本人だけに戻す") { switchParticipantMode(to: .owner) }
+            }
             Button("キャンセル", role: .cancel) {}
         } message: {
-            Text("「友人も一緒」では所有者の履歴や記憶を使わず、この通話を保存しません。切り替えると音声会話をつなぎ直します。")
+            Text(model.participantMode == .owner ? ShannonVoiceGuestModeCopy.switchToGuestMessage
+                : ShannonVoiceGuestModeCopy.switchToOwnerMessage)
+        }
+        .alert(ShannonVoiceGuestModeCopy.photoUnavailableTitle, isPresented: $workspace.showsPhotoUnavailable) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(ShannonVoiceGuestModeCopy.photoUnavailableMessage)
         }
         .confirmationDialog("入力マイク", isPresented: $workspace.showsInputPicker, titleVisibility: .visible) {
             ForEach(ShannonVoiceInputPreference.allCases.filter { model.inputState.canSelect($0) }) { preference in
@@ -232,7 +245,7 @@ public struct ShannonGeminiLiveVoiceView: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: 560)
             // Visible subtitles are bounded; VoiceOver reads the whole current turn.
-            // The complete conversation remains in the call's pinned Talk thread.
+            // Owner turns remain in the call's pinned Talk thread; 「友人も一緒」 turns are not kept.
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(subtitleAccessibilityLabel)
         }
@@ -257,7 +270,11 @@ public struct ShannonGeminiLiveVoiceView: View {
                 isPhotoBusy: workspace.isSharingCameraSnapshot || workspace.isLoadingLibraryPhoto,
                 showsTextComposer: workspace.showsTextComposer,
                 palette: palette,
-                choosePhoto: { composerIsFocused = false; workspace.showsPhotoSource = true },
+                choosePhoto: {
+                    composerIsFocused = false
+                    if model.participantMode.allowsCameraSharing { workspace.showsPhotoSource = true }
+                    else { workspace.showsPhotoUnavailable = true }
+                },
                 chooseParticipant: { composerIsFocused = false; workspace.showsParticipantModePicker = true },
                 toggleMute: model.toggleMicrophoneMute,
                 selectInput: { composerIsFocused = false; model.selectInput($0) },

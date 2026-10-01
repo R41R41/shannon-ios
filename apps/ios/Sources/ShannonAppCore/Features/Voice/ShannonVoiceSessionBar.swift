@@ -25,7 +25,7 @@ struct ShannonVoiceSessionBar: View {
 
     private var detailSubtitle: String {
         if model.phase == .failed { return "詳細を開いて再接続" }
-        if model.participantMode == .guest { return "友人も一緒 · マイク使用中 · 保存しない通話" }
+        if model.participantMode == .guest { return "友人も一緒 · マイク使用中 · 会話は保存しません" }
         return "本人だけ · マイク使用中 · 他のアプリでも通話を継続"
     }
 
@@ -77,6 +77,13 @@ struct ShannonVoiceSessionBar: View {
                                 .foregroundStyle(palette.textSecondary)
                                 .accessibilityLabel(ShannonVoiceCallDuration.accessibilityText(seconds: seconds))
                         }
+                    }
+                    if model.participantMode == .guest, !showsDetails {
+                        Label(ShannonVoiceGuestModeCopy.name, systemImage: "person.2.fill")
+                            .font(.caption.weight(.medium))
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(palette.action)
+                            .lineLimit(1)
                     }
                     if task != nil, !showsDetails {
                         Image(systemName: "hammer.fill")

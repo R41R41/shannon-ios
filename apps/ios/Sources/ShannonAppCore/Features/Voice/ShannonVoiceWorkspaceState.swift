@@ -26,6 +26,9 @@ final class ShannonVoiceWorkspaceState {
     var isSharingCameraSnapshot = false
     var isLoadingLibraryPhoto = false
     var cameraPrimerPhase: ShannonPermissionPrimerPhase?
+    var showsPhotoUnavailable = false
+    /// Set when a call that had a 「友人も一緒」 period ends; memory only.
+    var callSummaryPrompt: ShannonVoiceCallSummaryPromptState?
 
     func clearPhoto() {
         showsPhotoSource = false

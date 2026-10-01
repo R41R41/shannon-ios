@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-/// The call screen's bottom control bar: 写真, 人物, マイク, 文字, 終了.
+/// The call screen's bottom control bar: 写真, 本人だけ／友人も一緒, マイク, 文字, 終了.
 ///
 /// Every control keeps a visible label. When the labels no longer fit on one row
 /// (large accessibility text), the controls wrap to two rows, then to a
@@ -29,11 +29,8 @@ struct ShannonGeminiLiveCallControls: View {
     @ScaledMetric(relativeTo: .body) private var controlDiameter: CGFloat = 54
     @ScaledMetric(relativeTo: .body) private var primaryDiameter: CGFloat = 68
 
-    private var controls: [Control] {
-        participantMode.allowsCameraSharing
-            ? [.photo, .participant, .microphone, .text, .end]
-            : [.participant, .microphone, .text, .end]
-    }
+    /// 写真 stays in place in 「友人も一緒」 so its absence is explained instead of silent.
+    private let controls: [Control] = [.photo, .participant, .microphone, .text, .end]
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -69,18 +66,29 @@ struct ShannonGeminiLiveCallControls: View {
         switch control {
         case .photo:
             Button(action: choosePhoto) {
-                label("写真", systemImage: "camera.fill")
+                label("写真", systemImage: participantMode.allowsCameraSharing ? "camera.fill" : "camera",
+                      foreground: participantMode.allowsCameraSharing ? nil : palette.textSecondary)
             }
             .buttonStyle(.plain)
             .disabled(isPhotoBusy)
             .accessibilityLabel("写真をシャノンに見せる")
+            .accessibilityValue(participantMode.allowsCameraSharing ? "" : "「友人も一緒」では使えません")
+            .accessibilityHint(participantMode.allowsCameraSharing ? "" : "理由を表示します")
         case .participant:
             Button(action: chooseParticipant) {
-                label("人物", systemImage: participantMode == .owner ? "person.fill" : "person.2.fill")
+                // The label is the current state, so both people can see who Shannon is talking with.
+                label(
+                    participantMode.japaneseName,
+                    systemImage: participantMode == .owner ? "person.fill" : "person.2.fill",
+                    fill: participantMode == .guest ? palette.action.opacity(0.18) : nil,
+                    foreground: participantMode == .guest ? palette.action : palette.textPrimary
+                )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("音声の参加者")
+            .accessibilityLabel("会話の相手")
             .accessibilityValue(participantMode.japaneseName)
+            .accessibilityHint(participantMode == .owner
+                ? "友人も一緒に切り替えます。通話は続きます。" : "本人だけに戻します。通話は続きます。")
         case .microphone:
             microphone
         case .text:

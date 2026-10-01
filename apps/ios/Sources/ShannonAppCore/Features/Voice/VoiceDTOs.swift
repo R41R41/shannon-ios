@@ -19,7 +19,7 @@ public enum ShannonVoiceParticipantMode: String, Codable, CaseIterable, Equatabl
     public var transcriptSpeakerName: String {
         switch self {
         case .owner: "あなた"
-        case .guest: "参加者"
+        case .guest: "話し手"
         }
     }
 
@@ -176,12 +176,18 @@ public struct ShannonVoiceUserUtteranceDTO: Codable, Equatable, Sendable {
     public let text: String
     public let source: ShannonVoiceUtteranceSource?
     public let rawText: String?
+    /// Only for 「友人も一緒」: this call's own earlier turns. Omitted for owner turns.
+    public let callContext: ShannonVoiceCallContextDTO?
 
-    public init(id: String, text: String, source: ShannonVoiceUtteranceSource? = nil, rawText: String? = nil) {
+    public init(
+        id: String, text: String, source: ShannonVoiceUtteranceSource? = nil, rawText: String? = nil,
+        callContext: ShannonVoiceCallContextDTO? = nil
+    ) {
         self.id = id
         self.text = text
         self.source = source
         self.rawText = rawText
+        self.callContext = callContext
     }
 }
 

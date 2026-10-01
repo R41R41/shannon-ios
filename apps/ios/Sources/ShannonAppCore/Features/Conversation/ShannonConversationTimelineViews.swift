@@ -187,7 +187,18 @@ struct ShannonMessageRow: View {
             .font(.caption2)
             .foregroundStyle(palette.textSecondary)
 
-            ShannonRichMarkdownText(source: message.text, palette: palette)
+            if ShannonVoiceCallSummaryNote.isNote(message.text) {
+                // A record of a 「友人も一緒」 call the owner chose to keep, not something Shannon said in Talk.
+                Label(ShannonVoiceCallSummaryNote.label, systemImage: "person.2.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.textSecondary)
+                    .padding(.horizontal, ShannonSpacing.small)
+                    .padding(.vertical, 4)
+                    .background(palette.subtleSurface, in: Capsule())
+                    .accessibilityLabel("友人も一緒の通話の要約。会話そのものではなく、残すと選んだ記録です。")
+            }
+
+            ShannonRichMarkdownText(source: ShannonVoiceCallSummaryNote.body(of: message.text), palette: palette)
                 .textSelection(.enabled)
                 .tint(palette.action)
                 .frame(maxWidth: .infinity, alignment: .leading)

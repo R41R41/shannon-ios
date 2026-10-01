@@ -159,4 +159,12 @@ public extension ShannonAPIClientProtocol {
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
         throw ShannonAPIError.invalidResponse
     }
+
+    func saveVoiceCallSummary(
+        scopeKey: String,
+        threadId: String?,
+        turns: [ShannonVoiceCallContextTurnDTO]
+    ) async throws -> ShannonVoiceCallSummaryResponseDTO {
+        throw ShannonAPIError.invalidResponse
+    }
 }

@@ -105,6 +105,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   experienceObservedAt(scopeKey: string, ids: readonly string[]) { return this.shannonKnowledge.experienceObservedAt(scopeKey, ids); }
   appendTurn(scopeKey: string, threadId: string, userMessage: string, shannonReply: string, observedAt: string, context?: TurnPersistenceContext) { return this.conversations.appendTurn(scopeKey, threadId, userMessage, shannonReply, observedAt, context); }
   ingestPlatformTurn(input: PlatformTurnPersistenceInput) { return this.conversations.ingestPlatformTurn(input); }
+  appendNote(scopeKey: string, threadId: string, content: string, observedAt: string, noteKind: string) { return this.conversations.appendNote(scopeKey, threadId, content, observedAt, noteKind); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 

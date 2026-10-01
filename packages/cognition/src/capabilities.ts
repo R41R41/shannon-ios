@@ -66,7 +66,7 @@ export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner'): st
     'できること（頼み方）:',
     ...capabilities.map(item => `- ${item.text}`),
     ...(audience === 'guest'
-      ? ['この場では、持ち主の記憶・ノート・タスク・作業は見ないし使わない。この場の会話も後に残さない。']
+      ? ['この場では、持ち主の記憶・ノート・タスク・作業は見ないし使わない。この場の会話は、持ち主が通話の終わりに要約を残すと選んだ時以外、後に残さない。']
       : []),
     '今はできないこと:',
     ...SHANNON_LIMITATIONS.map(item => `- ${item.text}`),

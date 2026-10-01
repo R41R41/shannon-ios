@@ -28,6 +28,9 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             if geminiVoiceModel.phase != .idle {
                 ShannonVoiceSessionBar(model: geminiVoiceModel, task: voiceTask,
                     showDetails: { isPresented = true }, end: endCall, openTask: openTask)
+            } else if let prompt = workspace.callSummaryPrompt {
+                ShannonVoiceCallSummaryPrompt(state: prompt, keep: keepCallSummary,
+                    discard: { workspace.callSummaryPrompt = nil })
             }
             content
         }
@@ -49,7 +52,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     }
                     return try await conversationModel.analyzeVoiceCameraSnapshot(jpegData: data, threadID: threadID)
                 },
-                switchParticipantMode: beginCall,
+                switchParticipantMode: { geminiVoiceModel.switchParticipantMode(to: $0) },
                 openTask: { id in taskToOpen = id; isPresented = false },
                 minimize: { isPresented = false }, end: endCall
             )
@@ -59,14 +62,46 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         .onChange(of: isPresented) {
             if isPresented, geminiVoiceModel.phase == .idle { beginCall(.owner) }
         }
+        // A spoken switch happens in the session, so an unshared photo is cleared here too.
+        .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
+#if DEBUG
+        .task {
+            // Synthetic fixture for the end-of-call question; no call, model, or network.
+            guard ProcessInfo.processInfo.arguments.contains("-ShannonPreviewVoiceCallSummary"),
+                  workspace.callSummaryPrompt == nil, geminiVoiceModel.phase == .idle else { return }
+            workspace.callSummaryPrompt = .asking(.init(threadID: nil, turns: [
+                .init(role: .participant, text: "はじめまして"), .init(role: .shannon, text: "はじめまして、シャノンです。"),
+            ]))
+        }
+#endif
     }
 
     private func endCall() {
         workspace.connectionRequestID = nil
+        // Ending never saves anything. A call with a 「友人も一緒」 period only leaves a question.
+        let summaryTurns = geminiVoiceModel.callSummaryTurns
+        let threadID = workspace.threadContext?.threadID
         geminiVoiceModel.stop()
         workspace.threadContext = nil
         isPresented = false
         workspace.clearPhoto()
+        workspace.callSummaryPrompt = summaryTurns.map { .asking(.init(threadID: threadID, turns: $0)) }
+    }
+
+    private func keepCallSummary() {
+        guard let draft = workspace.callSummaryPrompt?.draft else { return }
+        workspace.callSummaryPrompt = .saving(draft)
+        Task {
+            do {
+                try await conversationModel.saveVoiceCallSummary(draft)
+                guard workspace.callSummaryPrompt == .saving(draft) else { return }
+                workspace.callSummaryPrompt = .saved
+                try? await Task.sleep(for: .seconds(4))
+                if workspace.callSummaryPrompt == .saved { workspace.callSummaryPrompt = nil }
+            } catch {
+                if workspace.callSummaryPrompt == .saving(draft) { workspace.callSummaryPrompt = .failed(draft) }
+            }
+        }
     }
 
     private func beginCall(_ mode: ShannonVoiceParticipantMode) {
@@ -83,6 +118,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         workspace.connectionRequestID = requestID
         workspace.threadContext = context
         workspace.clearPhoto()
+        // An unanswered summary question from the previous call is a "no".
+        workspace.callSummaryPrompt = nil
         // Session-owned, not sheet-owned: minimization must not cancel startup.
         Task {
             guard workspace.connectionRequestID == requestID else { return }
@@ -123,7 +160,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     )
                 },
                 handleDelegationResponse: { response in
-                    guard mode == .owner else { return }
+                    // Called for owner turns only; 「友人も一緒」 turns never reach the owner's thread.
                     if conversationModel.selectedThreadId == response.threadId, let session = response.organizeSession {
                         conversationModel.upsertOrganizeSession(session)
                     }
