@@ -81,6 +81,7 @@ import {
   type CognitiveIntentStore,
 } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
+import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
 import {
   DisabledVoyagerTaskDestination,
   DisabledVoyagerCatalog,
@@ -125,6 +126,7 @@ export interface ShannonApiKernelOptions {
   cognitiveIntents?: CognitiveIntentStore;
   conversationOrchestration?: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall;
+  autonomy?: ShannonAutonomyService;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -150,6 +152,7 @@ export class ShannonApiKernel {
   private readonly cognitiveIntents: CognitiveIntentStore;
   private readonly conversationOrchestration: ConversationOrchestrationStore;
   private readonly memoryRecall: TurnMemoryRecall | null;
+  private readonly autonomy: ShannonAutonomyService;
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -182,6 +185,7 @@ export class ShannonApiKernel {
     this.cognitiveIntents = options.cognitiveIntents ?? new InMemoryCognitiveIntentStore();
     this.conversationOrchestration = options.conversationOrchestration ?? new InMemoryConversationOrchestrationStore();
     this.memoryRecall = options.memoryRecall ?? null;
+    this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
   }
 
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
@@ -306,7 +310,7 @@ export class ShannonApiKernel {
       aetherProposals: this.aetherProposals,
       personIdentities: this.personIdentities,
       worldSubscriptions: this.worldSubscriptions,
-      cognitiveIntents: this.cognitiveIntents,
+      cognitiveIntents: this.cognitiveIntents, autonomy: this.autonomy,
       now: this.now,
     });
     if (dataResponse) return dataResponse;
@@ -370,7 +374,7 @@ export class ShannonApiKernel {
       const capabilityContext = explicitCommand ? '' : conversationCapabilityPrompt(body.scopeKey, message,
         { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog });
       const capabilityPrompt = typeof capabilityContext === 'string' ? capabilityContext : await capabilityContext;
-      const dailyMindPrompt = this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '';
+      const dailyMindPrompt = [this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey)].filter(Boolean).join('\n\n');
       const systemPrompt = [
         basePrompt, cognitiveContext.prompt, dailyMindPrompt, capabilityPrompt,
         buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),

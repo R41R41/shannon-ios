@@ -1,0 +1,399 @@
+import {
+  SHANNON_AUTONOMY_SYSTEM_DOMAIN,
+  buildShannonPursuitsPrompt,
+  type ShannonPursuit,
+  type ShannonPursuitLink,
+  type ShannonPursuitStatus,
+} from '@shannon/cognition';
+import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
+import { formatYen, type AutonomyActivityDay, type AutonomyActivityEntry } from './autonomyActivity.js';
+import { DisabledAutonomyAnnouncer, type AutonomyAnnouncer } from './autonomyAnnouncer.js';
+import {
+  autonomyBudgetStatus, autonomyDayKey, configuredAutonomy, yenFromUsd,
+  type AutonomyBudgetStatus, type AutonomyConfig,
+} from './autonomyBudget.js';
+import {
+  autonomyModel, autonomyModelAllowedFor, autonomyModelChoices, autonomyModelCostUsd, isAutonomyModelPurpose,
+  type AutonomyModelChoice,
+} from './autonomyModels.js';
+import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.js';
+import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
+import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
+import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
+import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
+
+/**
+ * The live side of bounded autonomy: it hands `authorizeAutonomousAction` the current
+ * stop switch and budget, writes every decision to the activity record, and offers
+ * the only functions through which Shannon's own activity may write (each one asks the
+ * gate first). The owner-side functions back the HTTP routes. No activity loop calls
+ * the Shannon-side functions yet (ADR-0002 step 3).
+ */
+export interface AutonomyServiceDependencies {
+  store: SQLiteAutonomyStore;
+  config: AutonomyConfig;
+  now: () => string;
+  announcer?: AutonomyAnnouncer;
+  agentTasks?: AgentTaskStore;
+  /** The Talk an owner-started proposal belongs to. */
+  defaultThread?: (scopeKey: string) => string;
+  defaultAgentHost?: string | null;
+  resolvePath?: AutonomyPathResolver;
+}
+
+export interface RecordedDecision extends AutonomyDecision {
+  /** The activity-record entry of this decision. */
+  activityId: string;
+}
+
+export type AutonomyControlLabel = 'disabled' | 'paused' | 'active';
+
+export interface AutonomyOverview {
+  control: { state: AutonomyControlLabel; enabled: boolean; paused: boolean; changedAt: string | null };
+  budget: AutonomyBudgetStatus;
+  budgetRequest: AutonomyBudgetRequest | null;
+  maximumExtraYen: number;
+  pursuits: readonly ShannonPursuit[];
+  modelChoices: readonly AutonomyModelChoice[];
+  proposals: readonly ShannonAgentTaskProposal[];
+}
+
+export type AutonomyOwnerError =
+  | 'BUDGET_REQUEST_NOT_FOUND' | 'BUDGET_REQUEST_DECIDED' | 'BUDGET_REQUEST_EXPIRED' | 'BUDGET_AMOUNT_INVALID'
+  | 'PROPOSAL_NOT_FOUND' | 'PROPOSAL_DECIDED' | 'AGENT_TASKS_UNAVAILABLE' | PursuitRejection;
+
+export interface ActionReport {
+  /** The allowed decision this action was carried out under. */
+  decisionId: string;
+  summary: string;
+  outcome: 'done' | 'failed';
+  link?: string;
+  tool?: string;
+  /** Actual usage of a paid step, from the provider response. */
+  usage?: { inputTokens: number; outputTokens: number; purpose?: string };
+}
+
+export class ShannonAutonomyService {
+  private readonly store: SQLiteAutonomyStore;
+  private readonly config: AutonomyConfig;
+  private readonly now: () => string;
+  private readonly announcer: AutonomyAnnouncer;
+  private readonly resolvePath: AutonomyPathResolver;
+
+  constructor(private readonly dependencies: AutonomyServiceDependencies) {
+    this.store = dependencies.store;
+    this.config = dependencies.config;
+    this.now = dependencies.now;
+    this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
+    this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
+  }
+
+  // MARK: The gate
+
+  /** Decides one autonomous step and appends the decision to the activity record. Throws if it cannot be recorded. */
+  authorize(scopeKey: string, request: AutonomousActionRequest): RecordedDecision {
+    const at = this.now();
+    const dayKey = autonomyDayKey(at, this.config);
+    let paused = true;
+    // A stop switch that cannot be read counts as on.
+    try { paused = this.store.control(scopeKey).paused; } catch { paused = true; }
+    const budget = this.budget(scopeKey, dayKey);
+    const decision = authorizeAutonomousAction(request, {
+      enabled: this.config.enabled,
+      paused,
+      budget,
+      isKnownModel: model => autonomyModel(model) !== null,
+      places: this.config.places,
+      resolvePath: this.resolvePath,
+      publicReadsToday: this.store.activity.countForDay(scopeKey, dayKey, 'public_read', 'allowed'),
+      maximumPublicReadsPerDay: this.config.maximumPublicReadsPerDay,
+    });
+    const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
+    const entry = this.store.activity.append(scopeKey, dayKey, at, {
+      kind: 'decision',
+      actor: 'shannon',
+      summary: typeof declared.summary === 'string' && declared.summary.trim() ? declared.summary : '形の正しくない依頼がありました。',
+      detail: decision.explanation,
+      domain: decision.domain === 'unknown' && typeof declared.domain === 'string' && declared.domain ? declared.domain : decision.domain,
+      ...(typeof declared.paid?.model === 'string' ? { model: declared.paid.model } : {}),
+      ...(typeof declared.tool === 'string' ? { tool: declared.tool } : {}),
+      outcome: decision.decision === 'allow' ? 'allowed' : decision.decision === 'needs_approval' ? 'needs_approval' : 'refused',
+      approval: decision.decision === 'needs_approval' ? 'needed' : 'not_needed',
+      reasonCode: decision.reason,
+    });
+    return Object.freeze({ ...decision, activityId: entry.id });
+  }
+
+  // MARK: Shannon's own writes (each asks the gate first)
+
+  /** Records what an allowed step did and, for a paid step, what it actually cost. */
+  recordAction(scopeKey: string, report: ActionReport): AutonomyActivityEntry {
+    const decision = this.store.activity.get(scopeKey, report.decisionId);
+    if (!decision || decision.kind !== 'decision' || decision.outcome !== 'allowed'
+      || this.store.activity.followUps(scopeKey, decision.id, 'action') > 0) {
+      throw new Error('AUTONOMY_ACTION_NOT_AUTHORIZED');
+    }
+    // Usage is accepted only for the model the gate priced.
+    if (report.usage && !decision.model) throw new Error('AUTONOMY_ACTION_NOT_AUTHORIZED');
+    const at = this.now();
+    const dayKey = autonomyDayKey(at, this.config);
+    return this.store.transaction(() => {
+      let costYen = 0;
+      if (report.usage && decision.model) {
+        const costUsd = autonomyModelCostUsd(decision.model, report.usage, this.config.modelPrices);
+        if (costUsd === null) throw new Error('AUTONOMY_MODEL_UNKNOWN');
+        costYen = yenFromUsd(costUsd, this.config);
+        this.store.recordSpend(scopeKey, dayKey, at, {
+          model: decision.model, purpose: report.usage.purpose, inputTokens: report.usage.inputTokens,
+          outputTokens: report.usage.outputTokens, costUsd, costYen, activityId: decision.id,
+        });
+      }
+      return this.store.activity.append(scopeKey, dayKey, at, {
+        kind: 'action', actor: 'shannon', summary: report.summary, domain: decision.domain,
+        ...(decision.model ? { model: decision.model } : {}),
+        ...(report.tool ?? decision.tool ? { tool: report.tool ?? decision.tool } : {}),
+        costYen, outcome: report.outcome, ...(report.link ? { link: report.link } : {}),
+        approval: 'not_needed', relatedId: decision.id,
+      });
+    });
+  }
+
+  addPursuit(scopeKey: string, draft: PursuitDraft): { decision: RecordedDecision; pursuit?: ShannonPursuit; rejection?: PursuitRejection } {
+    const decision = this.authorize(scopeKey, { domain: 'thinking', summary: `やりたいこと「${clip(draft?.title, 60)}」を自分の台帳に書きます。` });
+    if (decision.decision !== 'allow') return { decision };
+    const result = this.store.pursuits.add(scopeKey, draft, this.now());
+    if (typeof result === 'string') return { decision, rejection: result };
+    this.record(scopeKey, {
+      kind: 'pursuit', actor: 'shannon', summary: `やりたいこと「${clip(result.title, 60)}」を台帳に書きました。`,
+      detail: result.why, domain: 'thinking', outcome: 'recorded', approval: 'not_needed', relatedId: decision.activityId,
+    });
+    return { decision, pursuit: result };
+  }
+
+  updatePursuit(
+    scopeKey: string,
+    pursuitId: string,
+    change: { status?: ShannonPursuitStatus; why?: string; links?: readonly ShannonPursuitLink[] },
+  ): { decision: RecordedDecision; pursuit?: ShannonPursuit; rejection?: PursuitRejection } {
+    const decision = this.authorize(scopeKey, { domain: 'thinking', summary: 'やりたいことの台帳を書き直します。' });
+    if (decision.decision !== 'allow') return { decision };
+    const result = this.store.pursuits.update(scopeKey, pursuitId, change, this.now());
+    if (typeof result === 'string') return { decision, rejection: result };
+    this.record(scopeKey, {
+      kind: 'pursuit', actor: 'shannon', summary: `やりたいこと「${clip(result.title, 60)}」を${pursuitStatusPhrase(result.status)}。`,
+      domain: 'thinking', outcome: 'recorded', approval: 'not_needed', relatedId: decision.activityId,
+      ...(result.links[0] ? { link: result.links[0].url } : {}),
+    });
+    return { decision, pursuit: result };
+  }
+
+  /** 「せがむ」: one request per owner-local day, with a reason and an amount. */
+  requestBudget(scopeKey: string, input: { reason: string; amountYen: number }):
+    { decision?: RecordedDecision; request?: AutonomyBudgetRequest; rejection?: 'BUDGET_REQUEST_INVALID' | 'BUDGET_REQUEST_ALREADY_MADE' } {
+    const reason = typeof input?.reason === 'string' ? input.reason.replace(/\s+/gu, ' ').trim() : '';
+    const amountYen = typeof input?.amountYen === 'number' ? Math.round(input.amountYen) : Number.NaN;
+    if (!reason || reason.length > 300 || !Number.isFinite(amountYen) || amountYen < 1 || amountYen > this.config.maximumExtraYenPerDay) {
+      return { rejection: 'BUDGET_REQUEST_INVALID' };
+    }
+    const decision = this.authorize(scopeKey, { domain: 'owner_message', summary: '今日の予算を増やしてほしいと、所有者にお願いします。' });
+    if (decision.decision !== 'allow') return { decision };
+    const at = this.now();
+    const dayKey = autonomyDayKey(at, this.config);
+    const request = this.store.createBudgetRequest(scopeKey, dayKey, reason, amountYen, at);
+    if (!request) return { decision, rejection: 'BUDGET_REQUEST_ALREADY_MADE' };
+    this.record(scopeKey, {
+      kind: 'budget', actor: 'shannon', summary: `今日の予算をあと${formatYen(amountYen)}増やしてほしいとお願いしました。`,
+      detail: reason, domain: 'owner_message', outcome: 'requested', approval: 'needed', relatedId: decision.activityId,
+    });
+    // The request is already durable and visible in the app; a failed message must not undo it.
+    try {
+      this.announcer.announceBudgetRequest(scopeKey, {
+        requestId: request.id, dayKey, reason, requestedYen: amountYen, capYen: this.budget(scopeKey, dayKey).capYen,
+      }, at);
+    } catch { /* the app still shows the request */ }
+    return { decision, request };
+  }
+
+  setModelPreference(scopeKey: string, input: { purpose: string; modelId: string; reason: string }):
+    { decision?: RecordedDecision; rejection?: 'MODEL_PREFERENCE_INVALID' } {
+    const reason = typeof input?.reason === 'string' ? input.reason.replace(/\s+/gu, ' ').trim() : '';
+    if (!isAutonomyModelPurpose(input?.purpose) || !autonomyModelAllowedFor(input.modelId, input.purpose) || !reason || reason.length > 300) {
+      return { rejection: 'MODEL_PREFERENCE_INVALID' };
+    }
+    const model = autonomyModel(input.modelId)!;
+    const decision = this.authorize(scopeKey, { domain: 'thinking', summary: `使うモデルを${model.label}に選び直します。` });
+    if (decision.decision !== 'allow') return { decision };
+    this.store.setModelPreference(scopeKey, { purpose: input.purpose, modelId: model.id, reason, updatedAt: this.now() });
+    this.record(scopeKey, {
+      kind: 'model', actor: 'shannon', summary: `使うモデルを${model.label}に選びました。`, detail: reason,
+      domain: 'thinking', model: model.id, outcome: 'recorded', approval: 'not_needed', relatedId: decision.activityId,
+    });
+    return { decision };
+  }
+
+  /** A proposal from her own activity. It records the proposal and nothing else: no task, no command. */
+  proposeAgentTask(scopeKey: string, draft: ShannonProposalDraft & { paths?: readonly string[]; domain?: 'core' | 'suite_app_code' | 'owner_content' }):
+    { decision: RecordedDecision; proposal?: ShannonAgentTaskProposal } {
+    const decision = this.authorize(scopeKey, {
+      domain: draft?.domain ?? 'core', summary: `改修「${clip(draft?.title, 60)}」を提案します。`,
+      ...(draft?.paths ? { paths: draft.paths } : {}),
+    });
+    if (decision.decision !== 'needs_approval') return { decision };
+    const proposal = this.store.proposals.create(scopeKey, {
+      title: draft.title, goal: draft.goal, reason: draft.reason,
+      ...(draft.projectHint ? { projectHint: draft.projectHint } : {}),
+      coreAreas: decision.coreAreas ?? (decision.coreArea ? [decision.coreArea] : []),
+    }, this.now());
+    if (!proposal) return { decision };
+    this.record(scopeKey, {
+      kind: 'proposal', actor: 'shannon', summary: `改修「${clip(proposal.title, 60)}」を所有者に提案しました。`,
+      detail: proposal.reason, domain: decision.domain, outcome: 'needs_approval', approval: 'needed',
+      link: `shannon-proposal://${proposal.id}`, relatedId: decision.activityId,
+    });
+    return { decision, proposal };
+  }
+
+  // MARK: Owner
+
+  overview(scopeKey: string): AutonomyOverview {
+    const at = this.now();
+    const dayKey = autonomyDayKey(at, this.config);
+    const control = this.store.control(scopeKey);
+    const proposals = this.store.proposals.list(scopeKey);
+    return Object.freeze({
+      control: {
+        state: !this.config.enabled ? 'disabled' as const : control.paused ? 'paused' as const : 'active' as const,
+        enabled: this.config.enabled, paused: control.paused, changedAt: control.changedAt,
+      },
+      budget: this.budget(scopeKey, dayKey),
+      budgetRequest: this.store.budgetRequest(scopeKey, dayKey),
+      maximumExtraYen: this.config.maximumExtraYenPerDay,
+      pursuits: this.store.pursuits.list(scopeKey, at),
+      modelChoices: autonomyModelChoices(this.store.modelPreferences(scopeKey)),
+      proposals: [...proposals.filter(item => item.status === 'proposed'), ...proposals.filter(item => item.status !== 'proposed').slice(0, 10)],
+    });
+  }
+
+  activityDays(scopeKey: string, days = 14): readonly AutonomyActivityDay[] {
+    const span = Math.max(1, Math.min(90, Math.trunc(days)));
+    const since = new Date(Date.parse(this.now()) - (span - 1) * 24 * 60 * 60_000).toISOString();
+    return this.store.activity.days(scopeKey, { sinceDayKey: autonomyDayKey(since, this.config) });
+  }
+
+  /** The stop switch. Takes effect at the next `authorize`, because the gate reads it every time. */
+  setPaused(scopeKey: string, paused: boolean): AutonomyOverview {
+    const before = this.store.control(scopeKey).paused;
+    if (before !== paused) {
+      this.store.transaction(() => {
+        this.store.setPaused(scopeKey, paused, this.now());
+        this.record(scopeKey, {
+          kind: 'control', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id,
+          summary: paused ? '所有者が自律活動を一時停止しました。' : '所有者が自律活動の一時停止を解除しました。',
+          outcome: paused ? 'paused' : 'resumed', approval: 'not_needed',
+        });
+      });
+    }
+    return this.overview(scopeKey);
+  }
+
+  decideBudgetRequest(scopeKey: string, requestId: string, decision: 'approve' | 'decline', amountYen?: number): AutonomyOverview | AutonomyOwnerError {
+    const request = this.store.budgetRequestById(scopeKey, requestId);
+    if (!request) return 'BUDGET_REQUEST_NOT_FOUND';
+    if (request.status !== 'pending') return 'BUDGET_REQUEST_DECIDED';
+    const at = this.now();
+    // Approval raises only the day it was asked for; yesterday's request cannot raise today.
+    if (request.dayKey !== autonomyDayKey(at, this.config)) return 'BUDGET_REQUEST_EXPIRED';
+    const amount = decision === 'approve' ? Math.round(amountYen ?? request.requestedYen) : 0;
+    if (decision === 'approve' && (!Number.isFinite(amount) || amount < 1 || amount > this.config.maximumExtraYenPerDay)) {
+      return 'BUDGET_AMOUNT_INVALID';
+    }
+    const decided = this.store.transaction(() => {
+      const saved = this.store.decideBudgetRequest(scopeKey, requestId, decision === 'approve' ? 'approved' : 'declined', amount, at);
+      if (saved) {
+        this.record(scopeKey, {
+          kind: 'budget', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id,
+          summary: decision === 'approve' ? `所有者が今日の予算を${formatYen(amount)}増やしました。` : '所有者が予算の追加を見送りました。',
+          detail: request.reason, outcome: decision === 'approve' ? 'approved' : 'declined',
+          approval: decision === 'approve' ? 'approved' : 'declined',
+        });
+      }
+      return saved;
+    });
+    return decided ? this.overview(scopeKey) : 'BUDGET_REQUEST_DECIDED';
+  }
+
+  /** The owner may tell her to rest or drop one of her own non-seed pursuits; nothing else is editable. */
+  setPursuitStatusByOwner(scopeKey: string, pursuitId: string, status: 'resting' | 'dropped'): AutonomyOverview | AutonomyOwnerError {
+    const result = this.store.pursuits.update(scopeKey, pursuitId, { status }, this.now());
+    if (typeof result === 'string') return result;
+    this.record(scopeKey, {
+      kind: 'pursuit', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id,
+      summary: `所有者が「${clip(result.title, 60)}」を${status === 'resting' ? '休ませる' : 'やめる'}よう伝えました。`,
+      outcome: 'recorded', approval: 'not_needed',
+    });
+    return this.overview(scopeKey);
+  }
+
+  /** Only this call, made by the owner, turns a proposal into an agent task. */
+  decideProposal(scopeKey: string, proposalId: string, decision: 'start' | 'decline'):
+    { overview: AutonomyOverview; task?: AgentTask } | AutonomyOwnerError {
+    const proposal = this.store.proposals.get(scopeKey, proposalId);
+    if (!proposal) return 'PROPOSAL_NOT_FOUND';
+    if (proposal.status !== 'proposed') return 'PROPOSAL_DECIDED';
+    const at = this.now();
+    let task: AgentTask | undefined;
+    if (decision === 'start') {
+      const agentTasks = this.dependencies.agentTasks;
+      const threadId = this.dependencies.defaultThread?.(scopeKey);
+      if (!agentTasks || !threadId) return 'AGENT_TASKS_UNAVAILABLE';
+      const hostHint = agentTasks.resolveHost(proposal.projectHint, 'auto', at, this.dependencies.defaultAgentHost ?? null);
+      // The same idempotency key makes a retried start return the one task.
+      task = agentTasks.create(scopeKey, {
+        idempotencyKey: `shannon-proposal:${proposal.id}`, conversationThreadID: threadId,
+        title: proposal.title, goal: proposal.goal, summary: `シャノンからの提案です。理由：${proposal.reason}`,
+        ...(hostHint ? { hostHint } : {}), ...(proposal.projectHint ? { projectHint: proposal.projectHint } : {}),
+      }, at).task;
+    }
+    const saved = this.store.proposals.decide(scopeKey, proposalId, decision === 'start' ? 'started' : 'declined', at, task?.id);
+    if (!saved) return 'PROPOSAL_DECIDED';
+    this.record(scopeKey, {
+      kind: 'proposal', actor: 'owner', domain: SHANNON_AUTONOMY_SYSTEM_DOMAIN.id,
+      summary: decision === 'start' ? `所有者が提案「${clip(proposal.title, 60)}」の開始を承認しました。` : `所有者が提案「${clip(proposal.title, 60)}」を見送りました。`,
+      outcome: decision === 'start' ? 'approved' : 'declined', approval: decision === 'start' ? 'approved' : 'declined',
+      ...(task ? { link: `shannon-task://${task.id}` } : {}),
+    });
+    return { overview: this.overview(scopeKey), ...(task ? { task } : {}) };
+  }
+
+  // MARK: Prompt
+
+  /** Bounded projection of her current pursuits for an owner response prompt. Empty when there is nothing to add. */
+  pursuitPrompt(scopeKey: string): string {
+    try { return buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, this.now())); } catch { return ''; }
+  }
+
+  private budget(scopeKey: string, dayKey: string): AutonomyBudgetStatus {
+    return autonomyBudgetStatus(dayKey, this.store.spentYen(scopeKey, dayKey), this.store.approvedExtraYen(scopeKey, dayKey), this.config);
+  }
+
+  private record(scopeKey: string, draft: Parameters<SQLiteAutonomyStore['activity']['append']>[3]): AutonomyActivityEntry {
+    const at = this.now();
+    return this.store.activity.append(scopeKey, autonomyDayKey(at, this.config), at, draft);
+  }
+}
+
+/** A service over a private in-memory database, switched off, for tests and local runs without persistence. */
+export function createInMemoryAutonomyService(now: () => string, overrides: Partial<AutonomyServiceDependencies> = {}): ShannonAutonomyService {
+  return new ShannonAutonomyService({
+    store: new SQLiteAutonomyStore(':memory:'), config: configuredAutonomy({}), now, ...overrides,
+  });
+}
+
+function pursuitStatusPhrase(status: ShannonPursuitStatus): string {
+  return { active: '続けることにしました', resting: '休ませました', done: 'やり終えました', dropped: 'やめました' }[status];
+}
+
+function clip(value: unknown, maximum: number): string {
+  const text = typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
+  return text.length > maximum ? `${text.slice(0, maximum - 1)}…` : text;
+}

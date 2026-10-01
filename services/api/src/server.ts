@@ -41,6 +41,10 @@ import { createConfiguredPlatformBridgeRoute, handlePlatformBridgeRequest, isPla
 import { SQLitePersonIdentityStore } from './personIdentity.js';
 import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
+import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
+import { configuredAutonomy } from './autonomyBudget.js';
+import { ShannonAutonomyService } from './autonomyService.js';
+import { SQLiteAutonomyStore } from './autonomyStore.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -55,6 +59,14 @@ const voiceVisionGateway = createConfiguredVoiceVisionGateway(process.env);
 const personIdentityStore = new SQLitePersonIdentityStore(configuredDatabasePath());
 const cognitiveIntentStore = new SQLiteCognitiveIntentStore(configuredDatabasePath());
 const conversationOrchestrationStore = new SQLiteConversationOrchestrationStore(configuredDatabasePath());
+const autonomyStore = new SQLiteAutonomyStore(configuredDatabasePath());
+const autonomyAnnouncer = new SQLiteAutonomyAnnouncer(configuredDatabasePath());
+// Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
+const autonomy = new ShannonAutonomyService({
+  store: autonomyStore, config: configuredAutonomy(process.env, { databasePath: configuredDatabasePath() }), now,
+  announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
+  defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null,
+});
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
@@ -88,6 +100,7 @@ const kernel = createLocalApiKernel(now, {
   cognitiveIntents: cognitiveIntentStore,
   conversationOrchestration: conversationOrchestrationStore,
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
+  autonomy,
 });
 const platformBridge = createConfiguredPlatformBridgeRoute(process.env, persistentStore, persistentStore, backgroundDispatcher, now, chatModel);
 const port = parsePort(process.env.SHANNON_API_PORT);
@@ -266,6 +279,8 @@ function shutdown(): void {
     organizeStore.close();
     cognitiveIntentStore.close();
     conversationOrchestrationStore.close();
+    autonomyAnnouncer.close();
+    autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;
   });

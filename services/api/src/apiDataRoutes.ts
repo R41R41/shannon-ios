@@ -7,6 +7,8 @@ import type { InitiativeInbox } from './initiativeStore.js';
 import type { KnowledgeAnswer, KnowledgeStore } from './knowledgeStore.js';
 import type { MemoryDashboard, ShannonMemoryStore } from './memoryService.js';
 import { dispatchPersonRequest } from './apiPersonRoutes.js';
+import { dispatchAutonomyRequest } from './apiAutonomyRoutes.js';
+import type { ShannonAutonomyService } from './autonomyService.js';
 import type { PersonIdentityStore } from './personIdentity.js';
 import type { WorldSubscriptionReader } from './worldStore.js';
 import type { CognitiveIntentStatus, CognitiveIntentStore } from './cognitiveIntent.js';
@@ -23,12 +25,15 @@ export interface ApiDataRouteDependencies {
   personIdentities: PersonIdentityStore;
   worldSubscriptions: WorldSubscriptionReader | null;
   cognitiveIntents: CognitiveIntentStore;
+  autonomy: ShannonAutonomyService;
   now: () => string;
 }
 
 export function dispatchDataRequest(request: ApiRequest, dependencies: ApiDataRouteDependencies): ApiResponse | undefined {
   const personResponse = dispatchPersonRequest(request, dependencies);
   if (personResponse) return personResponse;
+  const autonomyResponse = dispatchAutonomyRequest(request, dependencies.autonomy);
+  if (autonomyResponse) return autonomyResponse;
 
   if (request.method === 'GET' && request.path === '/v1/cognition') {
     const scopeKey = request.query?.get('scopeKey');
