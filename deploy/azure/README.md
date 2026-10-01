@@ -12,6 +12,18 @@ explicit release operation.
 - Public HTTPS base: `https://sh4nnon.com/companion`
 - Services: `shannon-ios.service` (response lane) and `shannon-ios-worker.service` (background/sleep lane)
 
+## Activity loop (bounded autonomy)
+
+`shannon-ios-autonomy.service` runs Shannon's own activity (Syzygy ADR-0002 step 3) as a
+separate process with a CPU and memory ceiling, so the response lane never waits for it.
+It reads the same mode-0600 `api.env` and writes only to the database directory. Installing
+and starting the unit changes nothing by itself: the loop stays idle until
+`SHANNON_AUTONOMY_ENABLED=true` and a dedicated credential
+(`SHANNON_AUTONOMY_GEMINI_API_KEY` and/or `SHANNON_AUTONOMY_OPENAI_API_KEY`) are set, and
+while the owner has paused her in the app. Run one unit only; a second process would idle
+on the lease. Turning it on, pausing, and rolling back are in
+`docs/self-improvement-runbook.md` under "Shannon's activity loop".
+
 ## Optional private Gemini Voice Lab
 
 `shannon-gemini-voice-lab.service` runs the browser listening workbench from

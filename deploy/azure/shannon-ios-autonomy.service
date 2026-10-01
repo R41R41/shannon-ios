@@ -1,0 +1,32 @@
+[Unit]
+Description=Shannon bounded-autonomy activity loop
+After=network-online.target shannon-ios.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+WorkingDirectory=/home/azureuser/shannon-ios
+Environment=NODE_ENV=production
+Environment=SHANNON_DATABASE_PATH=/home/azureuser/shannon-ios-data/shannon.sqlite
+EnvironmentFile=/home/azureuser/.config/shannon-ios/api.env
+ExecStart=/home/azureuser/shannon-ios-runtime/bin/node --import tsx services/api/src/autonomyWorker.ts
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+# The loop writes only to the database. It has no workspace or folder of its own yet (ADR-0002 step 4).
+ReadWritePaths=/home/azureuser/shannon-ios-data
+# Kept apart from the response lane: a modest ceiling so her activity cannot starve the API.
+CPUQuota=50%
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

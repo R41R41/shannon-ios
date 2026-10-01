@@ -128,7 +128,10 @@ async function callModel(adapters: BoundAdapters, call: PaidCall, signal?: Abort
     });
     return { reply: parsedModelObject(result.text), usage: result.usage };
   } catch (error) {
-    return { reply: null, failure: error instanceof Error ? error.message : 'AUTONOMY_MODEL_FAILED', ...(error instanceof AutonomyModelError && error.usage ? { usage: error.usage } : {}) };
+    // The provider answered with an error: charged only what it reported. No answer at all (a timeout, a lost
+    // connection, a shutdown) leaves the cost unknown, so the estimate is charged and the count errs high.
+    const usage = error instanceof AutonomyModelError ? error.usage : call.estimate;
+    return { reply: null, failure: error instanceof Error ? error.message : 'AUTONOMY_MODEL_FAILED', ...(usage ? { usage } : {}) };
   }
 }
 

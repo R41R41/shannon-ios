@@ -109,10 +109,28 @@ Before a schema or persistence change:
 2. Make a timestamped copy of the SQLite database and its WAL/SHM companions when present.
 3. Deploy only reviewed files; never upload local `.env` files or DerivedData.
 4. Run the production typecheck/tests needed by the change.
-5. Restart only affected services: `shannon-ios.service`, `shannon-ios-worker.service`, and/or `shannon-ios-world.service`.
+5. Restart only affected services: `shannon-ios.service`, `shannon-ios-worker.service`, `shannon-ios-world.service`, and/or `shannon-ios-autonomy.service`.
 6. Verify health, logs, database access, and preserved conversation/task counts.
 
 Recovery means restoring the backed-up database and the previous source files, then restarting the same affected services.
+
+## Shannon's activity loop
+
+The loop (Syzygy ADR-0002 step 3) is `services/api/src/autonomyWorker.ts`, run as `shannon-ios-autonomy.service`. It is off until all three hold: the server switch, no owner pause, and a dedicated credential.
+
+To turn it on:
+
+1. At the provider, create an API key used for nothing else and set a spending limit on it. This limit is the real backstop; the application's daily counter is not.
+2. In `/home/azureuser/.config/shannon-ios/api.env` (mode 0600) set `SHANNON_AUTONOMY_GEMINI_API_KEY` (and/or `SHANNON_AUTONOMY_OPENAI_API_KEY`), never the conversation key, then `SHANNON_AUTONOMY_ENABLED=true`. Optionally set `SHANNON_AUTONOMY_MODEL_PRICES_JSON`; without it a model whose price is not in the code is counted at a high fail-safe rate.
+3. Back up the database as for any persistence change. The loop adds tables with `CREATE TABLE IF NOT EXISTS`; the schema version does not change.
+4. Install `deploy/azure/shannon-ios-autonomy.service`, then `systemctl enable --now shannon-ios-autonomy.service` and restart `shannon-ios.service` so the API reads the same switch.
+5. Check `journalctl -u shannon-ios-autonomy.service`: the first line names the readiness (`ready`, `disabled`, or `no_credential`), later lines only the loop state. In the app, 設定 → シャノンの自律 shows 動いています.
+
+To pause: 設定 → シャノンの自律 → 「自律活動を一時停止」, or the same switch in 「したことの記録」. It takes effect before the next step; a step already under way is finished and recorded. Chat, voice, memory, and work the owner started are not affected.
+
+To read what she did: 頭の中 → シャノンのやりたいこと → 「したことの記録」 (each day's short log, every step with its cost, today's spend against the cap) and 「書斎」 (her notes, and the stories she is willing to show).
+
+To roll back: set `SHANNON_AUTONOMY_ENABLED=false` and restart `shannon-ios.service` and `shannon-ios-autonomy.service`, or `systemctl disable --now shannon-ios-autonomy.service`. Either stops every step; the record, the budget history, and her study stay in the database and stay readable. Revoke the dedicated key at the provider if spending must stop for certain. An older API binary can open the database with the added tables.
 
 ## iPhone TestFlight delivery
 

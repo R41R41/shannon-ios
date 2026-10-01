@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { AutonomyModelError } from '../src/autonomyTextModel.js';
 import { FULL_PLAN, FakeModel, FakeReader, FakeShowing, STORY_BODY, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-loop-'));
@@ -187,11 +188,14 @@ describe('activity loop: the daily budget', () => {
     expect(request).toMatchObject({ status: 'pending', requestedYen: 300, reason: '短い物語の下書きを、今日のうちに書きたい' });
     expect(service.overview(scope).loop).toMatchObject({ state: 'budget_exhausted', label: '今日は予算を使い切りました' });
 
-    // Later the same day: blocked again, and no second request.
+    // Later the same day she rests: nothing more is asked, nothing is spent, and there is no second request.
+    const recorded = entries().length;
     advance(HOUR);
-    await runUntilIdle(loop);
+    expect(await runUntilIdle(loop)).toEqual(['budget']);
     advance(HOUR);
-    await runUntilIdle(loop);
+    expect(await runUntilIdle(loop)).toEqual(['budget']);
+    expect(entries()).toHaveLength(recorded);
+    expect(model.kinds()).toEqual(['think']);
     expect(entries().filter(entry => entry.kind === 'budget' && entry.outcome === 'requested')).toHaveLength(1);
     expect(store.study.list(scope)).toHaveLength(0);
     expect(service.overview(scope).budget.spentYen).toBeLessThanOrEqual(12);
@@ -199,6 +203,34 @@ describe('activity loop: the daily budget', () => {
     // The owner raises today's cap: the loop is no longer stopped by the budget.
     expect(typeof service.decideBudgetRequest(scope, request!.id, 'approve', 300)).toBe('object');
     expect(service.overview(scope).loop.state).toBe('running');
+    advance(HOUR);
+    await runUntilIdle(loop);
+    expect(model.kinds()).toEqual(['think', 'think', 'draft']);
+    expect(store.study.list(scope)).toHaveLength(1);
+    // The next day starts with the base cap again, and the request of yesterday raises nothing.
+    advance(24 * HOUR);
+    expect(service.overview(scope).budget).toMatchObject({ capYen: 12, spentYen: 0 });
+    expect(service.overview(scope).budgetRequest).toBeNull();
+  });
+
+  it('charges the estimate when a call ends without an answer, and only the reported usage when the provider answers with an error', async () => {
+    const { loop, model, service, entries, advance } = loopHarness({ loop: { cycleIntervalMilliseconds: HOUR, cyclesPerDay: 6 } });
+    // A timeout or a lost connection: whether the provider counted the call is unknown.
+    model.during = () => { throw new Error('The operation was aborted due to timeout'); };
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    const lost = entries().find(entry => entry.kind === 'action')!;
+    expect(lost).toMatchObject({ outcome: 'failed', tool: 'study.think' });
+    // The estimate (1.5 tokens per prompt character plus the 1,500-token output ceiling), well above a real thinking call of this fake (0.11 yen).
+    expect(lost.costYen).toBeGreaterThan(0.3);
+    expect(lost.summary).not.toMatch(/aborted|timeout/u);
+    const afterLost = service.overview(scope).budget.spentYen;
+    expect(afterLost).toBe(lost.costYen);
+    // The provider refused the call: nothing was generated, nothing is charged.
+    advance(HOUR);
+    model.during = () => { throw new AutonomyModelError('AUTONOMY_MODEL_HTTP_429'); };
+    await runUntilIdle(loop);
+    expect(entries().filter(entry => entry.kind === 'action')[0]).toMatchObject({ outcome: 'failed', costYen: 0 });
+    expect(service.overview(scope).budget.spentYen).toBe(afterLost);
   });
 
   it('does not ask for more at night or while the owner is talking', async () => {

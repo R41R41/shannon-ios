@@ -80,7 +80,9 @@ export class ShannonAutonomyLoop {
     if (store.loop.activityCyclesOn(this.scopeKey, dayKey) >= loop.cyclesPerDay) return 'idle';
     if (loop.ownerActiveMilliseconds > 0
       && showing.ownerActiveSince(this.scopeKey, new Date(Date.parse(at) - loop.ownerActiveMilliseconds).toISOString())) return 'owner-active';
-    if (service.overview(this.scopeKey).budget.exhausted) return 'budget';
+    // Once the day's cap has stopped a step she rests until tomorrow, or until the owner raises today's cap.
+    const budget = service.overview(this.scopeKey).budget;
+    if (budget.exhausted || store.loop.budgetBlocked(this.scopeKey, dayKey, budget.capYen)) return 'budget';
     return store.transaction(() => {
       store.loop.setNextCycleAt(this.scopeKey, new Date(Date.parse(at) + loop.cycleIntervalMilliseconds).toISOString());
       return store.loop.startCycle(this.scopeKey, dayKey, 'activity', [], at);
@@ -143,7 +145,7 @@ export class ShannonAutonomyLoop {
           decisionId: decision.activityId, summary: result.summary, outcome: result.outcome,
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
         });
-        if (committed?.plan) store.loop.setPlan(cycle.id, committed.plan, true);
+        if (committed?.plan) store.loop.setPlan(cycle.id, committed.plan, false);
       });
     } catch {
       // The product could not be saved. The call was still made, so its cost is still reported.
