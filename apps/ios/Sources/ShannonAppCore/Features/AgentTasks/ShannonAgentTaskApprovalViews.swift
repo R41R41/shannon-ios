@@ -10,6 +10,16 @@ struct AgentTaskApprovalCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            HStack(alignment: .center, spacing: ShannonSpacing.small) {
+                ShannonAvatarView(expression: ShannonAgentTaskStatus.waitingApproval.expression, size: 28)
+                Text(ShannonAgentTaskRoomPresentation.approvalHeader)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+
             Label("判断が必要", systemImage: approval.kind.symbolName)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(palette.attention)
@@ -75,7 +85,7 @@ struct AgentTaskApprovalCard: View {
 extension AgentTaskApprovalCard {
     var holdHint: String {
         let target = approval.kind.requiresHoldToConfirm(.once) ? "許可ボタン" : "「この作業中」"
-        return "\(target)は長押しで決定します。タップすると確認してから決定します。"
+        return "\(target)は長押しで決定。タップすると確認してから決定します。"
     }
 }
 

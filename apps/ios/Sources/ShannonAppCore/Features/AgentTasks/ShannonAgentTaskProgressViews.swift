@@ -1,59 +1,5 @@
 import SwiftUI
 
-struct AgentTaskStageProgressView: View {
-    let task: ShannonAgentTask
-    let palette: ShannonPalette
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(task.stageProgress.enumerated()), id: \.element.id) { index, step in
-                VStack(spacing: ShannonSpacing.small) {
-                    Image(systemName: symbol(for: step.state))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(color(for: step.state))
-                        .frame(width: 28, height: 28)
-                        .background(color(for: step.state).opacity(0.12), in: Circle())
-                    Text(step.stage.japaneseName)
-                        .font(.caption2.weight(step.state == .current ? .bold : .regular))
-                        .foregroundStyle(step.state == .pending ? palette.textSecondary : palette.textPrimary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-
-                if index < task.stageProgress.count - 1 {
-                    Rectangle()
-                        .fill(connectorColor(after: step.state))
-                        .frame(height: 1)
-                        .padding(.top, 14)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("シャノンの作業段階: \(task.stage.japaneseName)")
-    }
-
-    func symbol(for state: ShannonAgentTaskStageState) -> String {
-        switch state {
-        case .pending: "circle"
-        case .current: "circle.inset.filled"
-        case .completed: "checkmark"
-        }
-    }
-
-    func color(for state: ShannonAgentTaskStageState) -> Color {
-        switch state {
-        case .pending: palette.borderStrong
-        case .current: palette.action
-        case .completed: palette.success
-        }
-    }
-
-    func connectorColor(after state: ShannonAgentTaskStageState) -> Color {
-        state == .completed ? palette.success.opacity(0.65) : palette.divider
-    }
-}
-
 struct AgentTaskCommandActivityCard: View {
     let event: ShannonAgentTimelineEvent
     let palette: ShannonPalette

@@ -6,6 +6,60 @@
 
 import SwiftUI
 
+/// Plan section for the iPhone task room: a header disclosure with compact
+/// progress, then the timeline with already-completed steps folded into one row.
+struct AgentTaskPlanSection: View {
+    let task: ShannonAgentTask
+    let palette: ShannonPalette
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+            Button {
+                withAnimation(AgentTaskPlanMotion.expansion(reduceMotion: reduceMotion)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
+                    Label("計画", systemImage: "list.bullet.clipboard")
+                        .font(.headline)
+                        .foregroundStyle(palette.textPrimary)
+                    Spacer(minLength: ShannonSpacing.small)
+                    Text(ShannonAgentTaskRoomPresentation.planProgress(for: task))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(palette.textSecondary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(palette.textSecondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
+                .frame(minHeight: ShannonTouchTarget.minimum)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("計画")
+            .accessibilityValue(ShannonAgentPlanTimeline.summary(for: task))
+            .accessibilityHint(isExpanded ? "計画を閉じます" : "計画を開きます")
+            .accessibilityAddTraits([.isButton, .isHeader])
+
+            if isExpanded {
+                AgentTaskPlanTimelineView(task: task, palette: palette)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+enum AgentTaskPlanMotion {
+    /// DESIGN.md: expansion uses a 0.35 s damped spring, or a 0.15 s ease-out under Reduce Motion.
+    static func expansion(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.35, bounce: 0)
+    }
+}
+
 /// Vertical plan timeline for the iPhone task room.
 struct AgentTaskPlanTimelineView: View {
     let task: ShannonAgentTask
@@ -13,21 +67,79 @@ struct AgentTaskPlanTimelineView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var collapsedRunningIDs: Set<String> = []
+    @State private var showsCompletedSteps = false
 
     private let nodeSize: CGFloat = 28
     private let column: CGFloat = 36
 
     var body: some View {
         let entries = ShannonAgentPlanTimeline.entries(for: task)
+        let rows = ShannonAgentPlanTimeline.rows(for: entries, showsCompleted: showsCompletedSteps)
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(entries) { entry in
-                row(entry)
+            ForEach(rows) { row in
+                switch row {
+                case .completedGroup(let count, let isExpanded, let isLast):
+                    completedGroupRow(count: count, isExpanded: isExpanded, isLast: isLast)
+                case .entry(let entry):
+                    self.row(entry)
+                }
             }
         }
         .animation(reduceMotion ? .easeOut(duration: 0.15) : .easeInOut(duration: 0.45), value: entries.map(\.status))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("計画")
         .accessibilityValue(ShannonAgentPlanTimeline.summary(for: task))
+    }
+
+    /// One row standing in for the leading run of completed steps.
+    private func completedGroupRow(count: Int, isExpanded: Bool, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: ShannonSpacing.small) {
+            VStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(palette.success)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(palette.onAction)
+                }
+                .frame(width: nodeSize, height: nodeSize)
+                .padding(.top, ShannonSpacing.medium)
+                if !isLast {
+                    connector(completed: true)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: column)
+            .accessibilityHidden(true)
+
+            Button {
+                withAnimation(AgentTaskPlanMotion.expansion(reduceMotion: reduceMotion)) {
+                    showsCompletedSteps.toggle()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
+                    Text(ShannonAgentPlanTimeline.completedGroupTitle(count: count))
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(palette.textSecondary)
+                        .rotationEffect(.degrees(isExpanded ? -180 : 0))
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: ShannonTouchTarget.minimum - ShannonSpacing.medium, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, ShannonSpacing.extraSmall)
+            .padding(.vertical, ShannonSpacing.extraSmall)
+            .padding(.bottom, isLast ? 0 : ShannonSpacing.small)
+            .accessibilityLabel("完了した工程")
+            .accessibilityValue("\(count)工程完了")
+            .accessibilityHint(isExpanded ? "完了した工程を畳みます" : "完了した工程を表示します")
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func row(_ entry: ShannonAgentPlanTimeline.Entry) -> some View {
