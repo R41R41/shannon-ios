@@ -34,11 +34,15 @@ class RecordingModel implements ShannonChatModel {
   /** Every request in order, whichever lane answered it. */
   readonly all: Array<ShannonChatModelRequest | ShannonVoiceModelRequest> = [];
   threadSummary: string | undefined;
+  /** The next chat reply, for a turn whose answer paraphrases what it recalled. */
+  nextReply: string | undefined;
   get last() { return this.all.at(-1)!; }
   async generate(request: ShannonChatModelRequest) {
     this.requests.push(request);
     this.all.push(request);
-    return { mode: this.mode, model: this.model, reply: '了解です。', ...(this.threadSummary ? { threadSummary: this.threadSummary } : {}) };
+    const reply = this.nextReply ?? '了解です。';
+    this.nextReply = undefined;
+    return { mode: this.mode, model: this.model, reply, ...(this.threadSummary ? { threadSummary: this.threadSummary } : {}) };
   }
   async generateVoice(request: ShannonVoiceModelRequest) {
     this.voiceRequests.push(request);
@@ -75,13 +79,14 @@ async function seeded() {
     await api.waitForBackground('owner');
     return (response.body as { turnId: string }).turnId;
   };
-  // What the owner and Shannon talked about one-to-one.
+  // What the owner and Shannon talked about one-to-one. The ordinary turns come first, so nothing
+  // protected was in front of Shannon when she answered them.
+  const birds = await chat('最近はハシビロコウの動画ばかり見ている', 'hobby');
+  await chat('私は紅茶が好き', 'hobby');
   model.threadSummary = 'カピバラ基金と返済の段取りを相談した';
   const debt = await chat('実は借金があって、ミズクラゲ銀行のローンを返している');
   const hospital = await chat('私は病院が苦手');
   model.threadSummary = undefined;
-  const birds = await chat('最近はハシビロコウの動画ばかり見ている', 'hobby');
-  await chat('私は紅茶が好き', 'hobby');
   const note = store.createShannonKnowledge('owner', {
     title: '返済の段取りの進め方', bodyMarkdown: '## 状況\n返済の段取りを聞かれた\n## 行動\nオカピ方式で月ごとに分けて示す\n## 結果\n納得してもらえた',
     status: 'hypothesis', applicability: '返済の段取りを相談された時', sourceExperienceIds: [debt],
@@ -175,6 +180,31 @@ describe('(a) a sensitive one-to-one item never reaches a prompt other people ca
     const owner = await memoryRecall.enrich(alone, { scopeKey: 'owner', message: question, snapshot, threadId: 'elsewhere', memoryTurn: true });
     expect(owner.knowledgePrompt).toContain('オカピ方式');
     expect(usableThreadSummary(snapshot, store, 'owner', 'thread', OWNER_AUDIENCE)).toContain('カピバラ基金');
+    store.close();
+  });
+});
+
+describe('a reply written from a protected memory is protected too', () => {
+  it('withholds a turn whose prompt recalled a sensitive item, even when its own words look ordinary', async () => {
+    const { store, model, chat, guest, ownerVoice, api } = await seeded();
+    // The owner asks without any protected word; Shannon answers in a paraphrase the keyword rules do not catch.
+    model.nextReply = 'あの件はクラゲ作戦で順調ですよ。';
+    const paraphrase = await chat('ミズクラゲの件どうなった？', 'follow-up');
+    const stored = store.experiencesById('owner', [paraphrase])[0]!;
+    expect(stored.disclosure).toMatchObject({ sensitivity: 'ordinary' });
+    expect(stored.recalledMemoryIds?.length).toBeGreaterThan(0);
+
+    await guest('作戦が順調って、何のこと？');
+    expect(everythingSaid(model.last)).not.toContain('クラゲ作戦');
+    await ownerVoice('前に話した作戦が順調な件、覚えてる？', true, 'follow-up');
+    expect(everythingSaid(model.last)).not.toContain('クラゲ作戦');
+    await ownerVoice('前に話した作戦が順調な件、覚えてる？', false, 'follow-up');
+    expect(everythingSaid(model.last)).toContain('クラゲ作戦');
+
+    // The owner can still say that this turn is fine to mention.
+    await api.dispatch({ method: 'POST', path: '/v1/memories/action', body: { scopeKey: 'owner', memoryId: paraphrase, action: 'mark-ordinary' } });
+    await ownerVoice('前に話した作戦が順調な件、覚えてる？', true, 'follow-up');
+    expect(everythingSaid(model.last)).toContain('クラゲ作戦');
     store.close();
   });
 });

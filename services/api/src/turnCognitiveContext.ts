@@ -82,7 +82,7 @@ export function prepareTurnCognitiveContext(
   // Forgetting is judged against the whole state; the audience rule is a second, independent gate.
   const withholding = new MemoryWithholding(full, conversationStore, input.scopeKey, recentExperiences);
   const candidates = [
-    ...recentExperiences.filter(item => gate.allows(item.id, item.disclosure) && !withholding.withholdsExperience(item)),
+    ...recentExperiences.filter(item => gate.allowsTurn(item) && !withholding.withholdsExperience(item)),
     ...fullTextCandidates(withholding, gate, conversationStore, input, new Set(recentExperiences.map(item => item.id))),
     ...(input.additionalCandidates ?? []).filter(item => gate.allows(item.id, item.disclosure))
       .map(item => ({ id: item.id, summary: item.summary, observedAt: item.observedAt })),

@@ -66,6 +66,10 @@ everyone present is in the audience  → use     (an unidentified guest is never
 otherwise                            → withhold
 ```
 
+A completed turn must pass twice: by its own label, and by the labels of the memories that were recalled into its
+prompt (its recorded provenance), because a reply written with a protected memory in front of it may restate it in
+other words. The owner's own ふつう on the turn overrides the second check.
+
 Applied to: thread history, recalled experiences, full-text hits, semantic hits, thread summaries, profile facts and
 relationships, promises, Shannon's private knowledge, the intention frame, and person memories. Agent tasks, Aether
 and Voyager projections are withheld whenever anyone else is present, whatever their content. The decision reads
@@ -144,7 +148,9 @@ exactly that. The audience rule and the forgetting boundary are independent: an 
 ## What is not guaranteed
 
 - A model that was given sensitive content in a permitted context (alone with the owner, or with person A) may
-  paraphrase it in its reply; that reply is then labelled by the same keyword rules, not by what it was derived from.
+  paraphrase it in its reply. A text reply is protected when the content came through recall (recorded provenance).
+  It is not when the content came from the always-present profile block or from the thread history, and voice turns
+  record no provenance: those replies are labelled by the keyword rules on their own words only.
 - Content already sent to a model in a running call is not retracted when someone joins. The switch affects later turns.
 - The rule cannot tell who is physically present. It trusts the mode, the owner's words, and the names said aloud.
 - "Everyone present already knows it" is approximated by "was present when it was said to Shannon". What people told

@@ -2,6 +2,7 @@ import {
   discloseSnapshot,
   isOwnerOnly,
   mayDisclose,
+  memoryControlFor,
   resolveDisclosure,
   visibleMemoryText,
   type CompanionStateSnapshot,
@@ -46,7 +47,29 @@ export class DisclosureGate {
   allowsExperience(experienceId: string | undefined): boolean {
     if (this.ownerOnly) return true;
     if (!experienceId) return false;
-    return this.allows(experienceId, this.experience(experienceId)?.disclosure);
+    return this.allowsTurn(this.experience(experienceId) ?? { id: experienceId });
+  }
+
+  /**
+   * A completed turn. Besides its own label, the memories recalled into its prompt must be
+   * ones the people present may hear: a reply written with a protected memory in front of
+   * it may restate that memory in words the keyword rules do not catch. The owner's own
+   * ふつう on the turn overrides this.
+   */
+  allowsTurn(turn: Pick<ShannonExperience, 'id' | 'disclosure' | 'recalledMemoryIds'> | { id: string; disclosure?: undefined; recalledMemoryIds?: undefined }): boolean {
+    if (this.ownerOnly) return true;
+    if (!this.allows(turn.id, turn.disclosure)) return false;
+    if (memoryControlFor(this.state, turn.id)?.sensitivity === 'ordinary') return true;
+    return (turn.recalledMemoryIds ?? []).every(id => this.allowsSource(id));
+  }
+
+  /** One recalled source of a turn, judged by its own label only (no further recursion). */
+  private allowsSource(id: string): boolean {
+    // Summaries and Shannon's notes carry no label; a person memory cannot be resolved here. All are withheld.
+    if (id.startsWith('thread:') || id.startsWith('knowledge:') || id.startsWith('person:')) return false;
+    const item = this.state.userFacts.find(fact => fact.id === id) ?? this.state.relationships.find(fact => fact.id === id)
+      ?? this.state.prospectiveMemories.find(fact => fact.id === id);
+    return item ? this.allows(id, item.disclosure) : this.allows(id, this.experience(id)?.disclosure);
   }
 
   /** A stored thread message: it is judged as the turn it belongs to. Notes and other rows without a turn are unlabelled. */
