@@ -16,7 +16,9 @@ export {
 } from './temperament.js';
 export { InMemoryCompanionStateStore, type CompanionClock } from './store.js';
 export {
+  SHANNON_CURRENT_GOAL,
   SHANNON_FIRST_PERSON,
+  SHANNON_MOTIVE,
   SHANNON_ONE_LINE_VOICE,
   SHANNON_OWNER_NAME,
   SHANNON_SUITE_PRODUCTS,
@@ -34,6 +36,32 @@ export {
   type ShannonCapability,
   type ShannonCapabilityId,
 } from './capabilities.js';
+export {
+  SHANNON_AUTONOMY_DAILY_BUDGET_YEN,
+  SHANNON_AUTONOMY_DOMAINS,
+  SHANNON_AUTONOMY_SYSTEM_DOMAIN,
+  SHANNON_CORE_AREA_LABELS,
+  autonomyDomain,
+  autonomyDomainLabel,
+  shannonAutonomyRuleLines,
+  type ShannonAutonomyDomain,
+  type ShannonAutonomyDomainId,
+  type ShannonAutonomyRule,
+  type ShannonCoreAreaId,
+} from './autonomy.js';
+export {
+  SHANNON_PURSUIT_LIMITS,
+  SHANNON_SEED_PURSUITS,
+  buildShannonPursuitsPrompt,
+  isSeedPursuitId,
+  pursuitKindLabel,
+  seedPursuits,
+  type ShannonPursuit,
+  type ShannonPursuitKind,
+  type ShannonPursuitLink,
+  type ShannonPursuitOrigin,
+  type ShannonPursuitStatus,
+} from './pursuits.js';
 export {
   SHANNON_CORE_PROMPT,
   shannonIdentityPrompt,

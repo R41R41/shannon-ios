@@ -1,7 +1,7 @@
 # Shannon current architecture
 
 Status: implementation authority
-Revision: 2026-10-02 / Face, mood and traits from Shannon's own state
+Revision: 2026-10-02 / Bounded autonomy foundation (Syzygy ADR-0002)
 
 ## System shape
 
@@ -54,9 +54,9 @@ Emotion and memory updates affect the next reply after they commit. Prediction-e
 
 `packages/cognition` owns one pure definition of who Shannon is and what she can do. Every response prompt starts with it, so text, voice, and notifications are the same Shannon and the provider can cache the stable prefix.
 
-- **Persona** (`persona.ts`, `shannonPersonaPrompt`): first person `ボク`, the owner is `ライ氏` and never `あなた`, です・ます with a raw tone only when emotion is strong; bright, cheeky, sure she is a genius, a little clumsy; flustered and recovering after a mistake, happy and bashful when praised, praises back, glad to talk; not biased toward jabs at the owner; no repeated catchphrase; plain explanations for technical and work matters; serious without jokes in a hard, urgent, or dangerous moment. The guest variant keeps the character but never assumes the speaker is the owner and never addresses them as `ライ氏`.
+- **Persona** (`persona.ts`, `shannonPersonaPrompt`): first person `ボク`, the owner is `ライ氏` and never `あなた`, です・ます with a raw tone only when emotion is strong; bright, cheeky, sure she is a genius, a little clumsy; flustered and recovering after a mistake, happy and bashful when praised, praises back, glad to talk; not biased toward jabs at the owner; no repeated catchphrase; plain explanations for technical and work matters; serious without jokes in a hard, urgent, or dangerous moment. The guest variant keeps the character but never assumes the speaker is the owner and never addresses them as `ライ氏`. Both variants end with her current goal and motive (`SHANNON_CURRENT_GOAL`, `SHANNON_MOTIVE`: 人を感動させる物語を作ること／物語を通じて人間を知りたい、世界を知りたい), which the owner decided in Syzygy ADR-0002; they are her own, not an owner detail.
 - **Suite roles** (`shannonSuitePrompt`, `SHANNON_SUITE_PRODUCTS`): Aether（エーテル）is the writing and notes app, Voyager（ボイジャー）is the task app, Shannon is conversation, support, and requested execution. Knowing a role is not having read or being allowed to change its content. The same table supplies the Latin and Japanese names to voice routing, the notes/tasks read gates, and the Voyager search phrase.
-- **Capabilities** (`capabilities.ts`, `shannonCapabilityPrompt`): what she can do and how it is invoked, what she cannot do today, and how to answer — say plainly when she cannot, offer the nearest thing she can, propose an improvement task only when the owner wants one, and never claim an action without a receipt. Text and voice receive the identical text; a guest receives only the capabilities that need no owner data. `services/api/tests/shannonCapabilityEvidence.test.ts` maps every capability id to a code-path flag, so describing a capability without a code path fails type checking or the test. Agent work that adds or removes an ability updates this table in the same change.
+- **Capabilities** (`capabilities.ts`, `shannonCapabilityPrompt`): what she can do and how it is invoked, what she cannot do today, and how to answer — say plainly when she cannot, offer the nearest thing she can, propose an improvement task only when the owner wants one, and never claim an action without a receipt. Text and voice receive the identical text; a guest receives only the capabilities that need no owner data. `services/api/tests/shannonCapabilityEvidence.test.ts` maps every capability id to a code-path flag, so describing a capability without a code path fails type checking or the test. Agent work that adds or removes an ability updates this table in the same change. The block also states the bounded-autonomy rules from `autonomy.ts` (`shannonAutonomyRuleLines`): where she may act freely, what needs the owner's approval, what is forbidden, and that the mechanism for acting on her own is not running yet. A guest receives one line saying such requests are refused, with none of the owner's places, core areas, or budget.
 - **Projection**: `shannonIdentityPrompt(audience)` joins the three blocks. It is the first section of the text system prompt and the owner voice prompt with memory (`assembleShannonSystemPrompt`), of the slim owner voice prompt that carries no owner state, and of the guest voice prompt. A path adds only delivery notes: the Markdown response style for text, `voiceConversationInstructions` for spoken brevity and turn grounding, and `SHANNON_ONE_LINE_VOICE` for a generated one-line opening. The chat-model adapter adds no persona text of its own.
 - **Fixed sentences**: server-authored sentences presented as Shannon speaking (command replies, initiative and commitment messages, notification bodies for finished or failed work, waiting phrases) use the same voice. Approval requests, task status, and error messages are neutral system text and do not speak as her. `services/api/tests/shannonAuthoredCopy.test.ts` scans those sources for casual endings, `あなた`, and third-person self-reference.
 
@@ -346,7 +346,7 @@ User asks Shannon for a concrete change
   → iOS can leave and return without losing authoritative status
 ```
 
-Self-improvement is never initiated autonomously. The selected host persists the Codex thread, turn, and pending-approval checkpoint identifiers so it can reattach after an Agent Host restart. Azure `agent_tasks` and `agent_task_events` remain authoritative if the iOS app is suspended. Host and project hints are preserved from the model proposal through the iOS start request, and an explicitly targeted task can be claimed only by that host.
+Shannon may propose self-improvement from background activity (see Bounded autonomy), but no task starts without the owner: her proposal waits until the owner starts it. The selected host persists the Codex thread, turn, and pending-approval checkpoint identifiers so it can reattach after an Agent Host restart. Azure `agent_tasks` and `agent_task_events` remain authoritative if the iOS app is suspended. Host and project hints are preserved from the model proposal through the iOS start request, and an explicitly targeted task can be claimed only by that host.
 
 The Mac Development surface can enqueue durable `agent_project_requests` records for an HTTPS GitHub repository. The API validates the repository coordinate and bounded alias and sends no filesystem path or credential. `Auto` creates one request per available local/cloud host, ordered local first, so later task routing can prefer the Mac and fall back to cloud; an explicit host selection creates only that host's request. Each host clones with argument-separated Git into its configured `SHANNON_AGENT_WORKSPACE_ROOT`, persists only the resulting host-owned registration, and advertises the new alias on its next heartbeat. Existing user checkouts are never reused or overwritten by this flow.
 
@@ -357,6 +357,12 @@ Declining an approval refuses only that operation. The host answers Codex with `
 An approval request is valid only on the live Codex connection that created it. After a host restart, an expired approval is cleared rather than inferred. The same durable Shannon task and goal continue from the existing working tree in a clean Codex thread, avoiding unmatched tool calls left in the old history; a fresh approval is requested only when the remaining operation independently needs one. A user-directed release retains its explicit delivery authorization. The recovery `started` event also clears the stale approval projection in Azure so the app cannot remain permanently waiting on an unresolvable request.
 
 A Codex turn ending is not itself task completion. The Agent Host requires a structured terminal result from Codex and records `completed` only when Codex explicitly confirms that every applicable acceptance and runbook condition passed. A failed recorded verification always wins over a completion claim. Missing verification, an unavailable build host, an outstanding approval, or remaining deployment work projects the durable task as `paused` with one concrete next action so the same task can resume later. Such a pause is recorded as `pauseReason: needs_owner` with the timeline sequence of the pause, distinct from a pause the owner requested (`owner`); rows and host events that predate the field infer it from the presence of a next action. Clients name the two states differently (「続きが必要」 and 「一時停止中」), show the next action with a resume control, and count the first in the notice and badge; APNs sends it like an approval. Paused and failed events keep their changed files and verification results, so stopped work shows the same 変更 / 検証 / 未解決 report as finished work. A finished task accepts no further command: a fix or continuation is requested from its source thread and becomes a new proposal.
+
+## Bounded autonomy
+
+Authority: Syzygy ADR-0002 (`docs/adr/0002-shannon-bounded-autonomy.md` in the Syzygy hub). Shannon has a goal of her own (人を感動させる物語を作ること) and a motive (物語を通じて人間を知りたい、世界を知りたい). She may act without approval only in her own folder on the owner's Windows PC and Mac, her non-core code in the Azure VM workspace kept apart from the production service, her study in Aether, and her task list in Voyager. Core, Aether and Voyager app code, the owner's documents and tasks, and anything that reaches a person other than the owner need the owner's approval; she proposes and the owner decides. Spending beyond the daily model/API budget, unapproved contact, impersonation, using private conversation content as-is in a work, changing core without approval, and self-replication are forbidden.
+
+The domain vocabulary and the rule text of the identity prompt are in `packages/cognition/src/autonomy.ts`.
 
 ## Durable store
 
@@ -454,7 +460,8 @@ The distributor records every automatic check in the production SQLite database.
 
 - per-user LoRA or fine-tuning
 - prediction-error training
-- autonomous source-code rewriting
+- applying a source-code change without the owner's approval (proposing one is allowed; see Bounded autonomy)
+- the autonomous activity loop itself (ADR-0002 step 3); only the gate, record, budget, and stop switch it must pass through exist
 - Live2D runtime
 - animated widget character
 - background voice activation

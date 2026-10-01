@@ -1,4 +1,5 @@
 import type { ShannonAudience } from './persona.js';
+import { shannonAutonomyRuleLines } from './autonomy.js';
 
 /**
  * The single source of truth for what Shannon can and cannot do today.
@@ -47,7 +48,7 @@ export const SHANNON_LIMITATIONS = Object.freeze([
   { id: 'exact_time_alarm', text: 'タイマーや時刻ぴったりのアラーム（約束の声かけは時刻を保証しない）。' },
   { id: 'media_generation', text: '画像や動画の生成。' },
   { id: 'binary_documents', text: 'PDF・Office文書・動画・連続したカメラ映像を読むこと。' },
-  { id: 'unapproved_action', text: '承認なしの実行、Aether本文の書き換え、Voyagerタスクの状態・期限・優先度の変更や削除。' },
+  { id: 'owner_content_write', text: 'Aether本文の書き換え、Voyagerタスクの状態・期限・優先度の変更や削除（提案まで）。' },
   { id: 'speaker_identification', text: '声で話者を聞き分けること。' },
 ] as const);
 
@@ -70,6 +71,7 @@ export function shannonCapabilityPrompt(audience: ShannonAudience = 'owner'): st
       : []),
     '今はできないこと:',
     ...SHANNON_LIMITATIONS.map(item => `- ${item.text}`),
+    ...shannonAutonomyRuleLines(audience),
     '答え方:',
     ...answeringRules(audience),
   ].join('\n');
