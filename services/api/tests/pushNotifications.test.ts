@@ -232,6 +232,38 @@ describe('push notification delivery', () => {
     push.close();
   });
 
+  it('notifies when work stops and needs the owner, but not when the owner paused it', () => {
+    const { path, taskId } = createAgentTask('started');
+    const tasks = new SQLiteAgentTaskStore(path);
+    tasks.recordHostEvents('mac-1', [{
+      eventId: 'owner-pause', taskId, type: 'paused', title: '作業を一時停止',
+      occurredAt: '2026-09-04T04:00:04.000Z', payload: { pauseReason: 'owner' },
+    }, {
+      eventId: 'resumed', taskId, type: 'started', title: '作業を再開', occurredAt: '2026-09-04T04:00:05.000Z',
+    }, {
+      eventId: 'approval', taskId, type: 'approval_requested', title: 'コマンド実行の許可',
+      occurredAt: '2026-09-04T04:00:06.000Z', payload: { approval: {
+        externalRequestID: 'request-1', kind: 'command', title: 'コマンド実行の許可', reason: '必要',
+      } },
+    }, {
+      eventId: 'needs-owner', taskId, type: 'paused', title: '続きが必要です', detail: '実機確認が残っています。',
+      occurredAt: '2026-09-04T04:00:07.000Z', payload: { pauseReason: 'needs_owner', currentAction: '実機で起動を確認' },
+    }, {
+      eventId: 'legacy-needs-owner', taskId, type: 'paused', title: '検証が残っています',
+      occurredAt: '2026-09-04T04:00:08.000Z', payload: { currentAction: '全体検証を修正して再実行' },
+    }], '2026-09-04T04:00:08.000Z');
+    tasks.close();
+    const push = new SQLitePushNotificationStore(path, () => '2026-09-04T04:01:00.000Z');
+    push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ef'.repeat(32), 'sandbox');
+
+    expect(push.pending().map(item => [item.initiativeId, item.title, item.content])).toEqual([
+      ['agent:approval', 'シャノン · 許可待ち', '「リンク表示を直す」を続けるには、コマンド実行の許可が必要です。'],
+      ['agent:needs-owner', 'シャノン · 続きが必要', '「リンク表示を直す」は続きが必要です。次：実機で起動を確認'],
+      ['agent:legacy-needs-owner', 'シャノン · 続きが必要', '「リンク表示を直す」は続きが必要です。次：全体検証を修正して再実行'],
+    ]);
+    push.close();
+  });
+
   it('delivers only the first push for one TestFlight failure episode', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'shannon-testflight-push-test-'));
     directories.push(directory);
@@ -299,7 +331,7 @@ function createInitiative(): string {
   return path;
 }
 
-function createAgentTask(): { path: string; taskId: string } {
+function createAgentTask(until: 'completed' | 'started' = 'completed'): { path: string; taskId: string } {
   const directory = mkdtempSync(join(tmpdir(), 'shannon-agent-push-test-'));
   directories.push(directory);
   const path = join(directory, 'shannon.sqlite');
@@ -312,9 +344,12 @@ function createAgentTask(): { path: string; taskId: string } {
     hostId: 'mac-1', displayName: 'Mac', kind: 'local', capabilities: ['codex'], projects: [], models: [],
   }, '2026-09-04T04:00:01.000Z');
   tasks.claim('mac-1', '2026-09-04T04:00:02.000Z');
-  tasks.recordHostEvents('mac-1', [{
+  tasks.recordHostEvents('mac-1', [until === 'completed' ? {
     eventId: 'completed-event', taskId: created.task.id, type: 'completed', title: '完了',
     detail: 'リンク表示を修正した。', occurredAt: '2026-09-04T04:00:03.000Z',
+  } : {
+    eventId: 'started-event', taskId: created.task.id, type: 'started', title: '作業を開始',
+    occurredAt: '2026-09-04T04:00:03.000Z',
   }], '2026-09-04T04:00:03.000Z');
   tasks.close();
   return { path, taskId: created.task.id };

@@ -311,6 +311,82 @@ describe('CodexTaskBridge', () => {
     }));
     await bridge.stop();
   });
+
+  it('declines only the denied operation and keeps the turn, then leaves a next action when Codex stops', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Clean build', projectHint: 'fixture' }));
+    fixture.client.serverRequest({
+      id: 'approval-1', method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thread-1', turnId: 'turn-1', itemId: 'command-item', command: 'rm -rf build' },
+    });
+    await bridge.whenIdle();
+    const approval = events.find(event => event.type === 'approval_requested')?.payload?.approval as {
+      externalRequestID: string; denyContinues?: boolean; resource?: string;
+    };
+    expect(approval).toMatchObject({ denyContinues: true, resource: 'rm -rf build' });
+
+    await bridge.handle(command('deny-1', 'resolve_approval', {
+      externalRequestID: approval.externalRequestID, decision: 'deny', denyContinues: true,
+    }));
+    expect(fixture.client.responses).toContainEqual({ id: 'approval-1', result: { decision: 'decline' } });
+    expect(fixture.client.requests.some(request => request.method === 'turn/interrupt')).toBe(false);
+    expect(fixture.state.session('task-1')?.turnId).toBe('turn-1');
+    expect(events).toContainEqual(expect.objectContaining({ type: 'progress', title: '許可しない判断をCodexへ送信' }));
+
+    fixture.client.notify({ method: 'item/completed', params: {
+      threadId: 'thread-1', turnId: 'turn-1', item: {
+        type: 'agentMessage', id: 'message-1',
+        text: '削除せずに進められなかった。\nSHANNON_TASK_RESULT: {"status":"paused","summary":"buildの削除が必要です。","remainingAction":"buildを手動で消して再開"}',
+      },
+    } });
+    fixture.client.notify({ method: 'turn/completed', params: {
+      threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed', items: [] },
+    } });
+    await bridge.whenIdle();
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'paused', payload: expect.objectContaining({ pauseReason: 'needs_owner', currentAction: 'buildを手動で消して再開' }),
+    }));
+    await bridge.stop();
+  });
+
+  it('stops the turn on deny when the task store has already cancelled the task', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Clean build', projectHint: 'fixture' }));
+    fixture.client.serverRequest({
+      id: 'approval-1', method: 'item/fileChange/requestApproval',
+      params: { threadId: 'thread-1', turnId: 'turn-1', itemId: 'file-item' },
+    });
+    await bridge.whenIdle();
+    const approval = events.find(event => event.type === 'approval_requested')?.payload?.approval as {
+      externalRequestID: string;
+    };
+
+    await bridge.handle(command('deny-1', 'resolve_approval', {
+      externalRequestID: approval.externalRequestID, decision: 'deny',
+    }));
+    expect(fixture.client.responses).toContainEqual({ id: 'approval-1', result: { decision: 'decline' } });
+    expect(fixture.client.requests.some(request => request.method === 'turn/interrupt')).toBe(true);
+    expect(fixture.state.session('task-1')?.turnId).toBeUndefined();
+    expect(events.some(event => event.type === 'progress' && event.title === '許可しない判断をCodexへ送信')).toBe(false);
+    await bridge.stop();
+  });
+
+  it('marks a pause the owner asked for as the owner\'s', async () => {
+    const fixture = makeFixture();
+    const events: HostAgentEvent[] = [];
+    const bridge = new CodexTaskBridge({ ...fixture, publish: async batch => { events.push(...batch); } });
+    await bridge.start();
+    await bridge.handle(command('start-1', 'start', { goal: 'Work', projectHint: 'fixture' }));
+    await bridge.handle(command('pause-1', 'interrupt', {}));
+    expect(events.find(event => event.type === 'paused')?.payload).toEqual({ pauseReason: 'owner' });
+    await bridge.stop();
+  });
 });
 
 class FakeCodexConnection implements CodexAppServerConnection {

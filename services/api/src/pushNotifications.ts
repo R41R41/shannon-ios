@@ -38,6 +38,18 @@ const MAXIMUM_PUSH_AGE_MILLISECONDS = 12 * 60 * 60_000;
 const MAXIMUM_ATTEMPTS = 3;
 const DELIVERY_LEASE_MILLISECONDS = 5 * 60_000;
 const DELIVERY_STATE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
+/** A host pause that needs the owner: tagged by the host, or (older hosts) one that carries a next action. */
+const NEEDS_OWNER_PAUSE = `(e.event_type = 'host.paused' AND (
+  json_extract(e.payload_json, '$.pauseReason') = 'needs_owner'
+  OR (json_extract(e.payload_json, '$.pauseReason') IS NULL
+    AND COALESCE(json_extract(e.payload_json, '$.currentAction'), '') <> '')))`;
+/** Push titles use the same state words as the apps. */
+const AGENT_PUSH_TITLES: Record<string, string> = {
+  'host.approval_requested': 'シャノン · 許可待ち',
+  'host.paused': 'シャノン · 続きが必要',
+  'host.completed': 'シャノン · 完了',
+  'host.failed': 'シャノン · 失敗',
+};
 
 export class SQLitePushNotificationStore {
   private readonly database: DatabaseSync;
@@ -155,7 +167,8 @@ export class SQLitePushNotificationStore {
       ? []
       : this.database.prepare(`
         SELECT
-          e.event_id, e.event_type, e.detail, e.occurred_at,
+          e.event_id, e.event_type, e.title AS event_title, e.detail, e.occurred_at,
+          json_extract(e.payload_json, '$.currentAction') AS next_action,
           t.task_id, t.conversation_thread_id AS thread_id, t.title, t.scope_key,
           pr.device_id, pr.device_token, pr.environment,
           ${initiativeBadgeExpression} AS initiative_badge_count
@@ -165,7 +178,7 @@ export class SQLitePushNotificationStore {
           ON pr.scope_key = t.scope_key AND pr.invalidated_at IS NULL
         LEFT JOIN push_delivery_state delivery
           ON delivery.initiative_id = ('agent:' || e.event_id) AND delivery.device_id = pr.device_id
-        WHERE e.event_type IN ('host.approval_requested','host.completed','host.failed')
+        WHERE (e.event_type IN ('host.approval_requested','host.completed','host.failed') OR ${NEEDS_OWNER_PAUSE})
           AND e.occurred_at >= ?
           AND (delivery.initiative_id IS NULL OR (
             delivery.delivered_at IS NULL
@@ -180,16 +193,19 @@ export class SQLitePushNotificationStore {
       const eventType = String(row.event_type);
       const taskTitle = String(row.title);
       const detail = typeof row.detail === 'string' ? row.detail : '';
+      const nextAction = typeof row.next_action === 'string' ? row.next_action.trim() : '';
       const content = eventType === 'host.approval_requested'
-        ? `「${taskTitle}」を続けるため、確認が必要です。`
-        : eventType === 'host.completed'
-          ? (detail || `「${taskTitle}」が完了しました。`)
-          : (detail || `「${taskTitle}」を完了できませんでした。`);
+        ? `「${taskTitle}」を続けるには、${String(row.event_title)}が必要です。`
+        : eventType === 'host.paused'
+          ? `「${taskTitle}」は続きが必要です。${nextAction ? `次：${nextAction}` : '作業画面で次の一手を確認してください。'}`
+          : eventType === 'host.completed'
+            ? (detail || `「${taskTitle}」が完了しました。`)
+            : (detail || `「${taskTitle}」は失敗しました。`);
       return {
         kind: 'agent_task',
         initiativeId: `agent:${String(row.event_id)}`,
         taskId: String(row.task_id),
-        title: eventType === 'host.approval_requested' ? 'シャノン · 確認待ち' : 'シャノン · 作業',
+        title: AGENT_PUSH_TITLES[eventType] ?? 'シャノン · 作業',
         deviceId: String(row.device_id),
         deviceToken: String(row.device_token),
         environment: String(row.environment) as APNsEnvironment,

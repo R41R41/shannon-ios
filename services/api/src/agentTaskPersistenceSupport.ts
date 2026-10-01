@@ -7,6 +7,7 @@ import type {
   AgentApproval,
   AgentCommandType,
   AgentEventTone,
+  AgentPauseReason,
   AgentTask,
   AgentTaskStatus,
   AgentTimelineActivity,
@@ -30,6 +31,8 @@ export interface AgentTaskRow {
   status: AgentTaskStatus;
   summary: string;
   current_action: string | null;
+  pause_reason: string | null;
+  pause_sequence: number | null;
   plan_json: string;
   pending_approval_json: string | null;
   changes_json: string;
@@ -157,6 +160,12 @@ export function migrateAgentTasks(database: DatabaseSync): void {
   if (!taskColumns.some(column => column.name === 'is_archived')) {
     database.exec('ALTER TABLE agent_tasks ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1));');
   }
+  if (!taskColumns.some(column => column.name === 'pause_reason')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN pause_reason TEXT;');
+  }
+  if (!taskColumns.some(column => column.name === 'pause_sequence')) {
+    database.exec('ALTER TABLE agent_tasks ADD COLUMN pause_sequence INTEGER;');
+  }
   const hostColumns = database.prepare("PRAGMA table_info('agent_hosts')").all() as unknown as Array<{ name: string }>;
   if (!hostColumns.some(column => column.name === 'host_kind')) {
     database.exec("ALTER TABLE agent_hosts ADD COLUMN host_kind TEXT NOT NULL DEFAULT 'local';");
@@ -194,7 +203,20 @@ export function validateCommandTransition(task: AgentTask, type: AgentCommandTyp
   }
 }
 
-export function projectedStatusForCommand(status: AgentTaskStatus, type: AgentCommandType, payload: Record<string, unknown>): {
+/** A paused row says why: the owner paused it, or the host stopped and needs the owner (older rows infer it). */
+export function pauseProjection(row: AgentTaskRow): { pauseReason?: AgentPauseReason; pauseSequence?: number } {
+  if (row.status !== 'paused') return {};
+  const pauseReason: AgentPauseReason = row.pause_reason === 'owner' || row.pause_reason === 'needs_owner'
+    ? row.pause_reason : row.current_action ? 'needs_owner' : 'owner';
+  return { pauseReason, ...(row.pause_sequence === null ? {} : { pauseSequence: Number(row.pause_sequence) }) };
+}
+
+export function projectedStatusForCommand(
+  status: AgentTaskStatus,
+  type: AgentCommandType,
+  payload: Record<string, unknown>,
+  approval?: AgentApproval,
+): {
   status: AgentTaskStatus;
   summary?: string;
   currentAction?: string;
@@ -206,9 +228,14 @@ export function projectedStatusForCommand(status: AgentTaskStatus, type: AgentCo
       ? { status: 'cancelled', summary: 'この作業を中止した。', currentAction: '', clearApproval: true }
       : { status: 'paused', summary: '作業を一時停止しています。', currentAction: '' };
     case 'resume': return { status: 'starting', summary: '作業を再開しています。', currentAction: '作業環境へ再接続中' };
-    case 'resolve_approval': return payload.decision === 'deny'
-      ? { status: 'cancelled', summary: '許可されなかったので、ここで止めた。', currentAction: '', clearApproval: true }
-      : { status: 'starting', summary: '判断を受け取り、続きを始めています。', currentAction: '操作結果を作業環境へ送信中', clearApproval: true };
+    case 'resolve_approval':
+      if (payload.decision !== 'deny') {
+        return { status: 'starting', summary: '許可を受け取り、続きを始めています。', currentAction: '操作結果を作業環境へ送信中', clearApproval: true };
+      }
+      // A host that declines only the one operation says so on the approval. Older hosts stop the whole task.
+      return approval?.denyContinues === true
+        ? { status: 'starting', summary: 'この操作は許可されなかった。別の進め方を確認しています。', currentAction: '許可しない判断を作業環境へ送信中', clearApproval: true }
+        : { status: 'cancelled', summary: '許可されなかったので、作業を中止した。', currentAction: '', clearApproval: true };
     case 'start': return { status };
   }
 }
@@ -242,6 +269,7 @@ export function normalizeApproval(value: unknown, now: string): AgentApproval {
     title: typeof object.title === 'string' ? object.title : '操作の許可',
     reason: typeof object.reason === 'string' ? object.reason : '作業を続けるために確認が必要です。',
     ...(typeof object.resource === 'string' ? { resource: object.resource } : {}),
+    ...(object.denyContinues === true ? { denyContinues: true } : {}),
     requestedAt: typeof object.requestedAt === 'string' ? object.requestedAt : now,
   };
 }

@@ -162,7 +162,7 @@ export class CodexTaskBridge {
     const kind = request.method === 'item/fileChange/requestApproval' ? 'file_change'
       : request.method === 'item/permissions/requestApproval' ? 'permission'
         : network ? 'network' : 'command';
-    await this.events.emit(runtime.taskId, 'approval_requested', approvalTitle(kind), '作業を続ける前に確認が必要です。', {
+    await this.events.emit(runtime.taskId, 'approval_requested', approvalTitle(kind), '作業を続ける前に許可が必要です。', {
       approval: {
         id: randomUUID(),
         externalRequestID,
@@ -170,6 +170,8 @@ export class CodexTaskBridge {
         title: approvalTitle(kind),
         reason: stringValue(params.reason) ?? approvalReason(kind),
         resource: approvalResource(kind, params),
+        // This host declines only the one operation; Codex keeps the turn and looks for another way.
+        denyContinues: true,
         requestedAt: this.now(),
       },
     });
@@ -336,7 +338,7 @@ export class CodexTaskBridge {
       if (failedVerification) {
         await this.events.emit(runtime.taskId, 'paused', '検証が残っています',
           result?.summary ?? compact(runtime.lastAgentMessage) ?? '自動検証で問題が見つかりました。', {
-            ...payload,
+            ...payload, pauseReason: 'needs_owner',
             currentAction: result?.remainingAction ?? `${failedVerification.name}を修正して再実行`,
           });
         return;
@@ -344,7 +346,7 @@ export class CodexTaskBridge {
       if (!result) {
         await this.events.emit(runtime.taskId, 'paused', '完了条件を確認できません',
           compact(runtime.lastAgentMessage) ?? 'Codexのターンは終了しましたが、作業の完了条件を確認できませんでした。', {
-            ...payload,
+            ...payload, pauseReason: 'needs_owner',
             currentAction: '変更・検証・配備の残作業を確認',
           });
         return;
@@ -355,7 +357,7 @@ export class CodexTaskBridge {
       }
       if (result.status === 'paused') {
         await this.events.emit(runtime.taskId, 'paused', '続きが必要です', result.summary, {
-          ...payload,
+          ...payload, pauseReason: 'needs_owner',
           currentAction: result.remainingAction ?? '残っている工程を確認',
         });
         return;

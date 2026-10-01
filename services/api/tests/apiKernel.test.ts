@@ -161,6 +161,31 @@ describe('Shannon local API kernel', () => {
     expect(model.requests).toHaveLength(2);
   });
 
+  it('never reuses a started task identity for a later proposal in the same thread', async () => {
+    const model = new RecordingChatModel();
+    model.taskProposal = { title: 'ログイン修正', goal: 'ログイン画面を修正する', projectHint: 'shannon-ios' };
+    model.taskDecision = { disposition: 'propose', reason: '明示的な実装依頼' };
+    const api = createLocalApiKernel(() => '2026-09-28T12:00:00.000Z', { chatModel: model });
+    const first = await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', threadId: 'thread-work', message: 'ログイン画面を修正して',
+    } });
+    const firstBlock = (first.body as { uiBlocks: Array<{ proposalId: string }> }).uiBlocks[0]!;
+    const start = await api.dispatch({ method: 'POST', path: '/v1/agent/tasks', body: {
+      scopeKey: 'owner-a', taskId: firstBlock.proposalId, idempotencyKey: 'start-first',
+      conversationThreadID: 'thread-work', title: 'ログイン修正', goal: 'ログイン画面を修正する', summary: '修正する',
+    } });
+    expect(start.status).toBeLessThan(300);
+
+    model.taskProposal = { title: '別のバグ修正', goal: '別のバグを直す', projectHint: 'shannon-ios' };
+    const second = await api.dispatch({ method: 'POST', path: '/v1/chat', body: {
+      scopeKey: 'owner-a', threadId: 'thread-work', message: 'このバグも直せる？お願い',
+    } });
+    const secondBlock = (second.body as { uiBlocks: Array<{ proposalId: string; title: string }> }).uiBlocks[0]!;
+    expect(secondBlock.title).toBe('別のバグ修正');
+    expect(secondBlock.proposalId).toBeTruthy();
+    expect(secondBlock.proposalId).not.toBe(firstBlock.proposalId);
+  });
+
   it('routes a colloquial voice capability request to a visible implementation proposal', async () => {
     const model = new VoiceAwareRecordingModel();
     model.taskProposal = { title: 'センサー機能', goal: 'シャノンにセンサー機能を追加する',
@@ -939,7 +964,7 @@ describe('Shannon local API kernel', () => {
 
     expect(model.requests).toHaveLength(1);
     expect(model.requests[0]?.systemPrompt).toContain('[Codex作業の現在状態 — Azure DB上の事実・会話履歴より優先]');
-    expect(model.requests[0]?.systemPrompt).toContain('リンク表示を直す [waiting_approval]');
+    expect(model.requests[0]?.systemPrompt).toContain('リンク表示を直す [waiting_approval] 状態名=許可待ち');
     expect(model.requests[0]?.systemPrompt).toContain('SwiftPMの検証にsandbox-execが必要です。');
     expect(model.requests[0]?.systemPrompt).toContain('scripts/verify.sh ios');
     expect(model.requests[0]?.systemPrompt).toContain('別トークから尋ねられても');
