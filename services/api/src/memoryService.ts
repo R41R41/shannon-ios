@@ -137,6 +137,8 @@ export interface ShannonMemoryStore {
   mutate(scopeKey: string, mutation: MemoryMutation): MemoryDashboard;
 }
 
+const UNKNOWN_MEMORY_TEXT = '元の内容を一覧で取得できない記憶';
+
 export class ShannonMemoryService implements ShannonMemoryStore {
   constructor(
     private readonly stateStore: CompanionStateStore,
@@ -218,7 +220,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       items.push(buildItem({
         id: control.memoryId,
         kind: control.kind,
-        text: control.overrideText ?? control.sourceEvidence ?? '元の内容を一覧で取得できない記憶',
+        text: control.overrideText ?? control.sourceEvidence ?? UNKNOWN_MEMORY_TEXT,
         observedAt: control.updatedAt,
         ...(control.sourceEvidence ? { evidence: control.sourceEvidence } : {}),
       }, control, metadata.get(control.memoryId)));
@@ -284,9 +286,14 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const source = this.history?.experienceCandidates(scopeKey).find(value => value.id === (promise?.sourceExperienceId ?? item.id));
     const hiding = mutation.action === 'forget' || mutation.action === 'reject';
     const statusBefore = previous && previous.status !== 'active' ? previous.commitmentStatusBefore : promise?.status;
+    // Kept on the control so the rule survives the item leaving the bounded state.
+    // A conversation turn is identified by the owner's utterance (sourceEvidence), not by its two-sided summary.
+    const withheldText = previous?.withheldText ?? ((hiding || mutation.action === 'correct') && !previous?.overrideText
+      && (item.kind !== 'experience' || promise) && item.text !== UNKNOWN_MEMORY_TEXT ? item.text : undefined);
     const control: MemoryControl = { ...actionControl(item, previous, mutation, timestamp),
       sourceEvidence: previous?.sourceEvidence ?? source?.userMessage ?? item.evidence[0]?.quote,
       contextInvalidatedAt: hiding || mutation.action === 'correct' ? timestamp : previous?.contextInvalidatedAt,
+      ...(withheldText ? { withheldText } : {}),
       ...(previous?.causedBy && mutation.action !== 'restore' ? { causedBy: previous.causedBy } : {}),
       ...(hiding && statusBefore ? { commitmentStatusBefore: statusBefore } : {}) };
     events.push({ type: 'memory-control-upserted', control });
@@ -322,7 +329,8 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       }
     }
     if (mutation.action === 'restore') {
-      // Restore lifts exactly what this item's forget hid, and puts promises back as they were.
+      // One forget hides a group; restoring any member lifts that group and nothing the owner hid separately.
+      const origin = previous?.causedBy ?? item.id;
       const reopen = (memory: typeof promise, before: MemoryControl | undefined) => {
         if (!memory || !before || before.status === 'active') return;
         const status = before.commitmentStatusBefore ?? (memory.status === 'dismissed' ? 'pending' : memory.status);
@@ -331,9 +339,10 @@ export class ShannonMemoryService implements ShannonMemoryStore {
       reopen(promise, previous);
       for (const lifted of state.memoryControls) {
         // Controls written before `causedBy` existed are recognised by the shared instant and reason of that forget.
-        const sameForget = !lifted.causedBy && previous && previous.status !== 'active' && together.includes(lifted.memoryId)
+        const sameForget = !lifted.causedBy && previous && !previous.causedBy && previous.status !== 'active' && together.includes(lifted.memoryId)
           && lifted.updatedAt === previous.updatedAt && lifted.changeReason === previous.changeReason;
-        if (lifted.memoryId === item.id || lifted.status === 'active' || (lifted.causedBy !== item.id && !sameForget)) continue;
+        if (lifted.memoryId === item.id || lifted.status === 'active') continue;
+        if (lifted.memoryId !== origin && lifted.causedBy !== origin && !sameForget) continue;
         const { causedBy: _cause, commitmentStatusBefore: _before, ...kept } = lifted;
         events.push({ type: 'memory-control-upserted', control: { ...kept, status: 'active', updatedAt: timestamp, changeReason: control.changeReason } });
         reopen(state.prospectiveMemories.find(memory => memory.id === lifted.memoryId), lifted);

@@ -111,6 +111,8 @@ export interface MemoryControl {
   sourceEvidence?: string;
   /** When the item last stopped being usable; replies up to this instant may have used it. */
   contextInvalidatedAt?: string;
+  /** The item's text when it stopped being usable. Only its key terms are used, to find replies that restated it. */
+  withheldText?: string;
   /** The item whose forget or reject created this control; restoring that item lifts this one too. */
   causedBy?: string;
   /** A promise's status before a forget or reject dismissed it, so restore can put it back. */

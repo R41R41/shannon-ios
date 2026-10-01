@@ -54,9 +54,7 @@ public struct ShannonTurnCaptureList: View {
             }
             Button("キャンセル", role: .cancel) { confirming = nil }
         } message: {
-            Text(confirming?.kind == .knowledge
-                 ? "この内容を会話に使わなくなります。忘れた内容が戻らないよう、これより前のシャノンの返答も今後の会話の材料から外れます。トークの履歴は消えず、頭の中の「記憶の管理」から復元できます。"
-                 : "頭の中からいつでも確認できます。")
+            Text(confirming?.kind == .knowledge ? ShannonMemoryWithholdingCopy.captureUndo : "頭の中からいつでも確認できます。")
         }
     }
 

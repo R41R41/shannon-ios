@@ -45,9 +45,7 @@ struct ShannonMemoryDetailView: View {
             }
             Button("キャンセル", role: .cancel) { destructiveAction = nil }
         } message: {
-            Text(destructiveAction == .reject
-                 ? "今後の睡眠バッチでも同じ内容を自動で覚え直しません。"
-                 : "会話の生成には使われなくなります。「記憶と約束」の一覧から復元できます。元の会話や根拠は削除しません。忘れた内容が戻らないよう、これより前のシャノンの返答も今後の会話の材料から外れます。")
+            Text(destructiveAction == .reject ? ShannonMemoryWithholdingCopy.reject : ShannonMemoryWithholdingCopy.forget)
         }
     }
 
@@ -70,6 +68,9 @@ struct ShannonMemoryDetailView: View {
                       systemImage: item.status == .rejected ? "xmark.seal.fill" : "eye.slash.fill")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(palette.danger)
+                Text(ShannonMemoryWithholdingCopy.restore)
+                    .font(.footnote).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(ShannonSpacing.extraLarge)
@@ -178,7 +179,7 @@ struct ShannonMemoryDetailView: View {
     func correctionSheet(_ palette: ShannonPalette) -> some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: ShannonSpacing.large) {
-                Text("シャノンが覚える正しい内容を書いてください。元の根拠と訂正履歴は残ります。")
+                Text(ShannonMemoryWithholdingCopy.correct)
                     .font(.body).foregroundStyle(palette.textSecondary)
                 TextEditor(text: $correction)
                     .padding(ShannonSpacing.medium)

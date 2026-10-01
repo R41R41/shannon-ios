@@ -158,7 +158,7 @@ struct ShannonKnowledgeCorrectionModifier: ViewModifier {
                         Text(answer.question)
                     } footer: {
                         // The pencil records the same owner correction as the memory detail screen.
-                        Text("あなたの訂正として記録し、会話や夜の整理で元の内容に戻らないようにします。\(ShannonKnowledgeCorrection.maximumLength)文字まで（いま\(editingText.trimmingCharacters(in: .whitespacesAndNewlines).count)文字）。")
+                        Text("あなたの訂正として記録し、会話や夜の整理で元の内容に戻らないようにします。\(ShannonMemoryWithholdingCopy.correctionEffect)\(ShannonKnowledgeCorrection.maximumLength)文字まで（いま\(editingText.trimmingCharacters(in: .whitespacesAndNewlines).count)文字）。")
                     }
                     if let error = model.errorMessage {
                         Section {

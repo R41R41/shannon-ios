@@ -128,6 +128,76 @@ describe('forgetting one item withholds only what used it (TM-01)', () => {
   });
 });
 
+describe('the same rule from every entrance', () => {
+  it('a pencil correction in 覚えていること keeps unrelated earlier replies', async () => {
+    const { store } = sqlite(() => forgetAt);
+    const thread = store.createThread('owner');
+    const scenario = longThread(store, store, thread);
+    const kernel = createLocalApiKernel(() => forgetAt, { stateStore: store, conversationStore: store, knowledgeStore: store,
+      memoryStore: new ShannonMemoryService(store, store, () => forgetAt, store) });
+    const response = await kernel.dispatch({ method: 'POST', path: '/v1/knowledge/correct',
+      body: { scopeKey: 'owner', answerId: scenario.fact.id, answer: 'ユーザーはコーヒーが好き' } });
+    expect(response.status).toBe(200);
+    expect(store.snapshot('owner').memoryControls.find(item => item.memoryId === scenario.fact.id))
+      .toMatchObject({ overrideText: 'ユーザーはコーヒーが好き', withheldText: 'ユーザーは紅茶が好き' });
+    const replies = assistantReplies(store, store, thread);
+    expect(replies.join('\n')).not.toContain('紅茶');
+    expect(replies).toContain('署名設定を一緒に確認しましょう。（続き）');
+    store.close();
+  });
+
+  it('restores what a forget hid even when the controls were written before lineage was recorded', () => {
+    const state = new InMemoryCompanionStateStore(() => forgetAt);
+    const history = new InMemoryConversationStore();
+    const source = history.appendTurn('owner', 'thread-a', '明日プレゼンの練習をしよう', '明日、一緒に練習しましょう。', minute(1));
+    new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, source.observedAt);
+    const promise = state.snapshot('owner').prospectiveMemories[0]!;
+    const service = new ShannonMemoryService(state, history, () => forgetAt);
+    service.mutate('owner', { memoryId: promise.id, action: 'forget' });
+    // The shape a database holds from before this change: no causedBy, no earlier promise status, no withheld text.
+    for (const { causedBy: _cause, commitmentStatusBefore: _before, withheldText: _text, ...legacy } of state.snapshot('owner').memoryControls) {
+      state.apply('owner', { type: 'memory-control-upserted', control: legacy });
+    }
+    expect(state.snapshot('owner').memoryControls.every(item => !item.causedBy && item.status === 'forgotten')).toBe(true);
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toEqual([]);
+    service.mutate('owner', { memoryId: promise.id, action: 'restore' });
+    expect(state.snapshot('owner').memoryControls.every(item => item.status === 'active')).toBe(true);
+    expect(state.snapshot('owner').prospectiveMemories[0]!.status).toBe('pending');
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toHaveLength(2);
+  });
+
+  it('does not lift a control the owner set separately', () => {
+    const state = new InMemoryCompanionStateStore(() => forgetAt);
+    const history = new InMemoryConversationStore();
+    const source = history.appendTurn('owner', 'thread-a', '明日プレゼンの練習をしよう', '明日、一緒に練習しましょう。', minute(1));
+    new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, source.observedAt);
+    const promise = state.snapshot('owner').prospectiveMemories[0]!;
+    // The turn was forgotten on its own earlier (for example by 「それは忘れて」); the promise is forgotten later.
+    state.apply('owner', { type: 'memory-control-upserted', control: { memoryId: source.id, kind: 'experience', status: 'forgotten',
+      pinned: false, updatedAt: minute(400), changeReason: 'synthetic', contextInvalidatedAt: minute(400), sourceEvidence: source.userMessage } });
+    const service = new ShannonMemoryService(state, history, () => forgetAt);
+    service.mutate('owner', { memoryId: promise.id, action: 'forget' });
+    service.mutate('owner', { memoryId: promise.id, action: 'restore' });
+    expect(state.snapshot('owner').memoryControls.find(item => item.memoryId === source.id)?.status).toBe('forgotten');
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toEqual([]);
+  });
+
+  it('restoring any item of one forget lifts the whole group', () => {
+    const state = new InMemoryCompanionStateStore(() => forgetAt);
+    const history = new InMemoryConversationStore();
+    const source = history.appendTurn('owner', 'thread-a', '明日プレゼンの練習をしよう', '明日、一緒に練習しましょう。', minute(1));
+    new TurnRefinementProcessor(state, history).process('owner', source.userMessage, source.id, source.observedAt);
+    const promise = state.snapshot('owner').prospectiveMemories[0]!;
+    const service = new ShannonMemoryService(state, history, () => forgetAt);
+    service.mutate('owner', { memoryId: source.id, action: 'reject' });
+    expect(state.snapshot('owner').memoryControls.find(item => item.memoryId === promise.id)).toMatchObject({ status: 'rejected', causedBy: source.id });
+    service.mutate('owner', { memoryId: promise.id, action: 'restore' });
+    expect(state.snapshot('owner').memoryControls.every(item => item.status === 'active' && !item.causedBy)).toBe(true);
+    expect(state.snapshot('owner').prospectiveMemories[0]!.status).toBe('pending');
+    expect(visibleConversationHistory(state.snapshot('owner'), history, 'owner', 'thread-a')).toHaveLength(2);
+  });
+});
+
 describe('summaries follow the turns they were built from', () => {
   function threads(state: CompanionStateStore, history: ConversationStore) {
     const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(() => history.createThread('owner'));

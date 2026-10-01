@@ -95,6 +95,7 @@ function cleanControl(control: MemoryControl): MemoryControl {
     ...(control.overrideText ? { overrideText: cleanText(control.overrideText, 320) } : {}),
     ...(control.sourceEvidence ? { sourceEvidence: cleanText(control.sourceEvidence, 8_000) } : {}),
     ...(control.contextInvalidatedAt && Number.isFinite(Date.parse(control.contextInvalidatedAt)) ? { contextInvalidatedAt: control.contextInvalidatedAt } : {}),
+    ...(control.withheldText ? { withheldText: cleanText(control.withheldText, 320) } : {}),
     ...(control.causedBy ? { causedBy: cleanText(control.causedBy, 120) } : {}),
     ...(isCommitmentStatus(control.commitmentStatusBefore) ? { commitmentStatusBefore: control.commitmentStatusBefore } : {}),
   });
@@ -276,6 +277,7 @@ export function reduceCompanionState(
         && previous.overrideText === control.overrideText
         && previous.sourceEvidence === control.sourceEvidence
         && previous.contextInvalidatedAt === control.contextInvalidatedAt
+        && previous.withheldText === control.withheldText
         && previous.causedBy === control.causedBy
         && previous.commitmentStatusBefore === control.commitmentStatusBefore) return current;
       const memoryControls = [control, ...current.memoryControls.filter(item => item.memoryId !== control.memoryId)]
@@ -452,6 +454,7 @@ export function restoreCompanionState(
       ...(restoredText(value.overrideText, 320) ? { overrideText: restoredText(value.overrideText, 320) } : {}),
       ...(restoredText(value.sourceEvidence, 8_000) ? { sourceEvidence: restoredText(value.sourceEvidence, 8_000) } : {}),
       ...(typeof value.contextInvalidatedAt === 'string' ? { contextInvalidatedAt: value.contextInvalidatedAt } : {}),
+      ...(restoredText(value.withheldText, 320) ? { withheldText: restoredText(value.withheldText, 320) } : {}),
       ...(restoredText(value.causedBy, 120) ? { causedBy: restoredText(value.causedBy, 120) } : {}),
       ...(isCommitmentStatus(value.commitmentStatusBefore) ? { commitmentStatusBefore: value.commitmentStatusBefore } : {}),
     });

@@ -31,7 +31,8 @@ const STOP_TERMS = new Set([
   '話', '事', '人', '時', '日', '今', '前', '後', '中', '上', '下', '方', '物', '所', '気', '目', '手', '私', '僕', '俺', '君', '彼',
   '何', '誰', '年', '月', '週', '朝', '昼', '夜', '件', '分', '回', '度', '点', '的', '等', '氏', '様', '他', '別', '次', '間', '好', '嫌',
   'わたし', 'ぼく', 'あなた', 'こと', 'もの', 'それ', 'これ', 'あれ', 'ところ', 'とき', 'すき', 'きらい', 'です', 'ます', 'する', 'した',
-  'いる', 'ある', 'ない', 'という', 'ください', 'おねがい', 'ありがとう', 'そう', 'あれは', 'それは', 'これは',
+  'いる', 'ある', 'ない', 'という', 'ください', 'おねがい', 'ありがとう', 'そう', 'どれ', 'ここ', 'そこ', 'きみ', 'はい', 'うん',
+  'ので', 'から', 'けど', 'って', 'でし', 'まし', 'だよ', 'だね', 'よね', 'すね', 'した', 'して', 'です', 'ます',
   'the', 'and', 'for', 'you', 'ok', 'is', 'to', 'of', 'in', 'it', 'my', 'me',
 ]);
 const RUN = /[一-龠々〆]+|[ァ-ヴー]{2,}|[a-z][a-z0-9+#.-]*|[0-9]+(?:[.:/][0-9]+)*[一-龠]?|[ぁ-ん]+/gu;
@@ -68,7 +69,8 @@ export function memoryKeyTerms(text: string): readonly (readonly string[])[] {
     if (run.length >= 2) add(run);
   }
   if (!groups.size) {
-    for (const run of hiragana) for (const piece of run.split(PARTICLE)) if (piece.length >= 3) add(piece);
+    // Short pieces are kept here: a junk term only withholds more, while a missed word would leak.
+    for (const run of hiragana) for (const piece of run.split(PARTICLE)) if (piece.length >= 2) add(piece);
   }
   return Object.freeze([...groups.values()].slice(0, MAXIMUM_TERMS).map(group => Object.freeze([...group])));
 }
@@ -78,7 +80,9 @@ function controlBasis(snapshot: CompanionStateSnapshot, control: MemoryControl):
     ?? snapshot.relationships.find(item => item.id === control.memoryId);
   const promise = snapshot.prospectiveMemories.find(item => item.id === control.memoryId);
   const interest = snapshot.interests.find(item => memoryIdentifier('interest', item) === control.memoryId);
-  return [control.sourceEvidence, fact?.statement, fact?.evidence, promise?.summary, promise?.evidence, interest]
+  // A forgotten correction withholds the corrected wording as well as the original.
+  return [control.sourceEvidence, control.withheldText, control.status !== 'active' ? control.overrideText : undefined,
+    fact?.statement, fact?.evidence, promise?.summary, promise?.evidence, interest]
     .filter((value): value is string => Boolean(value)).join('\n');
 }
 
