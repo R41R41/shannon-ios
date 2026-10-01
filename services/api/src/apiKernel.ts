@@ -428,7 +428,7 @@ export class ShannonApiKernel {
         snapshotVersion: captured.version,
         messageEmotion,
         systemPrompt,
-        state: presentCompanionState(captured, occurredAt),
+        state: presentCompanionState(captured, occurredAt, expressiveEmotion),
         ...(completion.artifacts?.length ? { artifacts: completion.artifacts } : {}),
       };
       if (placeSkill?.places.length) response.uiBlocks = [{ type: 'place_search', places: placeSkill.places }];

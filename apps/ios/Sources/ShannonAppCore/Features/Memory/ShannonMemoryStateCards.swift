@@ -22,19 +22,20 @@ struct ShannonCurrentStateCard: View {
                     .foregroundStyle(palette.action)
             }
             HStack(spacing: ShannonSpacing.medium) {
-                Image(systemName: dominantState.symbol)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(palette.onUserMessage)
-                    .frame(width: 52, height: 52)
-                    .background(palette.userMessage, in: Circle())
+                ShannonAvatarView(expression: currentMood.expression, size: 52)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(dominantState.label)
+                    Text(currentMood.label)
                         .font(.title2.weight(.semibold))
-                    Text(dominantState.value.formatted(.percent.precision(.fractionLength(0))))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(palette.textSecondary)
+                    if let cause = currentMood.cause {
+                        Text(cause)
+                            .font(.caption)
+                            .foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
+            .accessibilityElement(children: .combine)
 
             if let focus = dailyMind {
                 VStack(alignment: .leading, spacing: 5) {
@@ -82,8 +83,14 @@ struct ShannonCurrentStateCard: View {
                     stateMeter("気分", value: (state.emotion.valence + 1) / 2)
                     stateMeter("活性", value: state.emotion.arousal)
                     stateMeter("心の開き", value: state.emotion.openness)
-                    stateMeter("好奇心", value: state.temperament.curiosity)
-                    stateMeter("親密さ", value: state.temperament.closeness)
+                    StateMeter(
+                        label: "好奇心", value: state.temperament.curiosity, palette: palette,
+                        reason: state.presence?.temperamentReasons.curiosity
+                    )
+                    StateMeter(
+                        label: "親密さ", value: state.temperament.closeness, palette: palette,
+                        reason: state.presence?.temperamentReasons.closeness
+                    )
                 }
                 .padding(.top, ShannonSpacing.medium)
             } label: {
@@ -121,10 +128,7 @@ struct ShannonCurrentStateCard: View {
         }
     }
 
-    var dominantState: (label: String, symbol: String, value: Double) {
-        let mood = ShannonMemoryOverview.mood(for: state)
-        return (mood.label, mood.symbol, mood.value)
-    }
+    var currentMood: ShannonMemoryOverview.Mood { ShannonMemoryOverview.mood(for: state) }
 }
 
 struct MemorySimpleSection: View {

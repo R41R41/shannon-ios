@@ -423,6 +423,19 @@ extension ShannonAPIClient {
         userTranscript: String,
         shannonTranscript: String
     ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
+        try await commitRealtimeVoiceTurn(
+            scopeKey: scopeKey, threadId: threadId,
+            userTranscript: userTranscript, shannonTranscript: shannonTranscript, emotion: nil
+        )
+    }
+
+    public func commitRealtimeVoiceTurn(
+        scopeKey: String,
+        threadId: String?,
+        userTranscript: String,
+        shannonTranscript: String,
+        emotion: ShannonVoiceTurnEmotionDTO?
+    ) async throws -> ShannonRealtimeVoiceTurnResponseDTO {
         let connection = currentConnection()
         var request = URLRequest(url: baseURL.appending(path: "/v1/voice/gemini/cascade/turns"))
         request.httpMethod = "POST"
@@ -433,7 +446,8 @@ extension ShannonAPIClient {
             scopeKey: connection?.scopeKey ?? scopeKey,
             threadId: threadId,
             userTranscript: userTranscript,
-            shannonTranscript: shannonTranscript
+            shannonTranscript: shannonTranscript,
+            emotion: emotion
         ))
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }

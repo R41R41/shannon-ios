@@ -180,7 +180,7 @@ extension ShannonDesktopRootView {
                 Circle()
                     .fill(Color.accentColor)
                     .frame(width: 7, height: 7)
-                Text(DesktopExpressionLabel.label(for: conversation.currentExpression))
+                Text(conversation.currentFace.japaneseName)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

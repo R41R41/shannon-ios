@@ -83,12 +83,18 @@ extension ShannonConversationModel {
             && !isLoadingHistory
     }
 
-    public var currentExpression: ShannonExpressionDTO {
-        messages
-            .last(where: { $0.role == .shannon })?
-            .emotionSnapshot?
-            .expression ?? .curious
+    /// The face of Shannon's latest reply in this thread. Before any reply it is the
+    /// presented mood, and a calm face when no state has loaded; never a fixed 興味津々.
+    public var currentFace: ShannonFace {
+        messages.last(where: { $0.role == .shannon })?.emotionSnapshot?.face
+            ?? state?.presence?.mood.face
+            ?? ShannonFace(expression: .calm)
     }
+
+    public var currentExpression: ShannonExpressionDTO { currentFace.expression }
+
+    /// 「いま」 outside a conversation: the feeling the server presents at read time.
+    public var presentFace: ShannonFace { state?.presence?.mood.face ?? currentFace }
 
     public var hasFailedMessage: Bool {
         messages.contains { $0.role == .user && $0.deliveryState == .failed }

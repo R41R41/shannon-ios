@@ -56,6 +56,8 @@ describe('text chat expression', () => {
     const { chat, stateStore, tick, api, model } = kernel();
     const response = await chat('すごい、さすが', 'えへへ、そんなこと言われると照れます。');
     expect(response.messageEmotion.expression).toBe('bashful');
+    // The state returned with the reply already agrees with its face.
+    expect(response.state).toMatchObject({ presence: { mood: { expression: 'bashful', fromConversation: true } } });
     // Nothing was written before the response was returned.
     expect(stateStore.snapshot('owner').expressiveEmotion?.primary).toBe('neutral');
     await tick();

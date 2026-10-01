@@ -108,6 +108,18 @@ describe('one carry-over rule for text and voice', () => {
       .toContain('いまの会話感情: 落ち着いている');
   });
 
+  it('is at full strength when just expressed and fades with the remaining carry-over', () => {
+    const bashful = resolveShannonEmotionState({
+      provisionalPrimary: 'neutral', provisionalIntensity: 0.15, transcript: 'すごいね',
+      reply: 'えへへ、照れます。', now: NOW,
+    });
+    expect(currentShannonEmotion(bashful, NOW)).toMatchObject({ primary: 'bashful', intensity: 0.52, visibility: 'subtle' });
+    const fiveMinutes = currentShannonEmotion(bashful, '2026-10-02T03:05:00.000Z');
+    expect(fiveMinutes.primary).toBe('bashful');
+    expect(fiveMinutes.intensity).toBeLessThan(0.52);
+    expect(currentShannonEmotion(bashful, '2026-10-02T03:15:00.000Z').primary).toBe('neutral');
+  });
+
   it('shows the same settled feeling as 「いま」', () => {
     expect(presentShannonMood(snapshot, '2026-10-02T03:01:00.000Z')).toMatchObject({
       expression: 'annoyed', fromConversation: true,

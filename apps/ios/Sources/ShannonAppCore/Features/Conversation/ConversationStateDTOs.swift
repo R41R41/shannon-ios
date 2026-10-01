@@ -45,6 +45,9 @@ public struct ShannonMessageEmotionDTO: Codable, Equatable, Sendable {
     public let arousal: Double
     public let openness: Double
     public let expression: ShannonExpressionDTO
+    /// Name of a core feeling that borrows `expression`'s face. Kept as text so an
+    /// unknown value from a newer server never fails decoding; read it through `face`.
+    public var feeling: String? = nil
 }
 
 public struct UserFactDTO: Codable, Equatable, Identifiable, Sendable {
@@ -71,6 +74,8 @@ public struct CompanionStateDTO: Codable, Equatable, Sendable {
     public let interests: [String]
     public let userFacts: [UserFactDTO]
     public let activeMemories: [ActiveMemoryDTO]
+    /// Absent from servers that predate the presented state.
+    public var presence: CompanionPresenceDTO? = nil
 }
 
 public struct ChatRequestDTO: Codable, Equatable, Sendable {

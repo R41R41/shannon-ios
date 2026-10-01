@@ -62,6 +62,8 @@ struct ShannonConversationCache {
         let arousal: Double
         let openness: Double
         let expression: ShannonExpressionDTO
+        /// Absent in caches written before feelings existed.
+        let feeling: String?
         let stateVersion: Int
 
         init(_ value: ConversationMessage.EmotionSnapshot) {
@@ -69,6 +71,7 @@ struct ShannonConversationCache {
             arousal = value.arousal
             openness = value.openness
             expression = value.expression
+            feeling = value.feeling?.rawValue
             stateVersion = value.stateVersion
         }
 
@@ -78,6 +81,7 @@ struct ShannonConversationCache {
                 arousal: arousal,
                 openness: openness,
                 expression: expression,
+                feeling: feeling.flatMap(ShannonFeelingDTO.init(rawValue:)),
                 stateVersion: stateVersion
             )
         }

@@ -153,10 +153,12 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                     try await conversationModel.streamSpeech(text, style: style, provider: speechProvider)
                 },
                 commitTurn: { user, shannon in
+                    // Read before the first suspension: the emotion of the reply being saved.
                     try await conversationModel.commitRealtimeVoiceTurn(
                         userTranscript: user,
                         shannonTranscript: shannon,
-                        threadID: context.threadID
+                        threadID: context.threadID,
+                        emotion: geminiVoiceModel.replyEmotion
                     )
                 },
                 handleDelegationResponse: { response in

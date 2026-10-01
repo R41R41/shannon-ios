@@ -139,13 +139,7 @@ extension ShannonConversationModel {
         }
         let emotionSnapshot = message.messageEmotion.flatMap { emotion in
             message.stateVersion.map { version in
-                ConversationMessage.EmotionSnapshot(
-                    valence: emotion.valence,
-                    arousal: emotion.arousal,
-                    openness: emotion.openness,
-                    expression: emotion.expression,
-                    stateVersion: version
-                )
+                ConversationMessage.EmotionSnapshot(emotion, stateVersion: version)
             }
         }
         return ConversationMessage(

@@ -115,15 +115,31 @@ struct ShannonMemoryOverviewTests {
     }
 
     @Test
-    func moodPicksTheStrongestStateAndKeepsTheFirstOnTies() throws {
+    func moodIsThePresentedFeelingAndNeverTheLargestTrait() throws {
+        // The strongest constant trait used to be named as her mood (「好奇心が強い」).
         let curious = try OverviewFixture.state(curiosity: 0.9, openness: 0.4, arousal: 0.3, calmness: 0.2, closeness: 0.1)
-        #expect(ShannonMemoryOverview.mood(for: curious).label == "好奇心が強い")
-        #expect(ShannonMemoryOverview.mood(for: curious).expression == .curious)
-        let calm = try OverviewFixture.state(curiosity: 0.2, openness: 0.4, arousal: 0.3, calmness: 0.8, closeness: 0.1)
-        #expect(ShannonMemoryOverview.mood(for: calm).label == "穏やか")
-        #expect(ShannonMemoryOverview.mood(for: calm).expression == .calm)
-        let tied = try OverviewFixture.state(curiosity: 0.5, openness: 0.5, arousal: 0.5, calmness: 0.5, closeness: 0.5)
-        #expect(ShannonMemoryOverview.mood(for: tied).label == "好奇心が強い")
+        #expect(ShannonMemoryOverview.mood(for: curious).label == "穏やか")
+        #expect(ShannonMemoryOverview.mood(for: curious).expression == .calm)
+        #expect(ShannonMemoryOverview.mood(for: curious).cause == nil)
+
+        var object = OverviewFixture.stateObject()
+        object["presence"] = [
+            "mood": ["expression": "determined", "feeling": "proud", "cause": "生成した応答の内容と会話文脈", "fromConversation": true],
+            "temperamentReasons": ["closeness": "この30日で12日話した", "curiosity": "いま育っている関心1件",
+                                   "confidenceAboutUser": "覚えていること3件から"],
+        ]
+        let proud = try OverviewFixture.decode(CompanionStateDTO.self, object)
+        #expect(ShannonMemoryOverview.mood(for: proud).label == "得意げ")
+        #expect(ShannonMemoryOverview.mood(for: proud).expression == .determined)
+        #expect(ShannonMemoryOverview.mood(for: proud).cause == "生成した応答の内容と会話文脈")
+
+        object["presence"] = [
+            "mood": ["expression": "calm", "cause": "特に強い気持ちは続いていない", "fromConversation": false],
+            "temperamentReasons": ["closeness": "", "curiosity": "", "confidenceAboutUser": ""],
+        ]
+        let settled = try OverviewFixture.decode(CompanionStateDTO.self, object)
+        #expect(ShannonMemoryOverview.mood(for: settled).label == "穏やか")
+        #expect(ShannonMemoryOverview.mood(for: settled).cause == nil)
     }
 
     @Test

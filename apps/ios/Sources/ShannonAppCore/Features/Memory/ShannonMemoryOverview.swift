@@ -76,11 +76,12 @@ struct ShannonMemoryOverview: Equatable {
         }
     }
 
+    /// 「いま」: Shannon's current feeling as the server presents it, never the largest trait.
     struct Mood: Equatable {
         let label: String
-        let symbol: String
-        let value: Double
         let expression: ShannonExpressionDTO
+        /// Why she feels this way; nil once the last conversational feeling has settled.
+        let cause: String?
     }
 
     static let featuredIntentLimit = 3
@@ -148,15 +149,17 @@ struct ShannonMemoryOverview: Equatable {
     var hiddenActiveIntentCount: Int { max(0, activeIntentCount - featuredIntents.count) }
 
     static func mood(for state: CompanionStateDTO) -> Mood {
-        let candidates = [
-            Mood(label: "好奇心が強い", symbol: "sparkles", value: state.temperament.curiosity, expression: .curious),
-            Mood(label: "心を開いている", symbol: "heart.circle.fill", value: state.emotion.openness, expression: .tender),
-            Mood(label: "元気がある", symbol: "bolt.fill", value: state.emotion.arousal, expression: .excited),
-            Mood(label: "穏やか", symbol: "cloud.sun.fill", value: state.temperament.calmness, expression: .calm),
-            Mood(label: "距離が近い", symbol: "person.2.fill", value: state.temperament.closeness, expression: .joyful),
-        ]
-        // Keep the first candidate on ties, matching the original card order.
-        return candidates.dropFirst().reduce(candidates[0]) { best, next in next.value > best.value ? next : best }
+        guard let presented = state.presence?.mood else {
+            // A server that predates the presented state sends no feeling; show a quiet face
+            // rather than naming a constant trait as her mood.
+            let quiet = ShannonFace(expression: .calm)
+            return Mood(label: quiet.japaneseName, expression: quiet.expression, cause: nil)
+        }
+        return Mood(
+            label: presented.face.japaneseName,
+            expression: presented.face.expression,
+            cause: presented.fromConversation && !presented.cause.isEmpty ? presented.cause : nil
+        )
     }
 
     // MARK: Categories

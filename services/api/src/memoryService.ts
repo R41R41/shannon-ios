@@ -1,3 +1,4 @@
+import { presentCompanionState } from './companionPresence.js';
 import {
   memoryControlFor,
   memoryIdentifier,
@@ -233,7 +234,7 @@ export class ShannonMemoryService implements ShannonMemoryStore {
     const backgroundCostUsd = this.usageReader?.backgroundLlmCostUsd(monthKey) ?? 0;
     return Object.freeze({
       generatedAt,
-      currentState: state,
+      currentState: presentCompanionState(state, generatedAt),
       knowledge: this.knowledgeStore?.knowledgeAnswers(scopeKey) ?? Object.freeze([]),
       personalityProfile: this.knowledgeStore?.personalityProfile(scopeKey) ?? null,
       activity: isActivityHistorySource(this.history)

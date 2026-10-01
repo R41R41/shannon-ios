@@ -40,7 +40,7 @@ struct DesktopMessageView: View {
                     ShannonAvatarView(expression: message.emotionSnapshot?.expression ?? .neutral, size: 28)
                     Text("シャノン")
                         .font(.callout.weight(.semibold))
-                    Text(DesktopExpressionLabel.label(for: message.emotionSnapshot?.expression ?? .neutral))
+                    Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")

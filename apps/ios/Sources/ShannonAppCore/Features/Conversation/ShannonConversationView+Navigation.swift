@@ -83,12 +83,4 @@ extension ShannonConversationView {
 #endif
     }
 
-    func refreshAppIconAtNextDeadline() async {
-        guard let refreshAt = appIconModel.nextRefreshAt else { return }
-        let delay = max(0, refreshAt.timeIntervalSinceNow)
-        try? await Task.sleep(for: .seconds(delay))
-        guard !Task.isCancelled else { return }
-        await appIconModel.updateAutomatically(for: model.currentExpression)
-    }
-
 }

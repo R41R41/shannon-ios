@@ -35,7 +35,8 @@ extension ShannonConversationView {
                 ShannonWaterlightEyeView(
                     expression: model.currentExpression,
                     activity: dialogueActivity,
-                    size: faceSize
+                    size: faceSize,
+                    feeling: model.currentFace.feeling
                 )
                     .shadow(color: palette.brandPresence.opacity(0.14), radius: 28, y: 10)
                     .position(
@@ -50,14 +51,14 @@ extension ShannonConversationView {
                             Text("シャノン")
                                 .font(.callout.weight(.semibold))
                             Text("·")
-                            Text(model.currentExpression.japaneseName)
+                            Text(model.currentFace.japaneseName)
                         }
                         .foregroundStyle(palette.textSecondary)
                         .padding(.horizontal, ShannonSpacing.medium)
                         .frame(minHeight: 32)
                         .background(.thinMaterial, in: Capsule())
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("シャノン、\(model.currentExpression.japaneseName)")
+                        .accessibilityLabel(model.currentFace.accessibilityDescription)
 
                         if let userMessage = latestUserMessage {
                             Text("あなた：\(userMessage.text)")

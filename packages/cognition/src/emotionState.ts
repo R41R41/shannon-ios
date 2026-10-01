@@ -227,8 +227,8 @@ export function carriedShannonEmotion(
 
 /**
  * What Shannon feels at `now` when nothing new has happened: the stored
- * feeling scaled by its remaining carry-over, or the settled baseline once the
- * carry-over is below the threshold. Prompts, the state sheet and message
+ * feeling at the share of its carry-over that remains, or the settled baseline
+ * once the carry-over is below the threshold. Prompts, the state sheet and message
  * expressions all read the stored state through this function.
  */
 export function currentShannonEmotion(
@@ -243,7 +243,9 @@ export function currentShannonEmotion(
       startedAt: validTimestamp(now),
     });
   }
-  const intensity = clamp(carried.intensity * carried.carryover, 0, 1);
+  // Full strength at the moment it was expressed, fading with the carry-over that remains.
+  const remaining = stored!.carryover > 0 ? carried.carryover / stored!.carryover : 0;
+  const intensity = clamp(carried.intensity * remaining, 0, 1);
   return Object.freeze({ ...carried, intensity, visibility: visibilityFor(intensity) });
 }
 

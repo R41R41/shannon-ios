@@ -237,6 +237,9 @@ public struct ShannonVoicePlanDTO: Codable, Equatable, Sendable {
     public let waitingPhrase: String?
     public let decisionSource: String?
     public let decisionLatencyMilliseconds: Int?
+    /// The face of the emotion this turn's voice acts with. Text, so a newer server's value never fails decoding.
+    public var expression: String? = nil
+    public var feeling: String? = nil
 
     public init(
         shouldRespond: Bool,
@@ -424,6 +427,29 @@ public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
     public let threadId: String?
     public let userTranscript: String
     public let shannonTranscript: String
+    /// The reconciled emotion the voice acted with, so the stored face equals the call Eye.
+    public var emotion: ShannonVoiceTurnEmotionDTO? = nil
+}
+
+public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {
+    public let primary: String
+    public let intensity: Double
+
+    public init(primary: String, intensity: Double) {
+        self.primary = primary
+        self.intensity = intensity
+    }
+}
+
+public extension ShannonVoicePlanDTO {
+    /// Nil from a server that predates the face, or for a face this build does not know.
+    var face: ShannonFace? {
+        expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: feeling) }
+    }
+
+    var turnEmotion: ShannonVoiceTurnEmotionDTO {
+        ShannonVoiceTurnEmotionDTO(primary: affect.rawValue, intensity: affectIntensity ?? 0.5)
+    }
 }
 
 public struct ShannonRealtimeVoiceTurnResponseDTO: Codable, Equatable, Sendable {

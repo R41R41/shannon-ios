@@ -61,14 +61,23 @@ export type PresentedCompanionState = CompanionStateSnapshot & { presence: Compa
  * The state as a client should show it now. Traits are recomputed for today so
  * an absence is visible without waiting for the next turn, and the mood is the
  * decayed conversational feeling rather than a stored one. Nothing is written.
+ * A reply passes the feeling it just resolved, which is stored only afterwards,
+ * so the state returned with that reply already agrees with its face.
  */
-export function presentCompanionState(snapshot: CompanionStateSnapshot, now: string): PresentedCompanionState {
+export function presentCompanionState(
+  snapshot: CompanionStateSnapshot,
+  now: string,
+  feeling?: ShannonExpressiveEmotion,
+): PresentedCompanionState {
   // An unreadable clock keeps the last calibrated day instead of pretending a month has passed.
   const today = Number.isFinite(Date.parse(now)) ? ownerDay(now) : snapshot.sharedDays?.at(-1) ?? ownerDay(now);
   return {
     ...snapshot,
     temperament: snapshot.sharedDays ? calibrateTemperament(snapshot, today) : snapshot.temperament,
-    presence: { mood: presentShannonMood(snapshot, now), temperamentReasons: explainTemperament(snapshot, today) },
+    presence: {
+      mood: presentShannonMood(feeling ? { ...snapshot, expressiveEmotion: feeling } : snapshot, now),
+      temperamentReasons: explainTemperament(snapshot, today),
+    },
   };
 }
 

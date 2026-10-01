@@ -119,7 +119,7 @@ extension ShannonConversationView {
         }
         .foregroundStyle(palette.textPrimary)
         .sheet(isPresented: $showsStateDetails) {
-            ShannonStateSheet(state: model.state, expression: model.currentExpression)
+            ShannonStateSheet(state: model.state, face: model.presentFace)
         }
         .sheet(isPresented: $showsConnectionDetails) {
             if let connectionModel {
@@ -177,7 +177,7 @@ extension ShannonConversationView {
             showsStateDetails = true
         } label: {
             HStack(spacing: ShannonSpacing.medium) {
-                ShannonChatAvatarView(expression: model.currentExpression, size: 56)
+                ShannonChatAvatarView(expression: model.presentFace.expression, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("シャノン")
                         .font(.title3.weight(.semibold))
@@ -188,9 +188,7 @@ extension ShannonConversationView {
                     ))
                     .font(.subheadline)
                     .foregroundStyle(palette.textSecondary)
-                    Text(model.state == nil
-                        ? "いま：\(model.currentExpression.japaneseName)"
-                        : "いま：\(model.currentExpression.japaneseName)・v\(model.state?.version ?? 0)")
+                    Text("いま：\(model.presentFace.japaneseName)")
                     .font(.caption)
                     .foregroundStyle(palette.textSecondary)
                 }

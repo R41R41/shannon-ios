@@ -56,6 +56,8 @@ extension ShannonGeminiLiveSessionModel {
                 let onSegment: ShannonVoiceSegmentHandler = {
                     [weak self] segment, plan in
                     guard let self, self.responseGenerationID == generation, !Task.isCancelled else { return }
+                    // Provisional with the first sentence, reconciled with later ones: the Eye follows the voice.
+                    if let face = plan?.face { self.callFace = face }
                     let firstText = self.latencyMeasurements.firstTextMilliseconds == nil
                     self.latencyMeasurements.recordFirstText(plan: plan)
                     if firstText, let milliseconds = self.latencyMeasurements.firstTextMilliseconds {
@@ -74,6 +76,8 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 try requireCurrentResponse(generation)
                 try responseDelivery.complete(response, batch: batch, ledger: &pendingTurns)
+                if let face = response.voicePlan?.face { callFace = face }
+                replyEmotion = mode == .owner ? response.voicePlan?.turnEmotion : nil
                 shannonTranscript = response.reply
                 textSendState = .idle
                 latencyMeasurements.recordServerMetrics(response.voiceMetrics)

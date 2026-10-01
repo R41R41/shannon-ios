@@ -433,30 +433,10 @@ enum ShannonDesktopConversationOutline {
     }
 }
 
+/// Names come from the shared `ShannonFace` table; the Mac keeps no table of its own.
 enum DesktopExpressionLabel {
-    static func label(for expression: ShannonExpressionDTO) -> String {
-        switch expression {
-        case .joyful: "うれしい"
-        case .excited: "わくわく"
-        case .amused, .laughing: "楽しそう"
-        case .bashful, .embarrassed: "少し照れている"
-        case .relieved: "ほっとしている"
-        case .surprised: "驚いている"
-        case .curious: "興味津々"
-        case .thinking, .confused: "考えている"
-        case .determined: "集中している"
-        case .tender: "親しみを感じている"
-        case .calm, .neutral: "穏やか"
-        case .jealous: "少し気になっている"
-        case .wry, .exasperated, .annoyed: "少し困っている"
-        case .concerned: "心配している"
-        case .sad: "少し沈んでいる"
-        case .sleepy: "眠そう"
-        }
-    }
-
-    static func stateDescription(for expression: ShannonExpressionDTO) -> String {
-        "\(label(for: expression))。作業の判断は状態ではなく、計画と検証結果に基づいて行います。"
+    static func stateDescription(for face: ShannonFace) -> String {
+        "\(face.japaneseName)。作業の判断は状態ではなく、計画と検証結果に基づいて行います。"
     }
 }
 struct ShannonDesktopRepositoryInput: Equatable {

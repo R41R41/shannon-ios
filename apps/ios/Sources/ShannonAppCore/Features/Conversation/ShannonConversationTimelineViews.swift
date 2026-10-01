@@ -166,8 +166,8 @@ struct ShannonMessageRow: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
 
-                if let expression = message.emotionSnapshot?.expression {
-                    Text("· \(expression.japaneseName)")
+                if let face = message.emotionSnapshot?.face {
+                    Text("· \(face.japaneseName)")
                 }
                 Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")
                     .lineLimit(1)
@@ -314,9 +314,11 @@ struct ShannonMessageRow: View {
     }
 
     var accessibilityLabel: String {
-        let speaker = message.role == .shannon ? "シャノン" : "あなた"
-        let emotion = message.emotionSnapshot.map { "。\($0.expression.japaneseName)表情" } ?? ""
+        // The feeling is read with the speaker, before the body: 「シャノン、得意げ。…」.
+        let speaker = message.role == .shannon
+            ? message.emotionSnapshot?.face.accessibilityDescription ?? "シャノン"
+            : "あなた"
         let delivery = message.deliveryState == .failed ? "。送信失敗" : ""
-        return "\(speaker)。\(message.text)\(emotion)\(delivery)"
+        return "\(speaker)。\(message.text)\(delivery)"
     }
 }
