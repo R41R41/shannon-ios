@@ -73,7 +73,7 @@ A snapshot is operational data. It must not carry conversation text.
 | `schedules[].name` | string, 1–80 | yes | |
 | `schedules[].time` | string, 1–40 | yes | A display label such as `08:00` or a cron expression; the server does not parse it. |
 | `schedules[].postedToday` | boolean | no | |
-| `kpi.postsToday`, `kpi.postsPlanned`, `kpi.tokensToday`, `kpi.apiCallsToday` | integer, 0–1,000,000,000,000 | yes, all four | |
+| `kpi.postsToday`, `kpi.postsPlanned`, `kpi.tokensToday`, `kpi.apiCallsToday` | integer, 0–1,000,000,000,000 | no; when `kpi` is sent, all four | Omit `kpi` when the runtime keeps no such counters. Never send zeros that were not counted. |
 | `skills` | array, 0–100 | yes | |
 | `skills[].name` | string, 1–80 | yes | |
 | `skills[].description` | string, 1–160 | yes | The skill's own fixed description. |

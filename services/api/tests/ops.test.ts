@@ -146,6 +146,15 @@ describe('snapshot validation', () => {
     expect(accepted.schedules[1]).toEqual({ name: 'evening-post', time: '0 21 * * *' });
     expect(validatedOpsSnapshot({ ...snapshot(), schemaVersion: 1 })).toBeTypeOf('object');
     expect(validatedOpsSnapshot({ ...snapshot(), services: [], minebot: [], schedules: [], skills: [] })).toBeTypeOf('object');
+    // A runtime that keeps no counters omits `kpi`; the stored snapshot then has none, never zeros.
+    const { kpi: _kpi, ...withoutKpi } = snapshot();
+    expect(validatedOpsSnapshot(withoutKpi)).not.toHaveProperty('kpi');
+    // The shape the legacy runtime's reporter sends.
+    expect(validatedOpsSnapshot({
+      scopeKey: 'owner', reportedAt: '2026-10-02T01:00:00.000Z', runtime: { release: 'platform-people-20261002-cc7480f', startedAt: '2026-10-02T00:00:00.000Z' },
+      services: [{ id: 'minecraft:lab', label: 'minecraft:lab', category: 'minecraft', status: 'degraded' }], minebot: [],
+      schedules: [{ name: 'morning_post', time: '0 8 * * *' }], skills: [{ name: 'search', description: '検索する 二行目' }],
+    })).toBeTypeOf('object');
   });
 
   it('accepts every bound at its maximum', () => {
@@ -208,7 +217,7 @@ describe('snapshot validation', () => {
     ['a long schedule name', body => { body.schedules[0].name = long(OPS_LIMITS.scheduleName + 1); }, 'schedules[0].name'],
     ['a long schedule time', body => { body.schedules[0].time = '0'.repeat(OPS_LIMITS.scheduleTime + 1); }, 'schedules[0].time'],
     ['a postedToday that is not a boolean', body => { body.schedules[0].postedToday = 'yes'; }, 'schedules[0].postedToday'],
-    ['a missing kpi', body => { delete body.kpi; }, 'kpi'],
+    ['a null kpi', body => { body.kpi = null; }, 'kpi'],
     ['a negative counter', body => { body.kpi.postsToday = -1; }, 'kpi.postsToday'],
     ['a fractional counter', body => { body.kpi.postsPlanned = 1.5; }, 'kpi.postsPlanned'],
     ['a counter sent as text', body => { body.kpi.tokensToday = '12'; }, 'kpi.tokensToday'],
@@ -341,7 +350,7 @@ describe('POST /v1/platform/ops/snapshot', () => {
     expect(answer.receivedAt).toBe('2026-10-02T03:01:00.000Z');
     expect(answer.snapshot.services).toEqual([{ id: 'discord', label: 'Discord', category: 'platform', status: 'stopped' }]);
     expect(answer.snapshot.minebot).toEqual([]);
-    expect(answer.snapshot.kpi.postsToday).toBe(4);
+    expect(answer.snapshot.kpi?.postsToday).toBe(4);
     // The scope is the bridge's, whatever the reporter names.
     expect(store.latest('another-name')).toBeNull();
     expect(store.latest('owner')).not.toBeNull();
@@ -356,7 +365,7 @@ describe('POST /v1/platform/ops/snapshot', () => {
     await report();
     first.close();
     const reopened = new SQLiteOpsStore(path);
-    expect(reopened.latest('owner')?.snapshot.kpi.apiCallsToday).toBe(97);
+    expect(reopened.latest('owner')?.snapshot.kpi?.apiCallsToday).toBe(97);
     expect(reopened.count()).toBe(1);
     reopened.close();
   });

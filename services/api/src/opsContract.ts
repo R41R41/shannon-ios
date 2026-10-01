@@ -32,7 +32,8 @@ export interface OpsSnapshot {
   services: Array<{ id: string; label: string; category: string; status: OpsStatus; detail?: string }>;
   minebot: Array<{ id: string; server: string; status: OpsStatus; task?: { title: string; steps: Array<{ title: string; status: OpsStepStatus }> } }>;
   schedules: Array<{ name: string; time: string; postedToday?: boolean }>;
-  kpi: { postsToday: number; postsPlanned: number; tokensToday: number; apiCallsToday: number };
+  /** Absent when the runtime keeps no such counters; a reporter must not send zeros it did not count. */
+  kpi?: { postsToday: number; postsPlanned: number; tokensToday: number; apiCallsToday: number };
   skills: Array<{ name: string; description: string }>;
 }
 
@@ -130,7 +131,7 @@ export function validatedOpsSnapshot(value: unknown): OpsSnapshot | string {
     if (body.schemaVersion !== undefined && body.schemaVersion !== OPS_SCHEMA_VERSION) refuse(`schemaVersion must be ${OPS_SCHEMA_VERSION}`);
     text(body.scopeKey, 'scopeKey', 160);
     const runtime = fields(body.runtime, 'runtime', ['release', 'startedAt']);
-    const kpi = fields(body.kpi, 'kpi', ['postsToday', 'postsPlanned', 'tokensToday', 'apiCallsToday']);
+    const kpi = body.kpi === undefined ? null : fields(body.kpi, 'kpi', ['postsToday', 'postsPlanned', 'tokensToday', 'apiCallsToday']);
     return {
       reportedAt: timestamp(body.reportedAt, 'reportedAt'),
       runtime: { release: text(runtime.release, 'runtime.release', OPS_LIMITS.release), startedAt: timestamp(runtime.startedAt, 'runtime.startedAt') },
@@ -158,10 +159,10 @@ export function validatedOpsSnapshot(value: unknown): OpsSnapshot | string {
           ...(schedule.postedToday === undefined ? {} : { postedToday: schedule.postedToday as boolean }),
         };
       }),
-      kpi: {
+      ...(kpi ? { kpi: {
         postsToday: counter(kpi.postsToday, 'kpi.postsToday'), postsPlanned: counter(kpi.postsPlanned, 'kpi.postsPlanned'),
         tokensToday: counter(kpi.tokensToday, 'kpi.tokensToday'), apiCallsToday: counter(kpi.apiCallsToday, 'kpi.apiCallsToday'),
-      },
+      } } : {}),
       skills: list(body.skills, 'skills', OPS_LIMITS.skills, (entry, at) => {
         const skill = fields(entry, at, ['name', 'description']);
         return { name: text(skill.name, `${at}.name`, OPS_LIMITS.skillName), description: text(skill.description, `${at}.description`, OPS_LIMITS.skillDescription) };
