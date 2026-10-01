@@ -209,9 +209,11 @@ summary". The rule, the sensitivity categories and what is not guaranteed are in
   (「ミキさん、また会えましたね」). Two remembered people with the same name make her ask, and
   she recalls nothing until it is settled.
 - **本人だけ with someone listening**: after 「お友達も一緒ですか？」 and until the owner answers
-  that nobody is there, owner turns are sent as "someone else may be listening": protected
-  memories, goals, tasks and notes are not read out, and those turns teach nothing about the
-  owner. The existing suggestion to switch stays.
+  right away that nobody is there, switches to 友人も一緒, or ends the call, owner turns are
+  sent as "someone else may be listening": protected memories, goals, tasks and notes are not
+  read out, and those turns teach nothing about the owner. The existing suggestion to switch
+  stays. Returning to 本人だけ by the control is the owner saying he is alone again; the
+  confirmation says that his schedule and protected memories are used from then on.
 - **Mac**: 頭の中 has the same 人 list. The Mac has no call, so nothing is added there.
 
 ### Table-side check (not yet performed)
