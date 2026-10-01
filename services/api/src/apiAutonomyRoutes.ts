@@ -1,5 +1,6 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
+import { HOST_STEP_ROUTE_PREFIX, dispatchHostStepRequest } from './apiAutonomyHostStepRoutes.js';
 import { dispatchStudyRequest } from './apiStudyRoutes.js';
 import type { AutonomyOwnerError, ShannonAutonomyService } from './autonomyService.js';
 
@@ -11,6 +12,8 @@ import type { AutonomyOwnerError, ShannonAutonomyService } from './autonomyServi
 export function dispatchAutonomyRequest(request: ApiRequest, autonomy: ShannonAutonomyService): ApiResponse | undefined {
   if (!request.path.startsWith('/v1/autonomy')) return undefined;
   if (request.path.startsWith('/v1/autonomy/study')) return dispatchStudyRequest(request, autonomy.study);
+  // The device side of her folder; the only routes here a non-owner surface (the bound device) uses.
+  if (request.path.startsWith(HOST_STEP_ROUTE_PREFIX)) return dispatchHostStepRequest(request, autonomy.folder);
 
   if (request.method === 'GET' && request.path === '/v1/autonomy') {
     const scopeKey = request.query?.get('scopeKey');

@@ -12,6 +12,8 @@ import { configuredAutonomyModelPrices, type AutonomyModelPrices } from './auton
 export interface AutonomyPlaces {
   /** Her own folder on each named host (owner's Mac, Windows PC). */
   hostFolders: Readonly<Record<string, string>>;
+  /** The paired device that works in her folder on a named host. The server never sees that folder; only this device may claim its steps. */
+  hostDevices?: Readonly<Record<string, string>>;
   /** Her workspace on the Azure VM, apart from the production service. */
   workspaceRoot: string | null;
   /** Deployed source of the running service. Everything inside needs approval. */
@@ -34,6 +36,10 @@ export interface AutonomyConfig {
   maximumPublicReadsPerDay: number;
   /** Reads of the owner's shared Notion pages per owner-local day. */
   maximumNotionReadsPerDay: number;
+  /** Files she may queue for her folders per owner-local day. */
+  maximumHostFolderWritesPerDay: number;
+  /** How long a device may hold a claimed step before it is closed as failed. */
+  hostStepLeaseMilliseconds: number;
   modelPrices: AutonomyModelPrices;
   places: AutonomyPlaces;
 }
@@ -54,9 +60,11 @@ export function configuredAutonomy(
     timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || 'Asia/Tokyo',
     maximumPublicReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_PUBLIC_READS, 0, 10_000, 200)),
     maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
+    maximumHostFolderWritesPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_HOST_FOLDER_WRITES, 0, 1_000, 10)),
+    hostStepLeaseMilliseconds: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS, 30, 3_600, 300)) * 1_000,
     modelPrices: configuredAutonomyModelPrices(environment),
     places: Object.freeze({
-      hostFolders: hostFolders(environment.SHANNON_AUTONOMY_HOST_FOLDERS_JSON),
+      ...hostPlaces(environment.SHANNON_AUTONOMY_HOST_FOLDERS_JSON),
       workspaceRoot: environment.SHANNON_AUTONOMY_WORKSPACE_ROOT?.trim() || null,
       productionRoots: Object.freeze([SERVICE_REPOSITORY_ROOT, ...roots(environment.SHANNON_AUTONOMY_PRODUCTION_ROOTS)]),
       repositoryRoots: Object.freeze([SERVICE_REPOSITORY_ROOT, ...roots(environment.SHANNON_AUTONOMY_REPOSITORY_ROOTS)]),
@@ -118,19 +126,26 @@ export function roundYen(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function hostFolders(raw: string | undefined): Readonly<Record<string, string>> {
-  if (!raw?.trim()) return Object.freeze({});
+/**
+ * `{"<host>": "<absolute folder>"}` names a folder this server can reach itself.
+ * `{"<host>": {"deviceId": "<paired device id>"}}` names her folder on the owner's machine: the
+ * server never sees it, and only that paired device may claim work for it. An object may carry both.
+ */
+function hostPlaces(raw: string | undefined): Required<Pick<AutonomyPlaces, 'hostFolders' | 'hostDevices'>> {
+  const folders: Record<string, string> = {};
+  const devices: Record<string, string> = {};
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return Object.freeze({});
-    const folders: Record<string, string> = {};
-    for (const [host, folder] of Object.entries(parsed as Record<string, unknown>)) {
-      if (/^[a-z0-9][a-z0-9-]{0,39}$/u.test(host) && typeof folder === 'string' && folder.trim()) folders[host] = folder.trim();
+    const parsed: unknown = raw?.trim() ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [host, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(host)) continue;
+        const entry = value && typeof value === 'object' && !Array.isArray(value) ? value as { folder?: unknown; deviceId?: unknown } : { folder: value };
+        if (typeof entry.folder === 'string' && entry.folder.trim()) folders[host] = entry.folder.trim();
+        if (typeof entry.deviceId === 'string' && /^[a-f0-9]{16}$/u.test(entry.deviceId)) devices[host] = entry.deviceId;
+      }
     }
-    return Object.freeze(folders);
-  } catch {
-    return Object.freeze({});
-  }
+  } catch { /* an unreadable value registers no host */ }
+  return { hostFolders: Object.freeze(folders), hostDevices: Object.freeze(devices) };
 }
 
 function boundedNumber(value: string | undefined, minimum: number, maximum: number, fallback: number): number {

@@ -58,6 +58,8 @@ export class ShannonAutonomyLoop {
     try { paused = store.control(this.scopeKey).paused; } catch { paused = true; }
     if (paused) return 'paused';
     this.closeInterruptedSteps(at);
+    // A file handed to a device that never reported back is closed as failed, also when that device stays away.
+    try { this.dependencies.service.folder.closeOverdue(this.scopeKey, at); } catch { /* the next claim or tick closes it */ }
     const cycle = store.loop.openCycle(this.scopeKey) ?? this.startCycleIfDue(at);
     return typeof cycle === 'string' ? cycle : this.advance(cycle, at, signal);
   }

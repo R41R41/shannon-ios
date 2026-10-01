@@ -1,4 +1,5 @@
 import type { ShannonPursuit, ShannonPursuitStatus } from '@shannon/cognition';
+import { copyableStudyPiece } from './autonomyHostFolderPath.js';
 import type { AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PromptNote, ThinkingMaterials } from './autonomyLoopPrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
@@ -41,7 +42,7 @@ export function thinkingMaterials(
   scopeKey: string,
   input: {
     at: string; localTime: string; remainingYen: number; remainingReads: number; maximumSteps: number;
-    readingSeeds: readonly { title: string; url: string }[]; notionAvailable: boolean;
+    readingSeeds: readonly { title: string; url: string }[]; notionAvailable: boolean; folderAvailable?: boolean;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
@@ -64,6 +65,7 @@ export function thinkingMaterials(
     }))),
     places: [...store.loop.readingLeads(scopeKey), ...input.readingSeeds.filter(seed => !store.loop.wasRead(scopeKey, seed.url))],
     notionAvailable: input.notionAvailable,
+    ...(input.folderAvailable ? { folderAvailable: true } : {}),
   };
 }
 
@@ -71,7 +73,7 @@ export function thinkingMaterials(
 export function planFromThought(
   reply: Record<string, unknown>,
   known: { pursuits: readonly ShannonPursuit[]; pieces: readonly StudyPiece[]; unnotedReadingIds: readonly string[]; placeUrls?: readonly string[] },
-  bounds: { maximumSteps: number; maximumReads: number; notionAvailable: boolean },
+  bounds: { maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean },
 ): Thought {
   const pursuitIds = new Set(known.pursuits.map(item => item.id));
   const stories = new Map(known.pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away').map(piece => [piece.id, piece]));
@@ -112,6 +114,10 @@ export function planFromThought(
       steps.push({ kind: 'show', pieceId });
     } else if (action === 'put_away' && pieceId && stories.has(pieceId)) {
       steps.push({ kind: 'put_away', pieceId });
+    } else if (action === 'copy' && bounds.folderAvailable) {
+      // A named piece must be one she may show; without a name the step takes her newest such piece when it runs.
+      if (pieceId && !known.pieces.some(piece => piece.id === pieceId && copyableStudyPiece(piece))) continue;
+      steps.push({ kind: 'copy', ...(pieceId ? { pieceId } : {}) });
     }
   }
   const pursuits: ThoughtPursuitChange[] = [];

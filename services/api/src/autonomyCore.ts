@@ -117,6 +117,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyShowing.ts',
     'services/api/src/autonomyTextModel.ts',
     'services/api/src/autonomyWorker.ts',
+    // Her folder on the owner's machines: what may leave, the queue, and the device routes.
+    'services/api/src/autonomyHostFolderPath.ts',
+    'services/api/src/autonomyHostFolderSteps.ts',
+    'services/api/src/autonomyHostFolderDesk.ts',
+    'services/api/src/autonomyLoopFolderStep.ts',
+    'services/api/src/apiAutonomyHostStepRoutes.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',

@@ -11,7 +11,7 @@ import type { DatabaseSync } from 'node:sqlite';
  * the same transaction that writes its activity-record entry and its cost. A step a
  * crash left `planned` or `authorized` is closed as `abandoned` and never run again.
  */
-export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away';
+export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy';
 export type AutonomyStepStatus = 'planned' | 'authorized' | 'reported' | 'refused' | 'abandoned';
 /** What the loop process last said about itself; the API reads it to describe the loop to the owner. */
 export type AutonomyLoopReadiness = 'ready' | 'disabled' | 'no_credential';

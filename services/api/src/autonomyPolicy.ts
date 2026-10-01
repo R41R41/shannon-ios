@@ -6,6 +6,7 @@ import {
 } from '@shannon/cognition';
 import { coreAreaForRepositoryPath } from './autonomyCore.js';
 import { fitsAutonomyBudget, type AutonomyPlaces } from './autonomyBudget.js';
+import { hostFolderRelativePath } from './autonomyHostFolderPath.js';
 import { isInsideResolvedRoot, relativeToResolvedRoot, type AutonomyPathResolver } from './autonomyPaths.js';
 
 /**
@@ -35,6 +36,8 @@ export interface AutonomousActionRequest {
   summary: string;
   /** For `host_folder`: the named host whose folder she works in. */
   host?: string;
+  /** For `host_folder` on a machine this server cannot see: one file, relative to her folder there. Never combined with `paths`. */
+  relativePath?: string;
   /** Absolute paths the step creates, changes, deletes, or runs. */
   paths?: readonly string[];
   /** For `public_read`: the public pages the step reads. */
@@ -155,6 +158,18 @@ function classifyPaths(request: AutonomousActionRequest, domainId: ShannonAutono
   const resolveAll = (values: readonly string[]) => values.map(value => context.resolvePath(value));
   const usable = (values: readonly (string | null)[]) => values.filter((value): value is string => value !== null);
   const ownRoots: string[] = [];
+  if (domainId === 'host_folder' && request.relativePath !== undefined) {
+    // The folder is on the owner's machine: the device bound to that host verifies the real location. Here only the spelling is judged.
+    const devices = context.places.hostDevices ?? {};
+    if (!request.host || !Object.hasOwn(devices, request.host) || !devices[request.host]) {
+      return { refusal: refuse('forbidden', 'unknown_host', domainId, '専用フォルダを受け持つ端末が登録されていないため、実行しません。'), coreAreas: [], allowedRoots: [] };
+    }
+    const checked = hostFolderRelativePath(request.relativePath);
+    return {
+      refusal: 'problem' in checked ? refuse('forbidden', 'malformed_request', domainId, `専用フォルダの中のパスとして認められないため、実行しません（${checked.problem}）。`) : null,
+      coreAreas: [], allowedRoots: [],
+    };
+  }
   if (domainId === 'host_folder') {
     const folder = request.host ? context.places.hostFolders[request.host] : undefined;
     const root = folder ? context.resolvePath(folder) : null;
@@ -222,6 +237,9 @@ function malformed(request: AutonomousActionRequest): string | null {
   if (typeof request.summary !== 'string' || !request.summary.trim() || request.summary.length > 300) return '説明の文がない、または長すぎる';
   if (request.host !== undefined && (typeof request.host !== 'string' || !request.host)) return '端末名が正しくない';
   if (request.tool !== undefined && (typeof request.tool !== 'string' || request.tool.length > 120)) return '道具の名前が正しくない';
+  if (request.relativePath !== undefined && (typeof request.relativePath !== 'string' || request.domain !== 'host_folder' || request.paths !== undefined)) {
+    return '相対パスの指定が正しくない';
+  }
   for (const [name, limit] of [['paths', MAXIMUM_PATHS], ['urls', MAXIMUM_URLS]] as const) {
     const value = request[name];
     if (value === undefined) continue;
