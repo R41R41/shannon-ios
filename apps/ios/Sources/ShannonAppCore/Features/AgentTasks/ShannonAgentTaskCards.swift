@@ -1,5 +1,81 @@
 import SwiftUI
 
+/// How a task appears inside the conversation. Only a proposal, which needs the
+/// user's decision, keeps a full card; running work is a one-line summary and
+/// finished work is a quiet line so the conversation stays readable.
+public struct ShannonAgentTaskCardPresentation: Equatable, Sendable {
+    public enum Style: Equatable, Sendable {
+        case proposal
+        case active
+        case quiet
+    }
+
+    public enum Tone: Equatable, Sendable {
+        case action
+        case attention
+        case success
+        case danger
+        case secondary
+    }
+
+    public let style: Style
+    public let statusText: String
+    public let symbolName: String
+    public let tone: Tone
+
+    public init(task: ShannonAgentTask) {
+        switch task.status {
+        case .proposed:
+            style = .proposal
+            statusText = "提案"
+            symbolName = "sparkles"
+            tone = .action
+        case .running:
+            style = .active
+            statusText = task.plan.isEmpty
+                ? task.status.japaneseName
+                : "\(task.status.japaneseName) \(task.completedPlanCount)/\(task.plan.count)"
+            symbolName = "hammer"
+            tone = .action
+        case .waitingApproval:
+            style = .active
+            statusText = "許可が必要"
+            symbolName = "hand.raised.fill"
+            tone = .attention
+        case .queued, .starting, .paused:
+            style = .active
+            statusText = task.status.japaneseName
+            symbolName = task.status.symbolName
+            tone = .action
+        case .completed:
+            style = .quiet
+            statusText = "完了"
+            symbolName = "checkmark.circle.fill"
+            tone = .success
+        case .failed:
+            style = .quiet
+            statusText = "問題あり"
+            symbolName = "exclamationmark.triangle.fill"
+            tone = .danger
+        case .cancelled:
+            style = .quiet
+            statusText = "中止"
+            symbolName = "xmark.circle"
+            tone = .secondary
+        }
+    }
+
+    func color(_ palette: ShannonPalette) -> Color {
+        switch tone {
+        case .action: palette.action
+        case .attention: palette.attention
+        case .success: palette.success
+        case .danger: palette.danger
+        case .secondary: palette.textSecondary
+        }
+    }
+}
+
 struct ShannonAgentTaskCardView: View {
     let task: ShannonAgentTask
     let cancel: () -> Void
@@ -9,15 +85,33 @@ struct ShannonAgentTaskCardView: View {
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
+        let presentation = ShannonAgentTaskCardPresentation(task: task)
 
-        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+        Group {
+            switch presentation.style {
+            case .proposal:
+                proposalCard(presentation, palette)
+            case .active, .quiet:
+                summaryRow(presentation, palette)
+            }
+        }
+        .padding(.leading, 62)
+    }
+
+    func proposalCard(_ presentation: ShannonAgentTaskCardPresentation, _ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(task.title)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .lineLimit(2)
                 Spacer(minLength: ShannonSpacing.small)
-                AgentTaskStatusBadge(task: task, palette: palette)
+                Label(presentation.statusText, systemImage: presentation.symbolName)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(palette.brandPresence)
+                    .padding(.horizontal, ShannonSpacing.small)
+                    .frame(minHeight: 22)
+                    .background(palette.intelligenceSoft, in: Capsule())
             }
 
             Text(task.summary)
@@ -25,42 +119,17 @@ struct ShannonAgentTaskCardView: View {
                 .foregroundStyle(palette.textSecondary)
                 .lineLimit(3)
 
-            if let progress = task.progressFraction, !task.status.isTerminal {
-                ProgressView(value: progress)
-                    .tint(palette.action)
-                    .accessibilityLabel("作業の進み具合")
-                    .accessibilityValue("全\(task.plan.count)工程中\(task.completedPlanCount)工程完了")
-            }
-
-            switch task.status {
-            case .proposed:
-                ShannonButtonRow {
-                    Button(action: open) { ShannonButtonLabel("設定して始める") }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    Button(action: cancel) { ShannonButtonLabel("今はやめる") }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: ShannonSpacing.small) {
+                    Spacer(minLength: 0)
+                    proposalButtons
                 }
-            case .cancelled:
-                EmptyView()
-            default:
-                Button(action: open) {
-                    HStack {
-                        Text(task.status == .completed ? "結果を見る"
-                            : task.status == .waitingApproval ? "許可内容を見る"
-                            : "作業を見る")
-                        Spacer()
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(palette.action)
-                    .frame(minHeight: 34)
+                VStack(alignment: .trailing, spacing: ShannonSpacing.small) {
+                    proposalButtons
                 }
-                .buttonStyle(.plain)
             }
         }
-        .padding(ShannonSpacing.large)
+        .padding(ShannonSpacing.medium)
         .background(
             palette.userMessage.opacity(colorScheme == .dark ? 0.34 : 0.48),
             in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
@@ -69,62 +138,115 @@ struct ShannonAgentTaskCardView: View {
             RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
                 .stroke(palette.action.opacity(0.26), lineWidth: 0.8)
         }
-        .padding(.leading, 62)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("シャノンの作業、\(task.title)、\(task.stage.japaneseName)")
+        .accessibilityLabel("シャノンの作業の提案、\(task.title)")
+    }
+
+    @ViewBuilder
+    var proposalButtons: some View {
+        Button("今はやめる", action: cancel)
+            .buttonStyle(.bordered)
+            .lineLimit(1)
+        Button("設定して始める", action: open)
+            .buttonStyle(.borderedProminent)
+            .lineLimit(1)
+    }
+
+    func summaryRow(_ presentation: ShannonAgentTaskCardPresentation, _ palette: ShannonPalette) -> some View {
+        let tint = presentation.color(palette)
+        let isActive = presentation.style == .active
+        return Button(action: open) {
+            HStack(spacing: ShannonSpacing.small) {
+                Image(systemName: presentation.symbolName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
+                Text(task.title)
+                    .font(.subheadline.weight(isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? palette.textPrimary : palette.textSecondary)
+                    .lineLimit(1)
+                Spacer(minLength: ShannonSpacing.small)
+                Text(presentation.statusText)
+                    .font(.caption.weight(isActive ? .semibold : .regular))
+                    .foregroundStyle(presentation.tone == .action ? palette.textSecondary : tint)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(palette.textSecondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, ShannonSpacing.medium)
+            .frame(minHeight: ShannonTouchTarget.minimum)
+            .background {
+                if isActive {
+                    RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous)
+                        .fill(palette.userMessage.opacity(colorScheme == .dark ? 0.34 : 0.48))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: ShannonShape.medium, style: .continuous)
+                                .stroke(tint.opacity(0.26), lineWidth: 0.8)
+                        }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("シャノンの作業、\(task.title)、\(presentation.statusText)")
+        .accessibilityHint("作業画面を開きます")
     }
 }
 
+/// One-line notice under the navigation bar for work that finished or needs a decision.
 struct ShannonAgentTaskCapsule: View {
     let task: ShannonAgentTask
     let open: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.dynamicTypeSize) var dynamicTypeSize
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
+        let presentation = ShannonAgentTaskCardPresentation(task: task)
+        let tint = presentation.color(palette)
+        let tintBackground: Color = switch presentation.tone {
+        case .attention: palette.attentionTint
+        case .success: palette.successTint
+        case .danger: palette.dangerTint
+        default: palette.subtleSurface
+        }
+        let text: Color = switch presentation.tone {
+        case .attention: palette.onAttentionTint
+        case .success: palette.onSuccessTint
+        case .danger: palette.onDangerTint
+        default: palette.textPrimary
+        }
 
         Button(action: open) {
-            HStack(spacing: ShannonSpacing.medium) {
-                ShannonAvatarView(expression: task.expression, size: dynamicTypeSize.isAccessibilitySize ? 30 : 36)
-                if dynamicTypeSize.isAccessibilitySize {
-                    Text(task.status == .waitingApproval ? "許可が必要です" : task.stageDescription)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(task.status == .waitingApproval ? palette.attention : palette.textPrimary)
-                        .lineLimit(1)
-                } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if task.status == .waitingApproval {
-                            Label("許可が必要です", systemImage: "hand.raised.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(palette.attention)
-                                .lineLimit(1)
-                        } else {
-                            Text(task.stageDescription)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(palette.textPrimary)
-                                .lineLimit(1)
-                        }
-                        Text(task.status == .waitingApproval
-                            ? "タップして内容を確認"
-                            : "\(task.stage.japaneseName) · シャノンの作業を見る")
-                            .font(.caption2)
-                            .foregroundStyle(palette.textSecondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.up")
+            HStack(spacing: ShannonSpacing.small) {
+                Image(systemName: presentation.symbolName)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(palette.action)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text("\(presentation.statusText)：\(task.title)")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(text)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(text.opacity(0.7))
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, ShannonSpacing.medium)
-            .frame(minHeight: 50)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay { Capsule().stroke(palette.action.opacity(0.28), lineWidth: 0.8) }
+            .frame(minHeight: 36)
+            .background(tintBackground, in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .frame(minHeight: ShannonTouchTarget.minimum)
         .padding(.horizontal, ShannonSpacing.large)
-        .accessibilityLabel("シャノンの作業、\(task.title)、\(task.stage.japaneseName)。作業画面を開く")
+        .accessibilityLabel("シャノンの作業、\(task.title)、\(presentation.statusText)")
+        .accessibilityHint("作業画面を開きます")
     }
 }

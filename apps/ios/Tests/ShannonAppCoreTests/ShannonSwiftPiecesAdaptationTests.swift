@@ -135,6 +135,7 @@ final class ShannonPromptSuggestionsTests: XCTestCase {
             interests: ["音楽", "写真", "料理"]
         )
         XCTAssertEqual(suggestions.count, ShannonPromptSuggestions.maximumCount)
+        XCTAssertEqual(ShannonPromptSuggestions.maximumCount, 3)
         XCTAssertTrue(suggestions[1].text.contains("…"))
         XCTAssertFalse(suggestions.contains { $0.text.contains("料理") })
     }

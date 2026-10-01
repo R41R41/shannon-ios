@@ -72,6 +72,15 @@ extension ShannonConversationView {
             }
 
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let task = model.latestAgentTaskNotice {
+                ShannonAgentTaskCapsule(task: task) {
+                    openAgentTask(task.id)
+                }
+                .padding(.bottom, ShannonSpacing.extraSmall)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: ShannonSpacing.small) {
                 if let statusMessage = model.statusMessage {
@@ -94,12 +103,6 @@ extension ShannonConversationView {
                     .padding(.horizontal, ShannonSpacing.large)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                if let task = model.latestAgentTaskNotice {
-                    ShannonAgentTaskCapsule(task: task) {
-                        openAgentTask(task.id)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
                 if voiceModel.phase != .idle {
                     ShannonVoiceStatusBar(
                         model: voiceModel,
@@ -111,7 +114,7 @@ extension ShannonConversationView {
                 }
 #if os(iOS)
                 if showsPromptSuggestions {
-                    ShannonPromptChipRow(suggestions: promptSuggestions, palette: palette) { suggestion in
+                    ShannonPromptSuggestionList(suggestions: promptSuggestions, palette: palette) { suggestion in
                         model.draft = suggestion.text
                         composerIsFocused = true
                     }
@@ -124,6 +127,7 @@ extension ShannonConversationView {
         }
         .background(palette.canvas)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.errorMessage)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.latestAgentTaskNotice?.id)
     }
 
     /// Empty scroll-mode conversation with nothing typed yet.

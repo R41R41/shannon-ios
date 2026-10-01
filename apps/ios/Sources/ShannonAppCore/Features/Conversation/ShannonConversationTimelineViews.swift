@@ -7,9 +7,32 @@ import AppKit
 
 struct ShannonEmptyConversation: View {
     @State private var waterlightReaction = 0
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = ShannonPalette.resolve(colorScheme)
+        VStack(spacing: ShannonSpacing.medium) {
+            hero
+            VStack(spacing: ShannonSpacing.extraSmall) {
+                Text("おかえり")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                Text("今日はどこから始める？")
+                    .font(.subheadline)
+                    .foregroundStyle(palette.textSecondary)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, ShannonSpacing.extraLarge)
+        .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
+            length * 0.8
+        }
+    }
 
     @ViewBuilder
-    var body: some View {
+    private var hero: some View {
 #if os(iOS)
         if ShannonConversationFeatureFlags.waterlightHero {
             Button {
@@ -22,20 +45,14 @@ struct ShannonEmptyConversation: View {
                 )
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: .infinity)
-            .padding(ShannonSpacing.extraLarge)
             .accessibilityLabel("シャノン")
             .accessibilityHint("触れると表情が変わります")
         } else {
             ShannonAvatarView(expression: .curious, size: 96)
-                .frame(maxWidth: .infinity)
-                .padding(ShannonSpacing.extraLarge)
                 .accessibilityLabel("シャノン")
         }
 #else
         ShannonAvatarView(expression: .curious, size: 96)
-            .frame(maxWidth: .infinity)
-            .padding(ShannonSpacing.extraLarge)
             .accessibilityLabel("シャノン")
 #endif
     }

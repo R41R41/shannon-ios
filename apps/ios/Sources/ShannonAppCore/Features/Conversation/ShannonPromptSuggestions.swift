@@ -2,7 +2,8 @@
 // by Saivion Hayes — https://github.com/Saivion/SwiftPieces
 // MIT + Commons Clause License Condition v1.0. See THIRD_PARTY_NOTICES.md.
 // Rewritten for Shannon: suggestions come only from state the client already holds,
-// choosing a chip fills the composer without sending, and there is no morph animation.
+// appear as a vertical two-line list instead of chips, choosing one fills the composer
+// without sending, and there is no morph animation.
 
 import SwiftUI
 
@@ -22,7 +23,7 @@ public enum ShannonPromptSuggestions {
         public var id: String { text }
     }
 
-    public static let maximumCount = 4
+    public static let maximumCount = 3
 
     public static let fallback: [Suggestion] = [
         Suggestion(text: "今日やることを一緒に整理したい", symbol: "checklist", source: .fallback),
@@ -64,8 +65,9 @@ public enum ShannonPromptSuggestions {
     }
 }
 
-/// Horizontal suggestion row placed above the composer on an empty conversation.
-struct ShannonPromptChipRow: View {
+/// Vertical suggestion list placed above the composer on an empty conversation.
+/// Each row wraps to two lines so no suggestion is cut off at the screen edge.
+struct ShannonPromptSuggestionList: View {
     let suggestions: [ShannonPromptSuggestions.Suggestion]
     let palette: ShannonPalette
     let choose: (ShannonPromptSuggestions.Suggestion) -> Void
@@ -75,48 +77,47 @@ struct ShannonPromptChipRow: View {
     @State private var chosenCount = 0
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: ShannonSpacing.small) {
-                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
-                    Button {
-                        chosenCount += 1
-                        choose(suggestion)
-                    } label: {
-                        HStack(spacing: ShannonSpacing.small) {
-                            Image(systemName: suggestion.symbol)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(palette.action)
-                                .frame(width: 28, height: 28)
-                                .background(palette.action.opacity(0.12), in: Circle())
-                                .accessibilityHidden(true)
-                            Text(suggestion.text)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(palette.textPrimary)
-                                .lineLimit(1)
-                        }
-                        .padding(.leading, 6)
-                        .padding(.trailing, ShannonSpacing.medium)
-                        .frame(minHeight: ShannonTouchTarget.minimum)
-                        .background(palette.elevatedSurface, in: Capsule())
-                        .overlay { Capsule().stroke(palette.divider.opacity(0.8), lineWidth: 0.7) }
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(ShannonChipPressStyle(reduceMotion: reduceMotion))
-                    .opacity(revealed || reduceMotion ? 1 : 0)
-                    .offset(y: revealed || reduceMotion ? 0 : 6)
-                    .animation(
-                        reduceMotion ? nil : .spring(duration: 0.4, bounce: 0).delay(Double(index) * 0.05),
-                        value: revealed
-                    )
-                    .accessibilityHint("入力欄に入れます。送信はしません")
+        VStack(spacing: 0) {
+            ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                if index > 0 {
+                    Divider()
+                        .overlay(palette.divider.opacity(0.6))
+                        .padding(.leading, 52)
                 }
+                Button {
+                    chosenCount += 1
+                    choose(suggestion)
+                } label: {
+                    HStack(spacing: ShannonSpacing.medium) {
+                        Image(systemName: suggestion.symbol)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(palette.action)
+                            .frame(width: 24)
+                            .accessibilityHidden(true)
+                        Text(suggestion.text)
+                            .font(.subheadline)
+                            .foregroundStyle(palette.textPrimary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, ShannonSpacing.medium)
+                    .padding(.vertical, ShannonSpacing.small)
+                    .frame(minHeight: ShannonTouchTarget.minimum)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(ShannonChipPressStyle(reduceMotion: reduceMotion))
+                .opacity(revealed || reduceMotion ? 1 : 0)
+                .offset(y: revealed || reduceMotion ? 0 : 6)
+                .animation(
+                    reduceMotion ? nil : .spring(duration: 0.4, bounce: 0).delay(Double(index) * 0.05),
+                    value: revealed
+                )
+                .accessibilityHint("入力欄に入れます。送信はしません")
             }
-            .scrollTargetLayout()
-            .padding(.vertical, 2)
         }
-        .scrollIndicators(.hidden)
-        .scrollTargetBehavior(.viewAligned)
-        .contentMargins(.horizontal, ShannonSpacing.medium, for: .scrollContent)
+        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous))
+        .padding(.horizontal, ShannonSpacing.medium)
         .sensoryFeedback(.selection, trigger: chosenCount)
         .onAppear { revealed = true }
         .accessibilityElement(children: .contain)
