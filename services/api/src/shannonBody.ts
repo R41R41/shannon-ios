@@ -6,6 +6,8 @@ import {
   BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
+import { AppLooks, type AppLookOptions } from './appLook.js';
+import { APP_LOOK_TOOL } from './appLookLines.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
 import { noteBodyLookSpeaker } from './bodyLookDelivery.js';
@@ -15,6 +17,7 @@ import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } 
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches } from './bodyTouch.js';
+import { ConversationLooks } from './conversationLooks.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
@@ -37,6 +40,8 @@ export interface ShannonBodyOptions {
   ingestEnabled?: boolean;
   /** Looking at the room (`bodyLook.ts`): its table, switch and limits, the model call, and the way her message is delivered. */
   look?: BodyLookOptions;
+  /** Looking through the camera of the app a turn came from (`appLook.ts`): its table and switch, the model call, and where her message is stored. */
+  appLook?: AppLookOptions;
   /** Messages she started on her own that the owner has not read (`reachOutDelivery.ts`); absent, presence has no `reachOut`. */
   reachOuts?: (scopeKey: string) => { pending: number; latestId?: string };
   /** What the body did with a message of hers, and when it last read presence (`reachOutReports.ts`); absent, the report route answers 404. */
@@ -131,6 +136,10 @@ export class ShannonBody {
   private readonly presenceMarks = new Map<string, number>();
   /** Looking at the room through the body's camera. */
   readonly looks: BodyLooks;
+  /** Looking through the camera of the owner's app, in the turn that came from it. */
+  readonly appLooks: AppLooks;
+  /** What a conversation turn is told about looking, whichever camera it is (`conversationLooks.ts`). */
+  readonly turnLooks: ConversationLooks;
   /** A touch as feeling and memory, behind both entrances (an event, a reaction request). */
   readonly touches: BodyTouches;
   /** When she is touched: her answer, and her line while it waits for his. */
@@ -146,6 +155,13 @@ export class ShannonBody {
       context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
     });
+    const context = (scopeKey: string, threadId: string) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages);
+    this.appLooks = new AppLooks({
+      speaker: noteBodyLookSpeaker(dependencies.conversationStore), viewer: dependencies.look?.viewer ?? null, ...dependencies.appLook,
+      now: dependencies.now, context,
+      record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: APP_LOOK_TOOL }); },
+    });
+    this.turnLooks = new ConversationLooks(this.looks, this.appLooks);
     const reactionStore = dependencies.reactions?.store ?? new SQLiteBodyReactionStore(':memory:');
     const config = { ...configuredBodyReactions({}), ...dependencies.reactions?.config };
     this.touches = new BodyTouches({

@@ -1,3 +1,7 @@
+import type { AppLookOptions } from './appLook.js';
+import { appLookRequestBytes, configuredAppLook } from './appLookContract.js';
+import { SQLiteAppLookSpeaker } from './appLookDelivery.js';
+import { SQLiteAppLookStore } from './appLookStore.js';
 import type { BodyLookOptions } from './bodyLook.js';
 import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
 import { createConfiguredActivityRoomLookViewer } from './bodyLookActivityVision.js';
@@ -28,6 +32,21 @@ export function configuredBodyLookOptions(
   };
 }
 
+/**
+ * The same for a look through the camera of the owner's app (`appLook.ts`): its own small table and switch, the
+ * conversation model as the viewer, and her message stored in the Talk without an initiative or a push.
+ */
+export function configuredAppLookOptions(
+  environment: Readonly<Record<string, string | undefined>>,
+  databasePath: string,
+  usageStore: { recordLlmUsage(event: LlmUsageEvent): void },
+): AppLookOptions {
+  const store = new SQLiteAppLookStore(databasePath);
+  const speaker = new SQLiteAppLookSpeaker(databasePath);
+  opened.push(store, speaker);
+  return { store, config: configuredAppLook(environment), viewer: createConfiguredRoomLookViewer(environment, usageStore), speaker };
+}
+
 const opened: Array<{ close(): void }> = [];
 
 /** Closes the look's own database handles at shutdown. */
@@ -35,7 +54,7 @@ export function closeBodyLookStores(): void {
   for (const handle of opened.splice(0)) handle.close();
 }
 
-/** The JSON body limit of a look answer, the one route that carries a frame; null for every other path. */
+/** The JSON body limit of a look answer (from her body or from an app), the routes that carry a frame; null for every other path. */
 export function bodyLookRequestBytes(path: string): number | null {
-  return bodyLookResultId(path) ? BODY_LOOK_REQUEST_BYTES : null;
+  return bodyLookResultId(path) ? BODY_LOOK_REQUEST_BYTES : appLookRequestBytes(path);
 }

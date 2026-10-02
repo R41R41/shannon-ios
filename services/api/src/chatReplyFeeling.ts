@@ -53,7 +53,7 @@ export const REPLY_FEELING_SCHEMA = Object.freeze({
       additionalProperties: false,
       properties: {
         kind: { type: 'string', enum: [...KINDS], description: 'このreplyでのシャノン自身の気持ち' },
-        strength: { type: 'string', enum: [...AFFECT_INTENSITY_STEPS], description: 'subtle=かすか / moderate=はっきり / strong=何日も残るほど' },
+        strength: { type: 'string', enum: [...AFFECT_INTENSITY_STEPS], description: 'subtle=その場かぎり / moderate=数時間は気分として残る / strong=何日か心に残る' },
       },
       required: ['kind', 'strength'],
     },

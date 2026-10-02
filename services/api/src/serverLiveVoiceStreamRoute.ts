@@ -50,7 +50,7 @@ export function createLiveVoiceStreamRoute(
       const apiResponse = await kernel.streamLiveVoiceDelegation({
         method: 'POST',
         path: '/v1/voice/gemini/cascade/delegations',
-        body,
+        body, deviceId: principal.deviceId,
       }, {
         signal: controller.signal,
         onPlan: async plan => {

@@ -68,6 +68,8 @@ public final class ShannonGeminiLiveSessionModel {
     var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     /// Receives each finished 「友人も一緒」 period. Set by the owner of the call, not per start.
     var guestPeriodEnded: (@MainActor (ShannonVoiceGuestPeriod) -> Void)?
+    /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
+    var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)

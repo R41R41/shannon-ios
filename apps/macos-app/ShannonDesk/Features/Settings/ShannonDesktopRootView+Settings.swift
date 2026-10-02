@@ -48,6 +48,8 @@ extension ShannonDesktopRootView {
 
             ShannonCalendarSharingSettingsSection()
 
+            ShannonAppLookSettingsSection()
+
             ShannonAutonomySettingsSection(model: memory.autonomy)
 
             Section("Shannon Desk") {

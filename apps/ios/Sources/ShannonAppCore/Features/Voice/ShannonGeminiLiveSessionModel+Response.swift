@@ -39,6 +39,7 @@ extension ShannonGeminiLiveSessionModel {
             defer { coordinator.cancel() }
             var failureStage = "generation"
             var commit: Task<Bool, Never>?
+            var look: Task<String?, Never>?
             do {
                 // A completed reply's history write belongs to the session, not
                 // playback. Barge-in cannot cancel it or erase context for this turn.
@@ -91,6 +92,8 @@ extension ShannonGeminiLiveSessionModel {
                     if response.companionPresent == true { guestCall.companionReported() }
                     handleDelegationResponse?(response)
                 }
+                // She looks through this app's camera while the reply is spoken (owner turns only).
+                look = mode == .owner && localReply == nil ? ShannonAppLookSpeech.begin(response.appLook, with: performAppLook) : nil
                 ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,
                     metadata: ["acknowledged_input_count": String(batch.turns.count)])
                 if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
@@ -111,6 +114,8 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 if response.voicePlan?.shouldRespond != false {
                     failureStage = "synthesis_stream"
+                    // What she saw is her next utterance, spoken behind this reply and known to the echo guard.
+                    if let seen = await ShannonAppLookSpeech.spoken(look) { await onSegment(seen, response.voicePlan) }
                     try await coordinator.finish()
                     try requireCurrentResponse(generation)
                     failureStage = "playback"
@@ -146,6 +151,8 @@ extension ShannonGeminiLiveSessionModel {
                     beginResponse()
                 }
             } catch is CancellationError {
+                // He spoke over her, or the call ended: a look that has not captured yet is not taken.
+                look?.cancel()
                 ShannonVoiceDiagnostics.shared.record("gemini.response.cancelled", sessionID: generation.uuidString)
                 // Only unfinished generation is reused. Completed text stays in history.
                 return

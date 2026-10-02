@@ -45,6 +45,8 @@ export interface ShannonChatModelRequest {
   offerRoomLook?: boolean;
   /** The structured reply gets a `feeling` field: she says what she feels in this reply and how strongly (`chatReplyFeeling.ts`). */
   offerReplyFeeling?: boolean;
+  /** The structured reply gets an `appLook` field: she may choose one look through the camera of the owner's app (`appLook.ts`). */
+  offerAppLook?: boolean;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -79,6 +81,8 @@ export interface ShannonChatModelResult {
   roomLook?: 'asked' | 'curious';
   /** The feeling she decided for this reply, only in a turn that offered the field. */
   replyFeeling?: ChatReplyFeeling;
+  /** What she chose for the app's camera, as the structured reply carried it (`appLookContract.ts`). */
+  appLook?: string;
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;

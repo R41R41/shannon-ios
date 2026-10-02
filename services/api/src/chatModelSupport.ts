@@ -77,6 +77,7 @@ export function parseStructuredTurn(raw: string): {
   places: ShannonPlace[];
   roomLook?: 'asked' | 'curious';
   replyFeeling?: ChatReplyFeeling;
+  appLook?: string;
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -100,7 +101,8 @@ export function parseStructuredTurn(raw: string): {
   const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
-  const roomLook = object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {};
+  const roomLook = { ...(object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {}),
+    ...(typeof object.appLook === 'string' && object.appLook !== 'none' ? { appLook: object.appLook.slice(0, 40) } : {}) };
   // Absent, null or unreadable is no decided feeling: the turn is read as it always was.
   const feeling = parsedReplyFeeling(object.feeling);
   const replyFeeling = feeling ? { replyFeeling: feeling } : {};

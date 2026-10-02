@@ -31,9 +31,8 @@ extension ShannonConversationModel {
                     text: "ユーザーが選んで共有した写真の視覚的な観察です。撮影時刻は不明です。\n\(vision.description)"
                 ))
             }
-            let response = try await client.send(
+            let response = try await sendChatTurn(
                 message: text,
-                scopeKey: scopeKey,
                 threadId: selectedThreadId,
                 attachments: referenceAttachments,
                 webSearch: webSearch,
@@ -89,6 +88,8 @@ extension ShannonConversationModel {
                 await loadThreads(force: true)
             }
             isSending = false
+            // She looks through this app's camera: what she saw arrives as her next message.
+            if let ask = response.appLook { Task { await performAppLook(ask) } }
             return response.reply
         } catch {
             updateDeliveryState(for: userMessageID, to: .failed)

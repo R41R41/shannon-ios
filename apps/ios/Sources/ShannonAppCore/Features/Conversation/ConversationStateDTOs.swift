@@ -85,6 +85,8 @@ public struct ChatRequestDTO: Codable, Equatable, Sendable {
     public let attachments: [ShannonChatAttachmentDTO]?
     public let webSearch: Bool?
     public let placeLocation: ShannonVoiceDeviceLocationDTO?
+    /// What this app's camera can do in this turn; absent on a client that never looks.
+    public var appLook: ShannonAppLookClientStateDTO? = nil
 
     public init(
         scopeKey: String,
