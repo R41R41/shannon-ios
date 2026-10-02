@@ -20,6 +20,7 @@ public struct ShannonCalendarSharingSettingsSection: View {
 struct ShannonCalendarSharingSectionContent: View {
     let model: ShannonCalendarSharingModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Section {
@@ -36,7 +37,11 @@ struct ShannonCalendarSharingSectionContent: View {
                             .accessibilityIdentifier("calendar-sharing-status")
                     }
                 } icon: {
+#if os(iOS)
+                    Image(systemName: "calendar").foregroundStyle(ShannonPalette.resolve(colorScheme).action)
+#else
                     Image(systemName: "calendar")
+#endif
                 }
             }
             .disabled(model.isChanging)
