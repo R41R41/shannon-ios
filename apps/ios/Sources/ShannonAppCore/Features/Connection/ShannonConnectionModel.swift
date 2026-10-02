@@ -16,6 +16,8 @@ public final class ShannonConnectionModel {
     private let session: URLSession
     private let deviceName: @Sendable () -> String
     private var connectedDeviceRevision = 0
+    /// Runs before this device unpairs, while its token still works (removes what it shared).
+    @ObservationIgnored public var beforeDisconnect: (@MainActor () async -> Void)?
 
     public init(
         baseURL: URL,
@@ -219,6 +221,7 @@ public final class ShannonConnectionModel {
     @discardableResult
     public func disconnect() async -> Bool {
         guard let credential = credentialForAuthenticatedRequest() else { return false }
+        await beforeDisconnect?()
         do {
             var request = URLRequest(url: baseURL.appending(path: "/v1/devices"))
             request.httpMethod = "POST"

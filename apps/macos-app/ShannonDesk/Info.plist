@@ -26,6 +26,8 @@
 	<string>public.app-category.productivity</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。</string>
 	<key>ShannonAPIBaseURL</key>
 	<string>$(SHANNON_API_BASE_URL)</string>
 	<key>ShannonAPIToken</key>
