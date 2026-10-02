@@ -245,7 +245,9 @@ function committedFeeling(
   // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions. (No resolver result is
   // an unpleasant mood held by an override; an event built elsewhere could be, so the guard stays.)
   if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming) && incoming.target === SHANNON_OWNER_NAME) {
-    if (incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)) return null;
+    // (While what is left of it still shows; once it is out of sight, the same strength is a new feeling.)
+    if (incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)
+      && (present.strengths?.[incoming.primary] ?? 0) >= SHANNON_EMOTION_CONTINUITY.visibleFrom) return null;
     // Nor is it stored when it is strong enough to be her mood and every place underneath is held by an unpleasant mood
     // that does not give way to it: a fifth such mood in rotation would otherwise be stored anew every time.
     if (incoming.intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && !hasPlaceUnderneath(state.lingering ?? [], incoming, awakeMs, nowIso, timing)) return null;

@@ -280,7 +280,9 @@ export function resolveShannonEmotionState(
         const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
         // An unpleasant mood toward the owner is a new, stronger one only above the height it was stored at, not above
         // what it has faded to since: the same strength decided turn after turn does not keep it up.
-        const belowHeight = isKeptUnpleasant(primary) && decidedStrength <= (previous.heights?.[primary] ?? previous.intensity);
+        const belowHeight = isKeptUnpleasant(primary) && decidedStrength <= (previous.heights?.[primary] ?? previous.intensity)
+          // Only while what is left of it still shows: once it is out of sight, the same strength is a new feeling.
+          && (previous.strengths?.[primary] ?? previous.intensity) >= SHANNON_EMOTION_CONTINUITY.visibleFrom;
         if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable) || belowHeight) {
           return continuedShannonEmotion(previous, primary, input.now);
         }
@@ -293,13 +295,13 @@ export function resolveShannonEmotionState(
       // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
       || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
       return continuedShannonEmotion(previous, primary, input.now);
-    } else if (!input.replaces && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)) {
+    } else if (!input.replaces && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)
+      && (previous.strengths?.[primary] ?? 0) >= SHANNON_EMOTION_CONTINUITY.visibleFrom) {
       // The same bar when another feeling is on top and gives way: an unpleasant mood alive underneath is not stored anew at
       // a strength it already had. It goes on, and the reply shows it at what is left of it, unless what is on top is owed
-      // to the owner (an override, her concern or apology) or too little is left to show. (No override names such a mood.)
-      const left = previous.strengths?.[primary] ?? 0;
+      // to the owner (an override, her concern or apology). Once too little is left to show, it is a new feeling instead.
       const owed = previous.overrideReason !== undefined || (SUPPORT.has(previous.primary) && previous.intensity >= 0.3);
-      return owed || left < 0.3 ? continuedShannonEmotion(previous, primary, input.now) : resurfacedShannonEmotion(previous, primary, left, input.now);
+      return owed ? continuedShannonEmotion(previous, primary, input.now) : resurfacedShannonEmotion(previous, primary, previous.strengths?.[primary] ?? 0, input.now);
     } else if (!input.replaces && isKeptUnpleasant(primary) && previous.heights?.[primary] === undefined
       && intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && intensity <= (previous.placeAbove ?? -1)) {
       // Every place underneath is held by an unpleasant mood at least this strong: a further one is not a new mood of hers.

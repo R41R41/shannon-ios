@@ -334,14 +334,18 @@ describe('(d) a strong feeling lingers one to two awake days', () => {
     // A strength decided for the reply (a voice turn) renews it when it is above the height the feeling had...
     const renewed = turn(awakeFor(sulking(), NIGHT, 60), 'もう知らない', '……。', at(NIGHT, HOUR), { primary: 'sulky', intensity: 0.6 }).state;
     expect(renewed.lingering).toMatchObject([{ kind: 'sulky', strength: 0.6, startedAt: NIGHT }]);
-    // ...and the same strength decided turn after turn does not hold it up: underneath it fades as if nothing had been said.
+    // ...and the same strength decided turn after turn does not hold it up: underneath it fades as if nothing had been said,
+    // for as long as it still shows (0.30, which 0.60 reaches after ninety awake minutes).
     let voiced = renewed;
-    for (let index = 1; index <= 12; index += 1) {
+    for (let index = 1; index <= 9; index += 1) {
       const now = at(NIGHT, HOUR + index * 10 * MINUTE);
       voiced = turn(awakeFor(voiced, at(NIGHT, HOUR + (index - 1) * 10 * MINUTE), 10), 'ふーん', '……。', now, { primary: 'sulky', intensity: 0.6 }).state;
     }
     expect(voiced.lingering).toMatchObject([{ kind: 'sulky', strength: 0.6, awakeAt: renewed.lingering![0]!.awakeAt }]);
-    expect(livingLingering(voiced, at(NIGHT, 3 * HOUR))[0]!.strength).toBeCloseTo(0.6 * 0.5 ** (120 / 90), 2);
+    expect(livingLingering(voiced, at(NIGHT, 150 * MINUTE))[0]!.strength).toBeCloseTo(0.3, 2);
+    // Once it is out of sight the same strength is a new sulk (owner decision 2026-10-03): a slow saw-tooth, not a pin.
+    const anew = turn(awakeFor(voiced, at(NIGHT, 150 * MINUTE), 10), 'ふーん', '……。', at(NIGHT, 160 * MINUTE), { primary: 'sulky', intensity: 0.6 }).state;
+    expect(anew.lingering).toMatchObject([{ kind: 'sulky', strength: 0.6, startedAt: at(NIGHT, 160 * MINUTE) }]);
     // Thanking him in every reply does not turn into gratitude that lingers for days.
     let grateful = fresh();
     for (let index = 0; index < 8; index += 1) {
@@ -1106,10 +1110,10 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     const reply = '大丈夫ですか、無理しないでくださいね。';
     expect(resolveWrittenReplyEmotion({ snapshot: caring, userMessage: 'つらい', reply, now: at(morning, MINUTE), timing: AWAKE, decided: { primary: 'hurt', intensity: 0.9 } }))
       .toEqual(resolveReplyEmotion({ snapshot: caring, userMessage: 'つらい', reply, now: at(morning, MINUTE), timing: AWAKE }));
-    // Nineteen awake hours on, 0.17 of the hurt is left: too little to show, so the joy on top goes on.
+    // Nineteen awake hours on, 0.17 of the hurt is left: out of sight, so a hurt decided now is a new hurt.
     const late = at(NIGHT, 19 * HOUR);
     const faint = turn(awakeFor(hurt(), NIGHT, 19 * 60), 'すごいね', QUIET, late, { primary: 'happy', intensity: 0.6 }).state;
-    expect(turn(faint, HARSH, QUIET, at(late, MINUTE), { primary: 'hurt', intensity: 0.9 }).feeling).toMatchObject({ primary: 'happy', continued: true });
+    expect(turn(faint, HARSH, QUIET, at(late, MINUTE), { primary: 'hurt', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
   });
 
   it('counts an eased mood at the height it had before, inside the hold, also when another feeling is on top', () => {
@@ -1162,12 +1166,12 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     expect(fifth.feeling).not.toHaveProperty('placeAbove');
     expect(fifth.state.lingering).toEqual(state.lingering);
     expect(JSON.stringify(fifth.state)).not.toContain('placeAbove');
-    // It registers once the four have settled (about twenty-one awake hours).
-    const settledAt = at(NIGHT, 21 * HOUR);
-    expect(turn(awakeFor(state, NIGHT, 21 * 60), 'ふーん', QUIET, settledAt, { primary: 'lonely', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'lonely', intensity: 0.9 });
+    // It registers once a holder is out of sight (0.90 is below 0.30 after about thirteen awake hours).
+    const outOfSight = at(NIGHT, 13 * HOUR);
+    expect(turn(awakeFor(state, NIGHT, 13 * 60), 'ふーん', QUIET, outOfSight, { primary: 'lonely', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'lonely', intensity: 0.9 });
     // One old strong hurt and three moderate moods: a new strong one takes the place of a moderate one, not of the hurt.
-    let mixed = awakeFor(hurt(), NIGHT, 16 * 60);
-    const day = at(NIGHT, 16 * HOUR);
+    let mixed = awakeFor(hurt(), NIGHT, 8 * 60);
+    const day = at(NIGHT, 8 * HOUR);
     (['sulky', 'jealous', 'annoyed'] as const).forEach((kind, index) => { mixed = turn(mixed, 'ふーん', QUIET, at(day, index * MINUTE), { primary: kind, intensity: 0.6 }).state; });
     expect(mixed.lingering).toHaveLength(4);
     mixed = turn(mixed, HARSH, QUIET, at(day, 5 * MINUTE), { primary: 'lonely', intensity: 0.9 }).state;
@@ -1270,6 +1274,95 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     state = turn(next.state, 'ねえ', 'はい。', at(NIGHT, 11 * MINUTE), { primary: 'happy', intensity: 0.9 }, WALL).state;
     expect(state.expressiveEmotion).toMatchObject({ primary: 'happy', intensity: 0.9 });
     expect(presentShannonFeeling(state, at(NIGHT, 11 * MINUTE), WALL)).not.toHaveProperty('heights');
+  });
+});
+
+describe('a new feeling of the same kind registers once the old one is out of sight (below 0.30)', () => {
+  const HARSH = 'もういい、君とはもう話したくない';
+  const QUIET = '……そうですか。';
+  /** The awake minutes at which a feeling decided every ten minutes is stored anew. */
+  const storesOf = (kind: string, intensity: number, hours: number) => {
+    let state = fresh();
+    const stored: number[] = [];
+    for (let minute = 0; minute <= hours * 60; minute += 10) {
+      const before = JSON.stringify(state.expressiveEmotion);
+      state = turn(state, 'ふーん', QUIET, at(NIGHT, minute * MINUTE), { primary: kind, intensity }).state;
+      if (JSON.stringify(state.expressiveEmotion) !== before) stored.push(minute);
+    }
+    return stored;
+  };
+
+  it('stores a second strong hurt fifteen awake hours after the first, as a new hurt with its own beginning', () => {
+    const first = turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.9 }).state;
+    const later = at(NIGHT, 15 * HOUR);
+    const rested = awakeFor(first, NIGHT, 15 * 60);
+    expect(livingLingering(rested, later)[0]!.strength).toBeCloseTo(0.245, 2);
+    const second = turn(rested, HARSH, QUIET, later, { primary: 'hurt', intensity: 0.9 });
+    expect(second.feeling).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+    expect(second.feeling.continued).not.toBe(true);
+    expect(second.face.expression).toBe('sad');
+    expect(second.state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+    expect(second.state.lingering).toMatchObject([{ kind: 'hurt', span: 'lingering', strength: 0.9, startedAt: later }]);
+    // While more than 0.30 of it is left, it is the first hurt going on.
+    const sooner = at(NIGHT, 12 * HOUR);
+    expect(turn(awakeFor(first, NIGHT, 12 * 60), HARSH, QUIET, sooner, { primary: 'hurt', intensity: 0.9 }).feeling).toMatchObject({ primary: 'hurt', continued: true });
+  });
+
+  it('stores a second moderate hurt a hundred awake minutes after the first', () => {
+    const first = turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.6 }).state;
+    const later = at(NIGHT, 100 * MINUTE);
+    const rested = awakeFor(first, NIGHT, 100);
+    expect(livingLingering(rested, later)[0]!.strength).toBeCloseTo(0.278, 2);
+    const second = turn(rested, HARSH, QUIET, later, { primary: 'hurt', intensity: 0.6 }).state;
+    expect(second.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.6 });
+    expect(second.lingering).toMatchObject([{ kind: 'hurt', strength: 0.6, startedAt: later }]);
+  });
+
+  it('also when another feeling is on top, and not against what she owes or inside his apology\'s hold', () => {
+    const late = at(NIGHT, 15 * HOUR);
+    const joy = turn(awakeFor(turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.9 }).state, NIGHT, 15 * 60), 'すごいね', QUIET, late, { primary: 'happy', intensity: 0.6 }).state;
+    expect(turn(joy, HARSH, QUIET, at(late, MINUTE), { primary: 'hurt', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+    // Eased below 0.30 by his apology a minute ago: inside the hold it is not a new hurt.
+    const hurt = turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.6 }).state;
+    const sorry = reduceCompanionState(hurt, { type: 'feeling-eased', by: 'apology' }, at(NIGHT, MINUTE));
+    expect(livingLingering(sorry, at(NIGHT, MINUTE))[0]!.strength).toBeLessThan(0.3);
+    const again = turn(sorry, 'まだ怒ってる？', QUIET, at(NIGHT, 2 * MINUTE), { primary: 'hurt', intensity: 0.6 });
+    expect(again.feeling.continued).toBe(true);
+    expect(livingLingering(again.state, at(NIGHT, 2 * MINUTE))[0]!.strength).toBeLessThan(0.3);
+  });
+
+  it('keeps four places blocked while their holders still show, and opens them once one is out of sight', () => {
+    let state = fresh();
+    (['hurt', 'sulky', 'jealous', 'annoyed'] as const).forEach((kind, index) => { state = turn(state, 'ふーん', QUIET, at(NIGHT, index * MINUTE), { primary: kind, intensity: 0.9 }).state; });
+    const ten = at(NIGHT, 10 * HOUR);
+    const stillShown = awakeFor(state, at(NIGHT, 3 * MINUTE), 10 * 60 - 3, 1);
+    expect(livingLingering(stillShown, ten).every(item => item.strength > 0.37 && item.strength < 0.39)).toBe(true);
+    const blocked = turn(stillShown, 'ふーん', QUIET, ten, { primary: 'lonely', intensity: 0.9 });
+    expect(blocked.feeling.continued).toBe(true);
+    expect(blocked.state.lingering!.map(item => item.kind)).not.toContain('lonely');
+    const thirteen = at(NIGHT, 13 * HOUR);
+    const opened = turn(awakeFor(state, at(NIGHT, 3 * MINUTE), 13 * 60 - 3, 1), 'ふーん', QUIET, thirteen, { primary: 'lonely', intensity: 0.9 }).state;
+    expect(opened.expressiveEmotion).toMatchObject({ primary: 'lonely', intensity: 0.9 });
+    expect(opened.lingering!.map(item => item.kind)).toContain('lonely');
+    expect(opened.lingering).toHaveLength(4);
+  });
+
+  it('still does not pin: decided every ten awake minutes, a strong sulk is stored once in ten hours and a moderate one every hundred minutes', () => {
+    expect(storesOf('sulky', 0.9, 10)).toEqual([0]);
+    // 0.90 falls below 0.30 after 12.7 awake hours: the slow saw-tooth of a strong mood has a period of 770 minutes.
+    expect(storesOf('sulky', 0.9, 40)).toEqual([0, 770, 1540, 2310]);
+    // 0.60 is at 0.30 after 90 awake minutes and below it at the next turn.
+    expect(storesOf('sulky', 0.6, 10)).toEqual([0, 100, 200, 300, 400, 500, 600]);
+    // Five strong kinds in rotation: the first four once, then nothing for ten hours.
+    const kinds = ['hurt', 'sulky', 'jealous', 'annoyed', 'lonely'] as const;
+    let state = fresh();
+    let stores = 0;
+    for (let index = 0; index < 60; index += 1) {
+      const before = JSON.stringify(state.expressiveEmotion);
+      state = turn(state, 'ふーん', QUIET, at(NIGHT, index * 10 * MINUTE), { primary: kinds[index % 5]!, intensity: 0.9 }).state;
+      if (JSON.stringify(state.expressiveEmotion) !== before) stores += 1;
+    }
+    expect(stores).toBe(4);
   });
 });
 
