@@ -20,7 +20,7 @@ import type { VoipPushSender } from './voipPushSender.js';
  */
 export interface IncomingCallsDependencies {
   store: SQLiteIncomingCallStore;
-  claims: Pick<SQLiteReachOutClaims, 'message' | 'release' | 'markSpoken' | 'holder' | 'ownerActiveAfter'>;
+  claims: Pick<SQLiteReachOutClaims, 'message' | 'release' | 'markSpoken' | 'holder' | 'ownerActiveAfter' | 'unread'>;
   /** Whether the device still holds a pairing that is neither revoked nor expired. */
   isPaired: (scopeKey: string, deviceId: string) => boolean;
   sender: VoipPushSender;
@@ -83,6 +83,14 @@ export class IncomingCalls {
     const { store, claims } = this.dependencies;
     const at = this.dependencies.now();
     const time = Date.parse(at);
+    // A claim of a call without its row: her process stopped between the two. It is given back, so the message is not left
+    // with nobody to say it.
+    for (const message of claims.unread(scopeKey)) {
+      if (message.claim?.surface === 'iphone_call' && message.claim.spokenAt === null && !store.ofMessage(scopeKey, message.id)
+        && time - Date.parse(message.claim.claimedAt) > INCOMING_CALL_LIMITS.pendingMilliseconds) {
+        claims.release(scopeKey, message.id, message.claim.deviceId);
+      }
+    }
     for (const call of store.openCalls(scopeKey)) {
       if (call.state === 'pending' && time - Date.parse(call.createdAt) > INCOMING_CALL_LIMITS.pendingMilliseconds) {
         if (store.end(call.callId, ['pending'], 'failed', 'server', at, { reason: 'not_sent' })) claims.release(scopeKey, call.initiativeId, call.deviceId);

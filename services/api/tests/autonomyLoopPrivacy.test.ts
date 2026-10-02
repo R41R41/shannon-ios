@@ -632,7 +632,7 @@ describe('what reaches the prompts of her own activity', () => {
     expect(read('autonomyLoopReachOutStep.ts')).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|ownerUpcoming|upcomingStore|calendarContract/u);
     // Watching for an answer, calling again, thinking again and pacing open no private store: an answer is a timestamp from the
     // showing desk, and what her body did with a message is a closed outcome from an interface.
-    for (const name of ['autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts', 'autonomyLoopPacing.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopOwnerContext.ts']) {
+    for (const name of ['autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts', 'autonomyLoopPacing.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopOwnerContext.ts']) {
       expect(read(name), name).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|reachOutReports|bodyStore|conversationStore|sqliteStore/u);
     }
     // An observation has no column and no field for words.

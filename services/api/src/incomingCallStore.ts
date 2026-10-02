@@ -68,6 +68,12 @@ export class SQLiteIncomingCallStore {
         UNIQUE (scope_key, initiative_id)
       );
       CREATE INDEX IF NOT EXISTS incoming_calls_open ON incoming_calls (state, expires_at);
+
+      CREATE TABLE IF NOT EXISTS incoming_call_server (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        available INTEGER NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
     secureDatabaseFiles(path);
   }
@@ -134,9 +140,18 @@ export class SQLiteIncomingCallStore {
     return callOf(this.database.prepare('SELECT * FROM incoming_calls WHERE scope_key = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(scopeKey) as unknown as CallRow | undefined);
   }
 
-  /** Whether one of the owner's iPhones is registered with his switch on, whoever it is. */
-  switchedOn(scopeKey: string): boolean {
-    return this.devices(scopeKey).length > 0;
+  /** The API process says whether it can ring: it holds the key and the switches. Written when it starts. */
+  setServerAvailable(available: boolean, at: string): void {
+    this.database.prepare(`
+      INSERT INTO incoming_call_server (singleton, available, updated_at) VALUES (1, ?, ?)
+      ON CONFLICT (singleton) DO UPDATE SET available = excluded.available, updated_at = excluded.updated_at
+    `).run(available ? 1 : 0, at);
+  }
+
+  /** What the API process last said about itself, for her loop; null while it never said anything. */
+  serverAvailable(): boolean | null {
+    const row = this.database.prepare('SELECT available FROM incoming_call_server WHERE singleton = 1').get() as unknown as { available: number } | undefined;
+    return row ? Number(row.available) === 1 : null;
   }
 
   /**

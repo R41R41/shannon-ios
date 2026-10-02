@@ -66,18 +66,21 @@ function world(options: { switchedOn?: boolean; serverReady?: boolean; intervalM
   const showing = new FakeShowing();
   const model = new FakeModel();
   const answered: string[] = [];
+  /** Runs at the end of every pause of a waiting step. */
+  const hooks: { afterWait?: () => void } = {};
   /** Every pause of a step that waits: the API process looks, and the phone does what it does once it rang. */
   const onWait = async () => {
-    if (options.apiRuns === false) return;
-    await calls.tick();
-    const ringing = store.openCalls(scope).find(call => call.state === 'ringing');
-    if (!ringing) return;
-    if (options.phoneDoes === 'answer') {
-      const taken = calls.answer(scope, PHONE, ringing.initiativeId, ringing.callId);
-      if (taken.kind === 'answered') answered.push(taken.message.content);
-    } else if (options.phoneDoes === 'decline') {
-      calls.report(scope, PHONE, ringing.callId, 'declined');
+    if (options.apiRuns !== false) {
+      await calls.tick();
+      const ringing = store.openCalls(scope).find(call => call.state === 'ringing');
+      if (ringing && options.phoneDoes === 'answer') {
+        const taken = calls.answer(scope, PHONE, ringing.initiativeId, ringing.callId);
+        if (taken.kind === 'answered') answered.push(taken.message.content);
+      } else if (ringing && options.phoneDoes === 'decline') {
+        calls.report(scope, PHONE, ringing.callId, 'declined');
+      }
     }
+    hooks.afterWait?.();
   };
   const harness = loopHarness({
     path, clock, model, showing, reachOuts: speaker, phone, agentic: true, onWait,
@@ -107,7 +110,7 @@ function world(options: { switchedOn?: boolean; serverReady?: boolean; intervalM
   };
   const recorded = () => [...harness.entries()].sort((left, right) => left.sequence - right.sequence);
   const callEntries = () => recorded().filter(entry => entry.tool === CALL_TOOL);
-  return { ...harness, path, speaker, claims, callStore: store, apns, calls, phone, showing, model, initiatives, listening, reports, answered, messages, ownerSpeaks, cycle, recorded, callEntries, threadId };
+  return { ...harness, path, speaker, claims, callStore: store, apns, calls, phone, showing, model, initiatives, listening, reports, answered, hooks, messages, ownerSpeaks, cycle, recorded, callEntries, threadId };
 }
 
 describe('call: she phones him because she chose to', () => {
@@ -175,7 +178,7 @@ describe('call: she phones him because she chose to', () => {
     const observed = w.store.loop.observations.since(scope, START);
     expect(observed.at(-1)).toMatchObject({ step: 'reach_out', outcome: 'done', code: 'call_answered', reachOut: { call: 'answered', replied: true } });
     expect(w.model.kinds().filter(kind => kind === 'think')).toHaveLength(1);
-    expect(autonomyDayLog(w.entries())).toContain('電話を1回かけ');
+    expect(autonomyDayLog(w.entries())).toContain('電話を1回かけて出てもらい');
   });
 
   it('is told plainly when he chose not to answer or did not answer, and decides herself what follows', async () => {
@@ -214,6 +217,22 @@ describe('call: she phones him because she chose to', () => {
     expect(w.callEntries()[1]!).toMatchObject({ outcome: 'done', reasonCode: 'call_failed' });
     expect(w.model.prompts('think')[1]).toContain('- 電話の知らせ: iPhoneに電話をかけようとしたが、つながらなかった。');
     expect(w.messages()).toEqual([{ role: 'assistant', content: LINE }]);
+    // Her day's record does not say she placed a call that never rang.
+    expect(autonomyDayLog(w.entries())).toContain('電話を1回かけようとしてつながらず');
+  });
+
+  it('does not say the call could not connect when she was only stopped from watching it', async () => {
+    const w = world({ phoneDoes: 'nothing' });
+    // The owner pauses her while his phone rings.
+    let waits = 0;
+    w.hooks.afterWait = () => { waits += 1; if (waits === 2) w.service.setPaused(scope, true); };
+    await w.cycle(CALL);
+    expect(w.apns.sent).toHaveLength(1);
+    const entry = w.callEntries().at(-1)!;
+    expect(entry).toMatchObject({ outcome: 'done', reasonCode: 'unwatched', summary: '持ち主のiPhoneに電話をかけました（理由: いま何をしているか気になった）。そのあとは見届けられませんでした。' });
+    const observed = w.store.loop.observations.since(scope, START).at(-1)!;
+    expect(observed.reachOut).toMatchObject({ unwatched: true });
+    expect(observed.reachOut).not.toHaveProperty('call');
   });
 
   it('never calls into a conversation, while a call rings, or sooner than the interval', async () => {

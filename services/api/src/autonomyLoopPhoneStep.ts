@@ -195,10 +195,14 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (!adapters.model || !adapters.reachOuts?.sayByPhone || !adapters.phone) return { outcome: 'failed', summary: '電話をかける道具が渡されなかったため、かけませんでした。' };
       const now = dependencies.now ?? (() => performAt);
       // He may have started talking since the plan was made, or a call may be ringing: then she does not call, and nothing is spent.
-      if (!callAvailable({ ...dependencies, phone: adapters.phone }, cycle.scopeKey, performAt)) {
-        const talking = conversationInProgress(dependencies, cycle.scopeKey, performAt);
-        return { outcome: 'failed', summary: `いまは電話をかけられないので、かけませんでした（理由: ${label}）。`, reasonCode: talking ? 'conversation_in_progress' : 'call_unavailable' };
-      }
+      const unavailable = (moment: string): 'conversation_in_progress' | 'call_unavailable' | null => {
+        if (callAvailable({ ...dependencies, phone: adapters.phone }, cycle.scopeKey, moment)) return null;
+        let talking = false;
+        try { talking = conversationInProgress(dependencies, cycle.scopeKey, moment); } catch { talking = false; }
+        return talking ? 'conversation_in_progress' : 'call_unavailable';
+      };
+      const before = unavailable(performAt);
+      if (before) return { outcome: 'failed', summary: `いまは電話をかけられないので、かけませんでした（理由: ${label}）。`, reasonCode: before };
       let reply: Record<string, unknown> | null = null;
       let usage: { inputTokens: number; outputTokens: number } | undefined;
       try {
@@ -215,9 +219,8 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       if (!text) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, reasonCode: 'held', summary: `電話をかけようかと思いましたが、やめておきました（理由: ${label}）。` };
       const writeAt = now();
       // Checked again with her words in hand: the model took a moment, and he may have begun to talk meanwhile.
-      if (!callAvailable({ ...dependencies, phone: adapters.phone }, cycle.scopeKey, writeAt)) {
-        return { outcome: 'failed', usage, summary: `いまは電話をかけられないので、かけませんでした（理由: ${label}）。`, reasonCode: 'conversation_in_progress' };
-      }
+      const after = unavailable(writeAt);
+      if (after) return { outcome: 'failed', usage, summary: `いまは電話をかけられないので、かけませんでした（理由: ${label}）。`, reasonCode: after };
       let written: ReturnType<NonNullable<typeof adapters.reachOuts.sayByPhone>>;
       try {
         written = adapters.reachOuts.sayByPhone(cycle.scopeKey, { reason: reason as ReachOutReason, text, dayKey: autonomyDayKey(writeAt, config) }, writeAt);
@@ -229,9 +232,13 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       // Her line is in the Talk. Now the call itself: asked for here, sent by the API process.
       let asked: ReturnType<AutonomyPhone['request']> = 'unavailable';
       try { asked = adapters.phone.request(cycle.scopeKey, sent.id, writeAt); } catch { asked = 'unavailable'; }
-      let call: ReachOutCallOutcome = 'failed';
-      // No outcome by then means the API process, which rings and closes every call, is not running: nothing rang.
-      if (asked === 'requested') call = await callOutcome(dependencies, adapters.phone, cycle.scopeKey, sent, signal) ?? 'failed';
+      let call: ReachOutCallOutcome | null = 'failed';
+      if (asked === 'requested') {
+        const watched = await callOutcome(dependencies, adapters.phone, cycle.scopeKey, sent, signal);
+        // No outcome by the limit means the API process, which rings and closes every call, is not running: nothing rang.
+        // No outcome because she was paused or stopped meanwhile means only that she did not see it: the phone may be ringing.
+        call = watched.outcome ?? (watched.timedOut ? 'failed' : null);
+      }
       let observed: ReachOutFacts;
       try {
         observed = await observeReachOut(dependencies, cycle.scopeKey, { id: sent.id, at: sent.at, reason }, { wait: false, signal });
@@ -240,6 +247,12 @@ export function preparePhoneCall(dependencies: StepDependencies, cycle: Autonomy
       }
       // Answering is his reply: she does not call after him as after a message nobody answered.
       const waited = Math.max(0, Math.round((Date.parse(now()) - Date.parse(sent.at)) / 1_000));
+      if (!call) {
+        return {
+          outcome: 'done', usage, observed: { ...observed, waitedSeconds: waited, unwatched: true }, reasonCode: 'unwatched',
+          summary: `持ち主のiPhoneに電話をかけました（理由: ${label}）。そのあとは見届けられませんでした。`,
+        };
+      }
       observed = { ...observed, call, waitedSeconds: waited, ...(call === 'answered' ? { replied: true, repliedAfterSeconds: observed.repliedAfterSeconds ?? waited } : {}) };
       return {
         outcome: 'done', usage, observed, reasonCode: `call_${call}`,
@@ -259,20 +272,21 @@ const CALL_SUMMARY: Readonly<Record<ReachOutCallOutcome, string>> = Object.freez
  */
 async function callOutcome(
   dependencies: StepDependencies, phone: AutonomyPhone, scopeKey: string, sent: { id: string; at: string }, signal?: AbortSignal,
-): Promise<ReachOutCallOutcome | null> {
+): Promise<{ outcome: ReachOutCallOutcome | null; timedOut: boolean }> {
   const now = dependencies.now ?? (() => new Date().toISOString());
   const pause = dependencies.wait ?? sleep;
   const held = () => { try { return dependencies.renew?.() ?? true; } catch { return false; } };
   const read = () => { try { return phone.outcome(scopeKey, sent.id); } catch { return null; } };
+  const over = () => Date.parse(now()) - Date.parse(sent.at) >= CALL_OBSERVE_LIMIT_MILLISECONDS;
   let outcome = read();
-  while (!outcome && held() && Date.parse(now()) - Date.parse(sent.at) < CALL_OBSERVE_LIMIT_MILLISECONDS && !signal?.aborted) {
+  while (!outcome && !over() && held() && !signal?.aborted) {
     let paused = true;
     try { paused = dependencies.store.control(scopeKey).paused; } catch { paused = true; }
     if (paused) break;
     try { await pause(CALL_OBSERVE_POLL_MILLISECONDS, signal); } catch { break; }
     outcome = read();
   }
-  return outcome;
+  return { outcome, timedOut: !outcome && over() };
 }
 
 function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {

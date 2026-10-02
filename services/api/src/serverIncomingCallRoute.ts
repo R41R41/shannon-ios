@@ -47,6 +47,8 @@ export function createIncomingCallRoute(
     isPaired: options.isPaired,
     log: (event, detail) => console.log(`Shannon incoming call ${event}`, { status: detail.status, ...(detail.reason ? { reason: detail.reason } : {}) }),
   });
+  // Her loop, another process, offers the call only while this one can ring: it is told here, once, what this process found.
+  try { store.setServerAvailable(calls.available, now()); } catch { /* she is then told by the environment alone */ }
   const dependencies: IncomingCallRouteDependencies = { calls, ownerScopeKey, bundleId: environment.SHANNON_APNS_BUNDLE_ID?.trim() || null };
   const usage = new Map<string, { startedAt: number; count: number }>();
   let timer: NodeJS.Timeout | null = null;

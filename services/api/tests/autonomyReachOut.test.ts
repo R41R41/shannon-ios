@@ -122,6 +122,11 @@ describe('reach_out: one message of her own', () => {
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: 'unlimited' }).maximumReachOutsPerDay).toBe(Number.POSITIVE_INFINITY);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '25' }).maximumReachOutsPerDay).toBe(25);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay).toBe(0);
+    // The words every other switch takes for off switch it off, and so does a value nobody can read: never "as many as she likes".
+    for (const value of ['off', 'false', 'disabled', 'none', '-1', 'three', 'Infinity']) {
+      expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: value }).maximumReachOutsPerDay, value).toBe(0);
+      expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_FOLLOW_UPS: value }).maximumReachOutFollowUpsPerDay, value).toBe(0);
+    }
     // The shortest time between two messages of hers, so that a loop cannot flood him: five minutes unless set otherwise.
     expect(configuredAutonomyLoop({}).reachOutSpacingMilliseconds).toBe(5 * MINUTE);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES: '60' }).reachOutSpacingMilliseconds).toBe(60 * MINUTE);

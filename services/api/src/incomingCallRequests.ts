@@ -17,7 +17,7 @@ import type { SQLiteReachOutClaims } from './reachOutClaims.js';
  * Everything read here is a yes or no, a closed state or a timestamp: never a word of his, never a device name.
  */
 export interface IncomingCallRequestsDependencies {
-  store: Pick<SQLiteIncomingCallStore, 'devices' | 'begin' | 'latest' | 'openCalls' | 'outcome' | 'ofMessage'>;
+  store: Pick<SQLiteIncomingCallStore, 'devices' | 'begin' | 'end' | 'latest' | 'openCalls' | 'outcome' | 'ofMessage' | 'serverAvailable'>;
   claims: Pick<SQLiteReachOutClaims, 'claim' | 'release' | 'message' | 'ownerLastActiveAt'>;
   /** The owner's apps that say only he can hear them now. */
   listeners: (scopeKey: string, at: string) => readonly PrivateListener[];
@@ -37,17 +37,24 @@ export class IncomingCallRequests implements AutonomyPhone {
     const latest = store.latest(scopeKey);
     const open = store.openCalls(scopeKey).length > 0;
     const sinceLast = latest ? Date.parse(at) - Date.parse(latest.createdAt) : null;
-    const wait = sinceLast === null ? 0 : Math.max(0, this.dependencies.minimumIntervalMilliseconds - sinceLast);
+    // After a call he answered, the conversation that followed is not rung into, whether or not he has spoken in it yet.
+    const interval = latest?.state === 'answered' ? Math.max(this.dependencies.minimumIntervalMilliseconds, INCOMING_CALL_LIMITS.conversationQuietMilliseconds)
+      : this.dependencies.minimumIntervalMilliseconds;
+    const wait = sinceLast === null ? 0 : Math.max(0, interval - sinceLast);
+    // What the API process, which holds the key and rings, last said about itself; until it has said anything, the environment decides.
+    let apiReady: boolean | null = null;
+    try { apiReady = store.serverAvailable(); } catch { apiReady = null; }
     let listeners: readonly PrivateListener[] = [];
     try { listeners = this.dependencies.listeners(scopeKey, at); } catch { listeners = []; }
     let body = false;
     try { body = this.dependencies.bodyVisible(scopeKey, at); } catch { body = false; }
     return {
       switchedOn: store.devices(scopeKey).length > 0,
-      serverReady: this.dependencies.serverReady,
+      serverReady: this.dependencies.serverReady && apiReady !== false,
       ringing: open,
       waitMinutes: Math.ceil(wait / 60_000),
-      earphones: listeners.length > 0,
+      // Only an app that would say a message of hers aloud: the line she is shown says a message would be heard.
+      earphones: listeners.some(listener => listener.speaks),
       body,
       ownerLastActiveAt: claims.ownerLastActiveAt(scopeKey),
       last: latest ? { at: latest.createdAt, outcome: latest.state === 'pending' || latest.state === 'sending' || latest.state === 'ringing' ? 'ringing' : latest.state } : null,
@@ -64,12 +71,20 @@ export class IncomingCallRequests implements AutonomyPhone {
     const device = store.devices(scopeKey)[0];
     const message = claims.message(scopeKey, initiativeId);
     if (!device || !message || store.ofMessage(scopeKey, initiativeId)) return 'unavailable';
-    // The claim first: from here no other surface says it. Then the request the API process sends.
-    if (claims.claim(scopeKey, initiativeId, device.deviceId, 'iphone_call', at) !== 'claimed') return 'taken';
     const callId = (this.dependencies.newCallId ?? randomUUID)();
     // The ring's end is set when the push leaves; until then the row carries the latest moment it may still be sent.
     const expiresAt = new Date(Date.parse(at) + INCOMING_CALL_LIMITS.pendingMilliseconds + INCOMING_CALL_LIMITS.ringSeconds * 1_000).toISOString();
-    if (!store.begin(scopeKey, { callId, initiativeId, deviceId: device.deviceId, threadId: message.threadId, expiresAt }, at)) {
+    const row = { callId, initiativeId, deviceId: device.deviceId, threadId: message.threadId, expiresAt };
+    // The claim first: from here no other surface says it. Then the request the API process sends.
+    if (claims.claim(scopeKey, initiativeId, device.deviceId, 'iphone_call', at) !== 'claimed') {
+      // Another surface took her line in the instant after it was written. The attempt is kept as a call that could not
+      // connect, so the interval counts from it and the message is never rung with later.
+      try { if (store.begin(scopeKey, row, at)) store.end(callId, ['pending'], 'failed', 'server', at, { reason: 'taken' }); } catch { /* nothing rings either way */ }
+      return 'taken';
+    }
+    let begun = false;
+    try { begun = store.begin(scopeKey, row, at); } catch { begun = false; }
+    if (!begun) {
       claims.release(scopeKey, initiativeId, device.deviceId);
       return 'unavailable';
     }

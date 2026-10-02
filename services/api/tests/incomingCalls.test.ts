@@ -432,13 +432,51 @@ describe('one surface per message', () => {
     w.close();
   });
 
-  it('does not ask for a call with a message another surface already took', async () => {
-    const w = world();
+  it('does not ring with a message another surface took in the instant after it was written, and counts the attempt', async () => {
+    const w = world({ intervalMinutes: 5 });
     w.register();
     const id = w.say();
     expect(w.claims.claim(scope, id, MAC, 'mac', w.clock.at)).toBe('claimed');
     expect(w.requests.request(scope, id, w.clock.at)).toBe('taken');
-    expect(w.store.ofMessage(scope, id)).toBeNull();
+    // Kept as a call that could not connect: the interval counts from it, and nothing is ever sent for it.
+    expect(w.store.ofMessage(scope, id)).toMatchObject({ state: 'failed', decidedBy: 'server' });
+    expect(w.claims.holder(scope, id)?.surface).toBe('mac');
+    expect(w.requests.facts(scope, w.clock.at)).toMatchObject({ waitMinutes: 5, last: { outcome: 'failed' } });
+    await w.calls.tick();
+    expect(w.apns.sent).toEqual([]);
+    w.close();
+  });
+
+  it('gives back a call claim whose request was never written, and is told by the API process whether it can ring', async () => {
+    const w = world();
+    w.register();
+    const id = w.say();
+    // Her process stopped between taking the claim and writing the request.
+    expect(w.claims.claim(scope, id, PHONE, 'iphone_call', w.clock.at)).toBe('claimed');
+    await w.calls.tick();
+    expect(w.claims.holder(scope, id)?.surface).toBe('iphone_call');
+    w.advance(11 * SECOND);
+    await w.calls.tick();
+    expect(w.claims.holder(scope, id)).toBeNull();
+    // The API process found it cannot ring (a key it could not read): she is not offered the call, whatever her own environment says.
+    expect(w.requests.facts(scope, w.clock.at).serverReady).toBe(true);
+    w.store.setServerAvailable(false, w.clock.at);
+    expect(w.requests.facts(scope, w.clock.at).serverReady).toBe(false);
+    expect(w.requests.request(scope, id, w.clock.at)).toBe('unavailable');
+    w.store.setServerAvailable(true, w.clock.at);
+    expect(w.requests.facts(scope, w.clock.at).serverReady).toBe(true);
+    w.close();
+  });
+
+  it('does not ring into the conversation of a call he answered, also before he has said a word in it', async () => {
+    const w = world({ intervalMinutes: 5 });
+    w.register();
+    const id = w.ask();
+    await w.calls.tick();
+    expect(w.answer(id, CALL_IDS[0]!).status).toBe(200);
+    w.advance(6 * MINUTE);
+    expect(w.requests.facts(scope, w.clock.at)).toMatchObject({ waitMinutes: 4, last: { outcome: 'answered' } });
+    expect(w.requests.request(scope, w.say('ライ氏、もうひとつ。'), w.clock.at)).toBe('too_soon');
     w.close();
   });
 
@@ -448,7 +486,10 @@ describe('one surface per message', () => {
       switchedOn: false, serverReady: true, ringing: false, waitMinutes: 0, earphones: false, body: false, ownerLastActiveAt: null, last: null,
     });
     w.register();
+    // An app that is privately listening and would not say her message aloud is not "in his ears" for her.
     w.beat(MAC, 'mac', false);
+    expect(w.requests.facts(scope, w.clock.at).earphones).toBe(false);
+    w.beat(MAC, 'mac', true);
     w.reports.markPresence(scope, BODY, w.clock.at);
     w.ownerSpeaks();
     expect(w.requests.facts(scope, w.clock.at)).toEqual({

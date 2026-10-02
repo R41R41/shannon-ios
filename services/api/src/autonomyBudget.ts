@@ -87,14 +87,15 @@ export function configuredAutonomy(
 
 /**
  * A count a day that has no limit unless the owner sets one (owner decision 2026-10-03: 「コストの範囲内なら、好きなだけ」).
- * Unset, empty or `unlimited`: no limit (`Infinity`). `0`: switched off. A positive whole number: that many a day.
- * Anything else is read as no limit; the daily budget bounds her either way.
+ * Unset, empty or `unlimited`: no limit (`Infinity`). `0`, and the words every other switch takes for off (`off`, `false`,
+ * `disabled`, `none`): switched off. A positive whole number: that many a day. Anything else cannot be read and switches
+ * it off: a value nobody can make sense of must not mean "as many as she likes".
  */
 export function dailyCount(value: string | undefined): number {
   const text = value?.trim().toLowerCase() ?? '';
   if (!text || text === 'unlimited') return Number.POSITIVE_INFINITY;
-  const parsed = Number(text);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(100_000, Math.trunc(parsed)) : Number.POSITIVE_INFINITY;
+  const parsed = /^\d+(?:\.\d+)?$/u.test(text) ? Number(text) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.min(100_000, Math.trunc(parsed)) : 0;
 }
 
 export interface AutonomyBudgetStatus {

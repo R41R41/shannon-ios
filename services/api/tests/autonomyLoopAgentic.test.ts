@@ -156,7 +156,7 @@ describe('after a message of hers: observe, then think again', () => {
     expect(unread.map(message => [message.kind, message.reason, message.expression])).toEqual(expect.arrayContaining([['reach_out', 'wonder', 'curious'], ['reach_out', 'follow_up', 'curious']]));
     expect(w.push.pending().map(item => item.content)).toContain('あれ、ライ氏、返事がないですね。席を外していますか。');
 
-    // It is not one of the day's three messages, and has its own count.
+    // It is not one of the day's own messages, and has its own count.
     expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(1);
     expect(w.speaker.followUpsOn(scope, '2026-10-02')).toBe(1);
     // The record: what she did and what followed, without her words.

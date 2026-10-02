@@ -16,7 +16,7 @@ import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
  * no `turn.completed` event, so nothing is learned about the owner from it.
  *
  * The one second call after a message got no answer (`follow_up`) leaves the same way and is not one
- * of the day's three: its key is `reach-out-follow-up:<owner-local day>:<id of the message it follows>`,
+ * of the day's messages: its key is `reach-out-follow-up:<owner-local day>:<id of the message it follows>`,
  * so the same unique key allows one per message, and the day's count is read from those keys.
  */
 export const REACH_OUT_SOURCE_PREFIX = 'reach-out:';
