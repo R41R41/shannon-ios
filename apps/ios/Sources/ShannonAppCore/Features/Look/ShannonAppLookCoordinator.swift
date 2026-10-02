@@ -100,7 +100,10 @@ public final class ShannonAppLookCoordinator {
         defer { isLooking = false }
         let state = clientState()
         if let refusal = ShannonAppLookAvailability.refusal(state.state) { return .refused(refusal) }
-        if state.state == .undetermined, let refusal = await authorize() { return .refused(refusal) }
+        if state.state == .undetermined {
+            if let refusal = await authorize() { return .refused(refusal) }
+            await settleAfterSystemPrompt()
+        }
         // The explanation and the system prompt take time, and the app may have left the screen meanwhile.
         guard ask.isOpen() else { return nil }
         if let refusal = ShannonAppLookAvailability.refusal(clientState().state) { return .refused(refusal) }
@@ -146,6 +149,14 @@ public final class ShannonAppLookCoordinator {
         // The sheet stays, now saying where the camera is switched on.
         if primerPhase != nil { primerPhase = .denied }
         return .denied
+    }
+
+    /// The system's prompt takes the app out of the active state for a moment after it closes;
+    /// that moment is not "the app left the screen".
+    private func settleAfterSystemPrompt() async {
+        for _ in 0..<15 where !environment.isForeground() {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     public func allowFromPrimer() {

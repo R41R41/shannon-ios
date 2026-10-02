@@ -356,7 +356,7 @@ Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言っ�
    | `no_camera` | The device has no camera. |
    | `switched_off` | The owner's switch is off. |
 
-   `cameras` is a subset of `back`, `front` (a Mac reports its camera as `front`); `platform` is `ios` or `macos` and only chooses which fixed line says where to allow the camera. An absent or malformed field means "no app camera": the turn is exactly what it was. A 「友人も一緒」 turn (`participantMode: guest`) should not send it, and never opens a look if it does.
+   `cameras` is a subset of `back`, `front` (a Mac reports its camera as `front`); `platform` is `ios` or `macos` and only chooses which fixed line says where to allow the camera. A voice turn may carry it inside `deviceContext` instead (`deviceContext.appLook`), which is where the apps put it. An absent or malformed field means "no app camera": the turn is exactly what it was. A 「友人も一緒」 turn (`participantMode: guest`) should not send it, and never opens a look if it does.
 2. When she looks, the response of that turn carries `appLook: { "id": "…", "camera": "back" | "front", "expiresAt": "…" }` (text: the JSON response; voice: the final response, also in the `completed` event of the stream). `expiresAt` is 30 seconds after the ask. Her reply only says that she will look.
 3. The app captures **one** frame with that camera without a tap, shows 「いま見ました」 with a small thumbnail, and answers, keeping no copy:
 

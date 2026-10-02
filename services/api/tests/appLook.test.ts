@@ -497,6 +497,15 @@ describe('a voice turn from the app', () => {
     expect((h.decision as ReturnType<typeof gateway>).inputs.at(-1)).toMatchObject({ appLook: true });
   });
 
+  it('reads the camera state from deviceContext as the apps send it', async () => {
+    const h = harness();
+    const turn = await h.say('これ見れる？', null, {}, { appLook: READY });
+    expect(turn.body.appLook).toMatchObject({ camera: 'back' });
+    const off = await h.say('これ見れる？', null, {}, { appLook: { state: 'switched_off', cameras: ['back'], platform: 'ios' } });
+    expect(off.body.appLook).toBeUndefined();
+    expect(off.prompt).toContain(appLookUnavailablePrompt('switched_off', 'ios'));
+  });
+
   it('looks on her own when the router judges that a look is welcome, and not below its threshold', async () => {
     const curious = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.9 }) });
     const turn = await curious.say('今、ラーメン屋さんにいるんだ。');
