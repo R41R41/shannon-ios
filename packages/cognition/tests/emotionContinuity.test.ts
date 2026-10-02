@@ -818,6 +818,60 @@ describe('(l) the kill switch: clock wall', () => {
   });
 });
 
+describe('a text reply whose feeling was decided (owner decision 2026-10-03)', () => {
+  const HARSH = 'もういい、君とはもう話したくない';
+  const QUIET = '……そうですか。';
+  const STRONG = { primary: 'hurt', intensity: 0.9 };
+
+  it('lingers into the next day when strong, is a mood when moderate, and leaves nothing when subtle or undecided', () => {
+    const strong = turn(fresh(), HARSH, QUIET, NIGHT, STRONG);
+    expect(strong.feeling).toMatchObject({ primary: 'hurt', intensity: 0.9, decided: true, cause: '生成した応答の内容と会話文脈' });
+    expect(strong.state.lingering).toMatchObject([{ kind: 'hurt', span: 'lingering', strength: 0.9 }]);
+    const morning = reduceCompanionState(strong.state, { type: 'awake-observed' }, MORNING);
+    expect(lingeringFeelingLine(morning, MORNING)).toContain('9時間前にライ氏との会話で傷ついたことを、まだ引きずっている（hurt / 強さ 0.88）');
+    expect(turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'hurt', intensity: 0.6 }).state.lingering).toMatchObject([{ kind: 'hurt', span: 'mood', strength: 0.6 }]);
+    for (const decided of [{ primary: 'hurt', intensity: 0.25 }, undefined]) {
+      const quiet = turn(fresh(), HARSH, QUIET, NIGHT, decided).state;
+      expect(quiet.lingering ?? []).toEqual([]);
+      expect(lingeringFeelingLine(reduceCompanionState(quiet, { type: 'awake-observed' }, MORNING), MORNING)).toBe('');
+    }
+  });
+
+  it('cannot be ratcheted or pinned by deciding strong in every reply', () => {
+    let repeated = turn(fresh(), HARSH, QUIET, NIGHT, STRONG).state;
+    let once = repeated;
+    const first = repeated.lingering![0]!;
+    for (let index = 1; index <= 48; index += 1) {
+      const now = at(NIGHT, index * 10 * MINUTE);
+      const said = turn(repeated, 'ふーん', QUIET, now, STRONG);
+      repeated = said.state;
+      once = turn(once, 'ふーん', QUIET, now).state;
+      // The reaction is felt again at the one step and never above it; what is underneath is never renewed.
+      expect(said.feeling.intensity).toBeLessThanOrEqual(0.9);
+      expect(repeated.expressiveEmotion!.intensity).toBeLessThanOrEqual(0.9);
+      expect(repeated.lingering).toEqual([first]);
+    }
+    // Eight awake hours on, it stands at half, exactly where one strong reply and silence leave it.
+    const end = at(NIGHT, 8 * HOUR);
+    expect(livingLingering(repeated, end)[0]!.strength).toBeCloseTo(0.45, 5);
+    expect(repeated.lingering).toEqual(once.lingering);
+    // And its four wall-clock days count from the first reply, however often it was decided again.
+    const late = at(NIGHT, 4 * 24 * HOUR + MINUTE);
+    expect(turn(repeated, 'おはよう', 'はい。', late).state.lingering).toEqual([]);
+  });
+
+  it('keeps his apology against a strong feeling decided again inside the hold', () => {
+    const hurt = turn(fresh(), HARSH, QUIET, NIGHT, STRONG).state;
+    const eased = reduceCompanionState(hurt, { type: 'feeling-eased', by: 'apology' }, at(NIGHT, MINUTE));
+    const height = livingLingering(eased, at(NIGHT, MINUTE))[0]!.strength;
+    expect(height).toBeCloseTo(0.36, 2);
+    const again = turn(eased, 'まだ怒ってる？', QUIET, at(NIGHT, 2 * MINUTE), STRONG);
+    expect(again.feeling.continued).toBe(true);
+    expect(livingLingering(again.state, at(NIGHT, 2 * MINUTE))[0]!.strength).toBeLessThanOrEqual(height);
+    expect(presentShannonFeeling(again.state, at(NIGHT, 2 * MINUTE)).intensity).toBeLessThan(0.45);
+  });
+});
+
 describe('the wall clock as a fact', () => {
   it('says how long ago in whole hours, and in days from twenty-four hours', () => {
     const state = sulking();
