@@ -26,75 +26,148 @@
   },
   "areas": [
     {
+      "id": "structure",
+      "title": "構成（入口）",
+      "place": "アプリ全体"
+    },
+    {
       "id": "talk",
-      "title": "トーク"
+      "title": "トーク",
+      "place": "トーク"
     },
     {
       "id": "voice",
-      "title": "声の会話"
+      "title": "声の会話",
+      "place": "トーク（入力欄から始める）"
     },
     {
       "id": "tasks",
-      "title": "作業"
+      "title": "作業",
+      "place": "作業"
     },
     {
       "id": "autonomy",
-      "title": "自律活動"
+      "title": "自律活動",
+      "place": "シャノン › 自律活動"
     },
     {
       "id": "study",
-      "title": "書斎"
+      "title": "書斎",
+      "place": "シャノン › 書斎"
     },
     {
       "id": "memory",
-      "title": "頭の中（記憶）"
+      "title": "頭の中（記憶）",
+      "place": "シャノン › 頭の中"
     },
     {
       "id": "yousu",
-      "title": "ようす（シャノンのいま）"
+      "title": "ようす（シャノンのいま）",
+      "place": "シャノン › ようす（シャノンのいま）"
     },
     {
       "id": "ops",
-      "title": "運用"
+      "title": "運用",
+      "place": "設定 › 管理 › 運用"
     },
     {
       "id": "body",
-      "title": "からだ・二つの姿"
+      "title": "からだ・二つの姿",
+      "place": "トークの表示（向き合う表示／会話の横）と、設定 › すがた"
     },
     {
       "id": "touch",
-      "title": "触る"
+      "title": "触る",
+      "place": "トークの表示の中の姿と、設定 › すがた"
     },
     {
       "id": "look",
-      "title": "見る（カメラ）"
+      "title": "見る（カメラ）",
+      "place": "設定 › カメラ。状態は、いつも見える所"
     },
     {
       "id": "reach",
-      "title": "話しかけ・電話"
+      "title": "話しかけ・電話",
+      "place": "設定（イヤホン・話しかけ・電話）"
     },
     {
       "id": "settings",
-      "title": "設定"
+      "title": "設定",
+      "place": "設定"
     },
     {
       "id": "devices",
-      "title": "端末と接続"
+      "title": "端末と接続",
+      "place": "設定 › 管理（接続中の端末）と、設定 › 接続"
     },
     {
       "id": "notifications",
-      "title": "通知"
+      "title": "通知",
+      "place": "（OS の通知と、入口の印）"
     },
     {
       "id": "delivery",
-      "title": "配信（TestFlight）"
+      "title": "配信（TestFlight）",
+      "place": "iPhone は設定、Mac は作業の中（デスクトップの追加）"
     },
     {
       "id": "desktop",
-      "title": "デスクトップだけのもの"
+      "title": "デスクトップだけのもの",
+      "place": "同じ領域の中に付ける（体とトレイだけは窓の外）"
     }
   ],
   "features": [
+    {
+      "id": "structure.four-entries",
+      "area": "structure",
+      "title": "入口は トーク／作業／シャノン／設定",
+      "description": "入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。",
+      "surfaces": {
+        "ios": {
+          "status": "partial",
+          "note": "シートのタイルは 作業／頭の中／設定。「シャノン」が無い。",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "サイドバーは トーク／作業全体／自律活動／書斎／運用／設定 の 6 つ。",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "structure.shannon-hub",
+      "area": "structure",
+      "title": "「シャノン」の場所",
+      "description": "先頭にシャノンのいまと待っていること、その下に ようす・頭の中・自律活動・書斎 の入口。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "いちばん近いのは「頭の中」（中に自律活動と書斎の入口がある）。ようすは作業中のブランチ。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定"
+        },
+        "windows": {
+          "status": "no",
+          "note": "自律活動と書斎が別々の入口。まとめる場所が無い。"
+        }
+      }
+    },
     {
       "id": "talk.text-chat",
       "area": "talk",
@@ -597,8 +670,8 @@
     {
       "id": "talk.dialogue-mode",
       "area": "talk",
-      "title": "向き合って話す表示",
-      "description": "履歴を並べる表示と、シャノンの顔と向き合う表示を切り替える。",
+      "title": "姿と向き合って話す表示（からだ）",
+      "description": "トークの表示を、履歴の一覧と、シャノンの姿と向き合う表示とで切り替える。広い画面では、姿が会話の横に立つ。姿は「すがた」の設定に従う。",
       "surfaces": {
         "ios": {
           "status": "yes",
@@ -608,11 +681,12 @@
           ]
         },
         "macos": {
-          "status": "no"
+          "status": "no",
+          "note": "決定（2026-10-03）: Mac は会話の横に姿を出す。"
         },
         "windows": {
           "status": "partial",
-          "note": "身体の窓が同じ役目（体と吹き出しで話す）。管理画面には切り替えが無い。",
+          "note": "体の窓が同じ役目（体と吹き出しで話す）。管理画面のトークの横には出ない。決定（2026-10-03）: 管理画面のトークの横にも出す。",
           "evidence": [
             "shannon-desktop:src/renderer/main.ts",
             "shannon-desktop:src/renderer/index.html"
@@ -1085,7 +1159,7 @@
       "id": "tasks.approval",
       "area": "tasks",
       "title": "許可を出す・断る",
-      "description": "作業が許可を求めたとき、今回だけ許可・この作業中は許可・許可しない、を選ぶ。",
+      "description": "作業が許可を求めたとき、今回だけ許可・この作業中・許可しない、の 3 つから選ぶ（3 つの画面とも同じ 3 つ）。",
       "surfaces": {
         "ios": {
           "status": "yes",
@@ -1250,6 +1324,29 @@
             "shannon-desktop:src/desk/views/WorkView.tsx"
           ],
           "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.hold-to-confirm",
+      "area": "tasks",
+      "title": "長く効く許可は、長押しで決める",
+      "description": "「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。"
+        },
+        "windows": {
+          "status": "no",
+          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Windows も長押しにする。"
         }
       }
     },
@@ -1802,7 +1899,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
-          ]
+          ],
+          "note": "ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。"
         },
         "macos": {
           "status": "no",
@@ -1830,7 +1928,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift"
-          ]
+          ],
+          "note": "ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。"
         },
         "macos": {
           "status": "no"
@@ -1856,7 +1955,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift"
-          ]
+          ],
+          "note": "ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。"
         },
         "macos": {
           "status": "no"
@@ -1882,7 +1982,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -1906,7 +2007,7 @@
         "ios": {
           "status": "planned",
           "branch": "codex/shannon/ios-yousu",
-          "note": "iPhone は確認の画面で長押しして決める。",
+          "note": "iPhone は確認の画面で長押しして決める。 ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsConfirmationSheet.swift"
           ]
@@ -1935,7 +2036,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -1961,7 +2063,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -1987,7 +2090,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -2012,7 +2116,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -2037,7 +2142,8 @@
           "branch": "codex/shannon/ios-yousu",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
-          ]
+          ],
+          "note": "ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。"
         },
         "macos": {
           "status": "no"
@@ -2052,6 +2158,32 @@
       }
     },
     {
+      "id": "ops.attention-mark",
+      "area": "ops",
+      "title": "運用が止まっていることに気づける印",
+      "description": "不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "codex/shannon/ios-yousu",
+          "note": "ブランチでは「ようす」のタイルに印が出る。設定のタイルと左上のボタンへ移す。",
+          "whenMerged": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
       "id": "body.live2d",
       "area": "body",
       "title": "Live2D の体",
@@ -2060,7 +2192,7 @@
         "ios": {
           "status": "planned",
           "branch": "codex/shannon/two-forms",
-          "note": "アプリの中の「からだ」の画面。",
+          "note": "ブランチでは別の「からだ」の画面。決定（2026-10-03）: トークの向き合う表示の中に出し、別の画面はたたむ。",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
           ]
@@ -2068,7 +2200,7 @@
         "macos": {
           "status": "planned",
           "branch": "codex/shannon/two-forms",
-          "note": "設定の「からだを開く」から見るだけ。デスクトップに立つ体は SwiftUI で作り直す予定（ADR-0004）。いまの Mac のデスクトップの体は、Electron 版（shannon-desktop）。",
+          "note": "ブランチでは設定の「からだを開く」から見るだけ。決定（2026-10-03）: トークの会話の横に出す。デスクトップに立つ体は SwiftUI で作り直す（ADR-0004）。いまの Mac のデスクトップの体は Electron 版。",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ]
@@ -2095,7 +2227,8 @@
           "branch": "codex/shannon/two-forms",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift"
-          ]
+          ],
+          "note": "ブランチでは設定と「からだ」の画面。決定（2026-10-03）: トークの表示の設定と、設定 › すがた。"
         },
         "macos": {
           "status": "planned",
@@ -2175,7 +2308,7 @@
         "ios": {
           "status": "planned",
           "branch": "codex/shannon/two-forms",
-          "note": "2 本の指で大きさと位置。全身と上半身。",
+          "note": "ブランチでは「からだ」の画面の中。決定（2026-10-03）: トークの表示の設定と、設定 › すがた へ移す。2 本の指で大きさと位置。",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
           ]
@@ -2239,7 +2372,8 @@
           "branch": "codex/shannon/two-forms",
           "whenMerged": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
-          ]
+          ],
+          "note": "ブランチでは「からだ」の画面でだけ触れられる（トークの中の姿は押すと画面が開く）。決定（2026-10-03）: トークの向き合う表示の中で触れる。"
         },
         "macos": {
           "status": "planned",
@@ -2330,6 +2464,34 @@
           "evidence": [
             "shannon-desktop:src/acting/touch.ts",
             "shannon-desktop:electron/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "touch.reply-mode",
+      "area": "touch",
+      "title": "触れたときの返事（文字で返す・声で返す）",
+      "description": "触れたときのひとことを、文字だけで返すか、声に出して返して数秒マイクを開くかを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "codex/shannon/two-forms",
+          "whenMerged": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "ブランチの Mac は、触れたことをシャノンに伝えない。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "声で返して数秒マイクを開く動きはある。選ぶ設定は無い。",
+          "evidence": [
+            "shannon-desktop:src/acting/touchAsk.ts",
+            "shannon-desktop:src/voice/listenWindow.ts"
           ],
           "read": "2026-10-03"
         }
@@ -2876,6 +3038,60 @@
       }
     },
     {
+      "id": "settings.figure",
+      "area": "settings",
+      "title": "設定 › すがた",
+      "description": "姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。",
+      "surfaces": {
+        "ios": {
+          "status": "planned",
+          "branch": "codex/shannon/two-forms",
+          "note": "ブランチでは、映し方と触れたときの返事が「からだ」の画面にある。設定の区画へ移す。",
+          "whenMerged": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+          ]
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "codex/shannon/two-forms",
+          "note": "ブランチでは、姿の切り替えと「からだを開く」だけ。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "「デスクトップのシャノン」に、体に起きたことを伝える・大きさがある。姿の切り替え・映し方・触れたときの返事は無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "settings.admin",
+      "area": "settings",
+      "title": "設定 › 管理",
+      "description": "運用（状態・操作・記録）と、接続中の端末を、設定の中の「管理」に並べる。",
+      "surfaces": {
+        "ios": {
+          "status": "no",
+          "note": "運用は作業中のブランチ（codex/shannon/ios-yousu）で「ようす」の中にある。決定（2026-10-03）で 設定 › 管理 へ移す。接続中の端末は「接続」の中。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "運用が無い。接続中の端末は接続のシートの中。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "運用は独立の入口、接続中の端末は設定の中。「管理」としてまとまっていない。",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx",
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
       "id": "devices.pair",
       "area": "devices",
       "title": "シャノンと接続する",
@@ -3395,5 +3611,11 @@
         }
       }
     }
-  ]
+  ],
+  "decisions": {
+    "date": "2026-10-03",
+    "source": "Syzygy work/shannon-unified-structure-comparison（所有者が比較ページで選んだ）",
+    "structure": "トーク／作業／シャノン／設定。シャノンの中に ようす（シャノンのいま）・頭の中・自律活動・書斎。からだはトークの表示の 1 つ。運用は 設定 › 管理。",
+    "details": "docs/product/information-architecture.md"
+  }
 }

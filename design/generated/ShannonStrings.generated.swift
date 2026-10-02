@@ -6,8 +6,6 @@ public enum ShannonGeneratedStrings {
     public static let appName = "シャノン"
     /// `nav.talk`
     public static let navTalk = "トーク"
-    /// `nav.workOverview`
-    public static let navWorkOverview = "作業全体"
     /// `nav.study`
     public static let navStudy = "書斎"
     /// `nav.settings`
@@ -40,8 +38,6 @@ public enum ShannonGeneratedStrings {
     public static let taskStatusFailed = "失敗"
     /// `task.status.cancelled`
     public static let taskStatusCancelled = "中止"
-    /// `task.group.active`
-    public static let taskGroupActive = "進行中"
     /// `task.group.finished`
     public static let taskGroupFinished = "終了"
     /// `task.approval.allowOnce`
@@ -238,4 +234,52 @@ public enum ShannonGeneratedStrings {
     public static func opsTargetSchedule(name: String) -> String { "予定「\(name)」" }
     /// `ops.target.minebotBody`
     public static func opsTargetMinebotBody(name: String) -> String { "Minebot の体（\(name) に入る）" }
+    /// `nav.work`
+    public static let navWork = "作業"
+    /// `nav.shannon`
+    public static let navShannon = "シャノン"
+    /// `nav.yousu`
+    public static let navYousu = "ようす"
+    /// `nav.now`
+    public static let navNow = "シャノンのいま"
+    /// `nav.memory`
+    public static let navMemory = "頭の中"
+    /// `nav.autonomy`
+    public static let navAutonomy = "自律活動"
+    /// `nav.admin`
+    public static let navAdmin = "管理"
+    /// `settings.figure`
+    public static let settingsFigure = "すがた"
+    /// `task.status.proposed`
+    public static let taskStatusProposed = "提案"
+    /// `task.status.queued`
+    public static let taskStatusQueued = "準備中"
+    /// `task.status.waitingApproval`
+    public static let taskStatusWaitingApproval = "許可待ち"
+    /// `task.group.now`
+    public static let taskGroupNow = "いま"
+    /// `task.group.next`
+    public static let taskGroupNext = "これから"
+    /// `voice.name`
+    public static let voiceName = "音声会話"
+    /// `voice.start`
+    public static let voiceStart = "音声会話を開始"
+    /// `voice.end`
+    public static let voiceEnd = "終了"
+    /// `guest.name`
+    public static let guestName = "友人も一緒"
+    /// `look.setting`
+    public static let lookSetting = "会話中にシャノンがカメラで見る"
+    /// `look.state.off`
+    public static let lookStateOff = "切"
+    /// `look.state.allowed`
+    public static let lookStateAllowed = "見てよい"
+    /// `talk.thinking`
+    public static let talkThinking = "考えている…"
+    /// `talk.searchingMemory`
+    public static let talkSearchingMemory = "記憶を探しています…"
+    /// `talk.placeholder`
+    public static let talkPlaceholder = "シャノンに話す"
+    /// `record.actor.owner`
+    public static let recordActorOwner = "あなた"
 }

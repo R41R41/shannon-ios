@@ -59,6 +59,14 @@ export function renderTokensSwift(tokens) {
     lines.push(`        public static let ${name} = TextStyle(size: ${number(style.size)}, lineHeight: ${number(style.lineHeight)}, weight: ${style.weight}, swiftTextStyle: "${style.swiftTextStyle}")`);
   }
   lines.push('    }', '');
+  if (tokens.typography.desktop) {
+    lines.push('    /// Wide screens (macOS and Windows): fixed sizes, one step below the phone scale. The phone keeps Dynamic Type.');
+    lines.push('    public enum DesktopTypography {');
+    for (const [name, style] of Object.entries(tokens.typography.desktop.scale)) {
+      lines.push(`        public static let ${name} = TextStyle(size: ${number(style.size)}, lineHeight: ${number(style.lineHeight)}, weight: ${style.weight}, swiftTextStyle: "${tokens.typography.scale[name]?.swiftTextStyle ?? name}")`);
+    }
+    lines.push('    }', '');
+  }
   for (const [title, group] of [['Spacing', tokens.spacing], ['Radius', tokens.radius], ['Size', tokens.size]]) {
     lines.push(`    public enum ${title} {`);
     for (const [name, value] of Object.entries(group)) lines.push(`        public static let ${name}: CGFloat = ${number(value)}`);
@@ -90,7 +98,21 @@ export function renderTokensCss(tokens) {
   for (const [name, value] of Object.entries(tokens.radius)) lines.push(`  --shannon-radius-${kebab(name)}: ${number(value)}px;`);
   for (const [name, value] of Object.entries(tokens.size)) lines.push(`  --shannon-size-${kebab(name)}: ${number(value)}px;`);
   for (const [name, entry] of Object.entries(tokens.motion.duration)) lines.push(`  --shannon-duration-${kebab(name)}: ${Math.round(entry.seconds * 1000)}ms;`);
+  for (const [name, style] of Object.entries(tokens.typography.desktop?.scale ?? {})) {
+    lines.push(`  --shannon-desktop-font-size-${kebab(name)}: ${number(style.size)}px;`);
+    lines.push(`  --shannon-desktop-line-height-${kebab(name)}: ${number(style.lineHeight)}px;`);
+  }
   lines.push('}', '');
+  if (tokens.typography.desktop) {
+    lines.push('/* Wide screens (macOS and Windows): set data-shannon-density="desktop" on <html> and keep using the plain names. */');
+    lines.push(':root[data-shannon-density="desktop"] {');
+    for (const [name, style] of Object.entries(tokens.typography.desktop.scale)) {
+      lines.push(`  --shannon-font-size-${kebab(name)}: ${number(style.size)}px;`);
+      lines.push(`  --shannon-line-height-${kebab(name)}: ${number(style.lineHeight)}px;`);
+      lines.push(`  --shannon-font-weight-${kebab(name)}: ${style.weight};`);
+    }
+    lines.push('}', '');
+  }
   lines.push('@media (prefers-color-scheme: dark) {', '  :root:not([data-theme="light"]) {', ...colors('dark').map((line) => `  ${line}`), '  }', '}', '');
   lines.push(':root[data-theme="dark"] {', ...colors('dark'), '}', '');
   return lines.join('\n');
@@ -108,6 +130,7 @@ export function renderTokensTs(tokens) {
     typography: {
       fontFamily: tokens.typography.fontFamily,
       scale: Object.fromEntries(Object.entries(tokens.typography.scale).map(([name, style]) => [name, { size: style.size, lineHeight: style.lineHeight, weight: style.weight }])),
+      desktopScale: Object.fromEntries(Object.entries(tokens.typography.desktop?.scale ?? {}).map(([name, style]) => [name, { size: style.size, lineHeight: style.lineHeight, weight: style.weight }])),
       weight: tokens.typography.weight,
     },
     spacing: tokens.spacing,
@@ -169,6 +192,11 @@ export function renderStringsTs(strings) {
   lines.push('export type ShannonStringKey = keyof typeof shannonStrings;', '');
   lines.push('/** Keys whose wording is a promise to the owner: show them exactly as they are. */');
   lines.push(`export const shannonVerbatimKeys: readonly ShannonStringKey[] = ${JSON.stringify(strings.strings.filter((entry) => entry.verbatim).map((entry) => entry.key), null, 2)};`, '');
+  const decided = strings.strings.filter((entry) => entry.decided);
+  if (decided.length) {
+    lines.push('/** Wording the owner decided, with what each implementation showed before (to find what must be replaced). */');
+    lines.push(`export const shannonDecidedWording: Readonly<Record<string, { decided: string; windowsBefore?: string; macBefore?: string }>> = ${JSON.stringify(Object.fromEntries(decided.map((entry) => [entry.key, { decided: entry.decided, ...(entry.windowsNow ? { windowsBefore: entry.windowsNow } : {}), ...(entry.macNow ? { macBefore: entry.macNow } : {}) }])), null, 2)};`, '');
+  }
   lines.push('export function shannonString(key: ShannonStringKey, params: Readonly<Record<string, string | number>> = {}): string {');
   lines.push('  return shannonStrings[key].replace(/\\{([A-Za-z][A-Za-z0-9]*)\\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole));');
   lines.push('}', '');
@@ -212,6 +240,7 @@ export function renderMatrixMarkdown(matrix) {
     const features = matrix.features.filter((feature) => feature.area === area.id);
     if (features.length === 0) continue;
     lines.push(`## ${area.title}（\`${area.id}\`）`, '');
+    if (area.place) lines.push(`決まった構成での場所: ${area.place}`, '');
     lines.push('| id | 機能 | iOS | macOS | Windows |', '|---|---|:-:|:-:|:-:|');
     const notes = [];
     for (const feature of features) {

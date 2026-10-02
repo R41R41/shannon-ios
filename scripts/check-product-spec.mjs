@@ -180,6 +180,15 @@ export function validateTokens(tokens, repo) {
   for (const [name, style] of Object.entries(tokens?.typography?.scale ?? {})) {
     for (const key of ['size', 'lineHeight', 'weight']) if (!(Number(style[key]) > 0)) failures.push(`tokens: typography ${name}.${key} must be a positive number`);
   }
+  const desktop = tokens?.typography?.desktop?.scale;
+  if (desktop) {
+    const names = Object.keys(tokens.typography.scale ?? {}).sort().join(',');
+    if (Object.keys(desktop).sort().join(',') !== names) failures.push('tokens: typography.desktop.scale must have the same styles as typography.scale');
+    for (const [name, style] of Object.entries(desktop)) {
+      for (const key of ['size', 'lineHeight', 'weight']) if (!(Number(style[key]) > 0)) failures.push(`tokens: typography.desktop ${name}.${key} must be a positive number`);
+      if (Number(style.size) > Number(tokens.typography.scale?.[name]?.size)) failures.push(`tokens: typography.desktop ${name} is larger than the phone size`);
+    }
+  }
   for (const group of ['spacing', 'radius', 'size']) {
     if (Object.keys(tokens?.[group] ?? {}).length === 0) failures.push(`tokens: ${group} is empty`);
     for (const [name, value] of Object.entries(tokens?.[group] ?? {})) if (!(Number(value) >= 0)) failures.push(`tokens: ${group}.${name} must be a number`);
@@ -233,8 +242,19 @@ export function validateStrings(strings, repo) {
     identifiers.set(identifier, key);
     if (!isText(entry.text)) { failures.push(`strings: ${key} has no text`); continue; }
     if (/\{[^A-Za-z}]|\{[A-Za-z][A-Za-z0-9]*[^A-Za-z0-9}]/u.test(entry.text)) failures.push(`strings: ${key} has a malformed {placeholder}`);
-    if (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix)) failures.push(`strings: ${key} needs windows: "${windowsPrefix}<path>"`);
-    if (!isText(entry.apple)) { failures.push(`strings: ${key} needs apple (a source path, or branch:<branch>:<path>)`); continue; }
+    if (entry.decided !== undefined) {
+      // Wording the owner decided: an implementation may not show it yet, so say what it shows today.
+      if (!datePattern.test(entry.decided)) failures.push(`strings: ${key} decided must be a date`);
+      if (!isText(entry.windowsNow)) failures.push(`strings: ${key} is decided and needs windowsNow (what Windows shows today, or the same text)`);
+      if (entry.windows !== undefined && (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix))) failures.push(`strings: ${key} windows must be "${windowsPrefix}<path>"`);
+    } else if (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix)) {
+      failures.push(`strings: ${key} needs windows: "${windowsPrefix}<path>"`);
+    }
+    if (!isText(entry.apple)) { failures.push(`strings: ${key} needs apple (a source path, branch:<branch>:<path>, or new)`); continue; }
+    if (entry.apple === 'new') {
+      if (entry.decided === undefined) failures.push(`strings: ${key} has no Apple source; only decided wording may be new`);
+      continue;
+    }
     if (entry.apple.startsWith('branch:')) {
       if (entry.apple.split(':').length < 3) failures.push(`strings: ${key} apple must be branch:<branch>:<path>`);
       continue; // in flight: cannot be read from this checkout

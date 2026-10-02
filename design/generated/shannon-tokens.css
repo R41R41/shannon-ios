@@ -82,11 +82,71 @@
   --shannon-radius-extra-large: 28px;
   --shannon-radius-full: 999px;
   --shannon-size-touch-target-minimum: 48px;
+  --shannon-size-desktop-row-height: 40px;
   --shannon-duration-quick: 150ms;
   --shannon-duration-standard: 220ms;
   --shannon-duration-page: 340ms;
   --shannon-duration-emphasized: 350ms;
   --shannon-duration-hold-to-confirm: 600ms;
+  --shannon-desktop-font-size-large-title: 28px;
+  --shannon-desktop-line-height-large-title: 34px;
+  --shannon-desktop-font-size-title: 22px;
+  --shannon-desktop-line-height-title: 28px;
+  --shannon-desktop-font-size-title2: 20px;
+  --shannon-desktop-line-height-title2: 25px;
+  --shannon-desktop-font-size-title3: 17px;
+  --shannon-desktop-line-height-title3: 22px;
+  --shannon-desktop-font-size-headline: 15px;
+  --shannon-desktop-line-height-headline: 20px;
+  --shannon-desktop-font-size-body: 15px;
+  --shannon-desktop-line-height-body: 20px;
+  --shannon-desktop-font-size-callout: 14px;
+  --shannon-desktop-line-height-callout: 19px;
+  --shannon-desktop-font-size-subheadline: 13px;
+  --shannon-desktop-line-height-subheadline: 18px;
+  --shannon-desktop-font-size-footnote: 12px;
+  --shannon-desktop-line-height-footnote: 16px;
+  --shannon-desktop-font-size-caption: 11px;
+  --shannon-desktop-line-height-caption: 14px;
+  --shannon-desktop-font-size-caption2: 10px;
+  --shannon-desktop-line-height-caption2: 13px;
+}
+
+/* Wide screens (macOS and Windows): set data-shannon-density="desktop" on <html> and keep using the plain names. */
+:root[data-shannon-density="desktop"] {
+  --shannon-font-size-large-title: 28px;
+  --shannon-line-height-large-title: 34px;
+  --shannon-font-weight-large-title: 400;
+  --shannon-font-size-title: 22px;
+  --shannon-line-height-title: 28px;
+  --shannon-font-weight-title: 400;
+  --shannon-font-size-title2: 20px;
+  --shannon-line-height-title2: 25px;
+  --shannon-font-weight-title2: 600;
+  --shannon-font-size-title3: 17px;
+  --shannon-line-height-title3: 22px;
+  --shannon-font-weight-title3: 600;
+  --shannon-font-size-headline: 15px;
+  --shannon-line-height-headline: 20px;
+  --shannon-font-weight-headline: 600;
+  --shannon-font-size-body: 15px;
+  --shannon-line-height-body: 20px;
+  --shannon-font-weight-body: 400;
+  --shannon-font-size-callout: 14px;
+  --shannon-line-height-callout: 19px;
+  --shannon-font-weight-callout: 400;
+  --shannon-font-size-subheadline: 13px;
+  --shannon-line-height-subheadline: 18px;
+  --shannon-font-weight-subheadline: 400;
+  --shannon-font-size-footnote: 12px;
+  --shannon-line-height-footnote: 16px;
+  --shannon-font-weight-footnote: 400;
+  --shannon-font-size-caption: 11px;
+  --shannon-line-height-caption: 14px;
+  --shannon-font-weight-caption: 400;
+  --shannon-font-size-caption2: 10px;
+  --shannon-line-height-caption2: 13px;
+  --shannon-font-weight-caption2: 400;
 }
 
 @media (prefers-color-scheme: dark) {

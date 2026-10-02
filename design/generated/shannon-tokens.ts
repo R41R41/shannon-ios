@@ -141,6 +141,63 @@ export const shannonTokens = {
         "weight": 400
       }
     },
+    "desktopScale": {
+      "largeTitle": {
+        "size": 28,
+        "lineHeight": 34,
+        "weight": 400
+      },
+      "title": {
+        "size": 22,
+        "lineHeight": 28,
+        "weight": 400
+      },
+      "title2": {
+        "size": 20,
+        "lineHeight": 25,
+        "weight": 600
+      },
+      "title3": {
+        "size": 17,
+        "lineHeight": 22,
+        "weight": 600
+      },
+      "headline": {
+        "size": 15,
+        "lineHeight": 20,
+        "weight": 600
+      },
+      "body": {
+        "size": 15,
+        "lineHeight": 20,
+        "weight": 400
+      },
+      "callout": {
+        "size": 14,
+        "lineHeight": 19,
+        "weight": 400
+      },
+      "subheadline": {
+        "size": 13,
+        "lineHeight": 18,
+        "weight": 400
+      },
+      "footnote": {
+        "size": 12,
+        "lineHeight": 16,
+        "weight": 400
+      },
+      "caption": {
+        "size": 11,
+        "lineHeight": 14,
+        "weight": 400
+      },
+      "caption2": {
+        "size": 10,
+        "lineHeight": 13,
+        "weight": 400
+      }
+    },
     "weight": {
       "regular": 400,
       "medium": 500,
@@ -164,7 +221,8 @@ export const shannonTokens = {
     "full": 999
   },
   "size": {
-    "touchTargetMinimum": 48
+    "touchTargetMinimum": 48,
+    "desktopRowHeight": 40
   },
   "motionSeconds": {
     "quick": 0.15,

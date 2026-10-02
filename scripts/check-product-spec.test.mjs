@@ -225,6 +225,35 @@ test('a shared string must still be written in the Apple source it names', () =>
   assert.match(validateStrings(duplicate, present).join('\n'), /key ops\.status\.running is used twice/u);
 });
 
+test('the desktop type scale is generated and must not exceed the phone scale', () => {
+  const desktop = structuredClone(tokens);
+  desktop.typography.desktop = { scale: { body: { size: 15, lineHeight: 20, weight: 400 } } };
+  assert.deepEqual(validateTokens(desktop, fakeRepository({ [designPath]: designSystem })), []);
+  assert.match(renderTokensSwift(desktop), /public enum DesktopTypography \{\n {8}public static let body = TextStyle\(size: 15, lineHeight: 20, weight: 400, swiftTextStyle: "body"\)/u);
+  const css = renderTokensCss(desktop);
+  assert.match(css, /--shannon-desktop-font-size-body: 15px;/u);
+  assert.match(css, /:root\[data-shannon-density="desktop"\] \{\n {2}--shannon-font-size-body: 15px;/u);
+  desktop.typography.desktop.scale.body.size = 18;
+  assert.match(validateTokens(desktop, fakeRepository({ [designPath]: designSystem })).join('\n'), /typography\.desktop body is larger than the phone size/u);
+});
+
+test('decided wording says what Windows shows today, and may be new on the Apple side', () => {
+  const decided = {
+    windowsRead: '2026-10-03',
+    strings: [
+      { key: 'task.status.proposed', text: '提案', apple: 'Status.swift', decided: '2026-10-03', windowsNow: '作業候補' },
+      { key: 'nav.admin', text: '管理', apple: 'new', decided: '2026-10-03', windowsNow: '（無い）' },
+    ],
+  };
+  const repo = fakeRepository({ 'Status.swift': 'case .proposed: "提案"' });
+  assert.deepEqual(validateStrings(decided, repo), []);
+  assert.match(renderStringsTs(decided), /"task\.status\.proposed": \{\n {4}"decided": "2026-10-03",\n {4}"windowsBefore": "作業候補"/u);
+  const undecided = { ...decided, strings: [{ key: 'nav.admin', text: '管理', apple: 'new', windows: 'shannon-desktop:src/desk/App.tsx' }] };
+  assert.match(validateStrings(undecided, repo).join('\n'), /only decided wording may be new/u);
+  const missing = { ...decided, strings: [{ key: 'task.status.proposed', text: '提案', apple: 'Status.swift', decided: '2026-10-03' }] };
+  assert.match(validateStrings(missing, repo).join('\n'), /is decided and needs windowsNow/u);
+});
+
 test('the repository reader lists feature folders', () => {
   const folders = repository().directories('apps/ios/Sources/ShannonAppCore/Features');
   assert.ok(folders.includes('apps/ios/Sources/ShannonAppCore/Features/Conversation'));

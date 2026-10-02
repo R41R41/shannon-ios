@@ -145,6 +145,21 @@ public enum ShannonGeneratedTokens {
         public static let caption2 = TextStyle(size: 11, lineHeight: 13, weight: 400, swiftTextStyle: "caption2")
     }
 
+    /// Wide screens (macOS and Windows): fixed sizes, one step below the phone scale. The phone keeps Dynamic Type.
+    public enum DesktopTypography {
+        public static let largeTitle = TextStyle(size: 28, lineHeight: 34, weight: 400, swiftTextStyle: "largeTitle")
+        public static let title = TextStyle(size: 22, lineHeight: 28, weight: 400, swiftTextStyle: "title")
+        public static let title2 = TextStyle(size: 20, lineHeight: 25, weight: 600, swiftTextStyle: "title2")
+        public static let title3 = TextStyle(size: 17, lineHeight: 22, weight: 600, swiftTextStyle: "title3")
+        public static let headline = TextStyle(size: 15, lineHeight: 20, weight: 600, swiftTextStyle: "headline")
+        public static let body = TextStyle(size: 15, lineHeight: 20, weight: 400, swiftTextStyle: "body")
+        public static let callout = TextStyle(size: 14, lineHeight: 19, weight: 400, swiftTextStyle: "callout")
+        public static let subheadline = TextStyle(size: 13, lineHeight: 18, weight: 400, swiftTextStyle: "subheadline")
+        public static let footnote = TextStyle(size: 12, lineHeight: 16, weight: 400, swiftTextStyle: "footnote")
+        public static let caption = TextStyle(size: 11, lineHeight: 14, weight: 400, swiftTextStyle: "caption")
+        public static let caption2 = TextStyle(size: 10, lineHeight: 13, weight: 400, swiftTextStyle: "caption2")
+    }
+
     public enum Spacing {
         public static let extraSmall: CGFloat = 4
         public static let small: CGFloat = 8
@@ -164,6 +179,7 @@ public enum ShannonGeneratedTokens {
 
     public enum Size {
         public static let touchTargetMinimum: CGFloat = 48
+        public static let desktopRowHeight: CGFloat = 40
     }
 
     /// Durations in seconds.

@@ -4,7 +4,6 @@
 export const shannonStrings = {
   "app.name": "シャノン",
   "nav.talk": "トーク",
-  "nav.workOverview": "作業全体",
   "nav.study": "書斎",
   "nav.settings": "設定",
   "talk.newThread": "新しいトーク",
@@ -21,7 +20,6 @@ export const shannonStrings = {
   "task.status.completed": "完了",
   "task.status.failed": "失敗",
   "task.status.cancelled": "中止",
-  "task.group.active": "進行中",
   "task.group.finished": "終了",
   "task.approval.allowOnce": "今回だけ許可",
   "task.approval.allowSession": "この作業中は許可",
@@ -120,6 +118,30 @@ export const shannonStrings = {
   "ops.service.minecraftServer": "Minecraft サーバー {name}",
   "ops.target.schedule": "予定「{name}」",
   "ops.target.minebotBody": "Minebot の体（{name} に入る）",
+  "nav.work": "作業",
+  "nav.shannon": "シャノン",
+  "nav.yousu": "ようす",
+  "nav.now": "シャノンのいま",
+  "nav.memory": "頭の中",
+  "nav.autonomy": "自律活動",
+  "nav.admin": "管理",
+  "settings.figure": "すがた",
+  "task.status.proposed": "提案",
+  "task.status.queued": "準備中",
+  "task.status.waitingApproval": "許可待ち",
+  "task.group.now": "いま",
+  "task.group.next": "これから",
+  "voice.name": "音声会話",
+  "voice.start": "音声会話を開始",
+  "voice.end": "終了",
+  "guest.name": "友人も一緒",
+  "look.setting": "会話中にシャノンがカメラで見る",
+  "look.state.off": "切",
+  "look.state.allowed": "見てよい",
+  "talk.thinking": "考えている…",
+  "talk.searchingMemory": "記憶を探しています…",
+  "talk.placeholder": "シャノンに話す",
+  "record.actor.owner": "あなた",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -137,6 +159,133 @@ export const shannonVerbatimKeys: readonly ShannonStringKey[] = [
   "ops.confirm.start",
   "ops.schedule.note"
 ];
+
+/** Wording the owner decided, with what each implementation showed before (to find what must be replaced). */
+export const shannonDecidedWording: Readonly<Record<string, { decided: string; windowsBefore?: string; macBefore?: string }>> = {
+  "nav.talk": {
+    "decided": "2026-10-03",
+    "windowsBefore": "トーク",
+    "macBefore": "会話"
+  },
+  "talk.fromShannon": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンから"
+  },
+  "task.status.starting": {
+    "decided": "2026-10-03",
+    "windowsBefore": "準備中"
+  },
+  "task.group.finished": {
+    "decided": "2026-10-03",
+    "windowsBefore": "終了"
+  },
+  "nav.work": {
+    "decided": "2026-10-03",
+    "windowsBefore": "作業全体",
+    "macBefore": "作業全体"
+  },
+  "nav.shannon": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い。自律活動・書斎・運用が別々の入口）",
+    "macBefore": "（無い。頭の中）"
+  },
+  "nav.yousu": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "（無い）"
+  },
+  "nav.now": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "（無い）"
+  },
+  "nav.memory": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "頭の中"
+  },
+  "nav.autonomy": {
+    "decided": "2026-10-03",
+    "windowsBefore": "自律活動",
+    "macBefore": "シャノンの自律（設定の見出し）"
+  },
+  "nav.admin": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い。運用が独立の入口）",
+    "macBefore": "（無い）"
+  },
+  "settings.figure": {
+    "decided": "2026-10-03",
+    "windowsBefore": "デスクトップのシャノン",
+    "macBefore": "（無い）"
+  },
+  "task.status.proposed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "作業候補"
+  },
+  "task.status.queued": {
+    "decided": "2026-10-03",
+    "windowsBefore": "待機中"
+  },
+  "task.status.waitingApproval": {
+    "decided": "2026-10-03",
+    "windowsBefore": "判断待ち"
+  },
+  "task.group.now": {
+    "decided": "2026-10-03",
+    "windowsBefore": "進行中"
+  },
+  "task.group.next": {
+    "decided": "2026-10-03",
+    "windowsBefore": "作業候補"
+  },
+  "voice.name": {
+    "decided": "2026-10-03",
+    "windowsBefore": "声の会話"
+  },
+  "voice.start": {
+    "decided": "2026-10-03",
+    "windowsBefore": "話す"
+  },
+  "voice.end": {
+    "decided": "2026-10-03",
+    "windowsBefore": "切る"
+  },
+  "guest.name": {
+    "decided": "2026-10-03",
+    "windowsBefore": "友人といっしょ"
+  },
+  "look.setting": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンがカメラで部屋を見てよい"
+  },
+  "look.state.off": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見られない"
+  },
+  "look.state.allowed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見てよい"
+  },
+  "talk.thinking": {
+    "decided": "2026-10-03",
+    "windowsBefore": "返答を待っています…",
+    "macBefore": "考えています"
+  },
+  "talk.searchingMemory": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "記憶を探しています"
+  },
+  "talk.placeholder": {
+    "decided": "2026-10-03",
+    "windowsBefore": "メッセージを入力（Enterで送信、Shift+Enterで改行）／シャノンに話しかける"
+  },
+  "record.actor.owner": {
+    "decided": "2026-10-03",
+    "windowsBefore": "所有者"
+  }
+};
 
 export function shannonString(key: ShannonStringKey, params: Readonly<Record<string, string | number>> = {}): string {
   return shannonStrings[key].replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (whole, name: string) => (name in params ? String(params[name]) : whole));

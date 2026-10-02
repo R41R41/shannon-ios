@@ -9,15 +9,33 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 件数
 
-機能は全部で 127 件。
+機能は全部で 134 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 86 | 3 | 8 | 9 | 21 | 0 |
-| macOS | 63 | 10 | 34 | 4 | 16 | 0 |
-| Windows | 59 | 20 | 41 | 6 | 0 | 1 |
+| iOS | 87 | 4 | 9 | 9 | 25 | 0 |
+| macOS | 63 | 11 | 38 | 4 | 18 | 0 |
+| Windows | 60 | 24 | 43 | 6 | 0 | 1 |
+
+## 構成（入口）（`structure`）
+
+決まった構成での場所: アプリ全体
+
+| id | 機能 | iOS | macOS | Windows |
+|---|---|:-:|:-:|:-:|
+| `structure.four-entries` | **入口は トーク／作業／シャノン／設定** 入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。 | △ | △ | △ |
+| `structure.shannon-hub` | **「シャノン」の場所** 先頭にシャノンのいまと待っていること、その下に ようす・頭の中・自律活動・書斎 の入口。 | 予定 | 予定 | × |
+
+- `structure.four-entries` iOS（△）: シートのタイルは 作業／頭の中／設定。「シャノン」が無い。
+- `structure.four-entries` macOS（△）: サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。
+- `structure.four-entries` Windows（△）: サイドバーは トーク／作業全体／自律活動／書斎／運用／設定 の 6 つ。
+- `structure.shannon-hub` iOS（予定）: ブランチ `未定`。いちばん近いのは「頭の中」（中に自律活動と書斎の入口がある）。ようすは作業中のブランチ。
+- `structure.shannon-hub` macOS（予定）: ブランチ `未定`
+- `structure.shannon-hub` Windows（×）: 自律活動と書斎が別々の入口。まとめる場所が無い。
 
 ## トーク（`talk`）
+
+決まった構成での場所: トーク
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -40,7 +58,7 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `talk.place-map` | **場所の地図カード** 返事に出た場所を、地図のカードで出す。 | ○ | × | × |
 | `talk.prompt-suggestions` | **空のトークのおすすめ** 空のトークで、今日の関心や進行中の作業から、話しかけの候補を 3 つまで出す。 | ○ | △ | × |
 | `talk.dictation` | **声で入力する（音声入力）** 入力欄に、声で文字を入れる。 | ○ | × | × |
-| `talk.dialogue-mode` | **向き合って話す表示** 履歴を並べる表示と、シャノンの顔と向き合う表示を切り替える。 | ○ | × | △ |
+| `talk.dialogue-mode` | **姿と向き合って話す表示（からだ）** トークの表示を、履歴の一覧と、シャノンの姿と向き合う表示とで切り替える。広い画面では、姿が会話の横に立つ。姿は「すがた」の設定に従う。 | ○ | × | △ |
 | `talk.sentence-stream` | **返事が文ごとに届く** 返事を待たずに、最初の一文から出す（声や字幕向け）。 | × | × | △ |
 | `talk.reply-read-aloud` | **文字の返事を声で読み上げる** 文字で話したときの返事を、声でも読む。 | × | × | ○ |
 | `talk.outline-summary` | **会話の目次と要約**【デスクトップの追加】 長い会話の見出しを横に並べ、押すとその場所へ移る。 | × | ○ | × |
@@ -58,12 +76,15 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 - `talk.place-map` macOS（×）: Mac のトークには地図のカードが無い。
 - `talk.prompt-suggestions` macOS（△）: 空のトークに案内の文は出るが、候補は出ない。
 - `talk.dictation` Windows（×）: 声の会話はあるが、入力欄へ声で文字を入れる機能は無い。
-- `talk.dialogue-mode` Windows（△）: 身体の窓が同じ役目（体と吹き出しで話す）。管理画面には切り替えが無い。
+- `talk.dialogue-mode` macOS（×）: 決定（2026-10-03）: Mac は会話の横に姿を出す。
+- `talk.dialogue-mode` Windows（△）: 体の窓が同じ役目（体と吹き出しで話す）。管理画面のトークの横には出ない。決定（2026-10-03）: 管理画面のトークの横にも出す。
 - `talk.sentence-stream` iOS（×）: トークは、返事が全部できてから出す。
 - `talk.sentence-stream` Windows（△）: 身体の窓だけ。管理画面のトークは一度に出る。
 - `talk.reply-read-aloud` iOS（×）: 文字のトークの返事を読み上げる設定は見つからない（声は音声会話とイヤホンの話しかけだけ）。
 
 ## 声の会話（`voice`）
+
+決まった構成での場所: トーク（入力欄から始める）
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -93,24 +114,31 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 作業（`tasks`）
 
+決まった構成での場所: 作業
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `tasks.overview` | **作業の一覧** 続いている作業・これからの提案・終わった作業を並べる。 | ○ | ○ | ○ |
 | `tasks.search-filter-pin-archive` | **作業の検索・絞り込み・ピン留め・アーカイブ** 作業を探し、絞り、大切なものを上に留め、終わったものを片付ける。 | ○ | △ | × |
 | `tasks.detail` | **作業の現在地** 目的・いましていること・次・計画・変更・検証の結果を見る。 | ○ | ○ | ○ |
-| `tasks.approval` | **許可を出す・断る** 作業が許可を求めたとき、今回だけ許可・この作業中は許可・許可しない、を選ぶ。 | ○ | △ | ○ |
+| `tasks.approval` | **許可を出す・断る** 作業が許可を求めたとき、今回だけ許可・この作業中・許可しない、の 3 つから選ぶ（3 つの画面とも同じ 3 つ）。 | ○ | △ | ○ |
 | `tasks.steer` | **追加の指示** 進んでいる作業に、指示を足す。 | ○ | ○ | ○ |
 | `tasks.pause-resume-cancel` | **一時停止・再開・中止** 作業を止める、続ける、やめる。 | ○ | ○ | ○ |
 | `tasks.proposal-start` | **作業の提案を始める・やめる** 会話で頼んだ作業の提案を見て、始めるか決める。 | ○ | ○ | ○ |
 | `tasks.notice-in-talk` | **トークの上の作業の知らせ** 許可待ちや結果を、トークの上に小さく出し、押すと作業を開く。 | ○ | △ | △ |
 | `tasks.open-origin-thread` | **作業から元の会話を開く** 作業を頼んだトークへ戻る。 | ○ | ○ | ○ |
+| `tasks.hold-to-confirm` | **長く効く許可は、長押しで決める** 「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。 | ○ | × | × |
 
 - `tasks.search-filter-pin-archive` macOS（△）: 開発の画面にだけ検索・絞り込み・ピン留め・アーカイブがある。「作業全体」には無い。
 - `tasks.approval` macOS（△）: 「今回だけ許可」と「許可しない」だけ。「この作業中は許可」が無い。
 - `tasks.notice-in-talk` macOS（△）: サイドバーの件数と、トークの横の「現在地」で分かる。トークの上の知らせは無い。
 - `tasks.notice-in-talk` Windows（△）: Windows の通知と、身体のしぐさで知らせる。管理画面のトークの上には出ない。
+- `tasks.hold-to-confirm` macOS（×）: ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。
+- `tasks.hold-to-confirm` Windows（×）: ボタンを 1 回押すだけ。決定（2026-10-03）で、Windows も長押しにする。
 
 ## 自律活動（`autonomy`）
+
+決まった構成での場所: シャノン › 自律活動
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -124,6 +152,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 書斎（`study`）
 
+決まった構成での場所: シャノン › 書斎
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `study.list` | **書斎の一覧** シャノンが自分の時間に書いた物語とメモを並べる。見せてもいいと言うまで、題名も本文も出ない。 | ○ | ○ | ○ |
@@ -133,6 +163,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `study.open-from-talk` | **トークから作品を開く** シャノンが見せてくれた物語を、トークの中の札から開く。 | ○ | ○ | × |
 
 ## 頭の中（記憶）（`memory`）
+
+決まった構成での場所: シャノン › 頭の中
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -151,21 +183,25 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## ようす（シャノンのいま）（`yousu`）
 
+決まった構成での場所: シャノン › ようす（シャノンのいま）
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `yousu.now` | **シャノンのいま** 気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。 | 予定 | × | △ |
 | `yousu.waiting` | **待っていること** 感想待ち・判断待ち・許可待ちを、1 か所に集める。 | 予定 | × | △ |
 | `yousu.recent-events` | **最近のできごとの記録** 部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。 | 予定 | × | △ |
 
-- `yousu.now` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
+- `yousu.now` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
 - `yousu.now` macOS（×）: ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。
 - `yousu.now` Windows（△）: 身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。
-- `yousu.waiting` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
+- `yousu.waiting` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
 - `yousu.waiting` Windows（△）: 身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。
-- `yousu.recent-events` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
+- `yousu.recent-events` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
 - `yousu.recent-events` Windows（△）: カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。
 
 ## 運用（`ops`）
+
+決まった構成での場所: 設定 › 管理 › 運用
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -176,16 +212,20 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `ops.kpi-skills` | **今日の数字とスキル** 今日の投稿数・トークン・API 呼出と、スキルの一覧を見る。 | 予定 | × | ○ |
 | `ops.command-record` | **操作の記録** 直近の操作と、その結果・理由を読む。 | 予定 | × | ○ |
 | `ops.minebot-task` | **Minebot のいまの作業** Minebot がいましている作業と手順を見る。 | 予定 | × | ○ |
+| `ops.attention-mark` | **運用が止まっていることに気づける印** 不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。 | 予定 | × | ○ |
 
-- `ops.status` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
-- `ops.service-control` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。iPhone は確認の画面で長押しして決める。
-- `ops.minebot-start` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
-- `ops.schedule-run` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
-- `ops.kpi-skills` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
-- `ops.command-record` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
-- `ops.minebot-task` iOS（予定）: ブランチ `codex/shannon/ios-yousu`
+- `ops.status` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.service-control` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。iPhone は確認の画面で長押しして決める。 ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.minebot-start` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.schedule-run` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.kpi-skills` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.command-record` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.minebot-task` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
+- `ops.attention-mark` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」のタイルに印が出る。設定のタイルと左上のボタンへ移す。
 
 ## からだ・二つの姿（`body`）
+
+決まった構成での場所: トークの表示（向き合う表示／会話の横）と、設定 › すがた
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -196,15 +236,15 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `body.layout` | **映し方（全身・上半身）と大きさ・位置** 体のどこを映すかと、大きさ・位置を変える。 | 予定 | 予定 | △ |
 | `body.idle-gestures` | **何もしていない時のしぐさ** 気分・時刻・していることに合わせて、自分からしぐさをする。 | 予定 | 予定 | ○ |
 
-- `body.live2d` iOS（予定）: ブランチ `codex/shannon/two-forms`。アプリの中の「からだ」の画面。
-- `body.live2d` macOS（予定）: ブランチ `codex/shannon/two-forms`。設定の「からだを開く」から見るだけ。デスクトップに立つ体は SwiftUI で作り直す予定（ADR-0004）。いまの Mac のデスクトップの体は、Electron 版（shannon-desktop）。
-- `body.form-switch` iOS（予定）: ブランチ `codex/shannon/two-forms`
+- `body.live2d` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは別の「からだ」の画面。決定（2026-10-03）: トークの向き合う表示の中に出し、別の画面はたたむ。
+- `body.live2d` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは設定の「からだを開く」から見るだけ。決定（2026-10-03）: トークの会話の横に出す。デスクトップに立つ体は SwiftUI で作り直す（ADR-0004）。いまの Mac のデスクトップの体は Electron 版。
+- `body.form-switch` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは設定と「からだ」の画面。決定（2026-10-03）: トークの表示の設定と、設定 › すがた。
 - `body.form-switch` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチの Mac 側は、設定から「からだを開く」だけ。切り替えが Mac のトークに効くかは確かめていない。
 - `body.form-switch` Windows（×）: Live2D の姿だけ。水の光の目は無い（確認用の静止画はある）。
 - `body.waterlight-eye` macOS（△）: 小さな表情のアイコンだけ。向き合う大きさの目は無い。
 - `body.presence-on-body` iOS（予定）: ブランチ `codex/shannon/two-forms`
 - `body.presence-on-body` macOS（予定）: ブランチ `codex/shannon/two-forms`
-- `body.layout` iOS（予定）: ブランチ `codex/shannon/two-forms`。2 本の指で大きさと位置。全身と上半身。
+- `body.layout` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは「からだ」の画面の中。決定（2026-10-03）: トークの表示の設定と、設定 › すがた へ移す。2 本の指で大きさと位置。
 - `body.layout` macOS（予定）: ブランチ `codex/shannon/two-forms`
 - `body.layout` Windows（△）: 大きさ（40〜500%、画面いっぱい）と置き場所。映し方の切り替えは無い。
 - `body.idle-gestures` iOS（予定）: ブランチ `codex/shannon/two-forms`。体のページのしぐさ。
@@ -212,22 +252,30 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 触る（`touch`）
 
+決まった構成での場所: トークの表示の中の姿と、設定 › すがた
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `touch.gestures` | **触る（撫でる・つつく・くすぐる・手をつなぐ）** 体に触れると、すぐ顔としぐさで返す。 | 予定 | 予定 | ○ |
 | `touch.tell-shannon` | **体に起きたことをシャノンに伝える** 設定が入のとき、触れた種類・長さ・強さ・時刻だけを本体へ送る。シャノンがひとこと返すことがある。 | 予定 | 予定 | ○ |
 | `touch.eye-tap` | **目に触れると照れる**【iPhone だけ】 水の光の目に触れると、驚いてから照れる。 | ○ | × | — |
 | `touch.carry` | **つまんで運ぶ**【デスクトップの追加】 体をつまんで、画面の好きな場所へ運ぶ。 | — | 予定 | ○ |
+| `touch.reply-mode` | **触れたときの返事（文字で返す・声で返す）** 触れたときのひとことを、文字だけで返すか、声に出して返して数秒マイクを開くかを選ぶ。 | 予定 | × | △ |
 
-- `touch.gestures` iOS（予定）: ブランチ `codex/shannon/two-forms`
+- `touch.gestures` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは「からだ」の画面でだけ触れられる（トークの中の姿は押すと画面が開く）。決定（2026-10-03）: トークの向き合う表示の中で触れる。
 - `touch.gestures` macOS（予定）: ブランチ `codex/shannon/two-forms`。Mac では見るだけで、触れたことは伝えない（ブランチの設定の文）。
 - `touch.tell-shannon` iOS（予定）: ブランチ `codex/shannon/two-forms`
 - `touch.tell-shannon` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、Mac からは伝えない。
 - `touch.eye-tap` Windows（—）: Windows には水の光の目が無い。
 - `touch.carry` iOS（—）: アプリの 1 画面の中では、窓ごと運べない（体のページにも無い）。
 - `touch.carry` macOS（予定）: ブランチ `未定`。デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。
+- `touch.reply-mode` iOS（予定）: ブランチ `codex/shannon/two-forms`
+- `touch.reply-mode` macOS（×）: ブランチの Mac は、触れたことをシャノンに伝えない。
+- `touch.reply-mode` Windows（△）: 声で返して数秒マイクを開く動きはある。選ぶ設定は無い。
 
 ## 見る（カメラ）（`look`）
+
+決まった構成での場所: 設定 › カメラ。状態は、いつも見える所
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -246,6 +294,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 - `look.activity-log` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。「ようす」の最近のできごとに出る。
 
 ## 話しかけ・電話（`reach`）
+
+決まった構成での場所: 設定（イヤホン・話しかけ・電話）
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -268,6 +318,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 設定（`settings`）
 
+決まった構成での場所: 設定
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `settings.appearance` | **外観（システム・ライト・ダーク）** アプリの明るさを選ぶ。 | ○ | ○ | × |
@@ -278,13 +330,23 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `settings.world-subscriptions` | **情報源** シャノンが読む情報源の候補と試し読みを見て、購読を決める。 | ○ | ○ | × |
 | `settings.profile-state` | **シャノンの状態の札** 設定のいちばん上に、いまの顔と気持ちを出し、押すと状態を開く。 | ○ | × | × |
 | `settings.about` | **アプリの版** アプリの版とビルドの番号を見る。 | △ | ○ | × |
+| `settings.figure` | **設定 › すがた** 姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。 | 予定 | 予定 | △ |
+| `settings.admin` | **設定 › 管理** 運用（状態・操作・記録）と、接続中の端末を、設定の中の「管理」に並べる。 | × | × | △ |
 
 - `settings.appearance` Windows（×）: OS の設定に従うだけで、アプリの中では選べない。
 - `settings.voice-provider` macOS（△）: 「Gemini（サーバー設定）」と出るだけで、選べない。
 - `settings.about` iOS（△）: 版は「配信」の画面で分かる。設定に版の欄は無い。
 - `settings.about` Windows（×）: 管理画面の設定に版は出ない。
+- `settings.figure` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、映し方と触れたときの返事が「からだ」の画面にある。設定の区画へ移す。
+- `settings.figure` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、姿の切り替えと「からだを開く」だけ。
+- `settings.figure` Windows（△）: 「デスクトップのシャノン」に、体に起きたことを伝える・大きさがある。姿の切り替え・映し方・触れたときの返事は無い。
+- `settings.admin` iOS（×）: 運用は作業中のブランチ（codex/shannon/ios-yousu）で「ようす」の中にある。決定（2026-10-03）で 設定 › 管理 へ移す。接続中の端末は「接続」の中。
+- `settings.admin` macOS（×）: 運用が無い。接続中の端末は接続のシートの中。
+- `settings.admin` Windows（△）: 運用は独立の入口、接続中の端末は設定の中。「管理」としてまとまっていない。
 
 ## 端末と接続（`devices`）
+
+決まった構成での場所: 設定 › 管理（接続中の端末）と、設定 › 接続
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
@@ -302,6 +364,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 通知（`notifications`）
 
+決まった構成での場所: （OS の通知と、入口の印）
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `notifications.push` | **通知** 新しい許可待ちの作業、シャノンからの話、結果を、通知で知らせる。 | ○ | × | △ |
@@ -315,6 +379,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 ## 配信（TestFlight）（`delivery`）
 
+決まった構成での場所: iPhone は設定、Mac は作業の中（デスクトップの追加）
+
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `delivery.testflight` | **TestFlight の配信の状況** 新しいビルドが届いたか、入れたか、実機で確かめたかを見る。 | ○ | ○ | — |
@@ -324,6 +390,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 - `delivery.request-release` Windows（—）: Apple のアプリの配信。
 
 ## デスクトップだけのもの（`desktop`）
+
+決まった構成での場所: 同じ領域の中に付ける（体とトレイだけは窓の外）
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
