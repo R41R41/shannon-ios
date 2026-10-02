@@ -46,8 +46,8 @@ describe('the local rules, one category at a time', () => {
       expect(quiet(transcript), transcript).toBe('unfinished');
     }
     // A particle that can close a sentence is a cut only when nothing closes the segment.
-    expect(quiet('もう寝るから。')).toBeNull();
-    expect(quiet('もう寝るから')).toBe('unfinished');
+    expect(quiet('先に食べてるから。')).toBeNull();
+    expect(quiet('先に食べてるから')).toBe('unfinished');
   });
 
   it('(d) says nothing to "wait a moment", and answers when it is an objection', () => {

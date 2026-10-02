@@ -47,7 +47,11 @@ function boundedNumber(value: string | undefined, fallback: number, minimum: num
 const fragmentCharacters = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_FRAGMENT_CHARACTERS, 16, 0, 80);
 /** Below this reply-required probability the router's doubt alone is silence (`SHANNON_VOICE_REPLY_SILENCE_BELOW`; 0 switches it off). */
 const replySilenceBelow = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_REPLY_SILENCE_BELOW, 0.15, 0, 1);
-const reliabilityThreshold = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_TRANSCRIPT_RELIABILITY_THRESHOLD, 0.85, 0, 1);
+/**
+ * "Could not trust" for that rule (`SHANNON_VOICE_FRAGMENT_RELIABILITY`). Lower than the 0.85 below which a transcript is
+ * re-read in context: a short, ordinary remark the router is merely unsure of must still be answered.
+ */
+const fragmentReliability = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_FRAGMENT_RELIABILITY, 0.5, 0, 1);
 
 /** Her question stays open for a short answer this long. */
 const QUESTION_OPEN_SECONDS = 120;
@@ -78,11 +82,11 @@ const POLITE_QUESTION = /(?:ですか|ますか|でしょうか|ないか|かい
 /** Wondering aloud: a question word that asks nobody in particular. A question mark still makes it a question. */
 const WONDERING = /(?:だろう|だろ|かなあ?|かなぁ|っけ|かしら)[。.…、]*$/u;
 const TE_REQUEST = /(?<!く|だっ)て(?:ください|下さい|くれる|くれない|くれ|もらえる|ほしい|欲しい|みて|よ|ね)?[。.!！…]*$|(?:読ん|呼ん|選ん|遊ん|頼ん)で[。.!！…]*$|(?:頼む|頼んだ|たのむ)[よね]?[。.!！…]*$/u;
-const GREETING = /おはよ|こんにちは|こんばんは|ただいま|おやすみ|ありがと|サンキュー|ごめん|すみません|よろしく|はじめまして|初めまして|久しぶり|ひさしぶり|やっほ|ハロー|お疲れ|おつかれ|いってきます|行ってきます|行ってくる|またね|じゃあね|バイバイ/u;
+const GREETING = /おはよ|こんにちは|こんばんは|ただいま|おやすみ|ありがと|サンキュー|ごめん|すみません|よろしく|はじめまして|初めまして|久しぶり|ひさしぶり|やっほ|ハロー|お疲れ|おつかれ|いってきます|行ってきます|行ってくる|またね|じゃあね|バイバイ|寝る|出かけ|帰る|帰った|起きた/u;
 const CALLING = /^(?:ねえ|ねぇ|ねー|なあ|おーい|おい|あのさ|あのね|聞いて|きいて|ちょっといい|ちょっと聞いて)/u;
 const SECOND_PERSON = /君|きみ|あなた|あんた|お前|おまえ|そっち(?:は|も|こそ|の)/u;
 const CORRECTION = /^(?:いや|いえ|いいえ)?(?:違う|ちがう|違います|そうじゃな|そうではな)/u;
-const AIMED_AT_HER = /寂し|さみし|疲れ|つかれた|しんど|つら|辛い|嬉し|うれし|楽し|悲し|怖|こわい|不安|心配|眠い|ねむい|お腹(?:すい|空い|減っ|へっ)|腹減|暑い|寒い|痛い|最高|やった|できた|終わった|おわった|好き|嫌い|すごい|すげ|かわいい|可愛い|えらい|天才|さすが|むかつく|落ち込|やめろ|うるさい|だめ|ダメ|いいね|いいじゃん|おもしろ|面白|ウケる|うまい|上手|正解|その通り/u;
+const AIMED_AT_HER = /寂し|さみし|疲れ|つかれた|しんど|つら|辛い|嬉し|うれし|楽し|悲し|怖|こわい|不安|心配|眠い|ねむい|お腹(?:すい|空い|減っ|へっ)|腹減|暑い|寒い|痛い|最高|やった|できた|終わった|おわった|好き|嫌い|すごい|すげ|かわいい|可愛い|えらい|天才|さすが|むかつく|落ち込|やめろ|うるさい|だめ|ダメ|いいね|いいじゃん|おもしろ|面白|ウケる|うまい|上手|正解|その通り|最悪|無理|やばい|ひどい|難しい|暇/u;
 /** Ends in the middle of a word or on a particle that cannot close a sentence. */
 const CUT_ALWAYS = /(?:[っッ]|は|が|を|へ|とか|という|について)$/u;
 /** Particles that can close a sentence (「もう寝るから。」): a cut only when nothing closes the segment. */
@@ -142,7 +146,8 @@ export function ownerTurnVerdict(
   return null;
 }
 
-const endsWithQuestion = (content: string) => /[?？][\s)）」』]*$/u.test(content.trim()) || /(?:ですか|ますか|でしょうか|かな)[。!！]?$/u.test(content.trim());
+/** 「〜ですか？」「〜しましょうか。」「〜かな」: her line ends by asking. */
+const endsWithQuestion = (content: string) => /[?？][\s)）」』]*$/u.test(content.trim()) || /(?:か|かな|かね|かい)[。!！]?$/u.test(content.trim());
 
 /** The facts of the moment for one owner-call utterance, from what the thread already holds. Nothing is stored. */
 export function ownerVoiceTurnFacts(input: {
@@ -203,7 +208,7 @@ export function settleOwnerVoiceTurn(
   if (!decision.shouldRespond) return silenced(decision, decision.silence ?? 'model');
   if (decision.source !== 'fallback' && decision.replyRequiredProbability < replySilenceBelow(environment)) return silenced(decision, 'model');
   const reliability = decision.transcriptReliabilityProbability;
-  if (rules.has('unfinished') && reliability !== undefined && reliability < reliabilityThreshold(environment)
+  if (rules.has('unfinished') && reliability !== undefined && reliability < fragmentReliability(environment)
     && characters(bareText(turn.transcript)) <= fragmentCharacters(environment)) return silenced(decision, 'unfinished');
   return decision;
 }
