@@ -99,12 +99,10 @@ struct ShannonOpsRow: View {
         ForEach(actions) { action in
             let label = ShannonOpsText.commandLabel(action.type)
             Button { choose(action) } label: {
-                // The label itself is 44 points tall, so the whole capsule is the target.
+                // With the bordered style's own padding the capsule, which is the target, is 44 points tall.
                 Text(label)
                     .lineLimit(1)
-                    .frame(minHeight: 44 - 14)
-                    .padding(.vertical, 7)
-                    .contentShape(Rectangle())
+                    .frame(minHeight: 30)
             }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)

@@ -23,7 +23,7 @@ extension ShannonConversationView {
             didApplyYousuPreview = true
             // After the preview's first load has settled the workspace on Talk.
             Task { @MainActor in
-                for _ in 0..<4 {
+                for _ in 0..<14 {
                     try? await Task.sleep(for: .milliseconds(1_500))
                     guard !showsThreadList else { continue }
                     if variant != "tile" { yousuRequest = .init(segment: variant == "now" ? .now : .ops) }
