@@ -59,6 +59,7 @@ import { validatedPlaceSearchOptions } from './placeDiscovery.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
+import { withSentenceStream } from './chatSentenceStream.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -337,6 +338,7 @@ export class ShannonApiKernel {
         return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
       }
       if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return badRequest('webSearch must be a boolean');
+      if (body.stream !== undefined && body.stream !== 'sentences') return badRequest('stream is invalid');
       // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
       const audience = chatAudienceTurn(body.audience);
       if (!audience) return badRequest('audience is invalid');
@@ -474,7 +476,7 @@ export class ShannonApiKernel {
       this.background.schedule(completedTurn, experience.id);
       // Her stored feeling toward the owner moves only on a turn that is his alone.
       if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
-      return { status: 200, body: audience.visible(response) };
+      return withSentenceStream(body, { status: 200, body: audience.visible(response) }, { modelReply: completion.reply, placeSearch: placeSkill !== null });
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }

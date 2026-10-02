@@ -54,6 +54,7 @@ import { SQLiteBodyStore } from './bodyStore.js';
 import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
+import { sendChatSentenceStream } from './serverChatSentenceStream.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -272,7 +273,7 @@ const server = createServer(async (request, response) => {
         body: principal ? bindScope(body, principal.scopeKey) : body,
         ...(principal ? { deviceId: principal.deviceId } : {}),
       });
-      sendJson(response, result.status, result.body);
+      if (!(await sendChatSentenceStream(response, url.pathname, body, result))) sendJson(response, result.status, result.body);
     } finally {
       if (isPairedChat) activeChats -= 1;
     }

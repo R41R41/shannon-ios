@@ -16,7 +16,12 @@ export interface ApiRequest {
 export interface ApiResponse {
   status: number;
   body: unknown;
+  /** Present only on a `/v1/chat` turn sent with `stream: "sentences"`. For the HTTP layer; never serialized. */
+  sentenceStream?: { fallback: ChatSentenceFallback | null };
 }
+
+/** Why an opted-in turn is answered with a single `done` line (docs/chat-stream-contract.md). */
+export type ChatSentenceFallback = 'command' | 'attachments' | 'web_search' | 'place_search' | 'sources';
 
 export interface ChatRequest {
   scopeKey: string;
@@ -27,6 +32,8 @@ export interface ChatRequest {
   placeLocation?: { latitude: number; longitude: number; accuracyMeters: number; observedAt: string };
   /** Who can see or hear the reply. Absent: the owner alone. `others`: someone else may, as in a call with someone listening. */
   audience?: 'owner' | 'others';
+  /** Absent: one JSON document, as before the field existed. `sentences`: NDJSON lines (docs/chat-stream-contract.md). */
+  stream?: 'sentences';
 }
 
 export interface ChatThread {

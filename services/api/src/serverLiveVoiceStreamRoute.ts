@@ -166,7 +166,7 @@ function normalizedSegment(value: string): string {
   return value.trim().replace(/\s*\n\s*/gu, ' ');
 }
 
-function startStream(response: ServerResponse): void {
+export function startStream(response: ServerResponse): void {
   if (response.headersSent) return;
   response.writeHead(200, {
     'content-type': 'application/x-ndjson; charset=utf-8',
@@ -176,7 +176,7 @@ function startStream(response: ServerResponse): void {
   });
 }
 
-async function writeEvent(response: ServerResponse, event: Record<string, unknown>): Promise<void> {
+export async function writeEvent(response: ServerResponse, event: Record<string, unknown>): Promise<void> {
   const line = `${JSON.stringify(event)}\n`;
   if (response.write(line)) return;
   await new Promise<void>((resolve, reject) => {
