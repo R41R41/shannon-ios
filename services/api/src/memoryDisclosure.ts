@@ -137,7 +137,9 @@ export class DisclosureGate {
   }
 
   /** A stored thread message: it is judged as the turn it belongs to. */
-  allowsMessage(message: Pick<StoredConversationMessage, 'sourceExperienceId'>): boolean {
+  allowsMessage(message: Pick<StoredConversationMessage, 'sourceExperienceId' | 'bodyLook'>): boolean {
+    // What she said about a look at the owner's room is for the owner alone.
+    if (message.bodyLook && !this.ownerOnly) return false;
     return this.allowsExperience(message.sourceExperienceId);
   }
 

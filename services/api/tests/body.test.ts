@@ -4,6 +4,7 @@ import { InMemoryCompanionStateStore } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { AutonomyActivityDay, AutonomyActivityEntry } from '../src/autonomyActivity.js';
 import { BODY_DOING, BODY_EVENT_TYPES, BODY_LIMITS, BODY_NUDGE_SCENES, bodyIngestEnabled, type BodyNudge } from '../src/bodyContract.js';
+import { BODY_LOOK_LIMITS, BODY_LOOK_REFUSAL_CODES, BODY_LOOK_REQUEST_BYTES } from '../src/bodyLookContract.js';
 import { bodyNudgeCandidates } from '../src/bodyNudges.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { bodyDoing, type BodyIngestReceipt, type BodyNudges, type BodyPresence } from '../src/shannonBody.js';
@@ -274,7 +275,7 @@ describe('GET /v1/body/presence', () => {
     expect(result.body).toEqual({
       schemaVersion: 1, etag: expect.stringMatching(/^[0-9a-f]{16}$/u), changedAt: START, pollAfterSeconds: BODY_LIMITS.presencePollSeconds,
       mood: { expression: expect.any(String), primary: 'neutral', intensity: 0, fromConversation: false, valence: expect.any(Number), arousal: expect.any(Number), openness: expect.any(Number) },
-      doing: 'idle', autonomy: { state: 'disabled' }, study: { awaitingReaction: 0 }, capabilities: null,
+      doing: 'idle', autonomy: { state: 'disabled' }, study: { awaitingReaction: 0 }, capabilities: null, look: null,
     });
   });
 
@@ -428,9 +429,19 @@ describe('body contract document', () => {
       'POST /v1/body/events', 'GET /v1/body/presence', 'PUT /v1/body/capabilities', 'GET /v1/body/nudges', '/v1/body/presence/stream',
       ...BODY_EVENT_TYPES, ...BODY_DOING, ...BODY_NUDGE_SCENES, 'audience', 'others', 'duplicate', 'conflict', 'stale', 'future', 'daily_cap',
       'BAD_REQUEST', 'BODY_INGEST_DISABLED', 'PAIRING_REQUIRED', 'RATE_LIMITED', 'SHANNON_BODY_INGEST', 'awaitingReaction', 'quietUntil', 'etag',
+      // Looking at the room.
+      'POST /v1/body/looks/{id}', 'flags.camera', 'requestedAt', 'expiresAt', 'pollAfterSeconds', ...BODY_LOOK_REFUSAL_CODES, 'discarded',
+      'LOOK_NOT_YOURS', 'LOOK_ALREADY_ANSWERED', 'LOOK_EXPIRED', 'LOOK_NOT_FOUND', 'BODY_LOOK_DISABLED', 'REQUEST_TOO_LARGE',
+      '400,000 bytes', '533,336', '535,384 bytes', '1–960', 'bodyLook', 'bodyLookId', 'not_seen', 'initiativeId', 'store: false',
+      'SHANNON_BODY_LOOK', 'SHANNON_BODY_LOOK_PER_HOUR', 'SHANNON_BODY_LOOK_PER_DAY',
     ]) expect(document, word).toContain(word);
+    expect(BODY_LOOK_REQUEST_BYTES).toBe(535_384);
+    expect(BODY_LOOK_LIMITS).toMatchObject({ imageBytes: 400_000, imageWidth: 960, lifetimeMilliseconds: 30_000, fastPollSeconds: 3, perHour: 6, perDay: 30 });
     for (const path of ['../../../deploy/azure/api.env.example', '../../../.env.example']) {
       expect(readFileSync(new URL(path, import.meta.url), 'utf8'), path).toMatch(/^SHANNON_BODY_INGEST=on$/mu);
+      for (const line of [/^SHANNON_BODY_LOOK=on$/mu, /^SHANNON_BODY_LOOK_PER_HOUR=6$/mu, /^SHANNON_BODY_LOOK_PER_DAY=30$/mu]) {
+        expect(readFileSync(new URL(path, import.meta.url), 'utf8'), path).toMatch(line);
+      }
     }
   });
 });
