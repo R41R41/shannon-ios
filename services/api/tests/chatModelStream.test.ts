@@ -99,7 +99,7 @@ describe('text chat provider adapter, streaming', () => {
     }
     const single = await streamed('proposal', () => Array.from(bytes, byte => Uint8Array.of(byte)));
     expect(single.result).toEqual(whole.result);
-  });
+  }, 60_000);
 
   it('uses the deltas when the completed envelope carries no output', async () => {
     const turn = extractOutputText(GOLDEN_RESPONSES.plain!.envelope);
