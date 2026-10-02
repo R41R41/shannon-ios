@@ -63,6 +63,23 @@ extension ShannonGeminiLiveSessionModel {
             addressedByName: addressedByName, followsShannonTurn: followsShannonTurn, localReply: localReply)
     }
 
+    public func shareCameraSnapshot(
+        jpegData: Data,
+        analyze: @escaping @MainActor (Data) async throws -> String
+    ) async throws {
+        guard participantMode.allowsCameraSharing else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
+        let generation = sessionGenerationID
+        let description = try await analyze(jpegData)
+        guard sessionGenerationID == generation, participantMode.allowsCameraSharing,
+              transport != nil else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
+        interruptResponse()
+        pendingTurns.append(rawText: "写真を共有しました。",
+            text: "いま共有した写真を見て、会話の流れに合わせて短くコメントして。画像の内容: \(description)",
+            source: .camera)
+        beginResponse()
+    }
+
+
     /// Closes the running 「友人も一緒」 period, if any, and hands it to whoever remembers calls.
     func finishGuestPeriod() {
         guard let period = guestCall.endGuestPeriod() else { return }
@@ -71,6 +88,12 @@ extension ShannonGeminiLiveSessionModel {
 
     /// Owner mode: someone may be listening, so protected memories are not read out and the turn is marked.
     var companionSuspected: Bool { participantMode == .owner && guestCall.companionSuspected }
+
+    /// Someone other than the owner may hear the phone now: 「友人も一緒」, or a companion he mentioned.
+    /// While this holds the app never says that only he can hear.
+    public var othersMayBeListening: Bool {
+        phase != .idle && (participantMode == .guest || guestCall.companionSuspected)
+    }
 
     /// Keeps the call screen readable on a table. Released when the call ends.
     func setKeepsScreenAwake(_ awake: Bool) {

@@ -50,6 +50,8 @@ extension ShannonDesktopRootView {
 
             ShannonAppLookSettingsSection()
 
+            ShannonPrivateListeningSettingsSection()
+
             ShannonAutonomySettingsSection(model: memory.autonomy)
 
             Section("Shannon Desk") {

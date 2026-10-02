@@ -21,12 +21,14 @@ final class ShannonGeminiLiveTransport {
         _ emittedAudioChunks: Int
     ) -> Void
     typealias InputStateHandler = @MainActor @Sendable (ShannonVoiceInputState) -> Void
+    typealias AudioStateHandler = @MainActor @Sendable (ShannonGeminiLiveAudioState) -> Void
     private let session: ShannonGeminiLiveSessionDTO
-    private let eventHandler: EventHandler
+    let eventHandler: EventHandler
     private let captureHandler: CaptureHandler
-    private let inputStateHandler: InputStateHandler
-    private let audioEngine = AVAudioEngine()
-    private let playerNode = AVAudioPlayerNode()
+    let inputStateHandler: InputStateHandler
+    let audioStateHandler: AudioStateHandler
+    let audioEngine = AVAudioEngine()
+    let playerNode = AVAudioPlayerNode()
     private let playbackDrain = ShannonVoicePlaybackDrain()
     private let playbackFormatMixerNode = AVAudioMixerNode()
     private let pitchNode = AVAudioUnitTimePitch()
@@ -41,26 +43,29 @@ final class ShannonGeminiLiveTransport {
     private var receiveTask: Task<Void, Never>?
     private var keepAliveSourceNode: AVAudioSourceNode?
     private var inputTapInstalled = false
-    private var audioStarted = false
-    private var stopped = false
+    var audioStarted = false
+    var stopped = false
+    /// The system took the audio session away (a phone call, Siri, another app); nothing is captured or played.
+    var interrupted = false
     private var didRecordFirstAudioSend = false
-    private var inputPreference: ShannonVoiceInputPreference = .automatic
-    private var preferenceUnavailable = false
+    var inputPreference: ShannonVoiceInputPreference = .automatic
+    var preferenceUnavailable = false
     private var inputMuted = false
-    private var routeObserver: NSObjectProtocol?
-    private var interruptionObserver: NSObjectProtocol?
+    var audioObservers: [NSObjectProtocol] = []
     private(set) var sentAudioSeconds: Double = 0
     private(set) var receivedAudioSeconds: Double = 0
     init(
         session: ShannonGeminiLiveSessionDTO,
         eventHandler: @escaping EventHandler,
         captureHandler: @escaping CaptureHandler,
-        inputStateHandler: @escaping InputStateHandler
+        inputStateHandler: @escaping InputStateHandler,
+        audioStateHandler: @escaping AudioStateHandler = { _ in }
     ) {
         self.session = session
         self.eventHandler = eventHandler
         self.captureHandler = captureHandler
         self.inputStateHandler = inputStateHandler
+        self.audioStateHandler = audioStateHandler
     }
     func start() async throws {
         stopped = false
@@ -149,7 +154,7 @@ final class ShannonGeminiLiveTransport {
     }
     func setInputPreference(_ preference: ShannonVoiceInputPreference) throws {
         inputPreference = preference
-        guard routeObserver != nil else { return }
+        guard !audioObservers.isEmpty else { return }
         try applyInputPreference()
     }
 
@@ -203,99 +208,9 @@ final class ShannonGeminiLiveTransport {
         keepAliveSourceNode = nil
         captureChunker.reset()
         audioStarted = false
-        if let routeObserver {
-            NotificationCenter.default.removeObserver(routeObserver)
-            self.routeObserver = nil
-        }
-        if let interruptionObserver {
-            NotificationCenter.default.removeObserver(interruptionObserver)
-            self.interruptionObserver = nil
-        }
+        removeAudioObservers()
+        interrupted = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-
-    private func configureAudioSession() throws {
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(
-            .playAndRecord,
-            mode: .voiceChat,
-            options: [.defaultToSpeaker, .allowBluetoothHFP]
-        )
-        try audioSession.setPreferredIOBufferDuration(0.02)
-        try audioSession.setActive(true)
-        try applyInputPreference()
-        if interruptionObserver == nil {
-            interruptionObserver = NotificationCenter.default.addObserver(
-                forName: AVAudioSession.interruptionNotification,
-                object: audioSession,
-                queue: .main
-            ) { [weak self] notification in
-                let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
-                let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
-                Task { @MainActor [weak self] in
-                    guard let self, !self.stopped,
-                          let rawType,
-                          let type = AVAudioSession.InterruptionType(rawValue: rawType) else { return }
-                    guard type == .ended else { return }
-                    let mayResume = AVAudioSession.InterruptionOptions(rawValue: rawOptions).contains(.shouldResume)
-                    guard mayResume else {
-                        self.eventHandler(.goAway(nil))
-                        return
-                    }
-                    do {
-                        try AVAudioSession.sharedInstance().setActive(true)
-                        if self.audioStarted && !self.audioEngine.isRunning {
-                            try self.audioEngine.start()
-                            self.playerNode.play()
-                        }
-                        try self.applyInputPreference()
-                    } catch {
-                        self.eventHandler(.goAway(nil))
-                    }
-                }
-            }
-        }
-        if routeObserver == nil {
-            routeObserver = NotificationCenter.default.addObserver(
-                forName: AVAudioSession.routeChangeNotification,
-                object: audioSession,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    try? self.applyInputPreference()
-                }
-            }
-        }
-    }
-
-    private func applyInputPreference() throws {
-        let audioSession = AVAudioSession.sharedInstance()
-        let inputs = audioSession.availableInputs ?? []
-        let resolution = ShannonVoiceInputRouting.resolve(
-            inputPreference, inputIsBuiltIn: inputs.map { $0.portType == .builtInMic }
-        )
-        if resolution.isPreferenceUnavailable, !preferenceUnavailable {
-            ShannonVoiceDiagnostics.shared.record("gemini.audio.input.fallback", metadata: ["preference": inputPreference.rawValue])
-        }
-        preferenceUnavailable = resolution.isPreferenceUnavailable
-        let selected = resolution.preferredIndex.map { inputs[$0] }
-        if audioSession.preferredInput?.uid != selected?.uid {
-            try audioSession.setPreferredInput(selected)
-        }
-        publishInputState()
-    }
-
-    private func publishInputState() {
-        let audioSession = AVAudioSession.sharedInstance()
-        let inputs = audioSession.availableInputs ?? []
-        inputStateHandler(ShannonVoiceInputState(
-            preference: inputPreference,
-            activeInputName: audioSession.currentRoute.inputs.first?.portName,
-            isBuiltInAvailable: inputs.contains(where: { $0.portType == .builtInMic }),
-            isConnectedInputAvailable: inputs.contains(where: { $0.portType != .builtInMic }),
-            isPreferenceUnavailable: preferenceUnavailable
-        ))
     }
 
     private func startAudioEngine() throws {
@@ -463,6 +378,8 @@ final class ShannonGeminiLiveTransport {
 
     private func play(_ pcm: Data) throws {
         guard pcm.count >= 2 else { throw URLError(.cannotDecodeRawData) }
+        // Starting a player on a stopped engine raises an Objective-C exception; an interrupted call plays nothing.
+        guard isAudioRunning else { throw URLError(.networkConnectionLost) }
         let frameCount = pcm.count / MemoryLayout<Int16>.size
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatInt16,

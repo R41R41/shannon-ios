@@ -56,10 +56,10 @@ The server reads these tables through a connection that cannot write (`PRAGMA qu
 | `looks[]` | Looks through her body's camera (`body_looks`) and through the app's (`app_looks`), newest first. `askedBy`: `owner`, `herself`, or `unknown` (an app look does not record it). `outcome`: `looking`, `seen`, `refused`, `discarded`, `expired`, `failed`. `code`: the closed codes of `docs/body-contract.md`. |
 | `touches[]` | Runs of touches of one kind (`body_touch_bursts`), newest first: `kind` (`pet`, `tickle`, `poke`, `carry`, `holdHand`), `count`, and `answered` (she said a line; the line is not here). |
 | `reachOuts[]` | Messages she started on her own, newest first. `reason`: `share`, `wonder`, `upcoming`, `saw`, `follow_up`, or absent. |
-| `reachOuts[].deliveries[]` | How it reached him, oldest first. `surface: "body"` with `outcome` `spoken`, `shown`, `away`, `hidden`, `muted` (one per body that reported); `surface: "app"` with `outcome: "read"` when he opened it in a Talk. Empty while nothing was reported. |
+| `reachOuts[].deliveries[]` | How it reached him, oldest first. `surface: "body"` with `outcome` `spoken`, `shown`, `away`, `hidden`, `muted` (one per body that reported); `surface: "earphones"` with `outcome: "spoken"` and `device` `mac` or `iphone` when that app said it in his earphones (private listening); `surface: "app"` with `outcome: "read"` when he opened it in a Talk. Empty while nothing was reported. |
 | `limits` | Each list holds at most `items` (30) entries, none older than `days` (14). |
 
-**A client must tolerate values it does not know**: a `surface` (`earphones`, `call` are planned), an `outcome`, a `code`, a `reason`, a touch `kind`, an `expression`. It shows a neutral wording for them and never fails the whole page.
+**A client must tolerate values it does not know**: a `surface` (`call` is planned), an `outcome`, a `code`, a `reason`, a touch `kind`, an `expression`. It shows a neutral wording for them and never fails the whole page.
 
 A feature that was never switched on, or a table a later change adds, is an empty list and not an error.
 
@@ -80,7 +80,7 @@ An older server answers `404`. On `403` and `404` the app shows the page without
 
 ## Adding a delivery surface
 
-`shannonNowReader.ts` holds `REACH_OUT_DELIVERY_SOURCES`: one function per surface, each reading its own table and returning nothing while that table does not exist. A new surface (her voice in the owner's earphones, an incoming call) adds one function that maps its rows to `{ id, surface, outcome, at }`. A source that throws is left out of the answer; the rest of the page still arrives.
+`shannonNowReader.ts` holds `REACH_OUT_DELIVERY_SOURCES`: one function per surface, each reading its own table and returning nothing while that table does not exist. A new surface (an incoming call) adds one function that maps its rows to `{ id, surface, outcome, at }`. A source that throws is left out of the answer; the rest of the page still arrives.
 
 ## Not built
 

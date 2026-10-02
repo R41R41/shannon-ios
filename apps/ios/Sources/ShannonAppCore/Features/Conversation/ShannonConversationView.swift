@@ -52,6 +52,7 @@ public struct ShannonConversationView: View {
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.scenePhase) var scenePhase
+    @Environment(ShannonPrivateListeningModel.self) var privateListening: ShannonPrivateListeningModel?
 
     public init(
         model: ShannonConversationModel = ShannonConversationModel(),
@@ -92,12 +93,7 @@ public struct ShannonConversationView: View {
             resetComposerTools()
         }
         .onChange(of: scenePhase) {
-            if scenePhase != .active {
-                voiceModel.cancel()
-            } else {
-                // Another device, or the worker, may have recorded captures while this one was away.
-                Task { await model.refreshCaptures() }
-            }
+            handleScenePhaseChange()
         }
         .onReceive(NotificationCenter.default.publisher(for: .shannonTestFlightDeliveryNotificationOpened)) { _ in
             showsSettings = true
@@ -110,6 +106,16 @@ public struct ShannonConversationView: View {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
+#if os(iOS)
+        // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
+        .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
+            privateListening?.othersPresent = geminiLiveVoiceModel.othersMayBeListening
+        }
+        // Shannon's own messages, said through registered earphones (Settings › イヤホン; off until switched on).
+        .modifier(ShannonPhoneEarphoneSpeaking(
+            conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel, workspace: voiceWorkspace, dictation: voiceModel
+        ))
+#endif
 #if DEBUG
         .onAppear { applyDesignPreviewLaunchState() }
 #endif

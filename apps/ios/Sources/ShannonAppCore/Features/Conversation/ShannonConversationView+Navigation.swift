@@ -13,6 +13,29 @@ extension ShannonConversationView {
         Task { await memoryModel.reload() }
     }
 
+    /// Leaving the app ends dictation, never a voice conversation: that goes on in the background
+    /// and ends by itself after `ShannonVoiceBackgroundSilence.limit` of silence.
+    func handleScenePhaseChange() {
+        if scenePhase != .active {
+            voiceModel.cancel()
+        } else {
+            // Another device, or the worker, may have recorded captures while this one was away.
+            Task { await model.refreshCaptures() }
+        }
+#if os(iOS)
+        switch scenePhase {
+        case .background:
+            // The camera is a foreground feature; a photo already taken stays for when he returns.
+            voiceWorkspace.showsCamera = false
+            geminiLiveVoiceModel.sceneDidEnterBackground()
+        case .active:
+            geminiLiveVoiceModel.sceneDidBecomeActive()
+        default:
+            break
+        }
+#endif
+    }
+
     func resetComposerTools() {
         composerAttachments = []
         composerUsesWebSearch = false

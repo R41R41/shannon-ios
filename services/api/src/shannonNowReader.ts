@@ -28,19 +28,27 @@ export type ReachOutDeliverySource = (
 
 const placeholders = (values: readonly unknown[]) => values.map(() => '?').join(', ');
 
-/** What her desktop body reported (`POST /v1/body/reach-outs/{id}/delivery`). */
-const bodyDeliveries: ReachOutDeliverySource = (database, scopeKey, ids, tableExists) => {
+/**
+ * What a surface reported about a message (`reach_out_deliveries`): her desktop body
+ * (`POST /v1/body/reach-outs/{id}/delivery`, no `surface`), or the Mac or iPhone app that said it in the
+ * owner's earphones while private listening was on (`surface` `mac` or `iphone`, `docs/private-listening-contract.md`).
+ * A database from before that column has rows of her body only.
+ */
+const reportedDeliveries: ReachOutDeliverySource = (database, scopeKey, ids, tableExists) => {
   if (!ids.length || !tableExists('reach_out_deliveries')) return [];
+  const columns = database.prepare(`PRAGMA table_info('reach_out_deliveries')`).all() as unknown as Array<{ name: string }>;
+  const surface = columns.some(column => column.name === 'surface') ? 'surface' : 'NULL';
   const rows = database.prepare(`
-    SELECT initiative_id, outcome, reported_at FROM reach_out_deliveries
+    SELECT initiative_id, outcome, reported_at, ${surface} AS surface FROM reach_out_deliveries
     WHERE scope_key = ? AND initiative_id IN (${placeholders(ids)}) ORDER BY reported_at ASC
-  `).all(scopeKey, ...ids) as unknown as Array<{ initiative_id: string; outcome: string; reported_at: string }>;
+  `).all(scopeKey, ...ids) as unknown as Array<{ initiative_id: string; outcome: string; reported_at: string; surface: string | null }>;
   return rows.map(row => ({
-    id: row.initiative_id, surface: 'body', outcome: row.outcome === 'shown_spoken' ? 'spoken' : row.outcome, at: row.reported_at,
+    id: row.initiative_id, at: row.reported_at, outcome: row.outcome === 'shown_spoken' ? 'spoken' : row.outcome,
+    ...(row.surface ? { surface: 'earphones', device: row.surface } : { surface: 'body' }),
   }));
 };
 
-export const REACH_OUT_DELIVERY_SOURCES: readonly ReachOutDeliverySource[] = Object.freeze([bodyDeliveries]);
+export const REACH_OUT_DELIVERY_SOURCES: readonly ReachOutDeliverySource[] = Object.freeze([reportedDeliveries]);
 
 export class SQLiteShannonNowReader {
   private readonly database: DatabaseSync;

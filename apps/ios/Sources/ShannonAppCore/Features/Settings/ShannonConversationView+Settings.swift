@@ -78,6 +78,8 @@ extension ShannonConversationView {
 
                 ShannonAppLookSettingsSection()
 
+                ShannonPrivateListeningSettingsSection()
+
                 ShannonAutonomySettingsSection(model: memoryModel.autonomy)
 
                 Section("接続と詳細") {

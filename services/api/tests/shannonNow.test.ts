@@ -228,11 +228,13 @@ describe('GET /v1/shannon/now: what it answers', () => {
     expect(reports.report(OWNER, 'pc', 'reach-1', 'shown_spoken', ago(3 * 60 * MINUTE - 4_000))).toBe('stored');
     expect(reports.report(OWNER, 'laptop', 'reach-1', 'hidden', ago(3 * 60 * MINUTE - 5_000))).toBe('stored');
     expect(reports.report(OWNER, 'pc', 'reach-2', 'away', ago(2 * 60 * MINUTE - 5_000))).toBe('stored');
+    // The iPhone said it in his earphones (private listening): the same table, with the surface named.
+    expect(reports.report(OWNER, 'iphone', 'reach-3', 'shown_spoken', ago(60 * MINUTE - 3_000), 'iphone')).toBe('stored');
     raw.prepare('UPDATE initiative_messages SET read_at = ? WHERE initiative_id = ?').run(ago(2 * 60 * MINUTE + 30 * MINUTE), 'reach-1');
 
     const { body } = await read();
     expect(body.reachOuts).toEqual([
-      { id: 'reach-3', at: ago(60 * MINUTE), deliveries: [] },
+      { id: 'reach-3', at: ago(60 * MINUTE), deliveries: [{ surface: 'earphones', device: 'iphone', outcome: 'spoken', at: ago(60 * MINUTE - 3_000) }] },
       { id: 'reach-2', at: ago(2 * 60 * MINUTE), reason: 'follow_up', deliveries: [{ surface: 'body', outcome: 'away', at: ago(2 * 60 * MINUTE - 5_000) }] },
       {
         id: 'reach-1', at: ago(3 * 60 * MINUTE), reason: 'share', deliveries: [
