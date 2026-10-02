@@ -142,8 +142,10 @@ describe('one task at a time on a host', () => {
     store.enqueue(OWNER, working.id, {
       idempotencyKey: 'approve-1', type: 'resolve_approval', payload: { decision: 'allow_once', externalRequestID: 'request-1' },
     }, tick());
-    expect(store.claim(MAC, tick())).toMatchObject({ taskId: working.id, type: 'resolve_approval' });
+    const approval = store.claim(MAC, tick())!;
+    expect(approval).toMatchObject({ taskId: working.id, type: 'resolve_approval' });
     host(MAC, working.id, 'progress');
+    host(MAC, working.id, 'command_completed', { commandId: approval.id });
 
     store.enqueue(OWNER, working.id, { idempotencyKey: 'pause-1', type: 'interrupt' }, tick());
     const interrupt = store.claim(MAC, tick())!;
