@@ -18,18 +18,19 @@ extension ShannonYousuModel {
 extension ShannonConversationView {
     /// Opens the thread list on 「ようす」 for a `shannon://yousu` link that arrived.
     func openPendingYousuLink() {
-        var request = ShannonYousuLink.takePending()
 #if DEBUG
-        if request == nil, model.isDesignPreview, !didApplyYousuPreview, let variant = ShannonYousuFixtureClient.launchVariant {
+        if model.isDesignPreview, !didApplyYousuPreview, let variant = ShannonYousuFixtureClient.launchVariant {
             didApplyYousuPreview = true
-            if variant == "tile" {
+            // After the preview's first load has settled the workspace on Talk.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(1_500))
+                if variant != "tile" { yousuRequest = .init(segment: variant == "now" ? .now : .ops) }
                 showsThreadList = true
-                return
             }
-            request = .init(segment: variant == "now" ? .now : .ops)
+            return
         }
 #endif
-        guard let request else { return }
+        guard let request = ShannonYousuLink.takePending() else { return }
         composerIsFocused = false
         yousuRequest = request
         showsThreadList = true
