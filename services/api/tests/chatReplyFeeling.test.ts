@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryCompanionStateStore, SHANNON_EMOTION_KINDS, livingLingering, presentShannonFeeling,
@@ -11,7 +12,7 @@ import { parseStructuredTurn } from '../src/chatModelSupport.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import {
   REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA, chatFeelingStrengthEnabled, decidedReplyFeeling, parsedReplyFeeling,
-  replyFeelingOffer, type ChatReplyFeeling,
+  replyFeelingOffer, usesDecidedFeeling, type ChatReplyFeeling,
 } from '../src/chatReplyFeeling.js';
 import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts.js';
@@ -140,10 +141,11 @@ describe('the field of the structured reply', () => {
     const plain = chatTurnRequestBody('gpt-test', GOLDEN_BASE, undefined) as ReturnType<typeof offered>;
     const body = offered();
     expect(body.instructions).toBe(`${plain.instructions}\n\n${REPLY_FEELING_INSTRUCTIONS}`);
-    expect(Array.from(REPLY_FEELING_INSTRUCTIONS).length).toBeLessThanOrEqual(420);
+    expect(Array.from(REPLY_FEELING_INSTRUCTIONS).length).toBeLessThanOrEqual(480);
     expect(body.max_output_tokens).toBe(plain.max_output_tokens);
-    for (const phrase of ['strongはまれ', '人なら後まで残る出来事のときだけ', 'ターンごとに自分で強めていかない',
-      '今回のライ氏の発言そのものに実際の原因があるときだけ', '特に動いていなければnull']) {
+    for (const phrase of ['strongはまれ', '人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない', 'moderate=数時間は気分として残る',
+      '新しい出来事がなければ、前より弱くするかnullにする', '別の気持ちに替えて強く出し続けたりしない', 'すでに謝ってもらったことを理由にしない',
+      'moderate以上にしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ', '特に動いていなければnull', 'replyの文面と食い違う気持ちは選ばない']) {
       expect(REPLY_FEELING_INSTRUCTIONS).toContain(phrase);
     }
     const { feeling: _feeling, ...rest } = body.text.format.schema.properties;
@@ -288,7 +290,7 @@ describe('a text conversation may leave a feeling that lingers', () => {
 });
 
 describe('every existing rule applies to it unchanged', () => {
-  it('cannot be ratcheted or pinned by choosing strong turn after turn', async () => {
+  it('cannot raise what lingers, or keep it from fading, by choosing strong turn after turn; only the reaction of the moment is felt again', async () => {
     const repeated = harness();
     const once = harness();
     await repeated.chat(HARSH, QUIET, strong('hurt'));
@@ -299,8 +301,9 @@ describe('every existing rule applies to it unchanged', () => {
       once.advance(10 * MINUTE);
       await repeated.chat('ふーん', QUIET, strong('hurt'));
       await once.chat('ふーん', QUIET);
-      // Never above the one step she chose, and what is underneath is never renewed: it is the entry of the first turn.
-      expect(repeated.state().expressiveEmotion!.intensity).toBeLessThanOrEqual(0.9);
+      // The reaction of the moment is felt again at the one step for as long as she keeps choosing it, never above it;
+      // what is underneath is never renewed: it is the entry of the first turn.
+      expect(repeated.state().expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
       expect(repeated.state().lingering).toEqual([first]);
     }
     // Five awake hours later it has faded exactly as far as when she said it once and nothing after.
@@ -364,12 +367,18 @@ describe('every existing rule applies to it unchanged', () => {
   it('puts grief and an emergency first, whatever she chose', async () => {
     const grief = harness();
     const mourning = await grief.chat('祖母が亡くなった', QUIET, strong('happy'));
-    expect(grief.state().expressiveEmotion).toMatchObject({ primary: 'caring', overrideReason: 'grief' });
+    // At the strength the override has without the field, not at hers.
+    expect(grief.state().expressiveEmotion).toMatchObject({ primary: 'caring', overrideReason: 'grief', intensity: 0.68 });
     expect(mourning.messageEmotion.expression).not.toBe('happy');
     expect(grief.state().lingering ?? []).toEqual([]);
     const danger = harness();
     await danger.chat('火事だ、助けて', QUIET, strong('sulky'));
-    expect(danger.state().expressiveEmotion).toMatchObject({ primary: 'protective', overrideReason: 'emergency' });
+    expect(danger.state().expressiveEmotion).toMatchObject({ primary: 'protective', overrideReason: 'emergency', intensity: 0.78 });
+    // Accuracy before play, as without the field: a chosen sulk beside his health is not stored as a strong one.
+    const health = harness();
+    await health.chat('薬を飲み忘れたかも', QUIET, strong('sulky'));
+    expect(health.state().lingering ?? []).toEqual([]);
+    expect(health.state().expressiveEmotion?.primary).not.toBe('sulky');
     expect(danger.state().lingering ?? []).toEqual([]);
   });
 
@@ -379,11 +388,33 @@ describe('every existing rule applies to it unchanged', () => {
       await chat(HARSH, QUIET, strong('hurt'));
       advance(MINUTE);
       const response = await chat('今日は仕事でひどい失敗をした', 'それは、こたえますね。', strong(kind));
-      expect(state().expressiveEmotion!.primary).toBe(kind);
+      // Strong is for what can linger: her sympathy is felt at moderate at most.
+      expect(state().expressiveEmotion).toMatchObject({ primary: kind, intensity: 0.6 });
       expect(response.state.presence.mood.fromConversation).toBe(true);
       // Only the hurt is underneath.
       expect(state().lingering!.map(item => item.kind)).toEqual(['hurt']);
     }
+  });
+
+  it('does not let a strong tone, startle or sympathy ease what lies underneath', async () => {
+    for (const kind of ['bright', 'gentle', 'relaxed', 'giggle', 'surprised', 'relief', 'caring'] as const) {
+      const { chat, advance, state } = harness();
+      await chat(HARSH, QUIET, strong('hurt'));
+      const hurt = state().lingering;
+      for (let index = 0; index < 3; index += 1) { advance(2 * MINUTE); await chat('それはそうと', QUIET, strong(kind)); }
+      expect(state().lingering, kind).toEqual(hurt);
+    }
+    // Her sympathy for his bad news does not halve a joy she carries.
+    const { chat, advance, state } = harness();
+    await chat('君の物語、読んで泣いたよ', QUIET, strong('happy'));
+    const joy = state().lingering;
+    advance(2 * MINUTE);
+    await chat('今日は仕事でひどい失敗をした', 'それは、こたえますね。', strong('sad'));
+    expect(state().lingering).toEqual(joy);
+    expect(decidedReplyFeeling({ replyFeeling: strong('sad') }, true, {})).toEqual({ decided: { primary: 'sad', intensity: 0.6 } });
+    expect(decidedReplyFeeling({ replyFeeling: strong('bright') }, true, {})).toEqual({ decided: { primary: 'bright', intensity: 0.6 } });
+    expect(decidedReplyFeeling({ replyFeeling: moderate('sad') }, true, {})).toEqual({ decided: { primary: 'sad', intensity: 0.6 } });
+    expect(decidedReplyFeeling({ replyFeeling: subtle('sad') }, true, {})).toEqual({ decided: { primary: 'sad', intensity: 0.25 } });
   });
 
   it('holds a strong feeling against a weaker one she chooses next, which stays beside it', async () => {
@@ -396,11 +427,49 @@ describe('every existing rule applies to it unchanged', () => {
     expect(state().lingering).toMatchObject([{ kind: 'hurt', strength: 0.9 }]);
   });
 
-  it('reconciles the chosen kind with her own words as a voice turn does: the cue in the reply names the feeling', async () => {
-    const { chat, state } = harness();
-    await chat(HARSH, 'ご、ごめんなさい……。', strong('hurt'));
-    expect(state().expressiveEmotion).toMatchObject({ primary: 'apologetic', intensity: 0.9 });
-    expect(state().lingering ?? []).toEqual([]);
+  it('never lends the chosen strength to a kind she did not choose: when her words name another, the turn is as without the field', async () => {
+    /** The same turn with and without the chosen feeling, from the same start. */
+    const both = async (message: string, reply: string, feeling: ChatReplyFeeling, before?: [string, string, ChatReplyFeeling]) => {
+      const run = async (chosen: ChatReplyFeeling | undefined) => {
+        const h = harness();
+        if (before) { await h.chat(before[0], before[1], before[2]); h.advance(2 * MINUTE); }
+        const response = await h.chat(message, reply, chosen);
+        return { state: h.state(), messageEmotion: response.messageEmotion };
+      };
+      return { chosen: await run(feeling), plain: await run(undefined) };
+    };
+    // A strong curiosity beside 「ほかの子」 is the jealousy her words name, at the cue's 0.52: a mood, not days.
+    const curious = await both('昨日は別の子と話してた', 'ほかの子の話も聞かせてください。', strong('curiosity'));
+    expect(curious.chosen).toEqual(curious.plain);
+    expect(curious.chosen.state.lingering).toMatchObject([{ kind: 'jealous', span: 'mood', strength: 0.52 }]);
+    // A strong hurt beside a pleasant word does not become a joy that lingers.
+    const mixed = await both(HARSH, '嬉しいです、でも……傷つきました。', strong('hurt'));
+    expect(mixed.chosen).toEqual(mixed.plain);
+    expect(mixed.chosen.state.lingering).toMatchObject([{ kind: 'excited', span: 'mood', strength: 0.52 }]);
+    // Beside an apology it is her apology, at the cue's strength.
+    const sorry = await both(HARSH, 'ご、ごめんなさい……。', strong('hurt'));
+    expect(sorry.chosen).toEqual(sorry.plain);
+    expect(sorry.chosen.state.expressiveEmotion).toMatchObject({ primary: 'apologetic', intensity: 0.52 });
+    expect(sorry.chosen.state.lingering ?? []).toEqual([]);
+    // A hurt she carries is not halved by a strong hurt whose reply happens to hold 「ふふ」.
+    const laugh = await both('まだ怒ってる？', 'ふふ、そうですか。', strong('hurt'), [HARSH, QUIET, strong('hurt')]);
+    expect(laugh.chosen).toEqual(laugh.plain);
+    expect(laugh.chosen.state.lingering).toMatchObject([{ kind: 'hurt', strength: 0.9 }]);
+    expect(laugh.chosen.state.lingering![0]).not.toHaveProperty('peak');
+    // Nor a joy by a strong affection whose reply holds 「ごめん」.
+    const fond = await both('また読ませて', 'ごめんなさい、うれし泣きです。', strong('affectionate'), ['君の物語、読んで泣いたよ', QUIET, strong('happy')]);
+    expect(fond.chosen).toEqual(fond.plain);
+    expect(fond.chosen.state.lingering).toMatchObject([{ kind: 'happy', strength: 0.9 }]);
+    // The cue of the chosen kind is the chosen feeling: its strength stands.
+    const sulk = await both(HARSH, 'ボク、ちょっとすねちゃいます。', strong('sulky'));
+    expect(sulk.chosen.state.lingering).toMatchObject([{ kind: 'sulky', span: 'lingering', strength: 0.9 }]);
+    expect(sulk.plain.state.lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
+
+    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'hurt' })).toBe(true);
+    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'sulky', continued: true })).toBe(true);
+    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'giggle' })).toBe(false);
+    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'giggle', continued: false })).toBe(false);
+    expect(usesDecidedFeeling({ primary: 'caring' }, { primary: 'caring', overrideReason: 'grief' })).toBe(false);
   });
 });
 
@@ -432,12 +501,16 @@ describe('guests and other people present never move her feeling toward the owne
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'hurt', intensity: 1 } }, true, {})).toEqual({});
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'neutral', intensity: 0.9 } }, true, {})).toEqual({});
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'furious' as never, intensity: 0.9 } }, true, {})).toEqual({});
-    // The one production caller is the kernel's chat turn; the bridge, voice and the body resolve a reply without it.
-    const callers = ['apiVoiceTurns.ts', 'platformBridge.ts', 'bodyReaction.ts', 'apiLiveVoice.ts', 'serverPlatformBridgeRoute.ts', 'apiPeopleMemoryRoutes.ts', 'apiVoiceCallSummary.ts'];
-    for (const file of callers) expect(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')).not.toMatch(/ReplyFeeling/u);
-    const kernel = readFileSync(new URL('../src/apiKernel.ts', import.meta.url), 'utf8');
+    // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
+    const directory = new URL('../src/', import.meta.url);
+    const naming = readdirSync(directory).filter(file => file.endsWith('.ts'))
+      .filter(file => /ReplyFeeling|resolveTextReplyEmotion|usesDecidedFeeling/u.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
+    // (`autonomyCore.ts` names the module's path among the core paths.)
+    expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
+    const kernel = readFileSync(new URL('apiKernel.ts', directory), 'utf8');
     expect(kernel.match(/replyFeelingOffer\(audience\.alone\)/gu)).toHaveLength(1);
-    expect(kernel.match(/decidedReplyFeeling\(completion, audience\.alone\)/gu)).toHaveLength(1);
+    expect(kernel.match(/resolveTextReplyEmotion\(\{[^}]*\}, completion, audience\.alone\)/gu)).toHaveLength(1);
+    expect(kernel.match(/ReplyFeeling|resolveTextReplyEmotion/gu)).toHaveLength(4);
   });
 });
 
@@ -488,6 +561,8 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     const off = await run(true);
     const before = await run(false);
     expect(off.seen).toEqual(before.seen);
+    // Recorded by running these four turns on the sources of 7e227e6 (responses, stored state and model requests, ids by order).
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('ddddfebb24392e5957bfb741795ae44361c9fce57defdaad21846c966e0b7abd');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

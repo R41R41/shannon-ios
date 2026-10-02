@@ -233,8 +233,19 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
     { type: 'collection-limit', path: 'state.lingering', maximum: 0 },
     { type: 'text-excludes', value: 'まだ残っている気持ち' },
   ]),
-  // Without the field the reply's own words decide, at the cue's 0.52 or not at all: here nothing is felt and nothing stays.
-  scenario('feeling-text-undecided-is-as-before', 'prompt-projection', {
+  // Without the field the reply's own words decide, as before: a cue is 0.52, a mood for hours and never one that lingers
+  // for days, and a reply without a cue leaves nothing.
+  scenario('feeling-text-undecided-cue-stays-a-mood', 'prompt-projection', {
+    now: night,
+    replyFeeling: { userMessage: quarrel.userMessage, reply: 'ボク、ちょっとすねちゃいます。' },
+    later: { now: morning, events: [{ type: 'awake-observed' }] },
+    prompt: { kind: 'state' },
+  }, [
+    { type: 'state-equals', path: 'state.lingering.0.span', value: 'mood' },
+    { type: 'state-equals', path: 'state.lingering.0.strength', value: 0.52 },
+    { type: 'text-includes', value: 'まだ少し引きずっている（sulky / 強さ 0.47）' },
+  ]),
+  scenario('feeling-text-undecided-without-cue-leaves-nothing', 'prompt-projection', {
     now: night,
     replyFeeling: quarrel,
     later: { now: morning, events: [{ type: 'awake-observed' }] },

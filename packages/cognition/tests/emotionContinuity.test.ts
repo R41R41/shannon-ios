@@ -837,7 +837,7 @@ describe('a text reply whose feeling was decided (owner decision 2026-10-03)', (
     }
   });
 
-  it('cannot be ratcheted or pinned by deciding strong in every reply', () => {
+  it('does not let what lingers be raised, or kept from fading, by deciding strong in every reply', () => {
     let repeated = turn(fresh(), HARSH, QUIET, NIGHT, STRONG).state;
     let once = repeated;
     const first = repeated.lingering![0]!;
