@@ -1,7 +1,7 @@
 import { SHANNON_CURRENT_GOAL, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES, pursuitKindLabel, shannonPersonaPrompt, type ShannonPursuit } from '@shannon/cognition';
 import {
   OWNER_CONTEXT_DRAFT_MATERIALS, OWNER_CONTEXT_MATERIALS_LINE, OWNER_CONTEXT_MESSAGE_MATERIALS, OWNER_CONTEXT_NOTE_PEOPLE, OWNER_CONTEXT_REVISE_MATERIALS,
-  OWNER_CONTEXT_SEEN_STORY_RULE, OWNER_CONTEXT_SEEN_THINKING_RULE, ownerPrivateRule,
+  OWNER_CONTEXT_SEEN_STORY_RULE, OWNER_CONTEXT_SEEN_THINKING_RULE, OWNER_CONTEXT_UPCOMING_THINKING_RULE, ownerPrivateRule,
 } from './autonomyLoopOwnerContext.js';
 
 /**
@@ -214,7 +214,7 @@ export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingEx
   const ownerContext = extras?.ownerContext;
   const rules = withRule(withRule(withSeenRule(THINKING_RULES(materials.maximumSteps, materials.notionAvailable, materials.folderAvailable === true, materials.lookAvailable === true, reachOuts, extras?.actions, extras?.examples,
     extras?.rest, ownerContext ? OWNER_CONTEXT_MATERIALS_LINE : undefined),
-  materials.notes.slice(0, 6), ownerContext ? OWNER_CONTEXT_SEEN_THINKING_RULE : SEEN_THINKING_RULE), upcoming.length ? UPCOMING_THINKING_RULE : null), ownerPrivateRule('thinking', Boolean(ownerContext)));
+  materials.notes.slice(0, 6), ownerContext ? OWNER_CONTEXT_SEEN_THINKING_RULE : SEEN_THINKING_RULE), upcoming.length ? (ownerContext ? OWNER_CONTEXT_UPCOMING_THINKING_RULE : UPCOMING_THINKING_RULE) : null), ownerPrivateRule('thinking', Boolean(ownerContext)));
   return {
     system: system((extras?.rules ?? []).reduce((text, rule) => withRule(text, rule), rules)),
     prompt: [
@@ -336,12 +336,15 @@ export function reachOutPrompt(input: {
   others?: { instructions: string; marker: string } | null;
   /** The owner's context for a message, as one section; what must reach nobody else is already left out of it. */
   ownerContext?: string;
+  /** Her notes may be about the owner and the people he knows: with someone else present each carries the marker. */
+  notesPrivate?: boolean;
 }): AutonomyPrompt {
   const marker = input.others?.marker ?? '';
+  const noteMarker = input.notesPrivate ? marker : '';
   const ownerContext = input.ownerContext;
   const materials = input.reason === 'share' ? [
-    section('[自分のメモ（新しい順）]', (input.notes ?? []).slice(0, 4).map(item => `- 「${oneLine(item.title, 40)}」 ${oneLine(item.excerpt, 200)}`)),
-    section('[書いているもの]', (input.stories ?? []).slice(0, 3).map(item => `- 「${oneLine(item.title, 60)}」 ${oneLine(item.statusLabel, 20)}`)),
+    section('[自分のメモ（新しい順）]', (input.notes ?? []).slice(0, 4).map(item => `- ${noteMarker}「${oneLine(item.title, 40)}」 ${oneLine(item.excerpt, 200)}`)),
+    section('[書いているもの]', (input.stories ?? []).slice(0, 3).map(item => `- ${noteMarker}「${oneLine(item.title, 60)}」 ${oneLine(item.statusLabel, 20)}`)),
   ] : input.reason === 'upcoming' ? [section(UPCOMING_HEADER, upcomingLines(input.upcoming ?? [], marker))]
     : input.reason === 'saw' ? [`[さっき体のカメラで見たこと]\n- ${marker}${oneLine(input.seen ?? '', 300)}`] : [];
   return {

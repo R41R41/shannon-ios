@@ -58,7 +58,7 @@ export interface StepDependencies {
   upcoming?: AutonomyUpcoming;
   /** What her body reported about a message of hers and what the server knows of the body; absent, both are unknown. */
   observer?: AutonomyReachOutObserver;
-  /** The owner's context for her thinking and her messages (owner decision 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
+  /** The owner's context for her thinking, her writing and her messages (owner decisions 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
   /** The loop's clock, read while a step waits. */
   now?: () => string;

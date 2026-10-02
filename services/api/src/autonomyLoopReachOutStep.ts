@@ -91,7 +91,7 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
   try {
     owned = dependencies.loop.ownerContext ? dependencies.ownerContext?.forMessage(cycle.scopeKey, at, notes.map(note => note.title).join(' '), others !== null)?.section ?? null : null;
   } catch { owned = null; }
-  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}) });
+  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}), ...(dependencies.loop.ownerContext && dependencies.ownerContext ? { notesPrivate: true } : {}) });
   const model = resolveAutonomyModel('prose', store.modelPreferences(cycle.scopeKey), id => dependencies.model.canUse(id));
   if (!model) return null;
   const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: OUTPUT_TOKENS };
