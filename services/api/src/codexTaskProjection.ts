@@ -93,6 +93,7 @@ export function deliveryInstructions(config: AgentHostConfig, taskId?: string): 
   return [
     'この作業ホストはAzure上のクラウド配備モードです。iPhoneを直接操作せず、Xcode Cloudと内部TestFlightを配備先にします。',
     `コード変更は専用ブランチ shannon/task-${suffix} で行い、実行中の本番APIディレクトリを変更しないでください。`,
+    '作業を始める前に git fetch origin を実行し、未コミットの変更が無ければ最新の origin/main を土台にしてください。古い土台のまま進めてはいけません。',
     'テスト成功前にmainへ統合またはpushしてはいけません。ユーザーがGitHubやTestFlightへの配布を明示的に依頼した場合、その依頼が対象変更の統合・push・配信を許可します。実行時に同じ許可を再確認しないでください。対象や範囲が変わった場合だけ、新しい判断を確認してください。',
     '配布を依頼されていない場合は、変更・テスト結果・専用ブランチ名までを報告して止めてください。配布を依頼された場合は、検証後にGitHubへ反映し、Xcode Cloudと内部TestFlightの結果まで確認してください。',
   ];
