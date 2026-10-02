@@ -59,17 +59,17 @@ describe('expression beside the name is her feeling for that reply', () => {
     expect(faceForEmotionKind('apologetic')).toEqual({ expression: 'concerned', feeling: 'apologetic' });
   });
 
-  it('lets a strong feeling linger one beat, keeps it through a dormant day, and settles it with awake time', () => {
+  it('lets a strong feeling linger one beat and a day-old feeling of one reply settle', () => {
     const proud = resolveShannonEmotionState({
       provisionalPrimary: 'triumphant', provisionalIntensity: 0.9, transcript: '動いた！', now: NOW,
     });
     const snapshot = reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: proud }, NOW);
     expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-02T03:01:00.000Z').feeling).toBe('proud');
-    // A day in which she was dormant: her clock stood still but for the idle cap, so the feeling is still there.
-    expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-03T03:00:00.000Z').feeling).toBe('proud');
-    // An hour awake settles the feeling of one reply.
-    const later = awakeFor(snapshot, NOW, 60);
-    expect(face('次は何をする？', '次はテストを書きます。', later, '2026-10-02T04:01:00.000Z').expression).toBe('calm');
+    // The pride of one reply passes in the minutes she stays awake after it: the next day it has settled.
+    expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-03T03:00:00.000Z').expression).toBe('calm');
+    // The same within one sitting: a quarter of an hour awake settles it.
+    const later = awakeFor(snapshot, NOW, 20);
+    expect(face('次は何をする？', '次はテストを書きます。', later, '2026-10-02T03:21:00.000Z').expression).toBe('calm');
   });
 
   it('under the kill switch a day-old feeling settles on the wall clock as before', () => {

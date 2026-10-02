@@ -36,13 +36,14 @@ const REACTION = new Set<ShannonEmotionKind>([
   'surprised', 'shocked', 'stunned', 'speechless', 'panic', 'scream', 'flustered', 'giggle',
 ]);
 /**
- * Kinds that are a state of hers rather than a reaction: expressed strongly toward the owner they
- * stay underneath as her mood. Sadness, worry and regret are left out on purpose: they are mostly
- * her answer to the owner's bad news, and that must stay concern for him, not a low mood of her own.
+ * Kinds that are a state of hers with a cause between her and the owner, rather than a reaction or
+ * a tone of voice: expressed strongly toward the owner they stay underneath as her mood. Two groups
+ * are left out on purpose. Sadness, worry and regret are mostly her answer to the owner's bad news,
+ * and that must stay concern for him, not a low mood of her own. Bright, gentle, relaxed and the
+ * like are how a reply is delivered (a greeting is bright), and a tone must not cover a mood.
  */
 const MOOD_LIKE = new Set<ShannonEmotionKind>([
-  'bright', 'happy', 'excited', 'ecstatic', 'pride', 'gratitude', 'hope', 'affectionate', 'content', 'relaxed', 'gentle',
-  'tender', 'quietCompanion',
+  'happy', 'excited', 'ecstatic', 'pride', 'gratitude', 'affectionate', 'tender',
   'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky', 'leftOut', 'lonely', 'lightPossessive', 'hurt',
 ]);
 
@@ -353,17 +354,22 @@ export function visibilityFor(intensity: number): ShannonExpressiveEmotion['visi
   return intensity < 0.3 ? 'hidden' : intensity < 0.62 ? 'subtle' : 'expressed';
 }
 
+/**
+ * `others`: the owner's own call while someone else can hear. A feeling she carries may have a cause
+ * that is his alone (what was said or done between the two of them), so the feeling may show and its
+ * cause is neither given to the model nor said.
+ */
 export function buildExpressiveEmotionPrompt(
   emotion: ShannonExpressiveEmotion,
-  audience: 'owner' | 'guest' = 'owner',
+  audience: 'owner' | 'guest' | 'others' = 'owner',
 ): string {
   return [
     '[Current expressive emotion — guidance, never a reason to fake facts]',
     `primary=${emotion.primary}; secondary=${emotion.secondary.join(',') || 'none'}; intensity=${emotion.intensity.toFixed(2)}; visibility=${emotion.visibility}`,
-    `target=${emotion.target}; cause=${emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
-    audience === 'owner'
-      ? 'Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.'
-      : 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.',
+    `target=${emotion.target}; cause=${audience === 'others' ? 'withheld while others can hear' : emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
+    audience === 'guest'
+      ? 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.'
+      : `Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.${audience === 'others' ? ' Do not say why you feel this way while others can hear.' : ''}`,
     'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');

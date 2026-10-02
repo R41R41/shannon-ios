@@ -15,7 +15,7 @@ export type ShannonEmotionClockMode = 'awake' | 'wall';
  *
  * | layer                 | value                 | lasts about                         |
  * | the moment's reaction | `reactionHalfLifeMs`  | a few minutes (startled, flustered) |
- * |                       | `passingHalfLifeMs`   | some tens of minutes (any other feeling of one reply) |
+ * |                       | `passingHalfLifeMs`   | about ten minutes (any other feeling of one reply); gone by the time she is dormant |
  * | mood                  | `moodHalfLifeMs`      | a few hours (a feeling held as her mood: glad after praise, sulking) |
  * |                       | `moodValueHalfLifeMs` | a few hours (valence and openness returning to their baseline) |
  * |                       | `arousalHalfLifeMs`   | about an hour (activation returning to its baseline) |
@@ -37,7 +37,7 @@ export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freez
   clock: 'awake',
   idleCapMs: 12 * MINUTE,
   reactionHalfLifeMs: 2 * MINUTE,
-  passingHalfLifeMs: 10 * MINUTE,
+  passingHalfLifeMs: 5 * MINUTE,
   moodHalfLifeMs: 90 * MINUTE,
   moodValueHalfLifeMs: 2 * HOUR,
   arousalHalfLifeMs: 30 * MINUTE,

@@ -141,10 +141,8 @@ describe('body-touched in the one emotion state', () => {
     const after = touched(protective, touch('tickle'), later(1));
     expect(after.expressiveEmotion).toEqual(protective.expressiveEmotion);
     expect(after.emotion.arousal).toBeGreaterThan(protective.emotion.arousal);
-    // Two hours in which she was dormant change nothing: her clock stood still, and the feeling is still held.
-    const settled = later(120);
-    expect(touched(protective, touch('tickle'), settled).expressiveEmotion!.primary).toBe('protective');
     // Once that feeling has settled with time she was awake, a touch is felt again.
+    const settled = later(120);
     let awake = protective;
     for (let minutes = 10; minutes <= 110; minutes += 10) awake = reduceCompanionState(awake, { type: 'awake-observed' }, later(minutes));
     expect(touched(awake, touch('tickle'), settled).expressiveEmotion!.primary).toBe('giggle');

@@ -58,7 +58,7 @@ import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CAL
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
-import { emotionTiming, feelingBeforeTurn } from './companionPresence.js';
+import { emotionTiming, feelingBeforeTurn, stillFeltLine } from './companionPresence.js';
 import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
@@ -334,7 +334,8 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
-    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : 'owner'),
+    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
+    alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     confirmedImplementationRequest

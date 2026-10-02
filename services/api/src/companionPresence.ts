@@ -1,6 +1,7 @@
 import {
   calibrateTemperament,
   explainTemperament,
+  lingeringFeelingLine,
   presentShannonFeeling,
   presentShannonMood,
   resolveReplyEmotion as resolveReplyEmotionWith,
@@ -96,6 +97,14 @@ export function presentCompanionState(
  */
 export function feelingBeforeTurn(snapshot: CompanionStateSnapshot, now: string, timing = emotionTiming()): ShannonExpressiveEmotion | undefined {
   return timing.clock === 'awake' ? presentShannonFeeling(snapshot, now, timing) : snapshot.expressiveEmotion;
+}
+
+/**
+ * What she still feels from before, in meaning, for a turn of the owner alone whose prompt carries
+ * no companion-state block (the slim voice path). Empty when nothing is left and under the kill switch.
+ */
+export function stillFeltLine(snapshot: CompanionStateSnapshot, now: string): string {
+  return lingeringFeelingLine(snapshot, now, emotionTiming());
 }
 
 /** Her feeling for one completed reply, with this process's emotion timing. Callers on the server use this, not the pure function. */
