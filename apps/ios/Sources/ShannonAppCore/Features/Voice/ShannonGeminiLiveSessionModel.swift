@@ -186,6 +186,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     public func stop() {
         resolveMicrophonePrimer(proceed: false)
+        interruptionGeneration &+= 1
         microphonePrimerPhase = nil
         textSendState.preservePendingText(
             message: "音声会話を閉じたため送信を中断しました。入力は残しています。"

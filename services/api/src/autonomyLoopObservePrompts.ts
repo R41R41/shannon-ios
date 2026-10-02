@@ -61,7 +61,8 @@ const EARPHONE_LINE: Readonly<Record<ReachOutAppSurface, string>> = Object.freez
  */
 export const EARPHONE_NO_ANSWER_LINE = `- イヤホンで伝えたあと、待っているあいだに${SHANNON_OWNER_NAME}の声も文字も届かなかった。`;
 export const EARPHONE_NO_ANSWER_RULE = `- イヤホンで伝えたので、声は${SHANNON_OWNER_NAME}の耳に届いているはず。それでも返事がないなら、もう一度だけ声をかけてもよい。それにも返事がなければ、${SHANNON_OWNER_NAME}はいまそこにいないのだと受け取って、この話しかけはそこまでにする。`;
-export const EARPHONE_GIVEN_UP_RULE = `- イヤホンでもう一度声をかけても返事がなかった。${SHANNON_OWNER_NAME}はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。`;
+/** After the second call. Whether it was answered is not known yet when she thinks next, so the rule is conditional. */
+export const EARPHONE_GIVEN_UP_RULE = `- さっきの話しかけには、もう一度だけ声をかけた。それにも返事がなければ、${SHANNON_OWNER_NAME}はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。`;
 export const EARPHONE_GIVEN_UP_MEMORY = `それでも返事がなかったので、${SHANNON_OWNER_NAME}はそこにいないのだと受け取って、そこまでにした。`;
 
 const STEP_PLAN_LABEL: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
@@ -228,7 +229,8 @@ export function reachOutMemoryLine(memory: ReachOutMemory, timeZone: string): st
     ...(facts.replied || facts.delivery === 'unknown' ? [] : [facts.surface ? EARPHONE_LINE[facts.surface] : DELIVERY_MEMORY[facts.delivery]]),
     ...memory.after.map(item => (item.step === 'look' ? (item.done ? 'そのあと部屋を一度見た（見たことはメモにある）。' : 'そのあと部屋を見ようとしたが、見られなかった。')
       : item.step === 'follow_up' ? (item.done ? 'もう一度だけ声をかけた。' : 'もう一度声をかけようとして、やめた。') : '思ったことを書斎に書き留めた。')),
-    ...(facts.surface && !facts.replied && !memory.repliedSince && memory.after.some(item => item.step === 'follow_up' && item.done) ? [EARPHONE_GIVEN_UP_MEMORY] : []),
+    // Only when it is known that he has not written or spoken since; where that cannot be told, nothing is concluded.
+    ...(facts.surface && !facts.replied && memory.repliedSince === false && memory.after.some(item => item.step === 'follow_up' && item.done) ? [EARPHONE_GIVEN_UP_MEMORY] : []),
     ...(!facts.replied && memory.repliedSince ? [`そのあと、${SHANNON_OWNER_NAME}は書くか話すかしている。`] : []),
   ].join('');
 }

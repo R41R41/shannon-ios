@@ -569,7 +569,8 @@ describe('what she observes', () => {
     // No second call left today: the rule that offers one is not given.
     expect(rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent], planned: [], pending: { followUp: false, look: false, thinkAfterLook: false } }).rules).not.toContain(EARPHONE_NO_ANSWER_RULE);
 
-    // After the second call: he is not there; this message is let go. No follow_up is offered again.
+    // After the second call: if that too stays unanswered he is not there; this message is let go. No follow_up is offered again.
+    expect(EARPHONE_GIVEN_UP_RULE).toBe('- さっきの話しかけには、もう一度だけ声をかけた。それにも返事がなければ、ライ氏はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。');
     const again = { id: 'o2', cycleId: 'c1', ordinal: 3, step: 'reach_out' as const, outcome: 'done' as const, observedAt: at, reachOut: { ...facts, id: 'a2', reason: 'follow_up' as const, delivery: 'unknown' as const, waitedSeconds: 0 } };
     const second = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent, again], planned: [], pending: null });
     expect(second.rules).toContain(EARPHONE_GIVEN_UP_RULE);
@@ -587,6 +588,8 @@ describe('what she observes', () => {
     expect(reachOutMemoryLine({ facts: sent.reachOut, after: [], repliedSince: false }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
     expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }], repliedSince: true }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
     expect(reachOutMemoryLine({ facts, after: [{ step: 'follow_up', done: true }], repliedSince: false }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
+    // Where it cannot be told whether he answered since, nothing is concluded.
+    expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }] }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
     expect(EARPHONE_NO_ANSWER_LINE).toBe('- イヤホンで伝えたあと、待っているあいだにライ氏の声も文字も届かなかった。');
   });
 

@@ -121,6 +121,21 @@ final class ShannonPrivateReachOutTests: XCTestCase {
         XCTAssertEqual(w.coordinator.unacknowledged, [])
     }
 
+    func testAServerThatIsBusyOrRestartingIsAskedAgain() async {
+        for status in [429, 500, 502, 503] {
+            defaults.removeObject(forKey: ShannonPrivateReachOutCoordinator.handledDefaultsKey)
+            defaults.removeObject(forKey: ShannonPrivateReachOutCoordinator.unacknowledgedDefaultsKey)
+            let w = world()
+            w.client.deliveryFailure = ShannonAPIError.rejected(status: status)
+            await w.coordinator.handle(offer)
+            XCTAssertEqual(w.coordinator.unacknowledged, ["r1"], "\(status)")
+            w.client.deliveryFailure = nil
+            await w.coordinator.flushReports()
+            XCTAssertEqual(w.client.deliveries, [.spoken])
+            XCTAssertEqual(w.coordinator.unacknowledged, [])
+        }
+    }
+
     func testAMessageWhoseFateIsUnknownCountsAsSpoken() async {
         // The app stopped after taking the message and before it could report: nobody may say it again.
         defaults.set(["r1"], forKey: ShannonPrivateReachOutCoordinator.handledDefaultsKey)

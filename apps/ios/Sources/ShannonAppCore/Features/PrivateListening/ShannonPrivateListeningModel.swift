@@ -257,12 +257,15 @@ public final class ShannonPrivateListeningModel {
         }
         defer { observer.cancel() }
         evaluate()
+        await reachOuts.flushReports()
         while !Task.isCancelled {
             // The loop wakes at the short interval whatever the report interval is, so a longer one (after a refusal,
             // or while reports fail) ends as soon as a report goes through again.
             await sleep(min(pollInterval, Self.defaultPollInterval))
             if Task.isCancelled { break }
             refreshRoute()
+            // What was done with a message is reported whether or not the earphones are still in.
+            await reachOuts.flushReports()
             if let lastAttemptAt, now().timeIntervalSince(lastAttemptAt) < pollInterval - 1 { continue }
             await report()
         }

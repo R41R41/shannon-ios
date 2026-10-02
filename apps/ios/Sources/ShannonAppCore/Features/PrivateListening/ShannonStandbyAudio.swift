@@ -102,7 +102,7 @@ public final class ShannonStandbyAudio {
     /// where sound would come out. Nothing is activated by this.
     private func restoreRouteCategory() {
         let session = AVAudioSession.sharedInstance()
-        guard session.category != .playback else { return }
+        guard session.category != .playback || session.mode != .default || session.categoryOptions != [.mixWithOthers] else { return }
         try? session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
     }
 
