@@ -68,6 +68,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         }
         // A spoken switch happens in the session, so an unshared photo is cleared here too.
         .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
+        // A call that ended without this sheet's 終了 (silence in the background, no answer to her own line) closes it too.
+        .onChange(of: workspace.callEndRevision) { isPresented = false }
 #if DEBUG
         .task {
             // Synthetic fixture for the end-of-call card; no call, model, or network.
@@ -79,14 +81,8 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     }
 
     private func endCall() {
-        workspace.connectionRequestID = nil
-        // A 「友人も一緒」 period that is still running ends with the call and is remembered;
-        // the card that replaces the pill says so and offers 「今回は残さない」.
-        geminiVoiceModel.finishGuestPeriod()
-        geminiVoiceModel.stop()
-        workspace.threadContext = nil
+        workspace.endCall(geminiVoiceModel)
         isPresented = false
-        workspace.clearPhoto()
     }
 
     private func beginCall(_ mode: ShannonVoiceParticipantMode) {
@@ -97,75 +93,10 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             return
         }
 #endif
-        // A call that failed without being ended may still hold a period; it is remembered like any other.
-        geminiVoiceModel.finishGuestPeriod()
-        geminiVoiceModel.stop()
-        let context = ShannonVoiceThreadContext(threadID: conversationModel.selectedThreadId)
-        let requestID = UUID()
-        workspace.connectionRequestID = requestID
-        workspace.threadContext = context
-        workspace.clearPhoto()
-        // The previous call stays remembered; its card makes room for the new call.
-        workspace.callMemory = nil
-        geminiVoiceModel.guestPeriodEnded = { [workspace, conversationModel] period in
-            workspace.remember(period, threadID: context.threadID, using: conversationModel)
-        }
-        geminiVoiceModel.performAppLook = { [conversationModel] ask in await conversationModel.performAppLook(ask) }
-        // Session-owned, not sheet-owned: minimization must not cancel startup.
-        Task {
-            guard workspace.connectionRequestID == requestID else { return }
-            await geminiVoiceModel.start(
-                participantMode: mode,
-                speechProvider: speechProvider,
-                createSession: { participantMode in
-                    let session = try await conversationModel.createGeminiLiveSession(
-                        participantMode: participantMode, threadID: context.threadID)
-                    context.threadID = session.threadId
-                    return session
-                },
-                performDelegation: { request, utterance, participantMode in
-                    try await conversationModel.performLiveVoiceDelegationResponse(
-                        transcript: request,
-                        userUtterance: utterance,
-                        participantMode: participantMode,
-                        threadID: context.threadID
-                    )
-                },
-                performStreamingDelegation: { request, utterance, participantMode, onSegment in
-                    try await conversationModel.performLiveVoiceDelegationStreamingResponse(
-                        transcript: request,
-                        userUtterance: utterance,
-                        participantMode: participantMode,
-                        threadID: context.threadID,
-                        onSegment: onSegment
-                    )
-                },
-                streamSpeech: { text, style in
-                    try await conversationModel.streamSpeech(text, style: style, provider: speechProvider)
-                },
-                commitTurn: { user, shannon in
-                    // Read before the first suspension: the emotion of the reply being saved.
-                    try await conversationModel.commitRealtimeVoiceTurn(
-                        userTranscript: user,
-                        shannonTranscript: shannon,
-                        threadID: context.threadID,
-                        emotion: geminiVoiceModel.replyEmotion,
-                        companionPresent: geminiVoiceModel.companionSuspected
-                    )
-                },
-                handleDelegationResponse: { response in
-                    // Called for owner turns only; 「友人も一緒」 turns never reach the owner's thread.
-                    if conversationModel.selectedThreadId == response.threadId, let session = response.organizeSession {
-                        conversationModel.upsertOrganizeSession(session)
-                    }
-                    conversationModel.installAgentTaskProposals(
-                        response.uiBlocks ?? [],
-                        threadID: response.threadId,
-                        sourceMessageID: UUID()
-                    )
-                }
-            )
-        }
+        workspace.beginCall(
+            mode: mode, speechProvider: speechProvider, threadID: conversationModel.selectedThreadId,
+            conversationModel: conversationModel, geminiVoiceModel: geminiVoiceModel
+        )
     }
 }
 

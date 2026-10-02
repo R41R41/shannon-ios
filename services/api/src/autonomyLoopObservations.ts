@@ -14,6 +14,9 @@ import { BODY_REACH_OUT_DELIVERY_OUTCOMES, type BodyReachOutDeliveryOutcome } fr
 /** What her body says it did with a message of hers: the closed vocabulary of the body contract. */
 export const REACH_OUT_DELIVERY_OUTCOMES = BODY_REACH_OUT_DELIVERY_OUTCOMES;
 export type ReachOutDeliveryOutcome = BodyReachOutDeliveryOutcome;
+/** One of the owner's apps that said her message through his earphones, instead of her body. */
+export const REACH_OUT_APP_SURFACES = ['mac', 'iphone'] as const;
+export type ReachOutAppSurface = typeof REACH_OUT_APP_SURFACES[number];
 
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];
@@ -33,6 +36,8 @@ export interface ReachOutFacts {
   repliedAfterSeconds?: number;
   /** What her body reported about this message; `unknown` when no body reported in time. */
   delivery: ReachOutDeliveryOutcome | 'unknown';
+  /** Set when `delivery` came from one of the owner's apps, which spoke it through his earphones; absent for her body. */
+  surface?: ReachOutAppSurface;
   /** A body read presence in the last half minute, so her window was showing. */
   windowVisible: boolean;
   /** The newest of the body's away and returned events of the last hour. */
@@ -139,10 +144,11 @@ function reachOutFacts(value: unknown): ReachOutFacts | null {
   if (!reason || typeof raw.id !== 'string' || !IDENTIFIER.test(raw.id) || typeof raw.sentAt !== 'string' || !Number.isFinite(Date.parse(raw.sentAt))) return null;
   const seconds = (item: unknown) => (typeof item === 'number' && Number.isFinite(item) ? Math.max(0, Math.min(86_400, Math.round(item))) : 0);
   const delivery = REACH_OUT_DELIVERY_OUTCOMES.find(item => item === raw.delivery) ?? 'unknown';
+  const surface = REACH_OUT_APP_SURFACES.find(item => item === raw.surface);
   return Object.freeze({
     id: raw.id, reason, sentAt: new Date(Date.parse(raw.sentAt)).toISOString(), waitedSeconds: seconds(raw.waitedSeconds),
     replied: raw.replied === true, ...(raw.replied === true ? { repliedAfterSeconds: seconds(raw.repliedAfterSeconds) } : {}),
-    delivery, windowVisible: raw.windowVisible === true,
+    delivery, ...(surface && delivery !== 'unknown' ? { surface } : {}), windowVisible: raw.windowVisible === true,
     owner: raw.owner === 'away' || raw.owner === 'returned' ? raw.owner : 'unknown', others: raw.others === true,
     ...(raw.unwatched === true ? { unwatched: true as const } : {}),
   });

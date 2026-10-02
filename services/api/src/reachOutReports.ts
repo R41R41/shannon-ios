@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { REACH_OUT_DELIVERY_OUTCOMES, type ReachOutDeliveryOutcome, type ReachOutFacts } from './autonomyLoopObservations.js';
+import { REACH_OUT_DELIVERY_OUTCOMES, REACH_OUT_APP_SURFACES, type ReachOutAppSurface, type ReachOutDeliveryOutcome, type ReachOutFacts } from './autonomyLoopObservations.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -10,6 +10,9 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  * sent a message, to know whether it was shown and whether her window is showing. A report
  * is a closed outcome for one of her own messages, by a device that registered as her body.
  * Both tables hold identifiers, a closed vocabulary and timestamps: no text.
+ *
+ * One of the owner's apps that spoke her message through his earphones (`privateReachOuts.ts`) reports in the same
+ * table, with `surface` naming it (`mac`, `iphone`); a row of her body has none.
  */
 /** A report is accepted this long after the message was written. */
 export const REACH_OUT_REPORT_WINDOW_MILLISECONDS = 24 * 60 * 60_000;
@@ -45,6 +48,13 @@ export class SQLiteReachOutReports {
         PRIMARY KEY (scope_key, device_id)
       );
     `);
+    // Added after the table first shipped. The API and the loop may start at once: the loser of the race finds the column there.
+    const columns = this.database.prepare(`PRAGMA table_info('reach_out_deliveries')`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'surface')) {
+      try { this.database.exec('ALTER TABLE reach_out_deliveries ADD COLUMN surface TEXT'); } catch (error) {
+        if (!(error instanceof Error && /duplicate column/iu.test(error.message))) throw error;
+      }
+    }
     secureDatabaseFiles(path);
   }
 
@@ -52,7 +62,7 @@ export class SQLiteReachOutReports {
    * Stores what one device did with one of her own messages, once. The same outcome again is a duplicate;
    * another outcome from the same device is a conflict and changes nothing.
    */
-  report(scopeKey: string, deviceId: string, initiativeId: string, outcome: ReachOutDeliveryOutcome, at: string): ReachOutReportResult {
+  report(scopeKey: string, deviceId: string, initiativeId: string, outcome: ReachOutDeliveryOutcome, at: string, surface?: ReachOutAppSurface): ReachOutReportResult {
     const message = this.tableExists('initiative_messages') ? this.database.prepare(`
       SELECT created_at FROM initiative_messages WHERE scope_key = ? AND initiative_id = ? AND source_item_id LIKE 'reach-out:%'
     `).get(scopeKey, initiativeId) as unknown as { created_at: string } | undefined : undefined;
@@ -63,8 +73,8 @@ export class SQLiteReachOutReports {
     if (known) return known.outcome === outcome ? 'duplicate' : 'conflict';
     if (Date.parse(at) - Date.parse(message.created_at) > REACH_OUT_REPORT_WINDOW_MILLISECONDS) return 'expired';
     const inserted = this.database.prepare(`
-      INSERT OR IGNORE INTO reach_out_deliveries (scope_key, initiative_id, device_id, outcome, reported_at) VALUES (?, ?, ?, ?, ?)
-    `).run(scopeKey, initiativeId, deviceId, outcome, at);
+      INSERT OR IGNORE INTO reach_out_deliveries (scope_key, initiative_id, device_id, outcome, reported_at, surface) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, initiativeId, deviceId, outcome, at, surface ?? null);
     if (Number(inserted.changes) > 0) return 'stored';
     // Another request of the same device won the row meanwhile: the answer follows what is stored.
     const stored = this.database.prepare(`
@@ -73,13 +83,23 @@ export class SQLiteReachOutReports {
     return stored?.outcome === outcome ? 'duplicate' : 'conflict';
   }
 
-  /** What her body did with the message, or null while no body has reported. */
+  /** What was done with the message, or null while nobody has reported. */
   delivery(scopeKey: string, initiativeId: string): ReachOutDeliveryOutcome | null {
+    return this.furthest(scopeKey, initiativeId)?.outcome ?? null;
+  }
+
+  /** Which of the owner's apps did it, when the report that stands came from one; null for her body. */
+  deliverySurface(scopeKey: string, initiativeId: string): ReachOutAppSurface | null {
+    return this.furthest(scopeKey, initiativeId)?.surface ?? null;
+  }
+
+  private furthest(scopeKey: string, initiativeId: string): { outcome: ReachOutDeliveryOutcome; surface: ReachOutAppSurface | null } | null {
     const rows = this.database.prepare(`
-      SELECT outcome FROM reach_out_deliveries WHERE scope_key = ? AND initiative_id = ?
-    `).all(scopeKey, initiativeId) as unknown as Array<{ outcome: string }>;
-    const outcomes = rows.flatMap(row => REACH_OUT_DELIVERY_OUTCOMES.filter(value => value === row.outcome));
-    return outcomes.sort((left, right) => RANK[right] - RANK[left])[0] ?? null;
+      SELECT outcome, surface FROM reach_out_deliveries WHERE scope_key = ? AND initiative_id = ?
+    `).all(scopeKey, initiativeId) as unknown as Array<{ outcome: string; surface: string | null }>;
+    const reports = rows.flatMap(row => REACH_OUT_DELIVERY_OUTCOMES.filter(value => value === row.outcome)
+      .map(outcome => ({ outcome, surface: REACH_OUT_APP_SURFACES.find(value => value === row.surface) ?? null })));
+    return reports.sort((left, right) => RANK[right.outcome] - RANK[left.outcome])[0] ?? null;
   }
 
   /** A body read presence: her window is showing on that device. */

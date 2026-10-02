@@ -30,6 +30,8 @@ final class ShannonVoiceWorkspaceState {
     /// What the last call's 「友人も一緒」 periods left behind. Filled as each period ends and
     /// shown in the pill's place once the call is over.
     var callMemory: ShannonVoiceCallMemoryState?
+    /// Counts calls ended through `endCall`, so every open call screen can close itself.
+    var callEndRevision = 0
 
     func clearPhoto() {
         showsPhotoSource = false
