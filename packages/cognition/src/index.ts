@@ -94,6 +94,7 @@ export {
 export {
   presentShannonMood,
   resolveReplyEmotion,
+  resolveWrittenReplyEmotion,
   type ReplyEmotion,
   type ReplyEmotionInput,
   type ShannonPresentMood,
@@ -121,6 +122,7 @@ export {
 export {
   INITIAL_SHANNON_EXPRESSIVE_EMOTION,
   SHANNON_EMOTION_CARRY_THRESHOLD,
+  SHANNON_EMOTION_CUE_STRENGTH,
   buildExpressiveEmotionPrompt,
   carriedShannonEmotion,
   currentShannonEmotion,

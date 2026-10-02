@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   SHANNON_EMOTION_CONTINUITY,
+  SHANNON_EMOTION_CUE_STRENGTH,
   SHANNON_EMOTION_TIME,
   advanceEmotionClock,
   awakeTimeAt,
@@ -19,6 +20,7 @@ import {
   reduceCompanionState,
   remainingShare,
   resolveReplyEmotion,
+  resolveWrittenReplyEmotion,
   restoreCompanionState,
   soothingIn,
   type CompanionStateSnapshot,
@@ -924,6 +926,34 @@ describe('a decided kind that wins over a cue word (a text turn; owner decision 
     // Her concern is not shown with play beside it.
     expect(written(fresh(), '最近眠れなくて', 'ふふ、そばにいますよ。', NIGHT, { primary: 'caring', intensity: 0.6 }).feeling)
       .toMatchObject({ primary: 'caring', secondary: [] });
+  });
+
+  it('decides in one place whether a written reply uses its decided feeling (the server and the evaluation call it)', () => {
+    const ask = (state: CompanionStateSnapshot, userMessage: string, reply: string, now: string, decided?: { primary: string; intensity: number }) =>
+      resolveWrittenReplyEmotion({ snapshot: state, userMessage, reply, now, timing: AWAKE, ...(decided ? { decided } : {}) });
+    const plain = (state: CompanionStateSnapshot, userMessage: string, reply: string, now: string) =>
+      resolveReplyEmotion({ snapshot: state, userMessage, reply, now, timing: AWAKE });
+    expect(SHANNON_EMOTION_CUE_STRENGTH).toBe(0.52);
+    // Moderate or strong wins over a cue of another kind.
+    expect(ask(fresh(), HARSH, 'ご、ごめんなさい……。', NIGHT, { primary: 'hurt', intensity: 0.6 }).expressiveEmotion)
+      .toMatchObject({ primary: 'hurt', intensity: 0.6, secondary: ['apologetic'] });
+    // Subtle does not hide what she voiced; nothing decided, neutral or unknown is the plain reading.
+    for (const decided of [{ primary: 'happy', intensity: 0.25 }, { primary: 'neutral', intensity: 0.9 }, { primary: 'furious', intensity: 0.9 }, undefined]) {
+      expect(ask(fresh(), HARSH, 'ボク、ちょっとすねちゃいます。', NIGHT, decided)).toEqual(plain(fresh(), HARSH, 'ボク、ちょっとすねちゃいます。', NIGHT));
+    }
+    // The feeling she has goes on: her apology or concern in her own words shows over the mood, as without a decided feeling.
+    const hurt = written(fresh(), HARSH, '……そうですか。', NIGHT, { primary: 'hurt', intensity: 0.9 }).state;
+    const later = at(NIGHT, 2 * MINUTE);
+    for (const reply of ['ごめんなさい、ボクも言いすぎました。', '大丈夫ですか？無理しないでくださいね。']) {
+      const shown = ask(hurt, '今日はしんどい', reply, later, { primary: 'gentle', intensity: 0.6 });
+      expect(shown).toEqual(plain(hurt, '今日はしんどい', reply, later));
+      expect(['apologetic', 'caring']).toContain(shown.expressiveEmotion.primary);
+    }
+    // An override took the reply: exactly the plain reading, at the override's own strength.
+    for (const message of ['祖母が亡くなった', '火事だ、助けて', '薬を飲み忘れたかも']) {
+      expect(ask(fresh(), message, 'ふふん、ボクは天才ですから。', NIGHT, { primary: 'sulky', intensity: 0.9 }))
+        .toEqual(plain(fresh(), message, 'ふふん、ボクは天才ですから。', NIGHT));
+    }
   });
 
   it('leaves a voice turn as it was: without the flag the cue in the completed reply names the kind', () => {

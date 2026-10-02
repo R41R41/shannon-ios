@@ -12,7 +12,7 @@ import { parseStructuredTurn } from '../src/chatModelSupport.js';
 import { chatTurnRequestBody } from '../src/chatModelTurn.js';
 import {
   REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA, chatFeelingStrengthEnabled, decidedReplyFeeling, parsedReplyFeeling,
-  replyFeelingOffer, usesDecidedFeeling, type ChatReplyFeeling,
+  replyFeelingOffer, type ChatReplyFeeling,
 } from '../src/chatReplyFeeling.js';
 import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts.js';
@@ -509,11 +509,6 @@ describe('every existing rule applies to it unchanged', () => {
       }
     }
 
-    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'hurt' })).toBe(true);
-    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'sulky', continued: true })).toBe(true);
-    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'giggle' })).toBe(false);
-    expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'giggle', continued: false })).toBe(false);
-    expect(usesDecidedFeeling({ primary: 'caring' }, { primary: 'caring', overrideReason: 'grief' })).toBe(false);
   });
 });
 
@@ -548,7 +543,7 @@ describe('guests and other people present never move her feeling toward the owne
     // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
     const directory = new URL('../src/', import.meta.url);
     const naming = (readdirSync(directory, { recursive: true }) as string[]).filter(file => file.endsWith('.ts'))
-      .filter(file => /replyFeeling|resolveTextReplyEmotion|usesDecidedFeeling/iu.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
+      .filter(file => /replyFeeling|resolveTextReplyEmotion|resolveWrittenReplyEmotion/iu.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)
     expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
     const kernel = readFileSync(new URL('apiKernel.ts', directory), 'utf8');

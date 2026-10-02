@@ -5,7 +5,7 @@ import {
   createInitialCompanionState,
   projectEmotionReaction,
   reduceCompanionState,
-  resolveReplyEmotion,
+  resolveWrittenReplyEmotion,
   buildShannonKnowledgePrompt,
   knowledgeExcerpt,
   mergeSemanticMemories,
@@ -144,8 +144,9 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
 
 /** One owner turn as the server commits it: the reply's feeling, or only her awake clock when the reply is neutral. */
 function committedReply(state: CompanionStateSnapshot, turn: CognitiveReplyFeelingInput, now: string): CompanionStateSnapshot {
-  const { expressiveEmotion } = resolveReplyEmotion({
-    snapshot: state, userMessage: turn.userMessage, reply: turn.reply, now, ...(turn.decided ? { decided: turn.decided, decidedKindWins: true } : {}),
+  // The same function the server calls, so the evaluation cannot model a different rule.
+  const { expressiveEmotion } = resolveWrittenReplyEmotion({
+    snapshot: state, userMessage: turn.userMessage, reply: turn.reply, now, ...(turn.decided ? { decided: turn.decided } : {}),
   });
   return reduceCompanionState(state, expressiveEmotion.primary === 'neutral'
     ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion: expressiveEmotion }, now);

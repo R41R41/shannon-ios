@@ -5,6 +5,7 @@ import {
   presentShannonFeeling,
   presentShannonMood,
   resolveReplyEmotion as resolveReplyEmotionWith,
+  resolveWrittenReplyEmotion,
   type ReplyEmotion,
   type ReplyEmotionInput,
   type CompanionStateEvent,
@@ -17,7 +18,7 @@ import {
 import { emotionTiming } from './emotionTiming.js';
 
 export { emotionTiming };
-import { decidedReplyFeeling, usesDecidedFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
+import { decidedReplyFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
 export { replyFeelingOffer } from './chatReplyFeeling.js';
 
 const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
@@ -115,26 +116,16 @@ export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
 }
 
 /**
- * Her feeling for a completed text reply of the chat model. The feeling the model decided for it (`chatReplyFeeling.ts`)
- * enters through the same resolver input as a voice turn's, and is used only when the resolver's result is that feeling.
- * Otherwise, and whenever none was decided or may be used, the turn is resolved as before the field existed.
+ * Her feeling for a completed text reply of the chat model, with this process's emotion timing. Whether the feeling the
+ * model decided for it (`chatReplyFeeling.ts`) is used is the core's rule (`resolveWrittenReplyEmotion`); when none was
+ * decided or may be used, the turn is resolved as before the field existed.
  */
 export function resolveTextReplyEmotion(
   input: ReplyEmotionInput, completion: { replyFeeling?: ChatReplyFeeling }, alone: boolean,
 ): ReplyEmotion {
   const { decided } = decidedReplyFeeling(completion, alone);
-  if (!decided) return resolveReplyEmotion(input);
-  // The chat model wrote the reply and chose its feeling: a cue word of another kind does not rename it (owner decision 2026-10-03).
-  // That holds for a feeling chosen at least as strongly as a cue is (0.52): a faint one does not hide what she plainly voiced.
-  const resolved = resolveReplyEmotion({ ...input, decided, ...(decided.intensity > CUE_STRENGTH ? { decidedKindWins: true } : {}) });
-  // The feeling she has went on and nothing of the chosen one is stored: the turn is the one without the field, so her concern
-  // or apology in her own words still shows over a mood, as it always did.
-  if (resolved.expressiveEmotion.continued === true) return resolveReplyEmotion(input);
-  return usesDecidedFeeling(decided, resolved.expressiveEmotion) ? resolved : resolveReplyEmotion(input);
+  return decided ? resolveWrittenReplyEmotion({ timing: emotionTiming(), ...input, decided }) : resolveReplyEmotion(input);
 }
-
-/** The strength a cue word in her reply has (the resolver's floor). */
-const CUE_STRENGTH = 0.52;
 
 /**
  * Stores the feeling of a text reply on a later tick, after the response has

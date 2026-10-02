@@ -105,6 +105,8 @@ const FINAL_CUES: readonly { emotion: ShannonEmotionKind; pattern: RegExp }[] = 
   { emotion: 'gratitude', pattern: /(?:ありがとうございます|感謝)/u },
 ];
 
+/** The strength a cue word in her own reply gives the feeling it names: enough for a mood of hours, never for days. */
+export const SHANNON_EMOTION_CUE_STRENGTH = 0.52;
 /** Below this carry-over a previous feeling no longer continues into a new turn. */
 export const SHANNON_EMOTION_CARRY_THRESHOLD = 0.28;
 export const SHANNON_SETTLED_CAUSE = '前の気持ちは時間とともに落ち着いた';
@@ -238,7 +240,7 @@ export function resolveShannonEmotionState(
       cueBeside = finalCue.emotion;
     } else if (finalCue) {
       primary = finalCue.emotion;
-      intensity = Math.max(intensity, 0.52);
+      intensity = Math.max(intensity, SHANNON_EMOTION_CUE_STRENGTH);
       // Her own words name the feeling. Its strength was decided for this reply only when the same kind was decided at
       // least as strongly as the cue's floor; a strength that comes from the floor alone is the cue's.
       fromCue = provisional.primary !== primary || provisional.intensity < intensity;

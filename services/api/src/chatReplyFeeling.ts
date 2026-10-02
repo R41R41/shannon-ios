@@ -18,14 +18,16 @@ import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } f
  * - `strong` is for a feeling that can linger. A kind that is never kept underneath (a tone, a
  *   startle, her concern or sympathy for the owner) is handed in at `moderate` at most, so a strong
  *   tone cannot ease what lies underneath (the contrary rule starts at 0.70) without leaving anything.
- * - An override takes the turn as it always did (`usesDecidedFeeling`, applied by
- *   `resolveTextReplyEmotion` in `companionPresence.ts`): when grief, an emergency or accuracy
- *   decides the reply's feeling, the turn is resolved exactly as before the field existed.
+ * - Whether a decided feeling is used is the core's rule (`resolveWrittenReplyEmotion`, called by
+ *   `resolveTextReplyEmotion` in `companionPresence.ts`): not when an override took the reply
+ *   (grief, an emergency, accuracy), and not when the feeling she already has simply goes on;
+ *   the turn is then resolved exactly as before the field existed.
  *
  * And one rule that is a text turn's alone (owner decision 2026-10-03, `decidedKindWins` in the
  * resolver): the model that wrote the reply chose its feeling, so a cue word of another kind in
- * her words (ごめん, ふふ, えっ) does not rename it and is kept beside it as the secondary feeling.
- * A voice turn's affect is decided before the reply exists; there the cue still names the kind.
+ * her words (ごめん, ふふ, えっ) does not rename a feeling chosen at moderate or strong, and is kept
+ * beside it as the secondary feeling. Beside a subtle one the cue names the kind. A voice turn's
+ * affect is decided before the reply exists; there the cue still names the kind.
  *
  * Only a turn the owner alone reads offers the field and only such a turn uses it.
  * `SHANNON_CHAT_FEELING_STRENGTH=off` offers nothing and uses nothing: the provider request and
@@ -105,18 +107,4 @@ export function decidedReplyFeeling(
   // Strong is for what can linger; any other kind is handed in at moderate at most.
   const intensity = isMoodLikeEmotion(feeling.kind) ? step : Math.min(step, affectIntensityOf('moderate'));
   return { decided: { primary: feeling.kind, intensity } };
-}
-
-/**
- * Whether the resolver's result for a reply is the feeling that was decided for it. It is when the
- * result is that kind and no override holds it, or when the present feeling simply goes on (nothing
- * is stored then). It is not when an override took the reply (grief, an emergency, accuracy), or,
- * should a caller resolve without `decidedKindWins`, when a cue named another kind: a chosen
- * strength is never lent to a kind she did not choose.
- */
-export function usesDecidedFeeling(
-  decided: { primary: string },
-  resolved: { primary: string; overrideReason?: string | undefined; continued?: boolean | undefined },
-): boolean {
-  return resolved.continued === true || (resolved.primary === decided.primary && !resolved.overrideReason);
 }

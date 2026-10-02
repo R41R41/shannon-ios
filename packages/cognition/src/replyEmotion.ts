@@ -1,6 +1,6 @@
 import { projectEmotionReaction } from './affect.js';
 import { presentShannonFeeling } from './emotionContinuity.js';
-import { isShannonEmotionKind, resolveShannonEmotionState } from './emotionState.js';
+import { SHANNON_EMOTION_CUE_STRENGTH, isShannonEmotionKind, resolveShannonEmotionState } from './emotionState.js';
 import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { createShannonMessageEmotion, deriveShannonFace, type ShannonFace, type ShannonMessageEmotion } from './expression.js';
 import type { CompanionStateSnapshot, ShannonExpressiveEmotion } from './types.js';
@@ -53,6 +53,25 @@ export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
   });
   const mood = projectEmotionReaction(input.snapshot, input.userMessage, timing);
   return { messageEmotion: createShannonMessageEmotion(mood, expressiveEmotion), expressiveEmotion };
+}
+
+/**
+ * Her feeling for a completed reply whose writer also decided its feeling (a text turn of the chat model). One place for
+ * the server and the evaluation, so they cannot differ. The decided feeling is used when the reply's feeling is that kind:
+ * - It wins over a cue word of another kind only when it was decided more strongly than a cue is; a fainter one does not
+ *   hide what she plainly voiced, and the cue names the kind.
+ * - When the feeling she already has simply goes on, nothing of the decided one would be stored: the turn is the one
+ *   without a decided feeling, so her concern or apology in her own words still shows over a mood.
+ * - When an override took the reply (grief, an emergency, accuracy), or her words named another kind, likewise.
+ * Without a usable `decided` it is `resolveReplyEmotion`.
+ */
+export function resolveWrittenReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
+  const { decided: given, decidedKindWins: _wins, ...plain } = input;
+  const decided = given && isShannonEmotionKind(given.primary) && given.primary !== 'neutral' ? given : undefined;
+  if (!decided) return resolveReplyEmotion(plain);
+  const resolved = resolveReplyEmotion({ ...plain, decided, ...(decided.intensity > SHANNON_EMOTION_CUE_STRENGTH ? { decidedKindWins: true } : {}) });
+  const feeling = resolved.expressiveEmotion;
+  return feeling.continued !== true && feeling.primary === decided.primary && !feeling.overrideReason ? resolved : resolveReplyEmotion(plain);
 }
 
 export interface ShannonPresentMood extends ShannonFace {
