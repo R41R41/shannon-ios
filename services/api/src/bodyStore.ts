@@ -31,6 +31,20 @@ const contentHash = (event: BodyEvent) => createHash('sha256').update(JSON.strin
   ...(event.region !== undefined ? [event.region] : []),
 ])).digest('hex').slice(0, 32);
 
+/**
+ * Adds a column that may already be there. The API process and her activity worker open the same database and
+ * may both arrive here at once: the one that comes second finds the column added and carries on.
+ */
+export function addColumnOnce(database: DatabaseSync, table: string, column: string, type: string): void {
+  const has = () => (database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>).some(item => item.name === column);
+  if (has()) return;
+  try {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (error) {
+    if (!has()) throw error;
+  }
+}
+
 export class SQLiteBodyStore {
   private readonly database: DatabaseSync;
 
@@ -73,15 +87,11 @@ export class SQLiteBodyStore {
       );
     `);
     // Added 2026-10-03: the touched part of an event, and where a registered body is.
-    this.addColumn('body_events', 'region', 'TEXT');
-    this.addColumn('body_capabilities', 'surface', 'TEXT');
+    addColumnOnce(this.database, 'body_events', 'region', 'TEXT');
+    addColumnOnce(this.database, 'body_capabilities', 'surface', 'TEXT');
     secureDatabaseFiles(path);
   }
 
-  private addColumn(table: string, column: string, type: string): void {
-    const columns = this.database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>;
-    if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-  }
 
   transaction<T>(operation: () => T): T {
     this.database.exec('BEGIN IMMEDIATE');

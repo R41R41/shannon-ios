@@ -35,6 +35,24 @@ export function touchPartPhrase(type: ShannonTouchKind, region: BodyTouchRegion 
   return region && verb ? `${PART[region]}を${verb[form]}` : null;
 }
 
+/** A stored part or surface that stands for "the touches of this burst did not agree" (never sent by a body). */
+export const BODY_TOUCH_MIXED = 'mixed';
+
+/** A gesture with no part named, where the wording from before parts existed names one (頭をなでられた): なでられた. */
+const PARTLESS: Partial<Record<ShannonTouchKind, { ongoing: string; done: string; memory: string }>> = Object.freeze({
+  pet: { ongoing: 'なでられている', done: 'なでられた', memory: 'なでてもらった' },
+});
+
+/**
+ * The phrase for a burst: its part when every touch named the same one, the part-less wording when they
+ * differed, and `legacy` (the wording from before parts existed) when no touch ever named one.
+ */
+export function burstTouchPhrase(
+  type: ShannonTouchKind, burst: { region?: BodyTouchRegion; mixedRegion?: boolean }, form: 'ongoing' | 'done' | 'memory', legacy: string,
+): string {
+  return touchPartPhrase(type, burst.region, form) ?? (burst.mixedRegion ? PARTLESS[type]?.[form] : undefined) ?? legacy;
+}
+
 /** Her body as she is told of it. Without a surface, the wording from before bodies said where they are. */
 export function bodyPlace(surface: BodySurface | null | undefined): string {
   switch (surface) {

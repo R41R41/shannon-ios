@@ -4,7 +4,8 @@ import { bodyReactionContentHash, validatedBodyReactionRequest, type BodyReactio
 import { bodyTouchLine } from '../src/bodyReactionPrompt.js';
 import type { StoredTouchBurst } from '../src/bodyReactionStore.js';
 import { touchExperienceSummary } from '../src/bodyTouchMemory.js';
-import { BODY_SURFACES, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyWhere, touchPartPhrase } from '../src/bodyTouchWords.js';
+import { addColumnOnce } from '../src/bodyStore.js';
+import { BODY_SURFACES, BODY_TOUCH_REGIONS, bodyPlace, bodySurfaceMark, bodyWhere, burstTouchPhrase, touchPartPhrase } from '../src/bodyTouchWords.js';
 import { START, reactionHarness, scope } from './bodyReactionHarness.js';
 
 const PHONE = 'iphone-1';
@@ -150,6 +151,82 @@ describe('what she is told, end to end', () => {
     const mixed = h.reactionStore.burstOfTouch(scope, 'c')!;
     expect(mixed.count).toBe(3);
     expect(mixed.region).toBeUndefined();
+    expect(mixed.mixedRegion).toBe(true);
     expect(mixed.surface).toBe('iphone');
+    expect(mixed.mixedSurface).toBeUndefined();
+  });
+
+  it('words a burst of several parts without a part, and never as the head', async () => {
+    // Pets on the head and on the cheek are one memory: neither 頭を nor 頬を is true of all of it.
+    expect(touchExperienceSummary(burst({ count: 2, mixedRegion: true }))).toBe('体の記憶: 10月2日の午後、ライ氏になでてもらった（2回、合わせて2秒ほど）。ボクは何も言わなかった。');
+    // A burst that never named a part keeps the wording from before parts existed.
+    expect(touchExperienceSummary(burst({ count: 2 }))).toBe('体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（2回、合わせて2秒ほど）。ボクは何も言わなかった。');
+    expect(burstTouchPhrase('pet', { mixedRegion: true }, 'done', '頭をなでられた')).toBe('なでられた');
+    expect(burstTouchPhrase('pet', {}, 'done', '頭をなでられた')).toBe('頭をなでられた');
+    expect(burstTouchPhrase('pet', { region: 'face' }, 'done', '頭をなでられた')).toBe('頬をなでられた');
+    expect(burstTouchPhrase('poke', { mixedRegion: true }, 'done', 'つつかれた')).toBe('つつかれた');
+
+    const h = await reactionHarness();
+    await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    expect((await h.react({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'head' }, {}, PHONE)).status).toBe(200);
+    h.advance(10_000);
+    expect((await h.react({ type: 'pet', durationMs: 1_500, ongoing: true, region: 'face' }, {}, PHONE)).status).toBe(200);
+    expect(h.speaker.prompts[1]).toContain('- いま: ライ氏に頬をなでられている（2秒ほど）');
+    expect(h.speaker.prompts[1]).toContain('- なでられた: この数分で2回目');
+    // The same burst touched from the desktop as well: no surface is claimed for the memory.
+    await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
+    await h.events({ id: 'w-pet', type: 'pet', audience: 'owner', occurredAt: h.clock.at, region: 'head' });
+    const both = h.reactionStore.burstOfTouch(scope, 'w-pet')!;
+    expect(both).toMatchObject({ count: 3, mixedRegion: true, mixedSurface: true });
+    expect(touchExperienceSummary(both)).toContain('、ライ氏になでてもらった（3回');
+  });
+
+  it('gives each part and each surface its own line in the block of a text turn, and keeps the PC out of the iPhone heading', async () => {
+    const h = await reactionHarness({ unregistered: true });
+    await h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    const touch = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, audience: 'owner', occurredAt: h.clock.at, ...extra });
+    await h.send('POST', '/v1/body/events', { events: [touch('a', 'poke', { region: 'face' }), touch('b', 'poke', { region: 'face' }), touch('c', 'poke', { region: 'side' })] }, PHONE);
+    const parts = (await h.chat('ただいま')).systemPrompt;
+    expect(parts).toContain('- たったいま、頬をつつかれた（2回）');
+    expect(parts).toContain('- たったいま、脇をつつかれた\n');
+    // The same gesture on two surfaces is two lines, and the heading names neither.
+    const two = await reactionHarness({ unregistered: true });
+    await two.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    await two.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
+    await two.send('POST', '/v1/body/events', { events: [touch('p', 'pet', { region: 'head' })] }, PHONE);
+    await two.send('POST', '/v1/body/events', { events: [touch('w', 'pet', { region: 'head' })] }, 'body-pc');
+    const surfaces = (await two.chat('ただいま')).systemPrompt;
+    expect(surfaces).toContain('[体に起きたこと]（ボクの体にライ氏がしたこと。');
+    expect(surfaces).toContain('- たったいま、頭をなでられた（Windowsで）');
+    expect(surfaces).toContain('- たったいま、頭をなでられた（iPhoneで）');
+    // He came back to his PC and touched her on the phone: the PC's fact is not put under the iPhone's heading.
+    const back = await reactionHarness({ unregistered: true });
+    await back.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, PHONE);
+    await back.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], surface: 'windows' }, 'body-pc');
+    await back.send('POST', '/v1/body/events', { events: [{ id: 'r', type: 'ownerReturned', audience: 'owner', occurredAt: back.clock.at, minutesAway: 42 }] }, 'body-pc');
+    await back.send('POST', '/v1/body/events', { events: [{ id: 'q', type: 'poke', audience: 'owner', occurredAt: back.clock.at, region: 'face' }] }, PHONE);
+    const mixed = (await back.chat('ただいま')).systemPrompt;
+    expect(mixed).not.toContain('iPhoneのアプリの中のボクの体にライ氏がしたこと');
+    expect(mixed).toContain('[体に起きたこと]（ボクの体にライ氏がしたこと。');
+    expect(mixed).toContain('- たったいま、頬をつつかれた（iPhoneで）');
+    expect(mixed).toContain('- たったいま、ライ氏が42分ぶりに席へ戻った');
+  });
+
+  it('adds its columns once, also when another process added them in the same moment', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE t (a TEXT)');
+    addColumnOnce(database, 't', 'region', 'TEXT');
+    addColumnOnce(database, 't', 'region', 'TEXT');
+    // The other process won the race between the check and the ALTER: the error is "duplicate column", and it is fine.
+    const racing = {
+      checks: 0,
+      prepare: () => ({ all: () => (racing.checks++ === 0 ? [{ name: 'a' }] : [{ name: 'a' }, { name: 'surface' }]) }),
+      exec: () => { throw new Error('duplicate column name: surface'); },
+    };
+    expect(() => addColumnOnce(racing as never, 't', 'surface', 'TEXT')).not.toThrow();
+    const broken = { prepare: () => ({ all: () => [{ name: 'a' }] }), exec: () => { throw new Error('disk I/O error'); } };
+    expect(() => addColumnOnce(broken as never, 't', 'surface', 'TEXT')).toThrow('disk I/O error');
+    expect((database.prepare("PRAGMA table_info('t')").all() as unknown as Array<{ name: string }>).map(column => column.name)).toEqual(['a', 'region']);
   });
 });

@@ -237,30 +237,32 @@ export class ShannonBody {
     try {
       const time = Date.parse(at);
       const since = new Date(time - BODY_LIMITS.contextWindowMilliseconds).toISOString();
-      const groups = new Map<BodyEventType, { latest: StoredBodyEvent; count: number }>();
-      for (const event of this.store.recent(scopeKey, 'owner', since, 100)) {
-        if (!CONTEXT_PHRASE[event.type] || Date.parse(event.occurredAt) > time) continue;
-        const group = groups.get(event.type);
-        if (group) group.count += 1; else groups.set(event.type, { latest: event, count: 1 });
-      }
-      const shown = [...groups.values()].slice(0, BODY_LIMITS.contextEvents);
-      if (!shown.length) return '';
-      // Where the touched body was, as its device registered. One surface is named in the heading; several are marked per line.
+      // Where the body of an event was, as its device registered.
       const surfaces = new Map<string, BodySurface | undefined>();
       const surfaceOf = (event: StoredBodyEvent) => {
         if (!surfaces.has(event.deviceId)) surfaces.set(event.deviceId, this.store.surface(scopeKey, event.deviceId));
         return surfaces.get(event.deviceId);
       };
-      const touched = shown.filter(({ latest }) => BODY_TOUCH_EVENT_TYPES.some(type => type === latest.type));
-      const distinct = new Set(touched.map(({ latest }) => surfaceOf(latest) ?? ''));
-      const mixed = distinct.size > 1;
+      // One line per way of touching, part and surface: a count never puts one touch's part or place on another's.
+      const groups = new Map<string, { latest: StoredBodyEvent; count: number }>();
+      for (const event of this.store.recent(scopeKey, 'owner', since, 100)) {
+        if (!CONTEXT_PHRASE[event.type] || Date.parse(event.occurredAt) > time) continue;
+        const key = `${event.type}\u0000${event.region ?? ''}\u0000${surfaceOf(event) ?? ''}`;
+        const group = groups.get(key);
+        if (group) group.count += 1; else groups.set(key, { latest: event, count: 1 });
+      }
+      const shown = [...groups.values()].slice(0, BODY_LIMITS.contextEvents);
+      if (!shown.length) return '';
+      // One surface is named in the heading. Several — also a touch on the phone beside 「席へ戻った」 from the PC —
+      // and the heading names none, with each touch saying where.
+      const mixed = new Set(shown.map(({ latest }) => surfaceOf(latest) ?? '')).size > 1;
       const lines = shown.map(({ latest, count }) => {
         const minutes = Math.floor((time - Date.parse(latest.occurredAt)) / 60_000);
         const touch = BODY_TOUCH_EVENT_TYPES.find(type => type === latest.type);
         const phrase = (touch && touchPartPhrase(touch, latest.region, 'done')) ?? CONTEXT_PHRASE[latest.type]!(latest);
         return `- ${minutes < 1 ? 'たったいま、' : `${minutes}分前に`}${phrase}${count > 1 ? `（${count}回）` : ''}${mixed && touch ? bodySurfaceMark(surfaceOf(latest)) : ''}`;
       });
-      const place = mixed ? `${SHANNON_FIRST_PERSON}の体` : bodyPlace(touched[0] ? surfaceOf(touched[0].latest) : undefined);
+      const place = mixed ? `${SHANNON_FIRST_PERSON}の体` : bodyPlace(surfaceOf(shown[0]!.latest));
       return [`[体に起きたこと]（${place}に${SHANNON_OWNER_NAME}がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）`, ...lines].join('\n');
     } catch { return ''; }
   }

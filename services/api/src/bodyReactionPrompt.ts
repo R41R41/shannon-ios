@@ -5,7 +5,7 @@ import {
 import type { BodyAudience } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionTouch } from './bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
-import { bodyPlace, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
+import { bodyPlace, burstTouchPhrase, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 
 /**
  * The words of a reaction: what the fast model is told when she is touched, and how its
@@ -64,7 +64,7 @@ export function bodyTouchLine(touch: BodyReactionTouch, audience: BodyAudience):
 }
 
 function sittingLine(burst: StoredTouchBurst, current: boolean, at: string): string {
-  const phrase = touchPartPhrase(burst.type, burst.region, 'done') ?? BODY_TOUCH_PHRASES[burst.type].done;
+  const phrase = burstTouchPhrase(burst.type, burst, 'done', BODY_TOUCH_PHRASES[burst.type].done);
   if (current) return `- ${phrase}: ${burst.count > 1 ? `この数分で${burst.count}回目` : 'いまのが1回目'}`;
   const minutes = Math.max(1, Math.round((Date.parse(at) - Date.parse(burst.lastAt)) / 60_000));
   return `- ${phrase}: ${minutes}分前までに${burst.count}回`;

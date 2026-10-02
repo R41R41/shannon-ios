@@ -3,7 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 import type { ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
-import { isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
+import { BODY_TOUCH_MIXED, isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
+import { addColumnOnce } from './bodyStore.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -45,6 +46,9 @@ export interface StoredTouchBurst {
   /** The part and the surface while every touch of the burst named the same one; otherwise absent. */
   region?: BodyTouchRegion;
   surface?: BodySurface;
+  /** True when its touches named different parts (or some named none): told apart from a burst that never named one. */
+  mixedRegion?: boolean;
+  mixedSurface?: boolean;
 }
 
 export interface TouchReceipt {
@@ -98,6 +102,7 @@ const burstOf = (row: BurstRow): StoredTouchBurst => {
     count: Number(row.touch_count), totalDurationMs: Number(row.total_duration_ms), others: Number(row.others) === 1,
     said: lines.map(line => line[0]), saidOpen: lines.filter(line => line[1] === 1).map(line => line[0]),
     ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}), ...(isBodySurface(row.surface) ? { surface: row.surface } : {}),
+    ...(row.region === BODY_TOUCH_MIXED ? { mixedRegion: true } : {}), ...(row.surface === BODY_TOUCH_MIXED ? { mixedSurface: true } : {}),
   };
 };
 
@@ -156,10 +161,7 @@ export class SQLiteBodyReactionStore {
     `);
     // Added 2026-10-03: the touched part and the surface, on a touch and on its burst.
     for (const table of ['body_touches', 'body_touch_bursts']) {
-      const columns = this.database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>;
-      for (const column of ['region', 'surface']) {
-        if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
-      }
+      for (const column of ['region', 'surface']) addColumnOnce(this.database, table, column, 'TEXT');
     }
     secureDatabaseFiles(path);
   }
@@ -214,9 +216,10 @@ export class SQLiteBodyReactionStore {
         this.database.prepare(`
           UPDATE body_touch_bursts SET touch_count = touch_count + 1, total_duration_ms = total_duration_ms + ?,
             last_at = MAX(last_at, ?), others = MAX(others, ?),
-            region = CASE WHEN region IS ? THEN region ELSE NULL END, surface = CASE WHEN surface IS ? THEN surface ELSE NULL END
+            region = CASE WHEN region IS ? THEN region ELSE ? END, surface = CASE WHEN surface IS ? THEN surface ELSE ? END
           WHERE scope_key = ? AND burst_id = ?
-        `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0, touch.region ?? null, touch.surface ?? null, scopeKey, burstId);
+        `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0,
+          touch.region ?? null, BODY_TOUCH_MIXED, touch.surface ?? null, BODY_TOUCH_MIXED, scopeKey, burstId);
       } else {
         this.database.prepare(`
           INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface)
