@@ -204,8 +204,11 @@ describe('docs/chat-stream-contract.md', () => {
   it('names every line type and every fallback the code can send', () => {
     const document = readFileSync(new URL('../../../docs/chat-stream-contract.md', import.meta.url), 'utf8');
     for (const word of ['"stream": "sentences"', '`start`', '`sentence`', '`done`', '`error`', 'STREAM_FAILED',
-      '`command`', '`attachments`', '`web_search`', '`place_search`', '`sources`', `${CHAT_SENTENCE_MAXIMUM_LENGTH} UTF-16 units`]) {
+      '`command`', '`attachments`', '`web_search`', '`place_search`', '`sources`', 'MODEL_UNAVAILABLE', 'SHANNON_CHAT_STREAM_EARLY', 'discard every sentence', `${CHAT_SENTENCE_MAXIMUM_LENGTH} UTF-16 units`]) {
       expect(document, word).toContain(word);
+    }
+    for (const example of ['../../../.env.example', '../../../deploy/azure/api.env.example']) {
+      expect(readFileSync(new URL(example, import.meta.url), 'utf8')).toContain('SHANNON_CHAT_STREAM_EARLY=on');
     }
   });
 });
