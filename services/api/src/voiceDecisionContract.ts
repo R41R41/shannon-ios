@@ -38,6 +38,28 @@ export interface VoiceWaitingDirection {
   readonly delivery: VoiceDelivery;
 }
 
+/**
+ * What the server knows about the moment an utterance arrived in an owner call, for deciding
+ * whether she should speak at all (`voiceSilence.ts`). Facts only; her last line itself is
+ * already the newest assistant entry of `context`.
+ */
+export interface VoiceTurnFacts {
+  /** Her last utterance ended with a question, recently enough that a short reply answers it. */
+  sheAsked: boolean;
+  /** The newest stored message of the call is hers (the owner has not spoken since). */
+  followsShannon: boolean;
+  /** Seconds since her last stored utterance; absent when there is none. */
+  secondsSinceShannon?: number;
+  /** Her last utterance, for recognising an echo of her own speech. Never sent to a provider from here. */
+  shannonLastLine?: string;
+  /** Someone other than the owner may be speaking or listening (同席者あり). */
+  othersPresent: boolean;
+  source?: 'speech' | 'typed' | 'camera';
+}
+
+/** Why a turn is left unanswered. `model`: the router chose silence and no local rule had an opinion. */
+export type VoiceSilenceCategory = 'not_addressed' | 'backchannel' | 'unfinished' | 'hold' | 'echo' | 'model';
+
 export interface VoiceDecisionInput {
   scopeKey: string;
   transcript: string;
@@ -46,6 +68,8 @@ export interface VoiceDecisionInput {
   hasFreshLocation: boolean;
   context?: readonly { role: 'user' | 'assistant'; content: string }[];
   rawTranscript?: string;
+  /** Present on owner-call turns; absent, the router decides as it did before the silence rules. */
+  turn?: VoiceTurnFacts;
 }
 
 export interface VoiceTurnDecision {
@@ -64,6 +88,10 @@ export interface VoiceTurnDecision {
   elapsedMilliseconds: number;
   /** Semantic/context reliability, NOT an acoustic ASR confidence. */
   transcriptReliabilityProbability?: number;
+  /** How strongly the router thinks one look through her body's camera is wanted now (`voiceRoomLook.ts`). It opens nothing by itself. */
+  roomLookProbability?: number;
+  /** Set when the turn is left unanswered: the category that decided it. */
+  silence?: VoiceSilenceCategory;
 }
 
 export interface VoiceDecisionGateway {

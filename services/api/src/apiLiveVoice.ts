@@ -61,8 +61,12 @@ import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePriva
 import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
+import { voiceRoomLookTurn } from './voiceRoomLook.js';
+import { ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
+  /** Looking at the room through her body's camera (`voiceRoomLook.ts`); absent, a voice turn never looks. */
+  looks?: Parameters<typeof voiceRoomLookTurn>[0];
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
@@ -155,10 +159,14 @@ async function completeLiveVoiceDelegation(
   const address = temporaryGuest
     ? guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source) : null;
   const router = address && !address.respond ? new LocalVoiceDecisionGateway() : dependencies.voiceDecision;
+  // Owner call: what the moment looks like, for deciding whether she should speak at all (voiceSilence.ts).
+  // The turn in which he says that someone is with him is said to her; from the next one on she must be addressed.
+  const turnFacts = temporaryGuest ? undefined : ownerVoiceTurnFacts({ history: routingHistory, at: occurredAt, othersPresent: !alone && !ownerSaysCompanionPresent(transcript),
+    newest: dependencies.conversationStore.conversationHistory(scopeKey, threadId).at(-1), source: deviceContext?.userUtterance?.source });
   let decision = await router.decide({
     // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
-    context: boundedVoiceHistory(routingHistory, 4),
+    context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
@@ -167,10 +175,11 @@ async function completeLiveVoiceDelegation(
   const confirmedImplementationRequest = !alone || uncertainTranscript ? null
     : confirmedVoiceImplementationRequest(transcript, routingHistory,
       dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
-  if (uncertainTranscript && !decision.shouldRespond) {
-    decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
-  }
+  decision = settleOwnerVoiceTurn(decision, { transcript, facts: turnFacts, uncertain: uncertainTranscript });
   if (address) decision = applyGuestAddressing(decision, address);
+  // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
+  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: occurredAt,
+    audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
@@ -233,7 +242,7 @@ async function completeLiveVoiceDelegation(
         threadId,
         model: dependencies.chatModel.model,
         reply: '',
-        webSources: [],
+        webSources: [], ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
         voicePlan,
       },
     };
@@ -339,7 +348,7 @@ async function completeLiveVoiceDelegation(
     confirmedImplementationRequest
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
       : '',
-    backendInstructions,
+    backendInstructions, roomLook.prompt,
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
   // The owner's thread is replayed by character budget, with the replay summary for what fell out of it;
@@ -408,6 +417,7 @@ async function completeLiveVoiceDelegation(
   const reply = confirmedImplementationRequest
     ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  roomLook.open(threadId, reply); // Opens the look only if this turn chose one and its conditions still hold.
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,

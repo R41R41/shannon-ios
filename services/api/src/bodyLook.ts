@@ -2,19 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import {
   BODY_LOOK_ACTIVITY_THREAD, BODY_LOOK_LIMITS, configuredBodyLook, roomLookChoice,
-  type BodyLookCode, type BodyLookConfig, type BodyLookResult,
+  type BodyLookCode, type BodyLookConfig, type BodyLookResult, type RoomLookChoice,
 } from './bodyLookContract.js';
 import { bodyLookNotSeenLine } from './bodyLookLines.js';
 import { SQLiteBodyLookStore, type BodyLookOutcome, type StoredBodyLook } from './bodyLookStore.js';
 import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';
 
 /**
- * One look at the room, from the offer in an owner text turn to her next message.
+ * One look at the room, from the offer in an owner turn to her next message.
  *
- * - Deciding: the look is offered to the conversation model only in a text turn with the
- *   owner alone, while a body with its camera on is showing her window, the limits have
- *   room, and both switches are on. The model chooses it in the structured reply; a
- *   choice that arrives without an offer is ignored.
+ * - Deciding: the look is available only in a turn with the owner alone, while a body with
+ *   its camera on is showing her window, the limits have room, and both switches are on.
+ *   In a text turn the conversation model chooses it in the structured reply; a choice that
+ *   arrives without an offer is ignored. A voice turn is streamed speech and has no such
+ *   field: there the decision gateway chooses (`voiceRoomLook.ts`), under the same conditions.
  * - Asking: the open look is carried by `GET /v1/body/presence` to the one device it was
  *   opened for, for 30 seconds.
  * - Seeing: the frame goes to the model once and is dropped. This module holds it only as
@@ -70,6 +71,8 @@ export interface BodyLookDependencies extends BodyLookOptions {
   dayKey(at: string): string;
   /** Devices that registered `flags.camera: true`. */
   cameraDevices(scopeKey: string): readonly string[];
+  /** Every device that registered as her body, whatever its flags. Absent: a missing body reads as a camera that is off. */
+  bodyDevices?(scopeKey: string): readonly string[];
   /** The last few messages of a Talk, oldest first. */
   context(scopeKey: string, threadId: string): readonly RoomLookContextLine[];
   /** Appends one entry to the activity record. */
@@ -86,16 +89,30 @@ export interface BodyLookTurn {
   decide(choice: unknown, threadId: string): void;
 }
 
+/** What a voice turn is told about looking (`voiceRoomLook.ts`). */
+export interface BodyLookVoiceTurn {
+  /** Why she cannot look now, or null when she can. */
+  unavailable: BodyLookUnavailable | null;
+  /**
+   * Opens the look once the reply is written; the conditions are checked again. `spoken` is this turn as it was said,
+   * for the model that sees the frame: a voice turn reaches the stored Talk only after her reply was spoken.
+   */
+  open(threadId: string, choice: RoomLookChoice, spoken?: readonly RoomLookContextLine[]): boolean;
+}
+
 export type BodyLookAnswer =
   | { kind: 'disabled' | 'not_found' | 'wrong_device' | 'answered' | 'expired' }
   | { kind: 'done'; id: string; status: 'seen' | 'refused' | 'discarded' | 'failed'; message: BodyLookMessage | null };
 
-type Unavailable = 'switched_off' | 'not_alone' | 'no_viewer' | 'no_camera' | 'body_away' | 'busy' | 'limit_hour' | 'limit_day';
+export type BodyLookUnavailable = 'switched_off' | 'not_alone' | 'no_viewer' | 'no_body' | 'no_camera' | 'body_away' | 'busy' | 'limit_hour' | 'limit_day';
+type Unavailable = BodyLookUnavailable;
 
-const UNAVAILABLE_REASON: Readonly<Record<Unavailable, string>> = Object.freeze({
+/** The real reason, as the server knows it. Text and voice turns carry the same words. */
+export const ROOM_LOOK_UNAVAILABLE_REASON: Readonly<Record<Unavailable, string>> = Object.freeze({
   switched_off: 'この機能は止めてある',
   not_alone: 'ほかの人がいる場では見ない',
   no_viewer: '見る仕組みがいまは使えない',
+  no_body: '体（PCのアプリ）がつながっていない',
   no_camera: '体のカメラが入っていない',
   body_away: '体の窓が出ていない',
   busy: 'いま見ている途中',
@@ -125,7 +142,7 @@ export const bodyLookNotSeenSummary = (code: BodyLookCode, frameDiscarded = fals
 export const ROOM_LOOK_OFFER_PROMPT = `[部屋を見る]（いまは体のカメラで部屋を一度だけ見られる。${SHANNON_OWNER_NAME}に見てと言われた時か、自分が見たい時だけ、返答のroomLookで選ぶ。`
   + '見えたものはこの返事のあとで届く。この返事では見てみると伝えるだけにして、まだ見ていないものを語らない）';
 export const roomLookUnavailablePrompt = (reason: Unavailable) =>
-  `[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: ${UNAVAILABLE_REASON[reason]}。見たふりをせず、見られないと正直に伝える）`;
+  `[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: ${ROOM_LOOK_UNAVAILABLE_REASON[reason]}。見たふりをせず、見られないと正直に伝える）`;
 
 /**
  * The owner's words ask her to look. This only decides whether the turn is told that she
@@ -155,6 +172,8 @@ export class BodyLooks {
   private readonly lastTurns = new Map<string, number>();
   /** Looks whose message must not be delivered because someone else joined while the model was seeing. */
   private readonly withheld = new Set<string>();
+  /** The voice turn a look was opened in, until the look ends. Memory only. */
+  private readonly spoken = new Map<string, readonly RoomLookContextLine[]>();
 
   constructor(private readonly dependencies: BodyLookDependencies) {
     this.store = dependencies.store ?? new SQLiteBodyLookStore(':memory:');
@@ -174,10 +193,7 @@ export class BodyLooks {
    */
   turn(scopeKey: string, message: string, at: string, audience: unknown): BodyLookTurn {
     try {
-      this.lastTurns.set(scopeKey, Date.parse(at));
-      this.sweep(scopeKey, at);
-      if (audience !== 'owner') this.withdraw(scopeKey, at);
-      const state = this.availability(scopeKey, at, audience);
+      const state = this.begin(scopeKey, at, audience);
       if (typeof state === 'string') return asksToLook(message) ? { ...NO_TURN, prompt: roomLookUnavailablePrompt(state) } : NO_TURN;
       return {
         prompt: ROOM_LOOK_OFFER_PROMPT,
@@ -185,6 +201,29 @@ export class BodyLooks {
         decide: (choice, threadId) => { try { this.open(scopeKey, threadId, choice); } catch { /* the reply is already written */ } },
       };
     } catch { return NO_TURN; }
+  }
+
+  /**
+   * The same for one voice turn (`POST /v1/voice/.../delegations`), under the conditions of a text turn.
+   * Nothing here reads the words that were said: whether to look is the caller's decision. It never throws.
+   */
+  voiceTurn(scopeKey: string, at: string, audience: unknown): BodyLookVoiceTurn {
+    try {
+      const state = this.begin(scopeKey, at, audience);
+      if (typeof state === 'string') return { unavailable: state, open: () => false };
+      return {
+        unavailable: null,
+        open: (threadId, choice, spoken) => { try { return this.open(scopeKey, threadId, choice, spoken); } catch { return false; } },
+      };
+    } catch { return { unavailable: 'no_viewer', open: () => false }; }
+  }
+
+  /** What every conversation turn does first: note the turn, close what is overdue, and end a look other people would hear about. */
+  private begin(scopeKey: string, at: string, audience: unknown): { deviceId: string } | Unavailable {
+    this.lastTurns.set(scopeKey, Date.parse(at));
+    this.sweep(scopeKey, at);
+    if (audience !== 'owner') this.withdraw(scopeKey, at);
+    return this.availability(scopeKey, at, audience);
   }
 
   /** The `look` field and the poll interval of one presence read. With the switch off there is no `look` key. */
@@ -237,10 +276,11 @@ export class BodyLooks {
     let text: string | null = null;
     try {
       text = (await viewer.see({
-        scopeKey, image: result.image, context: own ? [] : this.dependencies.context(scopeKey, look.threadId),
+        scopeKey, image: result.image, context: own ? [] : this.context(look),
         ...(hand ? { activity: { lookId: id, model: hand.model } } : {}),
       })).trim() || null;
     } catch { text = null; }
+    this.spoken.delete(id);
     const doneAt = this.dependencies.now();
     if (this.withheld.delete(id)) {
       this.close({ ...look, ownerAsked: false }, 'seeing', 'failed', 'others_present', doneAt);
@@ -282,11 +322,12 @@ export class BodyLooks {
     if (audience !== 'owner') return 'not_alone';
     if (!this.viewer) return 'no_viewer';
     const cameras = this.dependencies.cameraDevices(scopeKey);
-    if (!cameras.length) return 'no_camera';
+    if (!cameras.length) return this.dependencies.bodyDevices && !this.dependencies.bodyDevices(scopeKey).length ? 'no_body' : 'no_camera';
     const time = Date.parse(at);
+    const fresh = this.config.presenceFreshMilliseconds ?? BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds;
     const present = cameras
       .map(deviceId => ({ deviceId, readAt: this.presenceReads.get(`${scopeKey}\u0000${deviceId}`) ?? Number.NEGATIVE_INFINITY }))
-      .filter(device => time - device.readAt >= 0 && time - device.readAt <= BODY_LOOK_LIMITS.presenceFreshMilliseconds)
+      .filter(device => time - device.readAt >= 0 && time - device.readAt <= fresh)
       .sort((left, right) => right.readAt - left.readAt)[0];
     if (!present) return 'body_away';
     if (this.store.waiting(scopeKey).length) return 'busy';
@@ -296,22 +337,36 @@ export class BodyLooks {
   }
 
   /** Opens the look the model chose. The conditions are checked again: the reply took time. */
-  private open(scopeKey: string, threadId: string, choice: unknown): void {
+  private open(scopeKey: string, threadId: string, choice: unknown, spoken?: readonly RoomLookContextLine[]): boolean {
     const chosen = roomLookChoice(choice);
-    if (!chosen) return;
+    if (!chosen) return false;
     const at = this.dependencies.now();
     const state = this.availability(scopeKey, at, 'owner');
-    if (typeof state === 'string') return;
+    if (typeof state === 'string') return false;
     const time = Date.parse(at);
     this.store.prune(scopeKey, new Date(time - RETENTION_MILLISECONDS).toISOString());
+    const id = randomUUID();
     const opened = this.store.open({
-      id: randomUUID(), scopeKey, deviceId: state.deviceId, threadId, requestedAt: at,
+      id, scopeKey, deviceId: state.deviceId, threadId, requestedAt: at,
       expiresAt: new Date(time + BODY_LOOK_LIMITS.lifetimeMilliseconds).toISOString(), ownerAsked: chosen === 'asked',
     }, this.dependencies.dayKey(at));
-    if (opened && this.dependencies.timers !== false) {
+    if (!opened) return false;
+    if (spoken?.length) {
+      if (this.spoken.size >= 64) this.spoken.clear();
+      this.spoken.set(id, spoken.slice(-2));
+    }
+    if (this.dependencies.timers !== false) {
       setTimeout(() => { try { this.sweep(scopeKey, this.dependencies.now()); } catch { /* the next read sweeps */ } },
         BODY_LOOK_LIMITS.lifetimeMilliseconds + 250).unref();
     }
+    return true;
+  }
+
+  /** The last few messages of the look's Talk, then the voice turn it was opened in while that turn is not stored yet. */
+  private context(look: StoredBodyLook): readonly RoomLookContextLine[] {
+    const stored = this.dependencies.context(look.scopeKey, look.threadId);
+    const spoken = (this.spoken.get(look.id) ?? []).filter(line => !stored.some(item => item.role === line.role && item.content === line.content));
+    return [...stored, ...spoken].slice(-BODY_LOOK_LIMITS.contextMessages);
   }
 
   /** A turn other people can see ends a look in progress: nothing she saw is said in front of them. */
@@ -325,6 +380,7 @@ export class BodyLooks {
   /** Ends a look that did not become a message about the room: one activity entry, and one honest line if the owner had asked. */
   private close(look: StoredBodyLook, from: BodyLookOutcome, to: BodyLookOutcome, code: BodyLookCode, at: string, frameReceived = false): { message: BodyLookMessage | null } | null {
     if (!this.store.advance(look.scopeKey, look.id, from, to, at, { code, frameReceived })) return null;
+    this.spoken.delete(look.id);
     // Her activity loop reads the outcome and records it through the gate; nothing is said in a Talk.
     if (look.threadId === BODY_LOOK_ACTIVITY_THREAD) return { message: null };
     try {

@@ -13,8 +13,14 @@ export const BODY_LOOK_LIMITS = Object.freeze({
   activityPerDay: 3,
   /** A look the body has not answered by then is closed as `timeout`. The same for a look opened by her activity loop. */
   lifetimeMilliseconds: 30_000,
-  /** The body counts as present (window visible) while its last presence read is this recent. */
+  /** For a look in her own time: the body counts as present (window visible) while its last presence read is this recent. */
   presenceFreshMilliseconds: 30_000,
+  /**
+   * For a look in conversation (text or voice): the same, with room for the body's 10-second poll to slip
+   * while it is busy with a call. `SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS` (10–300). The body still refuses
+   * a look when her window is hidden, so a longer window costs at most one honest "could not look".
+   */
+  conversationPresenceFreshMilliseconds: 75_000,
   /** While a text turn is this recent, or a look is open, presence asks to be polled faster. */
   fastPollWindowMilliseconds: 60_000,
   fastPollSeconds: 3,
@@ -151,11 +157,13 @@ export interface BodyLookConfig {
   perDay: number;
   /** Looks from her own activity per owner-local day, counted inside `perHour` and `perDay`. 0: stage 2 is off. */
   activityPerDay: number;
+  /** How recent a presence read must be for a look in conversation. Absent: `BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds`. */
+  presenceFreshMilliseconds?: number;
 }
 
-function boundedLimit(value: string | undefined, fallback: number, maximum: number): number {
+function boundedLimit(value: string | undefined, fallback: number, maximum: number, minimum = 0): number {
   const parsed = Number(value?.trim());
-  return value?.trim() && Number.isInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : fallback;
+  return value?.trim() && Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
 /** Switching looks off needs only `SHANNON_BODY_LOOK=off` and a restart, not a deployment. */
@@ -165,5 +173,7 @@ export function configuredBodyLook(environment: Readonly<Record<string, string |
     perHour: boundedLimit(environment.SHANNON_BODY_LOOK_PER_HOUR, BODY_LOOK_LIMITS.perHour, 60),
     perDay: boundedLimit(environment.SHANNON_BODY_LOOK_PER_DAY, BODY_LOOK_LIMITS.perDay, 500),
     activityPerDay: boundedLimit(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, BODY_LOOK_LIMITS.activityPerDay, 30),
+    presenceFreshMilliseconds: boundedLimit(environment.SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS,
+      BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds / 1_000, 300, 10) * 1_000,
   };
 }

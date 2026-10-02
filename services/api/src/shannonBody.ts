@@ -129,7 +129,7 @@ export class ShannonBody {
     this.looks = new BodyLooks({
       speaker: noteBodyLookSpeaker(dependencies.conversationStore), ...dependencies.look,
       ingestEnabled: this.ingestEnabled, now: dependencies.now, dayKey: ownerDay,
-      cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'),
+      cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'), bodyDevices: scopeKey => this.store.devices(scopeKey),
       context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
     });

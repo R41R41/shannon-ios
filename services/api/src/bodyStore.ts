@@ -193,6 +193,12 @@ export class SQLiteBodyStore {
     return rows.filter(row => (JSON.parse(row.flags_json) as Record<string, boolean>)[flag] === true).map(row => row.device_id);
   }
 
+  /** Every device of the scope that registered as her body. */
+  devices(scopeKey: string): readonly string[] {
+    return (this.database.prepare('SELECT device_id FROM body_capabilities WHERE scope_key = ?').all(scopeKey) as unknown as Array<{ device_id: string }>)
+      .map(row => row.device_id);
+  }
+
   close(): void {
     this.database.close();
   }

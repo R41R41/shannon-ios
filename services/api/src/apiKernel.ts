@@ -489,7 +489,7 @@ export class ShannonApiKernel {
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
-      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people,
+      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, looks: this.body.looks,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }
