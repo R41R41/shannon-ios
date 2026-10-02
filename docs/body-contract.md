@@ -248,7 +248,7 @@ The body registers what it can express. One registration per device and scope; a
 
 An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`.
 
-The registration is stored and returned in `presence`. One flag is read by the server: `camera`. Nothing else of the registration is in any prompt, so Shannon does not yet know which expressions and gestures her body has.
+The registration is stored and returned in `presence`. Two flags are read by the server: `camera`, and `touchOnly` (see [A body that only feels touch](#a-body-that-only-feels-touch)). Nothing else of the registration is in any prompt, so Shannon does not yet know which expressions and gestures her body has.
 
 ## `GET /v1/body/nudges`
 
@@ -508,7 +508,7 @@ Owner decision 2026-10-02 (「触ったり動かしたりしたのがバック�
 
 No other field is accepted, at the top level or inside `touch`, and there is no text field: a request with one is refused with `400`. The request is facts; nothing in it can be read as an instruction.
 
-Only a device that registered with `PUT /v1/body/capabilities` may ask, and only in the owner's own scope (`SHANNON_OWNER_SCOPE_KEY`, default `owner`).
+Only a device that registered with `PUT /v1/body/capabilities` may ask (a registration with `flags.touchOnly` is enough), and only in the owner's own scope (`SHANNON_OWNER_SCOPE_KEY`, default `owner`).
 
 The answer is `200`:
 
@@ -589,6 +589,53 @@ After a `said` answer the body listens for `listenSeconds`.
 - **Windows.** The first voice turn that names the reaction must reach the server within `listenSeconds` + 60 seconds of the reaction's answer (he may speak for a while). Once a delegation named it, the stored turn may follow up to 10 minutes later. A body that only stores turns (`/v1/voice/realtime/turns`) may send `reactionId` there alone, inside the first window; her line is then stored before the turn but was not given to a model by the server.
 - **An unknown, expired or already used `reactionId` is not an error**: the turn is handled as an ordinary one. Only a `reactionId` that is not a string is refused (`400`).
 - **Guest mode** (the body runs voice with `participantMode: "guest"` while a stream is live or 「友人も一緒」 is on). `reactionId` is accepted on the delegation and **only supplies context**: her line precedes the speaker's words for the model. History and memory follow the existing rules of that call; nothing is written into the owner's Talk as an owner-alone turn. The same holds for an owner-mode turn stored with `companionPresent: true`, and for a line that was said with `audience: "others"`: the stored turn follows the companion rules and her line is not added to the Talk. The stored-turn route cannot tell a guest-mode call by itself: a body in guest mode must not send `reactionId` on `/turns` (or must send `companionPresent: true` with it).
+
+## A body that only feels touch
+
+Added 2026-10-03 (owner: 「アプリの中でも体を画面に。指で触るのも」). The iPhone app can show her Live2D figure
+(`docs/live2d-embed.md`), and a finger on it is a touch. So that a touch there can reach her, the phone
+registers as a body of one narrow kind:
+
+```json
+PUT /v1/body/capabilities
+{ "scopeKey": "owner", "expressions": ["joyful", "…"], "gestures": ["wave", "…"], "flags": { "touchOnly": true } }
+```
+
+`flags.touchOnly: true` (`services/api/src/bodyTouchOnly.ts`) says: this device feels touch and is nothing
+else of a body. With it the device may use two routes exactly as the desktop body does, with the same
+fields, limits, idempotency and audience rules:
+
+- `POST /v1/body/reactions` (the registration is what lifts `403 BODY_REACTION_NOT_A_BODY`);
+- `POST /v1/body/events` with the touch types (`pet`, `tickle`, `poke`, `holdHand`; the page has no `carry`).
+
+What a touch does to her is unchanged: her feeling moves, she remembers it, and she may say one line.
+
+Everything else that a registration means for the desktop body does **not** apply to a touch-only device:
+
+| What a full body's registration does | For a touch-only device |
+| --- | --- |
+| Counts as "a body is connected" when a look is refused (`no_camera` instead of `no_body`) | Not counted: with only the phone registered she still says her body is not connected. |
+| `flags.camera: true` makes it the device a look at the room is given to | Not read: no look is ever given to it, whatever its flags say. Looking through the phone stays the separate app look. |
+| A presence read marks "her window is showing" for her activity loop | Not marked. The phone does not read `GET /v1/body/presence` at all. |
+| `audience` on a presence read, and the audience of its newest event, say who can see or hear her body | Not kept, and its events do not stand in: the audience of a phone touch describes that touch only. |
+| May report what it did with a message she started (`POST /v1/body/reach-outs/{id}/delivery`) | `403 REACH_OUT_NOT_A_BODY`. |
+| Its read of `/v1/initiatives` is "her body's own read" of a message (`docs/private-listening-contract.md`) | It is an ordinary app read: nothing is claimed for the body and nothing is withheld from the phone. |
+
+What the phone does:
+
+- Nothing is sent, and the device does not register, until the owner switches on
+  「体に起きたことをシャノンに伝える」 (off by default, on the body screen and in Settings › すがた). With it off a
+  touch animates in the page and stays on the device. Switching it off drops what was waiting to be sent.
+  The registration itself stays on the server (there is no route to withdraw one); it grants nothing but the two routes above.
+- It asks for a reaction at the page's moment (the timing of [When to ask](#post-v1bodyreactions), decided by the same
+  acting code as on Windows), waits 4.5 seconds, and discards anything later. It reports the finished touch as an event with the same `id`.
+- `audience` is `owner`, or `others` while a call is in 「友人も一緒」.
+- Her line is shown in a bubble near the figure for a few seconds, and `mood` / `message.expression` go to the
+  page's `express`. **It is not spoken and no microphone opens**: the app has no speech outside a call, so
+  `listenSeconds` and `reactionId` are not used by the phone, and her line stays out of every Talk.
+- Known wording gap: the server's fixed texts still call the body 「PCに表示されているボクの体」 (the
+  `[体に起きたこと]` block and the reaction prompt), also for a touch that came from the phone. Changing
+  these sentences is a change to what she is told and awaits the owner's decision.
 
 ## Errors
 

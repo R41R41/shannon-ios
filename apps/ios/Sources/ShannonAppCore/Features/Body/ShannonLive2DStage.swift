@@ -30,7 +30,7 @@ enum ShannonLive2DStagePolicy {
     }
 
     /// The page is given this long to say `ready`.
-    static let loadTimeoutSeconds: TimeInterval = 30
+    static let loadTimeoutSeconds: TimeInterval = 90
     /// With no screen showing her, the model (about 85 MB of GPU memory) is let go after this long.
     static let releaseAfterSeconds: TimeInterval = 90
 
@@ -353,7 +353,13 @@ public final class ShannonLive2DStage {
 
         timeoutTask?.cancel()
         timeoutTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(ShannonLive2DStagePolicy.loadTimeoutSeconds))
+            // Only time in the foreground counts: a page in a backgrounded app is suspended, not broken.
+            var waited = 0.0
+            while waited < ShannonLive2DStagePolicy.loadTimeoutSeconds {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self, self.generation == generation, self.status == .loading else { return }
+                if self.appActive { waited += 1 }
+            }
             guard !Task.isCancelled, let self, self.generation == generation, self.status == .loading else { return }
             self.recover(generation: generation)
         }
@@ -401,6 +407,12 @@ public final class ShannonLive2DStage {
 
     fileprivate func receive(_ message: ShannonLive2DMessage, generation received: Int) {
         guard received == generation else { return }
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBodyStats") {
+            let seconds = loadStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+            NSLog("[ShannonBody] %@ (%.2f s after load began)", String(describing: message).prefix(160).description, seconds)
+        }
+#endif
         switch message {
         case let .ready(version, modelUpdatedAt, expressions, gestures):
             timeoutTask?.cancel()

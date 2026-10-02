@@ -117,6 +117,9 @@ struct ShannonBodyAttachment: ViewModifier {
             .onAppear {
                 bodyModel.audience = isGuestCall ? .others : .owner
                 applyForm()
+#if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBody") { bodyModel.showsScreen = true }
+#endif
             }
     }
 

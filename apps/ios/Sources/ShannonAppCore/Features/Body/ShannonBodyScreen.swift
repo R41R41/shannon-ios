@@ -17,6 +17,7 @@ public struct ShannonBodyScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     static let layoutModeKey = "shannon.body.layout-mode"
     static let refreshSeconds = 30.0
@@ -53,11 +54,12 @@ public struct ShannonBodyScreen: View {
                     .padding(.vertical, ShannonSpacing.small)
                     .accessibilityIdentifier("body-now-line")
                 // Never a scroll view around her: a scroll gesture would take the finger away from the page.
-                ViewThatFits(in: .vertical) {
-                    controls(palette)
+                if dynamicTypeSize.isAccessibilitySize {
                     ScrollView { controls(palette) }
+                        .frame(height: geometry.size.height * 0.45)
+                } else {
+                    controls(palette)
                 }
-                .frame(maxHeight: geometry.size.height * 0.5)
             }
         }
         .background(palette.canvas.ignoresSafeArea())

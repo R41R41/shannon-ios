@@ -145,6 +145,7 @@ What she observes afterwards is what she observes after any message: whether the
 
 The body contract is unchanged for the body: it polls `presence`, reads `/v1/initiatives`, shows and speaks, and reports. What it is told changes in one case:
 
+- "A device that registered as her body" below means a full body: a registration with `flags.touchOnly` (the phone showing her Live2D figure, `docs/body-contract.md`) is an ordinary app here.
 - A message an app holds is not in `presence.reachOut` and not in the `/v1/initiatives` answer **for a device that registered as her body**. The owner's apps see it as before. An app that took a message and was never heard from again (it was closed) keeps it from her body for 5 minutes after its claim; by then nothing is being said any more (a line ends at most two minutes after it was asked for), the message is at least that old, and the body's own rule for old messages applies.
 - A fresh message nobody holds is withheld from her body **while an app is privately listening and speaks**; that app takes it at its next heartbeat. If it does not (the app was closed), her body is told once the app's report lapsed (45 seconds) or the message is no longer fresh.
 - A fresh message nobody holds, with no app listening, becomes her body's **by the body's own read** (`surface: body`), so an app that starts listening a moment later does not say it a second time.
