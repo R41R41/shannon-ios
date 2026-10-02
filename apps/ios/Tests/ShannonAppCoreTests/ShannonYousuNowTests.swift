@@ -191,4 +191,18 @@ final class ShannonYousuNowTests: XCTestCase {
         XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, attention: true, action: {}).accessibilityLabel, "ようす、確かめたいことがあります")
         XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, action: {}).accessibilityLabel, "ようす")
     }
+
+    func testATouchIsToldWithItsPartAndSurfaceWhenTheServerKnowsThem() throws {
+        XCTAssertEqual(ShannonNowText.event(ShannonNowTouchDTO(id: "a", at: "t", kind: "poke", count: 2, phrase: "頬をつつかれた", place: "（iPhoneで）")).title, "頬をつつかれた（2回）（iPhoneで）")
+        XCTAssertEqual(ShannonNowText.event(ShannonNowTouchDTO(id: "b", at: "t", kind: "pet", phrase: "頭をなでられた")).title, "頭をなでられた")
+        XCTAssertEqual(ShannonNowText.event(ShannonNowTouchDTO(id: "c", at: "t", kind: "holdHand", place: "（Macで）")).title, "手をつないだ（Macで）")
+        // An older server says neither: the words are what they were.
+        XCTAssertEqual(ShannonNowText.event(ShannonNowTouchDTO(id: "d", at: "t", kind: "poke", count: 3)).title, "つつかれた（3回）")
+        let json = #"{"id":"e","at":"2026-10-03T06:12:00.000Z","kind":"poke","count":1,"answered":false,"region":"face","surface":"iphone","phrase":"頬をつつかれた","place":"（iPhoneで）"}"#
+        let decoded = try JSONDecoder().decode(ShannonNowTouchDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.phrase, "頬をつつかれた")
+        XCTAssertEqual(decoded.place, "（iPhoneで）")
+        let older = try JSONDecoder().decode(ShannonNowTouchDTO.self, from: Data(#"{"id":"f","at":"t","kind":"pet"}"#.utf8))
+        XCTAssertNil(older.phrase)
+    }
 }

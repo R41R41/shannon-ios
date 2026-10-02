@@ -100,13 +100,19 @@ public struct ShannonNowTouchDTO: Decodable, Equatable, Identifiable, Sendable {
     public let kind: String
     public let count: Int?
     public let answered: Bool?
+    /// The way of touching and the part, in the server's words (頬をつつかれた); absent when no part is known.
+    public var phrase: String? = nil
+    /// （iPhoneで）／（Windowsで）／（Macで）; absent when the surface is not known.
+    public var place: String? = nil
 
-    public init(id: String, at: String, kind: String, count: Int? = nil, answered: Bool? = nil) {
+    public init(id: String, at: String, kind: String, count: Int? = nil, answered: Bool? = nil, phrase: String? = nil, place: String? = nil) {
         self.id = id
         self.at = at
         self.kind = kind
         self.count = count
         self.answered = answered
+        self.phrase = phrase
+        self.place = place
     }
 }
 

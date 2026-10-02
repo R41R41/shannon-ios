@@ -9,6 +9,8 @@
  *
  * Owner-only and paired-device-only; nothing here is written, and nothing here is in a prompt.
  */
+import type { BodySurface, BodyTouchRegion } from './bodyTouchWords.js';
+
 export const SHANNON_NOW_PATH = '/v1/shannon/now';
 export const SHANNON_NOW_SCHEMA_VERSION = 1;
 
@@ -85,6 +87,13 @@ export interface ShannonNowTouch {
   count: number;
   /** She said a line in answer. The line itself is not here. */
   answered: boolean;
+  /** Which part was touched and on which surface her body was, when every touch of the run named the same one. */
+  region?: BodyTouchRegion;
+  surface?: BodySurface;
+  /** The way of touching and the part as one phrase (頬をつつかれた), in the words she is told; absent without a part. */
+  phrase?: string;
+  /** （iPhoneで）／（Windowsで）／（Macで）; absent without a surface. */
+  place?: string;
 }
 
 /** How one message of hers reached the owner on one surface. Surfaces and outcomes may be added. */

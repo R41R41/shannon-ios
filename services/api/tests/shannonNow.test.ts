@@ -246,6 +246,36 @@ describe('GET /v1/shannon/now: what it answers', () => {
     expect(JSON.stringify(body)).not.toContain('HER LINE');
   });
 
+  it('says which part was touched and on which surface, in the words she is told, when the run knows them', async () => {
+    const { path, read } = await harness();
+    const { reactions } = seed(path);
+    const cheek = reactions.recordTouch(OWNER, { id: 'p-1', type: 'poke', audience: 'owner', occurredAt: ago(30 * MINUTE), region: 'face', surface: 'iphone' }, ago(30 * MINUTE));
+    const head = reactions.recordTouch(OWNER, { id: 'p-2', type: 'pet', audience: 'owner', occurredAt: ago(20 * MINUTE), region: 'head', surface: 'windows' }, ago(20 * MINUTE));
+    // A run whose touches named different parts and surfaces names none.
+    const mixed = reactions.recordTouch(OWNER, { id: 'p-3', type: 'tickle', audience: 'owner', occurredAt: ago(10 * MINUTE), region: 'side', surface: 'mac' }, ago(10 * MINUTE));
+    reactions.recordTouch(OWNER, { id: 'p-4', type: 'tickle', audience: 'owner', occurredAt: ago(9 * MINUTE), region: 'face', surface: 'iphone' }, ago(9 * MINUTE));
+    const hand = reactions.recordTouch(OWNER, { id: 'p-5', type: 'holdHand', audience: 'owner', occurredAt: ago(5 * MINUTE), region: 'hand', surface: 'mac' }, ago(5 * MINUTE));
+
+    const { body } = await read();
+    expect(body.touches).toEqual([
+      // Holding hands names the hand already: the part is told, and no phrase replaces the client's own word.
+      { id: hand.burst.id, at: ago(5 * MINUTE), kind: 'holdHand', count: 1, answered: false, region: 'hand', surface: 'mac', place: '（Macで）' },
+      { id: mixed.burst.id, at: ago(9 * MINUTE), kind: 'tickle', count: 2, answered: false },
+      { id: head.burst.id, at: ago(20 * MINUTE), kind: 'pet', count: 1, answered: false, region: 'head', surface: 'windows', place: '（Windowsで）', phrase: '頭をなでられた' },
+      { id: cheek.burst.id, at: ago(30 * MINUTE), kind: 'poke', count: 1, answered: false, region: 'face', surface: 'iphone', place: '（iPhoneで）', phrase: '頬をつつかれた' },
+    ]);
+  });
+
+  it('does not take a phone that only feels touch for her desktop body', async () => {
+    const { path, read } = await harness();
+    const { body } = seed(path);
+    body.saveCapabilities(OWNER, 'iphone-1', { expressions: [], gestures: [], flags: { touchOnly: true, camera: true }, surface: 'iphone' }, NOW);
+    // Only the phone registered: no body is known, none is present, and there is no body camera to speak of.
+    expect((await read()).body.body).toMatchObject({ known: false, present: false, lastReadAt: null, camera: null });
+    body.saveCapabilities(OWNER, 'pc', { expressions: [], gestures: [], flags: { camera: false } }, NOW);
+    expect((await read()).body.body).toMatchObject({ camera: false });
+  });
+
   it('lists messages she started with how each was delivered, never their words', async () => {
     const { path, read } = await harness();
     const { reports, raw, reachOut } = seed(path);

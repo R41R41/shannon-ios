@@ -132,11 +132,12 @@ public enum ShannonNowText {
     ]
 
     public static func event(_ touch: ShannonNowTouchDTO) -> ShannonNowEvent {
-        let name = touchKinds[touch.kind] ?? "触れられた"
+        // The server's own phrase when it knows the part (頬をつつかれた); otherwise the name of the kind.
+        let name = touch.phrase.flatMap { $0.isEmpty ? nil : $0 } ?? touchKinds[touch.kind] ?? "触れられた"
         let count = touch.count ?? 1
         return ShannonNowEvent(
             id: "touch-\(touch.id)", kind: .touch, at: touch.at,
-            title: count > 1 ? "\(name)（\(count)回）" : name,
+            title: (count > 1 ? "\(name)（\(count)回）" : name) + (touch.place ?? ""),
             detail: touch.answered == true ? "ひとこと返した" : nil
         )
     }

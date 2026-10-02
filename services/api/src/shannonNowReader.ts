@@ -1,4 +1,7 @@
+import { isTouchOnlyBody } from './bodyTouchOnly.js';
+import { bodySurfaceMark, isBodySurface, isBodyTouchRegion, touchPartPhrase } from './bodyTouchWords.js';
 import { DatabaseSync } from 'node:sqlite';
+import { SHANNON_TOUCH_KINDS } from '@shannon/cognition';
 import { REACH_OUT_SOURCE_PREFIX, reachOutOfSource } from './reachOutDelivery.js';
 import {
   SHANNON_NOW_LIMITS, type ShannonNowBody, type ShannonNowDelivery, type ShannonNowLook, type ShannonNowReachOut, type ShannonNowTouch,
@@ -144,11 +147,26 @@ export class SQLiteShannonNowReader {
 
   private readTouches(scopeKey: string, since: string): ShannonNowTouch[] {
     if (!this.tableExists('body_touch_bursts')) return [];
+    // The part and the surface are columns of a newer database; an older one simply has none to tell.
+    const columns = (this.database.prepare("PRAGMA table_info('body_touch_bursts')").all() as unknown as Array<{ name: string }>).map(column => column.name);
+    const where = columns.includes('region') && columns.includes('surface') ? ', region, surface' : '';
     const rows = this.database.prepare(`
-      SELECT burst_id, touch_type, last_at, touch_count, (said_json IS NOT NULL AND said_json NOT IN ('', '[]')) AS answered FROM body_touch_bursts
+      SELECT burst_id, touch_type, last_at, touch_count, (said_json IS NOT NULL AND said_json NOT IN ('', '[]')) AS answered${where} FROM body_touch_bursts
       WHERE scope_key = ? AND last_at >= ? ORDER BY last_at DESC LIMIT ?
-    `).all(scopeKey, since, SHANNON_NOW_LIMITS.items) as unknown as Array<{ burst_id: string; touch_type: string; last_at: string; touch_count: number; answered: number }>;
-    return rows.map(row => ({ id: row.burst_id, at: row.last_at, kind: row.touch_type, count: Number(row.touch_count), answered: Number(row.answered) === 1 }));
+    `).all(scopeKey, since, SHANNON_NOW_LIMITS.items) as unknown as Array<{
+      burst_id: string; touch_type: string; last_at: string; touch_count: number; answered: number; region?: string | null; surface?: string | null;
+    }>;
+    return rows.map(row => {
+      // A run whose touches named different parts or surfaces (stored as `mixed`) names none here either.
+      const region = isBodyTouchRegion(row.region) ? row.region : undefined;
+      const surface = isBodySurface(row.surface) ? row.surface : undefined;
+      const kind = SHANNON_TOUCH_KINDS.find(value => value === row.touch_type);
+      const phrase = kind && region ? touchPartPhrase(kind, region, 'done') : null;
+      return {
+        id: row.burst_id, at: row.last_at, kind: row.touch_type, count: Number(row.touch_count), answered: Number(row.answered) === 1,
+        ...(region ? { region } : {}), ...(surface ? { surface, place: bodySurfaceMark(surface) } : {}), ...(phrase ? { phrase } : {}),
+      };
+    });
   }
 
   /** Messages she started on her own, newest first, each with how it was delivered. Never the words. */
@@ -193,9 +211,15 @@ export class SQLiteShannonNowReader {
     if (!this.tableExists('body_capabilities')) return null;
     const rows = this.database.prepare('SELECT flags_json FROM body_capabilities WHERE scope_key = ?').all(scopeKey) as unknown as Array<{ flags_json: string }>;
     if (!rows.length) return null;
-    return rows.some(row => {
-      try { return (JSON.parse(row.flags_json) as Record<string, unknown>).camera === true; } catch { return false; }
+    // A phone that registered only to feel touch (`bodyTouchOnly.ts`) is not her desktop body: with nothing else registered, no body is.
+    const bodies = rows.flatMap(row => {
+      try {
+        const flags = JSON.parse(row.flags_json) as Record<string, boolean>;
+        return isTouchOnlyBody({ flags }) ? [] : [flags];
+      } catch { return [{} as Record<string, boolean>]; }
     });
+    if (!bodies.length) return null;
+    return bodies.some(flags => flags.camera === true);
   }
 
   private tableExists(name: string): boolean {
