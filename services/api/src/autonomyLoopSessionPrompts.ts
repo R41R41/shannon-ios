@@ -33,15 +33,17 @@ const UNPLANNED_ACTION: Readonly<Record<string, string>> = Object.freeze({
 });
 const UNPLANNED_WHY: Readonly<Record<string, string>> = Object.freeze({
   unknown_piece: 'pieceId の物語が書斎に見つからなかった。「書斎: 物語」の ( ) の中の id をそのまま書く',
+  not_draft: 'その物語が下書きではなかった。ready にできるのは下書きだけ',
+  not_copyable: 'その pieceId のものは、写しを置けるものではなかった',
   not_listed: '「読めそうな場所」にない住所だった。そこにある住所をそのまま書く',
-  limit: '読める回数を使い切っていた', nothing_read: 'メモにする読み物がなかった。先に read する', secret: '内緒のことが入っていたので、書けなかった',
-  incomplete: '必要な項目が足りなかった', unavailable: 'いまはできない一歩だった',
+  bad_address: '住所が読める形ではなかった',
+  limit: '読める回数を使い切っていた', nothing_read: 'メモにする読み物がなかった。先に read する', secret: '内緒のことが入っていたので、使えなかった',
+  incomplete: '必要な項目が足りなかった', unavailable: 'できない一歩だった',
 });
 const UNPLANNED_REPLY: Readonly<Record<string, string>> = Object.freeze({
-  'reply.truncated': '返事が長すぎて、途中で切れた。thought は1文にして、steps は2つか3つまでにする。',
+  'reply.truncated': '返事が途中で切れた。thought は1文にして、steps は少なくする。',
   'reply.unparsable': '返事がJSONの形になっていなかった。説明を付けず、JSONだけを返す。',
   'reply.empty': 'steps が空だった。したいことを steps に書く。何もしないなら rest を書く。',
-  'reply.failed': 'モデルから返事が来なかった。',
 });
 
 /**
@@ -49,10 +51,10 @@ const UNPLANNED_REPLY: Readonly<Record<string, string>> = Object.freeze({
  * (`reply.<why>` or `<action>.<why>`). A code that is not known says nothing.
  */
 export function unplannedSection(codes: readonly string[]): string | null {
-  const lines = codes.slice(0, 8).flatMap(code => {
-    if (UNPLANNED_REPLY[code]) return [`- ${UNPLANNED_REPLY[code]}`];
+  const lines = [...new Set(codes)].slice(0, 8).flatMap(code => {
+    if (Object.hasOwn(UNPLANNED_REPLY, code)) return [`- ${UNPLANNED_REPLY[code]}`];
     const [action, why] = code.split('.');
-    return action && why && UNPLANNED_ACTION[action] && UNPLANNED_WHY[why] ? [`- ${UNPLANNED_ACTION[action]} は、${UNPLANNED_WHY[why]}。`] : [];
+    return action && why && Object.hasOwn(UNPLANNED_ACTION, action) && Object.hasOwn(UNPLANNED_WHY, why) ? [`- ${UNPLANNED_ACTION[action]} は、${UNPLANNED_WHY[why]}。`] : [];
   });
   return lines.length ? [UNPLANNED_HEADER, ...lines, '- できる一歩を選び直す。'].join('\n') : null;
 }

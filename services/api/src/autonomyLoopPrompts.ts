@@ -362,7 +362,7 @@ export function salvagedModelObject(text: string): Record<string, unknown> | nul
   if (start < 0) return null;
   let end = text.lastIndexOf('}');
   for (let attempt = 0; attempt < 24 && end > start; attempt += 1) {
-    for (const closing of [']}', '}', ']}]}']) {
+    for (const closing of [']}', '}']) {
       try {
         const value: unknown = JSON.parse(`${text.slice(start, end + 1)}${closing}`);
         if (value && typeof value === 'object' && !Array.isArray(value) && Array.isArray((value as { steps?: unknown }).steps)) return value as Record<string, unknown>;

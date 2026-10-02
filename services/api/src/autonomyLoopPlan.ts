@@ -134,13 +134,14 @@ export function reasonedPlan(
     const pursuitId = string(item?.pursuitId, 80);
     const pursuit = pursuitId && pursuitIds.has(pursuitId) ? { pursuitId } : {};
     const named = string(item?.pieceId, 80);
-    // In a session, a step on "the story" needs no id while her study holds exactly one: she means that one.
-    const pieceId = named && stories.has(named) ? named : bounds.session && stories.size === 1 && (action === 'revise' || action === 'ready' || action === 'put_away') ? [...stories.keys()][0]! : named;
+    // In a session, revising or showing "the story" needs no id while her study holds exactly one: she means that one.
+    // An id she did name is never replaced, also when it is wrong.
+    const pieceId = named ?? (bounds.session && stories.size === 1 && (action === 'revise' || action === 'ready') ? [...stories.keys()][0]! : null);
     if (action === 'read' || (action === 'notion' && bounds.notionAvailable)) {
       if (reads >= bounds.maximumReads) return 'limit';
       if (action === 'read') {
         const url = publicUrl(string(item?.url, 2_000), known.placeUrls ?? [], bounds.secrets !== undefined);
-        if (!url) return 'not_listed';
+        if (!url) return bounds.secrets !== undefined ? 'not_listed' : 'bad_address';
         if (carriesSecret(readable(url), bounds.secrets)) return 'secret';
         steps.push({ kind: 'read', url, ...pursuit });
       } else {
@@ -166,7 +167,7 @@ export function reasonedPlan(
       steps.push({ kind: 'put_away', pieceId });
     } else if (action === 'copy' && bounds.folderAvailable) {
       // A named piece must be one she may show; without a name the step takes her newest such piece when it runs.
-      if (named && !known.pieces.some(piece => piece.id === named && copyableStudyPiece(piece))) return 'unknown_piece';
+      if (named && !known.pieces.some(piece => piece.id === named && copyableStudyPiece(piece))) return 'not_copyable';
       steps.push({ kind: 'copy', ...(named ? { pieceId: named } : {}) });
     } else if (action === 'look' && bounds.lookAvailable && !steps.some(step => step.kind === 'look')) {
       // One look in a plan at most; the step checks again that the body is there when it runs.
@@ -185,6 +186,7 @@ export function reasonedPlan(
       if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.reachOut.upcoming)) return 'incomplete';
       steps.push({ kind: 'reach_out', reason });
     } else {
+      if (action === 'ready' && pieceId && stories.has(pieceId)) return 'not_draft';
       return action === 'revise' || action === 'ready' || action === 'put_away' ? 'unknown_piece' : 'unavailable';
     }
     return null;

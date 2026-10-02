@@ -85,7 +85,7 @@ const loop = new ShannonAutonomyLoop({
   reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
   // Content-free: a step kind and a closed reason code.
-  log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:.,-]/giu, '_').slice(0, 200)}`),
+  log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');

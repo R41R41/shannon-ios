@@ -191,6 +191,12 @@ describe('model adapters for her own activity', () => {
     }));
     expect(await configuredAutonomyTextModel(environment, incomplete.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
       .toMatchObject({ truncated: true, usage: { inputTokens: 800, outputTokens: 500 } });
+    const reasoned = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [], usage: { input_tokens: 800, output_tokens: 500 } }));
+    await expect(configuredAutonomyTextModel(environment, reasoned.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_TRUNCATED', usage: { inputTokens: 800, outputTokens: 500 } });
+    const filtered = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'content_filter' }, output: [], usage: { input_tokens: 800, output_tokens: 0 } }));
+    await expect(configuredAutonomyTextModel(environment, filtered.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_EMPTY' });
   });
 
   it('fails with a code that carries neither the request nor the credential', async () => {

@@ -144,7 +144,8 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     const taken = store.loop.steps(cycle.id);
     let row = 0;
     for (let index = taken.length - 1; index >= 0 && taken[index]!.step.kind === 'think'; index -= 1) row += 1;
-    return row <= loop.maximumRethinksPerCycle && loop.maximumStepsPerSession - cycle.stepsTaken >= 2 ? [{ kind: 'think', again: true, dropped: codes.slice(0, 8) }] : null;
+    // This thought is journalled but not yet counted in `cycle`: after it there must be room for the next thought and one step of it.
+    return codes.length && row <= loop.maximumRethinksPerCycle && loop.maximumStepsPerSession - cycle.stepsTaken >= 3 ? [{ kind: 'think', again: true, dropped: [...new Set(codes)].slice(0, 8) }] : null;
   };
   const noted = (code: string) => { try { dependencies.log?.(`think ${code}`); } catch { /* the log is optional */ } return code; };
   return {
@@ -156,16 +157,19 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     async perform(adapters, _at, signal) {
       const called = await callModel(adapters, call, signal);
       const { usage, failure } = called;
-      // A reply cut off at the output ceiling still holds the steps that were written out in full.
-      const reply = called.reply ?? (called.truncated && called.text ? salvagedModelObject(called.text) : null);
+      // In a session a reply cut off at the output ceiling still gives the steps that were written out in full.
+      const salvaged = session && !called.reply && called.truncated && called.text ? salvagedModelObject(called.text) : null;
+      const reply = called.reply ?? salvaged;
       if (!reply) {
         // Why there is no plan, as a closed code: for her record, for the log, and for her next thought.
         const code = called.truncated ? 'truncated' : failure ? 'model_failed' : 'unparsable';
         return {
           outcome: 'failed', usage, reasonCode: noted(code),
-          summary: called.truncated ? '考えましたが、返事が途中で切れて、次の一歩にまとまりませんでした。' : failure ? '考えようとしましたが、モデルから返事をもらえませんでした。' : '考えましたが、次の一歩にまとまりませんでした。',
+          // Under the fixed cycles the two sentences are the ones they were.
+          summary: session && called.truncated ? '考えましたが、返事が途中で切れて、次の一歩にまとまりませんでした。' : failure ? '考えようとしましたが、モデルから返事をもらえませんでした。' : '考えましたが、次の一歩にまとまりませんでした。',
           commit: remaining => {
-            const retry = remaining.length ? null : thinkAgain([code === 'model_failed' ? 'reply.failed' : `reply.${code}`]);
+            // A reply she can do better is asked for once more. A provider that did not answer is not asked again at once: that would only spend.
+            const retry = remaining.length || code === 'model_failed' ? null : thinkAgain([`reply.${code}`]);
             return retry ? { plan: retry } : undefined;
           },
         };
@@ -180,9 +184,10 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
       });
       const words = again ? 'さっき起きたことを見て、考え直しました。' : '次に何をするか考えました。';
       // A thought with no step at all: nothing she named could be done, or she named nothing.
-      const unplannable = thought.steps.length === 0
-        ? (thought.asked === 0 ? 'empty_plan' : `all_steps_filtered:${thought.dropped.join(',')}`.slice(0, 200)) : null;
-      const code = unplannable ?? (called.truncated && !called.reply ? 'truncated' : null);
+      // A reply that only rests (under the fixed cycles), or whose steps found no room, is neither.
+      const unplannable = thought.steps.length > 0 ? null
+        : salvaged ? 'truncated' : thought.asked === 0 ? 'empty_plan' : thought.dropped.length ? `all_steps_filtered:${[...new Set(thought.dropped)].join(',')}` : null;
+      const code = unplannable ?? (salvaged ? 'truncated' : null);
       return {
         outcome: 'done', usage, ...(code ? { reasonCode: noted(code) } : {}),
         summary: thought.text ? `${words}「${thought.text}」` : words,
@@ -192,7 +197,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
             else service.updatePursuit(cycle.scopeKey, change.id!, { ...(change.status ? { status: change.status } : {}), ...(change.why ? { why: change.why } : {}) });
           }
           if ((agentic || session) && !again) store.loop.observations.prune(cycle.scopeKey, new Date(Date.parse(commitAt) - OBSERVATION_RETENTION_MILLISECONDS).toISOString());
-          const retry = unplannable ? thinkAgain(thought.asked === 0 ? [called.truncated && !called.reply ? 'reply.truncated' : 'reply.empty'] : thought.dropped) : null;
+          const retry = unplannable && maximumSteps > 0 ? thinkAgain(salvaged ? ['reply.truncated'] : thought.asked === 0 ? ['reply.empty'] : thought.dropped) : null;
           return { plan: retry ?? thought.steps };
         },
       };

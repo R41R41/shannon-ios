@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { autonomyDayKey } from './autonomyBudget.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
-import { closeSession, fitsSession, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
+import { closeSession, fitsSession, nothingDone, ownerTalking, restMilliseconds, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomySession, SessionEndCode } from './autonomyLoopSessions.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
@@ -353,7 +353,9 @@ export class ShannonAutonomyLoop {
 
   /** Ends a session without a closing step of its own, and sets the next one a default rest away. */
   private endSession(cycle: AutonomyLoopCycle, code: SessionEndCode, at: string): AutonomyLoopTick {
-    const resumeAt = new Date(Date.parse(at) + restMilliseconds(this.dependencies.loop, undefined, code)).toISOString();
+    let idle = false;
+    try { idle = code === 'no_plan' && nothingDone(this.dependencies, cycle); } catch { idle = false; }
+    const resumeAt = new Date(Date.parse(at) + restMilliseconds(this.dependencies.loop, undefined, idle)).toISOString();
     closeSession(this.dependencies, cycle, code, at, resumeAt);
     return 'cycle-ended';
   }

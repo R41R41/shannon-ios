@@ -69,11 +69,16 @@ export function fitsSession(dependencies: Pick<StepDependencies, 'store' | 'loop
 }
 
 /** The rest she takes: what she asked for held inside the bounds, or the default. */
-export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, forced?: SessionEndCode): number {
+export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, idle = false): number {
   // A session in which nothing was done is followed by a short rest, not the long default.
-  if (forced === 'no_plan') return loop.sessionNoPlanRestMilliseconds;
+  if (idle) return loop.sessionNoPlanRestMilliseconds;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return loop.sessionDefaultRestMilliseconds;
   return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionMinimumRestMilliseconds, Math.round(minutes) * 60_000));
+}
+
+/** Whether a session did nothing but think: no step of hers was carried out, so a `no_plan` end is followed by the short rest. */
+export function nothingDone(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id'>): boolean {
+  return dependencies.store.loop.steps(cycle.id).every(step => step.step.kind === 'think' || step.step.kind === 'rest');
 }
 
 /** Ends the session and its cycle and sets when the next may begin, together. */
@@ -100,7 +105,7 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
   const { config, loop } = dependencies;
   const forced = step.forced;
   const reason = forced ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
-  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, forced);
+  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, forced === 'no_plan' && nothingDone(dependencies, cycle));
   return {
     request: { domain: 'thinking', tool: REST_TOOL, summary: forced ? '上限に届いたので、ここで一区切りにします。' : 'ここで一区切りにして、休みます。' },
     async perform(_adapters, performAt) {
