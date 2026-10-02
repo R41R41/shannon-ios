@@ -1,12 +1,12 @@
-# Operations contract (v1, stage 1: read-only)
+# Operations contract (v1: status, and commands)
 
 How the operational status of the legacy platform runtime (Discord, Minecraft, scheduled posts; another repository, the same VM) reaches the owner's desktop management window. The runtime **pushes a snapshot** to this API with the platform bridge credential; the desktop **reads the latest snapshot** from this API with its device token. The desktop never connects to the legacy runtime, and this API never calls it.
 
-This document and the contract test `services/api/tests/ops.test.ts` are what the reporter and the desktop client are built against. The vocabulary and bounds are in `services/api/src/opsContract.ts`; the routes are in `serverOpsRoutes.ts`; the table is in `opsStore.ts`.
+This document and the contract tests `services/api/tests/ops.test.ts` and `opsCommands.test.ts` are what the reporter and the desktop client are built against. The vocabulary and bounds are in `services/api/src/opsContract.ts`; the routes are in `serverOpsRoutes.ts`; the table is in `opsStore.ts`.
 
 Everything here is additive. No existing route, table, or prompt wording changed.
 
-Stage 1 is read-only: the owner can see the status and cannot change anything through it. Commands are [Stage 2 (not built)](#stage-2-not-built).
+Stage 1 is the status: the owner can see it and cannot change anything through it. [Stage 2](#stage-2-commands) adds commands, behind a switch that is off by default. With that switch off, everything below up to the stage 2 section is the whole behaviour.
 
 ## Privacy rule
 
@@ -55,7 +55,7 @@ A snapshot is operational data. It must not carry conversation text.
 | `runtime.release` | string, 1–80 | yes | A tag or a short commit id. A full 40-character commit id is refused as credential-shaped. |
 | `runtime.startedAt` | ISO 8601 | yes | |
 | `services` | array, 0–40 | yes | `id` unique within the array. |
-| `services[].id` | string, 1–80, `[A-Za-z0-9][A-Za-z0-9_.:-]*` | yes | Stable identifier; a stage 2 command would name it as its target. |
+| `services[].id` | string, 1–80, `[A-Za-z0-9][A-Za-z0-9_.:-]*` | yes | Stable identifier; a stage 2 command names it as its target. |
 | `services[].label` | string, 1–80 | yes | |
 | `services[].category` | string, 1–40 | yes | Free grouping label, e.g. `platform`, `game`, `infra`. |
 | `services[].status` | `running` \| `stopped` \| `degraded` \| `unknown` | yes | |
@@ -108,7 +108,7 @@ A failed report must never delay or fail the runtime's own work: send it in the 
 
 - `Authorization: Bearer <device token>` — a paired device (`POST /v1/pair`). The bridge credential is refused.
 - `scopeKey` is replaced with the device's own scope, as on every device route. (A server run locally with a fixed token requires it.)
-- Reading writes nothing. At most 120 reads a minute per scope; polling every 30 seconds is enough.
+- Reading stores nothing new (with commands on, it marks commands whose time ran out). At most 120 reads a minute per scope; polling every 30 seconds is enough.
 
 ```json
 {
@@ -118,7 +118,8 @@ A failed report must never delay or fail the runtime's own work: send it in the 
   "stale": false,
   "staleAfterSeconds": 180,
   "commands": [],
-  "commandsSupported": false
+  "commandsSupported": false,
+  "allowed": { "serviceStart": [], "serviceStop": [], "minecraft": false, "scheduleRun": false }
 }
 ```
 
@@ -128,8 +129,9 @@ A failed report must never delay or fail the runtime's own work: send it in the 
 | `receivedAt` | ISO 8601 \| `null` | When the server accepted it (server clock). |
 | `stale` | boolean | `true` when no snapshot arrived within `staleAfterSeconds`, by the server's clock. Always `true` when `snapshot` is `null`. |
 | `staleAfterSeconds` | integer | 180 now: three missed reports. |
-| `commands` | array | Always `[]` in stage 1. |
-| `commandsSupported` | boolean | Always `false` in stage 1. A client shows command controls only when this is `true`. |
+| `commands` | array | `[]` while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
+| `commandsSupported` | boolean | `false` while commands are switched off. A client shows command controls only when this is `true`. |
+| `allowed` | object | What a command would be accepted for now; nothing while commands are switched off. See [stage 2](#what-get-v1ops-adds). |
 
 What the desktop shows:
 
@@ -158,32 +160,209 @@ If the API itself is unreachable (the same VM), the request fails at the network
 
 `ops_snapshots` (`scope_key` primary key, `schema_version`, `reported_at`, `received_at`, `snapshot_json`): one row per scope, replaced on every accepted report. Created with `CREATE TABLE IF NOT EXISTS` outside the numbered migrations; the schema version is unchanged and an older API binary can still open the database.
 
-## Stage 2 (not built)
+## Stage 2: commands
 
-**Nothing in this section exists.** `POST /v1/ops/commands` and every `/v1/platform/ops/commands/*` path are not routed: they answer `404` to a paired device and `401` to anything else. It is a proposal, shaped so that stage 1 clients and reporters keep working unchanged when it is added: the snapshot request and the `GET /v1/ops` answer keep their fields; `commands` starts to carry entries and `commandsSupported` becomes `true`.
+The owner's desktop may ask the legacy runtime to start or stop a service, start or stop a Minecraft server, or run a schedule now. The direction is the same as in stage 1: the desktop writes a command to this API with its device token; the legacy runtime **polls, claims, performs and reports** with the bridge credential. This API never calls the runtime, the desktop never does, and nothing on this path carries text: a command is a closed `type` and one `target`, and an outcome is a closed `outcome` and `code`.
 
-The direction stays the same: the desktop writes a command to this API, the legacy runtime **polls and claims** it with the bridge credential, and reports the result. This API still never calls the runtime, and the desktop still never does.
+The vocabulary, the allowlist and the bounds are in `services/api/src/opsCommandContract.ts`; the routes are in `serverOpsCommandRoutes.ts`; the record is in `opsCommandStore.ts`; the contract test is `services/api/tests/opsCommands.test.ts`. Stage 1 clients and reporters work unchanged.
 
-Device side:
+### Kill switch
 
-- `POST /v1/ops/commands` — device token. `{ "scopeKey", "idempotencyKey", "type", "target" }`.
-  - `type`: `schedule.run` \| `service.start` \| `service.stop` \| `minecraft.start` \| `minecraft.stop`.
-  - `target`: an identifier from the latest snapshot — a `schedules[].name` for `schedule.run`, a `services[].id` for `service.*`, a `minebot[].id` or server for `minecraft.*`. No free text, no arguments, no shell.
-  - `idempotencyKey`: the same key with the same content returns the same command; with other content, `409`.
-  - Answer: `{ "id", "status": "queued" }`.
-- `GET /v1/ops` then lists recent commands in `commands`: `{ id, type, target, status: queued | claimed | succeeded | failed | expired | refused, requestedAt, finishedAt?, reason? }`, where `reason` is a closed code, not text.
+`SHANNON_PLATFORM_OPS_COMMANDS`, **default off**. `on`, `true`, `1` or `enabled` switches commands on; anything else, or nothing, is off. A restart applies it. The owner switches it on when the legacy runtime is deployed with its claimer. It is separate from `SHANNON_PLATFORM_OPS_INGEST`: status keeps flowing with commands off.
 
-Bridge side:
+| | Off | On |
+| --- | --- | --- |
+| `GET /v1/ops` | `commandsSupported: false`, `commands: []`, nothing in `allowed` | `commandsSupported: true`, the recent commands, `allowed` |
+| `POST /v1/ops/commands` | `403 OPS_COMMANDS_DISABLED` | accepted or refused by the rules below |
+| `POST /v1/platform/ops/commands/claim` | `200 { "command": null, "pollAfterSeconds": 60 }` | the next command or `null`, `pollAfterSeconds: 10` |
+| `POST /v1/platform/ops/commands/{id}/report` | accepted, so a command claimed before the switch still ends truthfully | accepted |
 
-- `POST /v1/platform/ops/commands/claim` — bridge credential. Returns at most one queued command and marks it `claimed` with a lease; an unclaimed command expires after a short time (a command queued while the VM is stopped must not run when it comes back hours later).
-- `POST /v1/platform/ops/commands/{id}/report` — bridge credential. `{ "status": "succeeded" | "failed" | "refused", "reason"? }`. Reporting twice with the same content is a duplicate.
+Switched off, the record is kept and not shown; a command still waiting expires on its own.
 
-Rules the proposal assumes: every command is appended to a record the runtime cannot rewrite; the runtime re-checks an allowlist of targets on its side and refuses anything else; a kill switch separate from `SHANNON_PLATFORM_OPS_INGEST` turns commands off while status keeps flowing; Shannon's activity loop has no access to these routes (starting processes is outside her bounded autonomy).
+### What may be commanded (the allowlist)
 
-Open questions for the owner, none decided:
+| `type` | `target` | Accepted when |
+| --- | --- | --- |
+| `service.start` | a `services[].id` | the id is one of `discord`, `twitter`, `youtube`, `youtube:live_chat`, `notion`, `minecraft`, and the latest snapshot names it |
+| `service.stop` | a `services[].id` | the id is one of `twitter`, `youtube`, `youtube:live_chat`, `notion`, `minebot`, `minebot:bot`, `minecraft`, and the latest snapshot names it |
+| `minecraft.start`, `minecraft.stop` | a server | the latest snapshot has a service `minecraft:<server>` |
+| `schedule.run` | a `schedules[].name` | the latest snapshot has a schedule with exactly this name |
 
-1. **Minecraft start competes with lab runs.** The VM has 2 cores and 15 GB. Starting a Minecraft server while a lab run is in progress can starve both. Should `minecraft.start` be refused while a lab run is active (the runtime answers `refused` with a reason code), queued until it ends, or allowed with a warning in the desktop?
-2. **`progressive-lab-*` is excluded from management.** The proposal is that services with this prefix are never a valid `target` and the runtime refuses them even if asked. Should they still appear in the snapshot as read-only status, or be left out entirely?
-3. **Who confirms.** Is a click in the desktop window enough, or does a command that stops something need a second confirmation there (and for which types)? Is the paired desktop the only device allowed to send commands, or any paired device including the iPhone?
-4. Which services may be stopped at all — stopping the Discord adapter stops Shannon's presence there; stopping the bridge reporter itself would make the console go stale.
-5. Whether `schedule.run` may run a schedule that already posted today (a second public post is something that reaches other people).
+- **`discord` can be started and cannot be stopped from here.** Stopping it takes Shannon offline on Discord and stops the Discord side of the bridge. `service.stop` with `discord` answers `403 TARGET_NOT_ALLOWED`.
+- **`minebot` and `minebot:bot` can be stopped and cannot be started from here.** Starting the production Minebot body begins using a paid planner API outside its budget controls; opening this needs a separate decision of the owner (`OPS_SERVICE_START_WITHHELD`). `service.start` answers `403 TARGET_NOT_ALLOWED`.
+- **Lab servers are not manageable at all.** A target that begins with `progressive-lab-` or `minecraft:progressive-lab-` answers `403 TARGET_NOT_ALLOWED` for every type, whether or not a snapshot names it. (The runtime does not report them.)
+- `minecraft` is the server manager, an ordinary service: it is started and stopped with `service.*`. A server is commanded with `minecraft.*` only; `minecraft:<server>` as a `service.*` target answers `403 TARGET_NOT_ALLOWED`.
+- **A Minecraft target is accepted as `minecraft:<server>` or as `<server>`.** The server records, lists and hands out the form with the prefix (`minecraft:main`). The runtime strips `minecraft:` to get the server name.
+- Any other service the runtime registers is not commandable until it is added to the list in `opsCommandContract.ts`.
+- `minecraft.start` has no extra condition here. Whether a lab run is in progress is known to the runtime only: it reports `refused` with `lab_running`.
+- `schedule.run` posts publicly. This API does not look at `postedToday`; the desktop has it in the snapshot and should confirm before a second post on the same day.
+
+### `POST /v1/ops/commands`
+
+- `Authorization: Bearer <device token>`. The bridge credential is refused.
+- JSON, at most 4 KiB. **No other field is accepted.**
+
+```json
+{ "scopeKey": "owner", "idempotencyKey": "3f2b8c1e-7a4d-4e9b-9c1a-5d6e7f8a9b0c", "type": "service.stop", "target": "twitter" }
+```
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `scopeKey` | string | Replaced with the device's own scope, as on every device route (required from a fixed local token). |
+| `idempotencyKey` | string, 8–80, `[A-Za-z0-9][A-Za-z0-9_.:-]*` | One per press of a button; a UUID is right. The same key with the same `type` and `target` returns the command it already made (`200`, `created: false`) in whatever state that command now is, and never makes a second one. With another `type` or `target`: `409 IDEMPOTENCY_KEY_REUSED`. |
+| `type` | `service.start` \| `service.stop` \| `schedule.run` \| `minecraft.start` \| `minecraft.stop` | |
+| `target` | string | For `service.*` and `minecraft.*`: the rule of `services[].id` (1–80, `[A-Za-z0-9][A-Za-z0-9_.:-]*`, not credential-shaped). For `schedule.run`: the rule of `schedules[].name` (1–80 after trimming, no control character, not credential-shaped). |
+
+Answer: `201` for a new command, `200` for a replay.
+
+```json
+{
+  "created": true,
+  "command": {
+    "id": "0b6f1c1e-3d0a-4f0e-9a51-2f6f0c7f5e11", "type": "service.stop", "target": "twitter", "status": "pending",
+    "createdAt": "2026-10-02T03:00:00.000Z", "expiresAt": "2026-10-02T03:05:00.000Z", "requestedByDeviceId": "…"
+  }
+}
+```
+
+| Command field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | |
+| `type`, `target` | | As recorded; a Minecraft target has the prefix. |
+| `status` | `pending` \| `claimed` \| `done` \| `failed` \| `refused` \| `expired` | See [Life of a command](#life-of-a-command). |
+| `createdAt` | ISO 8601 | Server clock. |
+| `expiresAt` | ISO 8601 | `createdAt` + 300 seconds: the time by which the runtime must have claimed it. |
+| `claimedAt` | ISO 8601, absent until claimed | |
+| `finishedAt` | ISO 8601, absent while `pending` or `claimed` | |
+| `code` | absent, or one of the [codes](#codes) | |
+| `requestedByDeviceId` | string | The paired device that asked (`local` for a fixed local token). |
+
+Checks, in this order; a refused request records nothing:
+
+| Status | `error` | Meaning |
+| --- | --- | --- |
+| `405` | `METHOD_NOT_ALLOWED` | Not `POST`. |
+| `401` | `PAIRING_REQUIRED` | Missing or wrong device token, or the bridge credential. |
+| `403` | `OPS_COMMANDS_DISABLED` | The kill switch is off. |
+| `400` / `413` | `INVALID_REQUEST` / `REQUEST_TOO_LARGE` | Not JSON, or a body over 4 KiB. |
+| `429` | `RATE_LIMITED` | More than 30 requests in a minute. |
+| `400` | `INVALID_REQUEST` | An unknown field, or a field that breaks its rule. |
+| `403` | `TARGET_NOT_ALLOWED` | The allowlist above. `message` says which rule (Discord, Minebot, lab server, not on the list). |
+| `200` | | The `idempotencyKey` already made this command: it is returned, `created: false`. |
+| `409` | `IDEMPOTENCY_KEY_REUSED` | The `idempotencyKey` already made a different command. |
+| `409` | `OPS_STALE` | There is no snapshot, the latest one is stale (`stale: true` in `GET /v1/ops`), or ingest is off. The runtime is not there to act, so nothing is queued for it. |
+| `422` | `TARGET_UNKNOWN` | The latest snapshot does not name this target. |
+| `429` | `TOO_MANY_OPEN_COMMANDS` | Already 5 open (`pending` or `claimed`) commands in the scope. |
+| `429` | `RATE_LIMITED` | Already 20 an hour accepted in the scope (any 60 minutes, counted from the record, so a restart does not reset it). |
+
+### Life of a command
+
+```
+pending ──claim──▶ claimed ──report──▶ done | failed | refused
+   │                  └─ no report in 120 seconds ─▶ failed (code no_report)
+   └─ not claimed in 300 seconds ─▶ expired
+```
+
+- **A command that was not claimed within 300 seconds of its creation is `expired` and is never handed out.** An operation must not fire long after the owner pressed the button, in particular a public post, or a start after the VM came back.
+- **A claimed command that was not reported within 120 seconds of the claim is `failed` with `no_report` and is never handed out again.** There is no retry of a start, a stop or a post whose effect is unknown. The owner presses again (a new `idempotencyKey`) after looking at the status.
+- A command is handed out at most once, whatever happens.
+- Expiry is by the server's clock and is applied whenever a command is read or written.
+
+### `POST /v1/platform/ops/commands/claim`
+
+- `Authorization: Bearer <SHANNON_PLATFORM_BRIDGE_TOKEN>`. A device token is refused.
+- Body: `{ "scopeKey": "owner" }` and no other field. As for the snapshot, the scope used is the one the credential is bound to.
+- Hands out the oldest `pending` command (first in, first out), one per call, and marks it `claimed`. Poll every `pollAfterSeconds` (10); at most 60 claims a minute are accepted. Perform one command, report it, then claim the next.
+
+```json
+{
+  "command": { "id": "0b6f1c1e-…", "type": "minecraft.start", "target": "minecraft:creative",
+    "createdAt": "2026-10-02T03:00:00.000Z", "expiresAt": "2026-10-02T03:02:04.000Z" },
+  "pollAfterSeconds": 10
+}
+```
+
+`command` is `null` when nothing waits. Here `expiresAt` is the claim time + 120 seconds: **the time by which the report must arrive.** An operation that will take longer is reported as `failed` with `timeout` before then, not left unanswered.
+
+How the runtime maps a command to its own surface:
+
+| `type` | Runtime call |
+| --- | --- |
+| `service.start` / `service.stop` | `dispatchServiceCommand(target, 'start' \| 'stop')` |
+| `minecraft.start` / `minecraft.stop` | `dispatchServiceCommand('minecraft', 'start' \| 'stop', <target without "minecraft:">)` |
+| `schedule.run` | `getSchedulerPort().callSchedule({ type: 'call_schedule', name: target })` |
+
+The runtime **re-checks its own allowlist** before acting (the same lists as above, and never a `progressive-lab-*` server) and reports `refused` with `not_allowed` for anything else: the server's check is not the only one.
+
+| Status | `error` | Meaning |
+| --- | --- | --- |
+| `400` | `INVALID_REQUEST` | Not a JSON object, no `scopeKey`, or another field. |
+| `401` | `PLATFORM_BRIDGE_UNAUTHORIZED` | Missing or wrong bridge credential. |
+| `405` | `METHOD_NOT_ALLOWED` | Not `POST`. |
+| `429` | `RATE_LIMITED` | More than 60 claims in a minute. |
+| `503` | `PLATFORM_BRIDGE_NOT_CONFIGURED` | The server has no bridge credential. |
+
+A failed claim must never delay or fail the runtime's own work: short timeout, and try again at the next interval.
+
+### `POST /v1/platform/ops/commands/{id}/report`
+
+- Bridge credential. Body: `{ "scopeKey": "owner", "outcome": "done" | "failed" | "refused", "code"? }` and no other field. There is no message, no log and no text.
+
+<a id="codes"></a>
+
+| `code` | Meaning |
+| --- | --- |
+| `not_registered` | The runtime has no such service, server or schedule. |
+| `already_running` | Nothing to start. |
+| `already_stopped` | Nothing to stop. |
+| `busy` | Another operation on the same target is in progress. |
+| `lab_running` | A lab run is in progress on the VM; a Minecraft server is not started now. |
+| `timeout` | The operation did not finish in time. |
+| `error` | The operation failed. The reason is in the runtime's own log, not here. |
+| `unsupported` | The runtime does not implement this type. |
+| `not_allowed` | The runtime's own allowlist refuses the target. |
+| `no_report` | **Set by the server only**, never accepted in a report: the claimed command was not reported in time. |
+
+`code` is optional with every `outcome` (for example `done` with `already_running`).
+
+Answer, `200`: `{ "id": "…", "status": "done", "code": "already_running", "duplicate": false }`.
+
+- **Idempotent.** The same `outcome` and `code` again answer `200` with `duplicate: true` and change nothing. Report with a retry on a network error.
+- A different report for a finished command answers `409 OPS_COMMAND_FINISHED`; the first report stands.
+- A report that arrives after the server wrote `no_report` is accepted once and replaces it: what the runtime did is the truer record. The command was not handed out again in between.
+- A report for a command that is still `pending` answers `409 OPS_COMMAND_NOT_CLAIMED`; for an `expired` one, `409 OPS_COMMAND_FINISHED`; for an unknown id, `404 OPS_COMMAND_NOT_FOUND`.
+- Other answers: `400 INVALID_REQUEST` (an unknown `outcome`, a `code` outside the set, another field), `401 PLATFORM_BRIDGE_UNAUTHORIZED`, `405`, `429 RATE_LIMITED` (more than 60 a minute), `503 PLATFORM_BRIDGE_NOT_CONFIGURED`.
+
+### What `GET /v1/ops` adds
+
+```json
+{
+  "commandsSupported": true,
+  "commands": [ { "id": "…", "type": "service.stop", "target": "twitter", "status": "done", "createdAt": "…", "expiresAt": "…",
+    "claimedAt": "…", "finishedAt": "…", "code": "already_stopped", "requestedByDeviceId": "…" } ],
+  "allowed": { "serviceStart": ["discord", "twitter"], "serviceStop": ["twitter", "minebot"], "minecraft": true, "scheduleRun": true }
+}
+```
+
+| Field | Notes |
+| --- | --- |
+| `commandsSupported` | `true` when the kill switch is on. A client shows command controls only then. |
+| `commands` | The last 20 commands of the scope, newest first, with the fields of the command above. `[]` when the switch is off. |
+| `allowed.serviceStart`, `allowed.serviceStop` | The service ids for which a start or a stop would be accepted now: the allowlist intersected with the services of the current snapshot, in the snapshot's order. |
+| `allowed.minecraft` | `true` when the current snapshot has at least one `minecraft:<server>` service that is not a lab server. Then every such service of the snapshot takes `minecraft.start` and `minecraft.stop`. |
+| `allowed.scheduleRun` | `true` when the current snapshot has at least one schedule. Then every schedule of the snapshot takes `schedule.run`. |
+
+`allowed` is always present. Everything in it is empty or `false` when the switch is off, when there is no snapshot, and when the snapshot is stale: the desktop shows only controls that would be accepted. After sending a command the desktop polls `GET /v1/ops` (every few seconds while a command is `pending` or `claimed`) and shows its `status` and `code`; the status in the snapshot follows within a minute.
+
+### Record and privacy
+
+`ops_commands` (`command_id` primary key, `scope_key`, `idempotency_key` unique per scope, `type`, `target`, `status`, `created_at`, `expires_at`, `claimed_at`, `report_by`, `finished_at`, `code`, `requested_by_device_id`): one row for every accepted command, with how it ended. Rows are added and their status advances; none is deleted, and the runtime can only report an outcome for a command it claimed. The table is created with `CREATE TABLE IF NOT EXISTS` on the connection of `ops_snapshots`, outside the numbered migrations.
+
+The record is in no prompt, and no model writes a command. The table is held by the ops routes alone, like the snapshot (asserted structurally in `ops.test.ts`), and the command routes accept a device token or the bridge credential only: Shannon's activity loop has neither, and starting processes is outside her bounded autonomy.
+
+### Open questions
+
+1. **Who else may command.** Any paired device of the owner's scope can send a command now (the device is recorded in `requestedByDeviceId`). Whether this should be the desktop only, and whether a stop or a public post needs a second confirmation, is the owner's decision; the confirmation itself is the client's.
+2. **Minecraft against lab runs.** The server does not detect a lab run. The runtime refuses `minecraft.start` with `lab_running`. Whether it should instead wait for the run to end, or whether stopping a server during a run needs a rule, is not decided.
+3. **`schedule.run` for a schedule that already posted today** is accepted. A second public post is something that reaches other people; whether the server should refuse it rather than leave it to the desktop's confirmation is not decided.
+4. **Starting Minebot** is withheld until its planner budget is under a control the owner accepts.

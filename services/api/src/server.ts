@@ -52,6 +52,7 @@ import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
 import { bodyLookRequestBytes, closeBodyLookStores, configuredBodyLookOptions } from './bodyLookWiring.js';
+import { opsCommandsEnabled } from './opsCommandContract.js';
 import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
@@ -133,6 +134,7 @@ const pairingRoute = createPairingRoute(authMode, deviceAuth);
 const opsStore = new SQLiteOpsStore(configuredDatabasePath());
 const opsRoute = createOpsRoute({
   store: opsStore, bridge: platformBridge?.configuration ?? null, ingestEnabled: () => opsIngestEnabled(process.env), now,
+  commandsEnabled: () => opsCommandsEnabled(process.env),
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });

@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { OpsCommandStore } from './opsCommandStore.js';
 import type { OpsSnapshot } from './opsContract.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
@@ -14,6 +15,8 @@ export interface StoredOpsSnapshot {
  */
 export class SQLiteOpsStore {
   private readonly database: DatabaseSync;
+  /** Stage 2: the record of commands, on the same connection and with the same single holder. */
+  readonly commands: OpsCommandStore;
 
   constructor(path: string) {
     this.database = new DatabaseSync(path);
@@ -27,6 +30,7 @@ export class SQLiteOpsStore {
         snapshot_json TEXT NOT NULL
       );
     `);
+    this.commands = new OpsCommandStore(this.database);
     secureDatabaseFiles(path);
   }
 

@@ -173,3 +173,22 @@ export function validatedOpsSnapshot(value: unknown): OpsSnapshot | string {
     throw error;
   }
 }
+
+function accepted<T>(check: () => T): T | null {
+  try {
+    return check();
+  } catch (error) {
+    if (error instanceof Refusal) return null;
+    throw error;
+  }
+}
+
+/** A value that passes the rule of `services[].id`, or null. Used by the command contract (`opsCommandContract.ts`). */
+export function opsIdentifier(value: unknown): string | null {
+  return accepted(() => identifier(value, 'value'));
+}
+
+/** A value that passes the rule of a short label (trimmed, bounded, no control character, not credential-shaped), or null. */
+export function opsLabel(value: unknown, maximum: number): string | null {
+  return accepted(() => text(value, 'value', maximum));
+}

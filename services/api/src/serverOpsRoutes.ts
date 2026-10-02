@@ -2,7 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { bearerAuthorized } from './apiAuth.js';
 import { validScopeKey } from './apiValidation.js';
 import { OPS_LIMITS, OPS_SCHEMA_VERSION, validatedOpsSnapshot, type OpsSnapshot } from './opsContract.js';
+import type { OpsCommandAllowed } from './opsCommandContract.js';
+import type { OpsCommand } from './opsCommandStore.js';
 import type { SQLiteOpsStore } from './opsStore.js';
+import { createOpsCommandRoute, isOpsCommandPath, opsCommandsView } from './serverOpsCommandRoutes.js';
 import { consumeDeviceAllowance, readJson, sendJson } from './serverHttp.js';
 
 export const OPS_SNAPSHOT_PATH = '/v1/platform/ops/snapshot';
@@ -13,12 +16,14 @@ export interface OpsRouteDependencies {
   /** The platform bridge credential and the owner scope it is bound to; null when the bridge is not configured. */
   bridge: { token: string; scopeKey: string } | null;
   ingestEnabled: () => boolean;
+  /** Stage 2 kill switch (`SHANNON_PLATFORM_OPS_COMMANDS`). Absent: commands are off. */
+  commandsEnabled?: () => boolean;
   now: () => string;
   /**
    * Who a device credential is. Null: not a paired device (or not the local token).
    * `scopeKey: null`: a fixed local token, which names the scope in the query.
    */
-  device: (authorization: string | undefined) => { scopeKey: string | null } | null;
+  device: (authorization: string | undefined) => { scopeKey: string | null; deviceId?: string } | null;
 }
 
 export interface OpsReadResponse {
@@ -27,22 +32,27 @@ export interface OpsReadResponse {
   receivedAt: string | null;
   stale: boolean;
   staleAfterSeconds: number;
-  commands: never[];
-  commandsSupported: false;
+  /** Stage 2: the recent commands, newest first. Empty while commands are switched off. */
+  commands: OpsCommand[];
+  commandsSupported: boolean;
+  /** Stage 2: what a command would be accepted for right now. A client shows only these controls. */
+  allowed: OpsCommandAllowed;
 }
 
 export function isOpsPath(path: string): boolean {
-  return path === OPS_SNAPSHOT_PATH || path === OPS_READ_PATH;
+  return path === OPS_SNAPSHOT_PATH || path === OPS_READ_PATH || isOpsCommandPath(path);
 }
 
 /**
- * The operations console, stage 1 (`docs/ops-contract.md`): the legacy runtime pushes a
- * snapshot with the platform bridge credential, and a paired device reads the latest one.
- * Nothing here calls a model, starts anything, or passes the snapshot to another module.
+ * The operations console (`docs/ops-contract.md`): the legacy runtime pushes a snapshot
+ * with the platform bridge credential, and a paired device reads the latest one. Commands
+ * (stage 2) are in `serverOpsCommandRoutes.ts`. Nothing here calls a model, starts
+ * anything, or passes the snapshot to another module.
  */
 export function createOpsRoute(dependencies: OpsRouteDependencies) {
   const snapshotUsage = new Map<string, { startedAt: number; count: number }>();
   const readUsage = new Map<string, { startedAt: number; count: number }>();
+  const commandRoute = createOpsCommandRoute(dependencies);
 
   async function report(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
@@ -92,13 +102,14 @@ export function createOpsRoute(dependencies: OpsRouteDependencies) {
 
   return async (path: string, request: IncomingMessage, response: ServerResponse, query: URLSearchParams): Promise<void> => {
     if (path === OPS_SNAPSHOT_PATH) await report(request, response);
+    else if (isOpsCommandPath(path)) await commandRoute(path, request, response);
     else read(request, response, query);
   };
 }
 
 /** What a device reads. With ingest off, or before any report, the snapshot and its time are null. */
 export function opsReadResponse(
-  dependencies: Pick<OpsRouteDependencies, 'store' | 'ingestEnabled' | 'now'>, scopeKey: string,
+  dependencies: Pick<OpsRouteDependencies, 'store' | 'ingestEnabled' | 'commandsEnabled' | 'now'>, scopeKey: string,
 ): OpsReadResponse {
   const stored = dependencies.ingestEnabled() ? dependencies.store.latest(scopeKey) : null;
   const ageMs = stored ? Date.parse(dependencies.now()) - Date.parse(stored.receivedAt) : Number.POSITIVE_INFINITY;
@@ -108,8 +119,6 @@ export function opsReadResponse(
     receivedAt: stored?.receivedAt ?? null,
     stale: !(ageMs <= OPS_LIMITS.staleAfterSeconds * 1000),
     staleAfterSeconds: OPS_LIMITS.staleAfterSeconds,
-    // Stage 2 (not built): commands the owner can send. Empty and unsupported until then.
-    commands: [],
-    commandsSupported: false,
+    ...opsCommandsView(dependencies, scopeKey),
   };
 }

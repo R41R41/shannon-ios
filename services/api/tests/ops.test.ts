@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { OPS_COMMAND_LIMITS, OPS_COMMAND_REPORT_CODES, OPS_SERVICE_START_ALLOWED, OPS_SERVICE_STOP_ALLOWED } from '../src/opsCommandContract.js';
 import { OPS_LIMITS, opsIngestEnabled, opsSecretLike, validatedOpsSnapshot } from '../src/opsContract.js';
 import { SQLiteOpsStore } from '../src/opsStore.js';
 import { createOpsRoute, isOpsPath, OPS_READ_PATH, OPS_SNAPSHOT_PATH } from '../src/serverOpsRoutes.js';
@@ -11,6 +12,8 @@ const BRIDGE_TOKEN = 'b'.repeat(40);
 const DEVICE_TOKEN = 'device-token-of-the-desktop';
 const START = '2026-10-02T03:00:00.000Z';
 const SECOND = 1000;
+// Stage 2 is off unless the owner switches it on: the stage 1 answer gains `allowed`, with nothing in it.
+const NOTHING_ALLOWED = { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false };
 
 const servers: Array<ReturnType<typeof createServer>> = [];
 const directories: string[] = [];
@@ -104,8 +107,11 @@ describe('authentication', () => {
     expect((await call('POST', OPS_READ_PATH, DEVICE_TOKEN, {})).status).toBe(405);
     expect(isOpsPath('/v1/ops')).toBe(true);
     expect(isOpsPath('/v1/platform/ops/snapshot')).toBe(true);
-    expect(isOpsPath('/v1/ops/commands')).toBe(false);
-    expect(isOpsPath('/v1/platform/ops/commands/claim')).toBe(false);
+    // Stage 2 routes are dispatched by the same hook (`opsCommands.test.ts`).
+    expect(isOpsPath('/v1/ops/commands')).toBe(true);
+    expect(isOpsPath('/v1/platform/ops/commands/claim')).toBe(true);
+    expect(isOpsPath('/v1/ops/status')).toBe(false);
+    expect(isOpsPath('/v1/platform/ops')).toBe(false);
   });
 
   it('reads the scope of the paired device, and requires one from a fixed local token', async () => {
@@ -381,7 +387,7 @@ describe('GET /v1/ops', () => {
   it('answers 200 with a null snapshot before any report', async () => {
     const { read } = await harness();
     expect(await read()).toEqual({ status: 200, body: {
-      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false,
+      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
     } });
   });
 
@@ -390,7 +396,7 @@ describe('GET /v1/ops', () => {
     await report();
     const { scopeKey: _scopeKey, ...expected } = snapshot();
     expect((await read()).body).toEqual({
-      schemaVersion: 1, snapshot: expected, receivedAt: START, stale: false, staleAfterSeconds: 180, commands: [], commandsSupported: false,
+      schemaVersion: 1, snapshot: expected, receivedAt: START, stale: false, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
     });
   });
 
@@ -432,7 +438,7 @@ describe('SHANNON_PLATFORM_OPS_INGEST', () => {
     expect(await report()).toMatchObject({ status: 403, body: { error: 'OPS_INGEST_DISABLED' } });
     expect((await report(snapshot(), null)).status).toBe(401);
     expect(await read()).toEqual({ status: 200, body: {
-      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false,
+      schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180, commands: [], commandsSupported: false, allowed: NOTHING_ALLOWED,
     } });
     expect(store.count()).toBe(1);
     delete environment.SHANNON_PLATFORM_OPS_INGEST;
@@ -443,8 +449,8 @@ describe('SHANNON_PLATFORM_OPS_INGEST', () => {
 describe('the snapshot stays out of every prompt', () => {
   const sourceRoot = resolve(import.meta.dirname, '../src');
   const cognitionRoot = resolve(import.meta.dirname, '../../../packages/cognition/src');
-  const owners = new Set(['opsContract.ts', 'opsStore.ts', 'serverOpsRoutes.ts']);
-  const markers = /opsStore|opsContract|serverOpsRoutes|ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse/u;
+  const owners = new Set(['opsContract.ts', 'opsStore.ts', 'serverOpsRoutes.ts', 'opsCommandContract.ts', 'opsCommandStore.ts', 'serverOpsCommandRoutes.ts']);
+  const markers = /opsStore|opsContract|serverOpsRoutes|ops_snapshots|OpsSnapshot|SQLiteOpsStore|opsReadResponse|opsCommand|OpsCommand|ops_commands|OPS_COMMAND|serverOpsCommandRoutes/u;
 
   it('is referenced by the ops files and the server entry point only', () => {
     const referencing = readdirSync(sourceRoot).filter(name => name.endsWith('.ts') && !owners.has(name)
@@ -462,14 +468,20 @@ describe('the snapshot stays out of every prompt', () => {
       'opsStore.close();',
     ]);
     expect(server.split('\n').filter(line => /\bopsRoute\b/u.test(line))).toHaveLength(2);
+    // Stage 2 adds the kill switch to the route's dependencies and nothing else.
+    expect(server.split('\n').filter(line => /opsCommand/iu.test(line)).map(line => line.trim())).toEqual([
+      "import { opsCommandsEnabled } from './opsCommandContract.js';",
+      'commandsEnabled: () => opsCommandsEnabled(process.env),',
+    ]);
   });
 
   it('imports nothing that builds a prompt or calls a model', () => {
     for (const name of owners) {
       const imports = [...readFileSync(join(sourceRoot, name), 'utf8').matchAll(/from '([^']+)'/gu)].map(match => match[1]);
       for (const source of imports) {
-        expect(['node:http', 'node:sqlite', '@shannon/cognition', './apiAuth.js', './apiValidation.js', './opsContract.js',
-          './opsStore.js', './serverHttp.js', './sqliteStoreContext.js']).toContain(source);
+        expect(['node:http', 'node:sqlite', 'node:crypto', '@shannon/cognition', './apiAuth.js', './apiValidation.js', './opsContract.js',
+          './opsStore.js', './serverHttp.js', './sqliteStoreContext.js', './opsCommandContract.js', './opsCommandStore.js',
+          './serverOpsCommandRoutes.js']).toContain(source);
       }
     }
     expect(readFileSync(join(sourceRoot, 'opsContract.ts'), 'utf8')).toContain("import { looksSecret } from '@shannon/cognition';");
@@ -477,12 +489,19 @@ describe('the snapshot stays out of every prompt', () => {
 });
 
 describe('docs/ops-contract.md', () => {
-  it('states the routes, the bounds, the errors and the stage that is not built', () => {
+  it('states the routes, the bounds, the errors, the commands and what is still open', () => {
     const document = readFileSync(resolve(import.meta.dirname, '../../../docs/ops-contract.md'), 'utf8');
     for (const word of ['/v1/platform/ops/snapshot', '/v1/ops', 'SHANNON_PLATFORM_OPS_INGEST', 'OPS_SNAPSHOT_INVALID', 'OPS_INGEST_DISABLED',
       'PLATFORM_BRIDGE_UNAUTHORIZED', 'PLATFORM_BRIDGE_NOT_CONFIGURED', 'REQUEST_TOO_LARGE', 'RATE_LIMITED', 'PAIRING_REQUIRED',
-      'commandsSupported', 'staleAfterSeconds', 'Stage 2 (not built)', '/v1/ops/commands', '/v1/platform/ops/commands/claim',
+      'commandsSupported', 'staleAfterSeconds', '/v1/ops/commands', '/v1/platform/ops/commands/claim', '/v1/platform/ops/commands/{id}/report',
       'schedule.run', 'service.start', 'service.stop', 'minecraft.start', 'minecraft.stop', 'progressive-lab-', 'idempotencyKey',
-      `${OPS_LIMITS.shortLabel} `, `${OPS_LIMITS.staleAfterSeconds} `]) expect(document).toContain(word);
+      'SHANNON_PLATFORM_OPS_COMMANDS', 'OPS_COMMANDS_DISABLED', 'OPS_STALE', 'TARGET_UNKNOWN', 'TARGET_NOT_ALLOWED', 'IDEMPOTENCY_KEY_REUSED',
+      'TOO_MANY_OPEN_COMMANDS', 'OPS_COMMAND_NOT_FOUND', 'OPS_COMMAND_NOT_CLAIMED', 'OPS_COMMAND_FINISHED', 'no_report', 'ops_commands',
+      'Open questions', ...OPS_COMMAND_REPORT_CODES.map(code => `\`${code}\``),
+      ...[...OPS_SERVICE_START_ALLOWED, ...OPS_SERVICE_STOP_ALLOWED].map(id => `\`${id}\``),
+      `${OPS_COMMAND_LIMITS.open} open`, `${OPS_COMMAND_LIMITS.perHour} an hour`, `${OPS_COMMAND_LIMITS.claimWithinSeconds} seconds`,
+      `${OPS_COMMAND_LIMITS.reportWithinSeconds} seconds`, `last ${OPS_COMMAND_LIMITS.recent}`,
+      `${OPS_LIMITS.shortLabel} `, `${OPS_LIMITS.staleAfterSeconds} `]) expect(document, word).toContain(word);
+    expect(document).not.toContain('not built');
   });
 });

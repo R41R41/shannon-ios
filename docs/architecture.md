@@ -479,12 +479,15 @@ Shannon's body is the Live2D desktop application on the owner's Windows PC; her 
 
 ## Operations console
 
-The legacy platform runtime reports its operational status and the owner's desktop management window reads it; the contract is `docs/ops-contract.md` (`opsContract.ts`, `opsStore.ts`, `serverOpsRoutes.ts`). Stage 1 is read-only.
+The legacy platform runtime reports its operational status and the owner's desktop management window reads it; the contract is `docs/ops-contract.md` (`opsContract.ts`, `opsStore.ts`, `serverOpsRoutes.ts`; commands in `opsCommandContract.ts`, `opsCommandStore.ts`, `serverOpsCommandRoutes.ts`). Stage 1 is the status; stage 2 is commands, off by default.
 
 - **Report** (`POST /v1/platform/ops/snapshot`, platform bridge credential): runtime release and start time, services, Minecraft bots and their task steps, schedules, daily counters, and skills. Fields are closed, bounded (64 KiB, short labels of at most 120 characters), free of control characters and of credential-shaped strings, and carry no conversation text. Only the latest snapshot per scope is kept (`ops_snapshots`, one row, replaced), under the scope the bridge is bound to.
-- **Read** (`GET /v1/ops`, device token): the latest snapshot, when it arrived, and `stale` when none arrived for 180 seconds (the VM is a Spot instance). Nothing received, or ingest off, is `200` with `snapshot: null`. `commands: []` and `commandsSupported: false` are fixed until stage 2.
-- The desktop never connects to the legacy runtime and the server never calls it. `server.ts` dispatches both paths to the ops route before the kernel; the store is held by that route alone, so the snapshot is in no prompt and no worker reads it.
-- `SHANNON_PLATFORM_OPS_INGEST=off` refuses reports and hides a stored snapshot. Commands (start, stop, run a schedule) are a proposal in the contract and are not built.
+- **Read** (`GET /v1/ops`, device token): the latest snapshot, when it arrived, and `stale` when none arrived for 180 seconds (the VM is a Spot instance). Nothing received, or ingest off, is `200` with `snapshot: null`. With commands off it answers `commands: []`, `commandsSupported: false` and an empty `allowed`.
+- **Command** (`POST /v1/ops/commands`, device token): a closed `type` (`service.start`, `service.stop`, `minecraft.start`, `minecraft.stop`, `schedule.run`) and one `target` that the current snapshot names; no arguments and no text. The allowlist is a set of constants: Discord can be started and not stopped, Minebot can be stopped and not started, `progressive-lab-*` servers are refused for every type. A stale or missing snapshot refuses the command (`OPS_STALE`), an `idempotencyKey` never makes a second command, and at most 5 are open and 20 an hour accepted per scope.
+- **Claim and report** (`POST /v1/platform/ops/commands/claim`, `…/{id}/report`, platform bridge credential): the runtime pulls the oldest pending command, performs it, and reports `done`, `failed` or `refused` with a code from a fixed set. A command not claimed within 300 seconds is `expired`; a claimed one not reported within 120 seconds is `failed` / `no_report`; neither is ever handed out (again), so nothing fires late and nothing is retried blindly.
+- `GET /v1/ops` lists the last 20 commands and `allowed` (the allowlist intersected with the current snapshot). Every accepted command and its outcome stays in `ops_commands`.
+- The desktop never connects to the legacy runtime and the server never calls it. `server.ts` dispatches every ops path to the ops route before the kernel; the store is held by that route alone, so neither the snapshot nor the command record is in a prompt, no worker reads them, and the activity loop cannot send a command.
+- `SHANNON_PLATFORM_OPS_INGEST=off` refuses reports and hides a stored snapshot. `SHANNON_PLATFORM_OPS_COMMANDS` is off unless set to `on`: off, a command is `403 OPS_COMMANDS_DISABLED`, a claim answers `null`, and the read says `commandsSupported: false`.
 
 ## Durable store
 
@@ -501,7 +504,7 @@ The legacy platform runtime reports its operational status and the owner's deskt
 | Voice identity | `voice_identity_preferences`, `voice_identity_preview_usage` |
 | Retired realtime voice allowance ledger (migration compatibility only) | `realtime_voice_session_reservations` |
 | Legacy platform ingestion | `platform_turn_receipts` plus canonical conversation and background-job rows |
-| Operations console | `ops_snapshots` (latest snapshot per scope; created outside the numbered migrations; schema version unchanged) |
+| Operations console | `ops_snapshots` (latest snapshot per scope), `ops_commands` (every accepted command and its outcome; rows are never deleted); both created outside the numbered migrations; schema version unchanged |
 | Person identity registry | `people`, `person_platform_identities`, `person_identity_events` |
 | People and what was talked about | `people` (`aliases_json`, `how_known`, `forgotten_at`), `person_calls` (`source`, `label`), `person_memory_items`, `person_platform_links`, `person_platform_turns` (idempotency receipts and daily counts; no message text) (created outside the numbered migrations; schema version unchanged) |
 | Intention and cognitive audit | `cognitive_intents`, `cognitive_cycle_receipts` |
