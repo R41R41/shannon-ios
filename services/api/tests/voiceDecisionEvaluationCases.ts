@@ -54,11 +54,11 @@ export const voiceDecisionEvaluationCases: readonly VoiceDecisionEvaluationCase[
   { id: 'complex-research', transcript: '最新情報を調べて複数案を比較し、実装順まで詳しく設計して', expectedClasses: ['skill_complex'], expectedSkills: ['current_web'], expectedLatency: ['over_10s'], shouldRespond: true },
 
   // What the owner said in the calls of 2026-10-02, and what she should have done.
-  { id: 'prod-fragment-statement', transcript: '言われた。', ...QUIET, silence: 'unfinished', production: true, turn: AFTER_HER },
+  { id: 'prod-fragment-statement', transcript: '言われた。', ...QUIET, silence: 'unfinished', production: true, turn: AFTER_HER, needsModel: true },
   { id: 'prod-eh', transcript: 'え?', ...QUIET, silence: 'backchannel', production: true, turn: AFTER_HER },
   { id: 'prod-are', transcript: 'あれ?', ...QUIET, silence: 'backchannel', production: true },
   { id: 'prod-cut-mid-word', transcript: 'あれ、ウェブコミに乗っ', ...QUIET, silence: 'unfinished', production: true },
-  { id: 'prod-cut-tail', transcript: '出るの。', ...QUIET, silence: 'unfinished', production: true },
+  { id: 'prod-cut-tail', transcript: '出るの。', ...QUIET, silence: 'unfinished', production: true, needsModel: true },
   { id: 'prod-cut-joined', transcript: 'あれ、ウェブコミに乗っ出るの。', ...QUIET, silence: 'unfinished', production: true, needsModel: true },
   { id: 'prod-hold', transcript: 'そっか、ちょっと待ってね。', ...QUIET, silence: 'hold', production: true, turn: AFTER_HER },
   { id: 'prod-look-can-you-see', transcript: '僕のこと見れる?', ...SPOKEN, expectedSkills: ['conversation_memory'], production: true },
@@ -95,7 +95,7 @@ export const voiceDecisionEvaluationCases: readonly VoiceDecisionEvaluationCase[
   // (c) Clearly unfinished: wait for the rest instead of asking to repeat.
   { id: 'cut-object', transcript: '明日の会議の資料を', ...QUIET, silence: 'unfinished' },
   { id: 'cut-comma', transcript: '昨日さ、会社で、', ...QUIET, silence: 'unfinished' },
-  { id: 'cut-topic', transcript: '今日は', ...QUIET, silence: 'unfinished' },
+  { id: 'cut-topic', transcript: '今日は', ...QUIET, silence: 'unfinished', needsModel: true },
   { id: 'cut-filler', transcript: 'えっと、その、', ...QUIET, silence: 'unfinished' },
   { id: 'cut-closed-by-asr', transcript: 'お茶を。', ...QUIET, silence: 'unfinished' },
   { id: 'cut-quote', transcript: 'あのファイルって', ...QUIET, silence: 'unfinished', needsModel: true },
@@ -131,6 +131,26 @@ export const voiceDecisionEvaluationCases: readonly VoiceDecisionEvaluationCase[
   { id: 'must-story', transcript: '今日さ、会社でめちゃくちゃ怒られたんだよね。', ...SPOKEN },
   { id: 'must-repeat-as-question', transcript: '今日もよろしくお願いします?', ...SPOKEN, turn: AFTER_HER },
   { id: 'must-wait-objection', transcript: 'ちょっと待って、それは違うと思う。', ...SPOKEN, turn: AFTER_HER },
+
+  // Short is not unfinished: one or two words that are a request, an answer, a choice, or a question whose mark was not heard.
+  { id: 'short-lets-go', transcript: '行こう', ...SPOKEN },
+  { id: 'short-fine', transcript: '大丈夫', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-okay', transcript: 'いいよ', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-again', transcript: 'もう一回', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-no', transcript: 'いや', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-uun', transcript: 'ううん', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-later', transcript: 'あとで', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-second', transcript: '2番', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-tokyo', transcript: '東京', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-can-you', transcript: 'できる', ...SPOKEN },
+  { id: 'short-really', transcript: 'ほんと', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-dull', transcript: 'だるい', ...SPOKEN },
+  { id: 'short-weather', transcript: '天気は', ...SPOKEN },
+  { id: 'short-plans', transcript: '今日の予定は', ...SPOKEN },
+  { id: 'short-from-the-start', transcript: '最初から', ...SPOKEN, turn: AFTER_HER },
+  { id: 'short-do-not-forget', transcript: '傘を忘れないで', ...SPOKEN, turn: { followsShannon: true, secondsSinceShannon: 4, shannonLastLine: '傘を忘れないでくださいね。' } },
+  { id: 'answer-one-word', transcript: 'カレー', ...SPOKEN, turn: { ...SHE_ASKED, shannonLastLine: '何にしますか？決まったら教えてくださいね。' } },
+  { id: 'answer-quoting-her', transcript: '紅茶にします', ...SPOKEN, turn: { ...SHE_ASKED, shannonLastLine: 'コーヒーにしますか、それとも紅茶にしますか？' } },
 
   // Someone else is present (同席者あり): she answers only when addressed.
   { id: 'others-table-talk', transcript: 'それ昨日買ったやつだよ。', ...QUIET, silence: 'not_addressed', turn: WITH_OTHERS },

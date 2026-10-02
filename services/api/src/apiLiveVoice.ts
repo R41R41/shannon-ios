@@ -417,7 +417,8 @@ async function completeLiveVoiceDelegation(
   const reply = confirmedImplementationRequest
     ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
-  roomLook.open(threadId, reply); // Opens the look only if this turn chose one and its conditions still hold.
+  // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
+  if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,

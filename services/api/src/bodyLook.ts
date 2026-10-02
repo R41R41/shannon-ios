@@ -114,7 +114,7 @@ export const ROOM_LOOK_UNAVAILABLE_REASON: Readonly<Record<Unavailable, string>>
   no_viewer: '見る仕組みがいまは使えない',
   no_body: '体（PCのアプリ）がつながっていない',
   no_camera: '体のカメラが入っていない',
-  body_away: '体の窓が出ていない',
+  body_away: '体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）',
   busy: 'いま見ている途中',
   limit_hour: 'この1時間に見られる回数を使い切った',
   limit_day: '今日見られる回数を使い切った',

@@ -188,7 +188,7 @@ describe('offering a look', () => {
     await h.camera(false);
     expect((await h.chat('部屋を見て')).body.systemPrompt).toContain('いまは見られない: 体のカメラが入っていない。');
     await h.camera();
-    expect((await h.chat('こっち見て')).body.systemPrompt).toContain('体の窓が出ていない');
+    expect((await h.chat('こっち見て')).body.systemPrompt).toContain('いまは見られない: 体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）。');
     expect((await harness({ config: { enabled: false } }).chat('カメラで見て')).body.systemPrompt).toContain('この機能は止めてある');
     const shared = await harness().chat('部屋見える？', { audience: 'others' });
     expect(shared.request.offerRoomLook).toBeUndefined();

@@ -25,9 +25,11 @@ describe('the local rules, one category at a time', () => {
   };
 
   it('(a) is silent for self-talk and for words said to someone else or to the computer', () => {
-    for (const transcript of ['よいしょ。', 'えーっと、なんだっけ。', 'あれ、おかしいな。', 'なんでだろう。', 'はーい、今行く。', 'もしもし。', '動いてよ。', 'まあいいか。']) {
+    for (const transcript of ['よいしょ。', 'えーっと、なんだっけ。', 'あれ、おかしいな。', 'なんでだろう。', 'はーい、今行く。', 'もしもし。', 'あー、固まった。', 'まあいいか。']) {
       expect(quiet(transcript), transcript).toBe('not_addressed');
     }
+    // Words that may as well be a request to her are not judged here.
+    for (const transcript of ['動いて。', '落ちた。', '重いな。', 'なにこれ。']) expect(quiet(transcript), transcript).not.toBe('not_addressed');
     // The same words with her name, or as part of a request, are for her.
     expect(quiet('シャノン、なんでだろう。')).toBe('answer:named');
     expect(quiet('なんでだろう、教えて。')).toBe('answer:question');
@@ -41,13 +43,19 @@ describe('the local rules, one category at a time', () => {
     expect(quiet('カレーかな。', asked)).toBe('answer:answers_her_question');
   });
 
-  it('(c) waits for the rest of an utterance that is cut or too small to be one', () => {
-    for (const transcript of ['あれ、ウェブコミに乗っ', '明日の会議の資料を', '今日は', '昨日さ、会社で、', 'お茶を。', '言われた。', '出るの。']) {
+  it('(c) waits for the rest of an utterance that is cut, and does not take a short one for a fragment', () => {
+    for (const transcript of ['あれ、ウェブコミに乗っ', '明日の会議の資料を', '昨日さ、会社で、', 'お茶を。', 'それっていうのは、つまり、']) {
       expect(quiet(transcript), transcript).toBe('unfinished');
     }
+    // Short is not unfinished. These are the models' to judge, and the local tier answers them.
+    for (const transcript of [
+      '行こう', 'やろう', '次いこう', 'もう一回', '続き', '詳しく', '最初から', '大丈夫', 'いいよ', 'いらない', 'もういい', 'いや', 'ううん', 'いいえ', 'そう', 'そうそう',
+      'そう思う', '知らない', 'たぶん', 'まだ', 'もっと', '任せる', 'あとで', '一番', '2番', '赤', '東京', '30分', 'ニュース', 'できる', '聞こえる', '起きてる', 'ほんと',
+      '元気', 'だるい', 'ひま', 'カレー', '天気は', '今日の予定は', '他には', '理由は', '次は', '言われた。', '出るの。', '今日は', '本当に', '自由に',
+    ]) expect(quiet(transcript), transcript).toBeNull();
     // A particle that can close a sentence is a cut only when nothing closes the segment.
-    expect(quiet('先に食べてるから。')).toBeNull();
-    expect(quiet('先に食べてるから')).toBe('unfinished');
+    expect(quiet('一つ気になることがあるんですが。')).toBeNull();
+    expect(quiet('一つ気になることがあるんですが')).toBe('unfinished');
   });
 
   it('(d) says nothing to "wait a moment", and answers when it is an objection', () => {
@@ -62,8 +70,27 @@ describe('the local rules, one category at a time', () => {
     const after: VoiceTurnFacts = { ...alone, followsShannon: true, secondsSinceShannon: 3, shannonLastLine: '明日は雨が降るみたいです。傘を忘れないでくださいね。' };
     expect(quiet('。')).toBe('echo');
     expect(quiet('傘を忘れないでくださいね', after)).toBe('echo');
+    expect(quiet('明日は雨が降るみたいです', after)).toBe('echo');
+    // Not her line any more once time has passed, once he has spoken since, or when its time is not known.
     expect(quiet('明日は雨が降るみたいです', { ...after, secondsSinceShannon: 600 })).toBeNull();
+    expect(quiet('明日は雨が降るみたいです', { ...after, followsShannon: false })).toBeNull();
+    expect(quiet('明日は雨が降るみたいです', { ...after, secondsSinceShannon: undefined })).toBeNull();
     expect(quiet('明日は雨が降る?', after)).toBe('answer:question');
+    // A short quote of her is his own sentence, and after her question quoting her is how he answers.
+    expect(quiet('傘を忘れないで', after)).toBe('answer:request');
+    const choice: VoiceTurnFacts = { ...after, sheAsked: true, shannonLastLine: 'コーヒーにしますか、それとも紅茶にしますか？' };
+    expect(quiet('紅茶にします', choice)).toBe('answer:answers_her_question');
+    expect(quiet('それとも紅茶にしますか', choice)).toBe('answer:answers_her_question');
+  });
+
+  it('reads a long or repetitive utterance in no time', () => {
+    const started = performance.now();
+    for (const transcript of [`${'あ'.repeat(34)}x`, `${'うん'.repeat(34)}だ`, `${'え'.repeat(34)}と思う`, `${'あ'.repeat(4_000)}x`, 'ちょっと'.repeat(2_000)]) {
+      expect(quiet(transcript), transcript.slice(0, 12)).toBeNull();
+    }
+    expect(quiet('待って'.repeat(2_000))).toBe('answer:request');
+    expect(quiet('あ'.repeat(30))).toBe('backchannel');
+    expect(performance.now() - started).toBeLessThan(200);
   });
 
   it('answers what needs an answer however short it is', () => {
@@ -104,6 +131,15 @@ describe('the facts of the moment', () => {
     expect(facts).toEqual({ sheAsked: true, followsShannon: true, secondsSinceShannon: 10, shannonLastLine: 'おはようございます。今日は何をしますか？', othersPresent: false, source: 'speech' });
   });
 
+  it('finds her question anywhere in her line', () => {
+    for (const content of ['何にしますか？決まったら教えてくださいね。', '散歩に行きましょうか。', 'どれがいいかな', 'コーヒーにしますか、それとも紅茶にしますか？']) {
+      expect(ownerVoiceTurnFacts({ history: [{ role: 'assistant', content }], at, othersPresent: false }).sheAsked, content).toBe(true);
+    }
+    for (const content of ['わかりました。', 'カレーにしましょう。', '見てみますね。']) {
+      expect(ownerVoiceTurnFacts({ history: [{ role: 'assistant', content }], at, othersPresent: false }).sheAsked, content).toBe(false);
+    }
+  });
+
   it('lets her question lapse after two minutes, and reads no question into a statement or into the owner\'s own words', () => {
     const history = [{ role: 'assistant' as const, content: '何にしますか？' }];
     expect(ownerVoiceTurnFacts({ history, newest: { role: 'assistant', observedAt: START }, at: '2026-10-02T09:02:01.000Z', othersPresent: false }).sheAsked).toBe(false);
@@ -122,7 +158,7 @@ describe('settling the router\'s answer against the rules', () => {
   const silentModel = { shouldRespond: false, conversationClass: 'no_response' as const, replyRequiredProbability: 0.05 };
 
   it('a rule for silence stands against a router that would answer', async () => {
-    for (const [transcript, category] of [['え?', 'backchannel'], ['言われた。', 'unfinished'], ['そっか、ちょっと待ってね。', 'hold'], ['あれ、おかしいな。', 'not_addressed']] as const) {
+    for (const [transcript, category] of [['え?', 'backchannel'], ['明日の会議の資料を', 'unfinished'], ['そっか、ちょっと待ってね。', 'hold'], ['あれ、おかしいな。', 'not_addressed']] as const) {
       const settled = settleOwnerVoiceTurn(await base(), { transcript, facts: alone, uncertain: true });
       expect(settled, transcript).toMatchObject({ shouldRespond: false, conversationClass: 'no_response', silence: category });
       expect(settled.waitingDirection, transcript).toBeUndefined();

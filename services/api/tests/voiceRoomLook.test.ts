@@ -156,7 +156,7 @@ describe('the owner asks her to look, aloud', () => {
     // The reasons are the server's own words; none of them is what she invented in the real call.
     for (const reason of Object.values(ROOM_LOOK_UNAVAILABLE_REASON)) for (const word of INVENTED) expect(reason).not.toContain(word);
     expect(ROOM_LOOK_UNAVAILABLE_REASON).toMatchObject({
-      no_body: '体（PCのアプリ）がつながっていない', no_camera: '体のカメラが入っていない', body_away: '体の窓が出ていない',
+      no_body: '体（PCのアプリ）がつながっていない', no_camera: '体のカメラが入っていない', body_away: '体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）',
       busy: 'いま見ている途中', limit_hour: 'この1時間に見られる回数を使い切った', limit_day: '今日見られる回数を使い切った',
       switched_off: 'この機能は止めてある', not_alone: 'ほかの人がいる場では見ない',
     });
@@ -215,7 +215,40 @@ describe('the owner asks her to look, aloud', () => {
       await h.say(transcript);
       expect(h.lookStore.waiting(scope), transcript).toEqual([]);
     }
-    for (const transcript of [...PRODUCTION_ASKS, 'こっち見て', 'カメラで見てみて', '何が見える?', 'これ見てよ']) expect(asksForLookAloud(transcript), transcript).toBe(true);
+    // Watching something, asking her to check a document, talk about cameras, seeing in general: none of these is a request to look.
+    for (const transcript of [
+      '僕もニュース見てるよ', '俺はテレビ見てる', '私は映画を見てる', '私今ドラマ見てる', '私もそれ見てる', '防犯カメラを見てる', '防犯カメラを見て',
+      '私のメール見てくれる', '僕の予定見て', '私のノート見て', 'ここのバグ見てくれない', 'スライドのここを見てください', 'ここ見て、3行目', 'これ見てよ',
+      'カメラの設定を見て', 'カメラロール見て', 'カメラで撮った写真見て', '新しいカメラを使ってる', 'カメラを買って使ってみて', 'オンライン会議でカメラをオンにして',
+      '星が見えてる', '字幕見えてる', '画面見えてる', '窓の外が見えない', '外は雨が見える', '何が見えたの昨日', '僕のこと見てた?',
+    ]) expect(asksForLookAloud(transcript), transcript).toBe(false);
+    for (const transcript of [
+      ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', 'こっち見える?', '僕が見える?', 'カメラで見てみて', 'カメラ使って', '何が見える?', '机の上見てくれる',
+      '部屋を見てほしいんだけど',
+    ]) expect(asksForLookAloud(transcript), transcript).toBe(true);
+    // Long or repetitive input costs nothing: the patterns repeat no alternation and look only at short clauses.
+    const started = performance.now();
+    expect(asksForLookAloud(`これ見て${'かな'.repeat(2_000)}x`)).toBe(false);
+    expect(asksForLookAloud('部屋を見て'.repeat(1_500))).toBe(false);
+    expect(performance.now() - started).toBeLessThan(200);
+  });
+
+  it('a gateway that is sure no look is wanted sets the fixed rule aside, and she says that she could look', async () => {
+    const h = harness({ voiceDecision: gateway({ roomLookProbability: 0.05, transcriptReliabilityProbability: 0.95 }) });
+    await h.ready();
+    const turn = await h.say('部屋を見て。');
+    expect(turn.prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+    expect(h.lookStore.waiting(scope)).toEqual([]);
+  });
+
+  it('opens nothing when the call is cut off before her reply is written', async () => {
+    const h = harness();
+    await h.ready();
+    const stopped = new AbortController();
+    await expect(h.api.streamLiveVoiceDelegation({ method: 'POST', path: delegations, deviceId: 'body-pc',
+      body: { scopeKey: scope, threadId: 'voice-thread', transcript: '部屋を見て。' } },
+    { signal: stopped.signal, onPlan: () => stopped.abort(), onTextDelta: () => undefined })).rejects.toThrow();
+    expect(h.lookStore.waiting(scope)).toEqual([]);
   });
 
   it('tells her that she could look when the camera is mentioned and nobody chose a look', async () => {

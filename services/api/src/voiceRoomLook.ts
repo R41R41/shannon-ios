@@ -34,26 +34,32 @@ function lookThreshold(environment: Environment): number {
   return value && Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : 0.85;
 }
 
-const SEE = '(?:見て|見える|見えて|見えます|見れる|見れます|見られる|見えない|のぞいて|写して|映して|映って)';
-const WHOM = '(?:僕|ぼく|ボク|俺|おれ|私|わたし|こっち|こちら)(?:のこと|の顔|の姿|の様子|の方|のほう)?';
-const WHERE = '(?:部屋|まわり|周り|机|手元|外|窓|ここ|これ)(?:の中|の様子|の上)?';
-/** What may follow the verb when the clause ends there: 「見てみて」「見えるかな」「見てほしいんだけど」. */
-const TAIL = '(?:みて|ほしい|欲しい|くれる|くれない|くれ|もらえる|ください|いい|も|る|ます|ますか|か|かな|の|よ|ね|な|んだけど|けど)*$';
+/** A request to look, and "can you see". The plain progressive (「見てる」) is neither: 「僕もニュース見てるよ」. */
+const LOOK = '(?:見て|のぞいて|写して|映して)';
+const CAN_SEE = '(?:見える|見えてる|見えます|見えてます|見れる|見れます|見られる)';
+/** The owner himself, or where he is. Not 「ここ」「これ」「外」: those are as often a screen, a document, the weather. */
+const ME = '(?:(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:のこと|の顔|の姿|の様子)?|こっち|こちら)(?:が|を|は|も)?';
+const ROOM = '(?:部屋|まわり|周り|机|手元)(?:の中|の様子|の上)?(?:が|を|は|も)?';
+/** What may close the clause after the verb, each part once and in this order: 「見てみて」「見てくれる」「見えるかな」「見てほしいんだけど」. */
+const TAIL = '(?:みて)?(?:ほしい|欲しい|くれる|くれない|くれ|もらえる|ください)?(?:んだけど|けど)?(?:かな|か|の|よね|よ|ね|な)?';
+/** The object stands directly before the verb: 「僕の予定見て」「カメラの設定を見て」 are about something else. */
 const ASKS = [
-  new RegExp(`(?:${WHOM}|${WHERE})(?:が|を|は|も)?.{0,4}${SEE}${TAIL}`, 'u'),
-  new RegExp(`カメラ(?:で|を|から|越しに)?.{0,8}(?:${SEE}|使って|つけて|オンにして)${TAIL}`, 'u'),
-  /(?:何|なに)が見え|見えてる$|見えてますか$|見えますか$/u,
+  new RegExp(`(?:${ME}|${ROOM})(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
+  new RegExp(`(?<!防犯|監視)カメラ(?:で|を|から|越しに)?(?:${LOOK}|${CAN_SEE}|使って(?:も)?(?:いい|大丈夫)?)${TAIL}(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
+  /(?:何|なに)が見え(?:る|てる|ます|てます)(?:かな|か|の)?$/u,
 ];
-const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて|見てた|見ていた/u;
+const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて/u;
+const CLAUSE_CHARACTERS = 40;
 
 /**
- * The owner asks her, in so many words, to look now. Judged clause by clause, and only where the
+ * The owner asks her, in so many words, to look now. Judged clause by clause, and only where a short
  * clause ends on the looking: 「私も見てみたい映画がある」 is not a request.
  */
 export function asksForLookAloud(transcript: string): boolean {
   const text = transcript.normalize('NFKC');
   if (REFUSES.test(text)) return false;
-  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, '')).some(clause => clause && ASKS.some(pattern => pattern.test(clause)));
+  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, ''))
+    .some(clause => clause.length > 0 && clause.length <= CLAUSE_CHARACTERS && ASKS.some(pattern => pattern.test(clause)));
 }
 
 const ROUTER_INSTRUCTIONS = 'Would one look through the camera of her desktop body be right now? True when the speaker asks her to look at him, at the room, or at something he is showing, or asks what she can see; also when he is clearly showing her something, so that one look is what he would welcome. False for talk about cameras, photos, screens, notes or seeing in general, for past or hypothetical looking, and when he asks her not to look.';
@@ -113,7 +119,9 @@ export interface VoiceRoomLookTurn {
   open(threadId: string, reply: string): boolean;
 }
 
-const NO_LOOK: VoiceRoomLookTurn = Object.freeze({ prompt: '', open: () => false });
+/** The fixed rule on his words is set aside when the gateway is this sure that no look is wanted. */
+const ASKED_CONTRADICTED_BELOW = 0.2;
+const NO_LOOK: VoiceRoomLookTurn =Object.freeze({ prompt: '', open: () => false });
 const cannot = (reason: VoiceRoomLookUnavailable): VoiceRoomLookTurn => ({ prompt: voiceRoomLookUnavailablePrompt(reason), unavailable: reason, open: () => false });
 
 /**
@@ -130,7 +138,8 @@ export function voiceRoomLookTurn(
   // Every voice turn passes here, as every text turn passes `BodyLooks.turn`: a turn other people hear withdraws an open look.
   const state = looks.voiceTurn(turn.scopeKey, turn.at, turn.audience);
   if (!turn.decision.shouldRespond) return NO_LOOK;
-  const asked = asksForLookAloud(turn.transcript);
+  // His words ask for it, and a model tier that also judged the turn did not say plainly that no look is wanted.
+  const asked = asksForLookAloud(turn.transcript) && (turn.decision.roomLookProbability ?? 1) >= ASKED_CONTRADICTED_BELOW;
   // Her own wish to look comes only from the gateway's judgement, and not from words it could not trust.
   const judged = !turn.uncertain && (turn.decision.roomLookProbability ?? 0) >= lookThreshold(environment);
   const mentioned = asked || judged || asksToLook(turn.transcript);

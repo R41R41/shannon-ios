@@ -57,40 +57,76 @@ const fragmentReliability = (environment: Environment) => boundedNumber(environm
 const QUESTION_OPEN_SECONDS = 120;
 /** A reaction counts as following her utterance this long after it was stored. */
 const FOLLOWS_SECONDS = 30;
-const ECHO_SECONDS = 60;
+/** An echo is her own line coming back while, or just after, her body speaks it; and it is long. */
+const ECHO_SECONDS = 30;
+const ECHO_CHARACTERS = 12;
 const SHORT_ANSWER_CHARACTERS = 28;
-const TINY_FRAGMENT_CHARACTERS = 4;
+/** Fillers, holds and self-talk are short: the three phrase rules do not look at anything longer. */
+const PHRASE_RULE_CHARACTERS = 40;
 
 /** The utterance without spaces and punctuation; long vowels are kept (「へー」). */
 const bareText = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[\s、。，,.!！?？…・「」『』（）()〜~]/gu, '');
 const characters = (text: string) => Array.from(text).length;
 
-const BACKCHANNEL = '(?:うんうん|うーん|うん|んー|ん|はい|ええ|えー|えっ|え|へえ|へー|ほう|ほー|ふーん|ふうん|ふむ|なるほど(?:ね|なあ|な)?|そっか(?:あ)?|そうか(?:あ)?'
-  + '|そうなんだ(?:ね)?|そうなの(?:か)?|そうだね|そうですね|そうね|だよね|ですよね|だね|ですね|たしかに|確かに|了解(?:です)?|りょうかい|わかった|分かった|わかりました'
-  + '|オッケー|おっけー|ok|おお|おー|ああ|あー|あっ|あれっ|あれ|あら|あ|おっと|まあね|まあ|よし|さて|ふう|はあ|は|へ)ー*';
-const BACKCHANNEL_ONLY = new RegExp(`^(?:${BACKCHANNEL})+$`, 'u');
-const HOLD = new RegExp(`^(?:${BACKCHANNEL})*(?:ごめんね?|すみません|すまん)?(?:じゃあ?)?(?:(?:ちょっと|ちょい|少し|すこし|少々|一旦|いったん|一瞬|今)?(?:だけ)?`
-  + '(?:(?:待|ま)っ(?:てて|ていて|といて|て)(?:ね|よ|な|くれる|くれ|ください|下さい|もらえる|ほしい)*|お待ち(?:ください|下さい|を)?|タイム|ストップ))+$', 'u');
-const SELF_TALK = 'よいしょ|どっこいしょ|よっこいしょ|よっこらしょ|さてと|えーっと|えーと|えっと|あのー|うーんと|(?:なん|何|どこ|どれ|いつ|誰|だれ)だっけ|(?:なん|何)でだろう?'
-  + '|おかしいな(?:あ)?|変だな(?:あ)?|まあ?いい(?:か|や)|どこ(?:いった|行った|やった|置いた)(?:かな|っけ|んだろう?)?|(?:なん|何)だこれ|(?:なに|何)これ'
-  + '|動け(?:よ)?|動いて(?:よ|くれ)?|固まった|フリーズした|落ちた|重いな(?:あ)?|遅いな(?:あ)?|めんどくさい?(?:な(?:あ)?)?';
-const SOMEONE_ELSE = 'はーい|はいはーい|(?:今|いま|すぐ)(?:行く|いく)(?:よ|ね)?|もしもし|お世話になっております|いらっしゃい(?:ませ)?';
-/** Nothing but such phrases and fillers (a bare filler is a backchannel and is judged before this). */
-const NOT_ADDRESSED = new RegExp(`^(?:${BACKCHANNEL}|${SELF_TALK}|${SOMEONE_ELSE})+$`, 'u');
+/**
+ * The words of the three phrase rules, by kind. An utterance is read as a sequence of them, one word at a time
+ * from the left and never backing up: a pattern that repeats an alternation takes exponential time on 「あああ…」.
+ * What cannot be read this way gets no opinion from these rules, which is the safe side.
+ * Within a kind, and between kinds that share a beginning, the longer word comes first.
+ */
+const PHRASE_WORD = new RegExp([
+  // o: said to someone else in the room or on the phone.
+  '(?<o>はいはーい|はーい|(?:今|いま|すぐ)(?:行く|いく)(?:よ|ね)?|もしもし|お世話になっております|いらっしゃい(?:ませ)?)',
+  // s: said to himself.
+  '(?<s>よいしょ|どっこいしょ|よっこいしょ|よっこらしょ|さてと|えーっと|えーと|えっと|あのー|うーんと|(?:なん|何|どこ|どれ|いつ|誰|だれ)だっけ|(?:なん|何)でだろう?'
+    + '|おかしいな(?:あ)?|変だな(?:あ)?|まあ?いい(?:か|や)|どこ(?:いった|行った|やった|置いた)(?:かな|っけ)?|固まった|フリーズした)',
+  // h: wait. y: sorry. q: a moment. d: just. j: well then.
+  '(?<h>(?:待|ま)っ(?:てて|ていて|といて|て)|お待ち|タイム|ストップ)',
+  '(?<y>ごめんね?|すみません|すまん)',
+  '(?<q>ちょっと|ちょい|少し|すこし|少々|一旦|いったん|一瞬|今)',
+  '(?<d>だけ)',
+  '(?<j>じゃあ?)',
+  // b: a backchannel or filler.
+  '(?<b>(?:うんうん|うーん|うん|んー|ん|はい|はあ|は|ええ|えー|えっ|え|へえ|へー|へ|ほう|ほー|ふーん|ふうん|ふむ|ふう|なるほど(?:ね|なあ|な)?|そっか(?:あ)?|そうか(?:あ)?'
+    + '|そうなんだ(?:ね)?|そうなの(?:か)?|そうだね|そうですね|そうね|だよね|ですよね|だね|ですね|たしかに|確かに|了解(?:です)?|りょうかい|わかりました|わかった|分かった'
+    + '|オッケー|おっけー|ok|おお|おー|おっと|ああ|あー|あっ|あれっ|あれ|あら|あ|まあね|まあ|よし|さて)ー*)',
+  // x: what may follow 「待って」.
+  '(?<x>ください|下さい|くれる|くれ|もらえる|ほしい|ね|よ|な|を)',
+].join('|'), 'uy');
+
+/** One letter per word of the utterance, or null when it is too long or holds anything that is not such a word. */
+function phraseKinds(bare: string): string | null {
+  if (!bare || characters(bare) > PHRASE_RULE_CHARACTERS) return null;
+  let kinds = '';
+  for (let index = 0; index < bare.length;) {
+    PHRASE_WORD.lastIndex = index;
+    const match = PHRASE_WORD.exec(bare);
+    const kind = match && Object.entries(match.groups ?? {}).find(([, value]) => value !== undefined)?.[0];
+    if (!match || !match[0] || !kind) return null;
+    kinds += kind;
+    index += match[0].length;
+  }
+  return kinds;
+}
+/** 「そっか、ちょっと待ってね」: fillers, an apology, then one or more "wait"s, each with what may follow it. */
+const HOLD_KINDS = /^b*y?j?(?:q?d?hx*)+$/u;
 
 const POLITE_QUESTION = /(?:ですか|ますか|でしょうか|ないか|かい)[。.!！…]*$/u;
 /** Wondering aloud: a question word that asks nobody in particular. A question mark still makes it a question. */
 const WONDERING = /(?:だろう|だろ|かなあ?|かなぁ|っけ|かしら)[。.…、]*$/u;
-const TE_REQUEST = /(?<!く|だっ)て(?:ください|下さい|くれる|くれない|くれ|もらえる|ほしい|欲しい|みて|よ|ね)?[。.!！…]*$|(?:読ん|呼ん|選ん|遊ん|頼ん)で[。.!！…]*$|(?:頼む|頼んだ|たのむ)[よね]?[。.!！…]*$/u;
+const TE_REQUEST = /(?<!く|だっ)て(?:ください|下さい|くれる|くれない|くれ|もらえる|ほしい|欲しい|みて|よ|ね)?[。.!！…]*$|(?:読ん|呼ん|選ん|遊ん|頼ん|ない)で(?:ください|下さい|くれ|よ|ね)?[。.!！…]*$|(?:頼む|頼んだ|たのむ)[よね]?[。.!！…]*$/u;
 const GREETING = /おはよ|こんにちは|こんばんは|ただいま|おやすみ|ありがと|サンキュー|ごめん|すみません|よろしく|はじめまして|初めまして|久しぶり|ひさしぶり|やっほ|ハロー|お疲れ|おつかれ|いってきます|行ってきます|行ってくる|またね|じゃあね|バイバイ|寝る|出かけ|帰る|帰った|起きた/u;
 const CALLING = /^(?:ねえ|ねぇ|ねー|なあ|おーい|おい|あのさ|あのね|聞いて|きいて|ちょっといい|ちょっと聞いて)/u;
 const SECOND_PERSON = /君|きみ|あなた|あんた|お前|おまえ|そっち(?:は|も|こそ|の)/u;
 const CORRECTION = /^(?:いや|いえ|いいえ)?(?:違う|ちがう|違います|そうじゃな|そうではな)/u;
 const AIMED_AT_HER = /寂し|さみし|疲れ|つかれた|しんど|つら|辛い|嬉し|うれし|楽し|悲し|怖|こわい|不安|心配|眠い|ねむい|お腹(?:すい|空い|減っ|へっ)|腹減|暑い|寒い|痛い|最高|やった|できた|終わった|おわった|好き|嫌い|すごい|すげ|かわいい|可愛い|えらい|天才|さすが|むかつく|落ち込|やめろ|うるさい|だめ|ダメ|いいね|いいじゃん|おもしろ|面白|ウケる|うまい|上手|正解|その通り|最悪|無理|やばい|ひどい|難しい|暇/u;
-/** Ends in the middle of a word or on a particle that cannot close a sentence. */
-const CUT_ALWAYS = /(?:[っッ]|は|が|を|へ|とか|という|について)$/u;
-/** Particles that can close a sentence (「もう寝るから。」): a cut only when nothing closes the segment. */
-const CUT_OPEN = /(?:に|も|から|まで|けどさ|でさ|てさ)$/u;
+/**
+ * Ends in the middle of a word or on a particle that cannot close a sentence. 「は」「に」「も」「から」 are not here:
+ * 「天気は」 is a question, 「自由に」 an ending and 「最初から」 a request, so those are the models' to judge.
+ */
+const CUT_ALWAYS = /(?:[っッ]|を|へ|とか|という|について)$/u;
+/** Endings that can close a sentence (「お願いがあるんですが。」): a cut only when nothing closes the segment. */
+const CUT_OPEN = /(?:が|けどさ|でさ|てさ)$/u;
 
 const answer = (reason: VoiceAnswerReason): VoiceSilenceVerdict => ({ respond: true, reason });
 const ADDRESS_REASON: Readonly<Partial<Record<GuestAddressReason, VoiceAnswerReason>>> = {
@@ -112,15 +148,18 @@ export function ownerTurnVerdict(
   const marked = /[?？]/u.test(text);
   const length = characters(bare);
   const recent = (seconds: number) => facts.secondsSinceShannon === undefined || facts.secondsSinceShannon <= seconds;
-  // (e) Noise, or her own voice coming back through the microphone.
+  // (e) Noise, or her own voice coming back through the microphone: a long stretch of the line she is speaking or has just
+  // spoken. Not after her question (「紅茶にします」 quotes her to answer her), and not a short quote (「傘を忘れないで」).
   if (!bare) return silent('echo');
-  if (!marked && length >= 6 && recent(ECHO_SECONDS) && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
+  if (!marked && !facts.sheAsked && facts.followsShannon && facts.secondsSinceShannon !== undefined && facts.secondsSinceShannon <= ECHO_SECONDS
+    && length >= ECHO_CHARACTERS && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
+  const kinds = phraseKinds(bare);
   // (d) 「ちょっと待ってね」: she waits and says nothing.
-  if (HOLD.test(bare)) return silent('hold');
+  if (kinds && HOLD_KINDS.test(kinds)) return silent('hold');
   // (b) A backchannel asks nothing, unless she had just asked: then 「うん」 is the answer.
-  if (BACKCHANNEL_ONLY.test(bare)) return facts.sheAsked ? answer('answers_her_question') : silent('backchannel');
-  // (a) Said to himself, to someone else, or to the computer.
-  if (NOT_ADDRESSED.test(bare)) return silent('not_addressed');
+  if (kinds && /^b+$/u.test(kinds)) return facts.sheAsked ? answer('answers_her_question') : silent('backchannel');
+  // (a) Said to himself or to someone else: nothing but such phrases and fillers.
+  if (kinds && /^[bso]+$/u.test(kinds)) return silent('not_addressed');
   if (ADDRESS_EVIDENCE.name.test(text)) return answer('named');
   if (facts.sheAsked && length <= SHORT_ANSWER_CHARACTERS) return answer('answers_her_question');
   if (facts.othersPresent) {
@@ -138,16 +177,19 @@ export function ownerTurnVerdict(
   if (CALLING.test(bare) || SECOND_PERSON.test(text)) return answer('called');
   if (CORRECTION.test(bare)) return answer('correction');
   if (AIMED_AT_HER.test(text)) return answer('aimed_at_her');
-  // (c) Cut in the middle of a word or on a particle, or too small to be an utterance: wait for the rest.
+  // (c) Cut in the middle of a word or on a particle: wait for the rest.
   // Recognition closes most segments with 「。」, so a full stop does not make 「明日の会議の資料を。」 a sentence.
+  // A short utterance is not a fragment for being short (「行こう」「大丈夫」「カレー」): that is left to the models.
   const closed = /[。.!！]$/u.test(text);
   if (CUT_ALWAYS.test(bare) || (!closed && (/[、,]$/u.test(text) || CUT_OPEN.test(bare)))) return silent('unfinished');
-  if (length <= TINY_FRAGMENT_CHARACTERS) return silent('unfinished');
   return null;
 }
 
-/** 「〜ですか？」「〜しましょうか。」「〜かな」: her line ends by asking. */
-const endsWithQuestion = (content: string) => /[?？][\s)）」』]*$/u.test(content.trim()) || /(?:か|かな|かね|かい)[。!！]?$/u.test(content.trim());
+/**
+ * Her line asks something: 「〜ですか？」「〜しましょうか。」「〜かな」, anywhere in it (「何にしますか？決まったら教えてくださいね。」).
+ * Read generously: a wrong yes only lets a short reply be answered.
+ */
+const asksSomething = (content: string) => /[?？]/u.test(content) || /(?:か|かな|かね|かい)(?:[。!！]|$)/u.test(content.trim());
 
 /** The facts of the moment for one owner-call utterance, from what the thread already holds. Nothing is stored. */
 export function ownerVoiceTurnFacts(input: {
@@ -161,7 +203,7 @@ export function ownerVoiceTurnFacts(input: {
 }): VoiceTurnFacts {
   const last = input.history.at(-1);
   const followsShannon = last?.role === 'assistant';
-  const asked = last?.role === 'assistant' && endsWithQuestion(last.content);
+  const asked = last?.role === 'assistant' && asksSomething(last.content);
   const line =[...input.history].reverse().find(item => item.role === 'assistant')?.content;
   const elapsed = input.newest?.role === 'assistant' ? (Date.parse(input.at) - Date.parse(input.newest.observedAt)) / 1_000 : NaN;
   const secondsSinceShannon = Number.isFinite(elapsed) && elapsed >= 0 ? Math.round(elapsed) : undefined;
