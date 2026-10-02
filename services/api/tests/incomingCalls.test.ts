@@ -560,6 +560,15 @@ describe('the APNs sender', () => {
     expect(warnings).toEqual(['SHANNON_APNS_PRIVATE_KEY_UNREADABLE', 'SHANNON_APNS_PRIVATE_KEY_FILE_MISSING', 'SHANNON_APNS_KEY_ID_INVALID']);
   });
 
+  it('documents the kill switch in both environment examples, with no key in either', () => {
+    for (const path of ['../../../deploy/azure/api.env.example', '../../../.env.example']) {
+      const example = readFileSync(new URL(path, import.meta.url), 'utf8');
+      expect(example).toContain('SHANNON_INCOMING_CALLS=on');
+      expect(example).toMatch(/^SHANNON_APNS_KEY_ID=$/mu);
+      expect(example).not.toContain('BEGIN PRIVATE KEY');
+    }
+  });
+
   it('keeps her words and the key out of every source file that sends or logs', () => {
     const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
     // The push body is built in one place, from identifiers and a time.

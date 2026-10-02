@@ -82,6 +82,8 @@ A message she starts on her own (`reach_out`, and its one `follow_up`) is writte
 1. **An app that is privately listening and speaks.** When several are, the one whose device the owner used most recently (`ownerActiveAt`; a device with a known last use before one without; then the run that began later).
 2. **Her body**, only when no app is privately listening and able to speak, and by its own rules as before.
 
+3. **A call**, by the owner's decision of 2026-10-03, when he switched 「シャノンからの着信を受ける」 on in the iPhone app: when neither an app in his ears nor her body takes the message, the server rings his iPhone with it, once. See `docs/incoming-call-contract.md`. A message the call holds (`surface: iphone_call`) is offered to no app and not told to her body.
+
 Whoever speaks first holds the message's **claim**: one row whose primary key is the message, so two devices asking at the same instant cannot both get it, and it survives a restart.
 
 An app that gave a message back (`not_spoken`) is left out of the choice for that message: it is not offered it again, and it does not keep it from the other surfaces.
@@ -109,7 +111,7 @@ While she speaks, every change of the route is checked at once and the sound sto
   "message": { "id": "0b6f…", "threadId": "…", "content": "ライ氏、いま何をしていますか。", "expression": "curious", "reason": "wonder", "createdAt": "2026-10-02T04:00:00.000Z" } }
 ```
 
-`status` is `held` when the same device asks again (a lost reply), and `spoken` then says whether it already reported speaking. No other field is accepted.
+`status` is `held` when the same device asks again (a lost reply), and `spoken` then says whether it already reported speaking. No other field is accepted, except `callId` from the iPhone that answered a call from her (`docs/incoming-call-contract.md`): the answer is then the same shape with `surface: "iphone_call"` and `listenSeconds: 0`, and the device does not have to be privately listening.
 
 | Status | `error` | Meaning |
 | --- | --- | --- |
@@ -167,6 +169,7 @@ On the iPhone, saying a message while another app is in front needs the Shannon 
 | `scope_key`, `initiative_id` | primary key: one holder per message |
 | `device_id` | the device that took it |
 | `surface` | `body` \| `mac` \| `iphone` |
+| `via` | nullable, added later: `call` for a claim the server took to ring the iPhone; such a claim is read as surface `iphone_call` |
 | `claimed_at` | |
 | `spoken_at` | nullable: set when the holder reported `shown_spoken`; from then on the claim is not given back |
 

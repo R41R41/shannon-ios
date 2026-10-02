@@ -187,6 +187,7 @@ What the body must do:
 - `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
 - After showing a message, or deciding not to, report what happened once: see [What the body did with her message](#what-the-body-did-with-her-message).
 - Added 2026-10-02, and nothing for the body to do: while one of the owner's apps is privately listening (his sound comes out of registered earphones or wired headphones), that app says her message through his earphones instead, and the message is then absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives. Exactly one surface says a message. A body that reports `away`, `hidden` or `muted` gives the message back so that such an app may still say it. See `docs/private-listening-contract.md`.
+- Added 2026-10-03, and nothing for the body to do: when neither such an app nor the body takes a message, and the owner switched it on, the server rings his iPhone with it (`docs/incoming-call-contract.md`). The body comes first: a body that read presence in the last 30 seconds is waited for, for up to 20 seconds, and a message the body shows is never rung with. A body that reports `away`, `hidden` or `muted` gives the message back and the phone may ring at once. A message the call holds is absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives.
 
 ### A second call (`follow_up`)
 

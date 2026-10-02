@@ -566,6 +566,16 @@ Contract: `docs/private-listening-contract.md` (`privateListeningContract.ts`, `
 - **What she observes.** As after any message: whether he wrote or spoke, in seconds, and the delivery, which for an app is the fixed line 「イヤホンからの知らせ: Macのイヤホンで、ライ氏にだけ聞こえる声で伝えた。」 (`ReachOutFacts.surface`, a closed value).
 - `SHANNON_PRIVATE_LISTENING=off` refuses every report; nobody then counts as privately listening. `SHANNON_PRIVATE_LISTENING_REACH_OUTS=off` keeps the state and stops the speaking, and her body is then told about every message as before.
 
+
+## A call from Shannon
+
+Contract: `docs/incoming-call-contract.md` (`incomingCallContract.ts`, `incomingCalls.ts`, `incomingCallStore.ts`, `incomingCallRoutes.ts`, `serverIncomingCallRoute.ts`, `voipPushSender.ts`). Owner decision 2026-10-03: she may start a voice conversation while the iPhone app is not running, which iOS allows only as an incoming call.
+
+- **A third surface.** A message she starts on her own is written as before. The order of surfaces is: an app that is privately listening and speaks; her body when it is there and shows the message; then, with 「シャノンからの着信を受ける」 switched on in the iPhone app (off until the owner turns it on), a call. The API process looks every two seconds for the newest fresh, unread message nobody holds, never within ten minutes of an owner turn and never for her second call, takes its claim as `iphone_call`, and sends one VoIP push (identifiers and an expiry, never her words). One row per message in `incoming_calls` makes a message ring at most once, also across a restart.
+- **The phone.** PushKit and CallKit are set up at every launch (`ShannonIncomingCalls`), and every VoIP push is reported as an incoming call from 「シャノン」 inside its callback, also one that is ended at once (expired, a duplicate, a conversation going on in the app). `ShannonIncomingCallMachine` is the call as a pure state machine: ringing, connecting, speaking, conversation. On answer the system activates the audio session; the app takes her words through the claim route (`callId`), says them with `ShannonEarphoneSpeaker`, and runs the ordinary voice conversation on her message's Talk. The conversation model and workspace are one pair for the app (`ShannonVoiceCallHost`), so a call from her and a call the owner started cannot both run, and standby steps aside for the length of the call.
+- **Outcomes.** `answered` (taking her words), `declined`, `unanswered`, `failed` (`POST /v1/incoming-calls/{callId}/report`; the server closes a ring nobody reported on as `unanswered`). Her loop reads the outcome as one closed value and is told one fixed line for it. Declined or not answered, the message stays the call's and stays text in the Talk; a call that could not ring gives the message back.
+- **Credentials and switches.** APNs token authentication with the key the ordinary notifications use (`SHANNON_APNS_KEY_ID`, `SHANNON_APNS_TEAM_ID`, `SHANNON_APNS_PRIVATE_KEY_FILE`), from the environment only and never logged; without them calls are unavailable and the settings row says so. `SHANNON_INCOMING_CALLS=off` is the kill switch.
+
 ## Calendar and upcoming items
 
 Contract: `docs/calendar-contract.md` (`calendarContract.ts`, `calendarRoutes.ts`, `upcomingStore.ts`, `ownerUpcoming.ts`, `ownerUpcomingWiring.ts`). Owner decision 2026-10-02.
