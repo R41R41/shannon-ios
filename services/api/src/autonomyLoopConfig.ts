@@ -85,7 +85,8 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     sessionsPerDay: integer(environment.SHANNON_AUTONOMY_SESSIONS_PER_DAY, 1, 48, 12),
     ...restBounds(environment),
     sessionThinkOutputTokens: clamped(environment.SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS, 1_500, 8_000, 4_000),
-    planReasoning: environment.SHANNON_AUTONOMY_PLAN_REASONING?.trim() === 'default' ? 'default' as const : 'low' as const,
+    // Unset or `low` asks for little reasoning; any other value leaves the field out, so a mistyped switch switches it off.
+    planReasoning: !environment.SHANNON_AUTONOMY_PLAN_REASONING?.trim() || environment.SHANNON_AUTONOMY_PLAN_REASONING.trim() === 'low' ? 'low' as const : 'default' as const,
     ownerContext: environment.SHANNON_AUTONOMY_OWNER_CONTEXT?.trim() !== 'off',
     ownerContextCharacters: integer(environment.SHANNON_AUTONOMY_OWNER_CONTEXT_CHARACTERS, 400, 8_000, 2_400),
   });

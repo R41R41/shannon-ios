@@ -368,7 +368,7 @@ function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: stri
 export function unpreparedCode(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'scopeKey'>, step: AutonomyPlannedStep): string {
   if (step.kind === 'draft' && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return 'draft.study_full';
   if (step.kind === 'read' && step.url && dependencies.store.loop.wasRead(cycle.scopeKey, step.url)) return 'read.already_read';
-  if (step.kind === 'note') return 'note.nothing_read';
+  if (step.kind === 'note' && !dependencies.store.loop.unnotedReadings(cycle.scopeKey).some(reading => reading.text)) return 'note.nothing_read';
   return `${step.kind === 'reach_out' && step.reason === 'follow_up' ? 'follow_up' : step.kind}.unavailable`;
 }
 

@@ -19,6 +19,8 @@ import { resolveAutonomyModel } from './autonomyTextModel.js';
  * With `SHANNON_AUTONOMY_PACING=cycles` no function here is reached and the loop is what it was.
  */
 export const REST_TOOL = 'study.rest';
+/** The rest after a second idle session in a row, at least: about ten idle sessions fit in a day. */
+export const IDLE_AGAIN_REST_MILLISECONDS = 150 * 60_000;
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 /** The session a cycle is, or null: under `cycles`, for a show cycle, and for a cycle begun before sessions were switched on. */
@@ -69,8 +71,10 @@ export function fitsSession(dependencies: Pick<StepDependencies, 'store' | 'loop
 }
 
 /** The rest she takes: what she asked for held inside the bounds, or the default. */
-export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, idle = false): number {
-  // A session in which nothing was done is followed by a short rest, not the long default.
+export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, idle: boolean | 'again' = false): number {
+  // A session in which nothing was done is followed by a short rest, not the long default; a second one in a row by a long
+  // rest whatever the default is set to, so idle sessions, which are not counted, stay few in a day.
+  if (idle === 'again') return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionDefaultRestMilliseconds, IDLE_AGAIN_REST_MILLISECONDS));
   if (idle) return Math.min(loop.sessionNoPlanRestMilliseconds, loop.sessionDefaultRestMilliseconds);
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return loop.sessionDefaultRestMilliseconds;
   return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionMinimumRestMilliseconds, Math.round(minutes) * 60_000));
@@ -125,7 +129,7 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
   const reason = forced ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
   // A session that did nothing but think ends as `idle`: a short rest the first time, the long default when the one before was idle too.
   const idle = forced === 'no_plan' && nothingDone(dependencies, cycle);
-  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, idle && !idleBefore(dependencies, cycle.scopeKey));
+  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, idle ? (idleBefore(dependencies, cycle.scopeKey) ? 'again' : true) : false);
   return {
     request: { domain: 'thinking', tool: REST_TOOL, summary: forced ? '上限に届いたので、ここで一区切りにします。' : 'ここで一区切りにして、休みます。' },
     async perform(_adapters, performAt) {

@@ -367,8 +367,8 @@ export class ShannonAutonomyLoop {
     try {
       idle = code === 'no_plan' && nothingDone(this.dependencies, cycle);
       again = idle && idleBefore(this.dependencies, cycle.scopeKey);
-    } catch { idle = false; }
-    const resumeAt = new Date(Date.parse(at) + restMilliseconds(this.dependencies.loop, undefined, idle && !again)).toISOString();
+    } catch { idle = false; again = false; }
+    const resumeAt = new Date(Date.parse(at) + restMilliseconds(this.dependencies.loop, undefined, again ? 'again' : idle)).toISOString();
     closeSession(this.dependencies, cycle, idle ? 'idle' : code, at, resumeAt);
     return 'cycle-ended';
   }

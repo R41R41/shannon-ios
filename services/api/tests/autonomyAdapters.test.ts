@@ -227,10 +227,24 @@ describe('model adapters for her own activity', () => {
     const limited = fakeFetch(() => new Response('{}', { status: 429 }));
     await expect(configuredAutonomyTextModel(environment, limited.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' })).rejects.toThrow('AUTONOMY_MODEL_HTTP_429');
     expect(limited.calls).toHaveLength(1);
-    // A request refused both with and without the field fails as before, after two requests.
-    const broken = fakeFetch(() => new Response('{}', { status: 400 }));
-    await expect(configuredAutonomyTextModel(environment, broken.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' })).rejects.toThrow('AUTONOMY_MODEL_HTTP_400');
+    // A request refused both with and without the field (too long, say) fails as before, and the field stays in use:
+    // nothing is remembered and nothing is logged, because the field was not the cause.
+    let oversized = true;
+    const broken = fakeFetch(() => (oversized ? new Response('{}', { status: 400 }) : ok()));
+    const brokenLines: string[] = [];
+    const again = configuredAutonomyTextModel(environment, broken.fetcher, line => brokenLines.push(line));
+    await expect(again.generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' })).rejects.toThrow('AUTONOMY_MODEL_HTTP_400');
     expect(broken.calls).toHaveLength(2);
+    oversized = false;
+    await again.generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' });
+    expect('thinkingConfig' in JSON.parse(broken.calls[2]!.init.body as string).generationConfig).toBe(true);
+    expect(brokenLines).toEqual([]);
+    // 422 is the same refusal, and OpenAI falls back the same way.
+    const unprocessable = fakeFetch((_url, init) => (JSON.parse(init.body as string).reasoning ? new Response('{}', { status: 422 })
+      : Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } })));
+    expect(await configuredAutonomyTextModel(environment, unprocessable.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 8, outputTokens: 2 } });
+    expect(unprocessable.calls).toHaveLength(2);
     // OpenAI: the field the conversation's own calls use.
     const openai = fakeFetch(() => Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } }));
     await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500, reasoning: 'low' });

@@ -67,18 +67,27 @@ const MODEL_ID = /^[A-Za-z0-9._-]{1,100}$/u;
 
 /**
  * Sends a request with the reasoning field when asked to, and once more without it when the provider refuses the
- * request as malformed (400 or 422): that field is the only thing the second request lacks. The model is remembered for
- * the life of the process, so the refused request is made once. A refused request generates nothing and costs nothing.
+ * request as malformed (400 or 422): that field is the only thing the second request lacks. When the second request is
+ * accepted the model is remembered for the life of the process, so the refused request is made once. A refused request
+ * generates nothing and costs nothing.
  */
 async function sendWithReasoning(
   refused: Set<string>, request: AutonomyTextRequest, provider: string, log: ProviderOptions['log'], send: (reasoning: boolean) => Promise<Response>,
 ): Promise<Response> {
   const reasoning = request.reasoning === 'low' && !refused.has(request.model);
   const response = await send(reasoning);
-  if (!reasoning || (response.status !== 400 && response.status !== 422)) return response;
-  refused.add(request.model);
-  try { log?.(`Shannon autonomy model: ${provider} ${request.model} refused the reasoning field; sending without it from now on`); } catch { /* the log is optional */ }
-  return send(false);
+  const malformed = (status: number) => status === 400 || status === 422;
+  if (!reasoning || !malformed(response.status)) return response;
+  // The refusal is not read: it may quote the request.
+  try { await response.body?.cancel(); } catch { /* nothing to release */ }
+  const second = await send(false);
+  // Only when the same request is accepted without the field was the field the cause. A request that is refused either
+  // way (too long, say) leaves the field in use.
+  if (!malformed(second.status)) {
+    refused.add(request.model);
+    try { log?.(`Shannon autonomy model: ${provider} ${request.model} refused the reasoning field; sending without it from now on`); } catch { /* the log is optional */ }
+  }
+  return second;
 }
 
 export class GeminiAutonomyTextModel {

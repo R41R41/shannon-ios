@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
+import { mayRetryThought } from '../src/autonomyLoopPacing.js';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
 import { salvagedModelObject } from '../src/autonomyLoopPrompts.js';
 import { createOwnerContext } from '../src/autonomyOwnerContext.js';
@@ -103,7 +104,6 @@ describe('a session: she runs until she decides to rest', () => {
   it('does not let sessions that did nothing use up the day, and does not come back every half hour when the cause stays', async () => {
     const { loop, model, store, advance, clock, service } = sessions({ loop: { sessionsPerDay: 2, maximumRethinksPerCycle: 0 } });
     const idle = async () => { model.plans = [{ thought: 'うーん。', steps: [] }]; return runUntilIdle(loop); };
-    const started = clock.at;
     // The first idle session: a short rest. The next one is idle too: the long default, so a cause that stays is met rarely.
     await idle();
     expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
@@ -125,9 +125,39 @@ describe('a session: she runs until she decides to rest', () => {
     advance(10 * MINUTE);
     await idle();
     expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
-    // In the worst case of a whole day of idle sessions she thinks about ten times, not thirty-six.
-    expect((24 * 60 - 30) / 150).toBeLessThan(10);
-    expect(Date.parse(clock.at)).toBeGreaterThan(Date.parse(started));
+  });
+
+  it('keeps a second idle session in a row far away also when the default rest is set short, and through the close without a step', async () => {
+    const { loop, model, store, advance, clock, service } = sessions({ loop: { maximumRethinksPerCycle: 0, sessionDefaultRestMilliseconds: 10 * MINUTE, sessionNoPlanRestMilliseconds: 10 * MINUTE } });
+    const idle = async () => { model.plans = [{ thought: 'うーん。', steps: [] }]; return runUntilIdle(loop); };
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(10 * MINUTE);
+    advance(10 * MINUTE);
+    // The closing step cannot be recorded this time: the session is closed without one, by the same rule.
+    const recordAction = service.recordAction.bind(service);
+    service.recordAction = (scopeKey, report) => { if (report.summary.includes('一区切り')) throw new Error('DISK'); return recordAction(scopeKey, report); };
+    model.plans = [{ thought: 'うーん。', steps: [] }];
+    for (let index = 0; index < 8 && (index === 0 || store.loop.openCycle(scope)); index += 1) await loop.tick();
+    expect(store.loop.openCycle(scope)).toBeNull();
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+  });
+
+  it('does not count a thought the gate refused among the thoughts in a row', async () => {
+    const { store, loopConfig } = sessions();
+    const cycle = store.loop.startCycle(scope, '2026-10-02', 'activity', [], '2026-10-02T01:00:00.000Z');
+    const think = (status: 'reported' | 'refused') => {
+      const row = store.loop.beginStep(store.loop.openCycle(scope)!, { kind: 'think' }, [], '2026-10-02T01:00:00.000Z');
+      store.loop.finishStep(row.id, status, '2026-10-02T01:00:00.000Z');
+    };
+    const dependencies = { store, loop: loopConfig };
+    think('reported'); think('reported');
+    expect(mayRetryThought(dependencies, cycle, 2)).toBe(true);
+    // A pause landed between the check and the gate: that thought was never had.
+    think('refused'); think('refused');
+    expect(mayRetryThought(dependencies, cycle, 4)).toBe(true);
+    think('reported');
+    expect(mayRetryThought(dependencies, cycle, 5)).toBe(false);
   });
 
   it('thinks again when a step fails, with what happened in front of her, and her new plan replaces the old one', async () => {
@@ -218,6 +248,7 @@ describe('a session: a thought that leads to no step', () => {
     const cycles = loopHarness();
     await runUntilIdle(cycles.loop);
     expect(cycles.model.calls.map(call => [call.reasoning, call.maximumOutputTokens])).toEqual([['low', 1_500]]);
+    expect(cycles.model.calls[0]!.system).toContain('rest（今回はここまで）');
     const plain = sessions({ loopEnvironment: { SHANNON_AUTONOMY_PLAN_REASONING: 'default' } });
     await runUntilIdle(plain.loop);
     expect('reasoning' in plain.model.calls[0]!).toBe(false);
@@ -852,7 +883,8 @@ describe('a session: what a day can cost', () => {
     for (const [value, tokens] of [['1000', 1_500], ['9000', 8_000], ['2500', 2_500], ['many', 4_000]] as const) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS: value }).sessionThinkOutputTokens, value).toBe(tokens);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600' }).sessionNoPlanRestMilliseconds).toBe(150 * MINUTE);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '60' }).sessionNoPlanRestMilliseconds).toBe(60 * MINUTE);
-    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: 'default' }).planReasoning).toBe('default');
+    for (const value of ['default', 'off', 'none', 'Low']) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: value }).planReasoning, value).toBe('default');
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: ' low ' }).planReasoning).toBe('low');
     // A default rest outside the bounds is held inside them.
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES: '30', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '5' }).sessionDefaultRestMilliseconds).toBe(30 * MINUTE);
   });
