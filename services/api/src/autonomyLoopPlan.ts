@@ -1,6 +1,8 @@
 import type { ShannonPursuit, ShannonPursuitStatus } from '@shannon/cognition';
 import { copyableStudyPiece } from './autonomyHostFolderPath.js';
 import { AUTONOMY_JOT_MAXIMUM_CHARACTERS } from './autonomyLoopObservePrompts.js';
+import { carriesSecret } from './autonomyLoopOwnerContext.js';
+import { AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS } from './autonomyLoopSessions.js';
 import type { AutonomyPlannedStep } from './autonomyLoopState.js';
 import { REACH_OUT_REASONS, type PromptNote, type PromptUpcoming, type ReachOutReason, type ThinkingMaterials } from './autonomyLoopPrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
@@ -91,29 +93,47 @@ export function planFromThought(
     chainLook?: boolean;
     /** She may write down what she thinks about it. */
     jot?: boolean;
+    /** In a session `rest` is a step of its own: it closes the session and says when she comes back. */
+    session?: boolean;
+    /**
+     * Words that must reach nobody but the owner, when her thinking was given his context. Free text of hers that repeats
+     * a run of them is dropped: an idea, an aim, a note, a search, a made-up address, a pursuit, her reason for resting.
+     */
+    secrets?: readonly string[];
   },
 ): Thought {
+  const own = (value: string | null): string | null => (value && carriesSecret(value, bounds.secrets) ? null : value);
   const pursuitIds = new Set(known.pursuits.map(item => item.id));
   const stories = new Map(known.pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away').map(piece => [piece.id, piece]));
   const steps: AutonomyPlannedStep[] = [];
   let reads = 0;
   let pendingReading = known.unnotedReadingIds.length;
   for (const raw of array(reply.steps)) {
-    if (steps.length >= bounds.maximumSteps) break;
+    const full = steps.length >= bounds.maximumSteps;
+    if (full && !bounds.session) break;
     const item = object(raw);
     const action = string(item?.action, 20);
     const pursuitId = string(item?.pursuitId, 80);
     const pursuit = pursuitId && pursuitIds.has(pursuitId) ? { pursuitId } : {};
     const pieceId = string(item?.pieceId, 80);
-    if (action === 'rest') break;
+    if (action === 'rest') {
+      // In a session her rest is the last step of the plan; whatever she wrote after it is dropped.
+      if (bounds.session) {
+        const minutes = Number(item?.resumeInMinutes);
+        const reason = own(string(item?.reason, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS));
+        steps.push({ kind: 'rest', ...(item?.resumeInMinutes != null && Number.isFinite(minutes) ? { minutes: Math.round(minutes) } : {}), ...(reason ? { intent: reason } : {}) });
+      }
+      break;
+    }
+    if (full) continue;
     if (action === 'read' || (action === 'notion' && bounds.notionAvailable)) {
       if (reads >= bounds.maximumReads) continue;
       if (action === 'read') {
         const url = publicUrl(string(item?.url, 2_000), known.placeUrls ?? []);
-        if (!url) continue;
+        if (!url || carriesSecret(readable(url), bounds.secrets)) continue;
         steps.push({ kind: 'read', url, ...pursuit });
       } else {
-        const query = string(item?.query, 200);
+        const query = own(string(item?.query, 200));
         if (!query) continue;
         steps.push({ kind: 'notion', query, ...pursuit });
       }
@@ -125,9 +145,9 @@ export function planFromThought(
       steps.push({ kind: 'note', ...(readingId && known.unnotedReadingIds.includes(readingId) ? { readingId } : {}) });
       pendingReading -= 1;
     } else if (action === 'draft') {
-      steps.push({ kind: 'draft', intent: string(item?.idea, 300) ?? '', ...pursuit });
+      steps.push({ kind: 'draft', intent: own(string(item?.idea, 300)) ?? '', ...pursuit });
     } else if (action === 'revise' && pieceId && stories.has(pieceId)) {
-      steps.push({ kind: 'revise', pieceId, intent: string(item?.aim, 300) ?? '' });
+      steps.push({ kind: 'revise', pieceId, intent: own(string(item?.aim, 300)) ?? '' });
     } else if (action === 'ready' && pieceId && stories.get(pieceId)?.status === 'draft') {
       steps.push({ kind: 'show', pieceId });
     } else if (action === 'put_away' && pieceId && stories.has(pieceId)) {
@@ -143,7 +163,7 @@ export function planFromThought(
       // The one second call after the message that got no answer: nothing of the reply but the action survives.
       steps.push({ kind: 'reach_out', reason: 'follow_up', originId: bounds.followUp.originId });
     } else if (action === 'jot' && bounds.jot && !steps.some(step => step.kind === 'jot')) {
-      const text = string(item?.text, AUTONOMY_JOT_MAXIMUM_CHARACTERS);
+      const text = own(string(item?.text, AUTONOMY_JOT_MAXIMUM_CHARACTERS));
       if (text) steps.push({ kind: 'jot', intent: text });
     } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
       // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
@@ -156,9 +176,9 @@ export function planFromThought(
   for (const raw of array(reply.pursuits)) {
     if (pursuits.length >= 2) break;
     const item = object(raw);
-    const why = string(item?.why, 400);
+    const why = own(string(item?.why, 400));
     if (item?.op === 'add' && (item.kind === 'question' || item.kind === 'work')) {
-      const title = string(item.title, 120);
+      const title = own(string(item.title, 120));
       if (title && why) pursuits.push({ op: 'add', kind: item.kind, title, why });
     } else if (item?.op === 'update') {
       const id = string(item.id, 80);
@@ -193,6 +213,11 @@ function publicUrl(value: string | null, shown: readonly string[]): string | nul
   } catch {
     return null;
   }
+}
+
+/** An address as words, so text hidden in its path is seen. */
+function readable(url: string): string {
+  try { return decodeURIComponent(url); } catch { return url; }
 }
 
 function array(value: unknown): readonly unknown[] {

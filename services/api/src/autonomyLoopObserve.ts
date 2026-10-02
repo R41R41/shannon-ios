@@ -1,6 +1,7 @@
 import { autonomyDayKey } from './autonomyBudget.js';
 import { reachOutWait } from './autonomyLoopConfig.js';
 import type { ObservedReachOutReason, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
+import { sessionOf } from './autonomyLoopPacing.js';
 import type { AutonomyLoopCycle, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
 
@@ -19,6 +20,10 @@ import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
  *
  * `SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0` switches all of it off: no wait, no observation, no
  * second thinking step, and every prompt is what it was. This file names interfaces only.
+ *
+ * In a session (`autonomyLoopPacing.ts`) a step's outcome is kept as an observation whatever that switch says,
+ * because thinking again is how a session goes on, and a session thinks again as long as it has steps left
+ * instead of a fixed number of times. The wait after a message and the second call stay behind the switch.
  */
 export interface AutonomyReachOutObserver {
   /** What her body reported about this message, or null while none has. */
@@ -117,6 +122,7 @@ export function thinkingSteps(dependencies: StepDependencies, cycleId: string): 
 /** Whether this cycle may think once more: the mechanism is on, a thinking step is left, and so is room for a step after it. */
 export function mayThinkAgain(dependencies: StepDependencies, cycle: AutonomyLoopCycle, stepsTaken: number): boolean {
   const { loop } = dependencies;
+  if (sessionOf(dependencies, cycle)) return loop.maximumStepsPerSession - stepsTaken >= 2;
   return agenticLoop(dependencies) && cycle.kind === 'activity' && loop.maximumRethinksPerCycle > 0
     && loop.maximumStepsPerCycle - stepsTaken >= 2
     && thinkingSteps(dependencies, cycle.id) < 1 + loop.maximumRethinksPerCycle;
@@ -142,7 +148,8 @@ export function observeStep(
   outcome: { outcome: 'done' | 'failed' | 'refused'; code?: string; observed?: StepResult['observed'] },
   remaining: readonly AutonomyPlannedStep[], at: string,
 ): AutonomyPlannedStep[] | null {
-  if (!agenticLoop(dependencies) || cycle.kind !== 'activity' || row.step.kind === 'think') return null;
+  if (cycle.kind !== 'activity' || row.step.kind === 'think' || row.step.kind === 'rest') return null;
+  if (!agenticLoop(dependencies) && !sessionOf(dependencies, cycle)) return null;
   const observation = {
     cycleId: cycle.id, ordinal: row.ordinal, step: row.step.kind, outcome: outcome.outcome,
     ...(outcome.code ? { code: outcome.code } : {}), ...(row.step.chain ? { chain: true } : {}),

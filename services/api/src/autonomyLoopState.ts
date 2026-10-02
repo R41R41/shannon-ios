@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AutonomyLoopObservations, type ObservedReachOutReason } from './autonomyLoopObservations.js';
+import { AutonomyLoopSessions, type SessionEndCode } from './autonomyLoopSessions.js';
 
 /**
  * Durable state of the activity loop (Syzygy ADR-0002 step 3): the single-runner
@@ -12,7 +13,7 @@ import { AutonomyLoopObservations, type ObservedReachOutReason } from './autonom
  * the same transaction that writes its activity-record entry and its cost. A step a
  * crash left `planned` or `authorized` is closed as `abandoned` and never run again.
  */
-export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out' | 'jot';
+export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out' | 'jot' | 'rest';
 export type AutonomyStepStatus = 'planned' | 'authorized' | 'reported' | 'refused' | 'abandoned';
 /** What the loop process last said about itself; the API reads it to describe the loop to the owner. */
 export type AutonomyLoopReadiness = 'ready' | 'disabled' | 'no_credential';
@@ -35,6 +36,10 @@ export interface AutonomyPlannedStep {
   again?: true;
   /** For `look`: chosen after a message of hers got no answer; she thinks once more with what she saw. */
   chain?: true;
+  /** For `rest`: in how many minutes she means to come back. The step holds it inside the bounds; `intent` is her reason. */
+  minutes?: number;
+  /** For `rest`: the bound that ended the session, when it was not her own decision. */
+  forced?: Exclude<SessionEndCode, 'rest'>;
 }
 
 export interface AutonomyLoopCycle {
@@ -85,6 +90,8 @@ const LEASE_NAME = 'activity-loop';
 export class AutonomyLoopState {
   /** What her steps led to, as facts (`autonomyLoopObservations.ts`). */
   readonly observations: AutonomyLoopObservations;
+  /** Her sessions: when each began, why it ended, and when she comes back (`autonomyLoopSessions.ts`). */
+  readonly sessions: AutonomyLoopSessions;
 
   constructor(private readonly database: DatabaseSync) {
     this.observations = new AutonomyLoopObservations(database);
@@ -141,6 +148,7 @@ export class AutonomyLoopState {
       );
       CREATE INDEX IF NOT EXISTS autonomy_loop_readings_scope ON autonomy_loop_readings (scope_key, fetched_at DESC);
     `);
+    this.sessions = new AutonomyLoopSessions(database);
   }
 
   // MARK: Lease

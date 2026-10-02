@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { autonomyDayKey } from './autonomyBudget.js';
 import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
+import { closeSession, fitsSession, ownerTalking, sessionBound, sessionOf, startSessionIfDue } from './autonomyLoopPacing.js';
 import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
+import type { AutonomySession, SessionEndCode } from './autonomyLoopSessions.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { adaptersFor, prepareStep, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
@@ -20,6 +22,10 @@ import { resolveAutonomyModel } from './autonomyTextModel.js';
  * A step's outcome is kept as an observation, and one that could change her plan puts a thinking step
  * at the front of the plan, a bounded number of times per cycle (`autonomyLoopObserve.ts`; owner decision
  * 2026-10-02). That thinking step is a step like any other: journalled, asked of the gate, counted.
+ *
+ * Her day is paced in sessions (owner decision 2026-10-02, ADR-0003; `autonomyLoopPacing.ts`): a cycle that goes on, thinking
+ * again whenever its plan is done, until she rests or a bound stops it, and that stands still while the owner talks.
+ * `SHANNON_AUTONOMY_PACING=cycles` restores the fixed cycles: no session is opened and nothing below takes a session's path.
  *
  * It runs in its own process, apart from the API, so chat and voice never wait for it.
  * A single lease in SQLite lets exactly one runner step; a second runner idles. The
@@ -69,17 +75,27 @@ export class ShannonAutonomyLoop {
     const readiness = this.readiness();
     const leaseUntil = new Date(Date.parse(at) + loop.leaseMilliseconds).toISOString();
     if (!store.loop.acquireLease(this.workerId, at, leaseUntil, readiness)) return 'not-leader';
-    if (readiness === 'disabled') return 'disabled';
-    if (readiness === 'no_credential') return 'not-configured';
+    if (readiness === 'disabled') return this.standingStill('disabled', at);
+    if (readiness === 'no_credential') return this.standingStill('not-configured', at);
     // A stop switch that cannot be read counts as on, as in the gate.
     let paused = true;
     try { paused = store.control(this.scopeKey).paused; } catch { paused = true; }
-    if (paused) return 'paused';
+    if (paused) return this.standingStill('paused', at);
     this.closeInterruptedSteps(at);
     // A file handed to a device that never reported back is closed as failed, also when that device stays away.
     try { this.dependencies.service.folder.closeOverdue(this.scopeKey, at); } catch { /* the next claim or tick closes it */ }
     const cycle = store.loop.openCycle(this.scopeKey) ?? this.startCycleIfDue(at);
     return typeof cycle === 'string' ? cycle : this.advance(cycle, at, signal);
+  }
+
+  /** While she may not act, an open session stands still: that time does not count against its clock. Under `cycles` nothing is read or written. */
+  private standingStill<T extends AutonomyLoopTick>(tick: T, at: string): T {
+    if (this.dependencies.loop.pacing !== 'sessions') return tick;
+    try {
+      const open = this.dependencies.store.loop.openCycle(this.scopeKey);
+      if (open) this.dependencies.store.loop.sessions.hold(open.id, at);
+    } catch { /* the clock keeps running; the session only ends sooner */ }
+    return tick;
   }
 
   /** Lets another runner take over at once; called when this process stops. */
@@ -95,6 +111,7 @@ export class ShannonAutonomyLoop {
     if (untold && showing.mayMessageNow(this.scopeKey, at) === 'ok') {
       return store.loop.startCycle(this.scopeKey, dayKey, 'show', [{ kind: 'show', pieceId: untold.id }], at);
     }
+    if (loop.pacing === 'sessions') return startSessionIfDue(this.dependencies, this.scopeKey, at);
     const next = store.loop.nextCycleAt(this.scopeKey);
     if (next && Date.parse(at) < Date.parse(next)) return 'idle';
     if (store.loop.activityCyclesOn(this.scopeKey, dayKey) >= loop.cyclesPerDay) return 'idle';
@@ -114,12 +131,43 @@ export class ShannonAutonomyLoop {
     const plan = [...cycle.plan];
     let step: AutonomyPlannedStep | undefined;
     let prepared: PreparedStep | null = null;
+    let session = sessionOf(this.dependencies, cycle);
+    let stop: Exclude<SessionEndCode, 'rest'> | null = null;
+    if (session) {
+      // He started talking: she stands back at once, before the next step, and her plan waits as it is.
+      if (ownerTalking(this.dependencies, this.scopeKey, at)) {
+        store.loop.sessions.hold(cycle.id, at);
+        return 'owner-active';
+      }
+      if (session.heldAt) {
+        store.loop.sessions.release(cycle.id, at);
+        session = store.loop.sessions.get(cycle.id) ?? session;
+      }
+      stop = sessionBound(this.dependencies, cycle, session, at);
+    }
     // The next step that can be carried out; one that cannot (nothing to note, an unknown piece) is dropped unasked.
     while (!prepared) {
-      if (cycle.stepsTaken >= loop.maximumStepsPerCycle) return this.endCycle(cycle, 'step-limit', at);
-      step = plan.shift() ?? (cycle.kind === 'activity' && !cycle.thought ? { kind: 'think' } : undefined);
-      if (!step) return this.endCycle(cycle, 'plan-done', at);
+      if (session) {
+        const next = this.nextSessionStep(cycle, plan, stop);
+        // The session could not be closed by a step of its own: it is closed here, so it can never go on unbounded.
+        if (!next) return this.endSession(cycle, stop ?? 'no_plan', at);
+        step = next;
+      } else {
+        if (cycle.stepsTaken >= loop.maximumStepsPerCycle) return this.endCycle(cycle, 'step-limit', at);
+        step = plan.shift() ?? (cycle.kind === 'activity' && !cycle.thought ? { kind: 'think' } : undefined);
+        if (!step) return this.endCycle(cycle, 'plan-done', at);
+      }
       prepared = prepareStep(this.dependencies, cycle, step, at);
+      if (session) {
+        if (!prepared && step.kind === 'rest') return this.endSession(cycle, step.forced ?? 'rest', at);
+        // Without a thought there is no next step, and a paid step that does not fit what one session may spend ends it.
+        if (!prepared && step.kind === 'think') stop = 'no_plan';
+        if (prepared?.request.paid && !fitsSession(this.dependencies, cycle, prepared.request.paid.estimatedCostYen)) {
+          stop = 'session_budget';
+          prepared = null;
+        }
+        continue;
+      }
       // Without a model there is no first thought and no cycle; a second thought that cannot be had is simply skipped.
       if (!prepared && step.kind === 'think' && !step.again) return this.endCycle(cycle, 'no-model', at);
     }
@@ -146,7 +194,33 @@ export class ShannonAutonomyLoop {
       result = { outcome: 'failed', summary: '一歩の途中で、うまくいかなくなりました。' };
     }
     this.report(cycle, begun.row, begun.decision, ready, result, plan, now());
-    return 'stepped';
+    // Her rest, or the one a bound put in her plan, has closed the session.
+    return current.kind === 'rest' && !store.loop.openCycle(this.scopeKey) ? 'cycle-ended' : 'stepped';
+  }
+
+  /**
+   * The next step of a session, or null when the session must be closed without one. A bound that stopped it, or a plan
+   * that ran out with nothing decided, becomes a `rest` step, so the reason is asked of the gate and recorded like her own.
+   * Past the step limit there is room for that closing step and its retries only.
+   */
+  private nextSessionStep(cycle: AutonomyLoopCycle, plan: AutonomyPlannedStep[], stop: Exclude<SessionEndCode, 'rest'> | null): AutonomyPlannedStep | null {
+    const { store, loop } = this.dependencies;
+    if (cycle.stepsTaken >= loop.maximumStepsPerSession + SESSION_CLOSING_STEPS) return null;
+    if (stop) {
+      // She had already decided to rest next: her own reason and time stand.
+      const own = plan[0]?.kind === 'rest' ? plan[0] : null;
+      plan.length = 0;
+      return own ?? { kind: 'rest', forced: stop };
+    }
+    const planned = plan.shift();
+    if (planned) return planned;
+    if (!cycle.thought) return { kind: 'think' };
+    const done = store.loop.steps(cycle.id);
+    const last = done.at(-1)?.step;
+    // A thought that led to no step ends the session; a rest that could not be carried out is tried once more.
+    if (!last || last.kind === 'think') return { kind: 'rest', forced: 'no_plan' };
+    if (last.kind === 'rest') return done.at(-2)?.step.kind === 'rest' ? null : last;
+    return { kind: 'think', again: true };
   }
 
   /** The product, the record entry with its actual cost, and the journal close commit together. */
@@ -201,7 +275,8 @@ export class ShannonAutonomyLoop {
     if (decision.reason === 'budget_exhausted') {
       const budget = service.overview(this.scopeKey).budget;
       store.loop.noteBudgetBlocked(this.scopeKey, autonomyDayKey(at, config), budget.capYen, at);
-      this.endCycle(cycle, 'budget', at);
+      if (this.session(cycle)) this.endSession(cycle, 'budget', at);
+      else this.endCycle(cycle, 'budget', at);
       if (prepared.budgetReason) this.askForBudget(prepared.budgetReason, at);
       return 'budget';
     }
@@ -271,4 +346,18 @@ export class ShannonAutonomyLoop {
     this.dependencies.store.loop.endCycle(cycle.id, reason, at);
     return 'cycle-ended';
   }
+
+  private session(cycle: AutonomyLoopCycle): AutonomySession | null {
+    try { return sessionOf(this.dependencies, cycle); } catch { return null; }
+  }
+
+  /** Ends a session without a closing step of its own, and sets the next one a default rest away. */
+  private endSession(cycle: AutonomyLoopCycle, code: SessionEndCode, at: string): AutonomyLoopTick {
+    const resumeAt = new Date(Date.parse(at) + this.dependencies.loop.sessionDefaultRestMilliseconds).toISOString();
+    closeSession(this.dependencies, cycle, code, at, resumeAt);
+    return 'cycle-ended';
+  }
 }
+
+/** Steps past the limit of a session that only its closing `rest` may take. */
+const SESSION_CLOSING_STEPS = 3;

@@ -86,7 +86,12 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
     .filter(piece => piece.kind === 'note' && piece.origin === 'room_look' && piece.status !== 'put_away' && piece.createdAt >= cycle.startedAt)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]?.body : undefined;
   if ((reason === 'share' && !notes.length && !stories.length) || (reason === 'upcoming' && !items.length) || (reason === 'saw' && !seen)) return null;
-  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others });
+  // What she knows of him, without anything that must reach nobody else: her words may be seen or heard beyond him.
+  let owned: string | null = null;
+  try {
+    owned = dependencies.loop.ownerContext ? dependencies.ownerContext?.forMessage(cycle.scopeKey, at, notes.map(note => note.title).join(' '), others !== null)?.section ?? null : null;
+  } catch { owned = null; }
+  const prompt = reachOutPrompt({ reason, localTime: localTime(at, config.timeZone), notes, stories, upcoming: items, ...(seen ? { seen } : {}), others, ...(owned ? { ownerContext: owned } : {}) });
   const model = resolveAutonomyModel('prose', store.modelPreferences(cycle.scopeKey), id => dependencies.model.canUse(id));
   if (!model) return null;
   const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: OUTPUT_TOKENS };

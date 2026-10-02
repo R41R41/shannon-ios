@@ -26,6 +26,8 @@ const STEP_WORDING: readonly { tool: string; code?: string; stem: (count: number
   { tool: 'owner.reach_out', code: 'no_reply', stem: count => `返事のないまま${count}回待ち`, plain: count => `話しかけて待ったが返事がなかった（${count}回）` },
   { tool: 'owner.reach_out_follow_up', stem: count => `もう一度${count}回声をかけ`, plain: count => `返事がないのでもう一度声をかけた（${count}回）` },
   { tool: 'study.jot', stem: count => `思ったことを${count}つ書き留め`, plain: count => `思ったことを${count}つ書き留めた` },
+  // The closing step of a session (`autonomyLoopPacing.ts`); never recorded under the fixed cycles.
+  { tool: 'study.rest', stem: count => `${count}回ひと区切りにし`, plain: count => `${count}回ひと区切りにして休んだ` },
 ];
 
 function stepCounts(entries: readonly LoggedEntry[]): { wording: (typeof STEP_WORDING)[number]; count: number }[] {

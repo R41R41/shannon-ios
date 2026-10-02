@@ -22,6 +22,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyLoopPlan.ts',
     // The words for what her steps led to, and the prompt of the one second call after an unanswered message.
     'services/api/src/autonomyLoopObservePrompts.ts',
+    // The words for her sessions and the facts of her budget; what she may see of the owner's and the output rule that goes with it.
+    'services/api/src/autonomyLoopSessionPrompts.ts',
+    'services/api/src/autonomyLoopOwnerContext.ts',
   ]),
   persona: Object.freeze([
     'packages/cognition/src/persona.ts',
@@ -147,6 +150,10 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyLoopFollowUpStep.ts',
     'services/api/src/autonomyLoopCalls.ts',
     'services/api/src/reachOutReports.ts',
+    // She paces her own day: when a session may begin, what stops it, when the next begins, and what the owner is shown of it.
+    'services/api/src/autonomyLoopPacing.ts',
+    'services/api/src/autonomyLoopSessions.ts',
+    'services/api/src/autonomySessionView.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',

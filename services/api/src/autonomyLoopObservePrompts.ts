@@ -51,13 +51,14 @@ const DELIVERY_MEMORY: Readonly<Record<ReachOutDeliveryOutcome, string>> = Objec
 const STEP_PLAN_LABEL: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
   think: '考える', read: '公開ページを読む', notion: 'Notionのページを読む', note: '読んだもののメモを書く', draft: '物語を書く', revise: '物語を直す',
   show: '物語を見せる', put_away: '下書きをしまう', copy: '写しをフォルダに置く', look: '部屋を見る', reach_out: '話しかける', jot: '思ったことを書き留める',
+  rest: '一区切りにして休む',
 });
 
 const STEP_DONE: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
   think: '次にすることを考えた。', read: '公開ページを1つ読んだ。', notion: 'Notionのページを1つ読んだ。', note: '読んだもののメモを1つ書いた。',
   draft: '物語の下書きを1つ書いた。', revise: '物語を直した。', show: '物語を「見せてもいい」にした。', put_away: '下書きを1つしまった。',
   copy: '写しを1つ、自分のフォルダに置く用意をした。', look: '体のカメラで部屋を一度見た。見たことは書斎のメモ「見たこと」にある。',
-  reach_out: `${SHANNON_OWNER_NAME}に話しかけた。`, jot: '思ったことを書斎に書き留めた。',
+  reach_out: `${SHANNON_OWNER_NAME}に話しかけた。`, jot: '思ったことを書斎に書き留めた。', rest: '一区切りにして休んだ。',
 });
 
 const STEP_NOT_DONE: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
@@ -65,6 +66,7 @@ const STEP_NOT_DONE: Readonly<Record<ObservedStepKind, string>> = Object.freeze(
   note: 'メモを書こうとしたが、形にならなかった', draft: '物語を書こうとしたが、下書きにならなかった', revise: '物語を直そうとしたが、次の稿にならなかった',
   show: '物語を見せようとしたが、できなかった', put_away: '下書きをしまおうとしたが、できなかった', copy: '写しを置こうとしたが、できなかった',
   look: '部屋を見ようとしたが、見られなかった', reach_out: `${SHANNON_OWNER_NAME}に話しかけようとしたが、話しかけなかった`, jot: '書き留めようとしたが、できなかった',
+  rest: '一区切りにしようとしたが、できなかった',
 });
 
 /** Why a step did not happen, for the codes the steps and the gate use. A code not listed here is shown as it is. */

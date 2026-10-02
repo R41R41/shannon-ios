@@ -26,6 +26,7 @@ import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
+import { autonomySessionView, type AutonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
 import { StudyDesk } from './studyDesk.js';
 
@@ -67,6 +68,8 @@ export interface AutonomyOverview {
   control: { state: AutonomyControlLabel; enabled: boolean; paused: boolean; changedAt: string | null };
   /** What the activity loop is doing, in the words the owner's screens show. */
   loop: AutonomyLoopStatus;
+  /** Her session or her rest (`autonomySessionView.ts`); absent under the fixed cycles and before her first session. */
+  session?: AutonomySessionView;
   budget: AutonomyBudgetStatus;
   budgetRequest: AutonomyBudgetRequest | null;
   maximumExtraYen: number;
@@ -311,12 +314,14 @@ export class ShannonAutonomyService {
     const control = this.store.control(scopeKey);
     const proposals = this.store.proposals.list(scopeKey);
     const budget = this.budget(scopeKey, dayKey);
+    const session = autonomySessionView(this.store.loop, scopeKey, at, this.config.timeZone);
     return Object.freeze({
       control: {
         state: !this.config.enabled ? 'disabled' as const : control.paused ? 'paused' as const : 'active' as const,
         enabled: this.config.enabled, paused: control.paused, changedAt: control.changedAt,
       },
       loop: this.loopStatus(scopeKey, at, control.paused, budget),
+      ...(session ? { session } : {}),
       budget,
       budgetRequest: this.store.budgetRequest(scopeKey, dayKey),
       maximumExtraYen: this.config.maximumExtraYenPerDay,

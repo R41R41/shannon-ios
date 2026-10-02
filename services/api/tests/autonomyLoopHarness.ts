@@ -3,6 +3,7 @@ import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.
 import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import type { AutonomyReachOutObserver } from '../src/autonomyLoopObserve.js';
+import type { AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
@@ -119,6 +120,15 @@ export interface LoopHarnessOptions {
   observer?: AutonomyReachOutObserver;
   /** Runs at every pause of a step that waits, after the clock moved. */
   onWait?: (at: string) => void | Promise<void>;
+  /**
+   * She paces her own day in sessions. Off unless asked for, so every test written before sessions runs the loop with
+   * `SHANNON_AUTONOMY_PACING=cycles`, the kill switch that restores the fixed cycles.
+   */
+  sessions?: boolean;
+  /** The owner's context for her thinking and her messages; absent, as with `SHANNON_AUTONOMY_OWNER_CONTEXT=off`, no prompt carries it. */
+  ownerContext?: AutonomyOwnerContext;
+  /** Environment of the loop's own configuration (`configuredAutonomyLoop`). */
+  loopEnvironment?: Record<string, string>;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -129,7 +139,9 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     SHANNON_AUTONOMY_ENABLED: options.enabled === false ? 'false' : 'true', ...(options.agentic ? {} : { SHANNON_AUTONOMY_MAX_FOLLOW_UPS: '0' }),
     ...options.environment,
   });
-  const loopConfig: AutonomyLoopConfig = { ...configuredAutonomyLoop({}), ...options.loop };
+  const loopConfig: AutonomyLoopConfig = {
+    ...configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: options.sessions ? 'sessions' : 'cycles', ...options.loopEnvironment }), ...options.loop,
+  };
   const now = () => clock.at;
   const reachOuts = options.reachOuts;
   const service = new ShannonAutonomyService({
@@ -152,6 +164,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.observer ? { observer: options.observer } : {}),
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}),
+    ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

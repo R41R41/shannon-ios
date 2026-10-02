@@ -18,7 +18,7 @@ export type ReachOutDeliveryOutcome = BodyReachOutDeliveryOutcome;
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];
 
-export const OBSERVED_STEP_KINDS = ['think', 'read', 'notion', 'note', 'draft', 'revise', 'show', 'put_away', 'copy', 'look', 'reach_out', 'jot'] as const;
+export const OBSERVED_STEP_KINDS = ['think', 'read', 'notion', 'note', 'draft', 'revise', 'show', 'put_away', 'copy', 'look', 'reach_out', 'jot', 'rest'] as const;
 export type ObservedStepKind = typeof OBSERVED_STEP_KINDS[number];
 
 /** What followed one message of hers. */

@@ -8,6 +8,8 @@ import { ROOM_LOOK_DOMAIN, prepareRoomLook, type AutonomyRoomLooks } from './aut
 import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
 import type { ReachOutFacts } from './autonomyLoopObservations.js';
 import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';
+import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
+import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
 import { prepareReachOut, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
 import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
@@ -56,6 +58,8 @@ export interface StepDependencies {
   upcoming?: AutonomyUpcoming;
   /** What her body reported about a message of hers and what the server knows of the body; absent, both are unknown. */
   observer?: AutonomyReachOutObserver;
+  /** The owner's context for her thinking and her messages (owner decision 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
+  ownerContext?: AutonomyOwnerContext;
   /** The loop's clock, read while a step waits. */
   now?: () => string;
   /** Renews the runner's lease and heartbeat while a step waits; false once the lease is lost. */
@@ -138,6 +142,7 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'look': return prepareRoomLook(dependencies, cycle, at);
     case 'reach_out': return step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
     case 'jot': return prepareJot(dependencies, cycle, step, at);
+    case 'rest': return prepareRest(dependencies, cycle, step);
     default: return null;
   }
 }
@@ -237,9 +242,11 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
 
 function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
   const { store } = dependencies;
+  // In a session she is told when her study has no room for another story, and a draft that could not be kept is not paid for.
+  if (sessionOf(dependencies, cycle) && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return null;
   const pursuit = step.pursuitId ? store.pursuits.get(cycle.scopeKey, step.pursuitId) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', draftPrompt({
-    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5),
+    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5), ...ownerInformed(dependencies),
   }), OUTPUT_TOKENS.draft);
   if (!call) return null;
   return {
@@ -275,7 +282,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({
     aim: step.intent ?? '', piece: { title: piece.title, body: piece.body, version: piece.version },
     feedback: feedback.map(item => ({ reactionLabel: STUDY_REACTION_LABEL[item.reaction], comment: item.comment, version: item.version })),
-    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3),
+    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3), ...ownerInformed(dependencies),
   }), OUTPUT_TOKENS.revise);
   if (!call) return null;
   const seen = piece.readableVersion !== null;
@@ -339,6 +346,16 @@ function preparePutAway(dependencies: StepDependencies, cycle: AutonomyLoopCycle
       };
     },
   };
+}
+
+/** While her thinking is given the owner's context, an idea, an aim or a pursuit may come from it: the story prompts then carry the output rule. */
+function ownerInformed(dependencies: StepDependencies): { ownerInformed?: true } {
+  return dependencies.loop.ownerContext && dependencies.ownerContext ? { ownerInformed: true } : {};
+}
+
+/** Stories that are open in her study: drafts and those she called 「見せてもいい」. */
+export function openStories(dependencies: Pick<StepDependencies, 'store'>, scopeKey: string): number {
+  return dependencies.store.study.list(scopeKey).filter(piece => piece.kind === 'story' && (piece.status === 'draft' || piece.status === 'ready')).length;
 }
 
 function waitingReason(outcome: ShowingOutcome): string {

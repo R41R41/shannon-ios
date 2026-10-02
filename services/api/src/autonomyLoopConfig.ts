@@ -28,6 +28,27 @@ export interface AutonomyLoopConfig {
   budgetRequestYen: number;
   /** Places to start reading from, besides links she found herself. */
   readingSeeds: readonly { title: string; url: string }[];
+  /**
+   * How her day is paced (owner decision 2026-10-02, Syzygy ADR-0003). `sessions`: she runs until she decides to rest and
+   * says when she comes back, inside the bounds below. `cycles`: the fixed cycles above, exactly as before sessions existed.
+   */
+  pacing: 'sessions' | 'cycles';
+  /** What one session may spend, estimates included, before it is stopped. */
+  sessionMaximumYen: number;
+  /** How long one session may run, not counting the time it stood still for the owner. */
+  sessionMaximumMilliseconds: number;
+  /** Steps in one session, thinking steps included: the hard stop if she never rests. */
+  maximumStepsPerSession: number;
+  /** Sessions she may start in one owner-local day. */
+  sessionsPerDay: number;
+  /** The shortest and the longest rest she may choose, and the rest taken when she names none or a bound stopped her. */
+  sessionMinimumRestMilliseconds: number;
+  sessionMaximumRestMilliseconds: number;
+  sessionDefaultRestMilliseconds: number;
+  /** Her thinking may draw on the owner's context through the conversation's memory entry points (owner decision 2026-10-02). */
+  ownerContext: boolean;
+  /** Characters of that context in a thinking prompt; a message of hers gets half. */
+  ownerContextCharacters: number;
 }
 
 const DEFAULT_READING_SEEDS = Object.freeze([
@@ -51,7 +72,23 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     leaseMilliseconds: integer(environment.SHANNON_AUTONOMY_LEASE_SECONDS, 240, 3_600, 600) * 1_000,
     budgetRequestYen: integer(environment.SHANNON_AUTONOMY_BUDGET_REQUEST_YEN, 1, 100_000, 300),
     readingSeeds: readingSeeds(environment.SHANNON_AUTONOMY_READING_SEEDS_JSON),
+    pacing: environment.SHANNON_AUTONOMY_PACING?.trim() === 'cycles' ? 'cycles' as const : 'sessions' as const,
+    sessionMaximumYen: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_YEN, 1, 100_000, 400),
+    sessionMaximumMilliseconds: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_MINUTES, 1, 240, 40) * 60_000,
+    maximumStepsPerSession: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_STEPS, 2, 200, 40),
+    sessionsPerDay: integer(environment.SHANNON_AUTONOMY_SESSIONS_PER_DAY, 1, 48, 12),
+    ...restBounds(environment),
+    ownerContext: environment.SHANNON_AUTONOMY_OWNER_CONTEXT?.trim() !== 'off',
+    ownerContextCharacters: integer(environment.SHANNON_AUTONOMY_OWNER_CONTEXT_CHARACTERS, 400, 8_000, 2_400),
   });
+}
+
+/** The rests she may take between sessions: the shortest is never under ten minutes' default, and the default lies between the two. */
+function restBounds(environment: Readonly<Record<string, string | undefined>>): Pick<AutonomyLoopConfig, 'sessionMinimumRestMilliseconds' | 'sessionMaximumRestMilliseconds' | 'sessionDefaultRestMilliseconds'> {
+  const minimum = integer(environment.SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES, 1, 720, 10);
+  const maximum = Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_MAX_REST_MINUTES, 1, 24 * 60, 720));
+  const fallback = Math.min(maximum, Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES, 1, 24 * 60, 150)));
+  return { sessionMinimumRestMilliseconds: minimum * 60_000, sessionMaximumRestMilliseconds: maximum * 60_000, sessionDefaultRestMilliseconds: fallback * 60_000 };
 }
 
 /**
