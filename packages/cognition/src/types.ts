@@ -63,6 +63,8 @@ export interface ShannonExpressiveEmotion {
    * Absent on a feeling of the same kind as the present one, the reducer stores nothing: raising a feeling needs the explicit `false`.
    */
   continued?: boolean;
+  /** Only on a reading whose feeling is what she owes the owner (concern, apology, an override): the strongest feeling it is covering. Never stored. */
+  underneath?: { primary: ShannonEmotionKind; intensity: number };
   /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
   decided?: boolean;
 }

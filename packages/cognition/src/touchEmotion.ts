@@ -125,7 +125,9 @@ export function holdsFeelingThroughTouch(
 ): boolean {
   if (timing.clock !== 'awake') return keepsFeelingThroughTouch(state.expressiveEmotion, feeling.intensity, now);
   const present = presentShannonFeeling(state, now, timing);
-  return holdsShannonFeeling(present, feeling, { presentFromTouch: isTouchFeeling(present) });
+  return holdsShannonFeeling(present, feeling, { presentFromTouch: isTouchFeeling(present) })
+    // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker touch.
+    || (present.underneath !== undefined && holdsShannonFeeling(present.underneath, feeling, { presentFromTouch: false }));
 }
 
 /**

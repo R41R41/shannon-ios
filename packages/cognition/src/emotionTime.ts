@@ -94,6 +94,9 @@ export function advanceEmotionClock(
   if (!Number.isFinite(time)) return { clock, elapsedMs: 0 };
   if (!clock) return { clock: Object.freeze({ awakeMs: 0, at: now }), elapsedMs: 0 };
   const gap = time - Date.parse(clock.at);
+  // A last event far in the future is a machine clock that was wrong for a while: the clock is brought back to
+  // now, and stored that way, so the next event advances it again. A small step back is two writers out of order.
+  if (gap < -Math.max(0, timing.idleCapMs)) return { clock: Object.freeze({ awakeMs: clock.awakeMs, at: now }), elapsedMs: 0 };
   if (!(gap > 0)) return { clock, elapsedMs: 0 };
   const elapsedMs = Math.min(gap, Math.max(0, timing.idleCapMs));
   return { clock: Object.freeze({ awakeMs: clock.awakeMs + elapsedMs, at: now }), elapsedMs };
@@ -104,16 +107,11 @@ export function awakeTimeAt(clock: ShannonEmotionClock | undefined, now: string,
   return advanceEmotionClock(clock, now, timing).clock?.awakeMs ?? 0;
 }
 
-/**
- * A stored clock that cannot be read is dropped; the next event starts a new one at zero. One stamped
- * later than `now` (a machine clock that was wrong for a while) is brought back to `now`: otherwise no
- * event would advance it until the wall clock caught up, and nothing would fade.
- */
-export function restoreEmotionClock(value: unknown, now: string): ShannonEmotionClock | undefined {
+/** A stored clock that cannot be read is dropped; the next event starts a new one at zero. */
+export function restoreEmotionClock(value: unknown): ShannonEmotionClock | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;
   if (typeof row.awakeMs !== 'number' || !Number.isFinite(row.awakeMs) || row.awakeMs < 0) return undefined;
   if (typeof row.at !== 'string' || !Number.isFinite(Date.parse(row.at))) return undefined;
-  const ahead = Date.parse(row.at) > Date.parse(now);
-  return Object.freeze({ awakeMs: row.awakeMs, at: ahead ? now : row.at });
+  return Object.freeze({ awakeMs: row.awakeMs, at: row.at });
 }

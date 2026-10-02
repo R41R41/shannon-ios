@@ -362,8 +362,34 @@ describe('(g) an activity session keeps her awake', () => {
     const reader = configuredAwakeClock(path, { now: () => MORNING });
     reader.observe(scope);
     reader.close();
-    expect(errors.mock.calls).toEqual([['Shannon awake clock failed', 'SyntaxError']]);
+    expect(errors.mock.calls).toEqual([['Shannon awake clock failed', 'SyntaxError', '']]);
     errors.mockRestore();
+  });
+
+  it('repairs a clock that was stamped in the future, from the loop alone, and keeps the resolver\'s notes out of the event log', () => {
+    const path = databasePath();
+    const clock = { at: NIGHT };
+    const api = new SQLiteShannonStore({ path, now: () => clock.at });
+    api.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'sulky', secondary: [], intensity: 0.62, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.5,
+      visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.5, updatedAt: NIGHT, continued: false, decided: true,
+    } });
+    expect(JSON.stringify(api.events(scope))).not.toMatch(/"continued"|"decided"|"presentAt"|"underneath"/u);
+    // The machine's clock was a month ahead for one event.
+    const raw = new DatabaseSync(path);
+    const stored = JSON.parse((raw.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scope) as { snapshot_json: string }).snapshot_json);
+    raw.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(
+      JSON.stringify({ ...stored, emotionClock: { awakeMs: 0, at: at(NIGHT, 30 * 24 * HOUR) } }), scope);
+    raw.close();
+    const loop = configuredAwakeClock(path, { now: () => clock.at });
+    for (let step = 1; step <= 5; step += 1) {
+      clock.at = at(NIGHT, step * 5 * MINUTE);
+      loop.observe(scope);
+    }
+    // The first step brought it back; the four after it counted.
+    expect(api.snapshot(scope).emotionClock).toEqual({ awakeMs: 20 * MINUTE, at: at(NIGHT, 25 * MINUTE) });
+    loop.close();
+    api.close();
   });
 
   it('counts a stretch once when the API process and the loop process both write', () => {

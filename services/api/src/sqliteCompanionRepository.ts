@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   assembleShannonSystemPrompt,
   createInitialCompanionState,
+  normalizeShannonExpressiveEmotion,
   reduceCompanionState,
   visibleMemoryText,
   isOwnerMemoryEvidence,
@@ -77,7 +78,8 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
         WHERE scope_key = ?
       `).run(next.version, next.updatedAt, JSON.stringify(next), scopeKey);
       this.context.insertEvent(scopeKey, `state.${event.type}`, next.updatedAt, {
-        event,
+        // The feeling as stored: the resolver's notes to the reducer are not kept in the log either.
+        event: event.type === 'expressive-emotion-updated' ? { ...event, emotion: normalizeShannonExpressiveEmotion(event.emotion) } : event,
         fromVersion: current.version,
         toVersion: next.version,
       });

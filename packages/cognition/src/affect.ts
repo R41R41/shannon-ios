@@ -18,13 +18,29 @@ const PERSONAL_CUES = ['僕は', '私は', '自分は', '実は', '本当は', '
 const CURIOUS_CUES = ['気になる', '知りたい', 'なぜ', 'どうして', '面白い', 'おもしろい', '考えたい'];
 const SLEEPY_CUES = ['眠い', '眠たい', 'ねむい', '寝る', 'おやすみ'];
 const CALM_CUES = ['安心', '落ち着いた', 'ほっとした', 'ゆっくり'];
-// Only words said to her. Easing a hurt on a word that was about someone else would be worse than missing an apology,
-// so everything here errs toward not easing: a short utterance, no quotation, no one else it could be addressed to.
-const ADDRESSED = /(?:シャノン|あなた|きみ|君)/u;
-const QUOTED = /[「」『』“”"]|って(?:言|い)|と(?:言|伝え|謝)/u;
-const SOMEONE_ELSE = /(?:さん|くん|ちゃん|部長|課長|社長|上司|先生|先輩|後輩|同僚|友達|友人|彼女|彼氏|恋人|家族|母|父|兄|姉|弟|妹|妻|夫|客|みんな|皆)(?:に|へ|には|にも|から)/u;
-const APOLOGY = /(?:ごめん(?:なさい|ね|よ)?|言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な(?:い|かった)(?:です)?|許して(?:ほしい|くれ|ください|ね)?)[。、！!…\s]*$|^(?:シャノン[、,\s]*)?(?:(?:さっき|昨日|昨夜|この前|今朝)は?)?ごめん(?:なさい|ね|よ)?[、,。\s]*(?:言い(?:すぎ|過ぎ)た|ひどいこと|傷つけ)/u;
-const KINDNESS = /^(?:シャノン[、,\s]*)?(?:いつも|本当に|ほんとに)?(?:ありがとう|大好き(?:だよ)?|助かった|助かる|頼りにしてる)(?:ね|よ|な|ございます)?[。、！!…\s]*$|(?:シャノン|あなた|きみ|君)(?:、|の|が|は|に)?.{0,12}(?:ありがとう|大好き|助かった|頼りにしてる)(?:ね|よ)?[。！!…\s]*$/u;
+// Only words said to her. Easing a hurt on a word that was about someone else would be worse than missing an apology, so
+// the whole utterance has to be one of a few forms: an apology or a thanks, optionally with her name, a when, and what for.
+// Anything with more in it (another person, a quotation, a request that follows) does not match, and nothing is eased.
+const TAIL = '[？?ー〜。！!…\\s]*';
+const SEP = '[、,\\s]*';
+const NAME = `(?:シャノン${SEP})?`;
+const WHEN = '(?:(?:さっき|昨日|昨夜|この前|今朝|今日|いつも|あの(?:時|とき))は?)?';
+const TRULY = '(?:本当に|ほんとに|ほんとうに)?';
+const SORRY = 'ごめん(?:なさい|ね|よ)?ね?';
+const DEED = '(?:(?:(?:ひどい|あんな|きつい)ことを?言って|言い(?:すぎ|過ぎ)て|傷つけて|怒って|八つ当たりして|(?:怒って|傷ついて)いたら)(?:しまって)?)?';
+const REGRET = '(?:言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|悪かった|申し訳な(?:い|かった)(?:です)?|傷つけた|ひどいことを?言った)(?:ね|よ)?';
+const APOLOGY = [
+  new RegExp(`^${NAME}${WHEN}${TRULY}${DEED}${SORRY}${TAIL}(?:${SEP}${REGRET})?${TAIL}(?:${SEP}シャノン)?${TAIL}$`, 'u'),
+  new RegExp(`^${NAME}${WHEN}${TRULY}(?:言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な(?:い|かった)(?:です)?)(?:ね|よ)?${TAIL}(?:${SEP}(?:${SORRY}|許して(?:ほしい|くれ|ください|ね)?))?${TAIL}$`, 'u'),
+  new RegExp(`^(?:あなた|きみ|シャノン)に(?:ひどいことを?言った|言い(?:すぎ|過ぎ)た)${SEP}${SORRY}${TAIL}$`, 'u'),
+  new RegExp(`^(?:ちゃんと)?謝りたい${SEP}${SORRY}${TAIL}$`, 'u'),
+];
+const THANKS = '(?:ありがとう(?:ね|な|ございます)?|大好き(?:だよ)?|助かった(?:よ)?|助かる(?:よ)?|頼りにしてる(?:よ)?)';
+const FOR = '(?:(?:手伝って|助けて|聞いて|待っていて|待ってて|そばにいて|教えて|付き合って|いて)くれて)?';
+const KINDNESS = [
+  new RegExp(`^${NAME}${WHEN}${TRULY}${FOR}${THANKS}${TAIL}(?:${SEP}(?:助かった(?:よ)?|大好き(?:だよ)?|シャノン))?${TAIL}$`, 'u'),
+  new RegExp(`^(?:シャノン|あなた|きみ)のおかげ(?:だよ|です)?${SEP}ありがとう(?:ね)?${TAIL}$`, 'u'),
+];
 const SOOTHING_LENGTH = 40;
 
 /**
@@ -33,10 +49,11 @@ const SOOTHING_LENGTH = 40;
  * Unsure means no.
  */
 export function soothingIn(userMessage: string): 'apology' | 'kindness' | null {
+  if (userMessage.length > SOOTHING_LENGTH * 4) return null;
   const text = userMessage.trim();
-  if (!text || Array.from(text).length > SOOTHING_LENGTH || QUOTED.test(text)) return null;
-  if (SOMEONE_ELSE.test(text) && !ADDRESSED.test(text)) return null;
-  return APOLOGY.test(text) ? 'apology' : KINDNESS.test(text) ? 'kindness' : null;
+  if (!text || Array.from(text).length > SOOTHING_LENGTH) return null;
+  if (APOLOGY.some(pattern => pattern.test(text))) return 'apology';
+  return KINDNESS.some(pattern => pattern.test(text)) ? 'kindness' : null;
 }
 
 function occurrences(text: string, cues: readonly string[]): number {

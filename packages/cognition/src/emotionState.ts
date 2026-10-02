@@ -251,10 +251,16 @@ export function resolveShannonEmotionState(
     // nothing is stored, so it can neither grow nor be raised back to this reading later. Only a stimulus that is
     // itself stronger is a new feeling, at its own strength. A weaker stimulus of another kind does not replace it.
     if (previous.primary === primary && !overrideReason) {
-      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength.
-      if (!input.replaces && intensity <= previous.intensity) return continuedShannonEmotion(previous, primary, input.now);
+      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength. Her own
+      // words naming the feeling she already has (also to deny it) are that feeling going on, whatever the cue's strength.
+      if (!input.replaces && (fromCue || intensity <= previous.intensity)) return continuedShannonEmotion(previous, primary, input.now);
       strongerAgain = true;
-    } else if (!input.replaces && holdsShannonFeeling(previous, { primary, intensity, overrideReason })) {
+    } else if (previous.primary === primary) {
+      // The same override again (he is still in danger) is felt anew, at full strength.
+      strongerAgain = true;
+    } else if (!input.replaces && (holdsShannonFeeling(previous, { primary, intensity, overrideReason })
+      // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
+      || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
       return continuedShannonEmotion(previous, primary, input.now);
     }
   }
@@ -323,7 +329,7 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;

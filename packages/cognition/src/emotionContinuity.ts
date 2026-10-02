@@ -106,14 +106,17 @@ export function presentShannonFeeling(
   }
   // What she owes the owner is read back as it was stored: a feeling held by an override, and her concern or apology
   // while it is strong enough to show, stay on top of a stronger mood underneath until they have passed.
-  const owed = surface !== undefined && (surface.overrideReason !== undefined
-    || (isSupportEmotion(surface.primary) && surface.intensity >= 0.3));
+  const owed = surface !== undefined && surface.intensity >= 0.3
+    && (surface.overrideReason !== undefined || isSupportEmotion(surface.primary));
   if (surface && (!under || owed || surface.intensity >= under.strength)) {
     // What lies underneath stays beside the reaction of the moment.
     const beside = under && under.feeling.kind !== surface.primary && !surface.secondary.includes(under.feeling.kind)
       && !unsafeCombination(surface.primary, under.feeling.kind)
       ? Object.freeze([under.feeling.kind, ...surface.secondary].slice(0, 2)) : surface.secondary;
-    return Object.freeze({ ...surface, secondary: beside, presentAt: now });
+    return Object.freeze({
+      ...surface, secondary: beside, presentAt: now,
+      ...(under && under.strength > surface.intensity ? { underneath: { primary: under.feeling.kind, intensity: under.strength } } : {}),
+    });
   }
   if (under) {
     const { feeling, strength } = under;
@@ -188,7 +191,9 @@ export function noteShannonFeeling(
     const existing = list.find(item => item.kind === feeling.primary && item.target === feeling.target);
     const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
     // A cue in her own words (also a denial of it) never renews what is already underneath: that keeps fading by awake time.
-    if (feeling.intensity > present && (!existing || present < RULE.settledBelow || decided)) {
+    // A decided strength renews it only when it is above what the feeling was at its height, so the same strength
+    // decided turn after turn does not hold it up either.
+    if (feeling.intensity > present && (!existing || present < RULE.settledBelow || (decided && feeling.intensity > existing.strength))) {
       const strength = clamp(feeling.intensity, 0, 1);
       const noted: ShannonLingeringFeeling = {
         kind: feeling.primary, target: feeling.target, cause: existing?.cause ?? feeling.cause,
@@ -291,10 +296,9 @@ export function restoreLingering(value: unknown, awakeMs: number): readonly Shan
     const kind = row.kind;
     const target = Array.from(row.target).slice(0, 80).join('');
     const twin = restored.findIndex(item => item.kind === kind && item.target === target);
-    // One entry per kind and person: of two, the stronger stays.
+    // One entry per kind and person: of two, the stronger stays, in the place of the first.
     if (twin >= 0 && restored[twin]!.strength >= clamp(row.strength as number, 0, 1)) continue;
-    if (twin >= 0) restored.splice(twin, 1);
-    restored.push(Object.freeze({
+    restored.splice(twin >= 0 ? twin : restored.length, twin >= 0 ? 1 : 0, Object.freeze({
       kind, target, cause: Array.from(row.cause).slice(0, 240).join(''),
       span: row.span === 'lingering' ? 'lingering' : 'mood', strength: clamp(row.strength as number, 0, 1),
       awakeAt: row.awakeAt as number, startedAwakeAt: row.startedAwakeAt as number, startedAt: row.startedAt,

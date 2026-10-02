@@ -235,7 +235,11 @@ function committedFeeling(
   const present = presentShannonFeeling(state, nowIso, timing);
   // The same kind as what she feels now is stored only when the resolver said the stimulus was itself stronger. Without
   // that word (a caller that rebuilt the object, an older reading) it is the feeling going on, and nothing is raised.
-  if (incoming.primary === present.primary && present.primary !== 'neutral' && event.continued !== false) return null;
+  if (incoming.primary === present.primary && present.primary !== 'neutral') {
+    if (event.continued !== false) return null;
+    // And even with it, only a stronger one, an override, or a touch (felt each time) replaces the same feeling.
+    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
+  }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   if (incoming.primary !== present.primary && holdsShannonFeeling(present, incoming, touch)) return null;
   const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, awakeAt: awakeMs });

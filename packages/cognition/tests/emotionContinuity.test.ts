@@ -106,7 +106,9 @@ describe('her awake clock', () => {
     expect(late.elapsedMs).toBe(12 * MINUTE);
     expect(late.clock).toEqual({ awakeMs: 17 * MINUTE, at: at(NIGHT, 185 * MINUTE) });
     // An event stamped earlier than the last one advances nothing and does not move the clock back.
-    expect(advanceEmotionClock(late.clock, at(NIGHT, 60 * MINUTE), AWAKE)).toEqual({ clock: late.clock, elapsedMs: 0 });
+    expect(advanceEmotionClock(late.clock, at(NIGHT, 180 * MINUTE), AWAKE)).toEqual({ clock: late.clock, elapsedMs: 0 });
+    // A last event further ahead than the idle cap is a clock that was wrong: it is brought back, and nothing is counted.
+    expect(advanceEmotionClock(late.clock, at(NIGHT, 60 * MINUTE), AWAKE)).toEqual({ clock: { awakeMs: 17 * MINUTE, at: at(NIGHT, 60 * MINUTE) }, elapsedMs: 0 });
     expect(advanceEmotionClock(late.clock, 'not a time', AWAKE)).toEqual({ clock: late.clock, elapsedMs: 0 });
     // Reading does not write: the stored clock plus the capped stretch since.
     expect(awakeTimeAt(late.clock, at(NIGHT, 190 * MINUTE), AWAKE)).toBe(22 * MINUTE);
@@ -310,9 +312,10 @@ describe('(d) a strong feeling lingers one to two awake days', () => {
       last = under;
       // What is underneath is the entry as first noted, or gone: never stamped anew.
       if (state.lingering!.length) expect(state.lingering![0]).toEqual(noted);
-      // The reply itself may show it, for that reply.
-      expect(said.feeling.primary).toBe('sulky');
-      expect(said.feeling.intensity).toBeLessThanOrEqual(0.52);
+      // Her words name the feeling she already has: it goes on at the strength it has, and nothing is stored or raised.
+      expect(said.feeling).toMatchObject({ primary: 'sulky', continued: true });
+      expect(said.feeling.intensity).toBeCloseTo(under, 2);
+      expect(presentShannonFeeling(state, now).intensity).toBeCloseTo(under, 5);
     }
     expect(last).toBeCloseTo(0.52 * 0.5 ** (160 / 90), 3);
     const quiet = awakeFor(sulking(), NIGHT, 160);
@@ -325,9 +328,17 @@ describe('(d) a strong feeling lingers one to two awake days', () => {
     const busy = turn(awakeFor(sulking(), NIGHT, 60), '進めて', '任せてください。', at(NIGHT, HOUR)).state;
     expect(busy.expressiveEmotion!.primary).toBe('determined');
     expect(turn(busy, 'まだ怒ってる？', '別にいいですけど。', at(NIGHT, HOUR + MINUTE)).state.lingering![0]).toEqual(noted);
-    // A strength decided for the reply (a voice turn) does renew it.
-    expect(turn(awakeFor(sulking(), NIGHT, 60), 'もう知らない', '……。', at(NIGHT, HOUR), { primary: 'sulky', intensity: 0.6 }).state.lingering)
-      .toMatchObject([{ kind: 'sulky', strength: 0.6, startedAt: NIGHT }]);
+    // A strength decided for the reply (a voice turn) renews it when it is above the height the feeling had...
+    const renewed = turn(awakeFor(sulking(), NIGHT, 60), 'もう知らない', '……。', at(NIGHT, HOUR), { primary: 'sulky', intensity: 0.6 }).state;
+    expect(renewed.lingering).toMatchObject([{ kind: 'sulky', strength: 0.6, startedAt: NIGHT }]);
+    // ...and the same strength decided turn after turn does not hold it up: underneath it fades as if nothing had been said.
+    let voiced = renewed;
+    for (let index = 1; index <= 12; index += 1) {
+      const now = at(NIGHT, HOUR + index * 10 * MINUTE);
+      voiced = turn(awakeFor(voiced, at(NIGHT, HOUR + (index - 1) * 10 * MINUTE), 10), 'ふーん', '……。', now, { primary: 'sulky', intensity: 0.6 }).state;
+    }
+    expect(voiced.lingering).toMatchObject([{ kind: 'sulky', strength: 0.6, awakeAt: renewed.lingering![0]!.awakeAt }]);
+    expect(livingLingering(voiced, at(NIGHT, 3 * HOUR))[0]!.strength).toBeCloseTo(0.6 * 0.5 ** (120 / 90), 2);
     // Thanking him in every reply does not turn into gratitude that lingers for days.
     let grateful = fresh();
     for (let index = 0; index < 8; index += 1) {
@@ -398,6 +409,15 @@ describe('(e) a feeling is not overwritten easily', () => {
     const { continued: _continued, decided: _decided, ...rebuilt } = read;
     check(rebuilt);
     check(JSON.parse(JSON.stringify({ ...rebuilt, intensity: 0.799 })));
+    // After the apology her own words naming the sulk, or denying it, do not bring the reading back up either.
+    let denied = apologised;
+    for (let index = 1; index <= 5; index += 1) {
+      denied = turn(denied, 'まだ怒ってる？', 'もう拗ねてませんよ、ライ氏。', at(now, index * 2 * MINUTE)).state;
+      expect(presentShannonFeeling(denied, at(now, index * 2 * MINUTE)).intensity).toBeLessThanOrEqual(eased);
+    }
+    // A hand-built commit that claims to be stronger and is not replaces nothing.
+    expect(reduceCompanionState(sulk, { type: 'expressive-emotion-updated', emotion: { ...sulk.expressiveEmotion!, intensity: 0.3, continued: false } }, now).expressiveEmotion)
+      .toEqual(sulk.expressiveEmotion);
     // Only a stimulus that is itself stronger than what she feels is a new feeling, stored at its own strength.
     const stronger = turn(sulk, 'もう知らない', '……。', now, { primary: 'sulky', intensity: 0.9 });
     expect(stronger.feeling).toMatchObject({ primary: 'sulky', intensity: 0.9, continued: false, decided: true });
@@ -423,9 +443,32 @@ describe('(e) a feeling is not overwritten easily', () => {
     expect(holdsFeelingThroughTouch(grief.state, { primary: 'giggle', intensity: 0.9 }, at(now, MINUTE))).toBe(true);
     expect(reduceCompanionState(grief.state, { type: 'body-touched', touch: { kind: 'tickle', countInWindow: 1 } }, at(now, MINUTE)).expressiveEmotion)
       .toEqual(grief.state.expressiveEmotion);
-    // The sulk was not wiped: when the concern has passed with awake time, it is what she feels again.
+    // The sulk was not wiped. Her concern covers it only while it is strong enough to show: at no moment does 「いま」 say
+    // that nothing is felt while the sulk is underneath.
     expect(grief.state.lingering).toMatchObject([{ kind: 'sulky', strength: 0.8 }]);
+    for (let minutes = 1; minutes <= 30; minutes += 1) {
+      const later = at(now, minutes * MINUTE);
+      const reading = presentShannonFeeling(awakeFor(grief.state, now, minutes, 1), later);
+      expect(['caring', 'sulky'], `${minutes}`).toContain(reading.primary);
+      if (reading.primary === 'caring') expect(reading.intensity, `${minutes}`).toBeGreaterThanOrEqual(0.3);
+      expect(presentShannonMood(awakeFor(grief.state, now, minutes, 1), later).fromConversation, `${minutes}`).toBe(true);
+    }
     expect(presentShannonFeeling(awakeFor(grief.state, now, 30), at(now, 30 * MINUTE)).primary).toBe('sulky');
+    // A strong emergency of last night does not cover this morning's mood either, nor hold a touch.
+    const emergency = turn(sulk, '友達が意識がない', 'すぐに119番へ。', now, { primary: 'protective', intensity: 0.95 }).state;
+    expect(presentShannonFeeling(emergency, MORNING).primary).toBe('sulky');
+    // The same override again is felt anew at full strength, also while a rest of the first is still on top.
+    const again = turn(awakeFor(grief.state, now, 6, 1), 'まだ信じられない、母も亡くなったばかりなのに', 'そばにいます。', at(now, 6 * MINUTE));
+    expect(again.feeling).toMatchObject({ primary: 'caring', overrideReason: 'grief' });
+    expect(presentShannonFeeling(again.state, at(now, 6 * MINUTE)).intensity).toBeCloseTo(again.feeling.intensity, 5);
+    expect(again.feeling.intensity).toBeGreaterThanOrEqual(0.68);
+    // Her sympathy on top does not lower the bar: the hurt it covers still holds against a weaker stimulus and a weaker touch.
+    const hurtDeep = turn(fresh(), 'もういい', '……。', NIGHT, { primary: 'hurt', intensity: 1 }).state;
+    const sorryFor = turn(hurtDeep, '今日は散々だった', 'それは残念でしたね。', now).state;
+    expect(presentShannonFeeling(sorryFor, now)).toMatchObject({ primary: 'sad', underneath: { primary: 'hurt' } });
+    expect(turn(sorryFor, 'じゃあこれやって', '任せてください。', at(now, MINUTE)).feeling).toMatchObject({ primary: 'sad', continued: true, secondary: ['determined', 'hurt'] });
+    expect(holdsFeelingThroughTouch(sorryFor, { primary: 'giggle', intensity: 0.6 }, at(now, MINUTE))).toBe(true);
+    expect(JSON.stringify(sorryFor)).not.toContain('underneath');
     // A visible apology is read back the same way, with the mood beside it, and gives the mood back once it is faint.
     const glad = turn(fresh(), 'すごいよ', '……ライ氏。', NIGHT, { primary: 'gratitude', intensity: 0.78 }).state;
     const sorry = turn(glad, 'それ違うよ', 'ごめんなさい、間違えました。', now).state;
@@ -512,16 +555,20 @@ describe('(e) a feeling is not overwritten easily', () => {
     const happy = turn(fresh(), '最高だった', '……ライ氏。', NIGHT, { primary: 'happy', intensity: 0.85 }).state;
     expect(reduceCompanionState(happy, { type: 'feeling-eased', by: 'apology' }, NIGHT)).toBe(happy);
     for (const apology of ['さっきはごめん、言いすぎた', 'ごめんね', 'ごめん', '昨日はごめん', 'ボクが悪かった', '言い過ぎた、許してほしい',
-      'シャノン、ごめんね。', 'あなたにひどいことを言った、ごめん', '申し訳なかった']) {
+      'シャノン、ごめんね。', 'あなたにひどいことを言った、ごめん', '申し訳なかった', 'ひどいこと言ってごめん', 'あんなこと言ってごめんね',
+      'ちゃんと謝りたい、ごめん', '怒っていたらごめんね', 'ごめん、シャノン', 'ごめんなさいね', 'ごめんね？', 'ごめんねー', '昨日は本当にごめん']) {
       expect(soothingIn(apology), apology).toBe('apology');
     }
-    for (const kind of ['いつもありがとう', 'ありがとう！', 'シャノン、ありがとうね', '大好きだよ', 'シャノンのおかげだよ、ありがとう']) {
+    for (const kind of ['いつもありがとう', 'ありがとう！', 'シャノン、ありがとうね', '大好きだよ', 'シャノンのおかげだよ、ありがとう',
+      'ありがとう、シャノン', '今日はありがとう', '手伝ってくれてありがとう', 'ありがとう、助かったよ', '待っていてくれてありがとう']) {
       expect(soothingIn(kind), kind).toBe('kindness');
     }
     // Not said to her, quoted, about someone else, part of something longer, or simply unsure: nothing is eased.
     for (const other of ['すみません、これ教えて', '次の予定は？', '今日は天気が悪かったね', 'ごめん、ちょっと待って', 'さすがに無理', '好きな食べ物は？',
       '部長に申し訳ないことをした', '部長に申し訳ない', '彼女に「ごめんね」って言われた', '友達にごめんねと伝えて', '母にありがとうを言いたい',
       'ありがとう、それで次の資料なんだけど', '店員さんにありがとうって言った', 'みんなにごめん',
+      'あの人に申し訳ない', 'お客様に申し訳ない', '彼に言いすぎた', '子供に言いすぎた', '取引先に申し訳なかった', '田中君が大好き', '鈴木君は助かった',
+      'それは無理、ごめん', '部長が怒ってて大変だった、ごめん', 'ごめん、傷つけられたのはこっちだ', 'ごめん'.repeat(100),
       '昨日の会議で部長が怒っていて大変だったけれど最後にはありがとうと言われた、ごめん']) {
       expect(soothingIn(other), other).toBeNull();
     }
@@ -612,15 +659,26 @@ describe('(h) state stored before the awake clock', () => {
     expect(clockless.lingering).toBeUndefined();
     expect(clockless.expressiveEmotion!.awakeAt).toBeUndefined();
     expect(presentShannonFeeling(clockless, MORNING).primary).toBe('neutral');
-    // A clock stamped in the future (the machine's clock was wrong) is brought back to now, so events advance it again.
+    // A clock stamped far in the future (the machine's clock was wrong) is brought back by the first event, at the same
+    // instant it was restored, and stored that way: from then on events advance it again.
     const future = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(aged)), emotionClock: { awakeMs: 60 * MINUTE, at: at(MORNING, 30 * 24 * HOUR) } }, MORNING);
-    expect(future.emotionClock).toEqual({ awakeMs: 60 * MINUTE, at: MORNING });
-    expect(reduceCompanionState(future, { type: 'awake-observed' }, at(MORNING, 5 * MINUTE)).emotionClock!.awakeMs).toBe(65 * MINUTE);
+    const repaired = reduceCompanionState(future, { type: 'awake-observed' }, MORNING);
+    expect(repaired).not.toBe(future);
+    expect(repaired.emotionClock).toEqual({ awakeMs: 60 * MINUTE, at: MORNING });
+    const reloaded = restoreCompanionState('owner', JSON.parse(JSON.stringify(repaired)), at(MORNING, 5 * MINUTE));
+    expect(reduceCompanionState(reloaded, { type: 'awake-observed' }, at(MORNING, 5 * MINUTE)).emotionClock!.awakeMs).toBe(65 * MINUTE);
+    // Two writers a few seconds out of order are not a broken clock: nothing moves back, nothing is counted twice.
+    expect(advanceEmotionClock({ awakeMs: 5, at: MORNING }, at(MORNING, -3_000), AWAKE)).toEqual({ clock: { awakeMs: 5, at: MORNING }, elapsedMs: 0 });
     // Two entries of one kind for one person are one: the stronger stays.
     const twin = { kind: 'happy', target: 'ライ氏', cause: 'x', span: 'mood', awakeAt: 0, startedAwakeAt: 0, startedAt: NIGHT };
     const merged = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(state)),
       lingering: [{ ...twin, strength: 0.4 }, { ...twin, strength: 0.7, cause: 'y' }, { ...twin, strength: 0.5 }, { ...twin, kind: 'pride', strength: 0.3 }] }, MORNING);
     expect(merged.lingering!.map(item => [item.kind, item.strength, item.cause])).toEqual([['happy', 0.7, 'y'], ['pride', 0.3, 'x']]);
+    // The kept twin stays in its place, so the bound of four does not drop it.
+    const many = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(state)), lingering: [
+      { ...twin, strength: 0.4 }, { ...twin, kind: 'pride', strength: 0.3 }, { ...twin, kind: 'hurt', strength: 0.3 }, { ...twin, kind: 'sulky', strength: 0.3 },
+      { ...twin, strength: 0.9 }, { ...twin, kind: 'jealous', strength: 0.3 }] }, MORNING);
+    expect(many.lingering!.map(item => [item.kind, item.strength])).toEqual([['happy', 0.9], ['pride', 0.3], ['hurt', 0.3], ['sulky', 0.3]]);
     // A feeling stamped ahead of a readable clock is brought back to it.
     const ahead = restoreCompanionState('owner', { ...JSON.parse(JSON.stringify(aged)), expressiveEmotion: { ...aged.expressiveEmotion, awakeAt: 9 * HOUR } }, MORNING);
     expect(ahead.expressiveEmotion!.awakeAt).toBe(aged.emotionClock!.awakeMs);
