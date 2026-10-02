@@ -13,8 +13,8 @@ import type { SQLiteShannonNowReader } from './shannonNowReader.js';
 
 export interface ShannonNowRouteDependencies {
   reader: Pick<SQLiteShannonNowReader, 'body' | 'looks' | 'touches' | 'reachOuts'>;
-  /** Her stored state, read and never written here. */
-  snapshot: (scopeKey: string) => CompanionStateSnapshot;
+  /** Her stored state, or null when none was ever stored. Reading must not create one: this route writes nothing. */
+  snapshot: (scopeKey: string) => CompanionStateSnapshot | null;
   /** `SHANNON_NOW_READ`. */
   enabled: () => boolean;
   /** The owner's scope; a device paired into another scope is a guest here. */
@@ -72,7 +72,8 @@ export function shannonNowResponse(dependencies: Omit<ShannonNowRouteDependencie
  * Her feeling as faces and strengths. The cause of a feeling is between her and the owner in
  * the Talk where it arose; it is not copied here, so this answer holds no conversation text.
  */
-export function shannonNowFeeling(snapshot: CompanionStateSnapshot, at: string, timing: ShannonEmotionTiming): ShannonNowFeeling {
+export function shannonNowFeeling(snapshot: CompanionStateSnapshot | null, at: string, timing: ShannonEmotionTiming): ShannonNowFeeling {
+  if (!snapshot) return { mood: { expression: 'neutral' }, present: null, lingering: [] };
   const current = presentShannonFeeling(snapshot, at, timing);
   const showing = current.primary !== 'neutral' && current.visibility !== 'hidden';
   const lingering = livingLingering(snapshot, at, timing)

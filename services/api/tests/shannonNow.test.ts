@@ -12,7 +12,7 @@ import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
-import { createShannonNowRoute } from '../src/serverShannonNowRoute.js';
+import { createShannonNowRoute, shannonNowResponse } from '../src/serverShannonNowRoute.js';
 import { SHANNON_NOW_LIMITS, SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope, type ShannonNowResponse } from '../src/shannonNowContract.js';
 import { SQLiteShannonNowReader, type ReachOutDeliverySource } from '../src/shannonNowReader.js';
 
@@ -22,6 +22,7 @@ const DAY = 24 * 60 * MINUTE;
 const OWNER = 'owner';
 const ago = (milliseconds: number) => new Date(Date.parse(NOW) - milliseconds).toISOString();
 
+const source = (name: string) => readFileSync(resolve(import.meta.dirname, '../src', name), 'utf8');
 const servers: Array<ReturnType<typeof createServer>> = [];
 const directories: string[] = [];
 const closers: Array<{ close(): void }> = [];
@@ -147,6 +148,34 @@ describe('GET /v1/shannon/now: what it answers', () => {
       limits: { items: 30, days: 14 },
     });
     expect(body.feeling.mood.expression).toEqual(expect.any(String));
+  });
+
+  it('never causes a first state to be stored, and leaves out a part whose table is in another shape', async () => {
+    const path = databasePath();
+    const { looks, raw } = seed(path);
+    const reader = new SQLiteShannonNowReader(path);
+    closers.push(reader);
+    // No state table at all, then a table without a row for the owner: neither is a state.
+    expect(reader.hasState(OWNER)).toBe(false);
+    raw.exec('CREATE TABLE companion_states (scope_key TEXT PRIMARY KEY, version INTEGER, updated_at TEXT, snapshot_json TEXT)');
+    expect(reader.hasState(OWNER)).toBe(false);
+    let asked = 0;
+    const answer = shannonNowResponse({ reader, now: () => NOW, snapshot: scopeKey => { asked += reader.hasState(scopeKey) ? 1 : 0; return null; } }, OWNER);
+    expect(asked).toBe(0);
+    expect(answer.feeling).toEqual({ mood: { expression: 'neutral' }, present: null, lingering: [] });
+    raw.prepare('INSERT INTO companion_states VALUES (?, 1, ?, ?)').run(OWNER, NOW, '{}');
+    expect(reader.hasState(OWNER)).toBe(true);
+    // The server wires exactly this guard in front of the state store.
+    expect(source('server.ts')).toContain('shannonNowReader.hasState(scopeKey) ? persistentStore.snapshot(scopeKey) : null');
+
+    // The reader's own connection refuses a write.
+    expect(() => (reader as unknown as { database: DatabaseSync }).database.exec('DELETE FROM body_looks')).toThrow();
+
+    looks.open({ id: 'look-1', scopeKey: OWNER, deviceId: 'pc', threadId: 't', requestedAt: ago(MINUTE), expiresAt: NOW, ownerAsked: true }, '2026-10-03');
+    raw.exec('DROP TABLE body_touch_bursts; CREATE TABLE body_touch_bursts (scope_key TEXT, something_else TEXT)');
+    raw.exec('DROP TABLE app_looks; CREATE TABLE app_looks (scope_key TEXT)');
+    expect(reader.touches(OWNER, ago(DAY))).toEqual([]);
+    expect(reader.looks(OWNER, ago(DAY)).map(look => look.id)).toEqual(['look-1']);
   });
 
   it('says whether a desktop body read presence lately', async () => {
@@ -316,7 +345,6 @@ describe('GET /v1/shannon/now: what it answers', () => {
 });
 
 describe('GET /v1/shannon/now: structure', () => {
-  const source = (name: string) => readFileSync(resolve(import.meta.dirname, '../src', name), 'utf8');
 
   it('reads through a connection that cannot write, and selects no text column', () => {
     const reader = source('shannonNowReader.ts');

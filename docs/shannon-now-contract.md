@@ -61,7 +61,7 @@ The server reads these tables through a connection that cannot write (`PRAGMA qu
 
 **A client must tolerate values it does not know**: a `surface` (`call` is planned), an `outcome`, a `code`, a `reason`, a touch `kind`, an `expression`. It shows a neutral wording for them and never fails the whole page.
 
-A feature that was never switched on, or a table a later change adds, is an empty list and not an error.
+A feature that was never switched on, or a table a later change adds, is an empty list and not an error. The same holds for a table in a shape the reader does not know. Before any state was stored for the owner, `feeling` is a neutral mood with nothing present and nothing lingering; the read does not create a state.
 
 | Status | `error` | Meaning |
 | --- | --- | --- |

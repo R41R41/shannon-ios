@@ -58,8 +58,18 @@ export class SQLiteShannonNowReader {
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA query_only = ON;');
   }
 
+  /** Whether a state was ever stored for the scope. The state store writes a first state when asked for one; this read never causes that. */
+  hasState(scopeKey: string): boolean {
+    return guarded(false, () => this.tableExists('companion_states')
+      && Boolean(this.database.prepare('SELECT 1 AS found FROM companion_states WHERE scope_key = ?').get(scopeKey)));
+  }
+
   /** Whether a body read presence lately, from the two places a presence read is noted. */
   body(scopeKey: string, at: string): ShannonNowBody {
+    return guarded({ known: false, present: false, lastReadAt: null, freshSeconds: SHANNON_NOW_LIMITS.bodyFreshSeconds, camera: null }, () => this.readBody(scopeKey, at));
+  }
+
+  private readBody(scopeKey: string, at: string): ShannonNowBody {
     const reads = ['reach_out_body_presence', 'body_look_presence'].flatMap(table => {
       if (!this.tableExists(table)) return [];
       const row = this.database.prepare(`SELECT MAX(read_at) AS latest FROM ${table} WHERE scope_key = ?`).get(scopeKey) as unknown as { latest: string | null };
@@ -76,6 +86,10 @@ export class SQLiteShannonNowReader {
 
   /** Looks through her body's camera and through the app's, newest first. Who, where, how it ended: nothing of what she saw. */
   looks(scopeKey: string, since: string): ShannonNowLook[] {
+    return newestFirst([...guarded([], () => this.bodyLooks(scopeKey, since)), ...guarded([], () => this.appLooks(scopeKey, since))]);
+  }
+
+  private bodyLooks(scopeKey: string, since: string): ShannonNowLook[] {
     const looks: ShannonNowLook[] = [];
     if (this.tableExists('body_looks')) {
       const rows = this.database.prepare(`
@@ -89,6 +103,11 @@ export class SQLiteShannonNowReader {
         });
       }
     }
+    return looks;
+  }
+
+  private appLooks(scopeKey: string, since: string): ShannonNowLook[] {
+    const looks: ShannonNowLook[] = [];
     if (this.tableExists('app_looks')) {
       const rows = this.database.prepare(`
         SELECT look_id, requested_at, outcome, code FROM app_looks
@@ -99,11 +118,15 @@ export class SQLiteShannonNowReader {
         looks.push({ id: row.look_id, at: row.requested_at, askedBy: 'unknown', surface: 'app', outcome: lookOutcome(row.outcome), ...(row.code ? { code: row.code } : {}) });
       }
     }
-    return newestFirst(looks);
+    return looks;
   }
 
   /** Runs of touches, newest first: the kind, how many, and whether she answered with a line. */
   touches(scopeKey: string, since: string): ShannonNowTouch[] {
+    return guarded([], () => this.readTouches(scopeKey, since));
+  }
+
+  private readTouches(scopeKey: string, since: string): ShannonNowTouch[] {
     if (!this.tableExists('body_touch_bursts')) return [];
     const rows = this.database.prepare(`
       SELECT burst_id, touch_type, last_at, touch_count, (said_json IS NOT NULL AND said_json NOT IN ('', '[]')) AS answered FROM body_touch_bursts
@@ -114,6 +137,10 @@ export class SQLiteShannonNowReader {
 
   /** Messages she started on her own, newest first, each with how it was delivered. Never the words. */
   reachOuts(scopeKey: string, since: string): ShannonNowReachOut[] {
+    return guarded([], () => this.readReachOuts(scopeKey, since));
+  }
+
+  private readReachOuts(scopeKey: string, since: string): ShannonNowReachOut[] {
     if (!this.tableExists('initiative_messages')) return [];
     const rows = this.database.prepare(`
       SELECT initiative_id, created_at, source_item_id, read_at FROM initiative_messages
@@ -152,6 +179,14 @@ export class SQLiteShannonNowReader {
   private tableExists(name: string): boolean {
     return Boolean(this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name));
   }
+}
+
+/**
+ * A table in a shape this reader does not know (an older database, a later change) leaves its part of the page
+ * empty; the rest still arrives.
+ */
+function guarded<T>(fallback: T, read: () => T): T {
+  try { return read(); } catch { return fallback; }
 }
 
 /** `pending` and `seeing` are one state for the owner: she is looking. */

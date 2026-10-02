@@ -164,7 +164,7 @@ const opsRoute = createOpsRoute({
 // 「シャノンのいま」 for the owner's own app (docs/shannon-now-contract.md): a read-only connection, held by this route only.
 const shannonNowReader = new SQLiteShannonNowReader(configuredDatabasePath());
 const shannonNowRoute = createShannonNowRoute({
-  reader: shannonNowReader, snapshot: scopeKey => persistentStore.snapshot(scopeKey), now,
+  reader: shannonNowReader, snapshot: scopeKey => (shannonNowReader.hasState(scopeKey) ? persistentStore.snapshot(scopeKey) : null), now,
   enabled: () => shannonNowEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
