@@ -32,6 +32,8 @@ export interface AutonomyTextResult {
   text: string;
   /** What the provider reported for this call. Output includes the model's own reasoning tokens. */
   usage: { inputTokens: number; outputTokens: number };
+  /** The provider stopped at the output ceiling: the text is cut off. Reasoning tokens count against that ceiling. */
+  truncated?: true;
 }
 
 export interface AutonomyTextModel {
@@ -92,8 +94,10 @@ export class GeminiAutonomyTextModel {
     const text = Array.isArray(parts)
       ? parts.map(part => (object(part)?.thought === true ? '' : object(part)?.text)).filter((value): value is string => typeof value === 'string').join('')
       : '';
-    if (!text.trim()) throw new AutonomyModelError('AUTONOMY_MODEL_EMPTY', usage);
-    return { text, usage };
+    const truncated = Array.isArray(candidates) && object(candidates[0])?.finishReason === 'MAX_TOKENS';
+    // The whole ceiling went to reasoning: nothing was written, and the call is still charged.
+    if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
+    return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
 }
 
@@ -128,8 +132,9 @@ export class OpenAIAutonomyTextModel {
     const reported = responseUsage(json);
     const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens };
     const text = openAIOutputText(json);
-    if (!text.trim()) throw new AutonomyModelError('AUTONOMY_MODEL_EMPTY', usage);
-    return { text, usage };
+    const truncated = object(json)?.status === 'incomplete' && object(object(json)?.incomplete_details)?.reason === 'max_output_tokens';
+    if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
+    return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
 }
 

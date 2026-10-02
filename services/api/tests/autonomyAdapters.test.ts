@@ -169,6 +169,30 @@ describe('model adapters for her own activity', () => {
     });
   });
 
+  it('says when the provider cut the reply off at the output ceiling, also when reasoning used all of it', async () => {
+    // Gemini: reasoning tokens count against maxOutputTokens, so 1,500 can be reached with half a JSON object written.
+    const cut = fakeFetch(() => Response.json({
+      candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"thought":"直します。","steps":[{"action":"rev' }] } }],
+      usageMetadata: { promptTokenCount: 4_600, candidatesTokenCount: 420, thoughtsTokenCount: 1_080 },
+    }));
+    expect(await configuredAutonomyTextModel(environment, cut.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 1_500 }))
+      .toEqual({ text: '{"thought":"直します。","steps":[{"action":"rev', usage: { inputTokens: 4_600, outputTokens: 1_500 }, truncated: true });
+    const nothing = fakeFetch(() => Response.json({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }], usageMetadata: { promptTokenCount: 4_600, thoughtsTokenCount: 1_500 } }));
+    const error = await configuredAutonomyTextModel(environment, nothing.fetcher)
+      .generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 1_500 }).catch(caught => caught as AutonomyModelError);
+    // Nothing was written, and the call is still charged what the provider counted.
+    expect(error).toMatchObject({ code: 'AUTONOMY_MODEL_TRUNCATED', usage: { inputTokens: 4_600, outputTokens: 1_500 } });
+    const whole = fakeFetch(() => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{"steps":[]}' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }));
+    expect(await configuredAutonomyTextModel(environment, whole.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 100 }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 10, outputTokens: 5 } });
+    const incomplete = fakeFetch(() => Response.json({
+      status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' },
+      output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[{"act' }] }], usage: { input_tokens: 800, output_tokens: 500 },
+    }));
+    expect(await configuredAutonomyTextModel(environment, incomplete.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .toMatchObject({ truncated: true, usage: { inputTokens: 800, outputTokens: 500 } });
+  });
+
   it('fails with a code that carries neither the request nor the credential', async () => {
     const refused = fakeFetch(() => new Response('{"error":{"message":"key dedicated-gemini-credential is invalid"}}', { status: 401 }));
     const model = configuredAutonomyTextModel(environment, refused.fetcher);

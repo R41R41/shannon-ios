@@ -22,18 +22,20 @@ export function paidCall(dependencies: StepDependencies, scopeKey: string, purpo
 }
 
 export async function callModel(adapters: { model?: AutonomyTextModel }, call: PaidCall, signal?: AbortSignal):
-  Promise<{ reply: Record<string, unknown> | null; usage?: { inputTokens: number; outputTokens: number }; failure?: string }> {
+  Promise<{ reply: Record<string, unknown> | null; usage?: { inputTokens: number; outputTokens: number }; failure?: string; /** The reply was cut off at the output ceiling. */ truncated?: boolean; /** The reply as text, when it was not one JSON object. */ text?: string }> {
   if (!adapters.model) return { reply: null, failure: 'AUTONOMY_STEP_NOT_BOUND' };
   try {
     const result = await adapters.model.generate({
       model: call.model, system: call.prompt.system, prompt: call.prompt.prompt, maximumOutputTokens: call.maximumOutputTokens, signal,
     });
-    return { reply: parsedModelObject(result.text), usage: result.usage };
+    const reply = parsedModelObject(result.text);
+    return { reply, usage: result.usage, ...(result.truncated ? { truncated: true } : {}), ...(reply ? {} : { text: result.text }) };
   } catch (error) {
     // The provider answered with an error: charged only what it reported. No answer at all (a timeout, a lost
     // connection, a shutdown) leaves the cost unknown, so the estimate is charged and the count errs high.
     const usage = error instanceof AutonomyModelError ? error.usage : call.estimate;
-    return { reply: null, failure: error instanceof Error ? error.message : 'AUTONOMY_MODEL_FAILED', ...(usage ? { usage } : {}) };
+    const failure = error instanceof Error ? error.message : 'AUTONOMY_MODEL_FAILED';
+    return { reply: null, failure, ...(usage ? { usage } : {}), ...(failure === 'AUTONOMY_MODEL_TRUNCATED' ? { truncated: true } : {}) };
   }
 }
 

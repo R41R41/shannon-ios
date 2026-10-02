@@ -60,6 +60,8 @@ export interface StepDependencies {
   observer?: AutonomyReachOutObserver;
   /** The owner's context for her thinking, her writing and her messages (owner decisions 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  /** A line for the service log. Only closed codes are ever passed: never a word of a prompt or a reply. */
+  log?: (line: string) => void;
   /** The loop's clock, read while a step waits. */
   now?: () => string;
   /** Renews the runner's lease and heartbeat while a step waits; false once the lease is lost. */

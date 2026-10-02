@@ -69,7 +69,9 @@ export function fitsSession(dependencies: Pick<StepDependencies, 'store' | 'loop
 }
 
 /** The rest she takes: what she asked for held inside the bounds, or the default. */
-export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number): number {
+export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, forced?: SessionEndCode): number {
+  // A session in which nothing was done is followed by a short rest, not the long default.
+  if (forced === 'no_plan') return loop.sessionNoPlanRestMilliseconds;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return loop.sessionDefaultRestMilliseconds;
   return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionMinimumRestMilliseconds, Math.round(minutes) * 60_000));
 }
@@ -98,7 +100,7 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
   const { config, loop } = dependencies;
   const forced = step.forced;
   const reason = forced ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
-  const rest = restMilliseconds(loop, forced ? undefined : step.minutes);
+  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, forced);
   return {
     request: { domain: 'thinking', tool: REST_TOOL, summary: forced ? '上限に届いたので、ここで一区切りにします。' : 'ここで一区切りにして、休みます。' },
     async perform(_adapters, performAt) {
