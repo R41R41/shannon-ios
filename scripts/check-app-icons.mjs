@@ -72,6 +72,7 @@ async function validateCatalog(directory, expectedTree, expectedIdiom) {
 async function main() {
   const manifest = JSON.parse(await readFile(resolve(root, 'config/shannon-app-icons.json'), 'utf8'));
   const failures = [];
+  const skipped = [];
   const levels = Object.keys(manifest.variants);
   if (levels.join(',') !== 'L02,L06,L10' || manifest.defaultVariant !== 'L06') {
     failures.push('icon manifest must expose only L02, L06, and L10 with L06 as default');
@@ -88,7 +89,10 @@ async function main() {
       maxBuffer: 1024 * 1024,
     });
   } catch (error) {
-    failures.push(`macOS icon visual footprint check failed: ${error.stderr || error.message}`);
+    // A host without the Swift toolchain (the Linux cloud Agent Host) cannot run this one check; the
+    // manifest and catalog checks above and below still run there. On a Mac and in Xcode Cloud it always runs.
+    if (error?.code === 'ENOENT') skipped.push('macOS icon visual footprint check skipped: the swift command is not installed on this host');
+    else failures.push(`macOS icon visual footprint check failed: ${error.stderr || error.message}`);
   }
 
   for (const [platform, directory] of [['iOS', iosAssets], ['macOS', macAssets]]) {
@@ -151,6 +155,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  skipped.forEach(note => console.log(`Shannon app icon check: ${note}.`));
   console.log(`Shannon app icon check passed (${levels.join(', ')}, iOS ${manifest.release.iosBuild}, macOS ${manifest.release.macosBuild}).`);
 }
 
