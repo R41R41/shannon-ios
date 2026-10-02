@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, currentShannonEmotion, presentShannonMood, resolveReplyEmotion, touchCause,
+  OWNER_AUDIENCE, currentShannonEmotion, presentShannonMood, resolveReplyEmotion, touchCause, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
 import { BODY_LIMITS } from './bodyContract.js';
@@ -9,7 +9,7 @@ import {
   type BodyReactionAnswer, type BodyReactionConfig, type BodyReactionRequest,
 } from './bodyReactionContract.js';
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
-import { BODY_TOUCH_PHRASES, bodyReactionPrompt, type BodyReactionDecision } from './bodyReactionPrompt.js';
+import { BODY_TOUCH_PHRASES, bodyReactionPrompt, boundedReactionText, type BodyReactionDecision } from './bodyReactionPrompt.js';
 import type { ReactionLine, SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import type { BodyTouches, FeltTouch } from './bodyTouch.js';
 import type { ConversationStore } from './conversationStore.js';
@@ -65,7 +65,7 @@ export class BodyReactions {
     if (!config.enabled) return { kind: 'disabled' };
     if (!this.dependencies.ingestEnabled) return { kind: 'ingest_disabled' };
     // A touch reaction is for the owner's own body only: no other scope may ask for one.
-    if (config.ownerScopeKey !== undefined && config.ownerScopeKey !== scopeKey) return { kind: 'not_owner' };
+    if (config.ownerScopeKey !== scopeKey) return { kind: 'not_owner' };
     if (!this.dependencies.isBody(scopeKey, deviceId)) return { kind: 'not_a_body' };
 
     const hash = bodyReactionContentHash(request);
@@ -128,6 +128,7 @@ export class BodyReactions {
 
       const saidAt = this.dependencies.now();
       const before = stateStore.snapshot(scopeKey);
+      const touched = { kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner' };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({
         snapshot: before, userMessage: '', reply: decision.text, now: saidAt,
@@ -136,7 +137,7 @@ export class BodyReactions {
       const held = before.expressiveEmotion?.overrideReason !== undefined && currentShannonEmotion(before.expressiveEmotion, saidAt).primary !== 'neutral';
       const after = resolved.expressiveEmotion.primary === 'neutral' || held ? before : stateStore.apply(scopeKey, {
         type: 'expressive-emotion-updated',
-        emotion: { ...resolved.expressiveEmotion, cause: touchCause({ kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner' }) },
+        emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
       });
       const answer: BodyReactionAnswer = {
         schemaVersion: 1, id: request.id, status: 'said',
@@ -181,7 +182,11 @@ export class BodyReactions {
     const deadline = new Promise<typeof LATE>(resolve => { timer = setTimeout(() => resolve(LATE), config.deadlineMilliseconds); });
     try {
       const decision = await Promise.race([speaker.decide({ scopeKey, prompt, signal: abort.signal }).catch(() => null), deadline]);
-      if (decision !== LATE) return decision;
+      if (decision !== LATE) {
+        // Whatever the speaker returns, her line is one short sentence, and no words means silence.
+        const text = decision?.say ? boundedReactionText(decision.text) : '';
+        return decision ? { ...decision, text, say: text.length > 0 } : null;
+      }
       // Given up: the body has stopped waiting, so a line that arrives now must not be said or kept.
       abort.abort();
       return null;

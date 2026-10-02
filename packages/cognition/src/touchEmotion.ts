@@ -87,6 +87,11 @@ export function touchCause(touch: ShannonTouch): string {
   return `${touch.ownerAlone === false ? '' : `${SHANNON_OWNER_NAME}に`}${SHANNON_TOUCH_FEELINGS[touch.kind].done}${count > 1 ? `（続けて${count}回目）` : ''}`;
 }
 
+/** Whom the feeling is toward: the owner, unless someone else may have been the one touching. */
+export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
+  return touch.ownerAlone === false ? '触れた人' : SHANNON_OWNER_NAME;
+}
+
 /**
  * The emotion state after one touch. Pure. The mood moves by at most `SHANNON_TOUCH_MOOD_STEP`
  * per value and never past the row's mood, so any number of touches stays bounded. A feeling
@@ -112,7 +117,7 @@ export function feelTouch(
   const resolved = resolveShannonEmotionState({
     ...(previous ? { previous } : {}),
     provisionalPrimary: felt.step.primary, provisionalIntensity: felt.intensity,
-    transcript: '', now, target: touch.ownerAlone === false ? '触れた人' : SHANNON_OWNER_NAME,
+    transcript: '', now, target: touchTarget(touch),
   });
   return { emotion, expressiveEmotion: Object.freeze({ ...resolved, cause: touchCause(touch) }) };
 }

@@ -118,6 +118,7 @@ export {
   isShannonTouchKind,
   touchCause,
   touchFeeling,
+  touchTarget,
   type ShannonTouchFeeling,
   type ShannonTouchFeelingStep,
 } from './touchEmotion.js';

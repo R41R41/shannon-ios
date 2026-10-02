@@ -91,8 +91,8 @@ export interface BodyReactionConfig {
   enabled: boolean;
   listenSeconds: number;
   deadlineMilliseconds: number;
-  /** `SHANNON_OWNER_SCOPE_KEY` when configured: only that scope's body may ask. Absent, any scope (local runs, tests). */
-  ownerScopeKey?: string;
+  /** `SHANNON_OWNER_SCOPE_KEY` (default `owner`): only that scope's body may ask. */
+  ownerScopeKey: string;
 }
 
 const REACTION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/u;
@@ -144,11 +144,10 @@ const boundedInteger = (value: string | undefined, fallback: number, minimum: nu
 
 /** Stopping reactions needs only `SHANNON_BODY_REACTIONS=off` and a restart, not a deployment. */
 export function configuredBodyReactions(environment: Readonly<Record<string, string | undefined>> = process.env): BodyReactionConfig {
-  const ownerScopeKey = environment.SHANNON_OWNER_SCOPE_KEY?.trim();
   return {
     enabled: !OFF.includes(environment.SHANNON_BODY_REACTIONS?.trim().toLowerCase() ?? ''),
     listenSeconds: boundedInteger(environment.SHANNON_BODY_REACTION_LISTEN_SECONDS, BODY_REACTION_LIMITS.listenSecondsDefault, 0, BODY_REACTION_LIMITS.listenSecondsMaximum),
     deadlineMilliseconds: boundedInteger(environment.SHANNON_BODY_REACTION_DEADLINE_MS, BODY_REACTION_LIMITS.deadlineMillisecondsDefault, 200, BODY_REACTION_LIMITS.deadlineMillisecondsMaximum),
-    ...(ownerScopeKey ? { ownerScopeKey } : {}),
+    ownerScopeKey: environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner',
   };
 }
