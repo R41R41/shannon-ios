@@ -289,7 +289,7 @@ How the runtime maps a command to its own surface:
 | `type` | Runtime call |
 | --- | --- |
 | `service.start` / `service.stop` | `dispatchServiceCommand(target, 'start' \| 'stop')` |
-| `minecraft.start` / `minecraft.stop` | `dispatchServiceCommand('minecraft', 'start' \| 'stop', <target without "minecraft:">)` |
+| `minecraft.start` / `minecraft.stop` | `dispatchServiceCommand(<target>, 'start' \| 'stop')` — each managed server is its own registered service `minecraft:<server>` (verified against the legacy runtime, 2026-10-02). A start is refused with `lab_running` while a paid lab run is in progress. |
 | `schedule.run` | `getSchedulerPort().callSchedule({ type: 'call_schedule', name: target })` |
 
 The runtime **re-checks its own allowlist** before acting (the same lists as above, and never a `progressive-lab-*` server) and reports `refused` with `not_allowed` for anything else: the server's check is not the only one.
