@@ -16,8 +16,8 @@ public struct ShannonVoiceBackgroundSilence: Equatable, Sendable {
     /// How often a running call looks at the clock while in the background.
     public static let checkInterval: TimeInterval = 5
     /// While a phone call, Siri or another app holds the audio, nobody can speak: the call waits this long for the
-    /// audio to come back before it ends, instead of the minute.
-    public static let interruptedLimit: TimeInterval = 5 * 60
+    /// audio to come back before it ends. One minute, like the silence itself (owner decision 2026-10-03: 「1分にする」).
+    public static let interruptedLimit: TimeInterval = 60
     /// An utterance of the owner's that the recogniser has heard begin keeps the call open at most this long,
     public static let maximumOpenUtterance: TimeInterval = 120
     /// and, once it has heard it end, this long while its words are still being recognised. Noise the recogniser

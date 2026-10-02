@@ -134,16 +134,19 @@ struct ShannonVoiceBackgroundSilenceTests {
         #expect(later)
     }
 
-    @Test func anInterruptedCallWaitsLongerForItsAudio() {
+    @Test func anInterruptedCallAlsoEndsAfterOneMinute() {
         var silence = ShannonVoiceBackgroundSilence()
         silence.enteredBackground(at: start)
         silence.speech(at: start)
-        // A phone call holds the audio for three minutes.
-        let during = silence.shouldEnd(at: start.addingTimeInterval(180), replyInProgress: false, interrupted: true)
+        // A phone call holds the audio.
+        let during = silence.shouldEnd(at: start.addingTimeInterval(59), replyInProgress: false, interrupted: true)
         #expect(!during)
-        let tooLong = silence.shouldEnd(at: start.addingTimeInterval(300), replyInProgress: false, interrupted: true)
+        let tooLong = silence.shouldEnd(at: start.addingTimeInterval(60), replyInProgress: false, interrupted: true)
         #expect(tooLong)
-        #expect(ShannonVoiceBackgroundSilence.interruptedLimit == 300)
+        #expect(ShannonVoiceBackgroundSilence.interruptedLimit == 60)
+        // A reply that is being made or played is still never silence, interrupted or not.
+        let replying = silence.shouldEnd(at: start.addingTimeInterval(600), replyInProgress: true, interrupted: true)
+        #expect(!replying)
     }
 
     @Test func theSnackbarSaysOneMinute() {
