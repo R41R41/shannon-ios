@@ -89,7 +89,7 @@ const CODE_REASON: Readonly<Record<string, string>> = Object.freeze({
   denied: 'カメラを使う許可がなかった', timeout: '体から返事がなかった', others_present: 'ほかの人がいた', rate_limited: '見る回数の上限だった',
   model_failed: '言葉にならなかった', conversation_in_progress: `${SHANNON_OWNER_NAME}が話している最中だった`, daily_limit: '今日の回数を使い切っていた',
   nowhere_to_speak: '話しかける場所がなかった', replied: '先に返事が来ていた', held: 'やめておいた', access_limit: '今日の回数の上限だった',
-  budget_exhausted: '今日の予算に収まらなかった', failed: 'うまくいかなかった',
+  budget_exhausted: '今日の予算に収まらなかった', failed: 'うまくいかなかった', call_unavailable: 'いまは電話をかけられなかった', call_failed: '電話がつながらなかった',
 });
 
 function clock(at: string, timeZone: string): string {

@@ -8,8 +8,9 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { reachOutHappenedLines, reachOutMemoryLine } from '../src/autonomyLoopObservePrompts.js';
 import { AutonomyLoopObservations, type ReachOutFacts } from '../src/autonomyLoopObservations.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
-import { INCOMING_CALL_LIMITS, incomingCallPushBody, incomingCallsEnabled, type IncomingCallPayload } from '../src/incomingCallContract.js';
+import { INCOMING_CALL_LIMITS, incomingCallMinimumIntervalMilliseconds, incomingCallPushBody, incomingCallsEnabled, type IncomingCallPayload } from '../src/incomingCallContract.js';
 import { dispatchIncomingCallRequest } from '../src/incomingCallRoutes.js';
+import { IncomingCallRequests, incomingCallsConfigured } from '../src/incomingCallRequests.js';
 import { IncomingCalls } from '../src/incomingCalls.js';
 import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
@@ -50,7 +51,7 @@ class FakeApns implements VoipPushSender {
   }
 }
 
-function world(options: { enabled?: boolean; path?: string; paired?: string[] } = {}) {
+function world(options: { enabled?: boolean; path?: string; paired?: string[]; intervalMinutes?: number } = {}) {
   const path = options.path ?? join(directory, `calls-${databases += 1}.sqlite`);
   const clock = { at: START };
   const now = () => clock.at;
@@ -73,8 +74,12 @@ function world(options: { enabled?: boolean; path?: string; paired?: string[] } 
   let ids = 0;
   const makeCalls = () => new IncomingCalls({
     store, claims, sender: apns, enabled: options.enabled ?? true, ownerScopeKey: scope, now, isPaired: (_scope, deviceId) => paired.has(deviceId),
-    appSpeaks: (scopeKey, at, id) => reachOuts.speaker(scopeKey, at, id) !== null, body: reports,
-    newCallId: () => CALL_IDS[ids++]!, log: (event, detail) => logged.push([event, detail]),
+    log: (event, detail) => logged.push([event, detail]),
+  });
+  /** Her loop's side: the facts she chooses with, and asking for the call. */
+  const requests = new IncomingCallRequests({
+    store, claims, listeners: (scopeKey, at) => listening.listeners(scopeKey, at), bodyVisible: (scopeKey, at) => reports.windowVisible(scopeKey, at),
+    serverReady: options.enabled ?? true, minimumIntervalMilliseconds: (options.intervalMinutes ?? 0) * MINUTE, newCallId: () => CALL_IDS[ids++]!,
   });
   let calls = makeCalls();
   const callRoutes = () => ({ calls, ownerScopeKey: scope, bundleId: BUNDLE });
@@ -104,6 +109,13 @@ function world(options: { enabled?: boolean; path?: string; paired?: string[] } 
     expect(speaker.say(scope, { reason: 'wonder', text, dayKey: clock.at.slice(0, 10), maximumPerDay: 20 }, clock.at)).toBe('sent');
     return speaker.latest(scope)!.id;
   };
+  /** She chose to phone him: her line is written as a message of hers, and the call is asked for. */
+  const ask = (text = TEXT) => {
+    expect(speaker.sayByPhone(scope, { reason: 'wonder', text, dayKey: clock.at.slice(0, 10) }, clock.at)).toBe('sent');
+    const id = speaker.latest(scope)!.id;
+    expect(requests.request(scope, id, clock.at)).toBe('requested');
+    return id;
+  };
   const ownerSpeaks = () => {
     const database = new DatabaseSync(path);
     try {
@@ -115,7 +127,7 @@ function world(options: { enabled?: boolean; path?: string; paired?: string[] } 
   };
   const close = () => { for (const item of [store, listening, claims, reports, speaker, body, initiatives, persistent]) item.close(); };
   return {
-    path, clock, advance, persistent, initiatives, reports, speaker, claims, store, apns, paired, logged, reachOuts,
+    path, clock, advance, persistent, initiatives, reports, speaker, claims, store, apns, paired, logged, reachOuts, requests, ask,
     get calls() { return calls; }, restart: () => { calls = makeCalls(); },
     post, register, report, answer, beat, bodyOnline, bodyPresence, bodyReport, say, ownerSpeaks, close,
   };
@@ -157,31 +169,65 @@ describe('registering the call token', () => {
   it('says the server is not ready without an APNs key or with the kill switch off, and rings nothing', async () => {
     const off = world({ enabled: false });
     expect(bodyOf(off.register()).available).toBe(false);
-    off.say();
+    // She is not offered the call, and asking for one is refused.
+    const message = off.say();
+    expect(off.requests.facts(scope, off.clock.at)).toMatchObject({ switchedOn: true, serverReady: false });
+    expect(off.requests.request(scope, message, off.clock.at)).toBe('unavailable');
     await off.calls.tick();
     expect(off.apns.sent).toEqual([]);
     off.close();
 
+    // The loop's process and the API process disagree for a moment (a restart applied the switch to one of them only).
     const noKey = world();
+    noKey.register();
+    const id = noKey.ask();
     noKey.apns.enabled = false;
-    expect(bodyOf(noKey.register()).available).toBe(false);
-    const id = noKey.say();
     await noKey.calls.tick();
     expect(noKey.apns.sent).toEqual([]);
-    // Nothing was taken: her body or an app may still say it.
+    expect(noKey.store.ofMessage(scope, id)).toMatchObject({ state: 'failed', decidedBy: 'server' });
+    // Nothing is held: her body or an app may still say it.
     expect(noKey.claims.holder(scope, id)).toBeNull();
     noKey.close();
 
     expect(incomingCallsEnabled({})).toBe(true);
     for (const value of ['off', 'false', '0', 'disabled', ' OFF ']) expect(incomingCallsEnabled({ SHANNON_INCOMING_CALLS: value })).toBe(false);
+    // What her process is told about the server: the switches and the three values, with a key file that exists. The key is not read.
+    const keyFile = join(directory, 'configured.p8');
+    writeFileSync(keyFile, 'not read here');
+    const environment = { SHANNON_APNS_KEY_ID: 'ABCDEFGHIJ', SHANNON_APNS_TEAM_ID: 'KLMNOPQRST', SHANNON_APNS_PRIVATE_KEY_FILE: keyFile };
+    expect(incomingCallsConfigured(environment)).toBe(true);
+    expect(incomingCallsConfigured({})).toBe(false);
+    expect(incomingCallsConfigured({ ...environment, SHANNON_APNS_PRIVATE_KEY_FILE: join(directory, 'nowhere.p8') })).toBe(false);
+    expect(incomingCallsConfigured({ ...environment, SHANNON_INCOMING_CALLS: 'off' })).toBe(false);
+    expect(incomingCallsConfigured({ ...environment, SHANNON_PRIVATE_LISTENING_REACH_OUTS: 'off' })).toBe(false);
+    expect(incomingCallMinimumIntervalMilliseconds({})).toBe(5 * MINUTE);
+    expect(incomingCallMinimumIntervalMilliseconds({ SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES: '30' })).toBe(30 * MINUTE);
+    expect(incomingCallMinimumIntervalMilliseconds({ SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES: '-1' })).toBe(5 * MINUTE);
   });
 });
 
 describe('ringing', () => {
-  it('rings his iPhone once with a message nobody can simply say, and the push carries no word of hers', async () => {
+  it('never rings by itself: an ordinary message of hers is delivered as before, however long nobody says it', async () => {
     const w = world();
     w.register();
     const id = w.say();
+    for (let index = 0; index < 10; index += 1) { w.advance(10 * SECOND); await w.calls.tick(); }
+    expect(w.apns.sent).toEqual([]);
+    expect(w.store.ofMessage(scope, id)).toBeNull();
+    expect(w.claims.holder(scope, id)).toBeNull();
+    // An app in his ears is offered it, as before.
+    const fresh = w.say('ライ氏、もうひとつ。');
+    expect(bodyOf(w.beat(MAC, 'mac')).reachOut).toMatchObject({ id: fresh });
+    w.close();
+  });
+
+  it('rings his iPhone once when she asked for the call, and the push carries no word of hers', async () => {
+    const w = world();
+    w.register();
+    const id = w.ask();
+    // From the moment she asked, the message is the call's: exactly one surface.
+    expect(w.claims.holder(scope, id)).toMatchObject({ deviceId: PHONE, surface: 'iphone_call', spokenAt: null });
+    expect(w.store.ofMessage(scope, id)).toMatchObject({ callId: CALL_IDS[0], state: 'pending', deviceId: PHONE });
     w.advance(2 * SECOND);
     await w.calls.tick();
     expect(w.apns.sent).toHaveLength(1);
@@ -191,9 +237,10 @@ describe('ringing', () => {
     const wire = incomingCallPushBody(payload);
     expect(JSON.parse(wire)).toEqual({ aps: {}, shannonCall: 1, ...payload });
     expect(wire).not.toContain('ライ氏');
-    // The call holds the message: exactly one surface.
-    expect(w.claims.holder(scope, id)).toMatchObject({ deviceId: PHONE, surface: 'iphone_call', spokenAt: null });
-    expect(w.store.ofMessage(scope, id)).toMatchObject({ callId: CALL_IDS[0], state: 'ringing', deviceId: PHONE });
+    expect(w.store.ofMessage(scope, id)).toMatchObject({ state: 'ringing', expiresAt: '2026-10-03T03:00:32.000Z' });
+    // Her line is in the Talk as a message of hers, outside the day's count of messages.
+    expect(w.speaker.text(scope, id)).toBe(TEXT);
+    expect(w.speaker.sentOn(scope, '2026-10-03')).toBe(0);
     // Looking again, however often, rings nothing more.
     for (let index = 0; index < 5; index += 1) { w.advance(2 * SECOND); await w.calls.tick(); }
     expect(w.apns.sent).toHaveLength(1);
@@ -205,7 +252,7 @@ describe('ringing', () => {
   it('does not ring again after a restart, whatever became of the call', async () => {
     const w = world();
     w.register();
-    const id = w.say();
+    const id = w.ask();
     await w.calls.tick();
     w.restart();
     await w.calls.tick();
@@ -215,98 +262,120 @@ describe('ringing', () => {
     w.restart();
     await w.calls.tick();
     expect(w.apns.sent).toHaveLength(1);
+    // The same message cannot be asked for twice.
+    expect(w.requests.request(scope, id, w.clock.at)).toBe('unavailable');
     w.close();
   });
 
-  it('closes a call whose push was never confirmed when the process stopped, gives the message back, and never sends it', async () => {
-    const w = world();
-    w.register();
-    const id = w.say();
-    // What a process that stopped between the row and the push leaves behind.
-    expect(w.claims.claim(scope, id, PHONE, 'iphone_call', w.clock.at)).toBe('claimed');
-    expect(w.store.begin(scope, { callId: CALL_IDS[8]!, initiativeId: id, deviceId: PHONE, threadId: 't', expiresAt: '2026-10-03T03:00:30.000Z' }, w.clock.at)).toBe(true);
-    w.restart();
-    await w.calls.tick();
-    expect(w.store.ofMessage(scope, id)?.state).toBe('pending');
-    w.advance(11 * SECOND);
-    await w.calls.tick();
-    expect(w.store.ofMessage(scope, id)).toMatchObject({ state: 'failed', decidedBy: 'server' });
-    expect(w.claims.holder(scope, id)).toBeNull();
-    await w.calls.tick();
-    expect(w.apns.sent).toEqual([]);
-    w.close();
+  it('never sends a call the API did not get to in time, or one a stopped process left half-sent', async () => {
+    const late = world();
+    late.register();
+    const id = late.ask();
+    // The API process was down while she asked.
+    late.advance(11 * SECOND);
+    await late.calls.tick();
+    expect(late.apns.sent).toEqual([]);
+    expect(late.store.ofMessage(scope, id)).toMatchObject({ state: 'failed', decidedBy: 'server' });
+    expect(late.claims.holder(scope, id)).toBeNull();
+    late.close();
+
+    const stopped = world();
+    stopped.register();
+    const other = stopped.ask();
+    // A process took the call to send it and stopped: whether the push left is not known.
+    expect(stopped.store.take(CALL_IDS[0]!, '2026-10-03T03:00:30.000Z')).toBe(true);
+    stopped.restart();
+    await stopped.calls.tick();
+    expect(stopped.apns.sent).toEqual([]);
+    // If the phone does ring, he can still answer.
+    expect(stopped.answer(other, CALL_IDS[0]!).status).toBe(200);
+    stopped.close();
+
+    const lost = world();
+    lost.register();
+    const third = lost.ask();
+    expect(lost.store.take(CALL_IDS[0]!, '2026-10-03T03:00:30.000Z')).toBe(true);
+    lost.restart();
+    lost.advance(46 * SECOND);
+    await lost.calls.tick();
+    expect(lost.apns.sent).toEqual([]);
+    expect(lost.store.ofMessage(scope, third)).toMatchObject({ state: 'failed', decidedBy: 'server' });
+    expect(lost.claims.holder(scope, third)).toBeNull();
+    lost.close();
   });
 
-  it('gives back a call claim that has no call row', async () => {
-    const w = world();
-    const id = w.say();
-    expect(w.claims.claim(scope, id, PHONE, 'iphone_call', w.clock.at)).toBe('claimed');
-    await w.calls.tick();
-    expect(w.claims.holder(scope, id)).toBeNull();
-    w.close();
-  });
-
-  it('never rings into a conversation, for a message he read, for an old one, or for her second call', async () => {
+  it('refuses, a moment after she asked, a call into a conversation, for a message he read, or while another rings', async () => {
     const talking = world();
     talking.register();
+    const id = talking.ask();
     talking.ownerSpeaks();
-    talking.advance(9 * MINUTE);
-    talking.say();
     await talking.calls.tick();
     expect(talking.apns.sent).toEqual([]);
+    expect(talking.store.ofMessage(scope, id)?.state).toBe('failed');
+    expect(talking.claims.holder(scope, id)).toBeNull();
+    expect(JSON.stringify(talking.logged)).toBe('[["failed",{"status":0,"reason":"conversation"}]]');
     talking.close();
-
-    const answered = world();
-    answered.register();
-    answered.say();
-    answered.advance(SECOND);
-    answered.ownerSpeaks();
-    await answered.calls.tick();
-    expect(answered.apns.sent).toEqual([]);
-    answered.close();
 
     const read = world();
     read.register();
-    read.say();
+    read.ask();
     read.initiatives.markRead(scope, undefined, read.clock.at);
     await read.calls.tick();
     expect(read.apns.sent).toEqual([]);
     read.close();
 
-    const old = world();
-    const id = old.say();
-    old.advance(3 * MINUTE + SECOND);
-    old.register();
-    await old.calls.tick();
-    expect(old.apns.sent).toEqual([]);
-    expect(old.claims.holder(scope, id)).toBeNull();
-    old.close();
+    // While a call rings she cannot ask for another, and neither can a second row slip through.
+    const ringing = world();
+    ringing.register();
+    ringing.ask();
+    await ringing.calls.tick();
+    const second = ringing.say('ライ氏、もうひとつ。');
+    expect(ringing.requests.facts(scope, ringing.clock.at)).toMatchObject({ ringing: true, last: { outcome: 'ringing' } });
+    expect(ringing.requests.request(scope, second, ringing.clock.at)).toBe('ringing');
+    expect(ringing.claims.holder(scope, second)).toBeNull();
+    ringing.close();
+  });
 
-    const again = world();
-    again.register();
-    const first = again.say();
-    await again.calls.tick();
-    expect(again.report(CALL_IDS[0]!, 'unanswered').status).toBe(200);
-    again.advance(4 * MINUTE);
-    expect(again.speaker.sayAgain(scope, { originId: first, text: 'ライ氏、もう一度だけ。', dayKey: again.clock.at.slice(0, 10), maximumPerDay: 3 }, again.clock.at)).toBe('sent');
-    await again.calls.tick();
-    expect(again.apns.sent).toHaveLength(1);
-    again.close();
+  it('keeps a minimum interval between two calls, whatever became of the first, and has no count of calls a day', async () => {
+    const w = world({ intervalMinutes: 5 });
+    w.register();
+    w.ask();
+    await w.calls.tick();
+    expect(w.report(CALL_IDS[0]!, 'declined').status).toBe(200);
+    w.advance(4 * MINUTE);
+    const soon = w.say('ライ氏、もう一度。');
+    expect(w.requests.facts(scope, w.clock.at)).toMatchObject({ ringing: false, waitMinutes: 1, last: { outcome: 'declined' } });
+    expect(w.requests.request(scope, soon, w.clock.at)).toBe('too_soon');
+    w.advance(MINUTE);
+    expect(w.requests.facts(scope, w.clock.at).waitMinutes).toBe(0);
+    // Five more, each after the interval: nothing counts them.
+    for (let index = 1; index <= 5; index += 1) {
+      w.ask(`ライ氏、${index}回目です。`);
+      await w.calls.tick();
+      expect(w.report(CALL_IDS[index]!, 'unanswered').status).toBe(200);
+      w.advance(5 * MINUTE);
+    }
+    expect(w.apns.sent).toHaveLength(6);
+    w.close();
   });
 
   it('rings only a device that is still paired and whose switch is on', async () => {
     const w = world({ paired: [] });
     w.register();
-    w.say();
+    const id = w.ask();
     await w.calls.tick();
     expect(w.apns.sent).toEqual([]);
+    expect(w.store.ofMessage(scope, id)?.state).toBe('failed');
+    // Switched off, she is told so and cannot ask.
     w.paired.add(PHONE);
     w.register(PHONE, { enabled: false });
-    await w.calls.tick();
-    expect(w.apns.sent).toEqual([]);
+    const other = w.say();
+    expect(w.requests.facts(scope, w.clock.at).switchedOn).toBe(false);
+    expect(w.requests.request(scope, other, w.clock.at)).toBe('unavailable');
     // Unpairing drops the token.
     w.register();
     w.store.invalidateDevice(PHONE, w.clock.at);
+    expect(w.requests.request(scope, other, w.clock.at)).toBe('unavailable');
     await w.calls.tick();
     expect(w.apns.sent).toEqual([]);
     w.close();
@@ -315,13 +384,12 @@ describe('ringing', () => {
   it('drops a token APNs no longer knows, gives the message back, and does not ring that message again', async () => {
     const w = world();
     w.register();
-    const id = w.say();
+    const id = w.ask();
     w.apns.next = { delivered: false, invalidToken: true, status: 410, reason: 'Unregistered' };
     await w.calls.tick();
     expect(w.store.ofMessage(scope, id)).toMatchObject({ state: 'failed', decidedBy: 'server' });
     expect(w.store.devices(scope)).toEqual([]);
     expect(w.claims.holder(scope, id)).toBeNull();
-    // Registered anew, the device may be rung again, but not with that message.
     w.apns.next = { delivered: true, invalidToken: false, status: 200, reason: null };
     w.register();
     await w.calls.tick();
@@ -330,7 +398,7 @@ describe('ringing', () => {
 
     const down = world();
     down.register();
-    const other = down.say();
+    const other = down.ask();
     down.apns.next = new Error(`socket hang up ${TOKEN}`);
     await down.calls.tick();
     expect(down.store.ofMessage(scope, other)?.state).toBe('failed');
@@ -342,22 +410,21 @@ describe('ringing', () => {
 });
 
 describe('one surface per message', () => {
-  it('leaves it to an app in his ears, and offers a ringing message to no app', async () => {
+  it('offers a message she phones with to no app and not to her body, from the moment she asked', async () => {
     const w = world();
     w.register();
+    await w.bodyOnline();
     w.beat(MAC, 'mac');
-    const id = w.say();
-    await w.calls.tick();
-    expect(w.apns.sent).toEqual([]);
-    // The app is gone (three missed reports): now the phone rings.
-    w.advance(50 * SECOND);
-    await w.calls.tick();
-    expect(w.apns.sent).toHaveLength(1);
-    // While it rings, and afterwards, no app is offered the message and none can take it.
+    // An app is in his ears and her body is there: she chose the phone anyway, and only the phone has it.
+    const id = w.ask();
     expect(bodyOf(w.beat(MAC, 'mac')).reachOut).toBeNull();
     expect(bodyOf(w.beat(PHONE, 'iphone')).reachOut).toBeNull();
+    expect((await w.bodyPresence())?.pending).toBe(0);
+    await w.calls.tick();
+    expect(w.apns.sent).toHaveLength(1);
+    expect(bodyOf(w.beat(MAC, 'mac')).reachOut).toBeNull();
     expect(errorOf(dispatchPrivateListeningRequest(
-      { method: 'POST', path: `/v1/private-listening/reach-outs/${id}/claim`, body: { scopeKey: scope }, deviceId: PHONE },
+      { method: 'POST', path: `/v1/private-listening/reach-outs/${id}/claim`, body: { scopeKey: scope }, deviceId: MAC },
       { store: new Proxy({}, {}) as never, enabled: true, ownerScopeKey: scope, reachOuts: w.reachOuts, now: () => w.clock.at },
     ))).toBe('REACH_OUT_TAKEN');
     // A report on the earphone route is not the call's.
@@ -365,48 +432,29 @@ describe('one surface per message', () => {
     w.close();
   });
 
-  it('leaves it to her body when the body is there and shows it, and rings when the body did not', async () => {
-    const shown = world();
-    shown.register();
-    await shown.bodyOnline();
-    await shown.bodyPresence();
-    const id = shown.say();
-    shown.advance(2 * SECOND);
-    // The body read presence a moment ago: the call waits for it.
-    await shown.calls.tick();
-    expect(shown.apns.sent).toEqual([]);
-    expect((await shown.bodyPresence())?.latestId).toBe(id);
-    expect(shown.claims.holder(scope, id)?.surface).toBe('body');
-    await shown.bodyReport(id, 'shown_spoken');
-    shown.advance(30 * SECOND);
-    await shown.calls.tick();
-    expect(shown.apns.sent).toEqual([]);
-    shown.close();
+  it('does not ask for a call with a message another surface already took', async () => {
+    const w = world();
+    w.register();
+    const id = w.say();
+    expect(w.claims.claim(scope, id, MAC, 'mac', w.clock.at)).toBe('claimed');
+    expect(w.requests.request(scope, id, w.clock.at)).toBe('taken');
+    expect(w.store.ofMessage(scope, id)).toBeNull();
+    w.close();
+  });
 
-    const away = world();
-    away.register();
-    await away.bodyOnline();
-    const other = away.say();
-    expect((await away.bodyPresence())?.latestId).toBe(other);
-    await away.bodyReport(other, 'away');
-    // The body gave it back: the phone rings at once, and her body is no longer told about it.
-    await away.calls.tick();
-    expect(away.apns.sent).toHaveLength(1);
-    expect(away.claims.holder(scope, other)?.surface).toBe('iphone_call');
-    expect((await away.bodyPresence())?.pending).toBe(0);
-    away.close();
-
-    const silent = world();
-    silent.register();
-    await silent.bodyOnline();
-    silent.reports.markPresence(scope, BODY, silent.clock.at);
-    silent.say();
-    silent.advance(21 * SECOND);
-    silent.reports.markPresence(scope, BODY, silent.clock.at);
-    // A body that keeps reading and never takes it does not hold the call back for ever.
-    await silent.calls.tick();
-    expect(silent.apns.sent).toHaveLength(1);
-    silent.close();
+  it('tells her the facts of the moment as yes or no and times', async () => {
+    const w = world();
+    expect(w.requests.facts(scope, w.clock.at)).toEqual({
+      switchedOn: false, serverReady: true, ringing: false, waitMinutes: 0, earphones: false, body: false, ownerLastActiveAt: null, last: null,
+    });
+    w.register();
+    w.beat(MAC, 'mac', false);
+    w.reports.markPresence(scope, BODY, w.clock.at);
+    w.ownerSpeaks();
+    expect(w.requests.facts(scope, w.clock.at)).toEqual({
+      switchedOn: true, serverReady: true, ringing: false, waitMinutes: 0, earphones: true, body: true, ownerLastActiveAt: START, last: null,
+    });
+    w.close();
   });
 });
 
@@ -414,7 +462,7 @@ describe('answering', () => {
   it('hands her words to the device that was rung, once he answered, and to nobody else', async () => {
     const w = world();
     w.register();
-    const id = w.say();
+    const id = w.ask();
     await w.calls.tick();
     w.advance(8 * SECOND);
     expect(errorOf(w.answer(id, CALL_IDS[0]!, MAC))).toBe('CALL_NOT_YOURS');
@@ -442,7 +490,7 @@ describe('answering', () => {
   it('keeps what he chose: declined or not answered stays the call\'s, and a call that could not ring gives the message back', async () => {
     const declined = world();
     declined.register();
-    const id = declined.say();
+    const id = declined.ask();
     await declined.calls.tick();
     expect(errorOf(declined.report(CALL_IDS[0]!, 'answered', MAC))).toBe('CALL_NOT_YOURS');
     expect(declined.report(CALL_IDS[0]!, 'hung_up').status).toBe(400);
@@ -464,7 +512,7 @@ describe('answering', () => {
 
     const failed = world();
     failed.register();
-    const other = failed.say();
+    const other = failed.ask();
     await failed.calls.tick();
     expect(bodyOf(failed.report(CALL_IDS[0]!, 'failed'))).toMatchObject({ status: 'stored' });
     expect(failed.claims.holder(scope, other)).toBeNull();
@@ -478,7 +526,7 @@ describe('answering', () => {
   it('counts a ring nobody reported on as not answered, refuses a late answer, and takes the app\'s word over its own guess', async () => {
     const w = world();
     w.register();
-    const id = w.say();
+    const id = w.ask();
     await w.calls.tick();
     w.advance(44 * SECOND);
     await w.calls.tick();
@@ -498,7 +546,7 @@ describe('answering', () => {
     const path = join(directory, `calls-${databases += 1}.sqlite`);
     const on = world({ path });
     on.register();
-    const id = on.say();
+    const id = on.ask();
     await on.calls.tick();
     on.close();
     const off = world({ path, enabled: false });
@@ -564,10 +612,11 @@ describe('the APNs sender', () => {
     expect(warnings).toEqual(['SHANNON_APNS_PRIVATE_KEY_UNREADABLE', 'SHANNON_APNS_PRIVATE_KEY_FILE_MISSING', 'SHANNON_APNS_KEY_ID_INVALID']);
   });
 
-  it('documents the kill switch in both environment examples, with no key in either', () => {
+  it('documents the kill switch and the interval in both environment examples, with no key in either', () => {
     for (const path of ['../../../deploy/azure/api.env.example', '../../../.env.example']) {
       const example = readFileSync(new URL(path, import.meta.url), 'utf8');
       expect(example).toContain('SHANNON_INCOMING_CALLS=on');
+      expect(example).toContain('SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES=5');
       expect(example).toMatch(/^SHANNON_APNS_KEY_ID=$/mu);
       expect(example).not.toContain('BEGIN PRIVATE KEY');
     }
@@ -618,7 +667,7 @@ describe('what she is told afterwards', () => {
   it('reads the outcome of the call for the message she sent', async () => {
     const w = world();
     w.register();
-    const id = w.say();
+    const id = w.ask();
     expect(w.store.outcome(scope, id)).toBeNull();
     await w.calls.tick();
     // While it rings there is nothing to tell yet.

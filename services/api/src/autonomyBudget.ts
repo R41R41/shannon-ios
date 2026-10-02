@@ -70,8 +70,8 @@ export function configuredAutonomy(
     maximumPublicReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_PUBLIC_READS, 0, 10_000, 200)),
     maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
     maximumRoomLooksPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, 0, 30, 3)),
-    maximumReachOutsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_REACH_OUTS, 0, 10, 3)),
-    maximumReachOutFollowUpsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_FOLLOW_UPS, 0, 10, 3)),
+    maximumReachOutsPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_REACH_OUTS),
+    maximumReachOutFollowUpsPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_FOLLOW_UPS),
     maximumHostFolderWritesPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_HOST_FOLDER_WRITES, 0, 1_000, 10)),
     hostStepLeaseMilliseconds: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS, 30, 3_600, 300)) * 1_000,
     modelPrices: configuredAutonomyModelPrices(environment),
@@ -83,6 +83,18 @@ export function configuredAutonomy(
       protectedPaths: Object.freeze([...databasePath, ...roots(environment.SHANNON_AUTONOMY_PROTECTED_PATHS)]),
     }),
   });
+}
+
+/**
+ * A count a day that has no limit unless the owner sets one (owner decision 2026-10-03: 「コストの範囲内なら、好きなだけ」).
+ * Unset, empty or `unlimited`: no limit (`Infinity`). `0`: switched off. A positive whole number: that many a day.
+ * Anything else is read as no limit; the daily budget bounds her either way.
+ */
+export function dailyCount(value: string | undefined): number {
+  const text = value?.trim().toLowerCase() ?? '';
+  if (!text || text === 'unlimited') return Number.POSITIVE_INFINITY;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(100_000, Math.trunc(parsed)) : Number.POSITIVE_INFINITY;
 }
 
 export interface AutonomyBudgetStatus {

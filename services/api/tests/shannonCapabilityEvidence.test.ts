@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
+  autonomyDomain,
 } from '@shannon/cognition';
 import { FileAetherContextReader } from '../src/aetherContext.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
@@ -11,7 +12,13 @@ import { HostFolderDesk } from '../src/autonomyHostFolderDesk.js';
 import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
 import { prepareFolderCopy } from '../src/autonomyLoopFolderStep.js';
 import { prepareRoomLook } from '../src/autonomyLoopLookStep.js';
+import { preparePhoneCall } from '../src/autonomyLoopPhoneStep.js';
 import { prepareReachOut } from '../src/autonomyLoopReachOutStep.js';
+import { AUTONOMY_CALL_DOMAIN } from '../src/autonomyPolicy.js';
+import { incomingCallsEnabled } from '../src/incomingCallContract.js';
+import { IncomingCallRequests } from '../src/incomingCallRequests.js';
+import { IncomingCalls } from '../src/incomingCalls.js';
+import { APNsVoipPushSender } from '../src/voipPushSender.js';
 import { calendarIngestEnabled } from '../src/calendarContract.js';
 import { dispatchCalendarRequest } from '../src/calendarRoutes.js';
 import { OwnerUpcoming, asksAboutSchedule } from '../src/ownerUpcoming.js';
@@ -102,12 +109,15 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
   calendar_read: () => exists(dispatchCalendarRequest, SQLiteUpcomingStore.prototype.replaceCalendar, OwnerUpcoming.prototype.promptFor)
     && asksAboutSchedule('今日の予定は？') && !asksAboutSchedule('おはよう') && calendarIngestEnabled({}) && !calendarIngestEnabled({ SHANNON_CALENDAR_INGEST: 'off' })
     && !Object.getOwnPropertyNames(SQLiteUpcomingStore.prototype).some(name => /event(?:Create|Update|Write)/iu.test(name)),
-  // The day's one topic or due promise, and, from her own activity, a few messages of her own a day (0 switches them off).
+  // The day's one topic or due promise, and, from her own activity, messages of her own with no count a day (0 switches them off).
   // A touch reaches her feeling and memory through one entrance, and she may answer it with one line.
   body_touch: () => exists(BodyTouches.prototype.observe, BodyReactions.prototype.react, OpenAIBodyReactionSpeaker.prototype.decide)
     && SHANNON_TOUCH_KINDS.every(kind => SHANNON_TOUCH_FEELINGS[kind].steps.length > 0),
   initiative: () => exists(SQLiteInitiativeStore, prepareReachOut, SQLiteReachOutSpeaker.prototype.say)
-    && configuredAutonomy({}).maximumReachOutsPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
+    && configuredAutonomy({}).maximumReachOutsPerDay === Number.POSITIVE_INFINITY && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
+  // Her own step in her own time: the gated step, the request the API process sends, and the push that rings. Only while he switched it on.
+  phone_call: () => exists(preparePhoneCall, IncomingCallRequests.prototype.request, IncomingCalls.prototype.tick, APNsVoipPushSender.prototype.send)
+    && autonomyDomain(AUTONOMY_CALL_DOMAIN)?.rule === 'free' && incomingCallsEnabled({}) && !incomingCallsEnabled({ SHANNON_INCOMING_CALLS: 'off' }),
 };
 
 describe('Shannon capability description', () => {

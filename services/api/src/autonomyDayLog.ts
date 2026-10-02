@@ -25,6 +25,7 @@ const STEP_WORDING: readonly { tool: string; code?: string; stem: (count: number
   { tool: 'owner.reach_out', code: 'replied', stem: count => `返事を${count}回もらい`, plain: count => `話しかけて返事をもらった（${count}回）` },
   { tool: 'owner.reach_out', code: 'no_reply', stem: count => `返事のないまま${count}回待ち`, plain: count => `話しかけて待ったが返事がなかった（${count}回）` },
   { tool: 'owner.reach_out_follow_up', stem: count => `もう一度${count}回声をかけ`, plain: count => `返事がないのでもう一度声をかけた（${count}回）` },
+  { tool: 'owner.call', stem: count => `電話を${count}回かけ`, plain: count => `電話を${count}回かけた` },
   { tool: 'study.jot', stem: count => `思ったことを${count}つ書き留め`, plain: count => `思ったことを${count}つ書き留めた` },
   // The closing step of a session (`autonomyLoopPacing.ts`); never recorded under the fixed cycles.
   { tool: 'study.rest', stem: count => `${count}回ひと区切りにし`, plain: count => `${count}回ひと区切りにして休んだ` },

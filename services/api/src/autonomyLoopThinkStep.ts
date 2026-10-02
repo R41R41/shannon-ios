@@ -9,6 +9,7 @@ import { mayRetryThought, sessionFacts, sessionOf } from './autonomyLoopPacing.j
 import { SESSION_RULES, restAction, sessionFactsSection, unplannedSection } from './autonomyLoopSessionPrompts.js';
 import { reasonedPlan, thinkingMaterials, type ReasonedThought } from './autonomyLoopPlan.js';
 import { salvagedModelObject, thinkingPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
+import { phoneThinking, withPhone, type PhoneThinking } from './autonomyLoopPhoneStep.js';
 import { reachOutsRemaining } from './autonomyLoopReachOutStep.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
@@ -115,8 +116,15 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     lookAvailable: lookNow && !rethink.looked, ownNotes: agentic,
     reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });
+  // The phone: the facts of the moment, and the action while she may use it. Nothing while he has not switched calls on.
+  let phone: PhoneThinking | null = null;
+  try {
+    phone = phoneThinking(dependencies, cycle.scopeKey, at, {
+      look: materials.lookAvailable === true, upcoming: Boolean(materials.reachOut) && (materials.upcoming?.length ?? 0) > 0, spoke: rethink.spoke,
+    });
+  } catch { phone = null; }
   const owned = ownerBlock(dependencies, cycle.scopeKey, at, materials.pursuits.filter(item => item.status === 'active').slice(0, 4).map(item => item.title).join(' '));
-  const base = rethink.extras ?? memory;
+  const base = withPhone(rethink.extras ?? memory, phone);
   // The thought before this one led to no step: she is told why, as fixed sentences.
   const unplanned = session && again && step.dropped?.length ? unplannedSection(step.dropped) : null;
   const facts = (thinkReserveYen?: number) => sessionFacts(dependencies, cycle, session!, at, {
@@ -183,6 +191,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         placeUrls: materials.places.map(place => place.url),
       }, {
         maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true, lookAvailable: materials.lookAvailable === true, reachOut: materials.reachOut ? { upcoming: (materials.upcoming?.length ?? 0) > 0 } : null,
+        call: phone?.offered ? { upcoming: Boolean(materials.reachOut) && (materials.upcoming?.length ?? 0) > 0 } : null,
         ...(again ? { followUp: rethink.followUp, chainLook: rethink.chainLook, jot: rethink.jot } : {}),
         ...(session ? { session: true } : {}), ...(owned ? { secrets: owned.secrets } : {}),
       });

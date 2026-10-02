@@ -164,6 +164,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Speaking up on her own: the gated step and the one way its message leaves.
     'services/api/src/autonomyLoopReachOutStep.ts',
     'services/api/src/reachOutDelivery.ts',
+    // Phoning the owner's iPhone on her own: the gated step, and asking the API process for the call.
+    'services/api/src/autonomyLoopPhoneStep.ts',
+    'services/api/src/incomingCallRequests.ts',
     // Act, observe, think again: what a step led to as closed facts, the wait after a message of hers, the thinking step,
     // the one second call, and what her body reports about a message.
     'services/api/src/autonomyLoopObservations.ts',

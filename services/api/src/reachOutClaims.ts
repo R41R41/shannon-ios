@@ -149,6 +149,15 @@ export class SQLiteReachOutClaims {
     `).get(scopeKey, after));
   }
 
+  /** When the owner last wrote or spoke in any Talk, or null. A timestamp; no content is read. */
+  ownerLastActiveAt(scopeKey: string): string | null {
+    if (!this.tableExists('conversation_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT MAX(observed_at) AS latest FROM conversation_messages WHERE scope_key = ? AND role = 'user'
+    `).get(scopeKey) as unknown as { latest: string | null };
+    return row.latest ?? null;
+  }
+
   close(): void {
     if (this.database.isOpen) this.database.close();
   }

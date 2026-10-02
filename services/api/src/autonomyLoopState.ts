@@ -30,6 +30,8 @@ export interface AutonomyPlannedStep {
   query?: string;
   /** For `reach_out`: why she speaks up, from the closed set. `follow_up` is the one second call after a message got no answer. */
   reason?: ObservedReachOutReason;
+  /** For `reach_out`: she chose to phone him with it (`autonomyLoopPhoneStep.ts`) instead of writing. */
+  call?: true;
   /** For `reach_out` with `follow_up`: the initiative id of the message that got no answer. */
   originId?: string;
   /** For `think`: a thinking step after something happened in this cycle, with what happened in front of her. */

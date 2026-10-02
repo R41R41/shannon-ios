@@ -104,10 +104,9 @@ const privateListeningRoute = createPrivateListeningRoute(process.env, configure
   isBody: (scopeKey, deviceId) => bodyStore.capabilities(scopeKey, deviceId) !== null,
   calls: () => incomingCallRoute?.calls ?? null,
 });
-// A call from her (docs/incoming-call-contract.md): when no surface can simply say a message she started, the owner's iPhone rings.
+// A call from her (docs/incoming-call-contract.md): when she chooses to phone him from her own activity, this process rings the owner's iPhone.
 // SHANNON_INCOMING_CALLS=off, or no APNs key, and nothing is rung.
 const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(process.env, configuredDatabasePath(), now, {
-  reachOuts: privateListeningRoute.reachOuts, reports: reachOutReports,
   isPaired: (scopeKey, deviceId) => deviceAuth?.listActiveDevicesForScope(scopeKey).some(device => device.deviceId === deviceId) ?? false,
 });
 const chatModel = createConfiguredChatModel(process.env, persistentStore);

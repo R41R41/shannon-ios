@@ -6,6 +6,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { SHANNON_ROOM_LOOK_RULES, UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/autonomyDayLog.js';
+import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import { planFromThought } from '../src/autonomyLoopPlan.js';
 import { REACH_OUT_REASONS, REACH_OUT_REASON_LABEL, reachOutPrompt, thinkingPrompt, type PromptUpcoming } from '../src/autonomyLoopPrompts.js';
@@ -107,8 +109,26 @@ describe('reach_out: one message of her own', () => {
     expect(autonomyDayPhrases(day)).toContain('自分から1回話しかけた');
   });
 
-  it('allows three in an owner-local day, plans no fourth, and starts again the next day', async () => {
+  it('has no count of messages a day unless the owner sets one, and then says nothing of a count', async () => {
     const w = world();
+    for (let index = 0; index < 6; index += 1) await w.cycle(WONDER);
+    expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(6);
+    expect(w.messages()).toHaveLength(6);
+    for (const prompt of w.model.prompts('think')) {
+      expect(prompt).toContain('reach_out（');
+      expect(prompt).not.toMatch(/今日はあと\d+回/u);
+    }
+    expect(configuredAutonomy({}).maximumReachOutsPerDay).toBe(Number.POSITIVE_INFINITY);
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: 'unlimited' }).maximumReachOutsPerDay).toBe(Number.POSITIVE_INFINITY);
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '25' }).maximumReachOutsPerDay).toBe(25);
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay).toBe(0);
+    // The shortest time between two messages of hers, so that a loop cannot flood him: five minutes unless set otherwise.
+    expect(configuredAutonomyLoop({}).reachOutSpacingMilliseconds).toBe(5 * MINUTE);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES: '60' }).reachOutSpacingMilliseconds).toBe(60 * MINUTE);
+  });
+
+  it('with a count set by the owner, allows that many in an owner-local day, plans no more, and starts again the next day', async () => {
+    const w = world({ environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: '3' } });
     for (let index = 0; index < 3; index += 1) await w.cycle(WONDER);
     expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(3);
     expect(w.model.prompts('think').slice(0, 3).map(prompt => /今日はあと(\d)回/u.exec(prompt)?.[1])).toEqual(['3', '2', '1']);

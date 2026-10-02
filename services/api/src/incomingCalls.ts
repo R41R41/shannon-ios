@@ -1,35 +1,26 @@
-import { randomUUID } from 'node:crypto';
-import type { BodyReachOutDeliveryOutcome } from './bodyContract.js';
 import { INCOMING_CALL_LIMITS, type IncomingCallOutcome, type IncomingCallRegistration } from './incomingCallContract.js';
-import type { SQLiteIncomingCallStore } from './incomingCallStore.js';
-import { PRIVATE_REACH_OUT_LIMITS } from './privateListeningContract.js';
+import type { IncomingCall, SQLiteIncomingCallStore } from './incomingCallStore.js';
 import type { ClaimedReachOut, SQLiteReachOutClaims } from './reachOutClaims.js';
 import type { VoipPushSender } from './voipPushSender.js';
 
 /**
- * A call from Shannon (owner decision 2026-10-03, `docs/incoming-call-contract.md`).
+ * A call from Shannon (owner decisions 2026-10-03, `docs/incoming-call-contract.md`).
  *
- * Her message is written as before: one assistant message in the Talk and one initiative. When no surface can
- * simply say it, the server rings the owner's iPhone with it, once. Answering is his choice; then the app takes
- * her words through the claim route, says them in her voice, and an ordinary voice conversation follows.
+ * The call is her own act: a step of her activity loop (`autonomyLoopPhoneStep.ts`) that she chooses when she wants to
+ * tell him something and he is not in the app. That step writes her line as a message of hers (the Talk, an initiative,
+ * the ordinary notification), takes the message's claim as `iphone_call`, and asks for the call: one `pending` row
+ * (`incomingCallRequests.ts`). Nothing rings by itself: an ordinary message of hers is never rung with.
  *
- * The order of surfaces for one message:
- *   1. one of his apps that is privately listening and speaks (`privateReachOuts.ts`), as before;
- *   2. her body, when it is there and shows the message, by its own rules, as before;
- *   3. the call, when he switched 「シャノンからの着信を受ける」 on.
- * The call holds the message's claim (`iphone_call`) from before the push, so no other surface says it while
- * the phone rings or after he answered.
+ * This class is the API's side. It sends the push for a call she asked for, once; hands her words to the device that
+ * answered; and keeps what became of the call. The claim is held from before the push, so no other surface says the
+ * message while the phone rings or after he answered.
  *
  * Nothing here calls a model, and nothing here reads or writes words except to hand her own line to the device
  * that answered.
  */
 export interface IncomingCallsDependencies {
   store: SQLiteIncomingCallStore;
-  claims: Pick<SQLiteReachOutClaims, 'unread' | 'message' | 'claim' | 'release' | 'markSpoken' | 'holder' | 'ownerActiveAfter'>;
-  /** Whether one of his apps would say this message through his earphones now. */
-  appSpeaks: (scopeKey: string, at: string, initiativeId: string) => boolean;
-  /** What the server knows of her body: whether it read presence a moment ago, and what it reported about this message. */
-  body: { windowVisible(scopeKey: string, at: string): boolean; delivery(scopeKey: string, initiativeId: string): BodyReachOutDeliveryOutcome | null };
+  claims: Pick<SQLiteReachOutClaims, 'message' | 'release' | 'markSpoken' | 'holder' | 'ownerActiveAfter'>;
   /** Whether the device still holds a pairing that is neither revoked nor expired. */
   isPaired: (scopeKey: string, deviceId: string) => boolean;
   sender: VoipPushSender;
@@ -38,7 +29,6 @@ export interface IncomingCallsDependencies {
   /** Only the owner's own scope is ever rung. */
   ownerScopeKey: string;
   now: () => string;
-  newCallId?: () => string;
   /** A fixed word and a status; never a token, never her words. */
   log?: (event: 'ringing' | 'failed', detail: { status: number; reason: string | null }) => void;
 }
@@ -50,9 +40,6 @@ export type IncomingCallAnswer =
 export type IncomingCallReport =
   | { kind: 'done'; status: 'stored' | 'duplicate' | 'kept' }
   | { kind: 'not_found' | 'not_yours' | 'conflict' };
-
-/** What her body reports when it did not show her message: the call may then ring at once. */
-const BODY_DID_NOT_SHOW: readonly BodyReachOutDeliveryOutcome[] = ['away', 'hidden', 'muted'];
 
 export class IncomingCalls {
   private placing = false;
@@ -73,104 +60,97 @@ export class IncomingCalls {
     return this.dependencies.store.devices(scopeKey).some(device => device.deviceId === deviceId);
   }
 
-  /** One look: closes what is over, and rings with at most one message. Never throws. */
+  /** One look: closes what is over, and sends the calls she asked for. Never throws. */
   async tick(): Promise<void> {
     if (this.placing) return;
     this.placing = true;
     try {
       const scopeKey = this.dependencies.ownerScopeKey;
       this.expire(scopeKey);
-      if (this.available) await this.place(scopeKey);
+      for (const call of this.dependencies.store.openCalls(scopeKey)) {
+        if (call.state === 'pending') await this.send(scopeKey, call);
+      }
     } catch { /* the next look tries again */ } finally {
       this.placing = false;
     }
   }
 
-  /** A row whose push was never confirmed is closed and never sent again; a ring nobody reported on was not answered. */
+  /**
+   * A call she asked for that was not sent in time, or that a stopped process left half-sent, is closed and never sent;
+   * a ring nobody reported on was not answered.
+   */
   private expire(scopeKey: string): void {
     const { store, claims } = this.dependencies;
     const at = this.dependencies.now();
     const time = Date.parse(at);
     for (const call of store.openCalls(scopeKey)) {
-      if (call.state === 'pending' && !this.sending.has(call.callId) && time - Date.parse(call.createdAt) > INCOMING_CALL_LIMITS.pendingMilliseconds) {
-        if (store.end(call.callId, ['pending'], 'failed', 'server', at, { reason: 'interrupted' })) claims.release(scopeKey, call.initiativeId, call.deviceId);
+      if (call.state === 'pending' && time - Date.parse(call.createdAt) > INCOMING_CALL_LIMITS.pendingMilliseconds) {
+        if (store.end(call.callId, ['pending'], 'failed', 'server', at, { reason: 'not_sent' })) claims.release(scopeKey, call.initiativeId, call.deviceId);
+      } else if (call.state === 'sending' && !this.sending.has(call.callId)) {
+        // Another process took it and stopped: whether the push left is not known, so it is not sent again. The claim stays
+        // the call's for a ring's length, in case the phone does ring and he answers.
+        if (time - Date.parse(call.expiresAt) > INCOMING_CALL_LIMITS.reportGraceMilliseconds
+          && store.end(call.callId, ['sending'], 'failed', 'server', at, { reason: 'interrupted' })) claims.release(scopeKey, call.initiativeId, call.deviceId);
       } else if (call.state === 'ringing' && time - Date.parse(call.expiresAt) > INCOMING_CALL_LIMITS.reportGraceMilliseconds) {
         store.end(call.callId, ['ringing'], 'unanswered', 'server', at);
       }
     }
   }
 
-  private async place(scopeKey: string): Promise<void> {
+  /** Why a call she asked for cannot ring now, as a code; null when it can. Checked again here, a moment after she chose. */
+  private refusal(scopeKey: string, call: IncomingCall, at: string): string | null {
+    const { store, claims } = this.dependencies;
+    if (!this.available) return 'unavailable';
+    const message = claims.message(scopeKey, call.initiativeId);
+    if (!message || message.read) return 'read';
+    // Never into a conversation: he wrote or spoke in the last minutes, in any Talk.
+    if (claims.ownerActiveAfter(scopeKey, new Date(Date.parse(at) - INCOMING_CALL_LIMITS.conversationQuietMilliseconds).toISOString())) return 'conversation';
+    // Never while another call of hers rings.
+    if (store.openCalls(scopeKey).some(other => other.callId !== call.callId && other.state !== 'pending')) return 'busy';
+    const holder = claims.holder(scopeKey, call.initiativeId);
+    if (!holder || holder.surface !== 'iphone_call' || holder.deviceId !== call.deviceId) return 'not_claimed';
+    const device = store.devices(scopeKey).find(candidate => candidate.deviceId === call.deviceId);
+    if (!device || !this.dependencies.isPaired(scopeKey, device.deviceId)) return 'no_device';
+    return null;
+  }
+
+  private async send(scopeKey: string, call: IncomingCall): Promise<void> {
     const { store, claims, sender } = this.dependencies;
     const at = this.dependencies.now();
-    // Only the newest of her messages, and only while it is fresh: an older one stays text.
-    const newest = claims.unread(scopeKey).find(message => fresh(message.createdAt, at));
-    if (!newest) return;
-    if (newest.claim) {
-      // A claim of a call without its row: the process stopped between the two. It is given back.
-      if (newest.claim.surface === 'iphone_call' && newest.claim.spokenAt === null && !store.ofMessage(scopeKey, newest.id)) {
-        claims.release(scopeKey, newest.id, newest.claim.deviceId);
-      }
+    const refusal = this.refusal(scopeKey, call, at);
+    if (refusal) {
+      if (store.end(call.callId, ['pending'], 'failed', 'server', at, { reason: refusal })) claims.release(scopeKey, call.initiativeId, call.deviceId);
+      this.dependencies.log?.('failed', { status: 0, reason: refusal });
       return;
     }
-    // One call per message, whatever became of it.
-    if (store.ofMessage(scopeKey, newest.id)) return;
-    const message = claims.message(scopeKey, newest.id);
-    // Her one second call after an unanswered message is never a ring: he is not rung twice about one thing.
-    if (!message || message.read || message.reason === 'follow_up') return;
-    // Never into a conversation: he wrote or spoke in the last minutes, in any Talk.
-    if (claims.ownerActiveAfter(scopeKey, new Date(Date.parse(at) - INCOMING_CALL_LIMITS.conversationQuietMilliseconds).toISOString())) return;
-    if (this.dependencies.appSpeaks(scopeKey, at, newest.id)) return;
-    if (this.bodyMayStillTakeIt(scopeKey, newest.id, newest.createdAt, at)) return;
-    const device = store.devices(scopeKey).find(candidate => this.dependencies.isPaired(scopeKey, candidate.deviceId));
-    if (!device) return;
-    // The claim first: from here no other surface says it. Then the row, then the push.
-    if (claims.claim(scopeKey, newest.id, device.deviceId, 'iphone_call', at) !== 'claimed') return;
-    const callId = (this.dependencies.newCallId ?? randomUUID)();
+    const device = store.devices(scopeKey).find(candidate => candidate.deviceId === call.deviceId)!;
     const expiresAt = new Date(Date.parse(at) + INCOMING_CALL_LIMITS.ringSeconds * 1_000).toISOString();
-    if (!store.begin(scopeKey, { callId, initiativeId: newest.id, deviceId: device.deviceId, threadId: message.threadId, expiresAt }, at)) {
-      claims.release(scopeKey, newest.id, device.deviceId);
-      return;
-    }
-    this.sending.add(callId);
+    // Taken before the push: only one process sends it, and only once, also across a restart.
+    if (!store.take(call.callId, expiresAt)) return;
+    this.sending.add(call.callId);
     let result: Awaited<ReturnType<VoipPushSender['send']>>;
     try {
       result = await sender.send(
         { deviceToken: device.deviceToken, environment: device.environment, bundleId: device.bundleId },
-        { callId, reachOutId: newest.id, threadId: message.threadId, expiresAt },
+        { callId: call.callId, reachOutId: call.initiativeId, threadId: call.threadId, expiresAt },
       );
     } catch {
       result = { delivered: false, invalidToken: false, status: 0, reason: 'transport' };
     } finally {
-      this.sending.delete(callId);
+      this.sending.delete(call.callId);
     }
     const after = this.dependencies.now();
     if (result.delivered) {
-      store.ringing(callId, after, result.status);
+      store.ringing(call.callId, after, result.status);
       this.dependencies.log?.('ringing', { status: result.status, reason: null });
       return;
     }
-    // It never rang: the message goes back, so her body or an app in his ears may still say it. It is not rung with again.
-    if (store.end(callId, ['pending'], 'failed', 'server', after, { status: result.status, ...(result.reason ? { reason: result.reason } : {}) })) {
-      claims.release(scopeKey, newest.id, device.deviceId);
+    // It never rang: the message goes back, so her body or an app in his ears may still say it.
+    if (store.end(call.callId, ['sending'], 'failed', 'server', after, { status: result.status, ...(result.reason ? { reason: result.reason } : {}) })) {
+      claims.release(scopeKey, call.initiativeId, call.deviceId);
     }
     if (result.invalidToken) store.invalidateDevice(device.deviceId, after);
     this.dependencies.log?.('failed', { status: result.status, reason: result.reason });
-  }
-
-  /**
-   * Her body comes before the call when it is there and shows the message. A body that read presence a moment ago
-   * takes a fresh message at its next read; the call waits for that, for a bounded time. A body that reported it
-   * did not show the message (the owner away, her window hidden, 「話しかける」 off) has given it back.
-   */
-  private bodyMayStillTakeIt(scopeKey: string, initiativeId: string, createdAt: string, at: string): boolean {
-    try {
-      const { body } = this.dependencies;
-      if (!body.windowVisible(scopeKey, at)) return false;
-      const reported = body.delivery(scopeKey, initiativeId);
-      if (reported) return !BODY_DID_NOT_SHOW.includes(reported);
-      return Date.parse(at) - Date.parse(createdAt) < INCOMING_CALL_LIMITS.bodyGraceMilliseconds;
-    } catch { return false; }
   }
 
   /**
@@ -187,15 +167,15 @@ export class IncomingCalls {
     if (!found) return { kind: 'not_found' };
     const { read: _read, ...message } = found;
     if (call.state === 'answered') return { kind: 'answered', status: 'held', message };
-    if (call.state !== 'pending' && call.state !== 'ringing') return { kind: call.state === 'unanswered' ? 'expired' : 'ended' };
+    if (call.state !== 'sending' && call.state !== 'ringing') return { kind: call.state === 'unanswered' ? 'expired' : 'ended' };
     const at = this.dependencies.now();
     if (Date.parse(at) - Date.parse(call.expiresAt) > INCOMING_CALL_LIMITS.reportGraceMilliseconds) {
-      store.end(callId, ['pending', 'ringing'], 'unanswered', 'server', at);
+      store.end(callId, ['sending', 'ringing'], 'unanswered', 'server', at);
       return { kind: 'expired' };
     }
     const holder = claims.holder(scopeKey, initiativeId);
     if (!holder || holder.deviceId !== deviceId || holder.surface !== 'iphone_call') return { kind: 'ended' };
-    if (!store.end(callId, ['pending', 'ringing'], 'answered', 'app', at)) return { kind: 'ended' };
+    if (!store.end(callId, ['sending', 'ringing'], 'answered', 'app', at)) return { kind: 'ended' };
     claims.markSpoken(scopeKey, initiativeId, deviceId, at);
     return { kind: 'answered', status: 'claimed', message };
   }
@@ -210,8 +190,8 @@ export class IncomingCalls {
     const at = this.dependencies.now();
     // Once he answered, the call was answered: what went wrong afterwards does not undo that.
     if (call.state === 'answered') return { kind: 'done', status: 'kept' };
-    const changed = call.state === 'pending' || call.state === 'ringing'
-      ? store.end(callId, ['pending', 'ringing'], outcome, 'app', at)
+    const changed = call.state === 'sending' || call.state === 'ringing'
+      ? store.end(callId, ['sending', 'ringing'], outcome, 'app', at)
       // The server had only assumed that nobody answered: the app knows.
       : call.state === 'unanswered' && call.decidedBy === 'server' && store.correct(callId, outcome, at);
     if (!changed) return { kind: 'conflict' };
@@ -220,10 +200,4 @@ export class IncomingCalls {
     if (outcome === 'failed') claims.release(scopeKey, call.initiativeId, deviceId);
     return { kind: 'done', status: 'stored' };
   }
-}
-
-/** The same span in which an app may say her message: a ring begins only this soon after she wrote it. */
-function fresh(createdAt: string, at: string): boolean {
-  const age = Date.parse(at) - Date.parse(createdAt);
-  return age >= -PRIVATE_REACH_OUT_LIMITS.futureSkewMilliseconds && age <= PRIVATE_REACH_OUT_LIMITS.freshMilliseconds;
 }

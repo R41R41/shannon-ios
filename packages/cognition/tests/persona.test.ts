@@ -53,8 +53,8 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_794);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_724);
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_898);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_834);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });

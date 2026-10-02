@@ -30,7 +30,7 @@ interface CallRow {
   call_id: string; initiative_id: string; device_id: string; thread_id: string; state: string; created_at: string; expires_at: string; decided_by: string | null;
 }
 
-const STATES: readonly IncomingCallState[] = ['pending', 'ringing', ...INCOMING_CALL_OUTCOMES];
+const STATES: readonly IncomingCallState[] = ['pending', 'sending', 'ringing', ...INCOMING_CALL_OUTCOMES];
 
 export class SQLiteIncomingCallStore {
   private readonly database: DatabaseSync;
@@ -110,16 +110,33 @@ export class SQLiteIncomingCallStore {
       INSERT OR IGNORE INTO incoming_calls (call_id, scope_key, initiative_id, device_id, thread_id, state, created_at, expires_at)
       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
     `).run(call.callId, scopeKey, call.initiativeId, call.deviceId, call.threadId, at, call.expiresAt);
-    this.database.prepare('DELETE FROM incoming_calls WHERE created_at < ? AND state NOT IN (\'pending\', \'ringing\')')
+    this.database.prepare('DELETE FROM incoming_calls WHERE created_at < ? AND state NOT IN (\'pending\', \'sending\', \'ringing\')')
       .run(new Date(Date.parse(at) - INCOMING_CALL_LIMITS.retentionMilliseconds).toISOString());
     return Number(inserted.changes) > 0;
+  }
+
+  /** The API takes a call she asked for, to send it: only one process can, and only once. The ring ends at `expiresAt`. */
+  take(callId: string, expiresAt: string): boolean {
+    return Number(this.database.prepare(`
+      UPDATE incoming_calls SET state = 'sending', expires_at = ? WHERE call_id = ? AND state = 'pending'
+    `).run(expiresAt, callId).changes) > 0;
   }
 
   /** The push left: the iPhone rings. */
   ringing(callId: string, at: string, status: number): boolean {
     return Number(this.database.prepare(`
-      UPDATE incoming_calls SET state = 'ringing', pushed_at = ?, apns_status = ? WHERE call_id = ? AND state = 'pending'
+      UPDATE incoming_calls SET state = 'ringing', pushed_at = ?, apns_status = ? WHERE call_id = ? AND state = 'sending'
     `).run(at, status, callId).changes) > 0;
+  }
+
+  /** Her newest call, whatever became of it: when she asked for it and its state. */
+  latest(scopeKey: string): IncomingCall | null {
+    return callOf(this.database.prepare('SELECT * FROM incoming_calls WHERE scope_key = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(scopeKey) as unknown as CallRow | undefined);
+  }
+
+  /** Whether one of the owner's iPhones is registered with his switch on, whoever it is. */
+  switchedOn(scopeKey: string): boolean {
+    return this.devices(scopeKey).length > 0;
   }
 
   /**
@@ -155,10 +172,10 @@ export class SQLiteIncomingCallStore {
     return INCOMING_CALL_OUTCOMES.find(value => value === state) ?? null;
   }
 
-  /** Calls that are still open: before the push, or ringing. */
+  /** Calls that are still open: asked for, being sent, or ringing. */
   openCalls(scopeKey: string): readonly IncomingCall[] {
     const rows = this.database.prepare(`
-      SELECT * FROM incoming_calls WHERE scope_key = ? AND state IN ('pending', 'ringing') ORDER BY created_at
+      SELECT * FROM incoming_calls WHERE scope_key = ? AND state IN ('pending', 'sending', 'ringing') ORDER BY created_at
     `).all(scopeKey) as unknown as CallRow[];
     return rows.flatMap(row => callOf(row) ?? []);
   }

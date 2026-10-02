@@ -533,7 +533,7 @@ describe('what reaches the prompts of her own activity', () => {
     const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
       'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
-      'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPlan.ts',
+      'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopOwnerContext.ts', 'autonomyLoopPacing.ts', 'autonomyLoopPhoneStep.ts', 'autonomyLoopPlan.ts',
       'autonomyLoopPrompts.ts', 'autonomyLoopReachOutStep.ts', 'autonomyLoopSessionPrompts.ts', 'autonomyLoopSessions.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
       'autonomyLoopThinkStep.ts',
     ]);
@@ -549,6 +549,8 @@ describe('what reaches the prompts of her own activity', () => {
       // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
       './autonomyLoopObservations.js', './autonomyLoopObserve.js', './autonomyLoopObservePrompts.js', './autonomyLoopFollowUpStep.js',
       './autonomyLoopThinkStep.js', './autonomyLoopCalls.js',
+      // Phoning his iPhone: the gated step. The phone is an interface the step names; the call store and the push sender are not imported.
+      './autonomyLoopPhoneStep.js',
       // She paces her own day: the bounds of a session, its row, and the words for its facts.
       './autonomyLoopPacing.js', './autonomyLoopSessions.js', './autonomyLoopSessionPrompts.js',
       // What she may see of the owner's: the interface the loop is handed, the output rule, and the check of her own free text. No store.

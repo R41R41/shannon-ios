@@ -72,7 +72,7 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     maximumStepsPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_STEPS, 1, 12, 6),
     maximumReadsPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_READS, 0, 6, 2),
     ownerActiveMilliseconds: integer(environment.SHANNON_AUTONOMY_OWNER_ACTIVE_MINUTES, 0, 240, 10) * 60_000,
-    reachOutSpacingMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES, 0, 24 * 60, 60) * 60_000,
+    reachOutSpacingMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES, 0, 24 * 60, 5) * 60_000,
     reachOutWaitMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS, 0, 300, 180) * 1_000,
     maximumRethinksPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_RETHINKS, 0, 3, 2),
     leaseMilliseconds: integer(environment.SHANNON_AUTONOMY_LEASE_SECONDS, 240, 3_600, 600) * 1_000,

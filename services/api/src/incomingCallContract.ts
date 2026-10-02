@@ -16,13 +16,11 @@ export const INCOMING_CALL_LIMITS = Object.freeze({
   ringSeconds: 30,
   /** A ringing call nobody reported on is counted as not answered this long after its ring ended. */
   reportGraceMilliseconds: 15_000,
-  /** A call row whose push was never confirmed (the process stopped in between) is closed after this long, and never sent again. */
+  /** A call she asked for that was not sent within this long (the API was down, or stopped half-way) is closed, and never sent. */
   pendingMilliseconds: 10_000,
-  /** While her body read presence a moment ago and has not taken the message yet, the call waits this long for it. */
-  bodyGraceMilliseconds: 20_000,
   /** An owner turn this recent is a conversation in progress: nobody is rung into one. Her own step uses the same span. */
   conversationQuietMilliseconds: 10 * 60_000,
-  /** How often the server looks for a message to ring with. */
+  /** How often the API looks for a call she asked for. */
   tickMilliseconds: 2_000,
   /** One device may send this many requests a minute. */
   requestsPerMinute: 30,
@@ -30,10 +28,13 @@ export const INCOMING_CALL_LIMITS = Object.freeze({
   retentionMilliseconds: 30 * 24 * 60 * 60_000,
 });
 
-/** What became of one call. `ringing` is the only open state after the push left; `pending` is before it. */
+/**
+ * What became of one call. `pending`: she asked for it and the API has not sent it yet. `sending`: the API took it and the
+ * push is on its way. `ringing`: the push left.
+ */
 export const INCOMING_CALL_OUTCOMES = ['answered', 'declined', 'unanswered', 'failed'] as const;
 export type IncomingCallOutcome = typeof INCOMING_CALL_OUTCOMES[number];
-export type IncomingCallState = 'pending' | 'ringing' | IncomingCallOutcome;
+export type IncomingCallState = 'pending' | 'sending' | 'ringing' | IncomingCallOutcome;
 
 export type VoipEnvironment = 'sandbox' | 'production';
 
@@ -92,6 +93,12 @@ export function incomingCallPushBody(payload: IncomingCallPayload): string {
 }
 
 const OFF = ['off', 'false', '0', 'disabled'];
+
+/** `SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES` (0–1440, default 5): the shortest time between two calls of hers, whatever became of the first. */
+export function incomingCallMinimumIntervalMilliseconds(environment: Readonly<Record<string, string | undefined>> = process.env): number {
+  const value = Number(environment.SHANNON_INCOMING_CALL_MIN_INTERVAL_MINUTES?.trim() || Number.NaN);
+  return (Number.isFinite(value) && value >= 0 && value <= 24 * 60 ? value : 5) * 60_000;
+}
 
 /** `SHANNON_INCOMING_CALLS=off` is the kill switch: nothing is rung, and the app's settings are told so. Unset means on. */
 export function incomingCallsEnabled(environment: Readonly<Record<string, string | undefined>> = process.env): boolean {

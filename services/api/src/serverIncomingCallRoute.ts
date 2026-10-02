@@ -5,9 +5,7 @@ import { dispatchIncomingCallRequest, type IncomingCallRouteDependencies } from 
 import { IncomingCalls } from './incomingCalls.js';
 import { SQLiteIncomingCallStore } from './incomingCallStore.js';
 import { privateReachOutsEnabled } from './privateListeningContract.js';
-import type { PrivateReachOuts } from './privateReachOuts.js';
 import { SQLiteReachOutClaims } from './reachOutClaims.js';
-import type { SQLiteReachOutReports } from './reachOutReports.js';
 import { bindScope, consumeDeviceAllowance, sendJson } from './serverHttp.js';
 import { createConfiguredVoipPushSender, type VoipPushSender } from './voipPushSender.js';
 
@@ -24,14 +22,12 @@ export interface IncomingCallRoute {
   calls: IncomingCalls;
   /** A device was unpaired: its call token goes with it. */
   invalidateDevice(deviceId: string): void;
-  /** Starts looking for a message to ring with, every two seconds. */
+  /** Starts looking for a call she asked for, every two seconds. */
   start(): void;
   close(): void;
 }
 
 export interface IncomingCallRouteOptions {
-  reachOuts: Pick<PrivateReachOuts, 'speaker'>;
-  reports: Pick<SQLiteReachOutReports, 'windowVisible' | 'delivery'>;
   /** Whether the device still holds a pairing that is neither revoked nor expired: only such a device is rung. */
   isPaired: (scopeKey: string, deviceId: string) => boolean;
   /** Tests hand in a sender that reaches no network. */
@@ -48,8 +44,7 @@ export function createIncomingCallRoute(
     store, claims, sender: options.sender ?? createConfiguredVoipPushSender(environment), ownerScopeKey, now,
     // The claim is what keeps two surfaces from saying one message: with it switched off, nothing is rung either.
     enabled: incomingCallsEnabled(environment) && privateReachOutsEnabled(environment),
-    appSpeaks: (scopeKey, at, initiativeId) => options.reachOuts.speaker(scopeKey, at, initiativeId) !== null,
-    body: options.reports, isPaired: options.isPaired,
+    isPaired: options.isPaired,
     log: (event, detail) => console.log(`Shannon incoming call ${event}`, { status: detail.status, ...(detail.reason ? { reason: detail.reason } : {}) }),
   });
   const dependencies: IncomingCallRouteDependencies = { calls, ownerScopeKey, bundleId: environment.SHANNON_APNS_BUNDLE_ID?.trim() || null };

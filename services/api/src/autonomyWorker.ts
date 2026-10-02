@@ -21,7 +21,11 @@ import { notionLoopReader } from './notionLoopReader.js';
 import { configuredNotionSource } from './notionSource.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
+import { callGateContext } from './autonomyLoopPhoneStep.js';
+import { IncomingCallRequests, incomingCallMinimumIntervalMilliseconds, incomingCallsConfigured } from './incomingCallRequests.js';
 import { SQLiteIncomingCallStore } from './incomingCallStore.js';
+import { SQLitePrivateListeningStore } from './privateListeningStore.js';
+import { SQLiteReachOutClaims } from './reachOutClaims.js';
 import { SQLiteReachOutReports, reachOutBodyFacts } from './reachOutReports.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 
@@ -57,6 +61,15 @@ const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => body
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
 const incomingCalls = new SQLiteIncomingCallStore(databasePath);
+// Phoning his iPhone is her own step (docs/incoming-call-contract.md). This process asks for the call and reads what became of
+// it; the API process rings. It reads no key for Apple's push service. SHANNON_INCOMING_CALLS=off switches it off.
+const reachOutClaims = new SQLiteReachOutClaims(databasePath);
+const privateListening = new SQLitePrivateListeningStore(databasePath);
+const phone = new IncomingCallRequests({
+  store: incomingCalls, claims: reachOutClaims, listeners: (scopeKey, at) => privateListening.listeners(scopeKey, at),
+  bodyVisible: (scopeKey, at) => bodyIngestEnabled(process.env) && reachOutReports.windowVisible(scopeKey, at),
+  serverReady: incomingCallsConfigured(process.env), minimumIntervalMilliseconds: incomingCallMinimumIntervalMilliseconds(process.env),
+});
 const observer = {
   // A report of one of the owner's apps (her message said through his earphones) is read whatever the body switch says.
   delivery: (scopeKey: string, initiativeId: string) => (bodyIngestEnabled(process.env) || reachOutReports.deliverySurface(scopeKey, initiativeId)
@@ -75,6 +88,7 @@ const service = new ShannonAutonomyService({
   store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at),
   reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
   reachOutFollowUps: (scopeKey, at) => ({ today: reachOuts.followUpsOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }),
+  calls: (scopeKey, at) => callGateContext(phone, scopeKey, at),
 });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
@@ -92,7 +106,7 @@ const loop = new ShannonAutonomyLoop({
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
   }),
   showing, now, looks, ...(notion ? { notion } : {}),
-  reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
+  reachOuts, phone, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
   // Content-free: a step kind and a closed reason code.
   log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
@@ -135,6 +149,8 @@ try {
   reachOuts.close();
   reachOutReports.close();
   incomingCalls.close();
+  reachOutClaims.close();
+  privateListening.close();
   lookHand.close();
   lookStore.close();
   bodyStore.close();
