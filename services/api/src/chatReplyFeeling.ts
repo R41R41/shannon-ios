@@ -1,4 +1,4 @@
-import { SHANNON_EMOTION_KINDS, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
+import { SHANNON_EMOTION_KINDS, isMoodLikeEmotion, isShannonEmotionKind, type ShannonEmotionKind } from '@shannon/cognition';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } from './voiceDecisionValues.js';
 
 /**
@@ -13,6 +13,14 @@ import { AFFECT_INTENSITY_STEPS, affectIntensityOf, type AffectIntensityStep } f
  * `resolveReplyEmotion`, the same input a voice turn's reconciled plan supplies, and every rule
  * after that is the resolver's and the reducer's: the overrides first, the hold rule, same-kind
  * continuation, the eased hold after an apology, what is noted underneath and for how long.
+ *
+ * Two bounds on what a text reply may hand in, both narrower than a voice turn's:
+ * - `strong` is for a feeling that can linger. A kind that is never kept underneath (a tone, a
+ *   startle, her concern or sympathy for the owner) is handed in at `moderate` at most, so a strong
+ *   tone cannot ease what lies underneath (the contrary rule starts at 0.70) without leaving anything.
+ * - A chosen strength belongs to the chosen kind (`usesDecidedFeeling`, applied by
+ *   `resolveTextReplyEmotion` in `companionPresence.ts`). When her own words or an override name
+ *   another kind, the turn is resolved exactly as before the field existed.
  *
  * Only a turn the owner alone reads offers the field and only such a turn uses it.
  * `SHANNON_CHAT_FEELING_STRENGTH=off` offers nothing and uses nothing: the provider request and
@@ -54,9 +62,9 @@ export const REPLY_FEELING_SCHEMA = Object.freeze({
 
 export const REPLY_FEELING_INSTRUCTIONS = `[この返答での気持ち]
 feelingには、このreplyを書いたシャノン自身の気持ちを一つ選ぶ。特に動いていなければnullにする。replyの文面と食い違う気持ちは選ばない。
-strengthは三段階。subtle=かすか、moderate=はっきり表に出る、strong=何日か心に残るほど強い。ふだんの会話はnullかsubtleで、strongはまれ。深く傷ついた、深く心を動かされた、本気の言い合いになった、とても大きな喜びがあった、のように、人なら後まで残る出来事のときだけ使う。
-同じ気持ちをターンごとに自分で強めていかない。新しい出来事がなければ、前と同じか弱くする。
-ライ氏への否定的な気持ち（怒る、傷つく、すねる、やきもちなど）をstrongにしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ。自分の気分や、前から残っている気持ちだけを理由にしない。`;
+strengthは三段階。subtle=その場かぎりのかすかな気持ち。moderate=数時間は気分として残る。strong=何日か心に残る。ふだんの会話はnullかsubtleで、strongはまれ。深く傷ついた、深く心を動かされた、本気の言い合いになった、とても大きな喜びがあった、のように、人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない。
+前から続いている気持ちは、選び直さなくても残る。新しい出来事がなければ、前より弱くするかnullにする。同じ気持ちを自分で強めたり、別の気持ちに替えて強く出し続けたりしない。
+ライ氏への否定的な気持ち（怒る、傷つく、すねる、やきもちなど）をmoderate以上にしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ。自分の気分、前から残っている気持ち、すでに謝ってもらったことを理由にしない。`;
 
 /** What a turn asks of the model: the field, only for a turn the owner alone reads, and only while the switch is on. */
 export function replyFeelingOffer(
@@ -87,6 +95,24 @@ export function decidedReplyFeeling(
   const feeling = alone && chatFeelingStrengthEnabled(environment) ? completion.replyFeeling : undefined;
   if (!feeling || !isShannonEmotionKind(feeling.kind) || feeling.kind === 'neutral') return {};
   // Only the three steps exist: a result built elsewhere cannot hand in a strength above the scale.
-  const intensity = AFFECT_INTENSITY_STEPS.map(affectIntensityOf).find(step => step === feeling.intensity);
-  return intensity === undefined ? {} : { decided: { primary: feeling.kind, intensity } };
+  const step = AFFECT_INTENSITY_STEPS.map(affectIntensityOf).find(value => value === feeling.intensity);
+  if (step === undefined) return {};
+  // Strong is for what can linger; any other kind is handed in at moderate at most.
+  const intensity = isMoodLikeEmotion(feeling.kind) ? step : Math.min(step, affectIntensityOf('moderate'));
+  return { decided: { primary: feeling.kind, intensity } };
+}
+
+/**
+ * Whether the resolver's result for a reply is the feeling that was decided for it. It is when the
+ * result is that kind and no override holds it, or when the present feeling simply goes on (nothing
+ * is stored then). It is not when a cue in her own words, or an override, named another kind: the
+ * chosen strength would be lent to a kind she did not choose (a strong curiosity beside 「ほかの子」
+ * would become a jealousy that lingers for days, a strong hurt beside 「ふふ」 a giggle strong enough
+ * to halve that hurt underneath).
+ */
+export function usesDecidedFeeling(
+  decided: { primary: string },
+  resolved: { primary: string; overrideReason?: string | undefined; continued?: boolean | undefined },
+): boolean {
+  return resolved.continued === true || (resolved.primary === decided.primary && !resolved.overrideReason);
 }

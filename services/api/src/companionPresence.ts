@@ -17,8 +17,8 @@ import {
 import { emotionTiming } from './emotionTiming.js';
 
 export { emotionTiming };
-/** A text reply's decided feeling enters through the same resolver call as a voice turn's (`chatReplyFeeling.ts`). */
-export { decidedReplyFeeling, replyFeelingOffer } from './chatReplyFeeling.js';
+import { decidedReplyFeeling, usesDecidedFeeling, type ChatReplyFeeling } from './chatReplyFeeling.js';
+export { replyFeelingOffer } from './chatReplyFeeling.js';
 
 const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 const SHARED_TIME_LOOKBACK_MILLISECONDS = 31 * 24 * 60 * 60_000;
@@ -112,6 +112,20 @@ export function stillFeltLine(snapshot: CompanionStateSnapshot, now: string): st
 /** Her feeling for one completed reply, with this process's emotion timing. Callers on the server use this, not the pure function. */
 export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
   return resolveReplyEmotionWith({ timing: emotionTiming(), ...input });
+}
+
+/**
+ * Her feeling for a completed text reply of the chat model. The feeling the model decided for it (`chatReplyFeeling.ts`)
+ * enters through the same resolver input as a voice turn's, and is used only when the resolver's result is that feeling.
+ * Otherwise, and whenever none was decided or may be used, the turn is resolved as before the field existed.
+ */
+export function resolveTextReplyEmotion(
+  input: ReplyEmotionInput, completion: { replyFeeling?: ChatReplyFeeling }, alone: boolean,
+): ReplyEmotion {
+  const { decided } = decidedReplyFeeling(completion, alone);
+  if (!decided) return resolveReplyEmotion(input);
+  const resolved = resolveReplyEmotion({ ...input, decided });
+  return usesDecidedFeeling(decided, resolved.expressiveEmotion) ? resolved : resolveReplyEmotion(input);
 }
 
 /**
