@@ -59,7 +59,7 @@ import { validatedPlaceSearchOptions } from './placeDiscovery.js';
 import { optionalPlaceDiscoverySkill, placeSkillReply } from './placeDiscoverySkill.js';
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { chatAudienceTurn } from './chatAudience.js';
-import { withSentenceStream } from './chatSentenceStream.js';
+import { generateChatTurn, validChatStream, withSentenceStream } from './chatSentenceStream.js';
 import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
@@ -338,10 +338,9 @@ export class ShannonApiKernel {
         return badRequest('attachments must contain at most 4 UTF-8 text files, 24000 characters each and 48000 characters total');
       }
       if (body.webSearch !== undefined && typeof body.webSearch !== 'boolean') return badRequest('webSearch must be a boolean');
-      if (body.stream !== undefined && body.stream !== 'sentences') return badRequest('stream is invalid');
       // Who can see or hear the reply. Absent: the owner alone, as before the field existed.
       const audience = chatAudienceTurn(body.audience);
-      if (!audience) return badRequest('audience is invalid');
+      if (!audience || !validChatStream(body.stream)) return badRequest(audience ? 'stream is invalid' : 'audience is invalid');
       const message = body.message.trim();
       const placeOptions = validatedPlaceSearchOptions(message, body.placeLocation, this.now());
       if (placeOptions === false) return badRequest('placeLocation is invalid');
@@ -420,7 +419,7 @@ export class ShannonApiKernel {
       }
       const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
-      const completion = await this.chatModel.generate({
+      const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, {
         scopeKey: body.scopeKey,
         systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
         history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, audience.present),
@@ -476,7 +475,7 @@ export class ShannonApiKernel {
       this.background.schedule(completedTurn, experience.id);
       // Her stored feeling toward the owner moves only on a turn that is his alone.
       if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
-      return withSentenceStream(body, { status: 200, body: audience.visible(response) }, { modelReply: completion.reply, placeSearch: placeSkill !== null });
+      return withSentenceStream(completion, { status: 200, body: audience.visible(response) });
     }
     return { status: 404, body: { error: 'NOT_FOUND' } };
   }

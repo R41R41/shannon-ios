@@ -9,10 +9,10 @@ import { createLocalApiKernel, type ShannonApiKernel } from '../src/apiKernel.js
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
 import { CHAT_SENTENCE_MAXIMUM_LENGTH } from '../src/chatSentenceSplitter.js';
-import { chatSentenceStreamLines, withSentenceStream, type ChatStreamLine } from '../src/chatSentenceStream.js';
-import type { ApiResponse, ChatResponse } from '../src/contracts.js';
+import { chatSentenceStreamLines } from '../src/chatSentenceStream.js';
+import type { ApiResponse, ChatResponse, ChatStreamLine } from '../src/contracts.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
-import { sendChatSentenceStream } from '../src/serverChatSentenceStream.js';
+import { dispatchWithChatSentences } from '../src/serverChatSentenceStream.js';
 import { readJson, sendJson } from '../src/serverHttp.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { fixtureNotionSource } from './notionFixture.js';
@@ -59,12 +59,17 @@ function sentenceText(lines: readonly ChatStreamLine[]): string {
   return lines.flatMap(line => (line.type === 'sentence' ? [line.text] : [])).join('');
 }
 
-/** The same hook `server.ts` uses after `kernel.dispatch`. */
+/** A kernel that has already answered: what the HTTP layer does with a finished response. */
+function answered(result: ApiResponse) {
+  return { dispatch: async () => result };
+}
+
+/** The same call `server.ts` makes. */
 async function listen(api: ShannonApiKernel): Promise<string> {
   const server = createServer(async (request, response) => {
     const body = await readJson(request, 64 * 1024);
-    const result = await api.dispatch({ method: 'POST', path: request.url ?? '/', body });
-    if (!(await sendChatSentenceStream(response, request.url ?? '/', body, result))) sendJson(response, result.status, result.body);
+    const result = await dispatchWithChatSentences(api, response, { method: 'POST', path: request.url ?? '/', body });
+    if (result) sendJson(response, result.status, result.body);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   closers.push(() => { server.closeAllConnections(); server.close(); });
@@ -85,8 +90,6 @@ describe('POST /v1/chat without stream', () => {
   it('returns the object it returned before the field existed', async () => {
     const plain = await dispatchChat(createLocalApiKernel(() => at, { chatModel: new ScriptedModel() }));
     expect(Object.keys(plain).sort()).toEqual(['body', 'status']);
-    // The hook hands back the very object it was given.
-    expect(withSentenceStream(chatBody() as never, plain, { modelReply: REPLY, placeSearch: false })).toBe(plain);
 
     const model = new ScriptedModel();
     const streamed = await dispatchChat(createLocalApiKernel(() => at, { chatModel: model }), { stream: 'sentences' });
@@ -311,7 +314,7 @@ describe('chat sentence stream delivery', () => {
   it('stops quietly when the reader disconnects mid-stream, and the turn is stored', async () => {
     const { body, result, conversation } = await completedTurn();
     const { response, written } = fakeResponse({ closeAfter: 2 });
-    await expect(sendChatSentenceStream(response, '/v1/chat', body, result)).resolves.toBe(true);
+    await expect(dispatchWithChatSentences(answered(result), response, { method: 'POST', path: '/v1/chat', body })).resolves.toBeNull();
     expect(written).toHaveLength(2);
     expect(response.ended).toBe(false);
     expect(await conversation()).toEqual(['聞こえてる？', REPLY]);
@@ -320,7 +323,7 @@ describe('chat sentence stream delivery', () => {
   it('writes nothing to a connection that closed while the reply was being made, and the turn is stored', async () => {
     const { body, result, conversation } = await completedTurn();
     const { response, written } = fakeResponse({ destroyed: true });
-    await expect(sendChatSentenceStream(response, '/v1/chat', body, result)).resolves.toBe(true);
+    await expect(dispatchWithChatSentences(answered(result), response, { method: 'POST', path: '/v1/chat', body })).resolves.toBeNull();
     expect(written).toEqual([]);
     expect(await conversation()).toEqual(['聞こえてる？', REPLY]);
   });
@@ -346,9 +349,9 @@ describe('chat sentence stream delivery', () => {
     const { body, result } = await completedTurn();
     const { response, written } = fakeResponse({ throwOn: 2 });
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await expect(sendChatSentenceStream(response, '/v1/chat', body, result)).resolves.toBe(true);
+    await expect(dispatchWithChatSentences(answered(result), response, { method: 'POST', path: '/v1/chat', body })).resolves.toBeNull();
     // The log names the failure and carries no reply text.
-    expect(warned.mock.calls).toEqual([['Shannon chat sentence stream failed', { name: 'Error' }]]);
+    expect(warned.mock.calls).toEqual([['Shannon chat sentence stream failed', { name: 'WriteError' }]]);
     warned.mockRestore();
     expect(written.map(line => JSON.parse(line) as ChatStreamLine).map(line => line.type)).toEqual(['start', 'error']);
     expect(JSON.parse(written.at(-1)!)).toEqual({ type: 'error', status: 502, error: 'STREAM_FAILED' });
@@ -366,7 +369,7 @@ describe('chat sentence stream delivery', () => {
     ];
     for (const [path, body, response] of cases) {
       const fake = fakeResponse();
-      await expect(sendChatSentenceStream(fake.response, path, body, response)).resolves.toBe(false);
+      await expect(dispatchWithChatSentences(answered(response), fake.response, { method: 'POST', path, body })).resolves.toBe(response);
       expect(fake.written).toEqual([]);
       expect(fake.response.headersSent).toBe(false);
     }

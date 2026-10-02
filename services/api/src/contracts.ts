@@ -11,6 +11,20 @@ export interface ApiRequest {
   body?: unknown;
   /** The paired device that sent the request; absent for a fixed-token or service caller. */
   deviceId?: string;
+  /** Given by the HTTP layer to an opted-in `/v1/chat` turn that may send sentences while the model writes. */
+  chatSentences?: ChatSentenceSink;
+}
+
+/** One NDJSON line of `stream: "sentences"` (docs/chat-stream-contract.md). */
+export type ChatStreamLine =
+  | { type: 'start'; threadId: string; turnId?: string; audience: 'owner' | 'others' }
+  | { type: 'sentence'; index: number; text: string }
+  | { type: 'done'; response: unknown; fallback?: ChatSentenceFallback }
+  | { type: 'error'; status: number; error: string };
+
+/** Takes lines in order and never throws or waits: the turn does not depend on its reader. */
+export interface ChatSentenceSink {
+  write(line: ChatStreamLine): void;
 }
 
 export interface ApiResponse {

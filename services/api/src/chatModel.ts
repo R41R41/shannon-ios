@@ -1,28 +1,17 @@
-import { createHash } from 'node:crypto';
-import { normalizedThreadTitle } from './threadTitle.js';
-import { placeSearchInstructions, placeSearchSchema, type PlaceSearchContext, type ShannonPlace } from './placeDiscovery.js';
+import type { PlaceSearchContext, ShannonPlace } from './placeDiscovery.js';
 import {
   estimatedOpenAICostUsd,
   responseUsage,
   type LlmUsageStore,
 } from './llmUsage.js';
-
+import { responseSSEEvents, streamedChatTurnEnvelope } from './chatModelStream.js';
+import { chatTurnRequestBody, chatTurnResult, parsedChatTurn } from './chatModelTurn.js';
 import {
-  ATTACHMENT_SAFETY_INSTRUCTIONS,
-  GENERATED_ARTIFACT_INSTRUCTIONS,
-  INTENT_PLAN_INSTRUCTIONS,
-  SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
-  THREAD_SUMMARY_INSTRUCTIONS,
-  THREAD_TITLE_INSTRUCTIONS,
   WEB_SEARCH_INSTRUCTIONS,
-  agentTaskInstructions,
-  attachmentProjection,
   errorDetail,
   extractOutputText,
   extractWebSources,
   parseJson,
-  parseStructuredTurn,
-  priorThreadSummaryInstructions,
   stableScopeIdentifier,
   validModel,
 } from './chatModelSupport.js';
@@ -112,6 +101,11 @@ export interface ShannonChatModel {
   readonly mode: ShannonChatMode;
   readonly model: string;
   generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult>;
+  /** `generate` with the reply reported while it is written. The pieces are a prefix of the returned `reply`. */
+  generateStreaming?(
+    request: ShannonChatModelRequest,
+    onReplyText: (text: string) => void | Promise<void>,
+  ): Promise<ShannonChatModelResult>;
   generateVoice?(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult>;
   generateVoiceStreaming?(
     request: ShannonVoiceModelRequest,
@@ -168,133 +162,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
         authorization: `Bearer ${this.options.apiKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({
-        model: this.model,
-        instructions: [request.systemPrompt, SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
-          ...(request.attachments?.length ? [ATTACHMENT_SAFETY_INSTRUCTIONS] : []),
-          ...(request.useWebSearch || request.placeSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
-          ...(request.placeSearch ? [placeSearchInstructions(request.placeSearch)] : []),
-          GENERATED_ARTIFACT_INSTRUCTIONS,
-          INTENT_PLAN_INSTRUCTIONS,
-          agentTaskInstructions(this.options.agentHostHint),
-          ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
-          THREAD_SUMMARY_INSTRUCTIONS,
-          ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
-        ].join('\n\n'),
-        input: [
-          ...request.history.map(item => ({ role: item.role, content: item.content })),
-          {
-            role: 'user',
-            content: request.attachments?.length
-              ? [
-                { type: 'input_text', text: request.message },
-                { type: 'input_text', text: attachmentProjection(request.attachments) },
-              ]
-              : request.message,
-          },
-        ],
-        reasoning: { effort: 'none' },
-        text: {
-          verbosity: 'medium',
-          format: {
-            type: 'json_schema',
-            name: 'shannon_chat_turn',
-            strict: true,
-            schema: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                reply: { type: 'string', description: 'ユーザーに見せる自然な日本語の返答' },
-                threadSummary: {
-                  type: ['string', 'null'],
-                  description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
-                },
-                ...(request.generateThreadTitle ? {
-                  threadTitle: { type: ['string', 'null'], description: '最初のユーザー発言とシャノン側のreplyの話題を表す短いトークタイトル' },
-                } : {}),
-                taskDecision: {
-                  type: 'object',
-                  additionalProperties: false,
-                  properties: {
-                    disposition: { type: 'string', enum: ['none', 'clarify', 'propose'] },
-                    reason: { type: 'string', description: '判定理由。内部監査用に短く具体的に書く' },
-                  },
-                  required: ['disposition', 'reason'],
-                },
-                taskProposal: {
-                  anyOf: [
-                    { type: 'null' },
-                    {
-                      type: 'object',
-                      additionalProperties: false,
-                      properties: {
-                        title: { type: 'string' },
-                        goal: { type: 'string' },
-                        hostHint: { type: ['string', 'null'] },
-                        projectHint: { type: ['string', 'null'] },
-                        risk: { type: ['string', 'null'] },
-                      },
-                      required: ['title', 'goal', 'hostHint', 'projectHint', 'risk'],
-                    },
-                  ],
-                },
-                intentPlan: {
-                  anyOf: [
-                    { type: 'null' },
-                    {
-                      type: 'object',
-                      additionalProperties: false,
-                      properties: {
-                        nextStep: { type: 'string', description: '目的に対する直近の具体的な一手' },
-                        steps: {
-                          type: 'array', minItems: 1, maxItems: 5,
-                          items: { type: 'string', description: '短く検証可能な計画段階' },
-                        },
-                      },
-                      required: ['nextStep', 'steps'],
-                    },
-                  ],
-                },
-                artifacts: {
-                  anyOf: [
-                    { type: 'null' },
-                    {
-                      type: 'array',
-                      maxItems: 2,
-                      items: {
-                        type: 'object',
-                        additionalProperties: false,
-                        properties: {
-                          name: { type: 'string', description: '拡張子を含む安全で短いファイル名' },
-                          mimeType: {
-                            type: 'string',
-                            enum: ['text/plain', 'text/markdown', 'application/json', 'text/csv', 'text/x-source-code'],
-                          },
-                          content: { type: 'string', description: 'ユーザーが保存できるUTF-8テキスト生成物' },
-                          summary: { type: ['string', 'null'], description: '生成物の内容を表す短い説明' },
-                        },
-                        required: ['name', 'mimeType', 'content', 'summary'],
-                      },
-                    },
-                  ],
-                },
-                ...(request.placeSearch ? { places: placeSearchSchema } : {}),
-              },
-              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
-            },
-          },
-        },
-        max_output_tokens: 2_200,
-        ...(request.useWebSearch || request.placeSearch ? {
-          tools: [{ type: 'web_search', search_context_size: 'medium' }],
-          tool_choice: { type: 'web_search' },
-          include: ['web_search_call.action.sources'],
-          max_tool_calls: 3,
-        } : {}),
-        store: false,
-        prompt_cache_key: stableScopeIdentifier(request.scopeKey),
-        safety_identifier: stableScopeIdentifier(request.scopeKey),
-      }),
+      body: JSON.stringify(chatTurnRequestBody(this.model, request, this.options.agentHostHint)),
       signal: AbortSignal.timeout(this.timeoutMilliseconds),
     });
 
@@ -303,30 +171,45 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     if (!response.ok) {
       throw new Error(`OPENAI_RESPONSE_${response.status}: ${errorDetail(json)}`);
     }
-    const structured = parseStructuredTurn(extractOutputText(json));
-    const usage = responseUsage(json);
+    return this.completedChatTurn(request, json);
+  }
+
+  /**
+   * The same request with `stream: true`. `onReplyText` receives the reply as it is written;
+   * the returned turn is parsed, checked and accounted exactly as `generate` does it.
+   */
+  async generateStreaming(
+    request: ShannonChatModelRequest,
+    onReplyText: (text: string) => void | Promise<void>,
+  ): Promise<ShannonChatModelResult> {
+    const envelope = await streamedChatTurnEnvelope({
+      fetcher: this.fetcher, endpoint: this.endpoint, apiKey: this.options.apiKey,
+      timeoutMilliseconds: this.timeoutMilliseconds,
+      body: chatTurnRequestBody(this.model, request, this.options.agentHostHint),
+    }, onReplyText, failed => {
+      // A failed response is recorded only when the provider reported what it used.
+      if (responseUsage(failed).totalTokens > 0) this.recordChatUsage(request.scopeKey, failed);
+    });
+    return this.completedChatTurn(request, envelope);
+  }
+
+  /** Parse, then account, then build the result: the order `generate` has always used. */
+  private completedChatTurn(request: ShannonChatModelRequest, envelope: unknown): ShannonChatModelResult {
+    const structured = parsedChatTurn(envelope);
+    this.recordChatUsage(request.scopeKey, envelope);
+    return chatTurnResult(this.model, request, envelope, structured);
+  }
+
+  private recordChatUsage(scopeKey: string, envelope: unknown): void {
+    const usage = responseUsage(envelope);
     this.options.usageStore?.recordLlmUsage({
-      scopeKey: request.scopeKey,
+      scopeKey,
       lane: 'chat',
       model: this.model,
       ...usage,
       estimatedCostUsd: estimatedOpenAICostUsd(this.model, usage),
       occurredAt: this.options.now?.() ?? new Date().toISOString(),
     });
-    const webSources = request.useWebSearch || request.placeSearch ? extractWebSources(json) : [];
-    return {
-      mode: this.mode,
-      model: this.model,
-      reply: structured.reply,
-      ...(structured.threadSummary ? { threadSummary: structured.threadSummary } : {}),
-      ...(webSources.length ? { webSources } : {}),
-      ...(structured.places.length ? { places: structured.places } : {}),
-      ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
-      ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
-      taskDecision: structured.taskDecision,
-      ...(structured.intentPlan ? { intentPlan: structured.intentPlan } : {}),
-      ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
-    };
   }
 
   async generateVoice(request: ShannonVoiceModelRequest): Promise<ShannonChatModelResult> {
@@ -449,36 +332,6 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       prompt_cache_key: stableScopeIdentifier(request.scopeKey),
       safety_identifier: stableScopeIdentifier(request.scopeKey),
     };
-  }
-}
-
-async function* responseSSEEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let pending = '';
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      pending += decoder.decode(value, { stream: !done });
-      const blocks = pending.split(/\r?\n\r?\n/u);
-      pending = blocks.pop() ?? '';
-      for (const block of blocks) {
-        const data = block.split(/\r?\n/u)
-          .filter(line => line.startsWith('data:'))
-          .map(line => line.slice(5).trimStart())
-          .join('\n');
-        if (!data || data === '[DONE]') continue;
-        yield parseJson(data);
-      }
-      if (done) break;
-    }
-    const data = pending.split(/\r?\n/u)
-      .filter(line => line.startsWith('data:'))
-      .map(line => line.slice(5).trimStart())
-      .join('\n');
-    if (data && data !== '[DONE]') yield parseJson(data);
-  } finally {
-    reader.releaseLock();
   }
 }
 
