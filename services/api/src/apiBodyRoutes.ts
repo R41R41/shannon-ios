@@ -1,6 +1,8 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import { validatedBodyCapabilities, validatedBodyEvents } from './bodyContract.js';
+import { BODY_SCHEMA_VERSION, validatedBodyCapabilities, validatedBodyEvents } from './bodyContract.js';
+import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
+import type { BodyLookAnswer } from './bodyLook.js';
 import type { ShannonBody } from './shannonBody.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
@@ -11,9 +13,10 @@ const LOCAL_DEVICE = 'local';
 /**
  * Routes of Shannon's body (`docs/body-contract.md`). The body reports facts, reads a
  * snapshot, registers what it can express, and reads fixed nudge lines. No route here
- * calls a model, writes as Shannon, or carries text from the body into a prompt.
+ * carries text from the body into a prompt. Only the answer to a look calls a model and
+ * writes as Shannon (`bodyLook.ts`); every other route does neither.
  */
-export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): ApiResponse {
+export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): ApiResponse | Promise<ApiResponse> {
   const deviceId = request.deviceId ?? LOCAL_DEVICE;
 
   if (request.method === 'GET') {
@@ -43,10 +46,34 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
       : { status: 200, body: receipt };
   }
 
+  if (request.method === 'POST' && request.path.startsWith(BODY_LOOK_RESULT_PREFIX)) {
+    const id = bodyLookResultId(request.path);
+    if (!id) return { status: 404, body: { error: 'NOT_FOUND' } };
+    const result = validatedBodyLookResult(request.body);
+    if (typeof result === 'string') return badRequest(result);
+    return body.looks.answer(scopeKey, deviceId, id, result).then(lookResponse);
+  }
+
   if (request.method === 'PUT' && request.path === BODY_CAPABILITIES_PATH) {
     const capabilities = validatedBodyCapabilities(request.body);
     if (typeof capabilities === 'string') return badRequest(capabilities);
     return { status: 200, body: body.saveCapabilities(scopeKey, deviceId, capabilities) };
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };
+}
+
+const LOOK_REFUSALS = {
+  disabled: [403, 'BODY_LOOK_DISABLED', 'Looking is switched off on the server.'],
+  not_found: [404, 'LOOK_NOT_FOUND', 'No such look.'],
+  wrong_device: [403, 'LOOK_NOT_YOURS', 'This look was given to another device.'],
+  answered: [409, 'LOOK_ALREADY_ANSWERED', 'This look was already answered.'],
+  expired: [410, 'LOOK_EXPIRED', 'This look expired before it was answered.'],
+} as const;
+
+function lookResponse(answer: BodyLookAnswer): ApiResponse {
+  if (answer.kind !== 'done') {
+    const [status, error, message] = LOOK_REFUSALS[answer.kind];
+    return { status, body: { error, message } };
+  }
+  return { status: 200, body: { schemaVersion: BODY_SCHEMA_VERSION, id: answer.id, status: answer.status, message: answer.message } };
 }

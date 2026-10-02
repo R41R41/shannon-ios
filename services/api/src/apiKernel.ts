@@ -14,12 +14,7 @@ import { dispatchDataRequest } from './apiDataRoutes.js';
 import { dispatchOrganizeRequest } from './apiOrganizeRoutes.js';
 import { dispatchVoiceTurn } from './apiVoiceTurns.js';
 import { dispatchPreferenceRequest } from './apiPreferenceRoutes.js';
-import {
-  dispatchLiveVoiceRequest,
-  realtimeVoiceSessionProjection,
-  type LiveVoiceStreamObserver,
-  type VoiceParticipantMode,
-} from './apiLiveVoice.js';
+import { dispatchLiveVoiceRequest, realtimeVoiceSessionProjection, type LiveVoiceStreamObserver, type VoiceParticipantMode } from './apiLiveVoice.js';
 import {
   badRequest,
   objectBody,
@@ -381,8 +376,9 @@ export class ShannonApiKernel {
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
         { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion }, audience.capabilities);
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
+      const roomLook = this.body.looks.turn(body.scopeKey, message, occurredAt, audience.audience);
       const dailyMindPrompt = [audience.ownFocus(this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), captured, this.conversationStore, body.scopeKey),
-        this.body.ownerContext(body.scopeKey, occurredAt, audience.audience)].filter(Boolean).join('\n\n');
+        this.body.ownerContext(body.scopeKey, occurredAt, audience.audience), roomLook.prompt].filter(Boolean).join('\n\n');
       const systemPrompt = [
         basePrompt, cognitiveContext.prompt, peopleRecall.prompt, dailyMindPrompt, capability.prompt,
         buildConversationOrchestrationPrompt(orchestrationState, this.agentTasks.list(body.scopeKey)),
@@ -424,7 +420,7 @@ export class ShannonApiKernel {
         history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, audience.present),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
-        ...(attachments.length ? { attachments } : {}),
+        ...(attachments.length ? { attachments } : {}), ...roomLook.request,
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
@@ -471,6 +467,7 @@ export class ShannonApiKernel {
         }];
       }
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
+      roomLook.decide(completion.roomLook, threadId); // One look at the room, only if this turn offered it (bodyLook.ts).
       this.background.schedule(completedTurn, experience.id);
       // Her stored feeling toward the owner moves only on a turn that is his alone.
       if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);

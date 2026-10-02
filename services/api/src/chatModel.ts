@@ -1,16 +1,13 @@
 import { createHash } from 'node:crypto';
 import { normalizedThreadTitle } from './threadTitle.js';
 import { placeSearchInstructions, placeSearchSchema, type PlaceSearchContext, type ShannonPlace } from './placeDiscovery.js';
-import {
-  estimatedOpenAICostUsd,
-  responseUsage,
-  type LlmUsageStore,
-} from './llmUsage.js';
+import { estimatedOpenAICostUsd, responseUsage, type LlmUsageStore } from './llmUsage.js';
 
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
   INTENT_PLAN_INSTRUCTIONS,
+  ROOM_LOOK_SCHEMA,
   SHANNON_RESPONSE_STYLE_INSTRUCTIONS,
   THREAD_SUMMARY_INSTRUCTIONS,
   THREAD_TITLE_INSTRUCTIONS,
@@ -51,6 +48,8 @@ export interface ShannonChatModelRequest {
   attachments?: readonly ShannonChatAttachment[];
   useWebSearch?: boolean;
   placeSearch?: PlaceSearchContext;
+  /** The structured reply gets a `roomLook` field: she may choose one look at the room (`bodyLook.ts`). */
+  offerRoomLook?: boolean;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -86,6 +85,7 @@ export interface ShannonChatModelResult {
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;
   intentPlan?: ShannonIntentPlan;
+  roomLook?: 'asked' | 'curious';
 }
 
 export interface ShannonIntentPlan {
@@ -278,9 +278,9 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
                     },
                   ],
                 },
-                ...(request.placeSearch ? { places: placeSearchSchema } : {}),
+                ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}),
               },
-              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+              required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
             },
           },
         },
@@ -326,6 +326,7 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
       taskDecision: structured.taskDecision,
       ...(structured.intentPlan ? { intentPlan: structured.intentPlan } : {}),
       ...(structured.taskProposal ? { taskProposal: structured.taskProposal } : {}),
+      ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}),
     };
   }
 

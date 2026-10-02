@@ -51,6 +51,7 @@ import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
+import { bodyLookRequestBytes, configuredBodyLookOptions } from './bodyLookWiring.js';
 import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
@@ -114,7 +115,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env) },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -238,7 +239,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     // One ended 「友人も一緒」 period carries up to sixty turns of text.
-    const body = request.method !== 'GET' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : 64 * 1024) : undefined;
+    const body = request.method !== 'GET' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {

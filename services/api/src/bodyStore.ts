@@ -144,6 +144,13 @@ export class SQLiteBodyStore {
     };
   }
 
+  /** Devices of the scope whose registration has the flag set to true, such as `camera`. */
+  devicesWithFlag(scopeKey: string, flag: string): readonly string[] {
+    const rows = this.database.prepare('SELECT device_id, flags_json FROM body_capabilities WHERE scope_key = ?')
+      .all(scopeKey) as unknown as Array<{ device_id: string; flags_json: string }>;
+    return rows.filter(row => (JSON.parse(row.flags_json) as Record<string, boolean>)[flag] === true).map(row => row.device_id);
+  }
+
   close(): void {
     this.database.close();
   }

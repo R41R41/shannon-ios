@@ -68,6 +68,8 @@ export interface StoredConversationMessage extends ShannonConversationItem {
   sourceAttribution?: ShannonSourceAttribution;
   /** A piece of her study this message is about; clients open the reader from it. */
   studyPiece?: { id: string; title: string };
+  /** Her message about one look at the room: what she saw (`seen`), or why she did not look (`not_seen`). */
+  bodyLook?: { id: string; outcome: 'seen' | 'not_seen' };
   /** The promise a reminder message is about; resolved to a `ReminderView` for clients. */
   reminder?: ReminderReference | ReminderView;
   /** What Shannon took in from this turn, attached to her reply once the worker has recorded it. */
