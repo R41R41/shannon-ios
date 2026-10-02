@@ -73,7 +73,9 @@ export type PresentedCompanionState = CompanionStateSnapshot & { presence: Compa
  * an absence is visible without waiting for the next turn, and the mood is the
  * decayed conversational feeling rather than a stored one. Nothing is written.
  * A reply passes the feeling it just resolved, which is stored only afterwards,
- * so the state returned with that reply already agrees with its face.
+ * so the state returned with that reply already agrees with its face. One case differs on purpose: a mood decided
+ * again that comes up for one reply from underneath a stronger feeling is the face of that reply only; her standing
+ * mood, here and on the next read, is still the stronger feeling until it has faded.
  */
 export function presentCompanionState(
   snapshot: CompanionStateSnapshot,

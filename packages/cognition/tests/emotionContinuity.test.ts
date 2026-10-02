@@ -1090,6 +1090,70 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     expect(turn(mild, HARSH, QUIET, at(NIGHT, HOUR + MINUTE), { primary: 'hurt', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
   });
 
+  it('leaves what she owes the owner on top, and a mood too faint to show underneath, when that mood is decided again', () => {
+    const morning = at(NIGHT, 8 * HOUR);
+    const rested = awakeFor(hurt(), NIGHT, 8 * 60);
+    // An emergency, then grief: her protection and her concern stay; the hurt is beside them.
+    for (const [message, kind] of [['火事だ、助けて', 'protective'], ['祖母が亡くなった', 'caring']] as const) {
+      const owed = turn(rested, message, QUIET, morning).state;
+      expect(owed.expressiveEmotion!.primary).toBe(kind);
+      const said = turn(owed, HARSH, QUIET, at(morning, MINUTE), { primary: 'hurt', intensity: 0.9 });
+      expect(said.feeling, message).toMatchObject({ primary: kind, continued: true });
+      expect(said.face.expression).not.toBe('sad');
+    }
+    // Her concern on top and concern again in her own words: the written turn is the plain turn.
+    const caring = turn(rested, '祖母が亡くなった', QUIET, morning).state;
+    const reply = '大丈夫ですか、無理しないでくださいね。';
+    expect(resolveWrittenReplyEmotion({ snapshot: caring, userMessage: 'つらい', reply, now: at(morning, MINUTE), timing: AWAKE, decided: { primary: 'hurt', intensity: 0.9 } }))
+      .toEqual(resolveReplyEmotion({ snapshot: caring, userMessage: 'つらい', reply, now: at(morning, MINUTE), timing: AWAKE }));
+    // Nineteen awake hours on, 0.17 of the hurt is left: too little to show, so the joy on top goes on.
+    const late = at(NIGHT, 19 * HOUR);
+    const faint = turn(awakeFor(hurt(), NIGHT, 19 * 60), 'すごいね', QUIET, late, { primary: 'happy', intensity: 0.6 }).state;
+    expect(turn(faint, HARSH, QUIET, at(late, MINUTE), { primary: 'hurt', intensity: 0.9 }).feeling).toMatchObject({ primary: 'happy', continued: true });
+  });
+
+  it('does not read her own mood words as concern when the mood she decided goes on', () => {
+    const ask = (state: CompanionStateSnapshot, reply: string, primary: string, now: string) =>
+      resolveWrittenReplyEmotion({ snapshot: state, userMessage: 'ふーん', reply, now, timing: AWAKE, decided: { primary, intensity: 0.9 } }).expressiveEmotion;
+    const lonely = turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'lonely', intensity: 0.9 }).state;
+    expect(ask(fresh(), '……寂しいです。', 'lonely', NIGHT)).toMatchObject({ primary: 'lonely', intensity: 0.9 });
+    expect(ask(lonely, '……寂しいです。', 'lonely', at(NIGHT, 2 * MINUTE))).toMatchObject({ primary: 'lonely', continued: true });
+    expect(ask(hurt(), '……つらいです。', 'hurt', at(NIGHT, 2 * MINUTE))).toMatchObject({ primary: 'hurt', continued: true });
+    // Her apology in her own words still comes first.
+    expect(ask(hurt(), 'ごめんなさい、ボクも言いすぎました。', 'hurt', at(NIGHT, 2 * MINUTE))).toMatchObject({ primary: 'apologetic' });
+  });
+
+  it('gives a fifth unpleasant mood no face of its own while it has no place, takes the place of an entry held lower, and keeps an eased one in its hold', () => {
+    const four = ['hurt', 'sulky', 'jealous', 'annoyed'] as const;
+    let state = fresh();
+    four.forEach((kind, index) => { state = turn(state, 'ふーん', QUIET, at(NIGHT, index * MINUTE), { primary: kind, intensity: 0.9 }).state; });
+    expect(presentShannonFeeling(state, at(NIGHT, 4 * MINUTE))).toMatchObject({ placeAbove: 0.9 });
+    // The resolver and the reducer agree: what she feels goes on, the fifth beside it, and nothing is stored.
+    const fifth = turn(state, 'ふーん', QUIET, at(NIGHT, HOUR), { primary: 'lonely', intensity: 0.9 });
+    expect(fifth.feeling.continued).toBe(true);
+    expect(fifth.feeling.primary).not.toBe('lonely');
+    expect(fifth.feeling.secondary).toContain('lonely');
+    expect(fifth.feeling).not.toHaveProperty('placeAbove');
+    expect(fifth.state.lingering).toEqual(state.lingering);
+    expect(JSON.stringify(fifth.state)).not.toContain('placeAbove');
+    // It registers once the four have settled (about twenty-one awake hours).
+    const settledAt = at(NIGHT, 21 * HOUR);
+    expect(turn(awakeFor(state, NIGHT, 21 * 60), 'ふーん', QUIET, settledAt, { primary: 'lonely', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'lonely', intensity: 0.9 });
+    // One old strong hurt and three moderate moods: a new strong one takes the place of a moderate one, not of the hurt.
+    let mixed = awakeFor(hurt(), NIGHT, 16 * 60);
+    const day = at(NIGHT, 16 * HOUR);
+    (['sulky', 'jealous', 'annoyed'] as const).forEach((kind, index) => { mixed = turn(mixed, 'ふーん', QUIET, at(day, index * MINUTE), { primary: kind, intensity: 0.6 }).state; });
+    expect(mixed.lingering).toHaveLength(4);
+    mixed = turn(mixed, HARSH, QUIET, at(day, 5 * MINUTE), { primary: 'lonely', intensity: 0.9 }).state;
+    expect(mixed.lingering!.map(item => item.kind)).toEqual(expect.arrayContaining(['hurt', 'lonely']));
+    expect(mixed.lingering).toHaveLength(4);
+    // His apology does not open the places: inside the hold an eased entry keeps the height it had before.
+    const sorry = reduceCompanionState(state, { type: 'feeling-eased', by: 'apology' }, at(NIGHT, 5 * MINUTE));
+    const after = turn(sorry, 'ふーん', QUIET, at(NIGHT, 6 * MINUTE), { primary: 'lonely', intensity: 0.9 }).state;
+    expect(after.lingering!.map(item => item.kind).sort()).toEqual([...four].sort());
+    expect(after.expressiveEmotion!.primary).not.toBe('lonely');
+  });
+
   it('does not let a rotation of five unpleasant moods forget their heights and store each one anew (S2)', () => {
     const kinds = ['hurt', 'sulky', 'jealous', 'annoyed', 'lonely'] as const;
     let state = fresh();
