@@ -32,7 +32,9 @@ extension ShannonConversationModel {
         guard let server = client as? any ShannonAppLookServing else { return nil }
         let threadAtAsk = selectedThreadId
         guard let outcome = await appLook.look(ask) else {
-            // The ask closed first: her line about it, if she had announced the look, is in the Talk on the server.
+            // The ask closed first: her line about it, if she had announced the look, is written by the server
+            // a moment after the ask's own expiry, which this device stops two seconds short of.
+            try? await Task.sleep(for: .seconds(4))
             await reloadAfterUnansweredLook(threadAtAsk)
             return nil
         }

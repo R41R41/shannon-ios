@@ -103,7 +103,13 @@ public final class ShannonAppLookCoordinator {
         guard let deadline = ask.deadline(receivedAt: Date()), Date() < deadline else { return nil }
         let state = clientState()
         if let refusal = ShannonAppLookAvailability.refusal(state.state) { return .refused(refusal) }
+        // No sign can be shown without a surface to show it on: then nothing is captured.
+        guard !presenters.isEmpty else { return .refused(.background) }
+        // He spoke over her or ended the call: a look that has not begun is not taken, and no explanation is shown.
+        if Task.isCancelled { return .refused(.interrupted) }
+        var allowedJustNow = false
         if state.state == .undetermined {
+            allowedJustNow = true
             let refusal = await authorize(until: deadline)
             // An explanation nobody answered in time is not a refusal: the ask has simply closed.
             guard Date() < deadline else { return nil }
@@ -114,8 +120,8 @@ public final class ShannonAppLookCoordinator {
         guard Date() < deadline else { return nil }
         if let refusal = ShannonAppLookAvailability.refusal(clientState().state) { return .refused(refusal) }
         let camera = state.cameras.contains(ask.camera) ? ask.camera : state.cameras.first ?? ask.camera
-        // He spoke over her or ended the call: a look that has not opened the camera yet is not taken.
-        if Task.isCancelled { return .refused(.interrupted) }
+        // Cut in after that: still not taken, unless he has just answered the camera prompt himself to let her look.
+        if Task.isCancelled, !allowedJustNow { return .refused(.interrupted) }
         do {
             let image = try await environment.camera.capture(camera)
             // A frame taken as the app left the screen is dropped unseen.
@@ -142,7 +148,7 @@ public final class ShannonAppLookCoordinator {
     /// nil once the camera is allowed. On iPhone the explanation comes first and the system prompt runs on the owner's tap.
     private func authorize(until deadline: Date) async -> ShannonAppLookRefusal? {
 #if os(iOS)
-        if !presenters.isEmpty {
+        do {
             primerPhase = .explain
             // The explanation does not wait for ever: when the ask closes it is put away as 「今はしない」.
             let expiry = Task { [weak self] in

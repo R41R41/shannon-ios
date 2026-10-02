@@ -179,6 +179,8 @@ enum ShannonAppLookSpeech {
         // Whichever comes first answers; a look that is merely slow is not cancelled and still reaches the Talk.
         // When the reply itself is cancelled (he spoke over her, or the call ended), a look that has not captured yet is.
         let once = Once()
+        // Sleeps for the wait; cancelled together with the reply, so that a cancelled reply ends at once.
+        let timer = Task { try? await Task.sleep(for: .seconds(seconds)) }
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
                 Task { @MainActor in
@@ -186,12 +188,13 @@ enum ShannonAppLookSpeech {
                     if once.take() { continuation.resume(returning: text) }
                 }
                 Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(seconds))
+                    await timer.value
                     if once.take() { continuation.resume(returning: nil) }
                 }
             }
         } onCancel: {
             look.cancel()
+            timer.cancel()
         }
     }
 

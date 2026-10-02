@@ -164,7 +164,7 @@ final class ShannonAppLookTests: XCTestCase {
 
     func testTakesOneFrameWithTheAskedCameraAndShowsTheSign() async throws {
         let camera = StubCamera()
-        let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera))
         XCTAssertEqual(coordinator.clientState(), ShannonAppLookClientStateDTO(state: .ready, cameras: [.back, .front], platform: ShannonAppLookAvailability.platform))
         let outcome = await coordinator.look(Fixtures.ask(camera: .front))
         guard case let .seen(used, frame) = outcome else { return XCTFail("expected a frame, got \(String(describing: outcome))") }
@@ -182,7 +182,7 @@ final class ShannonAppLookTests: XCTestCase {
 
     func testUsesTheCameraTheDeviceHasWhenItLacksTheAskedOne() async {
         let camera = StubCamera(available: [.front])
-        let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera))
         guard case let .seen(used, _) = await coordinator.look(Fixtures.ask(camera: .back)) else { return XCTFail("expected a frame") }
         XCTAssertEqual(used, .front)
         XCTAssertEqual(camera.captures, [.front])
@@ -199,7 +199,7 @@ final class ShannonAppLookTests: XCTestCase {
             var facts = Facts()
             change(&facts)
             let camera = StubCamera(available: facts.cameras)
-            let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera, facts: Box(facts)))
+            let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera, facts: Box(facts)))
             let outcome = await coordinator.look(Fixtures.ask())
             XCTAssertEqual(outcome, .refused(refusal), "\(refusal)")
             XCTAssertEqual(camera.captures, [], "\(refusal)")
@@ -209,7 +209,7 @@ final class ShannonAppLookTests: XCTestCase {
 
     func testAnAskThatAlreadyClosedIsNotAnsweredAndNothingIsCaptured() async {
         let camera = StubCamera()
-        let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera))
         let outcome = await coordinator.look(ShannonAppLookAskDTO(id: "old", camera: .back, expiresAt: "2020-01-01T00:00:00.000Z"))
         XCTAssertNil(outcome)
         XCTAssertEqual(camera.captures, [])
@@ -221,7 +221,7 @@ final class ShannonAppLookTests: XCTestCase {
             let facts = Box(Facts())
             let camera = StubCamera()
             camera.duringCapture = { leave(facts) }
-            let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera, facts: facts))
+            let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera, facts: facts))
             let outcome = await coordinator.look(Fixtures.ask())
             XCTAssertEqual(outcome, .refused(refusal))
             XCTAssertNil(coordinator.cue)
@@ -233,7 +233,7 @@ final class ShannonAppLookTests: XCTestCase {
         let camera = StubCamera()
         var environment = Fixtures.environment(camera: camera, facts: allowed)
         environment.requestPermission = { allowed.value.permission = .granted; return true }
-        let coordinator = ShannonAppLookCoordinator(environment: environment)
+        let coordinator = Fixtures.coordinator(environment)
         XCTAssertEqual(coordinator.clientState().state, .undetermined)
         guard case .seen = await coordinator.look(Fixtures.ask()) else { return XCTFail("expected a frame") }
 
@@ -241,7 +241,7 @@ final class ShannonAppLookTests: XCTestCase {
         let unused = StubCamera()
         var second = Fixtures.environment(camera: unused, facts: refused)
         second.requestPermission = { refused.value.permission = .denied; return false }
-        let outcome = await ShannonAppLookCoordinator(environment: second).look(Fixtures.ask())
+        let outcome = await Fixtures.coordinator(second).look(Fixtures.ask())
         XCTAssertEqual(outcome, .refused(.denied))
         XCTAssertEqual(unused.captures, [])
     }
@@ -250,7 +250,7 @@ final class ShannonAppLookTests: XCTestCase {
         let client = LookClient(ask: Fixtures.ask())
         let camera = StubCamera()
         let model = ShannonConversationModel(client: client, usesDisplayCache: false)
-        model.appLook = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        model.appLook = Fixtures.coordinator(Fixtures.environment(camera: camera))
         // He speaks over her before the camera opens: the look's task is cancelled.
         let look = Task { @MainActor in await model.performAppLook(Fixtures.ask()) }
         look.cancel()
@@ -278,13 +278,21 @@ final class ShannonAppLookTests: XCTestCase {
         for (error, refusal) in [(ShannonAppLookCaptureError.busy, ShannonAppLookRefusal.busy), (.failed, .failed), (.noCamera, .noCamera)] {
             let camera = StubCamera()
             camera.error = error
-            let outcome = await ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera)).look(Fixtures.ask())
+            let outcome = await Fixtures.coordinator(Fixtures.environment(camera: camera)).look(Fixtures.ask())
             XCTAssertEqual(outcome, .refused(refusal))
         }
     }
 
+    func testNothingIsCapturedWithoutASurfaceToShowTheSignOn() async {
+        let camera = StubCamera()
+        let coordinator = Fixtures.coordinator(Fixtures.environment(camera: camera), presented: false)
+        let outcome = await coordinator.look(Fixtures.ask())
+        XCTAssertEqual(outcome, .refused(.background))
+        XCTAssertEqual(camera.captures, [])
+    }
+
     func testOnlyTheFrontmostSurfaceShowsTheSign() {
-        let coordinator = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: StubCamera()))
+        let coordinator = Fixtures.coordinator(Fixtures.environment(camera: StubCamera()), presented: false)
         let talk = UUID(), call = UUID()
         coordinator.register(presenter: talk)
         XCTAssertTrue(coordinator.isFrontmost(presenter: talk))
@@ -301,7 +309,7 @@ final class ShannonAppLookTests: XCTestCase {
         let client = LookClient(ask: ShannonAppLookAskDTO(id: "look-1", camera: .back, expiresAt: Fixtures.future))
         let camera = StubCamera()
         let model = ShannonConversationModel(client: client, usesDisplayCache: false)
-        model.appLook = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        model.appLook = Fixtures.coordinator(Fixtures.environment(camera: camera))
         model.draft = "これ見れる？"
         await model.sendDraft()
         try await Fixtures.wait { await client.answers.count == 1 && model.messages.count == 3 }
@@ -324,7 +332,7 @@ final class ShannonAppLookTests: XCTestCase {
         let client = LookClient(ask: ShannonAppLookAskDTO(id: "look-2", camera: .back, expiresAt: Fixtures.future))
         let model = ShannonConversationModel(client: client, usesDisplayCache: false)
         let camera = StubCamera()
-        model.appLook = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera, facts: Box(Facts(foreground: false))))
+        model.appLook = Fixtures.coordinator(Fixtures.environment(camera: camera, facts: Box(Facts(foreground: false))))
         let said = await model.performAppLook(ShannonAppLookAskDTO(id: "look-2", camera: .back, expiresAt: Fixtures.future))
         XCTAssertEqual(said, "ラーメンですね。")
         let answers = await client.answers
@@ -339,7 +347,7 @@ final class ShannonAppLookTests: XCTestCase {
         let plain = PlainClient(response: Fixtures.chatResponse(reply: "はい。", ask: ShannonAppLookAskDTO(id: "x", camera: .back, expiresAt: Fixtures.future)))
         let camera = StubCamera()
         let model = ShannonConversationModel(client: plain, usesDisplayCache: false)
-        model.appLook = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        model.appLook = Fixtures.coordinator(Fixtures.environment(camera: camera))
         XCTAssertNil(model.appLookClientState())
         model.draft = "これ見れる？"
         await model.sendDraft()
@@ -452,6 +460,13 @@ private actor LookClient: ShannonAPIClientProtocol, ShannonAppLookServing {
 @MainActor
 private enum Fixtures {
     nonisolated static let future = "2099-01-01T00:00:00.000Z"
+
+    /// A coordinator with one surface on screen to show the sign on.
+    static func coordinator(_ environment: ShannonAppLookEnvironment, presented: Bool = true) -> ShannonAppLookCoordinator {
+        let coordinator = ShannonAppLookCoordinator(environment: environment)
+        if presented { coordinator.register(presenter: UUID()) }
+        return coordinator
+    }
 
     static func ask(camera: ShannonAppLookCamera = .back) -> ShannonAppLookAskDTO {
         ShannonAppLookAskDTO(id: "look", camera: camera, expiresAt: future)

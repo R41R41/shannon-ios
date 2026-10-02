@@ -153,7 +153,7 @@ export class AppLooks {
           try {
             if (opened) return;
             opened = true;
-            this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), 'failed', BODY_LOOK_CUT_OFF_LINE);
+            this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), 'interrupted', BODY_LOOK_CUT_OFF_LINE);
           } catch { /* nothing more to do */ }
         },
       };

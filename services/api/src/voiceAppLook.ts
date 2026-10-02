@@ -31,7 +31,9 @@ type Turn = Parameters<typeof voiceRoomLookTurn>[1] & {
 };
 
 /** The owner's plain request through the app, as the whole utterance: 「これ見れる？」「ねえ、これ見える？」「ここ見て」. */
-const PLAIN_APP_ASK = /^(?:ねえ|ねぇ|シャノン|ちょっと)*(?:これ|ここ|こっち|これって|ここって)(?:が|は|を)?(?:見れる|見れます|見える|見えます|見えてる|見られる|見て|見てみて|見てよ|見てくれる)(?:かな|か|の)?$/u;
+const PLAIN_APP_ASK = /^(?:ねえ|ねぇ|シャノン|ちょっと)*(?:これ|ここ|こっち|これって|ここって)(?:を)?(?:見れる|見える|見えてる|見られる|見て|見てみて|見てよ|見てくれる)(?:かな|か|の)?$/u;
+/** With someone beside the owner, how sure a model tier must be that a look is wanted before anything opens. */
+const GUARDED_AGREEMENT_FROM = 0.5;
 
 const viaBody = (turn: VoiceRoomLookTurn): VoiceLookTurn => ({ prompt: turn.prompt, open: turn.open, cutOff: turn.cutOff, ask: () => ({}) });
 
@@ -52,18 +54,21 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     };
     const guarded = turn.audience !== 'owner';
     const score = turn.decision.roomLookProbability;
-    // With other people there, whose words they were is uncertain: words alone open nothing, a model tier has to agree.
-    // With its agreement she looks when asked, and (owner decision 2026-10-03) also when she is curious herself.
-    if (guarded && score === undefined && !app.unavailable) return { prompt: '', open: () => false, cutOff: () => undefined, ask: () => ({}) };
+    // With other people there, whose words they were is uncertain: words alone open nothing, a model tier has to agree
+    // (at least as likely a look as not). With its agreement she looks when asked, and (owner decision 2026-10-03)
+    // also when she is curious herself.
+    if (guarded && !app.unavailable && (score === undefined || score < GUARDED_AGREEMENT_FROM)) return { prompt: '', open: () => false, cutOff: () => undefined, ask: () => ({}) };
     // Alone with her, 「これ見れる？」 said as the whole utterance is a request even when no model tier answered.
-    const plain = !guarded && score === undefined && PLAIN_APP_ASK.test(turn.transcript.normalize('NFKC').replace(/[\s、。，,.!！?？…]/gu, ''));
+    // A statement of what he sees (「これは見える。」) is not one: the particle は／が is not accepted, and a full stop only with 見て.
+    const plain = !guarded && score === undefined && PLAIN_APP_ASK.test(turn.transcript.normalize('NFKC').replace(/[\s、，,!！?？…]/gu, '').replace(/(見て(?:みて|よ|くれる)?)[。.]$/u, '$1'));
     // The app's camera is aimed by the owner himself: for it, a turn other people hear is judged like one of his alone.
     const chosen = voiceRoomLookTurn({ voiceTurn: () => state },
       { ...turn, audience: 'owner', ...(plain ? { decision: { ...turn.decision, roomLookProbability: 1 } } : {}) },
       { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on' });
     if (app.unavailable) {
       // The app cannot look now. Her body may, under its own rules; when neither can, the app's reason is the true one for this turn.
-      if (body.prompt && !body.unavailable) return viaBody(body);
+      // Not when the router was asked the app's wider question (the app only just looked): that score is not her body's.
+      if (body.prompt && !body.unavailable && !looks.routing.appLook) return viaBody(body);
       return { prompt: chosen.prompt ? appLookUnavailablePrompt(app.unavailable, client.platform) : '', open: () => false, cutOff: () => undefined, ask: () => ({}) };
     }
     if (!chosen.prompt) return viaBody(chosen);

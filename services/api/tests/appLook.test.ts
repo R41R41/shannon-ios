@@ -528,7 +528,7 @@ describe('a voice turn from the app', () => {
       expect(turn.prompt, words).toContain(voiceAppLookPrompt(true, 'back'));
     }
     const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
-    for (const words of ['これ見て思ったんだけど、あの映画よかったね。', 'シャノン、これ見れる？']) {
+    for (const words of ['これ見て思ったんだけど、あの映画よかったね。', 'これは見える。', 'ここが見えてるよ。', 'シャノン、これ見れる？']) {
       const turn = await h.say(words, READY, {}, words.startsWith('シャノン') ? { companionPresent: true } : {});
       expect(turn.body.appLook, words).toBeUndefined();
     }
@@ -542,6 +542,22 @@ describe('a voice turn from the app', () => {
       expect(turn.body.appLook, words).toBeUndefined();
     }
     expect(h.store.waiting(scope)).toEqual([]);
+    // A model tier that thinks a look is unlikely is not agreement either.
+    const doubtful = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.3 }) });
+    expect((await doubtful.say('シャノン、私のこと見える？', READY, {}, { companionPresent: true })).body.appLook).toBeUndefined();
+    const agreeing = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.6 }) });
+    expect((await agreeing.say('シャノン、私のこと見える？', READY, {}, { companionPresent: true })).body.appLook).toBeTruthy();
+  });
+
+  it('does not let the app-worded judgement open a look through her body while the app has just looked', async () => {
+    const h = harness();
+    await h.bodyReady();
+    const first = await h.say('これ見れる？');
+    expect(first.body.appLook).toBeTruthy();
+    // The app's look is still open: the next remark, which the router scores as welcome in the app's terms, opens nothing anywhere.
+    const next = await h.say('今、駅に着いたよ。');
+    expect(next.body.appLook).toBeUndefined();
+    expect(await h.bodyLook()).toBeNull();
   });
 
   it('asks the router in the app\'s terms only while the app can look', async () => {
