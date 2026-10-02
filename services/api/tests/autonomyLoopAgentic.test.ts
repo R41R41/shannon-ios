@@ -156,7 +156,7 @@ describe('after a message of hers: observe, then think again', () => {
     expect(unread.map(message => [message.kind, message.reason, message.expression])).toEqual(expect.arrayContaining([['reach_out', 'wonder', 'curious'], ['reach_out', 'follow_up', 'curious']]));
     expect(w.push.pending().map(item => item.content)).toContain('あれ、ライ氏、返事がないですね。席を外していますか。');
 
-    // It is not one of the day's three messages, and has its own count.
+    // It is not one of the day's own messages, and has its own count.
     expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(1);
     expect(w.speaker.followUpsOn(scope, '2026-10-02')).toBe(1);
     // The record: what she did and what followed, without her words.
@@ -420,7 +420,10 @@ describe('the gate, the switches and the budget', () => {
     expect(authorizeAutonomousAction(request, { ...context, enabled: false, reachOutFollowUps: { today: 0, maximumPerDay: 3 } })).toMatchObject({ reason: 'disabled' });
     expect(authorizeAutonomousAction({ ...request, reachesOthers: true }, { ...context, reachOutFollowUps: { today: 0, maximumPerDay: 3 } })).toMatchObject({ decision: 'needs_approval' });
     expect(authorizeAutonomousAction({ ...request, paid: { model: 'm', estimatedCostYen: 5_000 } }, { ...context, reachOutFollowUps: { today: 0, maximumPerDay: 3 } })).toMatchObject({ reason: 'budget_exhausted' });
-    expect(configuredAutonomy({}).maximumReachOutFollowUpsPerDay).toBe(3);
+    // No count a day unless the owner sets one (owner decision 2026-10-03); one per message stays, and 0 switches the mechanism off.
+    expect(configuredAutonomy({}).maximumReachOutFollowUpsPerDay).toBe(Number.POSITIVE_INFINITY);
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_FOLLOW_UPS: 'unlimited' }).maximumReachOutFollowUpsPerDay).toBe(Number.POSITIVE_INFINITY);
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_FOLLOW_UPS: '3' }).maximumReachOutFollowUpsPerDay).toBe(3);
     expect(configuredAutonomy({ SHANNON_AUTONOMY_MAX_FOLLOW_UPS: '0' }).maximumReachOutFollowUpsPerDay).toBe(0);
   });
 

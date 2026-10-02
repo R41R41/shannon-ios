@@ -16,13 +16,18 @@ import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
  * no `turn.completed` event, so nothing is learned about the owner from it.
  *
  * The one second call after a message got no answer (`follow_up`) leaves the same way and is not one
- * of the day's three: its key is `reach-out-follow-up:<owner-local day>:<id of the message it follows>`,
+ * of the day's messages: its key is `reach-out-follow-up:<owner-local day>:<id of the message it follows>`,
  * so the same unique key allows one per message, and the day's count is read from those keys.
  */
 export const REACH_OUT_SOURCE_PREFIX = 'reach-out:';
 export const REACH_OUT_SOURCE_TITLE = 'シャノンから';
 
 export const REACH_OUT_FOLLOW_UP_KEY_PREFIX = 'reach-out-follow-up:';
+/**
+ * The opening line of a call she places to his iPhone (owner decision 2026-10-03): a message of hers like any other,
+ * under a key of its own, `reach-out-call:<owner-local day>:<random>`. It is not counted among the day's messages.
+ */
+export const REACH_OUT_CALL_KEY_PREFIX = 'reach-out-call:';
 /** A second call whose prompt held her note of a look: the lock screen shows the fixed line of a look, as for `saw`. */
 export const REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX = `${REACH_OUT_SOURCE_PREFIX}follow_up:seen:`;
 
@@ -135,10 +140,19 @@ export class SQLiteReachOutSpeaker {
       const taken = new Set((this.database.prepare(`
         SELECT day_key FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
       `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:%`) as unknown as Array<{ day_key: string }>).map(row => row.day_key));
-      const slot = Array.from({ length: Math.max(0, input.maximumPerDay) }, (_, index) => `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:${index + 1}`)
-        .find(key => !taken.has(key));
-      return slot && taken.size < input.maximumPerDay ? slot : null;
+      // With no limit the day's messages are still numbered: the first free number, and the unique key keeps two writers apart.
+      if (taken.size >= input.maximumPerDay) return null;
+      for (let index = 1; index <= taken.size + 1; index += 1) {
+        const key = `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:${index}`;
+        if (!taken.has(key)) return key;
+      }
+      return null;
     });
+  }
+
+  /** Her opening line of a call to his iPhone: written like a message of hers, outside the day's count. */
+  sayByPhone(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at }, () => `${REACH_OUT_CALL_KEY_PREFIX}${input.dayKey}:${randomUUID()}`);
   }
 
   /**

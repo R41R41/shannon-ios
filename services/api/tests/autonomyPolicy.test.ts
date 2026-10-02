@@ -36,6 +36,7 @@ function context(overrides: Partial<AutonomyPolicyContext> = {}): AutonomyPolicy
     notionReadsToday: 0,
     maximumNotionReadsPerDay: 100,
     roomLooks: ROOM_LOOKS,
+    calls: { available: true },
     ...overrides,
   };
 }

@@ -1,5 +1,6 @@
 import { placeSearchInstructions, placeSearchSchema } from './placeDiscovery.js';
 import type { ShannonChatModelRequest, ShannonChatModelResult } from './chatModel.js';
+import { REPLY_FEELING_INSTRUCTIONS, REPLY_FEELING_SCHEMA } from './chatReplyFeeling.js';
 import {
   ATTACHMENT_SAFETY_INSTRUCTIONS,
   GENERATED_ARTIFACT_INSTRUCTIONS,
@@ -40,6 +41,7 @@ export function chatTurnRequestBody(
       ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
       THREAD_SUMMARY_INSTRUCTIONS,
       ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
+      ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
@@ -65,6 +67,8 @@ export function chatTurnRequestBody(
           additionalProperties: false,
           properties: {
             reply: { type: 'string', description: 'ユーザーに見せる自然な日本語の返答' },
+            // After `reply`, so the first sentence of a streamed reply never waits for it (chatReplyStreamDecoder.ts).
+            ...(request.offerReplyFeeling ? { feeling: REPLY_FEELING_SCHEMA } : {}),
             threadSummary: {
               type: ['string', 'null'],
               description: 'この返答までのトークの目的、決定、現在地、未決事項を短く表すナビゲーション要約',
@@ -140,7 +144,7 @@ export function chatTurnRequestBody(
             },
             ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
           },
-          required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+          required: ['reply', ...(request.offerReplyFeeling ? ['feeling'] : []), 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
         },
       },
     },
@@ -176,6 +180,7 @@ export function chatTurnResult(
     ...(webSources.length ? { webSources } : {}),
     ...(structured.places.length ? { places: structured.places } : {}),
     ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}), ...(request.offerAppLook && structured.appLook ? { appLook: structured.appLook } : {}),
+    ...(request.offerReplyFeeling && structured.replyFeeling ? { replyFeeling: structured.replyFeeling } : {}),
     ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
     ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
     taskDecision: structured.taskDecision,

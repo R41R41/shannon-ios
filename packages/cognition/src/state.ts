@@ -16,10 +16,11 @@ import {
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
 import {
-  easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
+  easeLingering, easeShannonFeeling, hasPlaceUnderneath, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
-import { holdsShannonFeeling } from './emotionState.js';
+import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
+import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
@@ -239,6 +240,17 @@ function committedFeeling(
     if (event.continued !== false) return null;
     // And even with it, only a stronger one, an override, or a touch (felt each time) replaces the same feeling.
     if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
+  }
+  // An unpleasant mood toward the owner is stored anew only above the height its kind was stored at, not above what it has
+  // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions. (No resolver result is
+  // an unpleasant mood held by an override; an event built elsewhere could be, so the guard stays.)
+  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming) && incoming.target === SHANNON_OWNER_NAME) {
+    // (While what is left of it still shows; once it is out of sight, the same strength is a new feeling.)
+    if (incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)
+      && (present.strengths?.[incoming.primary] ?? 0) >= SHANNON_EMOTION_CONTINUITY.visibleFrom) return null;
+    // Nor is it stored when it is strong enough to be her mood and every place underneath is held by an unpleasant mood
+    // that does not give way to it: a fifth such mood in rotation would otherwise be stored anew every time.
+    if (incoming.intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && !hasPlaceUnderneath(state.lingering ?? [], incoming, awakeMs, nowIso, timing)) return null;
   }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   // The reading is made here, from the state being written to: the mood her concern covers holds as well.

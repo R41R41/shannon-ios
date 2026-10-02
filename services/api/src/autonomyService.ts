@@ -54,6 +54,8 @@ export interface AutonomyServiceDependencies {
   reachOuts?: (scopeKey: string, at: string) => { today: number; maximumPerDay: number } | null;
   /** Second calls after a message of hers got no answer today, with the limit. Only the activity loop's service has it. */
   reachOutFollowUps?: (scopeKey: string, at: string) => { today: number; maximumPerDay: number } | null;
+  /** Whether a call to the owner's iPhone may be placed now. Only the activity loop's service has it. */
+  calls?: (scopeKey: string, at: string) => { available: boolean } | null;
   /** When the owner first wrote or spoke after an instant, or null: a timestamp, for what followed a message of hers. */
   ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
 }
@@ -131,6 +133,8 @@ export class ShannonAutonomyService {
     const looks = this.dependencies.roomLooks?.(scopeKey, at) ?? null;
     const reachOuts = this.dependencies.reachOuts?.(scopeKey, at) ?? null;
     const followUps = this.dependencies.reachOutFollowUps?.(scopeKey, at) ?? null;
+    let calls: { available: boolean } | null = null;
+    try { calls = this.dependencies.calls?.(scopeKey, at) ?? null; } catch { calls = null; }
     const decision = authorizeAutonomousAction(request, {
       enabled: this.config.enabled,
       paused,
@@ -148,6 +152,7 @@ export class ShannonAutonomyService {
       } } : {}),
       ...(reachOuts ? { reachOuts } : {}),
       ...(followUps ? { reachOutFollowUps: followUps } : {}),
+      ...(calls ? { calls } : {}),
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {

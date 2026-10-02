@@ -164,7 +164,7 @@ There is no stream and no push (see [Not built](#not-built)). Poll every `pollAf
 
 ## A message she starts on her own
 
-Owner decision 2026-10-02 (話しかける): in her own time she may write the owner a short message, up to three times an owner-local day, for one of four reasons — `share` (something she read or wrote), `wonder` (what he is doing), `upcoming` (something near in his calendar, promises or tasks), `saw` (what she saw in a look she just took). She does not do it while a conversation is in progress (a turn in the last 10 minutes). There are no quiet hours.
+Owner decision 2026-10-02 (話しかける): in her own time she may write the owner a short message (since 2026-10-03 with no count a day unless the owner sets one, at least five minutes apart), for one of four reasons — `share` (something she read or wrote), `wonder` (what he is doing), `upcoming` (something near in his calendar, promises or tasks), `saw` (what she saw in a look she just took). She does not do it while a conversation is in progress (a turn in the last 10 minutes). There are no quiet hours.
 
 It reaches the body through what already exists:
 
@@ -187,13 +187,14 @@ What the body must do:
 - `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
 - After showing a message, or deciding not to, report what happened once: see [What the body did with her message](#what-the-body-did-with-her-message).
 - Added 2026-10-02, and nothing for the body to do: while one of the owner's apps is privately listening (his sound comes out of registered earphones or wired headphones), that app says her message through his earphones instead, and the message is then absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives. Exactly one surface says a message. A body that reports `away`, `hidden` or `muted` gives the message back so that such an app may still say it. See `docs/private-listening-contract.md`.
+- Added 2026-10-03, and nothing for the body to do: she may choose to phone the owner's iPhone with a message instead of writing it (`docs/incoming-call-contract.md`). Such a message is the call's from the moment she asks: it is absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives, also after he declined or did not answer. Only a call that could not ring gives the message back. Nothing rings for an ordinary message of hers, which reaches the body as before.
 
 ### A second call (`follow_up`)
 
 Added 2026-10-02. After a message of hers she waits a few minutes (three by default) and observes: did the owner write or speak, and what did the body do with the message. If no answer came she thinks again and may, entirely as her own decision, call **once more**, in words she writes then — or look at the room first, or let it go.
 
 - A second call arrives **exactly like a first one**: `presence.reachOut` changes, and `GET /v1/initiatives` returns it with `kind: "reach_out"` and `reason: "follow_up"`, `expression: "curious"`. Show and speak it by the same rules as any reach-out, and report its delivery the same way.
-- There is at most one per message and at most three an owner-local day; it is not made once the owner has written or spoken.
+- There is at most one per message (and no count a day unless the owner sets one); it is not made once the owner has written or spoken.
 - **Do not speak into an empty room on the server's account.** The body is not asked to treat a `follow_up` differently when the PC looks idle: it applies its own rule (for example showing the bubble silently, or not showing it), and reports `away`. She is told that, and decides what to do next herself.
 - A look she takes between the two messages is an ordinary [look in her own time](#a-look-in-her-own-time).
 

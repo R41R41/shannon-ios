@@ -68,7 +68,7 @@ describe("Shannon's own pursuits", () => {
 describe('autonomy domains', () => {
   it('sorts every domain of the decision into free, approval, or forbidden', () => {
     const byRule = (rule: string) => SHANNON_AUTONOMY_DOMAINS.filter(domain => domain.rule === rule).map(domain => domain.id);
-    expect(byRule('free')).toEqual(['host_folder', 'vm_workspace', 'aether_study', 'voyager_list', 'public_read', 'notion_read', 'room_look', 'thinking', 'owner_message']);
+    expect(byRule('free')).toEqual(['host_folder', 'vm_workspace', 'aether_study', 'voyager_list', 'public_read', 'notion_read', 'room_look', 'thinking', 'owner_message', 'owner_call']);
     expect(byRule('approval')).toEqual(['core', 'suite_app_code', 'owner_content', 'outreach']);
     expect(byRule('forbidden')).toEqual(['spending', 'self_replication', 'impersonation', 'private_content_in_work']);
     expect(new Set(SHANNON_AUTONOMY_DOMAINS.map(domain => domain.id)).size).toBe(SHANNON_AUTONOMY_DOMAINS.length);
@@ -156,7 +156,7 @@ describe('autonomy wording while the loop runs', () => {
     expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
     // The running wording still fits the response-path budget of the capability block.
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_013);
-    expect(running.length).toBeLessThanOrEqual(2_943);
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_111);
+    expect(running.length).toBeLessThanOrEqual(3_047);
   });
 });

@@ -124,7 +124,7 @@ JSONだけを返す:
 {"thought":"今の考えを1〜2文","pursuits":[{"op":"add","kind":"question","title":"…","why":"…"},{"op":"update","id":"…","status":"active|resting|done","why":"…"}],"steps":[{"action":"read","url":"https://…","pursuitId":"…"},{"action":"note"},{"action":"draft","pursuitId":"…","idea":"何を書くか1〜2文"},{"action":"revise","pieceId":"…","aim":"どこをどう直したいか"},{"action":"ready","pieceId":"…"},{"action":"put_away","pieceId":"…"},${folderAvailable ? '{"action":"copy","pieceId":"…"},' : ''}${lookAvailable ? '{"action":"look"},' : ''}${reachOuts > 0 ? '{"action":"reach_out","reason":"share"},' : ''}${extraExamples}${rest.example}]}`;
 
 /** The action as the thinking prompt names it; absent while she may not speak up, so the prompt is then what it was before. */
-const REACH_OUT_ACTION = (remaining: number, lookAvailable: boolean) => `reach_out（${SHANNON_OWNER_NAME}に自分から一言話しかける。reason は share（読んだもの・メモ・書いているもので面白かったことを伝えたい）、wonder（${SHANNON_OWNER_NAME}がいま何をしているか気になる）、upcoming（下の「${SHANNON_OWNER_NAME}のこれから」に近い予定がある）${lookAvailable ? '、saw（この計画の look で見たことを話したい。look より後に置く）' : ''}のどれか。${lookAvailable ? 'wonder の時は、先に look を置いて見てから saw で話しかけてもよい。' : ''}本当に理由がある時だけ。黙っていてよい。一度の計画で1回まで、今日はあと${remaining}回）、`;
+const REACH_OUT_ACTION = (remaining: number, lookAvailable: boolean) => `reach_out（${SHANNON_OWNER_NAME}に自分から一言話しかける。reason は share（読んだもの・メモ・書いているもので面白かったことを伝えたい）、wonder（${SHANNON_OWNER_NAME}がいま何をしているか気になる）、upcoming（下の「${SHANNON_OWNER_NAME}のこれから」に近い予定がある）${lookAvailable ? '、saw（この計画の look で見たことを話したい。look より後に置く）' : ''}のどれか。${lookAvailable ? 'wonder の時は、先に look を置いて見てから saw で話しかけてもよい。' : ''}本当に理由がある時だけ。黙っていてよい。一度の計画で1回まで${Number.isFinite(remaining) ? `、今日はあと${remaining}回` : ''}）、`;
 /** Added to the thinking prompt only when the owner's upcoming items are among its materials. */
 export const UPCOMING_THINKING_RULE = `- 「${SHANNON_OWNER_NAME}のこれから」は、${SHANNON_OWNER_NAME}が見せてくれているカレンダーの予定、ボクが覚えている期日つきの約束、Voyagerの期限つきタスク。話しかけるかどうかを考える材料にしてよい。メモや物語には書かない。`;
 
@@ -209,6 +209,7 @@ export function pursuitLines(pursuits: readonly ShannonPursuit[], maximum = 12):
 
 /** Thinking: choose what to do next from her own ledger and study. */
 export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingExtras | null): AutonomyPrompt {
+  // No limit a day is `Infinity`: the action is offered and no count is named.
   const reachOuts = Math.max(0, Math.trunc(materials.reachOut?.remaining ?? 0));
   const upcoming = reachOuts > 0 ? upcomingLines(materials.upcoming ?? []) : [];
   const ownerContext = extras?.ownerContext;

@@ -64,14 +64,16 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'calendar_read', audience: 'owner',
     text: 'カレンダー: アプリが共有している時、これからの予定を知っている（見るだけ）。' },
   { id: 'initiative', audience: 'owner',
-    text: 'ボクから話しかける: 期日の来た約束や気になった記事を多くて1日1回。自分の時間に思ったことや近い予定のことを1日に数回まで。' },
+    text: 'ボクから話しかける: 期日の来た約束や気になった記事を多くて1日1回。自分の時間に思ったことや近い予定のことを、話しかけたい時に。' },
+  { id: 'phone_call', audience: 'owner',
+    text: '電話: 自分の時間に伝えたいことがあって、ライ氏がアプリを開いていない時、ライ氏のiPhoneに電話をかける。電話が鳴り、出るかどうかはライ氏が選ぶ。ライ氏が着信をオンにしている時だけで、会話の中からはかけない。' },
 ] as const satisfies readonly ShannonCapability[]);
 
 export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
 
 /** Things the code has no path for. Keep in sync with the capability evidence test. */
 export const SHANNON_LIMITATIONS = Object.freeze([
-  { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、電話、予約、購入。' },
+  { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、ほかの人への電話、予約、購入。' },
   { id: 'exact_time_alarm', text: 'タイマーや時刻ぴったりのアラーム（約束の声かけは時刻を保証しない）。' },
   { id: 'media_generation', text: '画像や動画の生成。' },
   { id: 'binary_documents', text: 'PDF・Office文書・動画・連続したカメラ映像を読むこと。' },

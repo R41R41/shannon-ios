@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
-import type { ObservedReachOutReason, ObservedStepKind, ReachOutAppSurface, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
+import type { ObservedReachOutReason, ObservedStepKind, ReachOutAppSurface, ReachOutCallOutcome, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
 import { AUTONOMY_QUOTED, REACH_OUT_REASON_LABEL, autonomySystem, type AutonomyPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
 
 /**
@@ -54,6 +54,14 @@ const EARPHONE_LINE: Readonly<Record<ReachOutAppSurface, string>> = Object.freez
   iphone: `iPhoneのイヤホンで、${SHANNON_OWNER_NAME}にだけ聞こえる声で伝えた。`,
 });
 
+/** The server rang his iPhone with her message (owner decision 2026-10-03): what became of that call. A closed fact; never what was said. */
+const CALL_LINE: Readonly<Record<ReachOutCallOutcome, string>> = Object.freeze({
+  answered: `iPhoneに電話をかけたら、${SHANNON_OWNER_NAME}が出てくれた。`,
+  declined: `iPhoneに電話をかけたが、${SHANNON_OWNER_NAME}はいまは出ないことを選んだ。`,
+  unanswered: `iPhoneに電話をかけたが、${SHANNON_OWNER_NAME}は出なかった。`,
+  failed: 'iPhoneに電話をかけようとしたが、つながらなかった。',
+});
+
 /**
  * After an app said her message into the owner's ears and nothing came back (owner decision 2026-10-03): the same
  * conclusion as for her body. She may call once more; if that too stays unanswered she takes it that he is not there
@@ -92,7 +100,7 @@ const CODE_REASON: Readonly<Record<string, string>> = Object.freeze({
   denied: 'カメラを使う許可がなかった', timeout: '体から返事がなかった', others_present: 'ほかの人がいた', rate_limited: '見る回数の上限だった',
   model_failed: '言葉にならなかった', conversation_in_progress: `${SHANNON_OWNER_NAME}が話している最中だった`, daily_limit: '今日の回数を使い切っていた',
   nowhere_to_speak: '話しかける場所がなかった', replied: '先に返事が来ていた', held: 'やめておいた', access_limit: '今日の回数の上限だった',
-  budget_exhausted: '今日の予算に収まらなかった', failed: 'うまくいかなかった',
+  budget_exhausted: '今日の予算に収まらなかった', failed: 'うまくいかなかった', call_unavailable: 'いまは電話をかけられなかった', call_failed: '電話がつながらなかった',
 });
 
 function clock(at: string, timeZone: string): string {
@@ -130,8 +138,11 @@ export function reachOutHappenedLines(facts: ReachOutFacts, input: { at: string;
   ];
   return [
     `- ${when}に${SHANNON_OWNER_NAME}へ話しかけた（きっかけ: ${reasonLabel(facts.reason)}）。${answer}`,
-    facts.surface ? `- イヤホンからの知らせ: ${EARPHONE_LINE[facts.surface]}` : `- 体からの知らせ: ${DELIVERY_LINE[facts.delivery]}`,
-    ...(facts.surface && !facts.replied && !input.repliedSince ? [EARPHONE_NO_ANSWER_LINE] : []),
+    // A call that never rang tells her nothing about where the message went: what her body reported is said as well.
+    ...(facts.call ? [`- 電話の知らせ: ${CALL_LINE[facts.call]}`] : []),
+    ...(facts.call && facts.call !== 'failed' ? []
+      : [facts.surface ? `- イヤホンからの知らせ: ${EARPHONE_LINE[facts.surface]}` : `- 体からの知らせ: ${DELIVERY_LINE[facts.delivery]}`]),
+    ...(facts.surface && !facts.call && !facts.replied && !input.repliedSince ? [EARPHONE_NO_ANSWER_LINE] : []),
     `- 体のまわり: ${around.join('。')}。`,
   ];
 }
@@ -224,6 +235,7 @@ export function reachOutMemoryLine(memory: ReachOutMemory, timeZone: string): st
   }
   return [
     `${clock(facts.sentAt, timeZone)}に話しかけた（きっかけ: ${reasonLabel(facts.reason)}）。`,
+    ...(facts.call ? [CALL_LINE[facts.call]] : []),
     facts.replied ? `${span(facts.repliedAfterSeconds ?? 0)}後に返事があった。`
       : facts.waitedSeconds > 0 ? `${span(facts.waitedSeconds)}待ったが返事はなかった。` : 'その時は返事がなかった。',
     ...(facts.replied || facts.delivery === 'unknown' ? [] : [facts.surface ? EARPHONE_LINE[facts.surface] : DELIVERY_MEMORY[facts.delivery]]),
