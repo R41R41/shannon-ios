@@ -75,6 +75,7 @@ export function parseStructuredTurn(raw: string): {
   artifacts: ShannonGeneratedArtifact[];
   places: ShannonPlace[];
   roomLook?: 'asked' | 'curious';
+  appLook?: string;
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -98,7 +99,8 @@ export function parseStructuredTurn(raw: string): {
   const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
-  const roomLook = object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {};
+  const roomLook = { ...(object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {}),
+    ...(typeof object.appLook === 'string' && object.appLook !== 'none' ? { appLook: object.appLook.slice(0, 40) } : {}) };
   if (object.taskProposal === null) {
     if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
     return {

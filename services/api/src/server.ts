@@ -49,10 +49,10 @@ import { configuredAutonomy } from './autonomyBudget.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
-import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
+import { BODY_CAPABILITIES_PATH, isBodyRoute } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
-import { bodyLookRequestBytes, closeBodyLookStores, configuredBodyLookOptions } from './bodyLookWiring.js';
+import { bodyLookRequestBytes, closeBodyLookStores, configuredAppLookOptions, configuredBodyLookOptions } from './bodyLookWiring.js';
 import { closeBodyReactionStores, configuredBodyReactionOptions } from './bodyReactionWiring.js';
 import { opsCommandsEnabled } from './opsCommandContract.js';
 import { opsIngestEnabled } from './opsContract.js';
@@ -144,7 +144,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore) },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -295,7 +295,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     // The body polls presence and reports touches; this keeps one device from flooding either.
-    if (principal && url.pathname.startsWith(BODY_ROUTE_PREFIX) && !consumeDeviceAllowance(bodyUsage, principal.deviceId, 120)) {
+    if (principal && isBodyRoute(url.pathname) && !consumeDeviceAllowance(bodyUsage, principal.deviceId, 120)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: 'Too many body requests; retry after a minute.' });
       return;
     }

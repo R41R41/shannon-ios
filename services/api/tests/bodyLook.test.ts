@@ -687,7 +687,7 @@ describe('the frame is never kept', () => {
     expect(imports('bodyLookTurnWait.ts')).toEqual([]);
     expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
     expect(imports('bodyLookVision.ts').sort()).toEqual(['./bodyLookContract.js', './chatModelSupport.js', './llmUsage.js', '@shannon/cognition']);
-    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiValidation.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
+    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiAppLookRoutes.js', './apiValidation.js', './appLookContract.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
     }
@@ -699,18 +699,20 @@ describe('the frame is never kept', () => {
     // through the one module `voiceRoomLook.ts`. In her own time (stage 2): one gated step of the activity loop, which the gate
     // knows as the domain `room_look`. The other voice routes and the platform bridge have no path to it.
     const sourceDirectory = new URL('../src/', import.meta.url);
-    const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.looks\.turn\(|offerRoomLook: true/u.test(source(name)));
-    expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts']);
+    const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.turnLooks\.turn\(|this\.body\.turn\(|offerRoomLook: true/u.test(source(name)));
+    // The chat turn asks `conversationLooks.ts`, which passes every turn to her body first (and then, for a turn from an app, to `appLook.ts`).
+    expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts', 'conversationLooks.ts']);
     const voiceCallers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.voiceTurn\(/u.test(source(name)));
     expect(voiceCallers.sort()).toEqual(['voiceRoomLook.ts']);
     const openers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /looks\.open\(|store\.open\(/u.test(source(name)));
-    expect(openers.sort()).toEqual(['bodyLook.ts', 'bodyLookActivity.ts']);
+    // `appLook.ts` opens a look through the owner's app into its own table (`app_looks`), never into `body_looks`.
+    expect(openers.sort()).toEqual(['appLook.ts', 'bodyLook.ts', 'bodyLookActivity.ts']);
     const aware = readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
     expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
-      'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
+      'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
     // The voice side handles words and a probability: it has no room for a frame either.
-    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceAppLook.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.

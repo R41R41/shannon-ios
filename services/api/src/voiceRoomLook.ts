@@ -1,5 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import { ROOM_LOOK_UNAVAILABLE_REASON, asksToLook, type BodyLookUnavailable, type BodyLookVoiceTurn } from './bodyLook.js';
+import { APP_LOOK_ROUTER } from './appLookContract.js';
 import type { VoiceDecisionInput, VoiceTurnDecision } from './voiceDecisionContract.js';
 
 /**
@@ -138,13 +139,17 @@ const ROUTER_QUESTION = Object.freeze({
   criteria: { true: 'One look through her body\'s camera now is asked for or clearly welcome.', false: 'No look is wanted now.' },
 });
 
-/** The question is asked only in a call with the owner alone: nowhere else can a look be taken. */
-const routed = (input: VoiceDecisionInput) => voiceRoomLookEnabled()
-  && input.participantMode === 'owner' && input.turn !== undefined && !input.turn.othersPresent;
+/**
+ * The question is asked only in a call with the owner alone: nowhere else can her body look. A turn from an app that
+ * offers its own camera (`voiceAppLook.ts`) is asked in the app's terms, also when someone is with the owner.
+ */
+const routed = (input: VoiceDecisionInput) => input.participantMode === 'owner' && input.turn !== undefined
+  && (input.appLook === true || (voiceRoomLookEnabled() && !input.turn.othersPresent));
 
 /** Jev: one more Noul beside the capabilities. */
-export function roomLookRouterQuestions(input: VoiceDecisionInput): Array<[string, typeof ROUTER_QUESTION]> {
-  return routed(input) ? [['room_look', ROUTER_QUESTION]] : [];
+export function roomLookRouterQuestions(input: VoiceDecisionInput): Array<[string, { type: string; instructions: string; criteria: { true: string; false: string } }]> {
+  if (!routed(input)) return [];
+  return input.appLook ? [['room_look', APP_LOOK_ROUTER.look], ['look_self', APP_LOOK_ROUTER.self]] : [['room_look', ROUTER_QUESTION]];
 }
 
 /** The OpenAI fallback: one more probability in the strict schema, and its instruction line. */
@@ -152,6 +157,13 @@ export function roomLookRouterSchema(input: VoiceDecisionInput): {
   instructions: string[]; properties: Record<string, { type: 'number'; minimum: 0; maximum: 1 }>; required: string[];
 } {
   if (!routed(input)) return { instructions: [], properties: {}, required: [] };
+  if (input.appLook) {
+    return {
+      instructions: [`roomLookProbability: ${APP_LOOK_ROUTER.look.instructions}`, `lookSelfProbability: ${APP_LOOK_ROUTER.self.instructions}`],
+      properties: { roomLookProbability: { type: 'number', minimum: 0, maximum: 1 }, lookSelfProbability: { type: 'number', minimum: 0, maximum: 1 } },
+      required: ['roomLookProbability', 'lookSelfProbability'],
+    };
+  }
   return {
     instructions: [`roomLookProbability: ${ROUTER_INSTRUCTIONS}`],
     properties: { roomLookProbability: { type: 'number', minimum: 0, maximum: 1 } }, required: ['roomLookProbability'],

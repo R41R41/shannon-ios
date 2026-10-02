@@ -72,6 +72,8 @@ export interface VoiceDecisionInput {
   rawTranscript?: string;
   /** Present on owner-call turns; absent, the router decides as it did before the silence rules. */
   turn?: VoiceTurnFacts;
+  /** The turn came from an app that offers its camera (`voiceAppLook.ts`): the look is asked about in the app's terms, also with others present. */
+  appLook?: true;
 }
 
 export interface VoiceTurnDecision {
@@ -92,6 +94,8 @@ export interface VoiceTurnDecision {
   transcriptReliabilityProbability?: number;
   /** How strongly the router thinks one look through her body's camera is wanted now (`voiceRoomLook.ts`). It opens nothing by itself. */
   roomLookProbability?: number;
+  /** For a look through the app: how strongly the router thinks the speaker himself is what should be seen (the camera facing him). */
+  lookSelfProbability?: number;
   /** Set when the turn is left unanswered: the category that decided it. */
   silence?: VoiceSilenceCategory;
 }

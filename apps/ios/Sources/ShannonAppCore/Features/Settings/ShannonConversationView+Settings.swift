@@ -76,6 +76,8 @@ extension ShannonConversationView {
 
                 ShannonCalendarSharingSettingsSection()
 
+                ShannonAppLookSettingsSection()
+
                 ShannonPrivateListeningSettingsSection()
 
 #if os(iOS)

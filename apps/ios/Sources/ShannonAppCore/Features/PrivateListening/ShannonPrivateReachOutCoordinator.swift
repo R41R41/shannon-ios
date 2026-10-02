@@ -63,6 +63,8 @@ public final class ShannonPrivateReachOutCoordinator {
     public static let outcomesDefaultsKey = "shannon.privateListening.reachOutOutcomes"
     public static let unacknowledgedDefaultsKey = "shannon.privateListening.unacknowledgedReachOuts"
     static let maximumHandled = 50
+    /// Answers after which the same report would be refused again: malformed, not this device's, unknown, already settled, too old.
+    static let finalStatuses: Set<Int> = [400, 401, 403, 404, 409, 410]
 
     public init(client: (any ShannonPrivateListeningServing)?, defaults: UserDefaults = .standard) {
         self.client = client
@@ -106,8 +108,9 @@ public final class ShannonPrivateReachOutCoordinator {
             let outcome = outcomes[id].flatMap(ShannonPrivateReachOutOutcome.init(rawValue:)) ?? .spoken
             do {
                 try await client.reportPrivateReachOut(id: id, outcome: outcome)
-            } catch is ShannonAPIError {
-                // The server answered and will not take it: asking again changes nothing.
+            } catch let error as ShannonAPIError {
+                // Only an answer that says "never" ends it. A server that is restarting or busy is asked again.
+                guard case let .rejected(status) = error, Self.finalStatuses.contains(status) else { continue }
             } catch {
                 continue
             }

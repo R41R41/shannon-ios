@@ -75,6 +75,8 @@ public final class ShannonGeminiLiveSessionModel {
     var interruptionGeneration = 0
     /// Ends the call the way the owner's own 終了 does. Set by the owner of the call.
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
+    /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
+    var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
@@ -186,6 +188,7 @@ public final class ShannonGeminiLiveSessionModel {
 
     public func stop() {
         resolveMicrophonePrimer(proceed: false)
+        interruptionGeneration &+= 1
         microphonePrimerPhase = nil
         textSendState.preservePendingText(
             message: "音声会話を閉じたため送信を中断しました。入力は残しています。"
@@ -300,9 +303,11 @@ public final class ShannonGeminiLiveSessionModel {
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
         case .speechStarted:
+            backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
         case .speechStopped:
+            backgroundSilence.ownerSpeechStopped(at: Date())
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
             if discardsAsEcho(text) { return }
@@ -311,7 +316,7 @@ public final class ShannonGeminiLiveSessionModel {
                     shannonTurnEndedAt: echoWindow.playbackEndedAt, isSpeaking: responseTask != nil,
                     now: ProcessInfo.processInfo.systemUptime)
             }
-            backgroundSilence.speech(at: Date())
+            backgroundSilence.ownerSpoke(at: Date())
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.

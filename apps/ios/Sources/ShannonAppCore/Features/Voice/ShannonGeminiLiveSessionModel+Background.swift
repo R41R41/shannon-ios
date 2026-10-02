@@ -40,7 +40,11 @@ extension ShannonGeminiLiveSessionModel {
     /// Ends a call that has been silent in the background for the limit. A failed or still connecting
     /// call is ended too, so nothing is left behind unseen.
     func endIfSilentInBackground(now: Date = Date()) {
-        guard phase != .idle, backgroundSilence.shouldEnd(at: now) else { return }
+        // A reply in the making or in the air is not silence. Words of his that no reply is being made for (the
+        // reply failed) are: otherwise such a call would stay open, microphone and all, until he came back.
+        guard phase != .idle, backgroundSilence.shouldEnd(
+            at: now, replyInProgress: responseTask != nil, interrupted: phase == .reconnecting
+        ) else { return }
         ShannonVoiceDiagnostics.shared.record("gemini.session.background_silence.ended",
             metadata: ["phase": phase.rawValue])
         if let endAfterBackgroundSilence {

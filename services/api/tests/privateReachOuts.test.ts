@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { AutonomyLoopObservations } from '../src/autonomyLoopObservations.js';
-import { reachOutHappenedLines, reachOutMemoryLine } from '../src/autonomyLoopObservePrompts.js';
+import { EARPHONE_GIVEN_UP_MEMORY, EARPHONE_GIVEN_UP_RULE, EARPHONE_NO_ANSWER_LINE, EARPHONE_NO_ANSWER_RULE, reachOutHappenedLines, reachOutMemoryLine, rethinkExtras } from '../src/autonomyLoopObservePrompts.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { PRIVATE_REACH_OUT_LIMITS, privateReachOutListenSeconds, privateReachOutsEnabled } from '../src/privateListeningContract.js';
@@ -549,6 +549,48 @@ describe('what she observes', () => {
       .toContain('iPhoneのイヤホンで、ライ氏にだけ聞こえる声で伝えた。');
     // Her body's own report reads as before.
     expect(reachOutHappenedLines(facts, { at: '2026-10-02T03:03:00.000Z', timeZone: 'Asia/Tokyo' }).join('\n')).toContain('- 体からの知らせ: 画面に出して、声でも読み上げた。');
+  });
+
+  it('after an earphone delivery with no answer she may call once more, and then takes it that he is not there', () => {
+    const at = '2026-10-02T03:03:00.000Z';
+    const sent = { id: 'o1', cycleId: 'c1', ordinal: 1, step: 'reach_out' as const, outcome: 'done' as const, observedAt: at, reachOut: { ...facts, surface: 'mac' as const } };
+    // The fact: nothing came back while she waited.
+    expect(reachOutHappenedLines(sent.reachOut, { at, timeZone: 'Asia/Tokyo' })).toContain(EARPHONE_NO_ANSWER_LINE);
+    expect(reachOutHappenedLines(sent.reachOut, { at, timeZone: 'Asia/Tokyo', repliedSince: true })).not.toContain(EARPHONE_NO_ANSWER_LINE);
+    expect(reachOutHappenedLines({ ...sent.reachOut, replied: true, repliedAfterSeconds: 4 }, { at, timeZone: 'Asia/Tokyo' })).not.toContain(EARPHONE_NO_ANSWER_LINE);
+    // Her body's report never gets the earphone lines.
+    expect(reachOutHappenedLines(facts, { at, timeZone: 'Asia/Tokyo' })).not.toContain(EARPHONE_NO_ANSWER_LINE);
+
+    // First thought after it: one more call is allowed, and what to conclude if that fails too.
+    const first = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent], planned: [], pending: { followUp: true, look: false, thinkAfterLook: false } });
+    expect(first.rules).toContain(EARPHONE_NO_ANSWER_RULE);
+    expect(first.rules).not.toContain(EARPHONE_GIVEN_UP_RULE);
+    expect(first.actions).toContain('follow_up');
+    // No second call left today: the rule that offers one is not given.
+    expect(rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent], planned: [], pending: { followUp: false, look: false, thinkAfterLook: false } }).rules).not.toContain(EARPHONE_NO_ANSWER_RULE);
+
+    // After the second call: if that too stays unanswered he is not there; this message is let go. No follow_up is offered again.
+    expect(EARPHONE_GIVEN_UP_RULE).toBe('- さっきの話しかけには、もう一度だけ声をかけた。それにも返事がなければ、ライ氏はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。');
+    const again = { id: 'o2', cycleId: 'c1', ordinal: 3, step: 'reach_out' as const, outcome: 'done' as const, observedAt: at, reachOut: { ...facts, id: 'a2', reason: 'follow_up' as const, delivery: 'unknown' as const, waitedSeconds: 0 } };
+    const second = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent, again], planned: [], pending: null });
+    expect(second.rules).toContain(EARPHONE_GIVEN_UP_RULE);
+    expect(second.rules).not.toContain(EARPHONE_NO_ANSWER_RULE);
+    expect(second.actions).not.toContain('follow_up');
+    // He answered meanwhile: neither rule.
+    const answered = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [sent, again], planned: [], pending: null, repliedSince: true });
+    expect(answered.rules).not.toContain(EARPHONE_GIVEN_UP_RULE);
+    // A body delivery reads exactly as before.
+    const body = rethinkExtras({ at, timeZone: 'Asia/Tokyo', happened: [{ ...sent, reachOut: facts }], planned: [], pending: { followUp: true, look: false, thinkAfterLook: false } });
+    expect(body.rules.join('\n')).not.toContain('イヤホン');
+
+    // What a later cycle remembers.
+    expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }], repliedSince: false }, 'Asia/Tokyo')).toContain(EARPHONE_GIVEN_UP_MEMORY);
+    expect(reachOutMemoryLine({ facts: sent.reachOut, after: [], repliedSince: false }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
+    expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }], repliedSince: true }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
+    expect(reachOutMemoryLine({ facts, after: [{ step: 'follow_up', done: true }], repliedSince: false }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
+    // Where it cannot be told whether he answered since, nothing is concluded.
+    expect(reachOutMemoryLine({ facts: sent.reachOut, after: [{ step: 'follow_up', done: true }] }, 'Asia/Tokyo')).not.toContain(EARPHONE_GIVEN_UP_MEMORY);
+    expect(EARPHONE_NO_ANSWER_LINE).toBe('- イヤホンで伝えたあと、待っているあいだにライ氏の声も文字も届かなかった。');
   });
 
   it('keeps the surface as a closed value in the observation, and drops anything else', () => {

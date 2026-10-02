@@ -53,8 +53,9 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_898);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_834);
+    // +125 on 2026-10-02: the look through the app. 2026-10-03: the phone call line, and no count of messages a day (owner decisions).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_023);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_959);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -133,6 +134,16 @@ describe('canonical capability description', () => {
     // The guest hears that such requests are refused, without the owner's places or budget.
     expect(guest).toContain('自分の複製はしない');
     for (const ownerDetail of ['専用フォルダ', 'Azure', '2,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
+  });
+
+  it('states the look through the app (owner decision 2026-10-02): when asked or curious, one frame, not kept, and when she cannot', () => {
+    const line = SHANNON_CAPABILITIES.find(item => item.id === 'app_look')!;
+    expect(line.audience).toBe('owner');
+    for (const part of ['これ見れる？', '自分が見たくなったら', '一度だけ見て', '写した1枚は残さない', '画面に出ていない', '許可がない', '設定で切ってある', '見られないと伝える']) {
+      expect(line.text, part).toContain(part);
+    }
+    expect(shannonCapabilityPrompt('owner')).toContain(line.text);
+    expect(shannonCapabilityPrompt('guest')).not.toContain('アプリのカメラで見る');
   });
 
   it('states the one look at the room with the four rules the owner decided, for the owner only', () => {

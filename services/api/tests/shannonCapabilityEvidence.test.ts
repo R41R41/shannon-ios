@@ -53,7 +53,13 @@ import { establishedGuestName } from '../src/voiceGuestNames.js';
 import { wantsPlaceDiscovery } from '../src/placeDiscovery.js';
 import { distributeLatestInternalBuild } from '../src/testflightDistributor.js';
 import { VOICE_SKILLS, mandatorySkillPatterns, type VoiceSkill } from '../src/voiceDecisionContract.js';
+import { voiceLookTurn } from '../src/voiceAppLook.js';
 import { asksForLookAloud, voiceRoomLookTurn } from '../src/voiceRoomLook.js';
+import { dispatchAppLookRequest } from '../src/apiAppLookRoutes.js';
+import { AppLooks } from '../src/appLook.js';
+import { APP_LOOK_SCHEMA, configuredAppLook } from '../src/appLookContract.js';
+import { appLookUnavailablePrompt } from '../src/appLookLines.js';
+import { ConversationLooks } from '../src/conversationLooks.js';
 import { createConfiguredVoiceVisionGateway } from '../src/voiceVision.js';
 
 const voiceSkill = (skill: VoiceSkill) => (VOICE_SKILLS as readonly string[]).includes(skill);
@@ -85,6 +91,11 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     && exists(prepareRoomLook, ActivityRoomLooks.prototype.look, GeminiActivityRoomLookViewer.prototype.see)
     && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookNotePrompt().system.includes(rule))
     && configuredAutonomy({}).maximumRoomLooksPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' }).maximumRoomLooksPerDay === 0,
+  // One look through the app the turn came from: offered in a text turn, chosen before the reply in a voice turn, answered with one frame.
+  app_look: () => exists(AppLooks.prototype.turn, AppLooks.prototype.answer, ConversationLooks.prototype.turn, voiceLookTurn, dispatchAppLookRequest)
+    && APP_LOOK_SCHEMA.enum.includes('asked_back') && APP_LOOK_SCHEMA.enum.includes('curious_front')
+    && roomLookInstructions([], { camera: 'back' }).includes('アプリ') && configuredAppLook({}).enabled && !configuredAppLook({ SHANNON_APP_LOOK: 'off' }).enabled
+    && (['background', 'denied', 'switched_off'] as const).every(reason => appLookUnavailablePrompt(reason, 'ios').includes('見られない')),
   text_attachments: () => validatedChatAttachments([{ name: 'memo.md', mimeType: 'text/markdown', text: '内容' }])?.length === 1
     && validatedChatAttachments(Array.from({ length: 5 }, (_, index) => (
       { name: `${index}.txt`, mimeType: 'text/plain', text: 'x' }))) === null

@@ -110,15 +110,24 @@ extension ShannonGeminiLiveTransport {
         guard !stopped else { return false }
         do {
             try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.refused",
+                metadata: ["code": String((error as NSError).code), "ending": String(endingCallOnFailure)])
+            // The session could not be taken back: for a caller that only asks, the interruption is simply still going on.
+            if endingCallOnFailure { eventHandler(.goAway(Self.audioFailure)) }
+            return false
+        }
+        do {
             if audioStarted, !audioEngine.isRunning {
                 try audioEngine.start()
                 playerNode.play()
             }
             try applyInputPreference()
         } catch {
+            // The session is ours again and the audio still does not run: that is a failure, never "still interrupted".
             ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.failed",
-                metadata: ["code": String((error as NSError).code), "ending": String(endingCallOnFailure)])
-            if endingCallOnFailure { eventHandler(.goAway(Self.audioFailure)) }
+                metadata: ["code": String((error as NSError).code)])
+            eventHandler(.goAway(Self.audioFailure))
             return false
         }
         if interrupted {

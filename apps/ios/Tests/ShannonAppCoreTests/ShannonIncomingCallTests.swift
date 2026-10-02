@@ -288,7 +288,7 @@ final class ShannonIncomingCallTests: XCTestCase {
         // The app does not report "answered": taking her words told the server.
         XCTAssertEqual(w.server.reports, [])
 
-        // The conversation ends (終了 in the app, or five minutes of silence): the system's call ends with it.
+        // The conversation ends (終了 in the app, or silence in the background): the system's call ends with it.
         w.conversation.end()
         XCTAssertEqual(w.system.events, [.shown(callUUID), .ended(callUUID, .remoteEnded)])
         // The audio session is the call's until the system took it back: standby does not start on it before.

@@ -24,6 +24,7 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
     private var pendingBuffers = 0
     private var playedAnything = false
     private var wasCut = false
+    private var isSpeaking = false
     private var fetchTask: Task<ShannonGeminiSpeechStream, Error>?
     private var feedTask: Task<Void, Error>?
 
@@ -41,7 +42,9 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
     public func speak(_ text: String, stillPrivate: @escaping @MainActor () -> Bool) async -> ShannonReachOutSpeechOutcome {
         let spoken = ShannonGeminiCascadeSpeech.spokenText(for: text)
         guard !spoken.isEmpty else { return .failed }
-        guard engine == nil, stillPrivate() else { return .notStarted }
+        guard !isSpeaking, engine == nil, stillPrivate() else { return .notStarted }
+        isSpeaking = true
+        defer { isSpeaking = false }
         let provider = defaults.string(forKey: ShannonSpeechProvider.storageKey).flatMap(ShannonSpeechProvider.init(rawValue:)) ?? .gemini
         let style = provider == .gemini
             ? ShannonGeminiCascadeSpeech.style(for: text, plan: nil)
@@ -53,10 +56,12 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
         // first, and the line is over by the second. Either one stops the line where it is.
         let patience = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(Self.firstSoundTimeout)) } catch { return }
+            guard !Task.isCancelled else { return }
             if self?.playedAnything == false { self?.cut() }
         }
         let limit = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(Self.maximumLineTime)) } catch { return }
+            guard !Task.isCancelled else { return }
             self?.cut()
         }
         let stream: ShannonGeminiSpeechStream

@@ -13,6 +13,7 @@ import {
   normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
 import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from './voiceRoomLook.js';
+import { lookSelfAnswer } from './appLookContract.js';
 import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from './voiceSilence.js';
 import { fallbackWaitingDirection, jevWaitingQuestions } from './voiceWaitingCue.js';
 
@@ -368,7 +369,7 @@ function parsedOpenAIDecision(
     ...(value.transcriptReliabilityProbability === undefined ? {} : {
       transcriptReliabilityProbability: probabilityValue(value.transcriptReliabilityProbability),
     }),
-    shouldRespond: shouldRespondToTurn(conversationClass), ...roomLookAnswer(value.roomLookProbability),
+    shouldRespond: shouldRespondToTurn(conversationClass), ...roomLookAnswer(value.roomLookProbability), ...lookSelfAnswer(value.lookSelfProbability),
     replyRequiredProbability, solutionWantedProbability, conversationClass, latencyClass,
     affect, affectIntensity, delivery,
     waitingDirection: fallbackWaitingDirection(input, selected, affect, affectIntensity, delivery),
@@ -433,7 +434,7 @@ function parsedJevDecision(
       transcriptReliabilityProbability: noulValue(answerMap.transcript_reliable),
     }),
     conversationClass, latencyClass, affect, affectIntensity, delivery, waitingDirection,
-    selectedSkills: selected, ...roomLookAnswer(answerMap.room_look),
+    selectedSkills: selected, ...roomLookAnswer(answerMap.room_look), ...lookSelfAnswer(answerMap.look_self),
     skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
 }

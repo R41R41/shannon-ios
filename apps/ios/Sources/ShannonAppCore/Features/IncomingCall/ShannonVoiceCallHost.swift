@@ -74,7 +74,7 @@ final class ShannonCallConversation: ShannonCallConversing {
             return false
         }
         // Answered with no screen in front (the lock screen, another app): the conversation ends by itself after
-        // five minutes without a word, as any conversation in the background does.
+        // the background silence limit, as any conversation in the background does.
         if UIApplication.shared.applicationState != .active { voice.sceneDidEnterBackground() }
         watch(request)
         return true
