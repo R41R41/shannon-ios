@@ -282,4 +282,12 @@ public enum ShannonGeneratedStrings {
     public static let talkPlaceholder = "シャノンに話す"
     /// `record.actor.owner`
     public static let recordActorOwner = "あなた"
+    /// `look.state.looking`
+    public static let lookStateLooking = "いま見ています"
+    /// `voice.thisCall`
+    public static let voiceThisCall = "この通話"
+    /// `nav.delivery`
+    public static let navDelivery = "配信"
+    /// `nav.diagnostics`
+    public static let navDiagnostics = "診断"
 }

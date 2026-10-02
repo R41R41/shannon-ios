@@ -800,7 +800,7 @@
       "decided": "2026-10-03",
       "windowsNow": "（無い。運用が独立の入口）",
       "macNow": "（無い）",
-      "note": "設定の中の区画。運用と、接続中の端末を置く。"
+      "note": "設定の中の区画。運用、接続中の端末、配信、診断を置く。"
     },
     {
       "key": "settings.figure",
@@ -890,7 +890,8 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookPolicy.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:electron/main.ts",
-      "windowsNow": "シャノンがカメラで部屋を見てよい"
+      "windowsNow": "シャノンがカメラで部屋を見てよい",
+      "note": "名前はこのまま。自分の時間にも見ることがある画面（Windows の体）では、そのことを説明の文に書く。"
     },
     {
       "key": "look.state.off",
@@ -941,6 +942,41 @@
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/AutonomyView.tsx",
       "windowsNow": "所有者"
+    },
+    {
+      "key": "look.state.looking",
+      "text": "いま見ています",
+      "apple": "new",
+      "decided": "2026-10-03",
+      "windows": "shannon-desktop:src/renderer/index.html",
+      "windowsNow": "いま見ています",
+      "note": "カメラの 3 つめの状態（見ている最中）。"
+    },
+    {
+      "key": "voice.thisCall",
+      "text": "この通話",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceCallSummary.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "通話",
+      "note": "機能の名前は「音声会話」。1 回分を指すときは「この通話」。"
+    },
+    {
+      "key": "nav.delivery",
+      "text": "配信",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "（無い）",
+      "macNow": "Release Center",
+      "note": "設定 › 管理 の中。Mac では、作業の中にも「配信」として出す。"
+    },
+    {
+      "key": "nav.diagnostics",
+      "text": "診断",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "（無い）",
+      "macNow": "（無い）",
+      "note": "設定 › 管理 の中。"
     }
   ]
 }

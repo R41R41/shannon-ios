@@ -142,6 +142,10 @@ export const shannonStrings = {
   "talk.searchingMemory": "記憶を探しています…",
   "talk.placeholder": "シャノンに話す",
   "record.actor.owner": "あなた",
+  "look.state.looking": "いま見ています",
+  "voice.thisCall": "この通話",
+  "nav.delivery": "配信",
+  "nav.diagnostics": "診断",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -284,6 +288,24 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "record.actor.owner": {
     "decided": "2026-10-03",
     "windowsBefore": "所有者"
+  },
+  "look.state.looking": {
+    "decided": "2026-10-03",
+    "windowsBefore": "いま見ています"
+  },
+  "voice.thisCall": {
+    "decided": "2026-10-03",
+    "windowsBefore": "通話"
+  },
+  "nav.delivery": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "Release Center"
+  },
+  "nav.diagnostics": {
+    "decided": "2026-10-03",
+    "windowsBefore": "（無い）",
+    "macBefore": "（無い）"
   }
 };
 

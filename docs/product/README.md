@@ -26,7 +26,7 @@ Mac の Electron 版は、SwiftUI の Mac アプリにまとめる（ADR-0004）
 
 - [`roadmap.md`](roadmap.md): 決まった構成に 3 つをそろえるまでの順番（Apple 側と Windows 側）。
 - [`gaps.md`](gaps.md): 所有者が選ぶ前に洗い出した、3 つの画面のずれ。
-- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。決まったもの（18 行）と残り（42 行）、直す場所。
+- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。決まったもの（19 行）と残り（41 行）、直す場所。
 - [`for-windows-app.md`](for-windows-app.md): Windows アプリの担当へ。
 - [`parity-baseline.json`](parity-baseline.json): いま受け入れている遅れの一覧（下の「検証」を参照）。
 
