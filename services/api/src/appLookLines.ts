@@ -19,6 +19,7 @@ const NOT_SEEN_LINE: Readonly<Record<Exclude<AppLookCode, 'denied'>, string>> = 
   timeout: 'カメラの用意が間に合わなくて、いまは見られませんでした。',
   model_failed: '写してもらったのですが、うまく見られませんでした。',
   too_soon: 'いま見たばかりなので、少し間をあけてから見ます。',
+  not_opened: 'すみません、見ると言いましたが、いまは見られていません。まだ何も見ていないです。',
 });
 
 /** Where the owner allows the camera, by platform. */
@@ -44,6 +45,7 @@ const NOT_SEEN_REASON: Readonly<Record<AppLookCode, string>> = Object.freeze({
   timeout: 'アプリから返事がなかった',
   model_failed: '届いた1枚を見られなかった',
   too_soon: '直前に見たばかりか、見ている途中だった',
+  not_opened: '見ると言ったが、見られる状態ではなかった',
 });
 
 export const APP_LOOK_TOOL = 'app.look';
@@ -72,22 +74,45 @@ export function appLookUnavailableReason(reason: AppLookUnavailable, platform: A
 const CAMERA_WORDS: Readonly<Record<AppLookCamera, string>> = Object.freeze({
   back: `外側のカメラ（${SHANNON_OWNER_NAME}が向けている先）`, front: `内側のカメラ（${SHANNON_OWNER_NAME}自身）`,
 });
-const AFTERWARDS = '見えたものはこの返事のあとで届く。この返事では「見てみますね」のように短く伝えるだけにして、まだ見ていないものを語らない';
+const AFTERWARDS = '見えたものはこの返事のあとで届く。この返事では「カメラで見てみますね」と短く伝えるだけにして、まだ見ていないものを語らない';
+/** The fact every turn without a look carries: nothing has been seen unless the Talk holds what she saw. */
+const NOTHING_SEEN = '会話の履歴に見た結果の発言がない限り、カメラではまだ何も見ていない。人や物の見た目・色・様子を、見えたものとして語らない';
+
+/**
+ * Her reply says that she looks through the camera now. The turn's look line tells her to use these words when, and only
+ * when, she looks: a reply about reading a note or checking a schedule (「見てみますね」) is not one.
+ */
+export function announcesCameraLook(reply: string): boolean {
+  return /カメラで[^。！？!?\n]{0,12}(?:見て(?:み|き)ま|見てみる|見ま|のぞ)/u.test(reply.normalize('NFKC'));
+}
+
+/**
+ * A turn in which no camera is offered at all (no app camera in the turn, her body not offering one): she knows from
+ * her capabilities that she can look, so she is told as a fact that she has not, and that this reply does not.
+ */
+export const LOOK_NOT_SEEN_GUARD = `[カメラ]（この返事ではカメラで何も見ない。${NOTHING_SEEN}。「見てみます」「見えています」と言わない。見てほしいと言われたら、いまは見られないと正直に伝える）`;
+
+/**
+ * A voice turn from an app that can look, in which nothing decided a look beforehand: she may choose it herself by
+ * saying so. Only the words 「カメラで見てみますね」 open the look, after the reply.
+ */
+export const VOICE_APP_LOOK_OFFER_PROMPT = `[アプリのカメラで見る]（いまは${SHANNON_OWNER_NAME}が使っているアプリのカメラで一度だけ見られる。${NOTHING_SEEN}。`
+  + `${SHANNON_OWNER_NAME}に見てと言われた時（「これ見れる？」「見える？」「見て」「カメラ見て」）は必ず見る。いまいる場所、目の前のもの、${SHANNON_OWNER_NAME}の服や見た目の話で自分が見たくなった時も見てよい。`
+  + '見る時は、この返事で必ず「カメラで見てみますね」と短く言う。そう言った時だけ、返事のあとで実際に一度見て、見えたものは次の発言で届く。'
+  + '見ない時は、見るとも見えたとも言わない。カメラの許可や接続の不具合など、起きていないことを言わない）';
 
 /** A text turn in which she may choose the look in the structured reply (`appLook`). */
 export const APP_LOOK_OFFER_PROMPT = `[アプリのカメラで見る]（いまは${SHANNON_OWNER_NAME}が使っているアプリのカメラで一度だけ見られる。返答のappLookで選ぶ。`
   + `${SHANNON_OWNER_NAME}に見てと言われた時（「これ見れる？」「見える？」「見て」）は必ず見る。`
   + '見てと言われていなくても、いまいる場所や目の前のものの話（「今〜にいるんだ」「これ美味しそうでしょ？」）で自分が見たくなった時は見てよい。そうでなければ見ない。'
-  + `${SHANNON_OWNER_NAME}自身や服・髪・表情の話なら内側のカメラ、それ以外は外側のカメラを選ぶ。${AFTERWARDS}）`;
+  + `${SHANNON_OWNER_NAME}自身や服・髪・表情の話なら内側のカメラ、それ以外は外側のカメラを選ぶ。${AFTERWARDS}。`
+  + `appLookでnoneを選ぶ返事では、見るとも見えたとも言わない。${NOTHING_SEEN}）`;
 
 export const appLookUnavailablePrompt = (reason: AppLookUnavailable, platform: AppLookClient['platform']) =>
-  `[アプリのカメラで見る]（カメラで見てほしいという頼みなら、いまは見られない。本当の理由: ${appLookUnavailableReason(reason, platform)}。`
-  + 'この理由だけを短く正直に伝える。見たふりをしない。ここに書かれていない原因を作って言わない）';
+  `[アプリのカメラで見る]（いまはカメラで見られない。本当の理由: ${appLookUnavailableReason(reason, platform)}。この返事では見ない。「見てみます」と言わない。`
+  + `${NOTHING_SEEN}。見てほしいと言われたら、この理由だけを短く正直に伝える。見たふりをしない。ここに書かれていない原因を作って言わない）`;
 
 /** The reply of a voice turn in which the look is taken. */
 export const voiceAppLookPrompt = (asked: boolean, camera: AppLookCamera) => `[アプリのカメラで見る]（${asked
   ? `${SHANNON_OWNER_NAME}に見てと言われたので、`
   : 'いまの話から自分で見たくなったので、'}この返事のあとアプリの${CAMERA_WORDS[camera]}で一度だけ見る。${AFTERWARDS}。カメラの許可や接続の不具合など、起きていないことを言わない）`;
-
-/** The camera was mentioned, nobody chose a look, and she could take one. */
-export const VOICE_APP_LOOK_READY_PROMPT = `[アプリのカメラで見る]（いまはアプリのカメラで一度見られる状態。この返事では見ない。${SHANNON_OWNER_NAME}に見てと言われたら見られる、と伝えてよい。見えたものや、カメラの許可・接続の不具合を作って言わない）`;

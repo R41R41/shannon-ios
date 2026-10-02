@@ -80,13 +80,13 @@ export interface AppLookAsk {
 }
 
 /**
- * Why the app did not look. Sent by the app, except `timeout`, `model_failed` and `too_soon` (another look was open or just taken), which the server adds itself.
+ * Why the app did not look. Sent by the app, except `timeout`, `model_failed` and `too_soon` (another look was open or just taken) and `not_opened` (she said she would look in a turn that could not), which the server adds itself.
  * `declined`: the system had not asked about the camera yet, and the owner chose not to allow it for now.
  * `interrupted`: he spoke over her or ended the call before the camera opened, so nothing was captured.
  */
 export const APP_LOOK_REFUSAL_CODES = ['background', 'denied', 'declined', 'no_camera', 'switched_off', 'busy', 'failed', 'interrupted'] as const;
 export type AppLookRefusalCode = typeof APP_LOOK_REFUSAL_CODES[number];
-export type AppLookCode = AppLookRefusalCode | 'timeout' | 'model_failed' | 'too_soon';
+export type AppLookCode = AppLookRefusalCode | 'timeout' | 'model_failed' | 'too_soon' | 'not_opened';
 
 export type AppLookResult =
   | { outcome: 'seen'; camera: AppLookCamera; image: BodyLookImage }

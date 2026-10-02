@@ -1,5 +1,6 @@
 import type { AppLooks, AppLookTurn } from './appLook.js';
 import { appLookClient, type AppLookAsk, type AppLookClient } from './appLookContract.js';
+import { LOOK_NOT_SEEN_GUARD, announcesCameraLook } from './appLookLines.js';
 import type { BodyLooks } from './bodyLook.js';
 
 /**
@@ -48,8 +49,10 @@ export class ConversationLooks implements VoiceLooks {
   /** What one `POST /v1/chat` turn is told about looking. It never throws: a failure here must not cost the owner a reply. */
   turn(scopeKey: string, message: string, at: string, audience: unknown, request: { deviceId?: string; body?: unknown }): ConversationLookTurn {
     const body = this.body.turn(scopeKey, message, at, audience);
+    // Whatever camera the turn has, she is told as a fact when nothing is seen: her capabilities alone must not lead her
+    // to say that she looks or has seen.
     const viaBody: ConversationLookTurn = {
-      prompt: body.prompt, request: body.request,
+      prompt: body.prompt || LOOK_NOT_SEEN_GUARD, request: body.request,
       decide: (completion, threadId) => { body.decide(completion.roomLook, threadId); return {}; },
     };
     let app: AppLookTurn;
@@ -68,7 +71,12 @@ export class ConversationLooks implements VoiceLooks {
         },
       };
     }
-    return body.request.offerRoomLook ? viaBody : { ...viaBody, prompt: app.prompt || body.prompt };
+    if (body.request.offerRoomLook) return viaBody;
+    return {
+      prompt: app.prompt || viaBody.prompt, request: {},
+      // She announced a look in a turn that cannot look: the app's reason as her one honest line.
+      decide: (completion, threadId) => { if (announcesCameraLook(completion.reply)) app.announcedWithoutLook(threadId); return {}; },
+    };
   }
 
   /** The client stored a voice turn: her message about that turn's look, whichever camera took it, may follow now. */
