@@ -20,12 +20,13 @@ Mac の Electron 版は、SwiftUI の Mac アプリにまとめる（ADR-0004）
 | 機能の一覧表 | [`feature-matrix.json`](feature-matrix.json) | [`feature-matrix.md`](feature-matrix.md) |
 | 色・文字・余白・角丸・動き | [`design/tokens.json`](../../design/tokens.json) | `design/generated/ShannonDesignTokens.generated.swift`、`shannon-tokens.css`、`shannon-tokens.ts` |
 | 画面の文言 | [`design/strings.ja.json`](../../design/strings.ja.json) | `design/generated/ShannonStrings.generated.swift`、`shannon-strings.ja.ts` |
-| 画面の構成（案） | [`information-architecture.md`](information-architecture.md) | — |
+| 画面の構成（2026-10-03 決定） | [`information-architecture.md`](information-architecture.md) | — |
 
 合わせて読むもの:
 
-- [`gaps.md`](gaps.md): いまの 3 つの画面のずれと、直す順番の案。
-- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。所有者が決めたら `strings.ja.json` へ入れる。
+- [`roadmap.md`](roadmap.md): 決まった構成に 3 つをそろえるまでの順番（Apple 側と Windows 側）。
+- [`gaps.md`](gaps.md): 所有者が選ぶ前に洗い出した、3 つの画面のずれ。
+- [`copy-differences.md`](copy-differences.md): アプリによって違っている文言の一覧。決まったもの（18 行）と残り（42 行）、直す場所。
 - [`for-windows-app.md`](for-windows-app.md): Windows アプリの担当へ。
 - [`parity-baseline.json`](parity-baseline.json): いま受け入れている遅れの一覧（下の「検証」を参照）。
 
@@ -81,10 +82,10 @@ Windows の実装は、このリポジトリからは確かめられない。Win
 1. **色**: `ShannonDesignSystem.swift` の `ShannonColorTokens` の値を、`ShannonGeneratedTokens.Color` から取るようにする。生成した Swift を `apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/` に出すよう、生成の出力先を足す。値は同じなので、見た目は変わらない。`ShannonPalette` の名前（`brandPresence` など）はそのままでよい。役割の対応は `tokens.json` の `swift` に書いてある。
 2. **余白・角丸・動き**: `ShannonSpacing`、`ShannonShape` を生成した値に向ける。動きの長さは、直接書いてある所（下の一覧）を `ShannonGeneratedTokens.Motion` に置き換える。
 3. **Mac**: Mac のアプリは、いま共通の余白・角丸・色をまったく使っていない（[`gaps.md`](gaps.md) の 4）。画面ごとに置き換える。
-4. **文言**: 運用の画面（両方で同じ文になっている）から始め、作業の状態の語、自律活動、と進める。違っている文言は、所有者が決めてから入れる。
+4. **文言**: 運用の画面（両方で同じ文になっている）から始め、作業の状態の語、自律活動、と進める。`strings.ja.json` で `decided` が付いている文は、所有者が決めた言葉（`windowsNow`・`macNow` が、いま出ている違う言葉）。まだ決まっていない違いは、決まってから入れる。
 5. 置き換えた所は、検証が「アプリが生成した値を読んでいる」と見て、値の照合をやめる（`ShannonGeneratedTokens`、`ShannonGeneratedStrings` という名前がファイルにあるかで見分ける）。
 
-文字の大きさは、iOS では Dynamic Type のテキストスタイル（`.body` など）のまま使う。`tokens.json` の大きさは、その既定の値で、Web 側がそろえるための数字。デスクトップで文字を小さくするか（macOS の標準は本文 13pt、いまの Windows は 14px）は、所有者がまだ決めていない（[`gaps.md`](gaps.md) の 4）。
+文字の大きさは、iPhone では Dynamic Type のテキストスタイル（`.body` など）のまま使う（`typography.scale` は、その既定の値）。Mac と Windows は、本文 15 の固定の目盛り（`typography.desktop`。所有者の決定、2026-10-03）。Swift では `ShannonGeneratedTokens.DesktopTypography`、CSS では `<html data-shannon-density="desktop">` を付けると `--shannon-font-size-*` がこの値になる。
 
 ### iOS のコードで、トークンと違う値を直接書いている所
 
@@ -115,6 +116,18 @@ Mac のアプリ（`apps/macos-app/ShannonDesk`）は、`ShannonPalette`・`Shan
 | 画面の構成・色・文言の決定 | 所有者 |
 
 仕様を変えたら、相手のスレッドへ知らせる。Syzygy の `docs/operations/task-coordination.md` の決まりに従う。
+
+## 決まったこと（2026-10-03）
+
+所有者が比較ページで選んだ。くわしくは [`information-architecture.md`](information-architecture.md)。
+
+- 入口は トーク／作業／シャノン／設定。シャノンの中に ようす（シャノンのいま）・頭の中・自律活動・書斎。
+- iPhone はいまのシート、広い画面はサイドバー（下にトークの一覧）。
+- からだは、トークの表示の 1 つ（別の場所にしない）。設定は 設定 › すがた。
+- 運用は 設定 › 管理。止まっているときは、設定の入口と、いつも見える所に印。
+- 色は iPhone の役割分けを 3 つとも。広い画面の文字は本文 15。
+- 承認は 3 つの選択と長押しを、デスクトップでも。
+- 言葉は iPhone のもの。自律の場所は「自律活動」。
 
 ## 前からある設計の文書との関係
 

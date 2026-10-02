@@ -1,5 +1,7 @@
 # いまのずれ（iOS・macOS・Windows）
 
+> **2026-10-03 追記**: このずれを見たうえで、所有者が構成・色・文字・承認・言葉を選んだ（[`information-architecture.md`](information-architecture.md)）。直す順番は [`roadmap.md`](roadmap.md) に移した（下の 7 は、選ぶ前の案）。決定で新しく行が 7 つ増え（`structure.four-entries`、`structure.shannon-hub`、`tasks.hold-to-confirm`、`settings.figure`、`touch.reply-mode`、`settings.admin`、`ops.attention-mark`）、機能は 134 件、遅れている所は 148 か所になった。下の件数と本文は、選ぶ前（127 件・129 か所）のまま残してある。いまの件数は [`feature-matrix.md`](feature-matrix.md)。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。
@@ -172,6 +174,8 @@
 - 見た目は、値をコードから読んだだけで、画面を並べて見比べてはいない。
 
 ## 7. 進める順番の案（小さな一歩ずつ）
+
+**この案は [`roadmap.md`](roadmap.md) に置き換えた。** 下は、所有者が選ぶ前に書いたもの。
 
 ADR-0004 の順（仕様 → 所有者が構成を選ぶ → Apple をそろえる → Windows を直す → Mac の体）に沿って、1 つずつ入れられる大きさに分けた。
 
