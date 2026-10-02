@@ -213,7 +213,7 @@ The lines are a **seed set of five, one per scene, awaiting the owner's review**
 
 ## Looking at the room
 
-Owner decision (Syzygy ADR-0002 addendum, 2026-10-02), stage 1. Shannon may take **one look** at the room through the body's camera: one JPEG frame, only in a text conversation with the owner alone, only while her window is visible. The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
+Owner decision (Syzygy ADR-0002 addendum, 2026-10-02). Shannon may take **one look** at the room through the body's camera: one JPEG frame, only while her window is visible. Stage 1: in a text conversation with the owner alone. Stage 2: also in her own time, a few times a day (see [A look in her own time](#a-look-in-her-own-time)). The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
 
 ### Order of one look
 
@@ -230,6 +230,15 @@ Owner decision (Syzygy ADR-0002 addendum, 2026-10-02), stage 1. Shannon may take
 5. The server shows the frame to the conversation model once and drops it. What she says arrives as her next message in the same Talk (see [How her message reaches a client](#how-her-message-reaches-a-client)).
 
 There is at most one open look per scope. While a text turn happened in the last 60 seconds, or a look is open, `pollAfterSeconds` is **3** instead of 10; the body should accept 3–10.
+
+### A look in her own time
+
+Stage 2. Her activity loop may ask for a look too, at most 3 times an owner-local day (`SHANNON_AUTONOMY_MAX_ROOM_LOOKS`), inside the same 6 an hour and 30 a day. **Nothing new is on the wire.** The differences the body sees:
+
+- `look` may appear in `presence` **without a conversation turn before it**. The server asks only while a device with `flags.camera: true` read presence in the last 30 seconds and the owner has not written or spoken to her for 10 minutes. Treat it exactly like any other look: the badge, one frame, the same refusal codes, the body's own limits.
+- The body polls every 10 seconds when nothing is happening, so it may first see the look up to 10 seconds after `requestedAt`. `expiresAt` is still 30 seconds after `requestedAt`: the body has at least 20 seconds to answer. Once it has read the look, `pollAfterSeconds` is 3 as for any open look.
+- The answer of `POST /v1/body/looks/{id}` has `"message": null` for every `status`. What she saw is not a message: it becomes a note in her study, which the owner reads there. The body must not show or speak anything for such a look, and nothing arrives through `/v1/conversation`, `/v1/initiatives`, or a push.
+- The `POST` is still held while the model looks (up to 20 seconds).
 
 ### `POST /v1/body/looks/{id}`
 
@@ -317,10 +326,10 @@ When the existing apps show it, without a change to them: the Mac app reads `GET
 
 ### What the server guarantees about the frame
 
-- It is sent to the conversation model provider **once**, with a request the provider is asked not to keep (`store: false`), and then dropped. It is never written to the database, a file, a log line, the conversation history, or a turn capture. `body_looks` holds identifiers, timestamps, an outcome and a code, and has no column for a frame or a description.
-- A frame is shown to the model only for a look opened in an owner text turn, answered by the device it was given to, in time, with `audience: owner`. A text turn with `audience: others` that arrives meanwhile ends the look: an unanswered one is closed, and what the model saw is not said.
+- It is sent to a model provider **once** and then dropped: for a look in conversation, the conversation model, with a request the provider is asked not to keep (`store: false`); for a look in her own time, the model of her own activity (Gemini, with the dedicated autonomy key). It is never written to the database, a file, a log line, the conversation history, or a turn capture. `body_looks` holds identifiers, timestamps, an outcome and a code, and has no column for a frame or a description. For a look in her own time, her short text about it rests in `body_look_activity` until her activity loop takes it (seconds), and is then a note in her study.
+- A frame is shown to the model only for a look opened in an owner text turn or by her activity loop through the gate, answered by the device it was given to, in time, with `audience: owner`. A text turn with `audience: others` that arrives meanwhile ends the look: an unanswered one is closed, and what the model saw is not said.
 - Limits on the server: 6 an hour and 30 an owner-local day (`Asia/Tokyo`), counted on looks for which a frame arrived (`SHANNON_BODY_LOOK_PER_HOUR`, `SHANNON_BODY_LOOK_PER_DAY`).
-- Every look is one entry in the activity record (tool `body.look`): 「部屋を一度見ました。」 or 「部屋を見ませんでした（…）。」 with the code. The entry never contains what she saw.
+- Every look is in the activity record. In conversation: one entry (tool `body.look`), 「部屋を一度見ました。」 or 「部屋を見ませんでした（…）。」 with the code. In her own time: the gate's decision and one result (tool `study.look`, domain 「体のカメラで部屋を見る」), with the cost. No entry contains what she saw.
 - The model is told, with the frame: that the person in view may be taken to be the owner and that she may speak of his appearance (owner decision 2026-10-02), not to say who any other person is or judge their appearance, not to read out or remember text on screens or documents, and not to put other people who appear into memory. Her message is display history: it has no user side and no completed-turn event, so no fact, relationship, promise, goal or person memory is extracted from it.
 - Voice calls, the platform bridge, turns with `audience: others`, guests, and the activity loop never start a look.
 
