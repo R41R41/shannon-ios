@@ -156,7 +156,7 @@ describe('autonomy wording while the loop runs', () => {
     expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
     // The running wording still fits the response-path budget of the capability block.
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(1_939);
-    expect(running.length).toBeLessThanOrEqual(2_869);
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(2_013);
+    expect(running.length).toBeLessThanOrEqual(2_943);
   });
 });

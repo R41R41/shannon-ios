@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import {
-  APP_LOOK_LIMITS, appLookChoice, availableCamera, configuredAppLook,
+  APP_LOOK_LIMITS, appLookChoice, availableCamera, configuredAppLook, voiceLookCamera,
   type AppLookAsk, type AppLookCamera, type AppLookClient, type AppLookCode, type AppLookConfig, type AppLookResult,
 } from './appLookContract.js';
 import {
-  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, appLookNotSeenLine, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
+  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcedLook, appLookNotSeenLine, lookAnnouncement, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
 } from './appLookLines.js';
 import { SQLiteAppLookStore, type AppLookOutcome, type StoredAppLook } from './appLookStore.js';
 import { asksToLook, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
@@ -62,6 +62,11 @@ export interface AppLookTurn {
   open(threadId: string, camera: AppLookCamera, spoken: readonly RoomLookContextLine[], turnId?: string): AppLookAsk | null;
   /** A voice turn cut off after she had begun to say she would look: no look, and one honest line once the turn is stored. */
   cutOff(threadId: string, said: string, turnId?: string): void;
+  /**
+   * She said that she would look through the camera in a turn that could not open a look: one honest fixed line in the
+   * Talk, once the turn is stored. `said` is his words of a voice turn; absent for a text turn, which is stored already.
+   */
+  announcedWithoutLook(threadId: string, said?: string, turnId?: string): void;
 }
 
 export type AppLookAnswer =
@@ -72,10 +77,13 @@ const VOICE_TURN_WAIT_MILLISECONDS = 8_000;
 /** A look the model is seeing is given up this long after its expiry (the process stopped mid-call). */
 const SEEING_GRACE_MILLISECONDS = 90_000;
 const RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
-/** She wrote that she would look: 「見てみますね」「のぞいてみますね」, not 「意見」「見つけ」. */
-const ANNOUNCES_LOOK = /見て(?:み|き)ま|見てみる|見ますね|みてみま|のぞいてみ|カメラで/u;
-const CLOSED: Pick<AppLookTurn, 'request' | 'decide' | 'open' | 'cutOff'> = Object.freeze({
-  request: Object.freeze({}), decide: () => null, open: () => null, cutOff: () => undefined,
+const CLOSED: Pick<AppLookTurn, 'request' | 'decide' | 'open' | 'cutOff' | 'announcedWithoutLook'> = Object.freeze({
+  request: Object.freeze({}), decide: () => null, open: () => null, cutOff: () => undefined, announcedWithoutLook: () => undefined,
+});
+/** The fixed line for a look she announced in a turn that could not look: the app's own reason where it has a line. */
+const UNLOOKED_CODE: Readonly<Record<AppLookUnavailable, AppLookCode>> = Object.freeze({
+  background: 'background', denied: 'denied', no_camera: 'no_camera', switched_off: 'switched_off', busy: 'too_soon',
+  server_off: 'not_opened', no_viewer: 'not_opened', guest: 'not_opened',
 });
 
 export class AppLooks {
@@ -115,10 +123,20 @@ export class AppLooks {
     try {
       this.sweep(scopeKey, at);
       const unavailable = this.unavailable(scopeKey, at, client, audience.guest);
-      if (unavailable) {
-        return { ...CLOSED, unavailable, prompt: message !== undefined && asksToLook(message) ? appLookUnavailablePrompt(unavailable, client.platform) : '' };
-      }
       const since = this.turns.mark;
+      let unlooked = false;
+      const announcedWithoutLook = (code: AppLookCode) => (threadId: string, said?: string, turnId?: string) => {
+        try {
+          if (unlooked) return;
+          unlooked = true;
+          this.unopened(scopeKey, threadId, said === undefined ? null : this.turns.await(scopeKey, threadId, said, since, turnId), code, appLookNotSeenLine(code, client.platform));
+        } catch { /* nothing more to do */ }
+      };
+      if (unavailable) {
+        // The reason is a fact of the turn, told whether or not he asks: she must not think she can look, or has.
+        return { ...CLOSED, unavailable, prompt: message !== undefined ? appLookUnavailablePrompt(unavailable, client.platform, audience.guarded) : '',
+          announcedWithoutLook: audience.guest ? CLOSED.announcedWithoutLook : announcedWithoutLook(UNLOOKED_CODE[unavailable]) };
+      }
       let opened = false;
       const open = (threadId: string, camera: AppLookCamera, announced: boolean, spoken: readonly RoomLookContextLine[], wait: TurnWait | null) => {
         if (opened) return null;
@@ -129,13 +147,16 @@ export class AppLooks {
         unavailable: null, prompt: message === undefined ? '' : APP_LOOK_OFFER_PROMPT, request: { offerAppLook: true },
         decide: (choice, threadId, reply) => {
           try {
-            const chosen = appLookChoice(choice);
+            // Her own words 「カメラで見てみますね」 are a choice too: a look she announced is taken, not left as a promise.
+            // So is saying that she will look right after he asked her to, in whatever words.
+            const said = announcedLook(reply, asksToLook(message ?? ''));
+            const chosen = appLookChoice(choice) ?? (said ? { choice: 'curious' as const, camera: voiceLookCamera(message ?? '', undefined) } : null);
             if (!chosen) return null;
             // Her text about the look follows this turn, which is stored before this runs: nothing is waited for.
-            const announced = chosen.choice === 'asked' || ANNOUNCES_LOOK.test(reply);
+            const announced = chosen.choice === 'asked' || lookAnnouncement(reply) !== null;
             const ask = open(threadId, chosen.camera, announced, [{ role: 'user', content: message ?? '' }, { role: 'assistant', content: reply }], null);
             // Another look was opened while she was writing: if she said she would look, one honest line follows.
-            if (!ask && ANNOUNCES_LOOK.test(reply)) this.unopened(scopeKey, threadId, null, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
+            if (!ask && lookAnnouncement(reply) !== null) this.unopened(scopeKey, threadId, null, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
             return ask;
           } catch { return null; }
         },
@@ -156,6 +177,7 @@ export class AppLooks {
             this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), 'interrupted', BODY_LOOK_CUT_OFF_LINE);
           } catch { /* nothing more to do */ }
         },
+        announcedWithoutLook: announcedWithoutLook('not_opened'),
       };
     } catch { return { ...CLOSED, unavailable: 'no_viewer', prompt: '' }; }
   }
