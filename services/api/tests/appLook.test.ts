@@ -288,6 +288,14 @@ describe('a text turn from the app', () => {
     expect((await h.answer(ask.id)).status).toBe(200);
     expect(h.viewer.calls[0]!.context.map(line => line.content)).toEqual(['これ見れる？', '見てみますね。']);
   });
+
+  it('lets her look out of curiosity in a turn other people can see (owner decision 2026-10-03)', async () => {
+    const h = harness();
+    h.model.appLook = 'curious_back';
+    const turn = await h.chat('今カフェにいるんだ', READY, { audience: 'others' });
+    expect(turn.body.appLook).toMatchObject({ camera: 'back' });
+    expect(h.store.get(scope, turn.body.appLook!.id)).toMatchObject({ guarded: true });
+  });
 });
 
 describe('the loop guard', () => {
@@ -435,6 +443,7 @@ describe('POST /v1/app/looks/{id}', () => {
       expect(h.viewer.calls, code).toEqual([]);
     }
     expect(appLookNotSeenLine('background', 'ios')).toBe('アプリが画面に出ていないので、いまは見られませんでした。');
+    expect(appLookNotSeenLine('interrupted', 'ios')).toBe(BODY_LOOK_CUT_OFF_LINE);
     expect(appLookNotSeenLine('denied', 'ios')).toContain('設定アプリの「シャノン」でカメラをオン');
     expect(appLookNotSeenLine('denied', 'macos')).toContain('システム設定の「プライバシーとセキュリティ」→「カメラ」');
     expect(appLookNotSeenLine('switched_off', 'ios')).toContain('設定で切ってある');
@@ -610,18 +619,19 @@ describe('a voice turn from the app', () => {
     expect(h.viewer.calls).toEqual([]);
   });
 
-  it('does not look of her own choosing with someone beside the owner, however sure the router is', async () => {
-    const h = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 1 }) });
-    // Answered (a request, as far as the table rule can tell), but nobody asked her to look.
-    for (const remark of ['それ見せて。', 'シャノン、今ラーメン屋さんにいるんだ。']) {
-      const turn = await h.say(remark, READY, {}, { companionPresent: true });
-      expect(turn.body.reply, remark).not.toBe('');
-      expect(turn.body.appLook, remark).toBeUndefined();
-      expect(turn.prompt, remark).not.toContain(voiceAppLookPrompt(false, 'back'));
-    }
-    expect(h.store.waiting(scope)).toEqual([]);
-    // Alone with her, the same remark is hers to be curious about.
-    expect((await h.say('シャノン、今ラーメン屋さんにいるんだ。')).body.appLook).toBeTruthy();
+  it('may look of her own choosing with someone beside the owner, when a model tier judges it welcome, and not on a remark alone', async () => {
+    // Owner decision 2026-10-03: in the app, curiosity is hers also with other people there.
+    const sure = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.9 }) });
+    const turn = await sure.say('シャノン、今ラーメン屋さんにいるんだ。', READY, {}, { companionPresent: true });
+    expect(turn.prompt).toContain(voiceAppLookPrompt(false, 'back'));
+    expect(turn.body.appLook).toBeTruthy();
+    expect(sure.store.get(scope, turn.body.appLook!.id)).toMatchObject({ guarded: true });
+    // Below the threshold, or with no model tier at all, the same remark opens nothing.
+    const unsure = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.6 }) });
+    expect((await unsure.say('シャノン、今ラーメン屋さんにいるんだ。', READY, {}, { companionPresent: true })).body.appLook).toBeUndefined();
+    const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    expect((await local.say('シャノン、今ラーメン屋さんにいるんだ。', READY, {}, { companionPresent: true })).body.appLook).toBeUndefined();
+    expect(local.store.waiting(scope)).toEqual([]);
   });
 
   it('opens nothing on words a model tier could not trust', async () => {

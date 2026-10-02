@@ -114,6 +114,8 @@ public final class ShannonAppLookCoordinator {
         guard Date() < deadline else { return nil }
         if let refusal = ShannonAppLookAvailability.refusal(clientState().state) { return .refused(refusal) }
         let camera = state.cameras.contains(ask.camera) ? ask.camera : state.cameras.first ?? ask.camera
+        // He spoke over her or ended the call: a look that has not opened the camera yet is not taken.
+        if Task.isCancelled { return .refused(.interrupted) }
         do {
             let image = try await environment.camera.capture(camera)
             // A frame taken as the app left the screen is dropped unseen.

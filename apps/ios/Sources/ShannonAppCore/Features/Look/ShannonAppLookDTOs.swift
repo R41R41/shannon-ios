@@ -72,6 +72,8 @@ public enum ShannonAppLookRefusal: String, Codable, Equatable, Sendable {
     case switchedOff = "switched_off"
     case busy
     case failed
+    /// He spoke over her or ended the call before the camera opened.
+    case interrupted
 }
 
 /// The app's answer to one ask: `POST /v1/app/looks/{id}`.
@@ -174,17 +176,22 @@ enum ShannonAppLookSpeech {
     @MainActor
     static func spoken(_ look: Task<String?, Never>?, within seconds: Double = spokenWaitSeconds) async -> String? {
         guard let look else { return nil }
-        // Whichever comes first answers; the look itself is not cancelled and still reaches the Talk.
+        // Whichever comes first answers; a look that is merely slow is not cancelled and still reaches the Talk.
+        // When the reply itself is cancelled (he spoke over her, or the call ended), a look that has not captured yet is.
         let once = Once()
-        return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
-            Task { @MainActor in
-                let text = await look.value
-                if once.take() { continuation.resume(returning: text) }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+                Task { @MainActor in
+                    let text = await look.value
+                    if once.take() { continuation.resume(returning: text) }
+                }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(seconds))
+                    if once.take() { continuation.resume(returning: nil) }
+                }
             }
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(seconds))
-                if once.take() { continuation.resume(returning: nil) }
-            }
+        } onCancel: {
+            look.cancel()
         }
     }
 

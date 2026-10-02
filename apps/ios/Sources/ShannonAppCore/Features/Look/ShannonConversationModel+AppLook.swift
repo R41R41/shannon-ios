@@ -41,9 +41,12 @@ extension ShannonConversationModel {
         case let .refused(code): .refused(scopeKey: scopeKey, code: code)
         }
         do {
-            guard let message = try await server.answerAppLook(id: ask.id, answer: answer).message else { return nil }
+            // Sent from a task of its own: a look that was interrupted still tells the server so, at once.
+            let answered = try await Task { try await server.answerAppLook(id: ask.id, answer: answer) }.value
+            guard let message = answered.message else { return nil }
             appendAppLookMessage(message)
-            return message.text
+            // What she says about an interrupted look is in the Talk; it is not spoken over him.
+            return Task.isCancelled ? nil : message.text
         } catch {
             await reloadAfterUnansweredLook(threadAtAsk)
             return nil

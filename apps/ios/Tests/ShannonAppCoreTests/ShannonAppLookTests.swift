@@ -246,6 +246,34 @@ final class ShannonAppLookTests: XCTestCase {
         XCTAssertEqual(unused.captures, [])
     }
 
+    func testAnInterruptedLookIsNotCapturedAndStillTellsTheServer() async throws {
+        let client = LookClient(ask: Fixtures.ask())
+        let camera = StubCamera()
+        let model = ShannonConversationModel(client: client, usesDisplayCache: false)
+        model.appLook = ShannonAppLookCoordinator(environment: Fixtures.environment(camera: camera))
+        // He speaks over her before the camera opens: the look's task is cancelled.
+        let look = Task { @MainActor in await model.performAppLook(Fixtures.ask()) }
+        look.cancel()
+        let spoken = await look.value
+        XCTAssertNil(spoken)
+        XCTAssertEqual(camera.captures, [])
+        XCTAssertNil(model.appLook.cue)
+        let answers = await client.answers
+        XCTAssertEqual(answers.first?.body.code, .interrupted)
+        XCTAssertEqual(answers.first?.body.outcome, "refused")
+
+        // A reply that is cancelled while it waits for the look cancels a look that has not captured yet.
+        let pending = Task<String?, Never> { @MainActor in
+            while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+            return nil
+        }
+        let reply = Task { @MainActor in await ShannonAppLookSpeech.spoken(pending, within: 30) }
+        try await Task.sleep(for: .milliseconds(50))
+        reply.cancel()
+        _ = await reply.value
+        XCTAssertTrue(pending.isCancelled)
+    }
+
     func testSaysWhyWhenTheCameraIsBusyOrFails() async {
         for (error, refusal) in [(ShannonAppLookCaptureError.busy, ShannonAppLookRefusal.busy), (.failed, .failed), (.noCamera, .noCamera)] {
             let camera = StubCamera()

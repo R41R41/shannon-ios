@@ -130,8 +130,7 @@ export class AppLooks {
         decide: (choice, threadId, reply) => {
           try {
             const chosen = appLookChoice(choice);
-            // Where other people can see the reply she looks only when asked: whose remark it was is too uncertain for a look of her own.
-            if (!chosen || (audience.guarded && chosen.choice !== 'asked')) return null;
+            if (!chosen) return null;
             // Her text about the look follows this turn, which is stored before this runs: nothing is waited for.
             const announced = chosen.choice === 'asked' || ANNOUNCES_LOOK.test(reply);
             const ask = open(threadId, chosen.camera, announced, [{ role: 'user', content: message ?? '' }, { role: 'assistant', content: reply }], null);

@@ -1,5 +1,6 @@
 import { SHANNON_OWNER_NAME } from '@shannon/cognition';
 import type { AppLookCamera, AppLookClient, AppLookCode } from './appLookContract.js';
+import { BODY_LOOK_CUT_OFF_LINE } from './bodyLookLines.js';
 
 /**
  * What she says when she was to look through the app's camera and could not. Fixed sentences in her
@@ -13,6 +14,8 @@ const NOT_SEEN_LINE: Readonly<Record<Exclude<AppLookCode, 'denied'>, string>> = 
   switched_off: '会話中にカメラで見るのは設定で切ってあるので、見ていません。',
   busy: 'カメラがほかのことに使われていて、いまは見られませんでした。',
   failed: 'うまく写せなくて、見られませんでした。',
+  // The same words as a look through her body that was cut off: 「話が途中になったので、いまは見ないでおきました。」
+  interrupted: BODY_LOOK_CUT_OFF_LINE,
   timeout: 'カメラの用意が間に合わなくて、いまは見られませんでした。',
   model_failed: '写してもらったのですが、うまく見られませんでした。',
   too_soon: 'いま見たばかりなので、少し間をあけてから見ます。',
@@ -37,6 +40,7 @@ const NOT_SEEN_REASON: Readonly<Record<AppLookCode, string>> = Object.freeze({
   switched_off: 'アプリの設定で切ってあった',
   busy: 'カメラがほかのことに使われていた',
   failed: '写せなかった',
+  interrupted: '話が途中で切れた',
   timeout: 'アプリから返事がなかった',
   model_failed: '届いた1枚を見られなかった',
   too_soon: '直前に見たばかりか、見ている途中だった',

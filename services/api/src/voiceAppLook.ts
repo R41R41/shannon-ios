@@ -14,9 +14,8 @@ export type { VoiceLooks } from './conversationLooks.js';
  * For a turn from an app the same function is run against the app's camera instead of her body's; only the wording of
  * the prompt, the camera, and the way the ask travels differ:
  * - the ask is returned in the response of the turn (`appLook`), not read from `presence`;
- * - other people listening beside the owner do not stop it (he aims the camera himself), but then she looks only when
- *   asked: with several people talking, whose remark it was is too uncertain for a look of her own choosing. A 「友人も一緒」
- *   turn never opens one;
+ * - other people listening beside the owner do not stop it (he aims the camera himself): she looks when asked and when
+ *   curious, as when alone, but only with a model tier's agreement, never on words alone. A 「友人も一緒」 turn never opens one;
  * - the camera is the router's judgement (`lookSelfProbability`), or a narrow rule on his words when it gave none.
  *
  * `SHANNON_VOICE_ROOM_LOOK=off` is about her body and does not switch the app off; `SHANNON_APP_LOOK=off` does.
@@ -53,16 +52,15 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     };
     const guarded = turn.audience !== 'owner';
     const score = turn.decision.roomLookProbability;
-    // With other people there, whose words they were is uncertain: a model tier has to agree that a look is asked for
-    // (words alone open nothing), and its judgement never opens a look by itself.
+    // With other people there, whose words they were is uncertain: words alone open nothing, a model tier has to agree.
+    // With its agreement she looks when asked, and (owner decision 2026-10-03) also when she is curious herself.
     if (guarded && score === undefined && !app.unavailable) return { prompt: '', open: () => false, cutOff: () => undefined, ask: () => ({}) };
     // Alone with her, 「これ見れる？」 said as the whole utterance is a request even when no model tier answered.
     const plain = !guarded && score === undefined && PLAIN_APP_ASK.test(turn.transcript.normalize('NFKC').replace(/[\s、。，,.!！?？…]/gu, ''));
-    const decided = plain ? { ...turn, decision: { ...turn.decision, roomLookProbability: 1 } }
-      : guarded && score !== undefined ? { ...turn, decision: { ...turn.decision, roomLookProbability: Math.min(score, 0.99) } } : turn;
     // The app's camera is aimed by the owner himself: for it, a turn other people hear is judged like one of his alone.
-    const chosen = voiceRoomLookTurn({ voiceTurn: () => state }, { ...decided, audience: 'owner' },
-      { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on', ...(guarded ? { SHANNON_VOICE_ROOM_LOOK_THRESHOLD: '1' } : {}) });
+    const chosen = voiceRoomLookTurn({ voiceTurn: () => state },
+      { ...turn, audience: 'owner', ...(plain ? { decision: { ...turn.decision, roomLookProbability: 1 } } : {}) },
+      { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on' });
     if (app.unavailable) {
       // The app cannot look now. Her body may, under its own rules; when neither can, the app's reason is the true one for this turn.
       if (body.prompt && !body.unavailable) return viaBody(body);
