@@ -127,7 +127,13 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
         const sent = agenticLoop(dependencies) ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
         if (!sent) return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
         // She stays with it for a short while: did he answer, and what did her body do with it. Facts only.
-        const observed = await observeReachOut(dependencies, cycle.scopeKey, { id: sent.id, at: sent.at, reason }, { wait: true, signal });
+        let observed: Awaited<ReturnType<typeof observeReachOut>>;
+        try {
+          observed = await observeReachOut(dependencies, cycle.scopeKey, { id: sent.id, at: sent.at, reason }, { wait: true, signal });
+        } catch {
+          // The message is sent whatever comes of watching: the step is reported as before.
+          return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
+        }
         return {
           outcome: 'done', usage, observed, reasonCode: observed.replied ? 'replied' : 'no_reply',
           summary: `持ち主に話しかけました（理由: ${label}）。${observed.replied ? '返事がありました。' : observed.waitedSeconds >= 60 ? `${Math.round(observed.waitedSeconds / 60)}分待ちましたが、返事はまだありません。` : '返事はまだありません。'}`,

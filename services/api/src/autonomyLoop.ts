@@ -156,7 +156,7 @@ export class ShannonAutonomyLoop {
           ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
         });
         // What the step led to, as facts; when it is worth thinking about, she thinks again before going on.
-        const rethought = observeStep(this.dependencies, cycle, row, {
+        const rethought = this.observed(cycle, row, {
           outcome: result.outcome, ...(result.observed ? { observed: result.observed } : {}),
           ...(result.reasonCode ?? (result.tool?.endsWith('_held') ? 'held' : undefined) ? { code: result.reasonCode ?? 'held' } : {}),
         }, committed?.plan ?? plan, at);
@@ -197,11 +197,18 @@ export class ShannonAutonomyLoop {
     // after she has seen that it was not allowed, when she may think again.
     try {
       store.transaction(() => {
-        const rethought = observeStep(this.dependencies, cycle, row, { outcome: 'refused', code: decision.reason }, plan, at);
+        const rethought = this.observed(cycle, row, { outcome: 'refused', code: decision.reason }, plan, at);
         if (rethought) store.loop.setPlan(cycle.id, rethought, false);
       });
     } catch { /* the plan goes on as it was */ }
     return 'stepped';
+  }
+
+  /** The step's observation and the plan with a thinking step in front, or null. An observation that cannot be kept never undoes the step's report. */
+  private observed(
+    cycle: AutonomyLoopCycle, row: AutonomyLoopStep, outcome: Parameters<typeof observeStep>[3], remaining: readonly AutonomyPlannedStep[], at: string,
+  ): AutonomyPlannedStep[] | null {
+    try { return observeStep(this.dependencies, cycle, row, outcome, remaining, at); } catch { return null; }
   }
 
   /** 「せがむ」: at most once a day (the store refuses a second), never at night or while he is talking. */
