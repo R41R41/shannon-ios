@@ -46,12 +46,14 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
 - The page is paused (`setPaused`) while the app is not active.
 - Reduce Motion: `setIdle({ gestures: false, sway: 0 })` — she starts no gesture by herself and does not
   sway; breathing, blinking, faces, her mouth and her reaction to a touch go on. Low Power Mode:
-  `setFrameRate(30)`. The page's version does not say which calls it has, so the app asks the page
+  `setFrameRate(30)`, and after a minute without anything happening the figure is stopped until a touch
+  or something to show (the page would otherwise draw for as long as the screen is up). The page's version does not say which calls it has, so the app asks the page
   (`typeof window.shannonBody.setIdle`); a page without them is paused into a still picture after five idle
   seconds instead, never while a finger is on her, and moves again on a touch.
 - Loading: the page reports `loading { progress }`, shown on the body screen as a percentage. A page that
-  stays silent for 25 foreground seconds, or is not `ready` after 90, is reloaded. A lost WebGL context is
-  mended by the page itself (`contextLost` → `contextRestored`); the app reloads only on `error` (including
+  sends no message at all for 40 foreground seconds, or is not `ready` after 90, is reloaded. A lost WebGL context is
+  mended by the page itself (`contextLost` → `contextRestored`, after which the app says the layout, the
+  calm and the pause again); the app reloads only on `error` (including
   `code: contextLost`, after the page gave up), on a failed load, or when the page's process ended. One
   automatic reload a minute, and a page that failed twice without once becoming ready is shown as failed on
   the body screen with 「もう一度読み込む」, with the Waterlight Eye in its place.

@@ -17,6 +17,10 @@ public final class ShannonBodyTouchCoordinator {
         public var reactionID = ""
         public var threadID: String?
         public var listenSeconds = 0
+        /// Who was around when she was touched. A line said with others around is never spoken or listened for.
+        public var audience = ShannonBodyAudience.owner
+        /// True when her voice says it: the bubble is then not also announced to VoiceOver.
+        public var isSpoken = false
     }
 
     /// What the body screen may truthfully say about delivery.
@@ -36,6 +40,8 @@ public final class ShannonBodyTouchCoordinator {
         public var repliesInVoice: @MainActor @Sendable () -> Bool = { false }
         /// Says the line and listens for his answer. Nil where nothing can speak.
         public var speak: (@MainActor @Sendable (Line) async -> Void)?
+        /// Stops a line that is being spoken or listened for.
+        public var stopSpeaking: (@MainActor @Sendable () -> Void)?
 
         public init(
             reportsTouch: @escaping @MainActor @Sendable () -> Bool = { ShannonBodyPreference.reportsTouch() },
@@ -105,6 +111,7 @@ public final class ShannonBodyTouchCoordinator {
     /// The owner switched reporting off: her line goes, and what was waiting to be sent is dropped.
     public func reportingChanged() {
         guard !environment.reportsTouch() else { return }
+        environment.stopSpeaking?()
         pending.removeAll()
         delivery = .fine
         clearLine()
@@ -173,7 +180,7 @@ public final class ShannonBodyTouchCoordinator {
             guard environment.now().timeIntervalSince(startedAt) <= ShannonBodyRegistration.reactionTimeoutSeconds,
                   environment.reportsTouch() else { return }
             delivery = .fine
-            show(answer)
+            show(answer, audience: request.audience)
         } catch let refusal as ShannonBodyRefusal {
             switch refusal.status {
             case 401: delivery = .notConnected
@@ -206,19 +213,22 @@ public final class ShannonBodyTouchCoordinator {
         registered = true
     }
 
-    private func show(_ answer: ShannonBodyReactionAnswerDTO) {
+    private func show(_ answer: ShannonBodyReactionAnswerDTO, audience: ShannonBodyAudience) {
         let message = answer.status == "said" ? answer.message : nil
         if let expression = message?.expression ?? answer.mood?.expression {
             environment.express(expression, message?.expression != nil ? message?.feeling : answer.mood?.feeling)
         }
         guard let message, !message.text.isEmpty else { return }
         let face = message.expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: message.feeling) }
+        // Voice mode, the owner alone, and nothing else holding the sound: the bubble and her voice, then a moment
+        // in which he may answer. Otherwise the bubble only.
+        let speaks = audience == .owner && environment.speak != nil && !isSpeaking && environment.repliesInVoice()
         let shown = Line(
             id: message.id, text: String(message.text.prefix(120)), face: face,
-            reactionID: answer.id, threadID: message.threadId, listenSeconds: min(30, max(0, message.listenSeconds ?? 0)))
+            reactionID: answer.id, threadID: message.threadId, listenSeconds: min(30, max(0, message.listenSeconds ?? 0)),
+            audience: audience, isSpoken: speaks)
         line = shown
-        // Voice mode: the bubble and her voice, then a moment in which he may answer. Text mode: the bubble only.
-        if environment.repliesInVoice(), let speak = environment.speak, !isSpeaking {
+        if speaks, let speak = environment.speak {
             isSpeaking = true
             Task { [weak self] in
                 await speak(shown)

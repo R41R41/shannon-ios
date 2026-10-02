@@ -164,7 +164,7 @@ public struct ShannonBodyScreen: View {
         case .loading, .unloaded: return ShannonBodyCopy.loading(progress: stage.loadProgress)
         case .ready:
             if stage.activeHost != hostID { return ShannonBodyCopy.shownElsewhere }
-            if stage.isResting { return stage.reduceMotion ? ShannonBodyCopy.restingReduceMotion : ShannonBodyCopy.resting }
+            if stage.isResting { return stage.lowPower ? ShannonBodyCopy.resting : ShannonBodyCopy.restingReduceMotion }
 #if DEBUG
             if let fps = stage.framesPerSecond {
                 return "\(fps) fps・読み込み \(String(format: "%.1f", stage.lastLoadSeconds ?? 0)) 秒・\(stage.modelUpdatedAt ?? "")"
@@ -225,8 +225,12 @@ public struct ShannonBodyScreen: View {
                     .pickerStyle(.segmented)
                     .disabled(!reportsTouch || !usesLive2D)
                     .opacity(reportsTouch && usesLive2D ? 1 : 0.45)
-                    .accessibilityHint(ShannonBodyCopy.replyModeHint)
                     .accessibilityIdentifier("body-reply-mode")
+                    Text(ShannonBodyCopy.replyModeExplanation)
+                        .font(.footnote)
+                        .foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(reportsTouch && usesLive2D ? 1 : 0.45)
                 }
             }
         }

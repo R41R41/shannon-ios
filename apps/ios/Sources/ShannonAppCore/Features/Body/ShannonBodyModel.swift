@@ -15,8 +15,22 @@ public final class ShannonBodyModel {
     public internal(set) var face = ShannonFace(expression: .calm)
     public internal(set) var doingLine: String?
     /// Someone else may be listening, or was a moment ago: touches are then reported as seen by others.
-    var audienceRule = ShannonBodyAudienceRule()
+    var audienceRule = ShannonBodyAudienceRule(defaults: .standard) {
+        didSet { if audienceRule.othersUntil != oldValue.othersUntil { audienceRule.save(to: .standard) } }
+    }
     public var audience: ShannonBodyAudience { audienceRule.audience(at: Date()) }
+    /// The app is in front. Her voice for a touch and the microphone after it never run in the background.
+    @ObservationIgnored var sceneIsActive = true
+
+    /// The body screen still answers a touch in voice: it is up, 声で返す and 伝える are on, the app is in front, and nobody else is around.
+    var answersInVoice: Bool {
+        (showsScreen || showsScreenFromSettings) && sceneIsActive && audience == .owner
+            && ShannonBodyReplyMode.current() == .voice && ShannonBodyPreference.reportsTouch()
+            && ShannonForm.current() == .live2d
+    }
+
+    /// Stops her spoken line; the listening call notices by itself (`answersInVoice`).
+    func stopVoice() { voice?.stop() }
     public internal(set) var touch: ShannonBodyTouchCoordinator
     @ObservationIgnored var isConnected = false
     @ObservationIgnored var voice: ShannonBodyVoice?
@@ -45,12 +59,11 @@ public final class ShannonBodyModel {
         ))
         self.voice = voice
         if let voice {
-            // Only where the surface answers in voice: the body screen with 声で返す chosen.
-            touch.environment.repliesInVoice = { [weak self] in
-                guard let self else { return false }
-                return (self.showsScreen || self.showsScreenFromSettings) && ShannonBodyReplyMode.current() == .voice
-            }
+            voice.mayAnswerInVoice = { [weak self] in self?.answersInVoice ?? false }
+            // Only where the surface answers in voice, and only while nothing else holds the sound.
+            touch.environment.repliesInVoice = { [weak voice] in voice?.canSpeakNow ?? false }
             touch.environment.speak = { [weak voice] line in await voice?.say(line) }
+            touch.environment.stopSpeaking = { [weak voice] in voice?.stop() }
         }
         ShannonLive2DStage.shared.onTouchMessage = { [weak self] message in
             self?.touch.handle(message)
@@ -72,6 +85,7 @@ struct ShannonBodyAttachment: ViewModifier {
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
+    @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
     @Environment(\.scenePhase) private var scenePhase
     /// Moves on so that a step of hers stops being shown once it is three minutes old.
     @State private var clock = Date()
@@ -141,7 +155,10 @@ struct ShannonBodyAttachment: ViewModifier {
         feelings(signals(content))
             .environment(bodyModel)
             .modifier(ShannonBodyScreenPresentation(bodyModel: bodyModel, memory: memory))
-            .task { connect() }
+            .task {
+                bodyModel.sceneIsActive = scenePhase == .active
+                connect()
+            }
             .task(id: scenePhase) { await keepClock() }
             .onAppear {
                 bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date())
@@ -164,7 +181,8 @@ struct ShannonBodyAttachment: ViewModifier {
             .onChange(of: phase) { phaseChanged() }
             .onChange(of: othersMayBeListening) { bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date()) }
             .onChange(of: reportsTouch) { bodyModel.touch.reportingChanged() }
-            .onChange(of: scenePhase) { if scenePhase != .active { ShannonSpeechLevelPublisher.shared.end() } }
+            .onChange(of: scenePhase) { sceneChanged() }
+            .onChange(of: answersInVoice) { if !answersInVoice { bodyModel.stopVoice() } }
     }
 
     private func feelings(_ content: some View) -> some View {
@@ -230,6 +248,19 @@ struct ShannonBodyAttachment: ViewModifier {
         }
     }
 
+    /// Read here so that leaving the screen, switching the mode or the reporting off, or the form, stops her voice at once.
+    private var answersInVoice: Bool {
+        (bodyModel.showsScreen || bodyModel.showsScreenFromSettings) && scenePhase == .active
+            && replyModeRawValue == ShannonBodyReplyMode.voice.rawValue && reportsTouch && usesLive2D
+    }
+
+    private func sceneChanged() {
+        bodyModel.sceneIsActive = scenePhase == .active
+        guard scenePhase != .active else { return }
+        bodyModel.stopVoice()
+        ShannonSpeechLevelPublisher.shared.end()
+    }
+
     private func refreshDoing() {
         let next = ShannonBodySignals.doing(loopState: loopState, days: memory.autonomy.days, now: clock)
         if next != doing { doing = next }
@@ -271,6 +302,7 @@ struct ShannonBodyAttachment: ViewModifier {
             pushAll()
         } else {
             ShannonSpeechLevelPublisher.shared.setSink(nil)
+            bodyModel.stopVoice()
             bodyModel.touch.clearLine()
         }
     }

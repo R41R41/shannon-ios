@@ -169,7 +169,8 @@ struct ShannonBodyLineBubble: View {
         .frame(width: maxWidth)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: line)
         .onChange(of: line) {
-            guard let line else { return }
+            // Her voice says a spoken line; VoiceOver does not say it over her.
+            guard let line, !line.isSpoken else { return }
             AccessibilityNotification.Announcement("シャノン：\(line.text)").post()
         }
         .allowsHitTesting(false)

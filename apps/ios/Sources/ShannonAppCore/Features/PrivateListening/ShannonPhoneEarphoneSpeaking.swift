@@ -96,7 +96,16 @@ final class ShannonPhoneEarphoneController {
         reachOuts.speaker = speaker
         reachOuts.listener = listener
         // She does not speak into a conversation: a voice call, dictation, or a message on its way.
-        reachOuts.isConversationActive = { [weak self] in self?.conversationIsActive ?? true }
+        // Nor into her own line for a touch on her figure (`ShannonSpeechArbiter`).
+        reachOuts.isConversationActive = { [weak self] in
+            (self?.conversationIsActive ?? true) || ShannonSpeechArbiter.shared.touchLineHoldsSound
+        }
+        // Her touch line asks the same questions before it speaks, and prepares the session through the standby.
+        let arbiter = ShannonSpeechArbiter.shared
+        arbiter.sessionInUse = { [weak self] in self?.sessionInUse ?? false }
+        arbiter.reachOutIsSpeaking = { [weak speaker] in speaker?.isSpeaking ?? false }
+        arbiter.beginSpeech = { [standby] in try standby.beginSpeech() }
+        arbiter.endSpeech = { [standby] in standby.endSpeech() }
         // Between her line and the microphone no audio runs for a moment; this keeps iOS from suspending the app there.
         reachOuts.protect = { work in
             let assertion = ShannonBackgroundAssertion(name: "shannon.reach-out")

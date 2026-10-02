@@ -24,12 +24,14 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
     private var pendingBuffers = 0
     private var playedAnything = false
     private var wasCut = false
-    private var isSpeaking = false
+    public private(set) var isSpeaking = false
     private var fetchTask: Task<ShannonGeminiSpeechStream, Error>?
     private var feedTask: Task<Void, Error>?
 
     /// Her voice has to begin within this long of the request, or the line is not said.
     static let firstSoundTimeout: TimeInterval = 30
+    /// The limit of this speaker; a line that answers a touch waits far less than a message of hers.
+    public var firstSoundTimeout: TimeInterval = ShannonEarphoneSpeaker.firstSoundTimeout
     /// A line is over this long after the request, whatever state it is in; her longest line is well under a minute.
     static let maximumLineTime: TimeInterval = 120
 
@@ -55,7 +57,7 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
         // Two limits hold for the whole line, from the request to the last sample: her voice has to begin within the
         // first, and the line is over by the second. Either one stops the line where it is.
         let patience = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(Self.firstSoundTimeout)) } catch { return }
+            do { try await Task.sleep(for: .seconds(self?.firstSoundTimeout ?? Self.firstSoundTimeout)) } catch { return }
             guard !Task.isCancelled else { return }
             if self?.playedAnything == false { self?.cut() }
         }

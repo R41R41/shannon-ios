@@ -17,8 +17,16 @@ enum ShannonLive2DStagePolicy {
 
     /// With Reduce Motion or Low Power Mode on, an idle figure becomes a still picture after this long.
     static let restAfterSeconds: TimeInterval = 5
-    static func rests(calm: Bool, phase: ShannonLive2DPhase, idleSeconds: TimeInterval, fingerDown: Bool = false) -> Bool {
-        calm && !fingerDown && phase == .idle && idleSeconds >= restAfterSeconds
+    /// A page that calms itself (no gestures, half the frames) still draws; in Low Power Mode it is stopped after this long idle.
+    static let restAfterSecondsInPage: TimeInterval = 60
+    static func rests(calm: Bool, phase: ShannonLive2DPhase, idleSeconds: TimeInterval, fingerDown: Bool = false, calmsInPage: Bool = false) -> Bool {
+        calm && !fingerDown && phase == .idle && idleSeconds >= (calmsInPage ? restAfterSecondsInPage : restAfterSeconds)
+    }
+
+    /// Whether an idle figure is ever paused to rest: always for a page that cannot calm itself; for one that
+    /// can, only in Low Power Mode (Reduce Motion alone is fully served by the page's own calm).
+    static func mayRest(reduceMotion: Bool, lowPower: Bool, calmsInPage: Bool) -> Bool {
+        calmsInPage ? lowPower : (reduceMotion || lowPower)
     }
 
     /// One automatic reload per minute; a second failure inside it is shown as failed.
@@ -40,7 +48,7 @@ enum ShannonLive2DStagePolicy {
     /// The page is given this long to say `ready`, and may not stay silent for longer than the second value
     /// while it loads (it reports its progress; foreground time only).
     static let loadTimeoutSeconds: TimeInterval = 90
-    static let loadSilenceSeconds: TimeInterval = 25
+    static let loadSilenceSeconds: TimeInterval = 40
 
     static func loadTimedOut(waited: TimeInterval, silent: TimeInterval) -> Bool {
         waited >= loadTimeoutSeconds || silent >= loadSilenceSeconds

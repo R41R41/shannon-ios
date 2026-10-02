@@ -98,6 +98,8 @@ extension ShannonVoiceWorkspaceState {
     /// answered stay stored, and every open call screen closes.
     func endCall(_ geminiVoiceModel: ShannonGeminiLiveSessionModel) {
         connectionRequestID = nil
+        // A touch line that was waiting for his answer belongs to this call only.
+        ShannonBodyReactionLink.shared.disarm()
         // A 「友人も一緒」 period that is still running ends with the call and is remembered;
         // the card that replaces the pill says so and offers 「今回は残さない」.
         geminiVoiceModel.finishGuestPeriod()

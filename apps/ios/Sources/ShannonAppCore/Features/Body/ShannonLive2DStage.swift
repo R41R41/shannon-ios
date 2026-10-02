@@ -84,8 +84,6 @@ public final class ShannonLive2DStage {
 
     public static var isAvailable: Bool { embedFolder != nil }
 
-    private var calm: Bool { reduceMotion || lowPower }
-
     // MARK: Hosts
 
     /// A screen that shows her figure came on. The one with the highest priority shows the web view.
@@ -224,7 +222,6 @@ public final class ShannonLive2DStage {
             Task { @MainActor in
                 guard let self, self.generation == asked else { return }
                 self.calmsInPage = supported
-                if supported, self.isResting { self.isResting = false }
                 self.applyCalm()
                 self.refreshPaused()
                 self.scheduleRest()
@@ -235,15 +232,18 @@ public final class ShannonLive2DStage {
     private func scheduleRest() {
         restTask?.cancel()
         restTask = nil
-        // A page that calms itself is never paused to rest.
-        guard calm, !calmsInPage, status == .ready, activeHost != nil else { return }
+        // A page that calms itself is paused to rest only in Low Power Mode, and after a longer idle.
+        guard ShannonLive2DStagePolicy.mayRest(reduceMotion: reduceMotion, lowPower: lowPower, calmsInPage: calmsInPage),
+              status == .ready, activeHost != nil else { return }
         restTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
-                guard self.calm, self.status == .ready, self.activeHost != nil else { return }
+                guard ShannonLive2DStagePolicy.mayRest(reduceMotion: self.reduceMotion, lowPower: self.lowPower, calmsInPage: self.calmsInPage),
+                      self.status == .ready, self.activeHost != nil else { return }
                 if ShannonLive2DStagePolicy.rests(
-                    calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown) {
+                    calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown,
+                    calmsInPage: self.calmsInPage) {
                     self.isResting = true
                     self.refreshPaused()
                     return
@@ -390,6 +390,8 @@ public final class ShannonLive2DStage {
 
     func receive(_ message: ShannonLive2DMessage, generation received: Int) {
         guard received == generation else { return }
+        // Any message proves the page alive, whatever it says.
+        lastHeardAt = Date()
 #if DEBUG
         probe(message)
 #endif
@@ -415,14 +417,20 @@ public final class ShannonLive2DStage {
             lastActivityAt = Date()
             scheduleRest()
         case let .loading(progress):
-            lastHeardAt = Date()
             if status == .loading { loadProgress = max(loadProgress, progress) }
         case .error:
             // Also `code: contextLost`: the page tried three times to make its drawing surface again and could not.
             recover(generation: received)
-        case .contextLost, .contextRestored:
+        case .contextLost:
             // The page mends this itself and keeps the face, the mood and the layout; a reload would only lose them.
             lastActivityAt = Date()
+        case .contextRestored:
+            // What the app decides is said again: where she stands, how calm she is, and whether she draws.
+            lastActivityAt = Date()
+            applyHost()
+            applyCalm()
+            sentPaused = nil
+            refreshPaused()
         case let .frameStats(fps):
             framesPerSecond = fps
         case .touch, .askReaction, .tap:

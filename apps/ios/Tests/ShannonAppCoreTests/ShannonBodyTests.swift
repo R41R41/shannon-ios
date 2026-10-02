@@ -171,6 +171,15 @@ final class ShannonBodyTests: XCTestCase {
         rule.observe(othersMayBeListening: false, at: start.addingTimeInterval(3_600 + 200))
         XCTAssertEqual(rule.audience(at: start.addingTimeInterval(3_600 + 300)), .owner)
         XCTAssertEqual(ShannonBodyAudienceRule.holdSeconds, 300)
+        // The hold survives a relaunch, also one in the middle of the call.
+        let defaults = UserDefaults(suiteName: "shannon-body-audience-\(UUID().uuidString)")!
+        XCTAssertEqual(ShannonBodyAudienceRule(defaults: defaults).audience(at: start), .owner)
+        var running = ShannonBodyAudienceRule()
+        running.observe(othersMayBeListening: true, at: start)
+        running.save(to: defaults)
+        let relaunched = ShannonBodyAudienceRule(defaults: defaults)
+        XCTAssertEqual(relaunched.audience(at: start.addingTimeInterval(299)), .others)
+        XCTAssertEqual(relaunched.audience(at: start.addingTimeInterval(300)), .owner)
     }
 
     // MARK: The stage's rules
@@ -197,8 +206,15 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(Policy.mayReload(lastReloadAt: nil, now: now, failuresWithoutReady: 1))
         XCTAssertFalse(Policy.mayReload(lastReloadAt: nil, now: now, failuresWithoutReady: 2))
         // Loading: a page that reports progress is given its time; a silent one is not.
-        XCTAssertFalse(Policy.loadTimedOut(waited: 60, silent: 3))
-        XCTAssertTrue(Policy.loadTimedOut(waited: 20, silent: 25))
+        XCTAssertFalse(Policy.loadTimedOut(waited: 60, silent: 39))
+        XCTAssertTrue(Policy.loadTimedOut(waited: 45, silent: 40))
+        // A page that calms itself rests only in Low Power Mode, and after a minute; one that cannot, after five seconds.
+        XCTAssertFalse(Policy.mayRest(reduceMotion: true, lowPower: false, calmsInPage: true))
+        XCTAssertTrue(Policy.mayRest(reduceMotion: true, lowPower: true, calmsInPage: true))
+        XCTAssertTrue(Policy.mayRest(reduceMotion: true, lowPower: false, calmsInPage: false))
+        XCTAssertFalse(Policy.mayRest(reduceMotion: false, lowPower: false, calmsInPage: false))
+        XCTAssertFalse(Policy.rests(calm: true, phase: .idle, idleSeconds: 59, calmsInPage: true))
+        XCTAssertTrue(Policy.rests(calm: true, phase: .idle, idleSeconds: 60, calmsInPage: true))
         XCTAssertTrue(Policy.loadTimedOut(waited: 90, silent: 0))
         XCTAssertEqual(Policy.frameRate(lowPower: true), 30)
         XCTAssertEqual(Policy.frameRate(lowPower: false), 0)
@@ -450,39 +466,149 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(coordinator.isSpeaking)
     }
 
-    func testTheFirstVoiceTurnAfterASpokenLineNamesTheReactionOnce() throws {
+    func testTheFirstUtteranceAfterASpokenLineNamesTheReactionAndNoOtherDoes() throws {
         let link = ShannonBodyReactionLink()
         let now = Date(timeIntervalSince1970: 10_000)
-        XCTAssertNil(link.forDelegation(ownerMode: true, now: now))
+        XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "なに？", now: now))
         link.arm(reactionID: "t1", listenSeconds: 6, now: now)
         // A turn other people can hear never carries it.
-        XCTAssertNil(link.forDelegation(ownerMode: false, now: now))
-        XCTAssertNil(link.forTurn(companionPresent: false))
-        XCTAssertEqual(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(60)), "t1")
-        XCTAssertNil(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(61)))
-        XCTAssertEqual(link.forTurn(companionPresent: false), "t1")
-        XCTAssertNil(link.forTurn(companionPresent: false))
+        XCTAssertNil(link.forDelegation(ownerMode: false, utterance: "なに？", now: now))
+        XCTAssertNil(link.forTurn(companionPresent: false, now: now))
+        XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(60)), "t1")
+        // A retry or a fallback of the same utterance keeps it; the next utterance does not get it.
+        XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(200)), "t1")
+        XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "それでね", now: now.addingTimeInterval(61)))
+        XCTAssertEqual(link.forTurn(companionPresent: false, now: now.addingTimeInterval(120)), "t1")
+        XCTAssertNil(link.forTurn(companionPresent: false, now: now.addingTimeInterval(121)))
+        XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(122)))
         // Too late for the server's window: an ordinary turn.
         link.arm(reactionID: "t2", listenSeconds: 6, now: now)
-        XCTAssertNil(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(67)))
+        XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(67)))
         // A companion turned up between the delegation and the stored turn: the turn is stored without it.
         link.arm(reactionID: "t3", listenSeconds: 6, now: now)
-        XCTAssertEqual(link.forDelegation(ownerMode: true, now: now), "t3")
-        XCTAssertNil(link.forTurn(companionPresent: true))
+        XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now), "t3")
+        XCTAssertNil(link.forTurn(companionPresent: true, now: now))
+        // The stored turn comes later than the server keeps the link: stored without it.
         link.arm(reactionID: "t4", listenSeconds: 6, now: now)
+        XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now), "t4")
+        XCTAssertNil(link.forTurn(companionPresent: false, now: now.addingTimeInterval(601)))
+        // The call ended before he said anything: a later call never gets the id.
+        link.arm(reactionID: "t5", listenSeconds: 6, now: now)
         link.disarm()
-        XCTAssertNil(link.forDelegation(ownerMode: true, now: now))
+        XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "なに？", now: now))
 
-        // On the wire: present only on the turn it belongs to.
-        link.arm(reactionID: "t5", listenSeconds: 6)
+        // On the wire: present only on the utterance it belongs to.
+        link.arm(reactionID: "t6", listenSeconds: 6)
         let request = ShannonLiveVoiceDelegationRequestDTO(scopeKey: "owner", threadId: "th", transcript: "なに？", participantMode: .owner)
-        let first = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.linkedToReaction(link))) as? [String: Any]
-        let second = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.linkedToReaction(link))) as? [String: Any]
-        XCTAssertEqual(first?["reactionId"] as? String, "t5")
-        XCTAssertNil(second?["reactionId"])
+        let other = ShannonLiveVoiceDelegationRequestDTO(scopeKey: "owner", threadId: "th", transcript: "それでね", participantMode: .owner)
+        func sent(_ value: ShannonLiveVoiceDelegationRequestDTO) throws -> String? {
+            (try JSONSerialization.jsonObject(with: JSONEncoder().encode(value.linkedToReaction(link))) as? [String: Any])?["reactionId"] as? String
+        }
+        XCTAssertEqual(try sent(request), "t6")
+        XCTAssertEqual(try sent(request), "t6")
+        XCTAssertNil(try sent(other))
         let turn = ShannonRealtimeVoiceTurnRequestDTO(scopeKey: "owner", threadId: "th", userTranscript: "なに？", shannonTranscript: "えへへ")
         let stored = try JSONSerialization.jsonObject(with: JSONEncoder().encode(turn.linkedToReaction(link))) as? [String: Any]
-        XCTAssertEqual(stored?["reactionId"] as? String, "t5")
+        XCTAssertEqual(stored?["reactionId"] as? String, "t6")
+    }
+
+    func testHerVoiceForATouchYieldsToEverythingElseAndStopsWhenTheSurfaceNoLongerAnswersInVoice() async {
+        let arbiter = ShannonSpeechArbiter()
+        let speaker = FakeLineSpeaker()
+        let voice = ShannonBodyVoice(speaker: speaker, arbiter: arbiter)
+        let allowed = FlagBox(true)
+        let heard = LineBox()
+        voice.mayAnswerInVoice = { allowed.value }
+        voice.listen = { line, _ in heard.values.append(line) }
+        func line(_ audience: ShannonBodyAudience = .owner, listen: Int = 6) -> ShannonBodyTouchCoordinator.Line {
+            .init(id: "m", text: "えへへ", face: nil, reactionID: "t", threadID: nil, listenSeconds: listen, audience: audience)
+        }
+        // A call, dictation or a ringing call of hers; one of her own messages being said; another touch line.
+        let session = FlagBox(true)
+        arbiter.sessionInUse = { session.value }
+        XCTAssertFalse(voice.canSpeakNow)
+        await voice.say(line())
+        session.value = false
+        let reachOut = FlagBox(true)
+        arbiter.reachOutIsSpeaking = { reachOut.value }
+        await voice.say(line())
+        reachOut.value = false
+        arbiter.touchLineIsActive = true
+        await voice.say(line())
+        arbiter.touchLineIsActive = false
+        // Other people around: never aloud, never listened for.
+        await voice.say(line(.others))
+        // The surface does not answer in voice (the screen was left, 文字で返す, 伝える off, the app in the background).
+        allowed.value = false
+        await voice.say(line())
+        XCTAssertEqual(speaker.spoken, [])
+        XCTAssertEqual(heard.values.count, 0)
+
+        // Free: she speaks, the arbiter knows it while she does, and then he may answer.
+        allowed.value = true
+        XCTAssertTrue(voice.canSpeakNow)
+        speaker.during = {
+            XCTAssertTrue(arbiter.touchLineIsActive)
+            XCTAssertTrue(arbiter.touchLineHoldsSound)
+        }
+        await voice.say(line())
+        XCTAssertEqual(speaker.spoken, ["えへへ"])
+        XCTAssertEqual(heard.values.count, 1)
+        XCTAssertFalse(arbiter.touchLineIsActive)
+        XCTAssertEqual(speaker.lastStillPrivate, true)
+
+        // He starts a call while the voice is being fetched: the speaker is told no, and nothing is listened for.
+        speaker.during = { session.value = true }
+        speaker.outcome = .notStarted
+        await voice.say(line())
+        XCTAssertEqual(speaker.lastStillPrivate, false)
+        XCTAssertEqual(heard.values.count, 1)
+        session.value = false
+        // He leaves the screen while she speaks: cut short, and no microphone.
+        speaker.during = { allowed.value = false }
+        speaker.outcome = .cutShort
+        await voice.say(line())
+        XCTAssertEqual(speaker.lastStillPrivate, false)
+        XCTAssertEqual(heard.values.count, 1)
+        allowed.value = true
+        // A line that came too late (the speaker's first-sound limit) is the bubble only.
+        speaker.during = nil
+        speaker.outcome = .notStarted
+        await voice.say(line())
+        XCTAssertEqual(heard.values.count, 1)
+        XCTAssertEqual(ShannonBodyVoice.firstSoundSeconds, 6)
+        voice.stop()
+        XCTAssertEqual(speaker.stops, 1)
+    }
+
+    func testALineSaidWithOthersAroundIsNeverSpokenAndASpokenLineIsMarked() async {
+        let client = FakeBodyClient()
+        await client.setAnswer(.init(
+            id: "t1", status: "said",
+            message: .init(id: "m1", text: "えへへ", expression: "bashful", feeling: nil, threadId: nil, listenSeconds: 6), mood: nil))
+        let spoken = LineBox()
+        let audience = AudienceBox()
+        var environment = ShannonBodyTouchCoordinator.Environment(
+            reportsTouch: { true }, audience: { audience.value }, capabilities: { ([], []) }, express: { _, _ in })
+        environment.repliesInVoice = { true }
+        environment.speak = { line in spoken.values.append(line) }
+        let stopped = FlagBox(false)
+        environment.stopSpeaking = { stopped.value = true }
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: environment)
+        audience.value = .others
+        await coordinator.handle(.askReaction(Self.touch("t1")))?.value
+        XCTAssertEqual(coordinator.line?.audience, .others)
+        XCTAssertEqual(coordinator.line?.isSpoken, false)
+        XCTAssertEqual(spoken.values.count, 0)
+        audience.value = .owner
+        await coordinator.handle(.askReaction(Self.touch("t1")))?.value
+        for _ in 0..<50 where coordinator.isSpeaking { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(coordinator.line?.isSpoken, true)
+        XCTAssertEqual(spoken.values.map(\.audience), [.owner])
+        // Switching the reporting off stops her voice.
+        coordinator.environment.reportsTouch = { false }
+        coordinator.reportingChanged()
+        XCTAssertTrue(stopped.value)
     }
 
     func testAnOlderServerIsSaidToBeUnsupported() async {
@@ -531,6 +657,25 @@ final class ShannonBodyTests: XCTestCase {
 }
 
 @MainActor private final class LevelBox: Sendable { var values: [Double] = [] }
+
+@MainActor
+private final class FakeLineSpeaker: ShannonReachOutSpeaking {
+    var spoken: [String] = []
+    var outcome = ShannonReachOutSpeechOutcome.spoken
+    /// What happens between the request for her voice and its first sound.
+    var during: (@MainActor () -> Void)?
+    var lastStillPrivate: Bool?
+    var stops = 0
+
+    func speak(_ text: String, stillPrivate: @escaping @MainActor () -> Bool) async -> ShannonReachOutSpeechOutcome {
+        during?()
+        lastStillPrivate = stillPrivate()
+        if outcome == .spoken { spoken.append(text) }
+        return outcome
+    }
+
+    func stop() { stops += 1 }
+}
 @MainActor private final class LineBox: Sendable { var values: [ShannonBodyTouchCoordinator.Line] = [] }
 @MainActor private final class ExpressionBox: Sendable { var values: [String] = [] }
 @MainActor private final class AudienceBox: Sendable { var value = ShannonBodyAudience.owner }

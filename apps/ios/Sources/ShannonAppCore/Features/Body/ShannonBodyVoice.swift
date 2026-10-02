@@ -28,115 +28,140 @@ public enum ShannonBodyReplyMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Carries the id of a touch reaction to the first voice turn that answers it (`docs/body-contract.md`,
-/// "If he answers"): the first delegation of the call names it, and so does the stored turn, so the Talk
-/// reads her line → his words → her reply. One reaction at a time; a turn other people can hear never carries it.
-public final class ShannonBodyReactionLink: @unchecked Sendable {
-    public static let shared = ShannonBodyReactionLink()
-    /// The server takes the first voice turn up to `listenSeconds` plus this after her line.
-    static let marginSeconds: TimeInterval = 60
+/// The one place that knows whether the app's sound is taken. Her spoken line for a touch, her own
+/// messages through the earphones, a voice conversation, dictation and a call from her all use one
+/// audio session: whoever wants to speak asks here first, and a line prepares and gives back the
+/// session through the earphone standby's own bookkeeping when that exists.
+@MainActor
+public final class ShannonSpeechArbiter {
+    public static let shared = ShannonSpeechArbiter()
 
-    private let lock = NSLock()
-    private var reactionID: String?
-    private var until = Date.distantPast
-    private var delegated = false
+    /// A voice conversation, dictation or a call from her (also while it rings) holds the session. Set by the earphone controller.
+    public var sessionInUse: (@MainActor () -> Bool)?
+    /// One of her own messages is being said through the earphones.
+    public var reachOutIsSpeaking: (@MainActor () -> Bool)?
+    /// The standby's way of preparing the session for one spoken line and giving it back.
+    public var beginSpeech: (@MainActor () throws -> Void)?
+    public var endSpeech: (@MainActor () -> Void)?
+    /// Her line for a touch is being fetched or spoken, or his answer to it is being listened for.
+    public internal(set) var touchLineIsActive = false
 
     public init() {}
 
-    public func arm(reactionID: String, listenSeconds: Int, now: Date = Date()) {
-        lock.lock()
-        self.reactionID = reactionID
-        until = now.addingTimeInterval(TimeInterval(max(0, listenSeconds)) + Self.marginSeconds)
-        delegated = false
-        lock.unlock()
+    /// Whether a touch line may not be spoken now.
+    public var isBusyForTouchLine: Bool {
+        (sessionInUse?() ?? false) || (reachOutIsSpeaking?() ?? false) || touchLineIsActive
     }
 
-    public func disarm() {
-        lock.lock()
-        reactionID = nil
-        delegated = false
-        lock.unlock()
-    }
-
-    /// For the first delegation of an owner call inside the window; nil for every other.
-    public func forDelegation(ownerMode: Bool, now: Date = Date()) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard ownerMode, !delegated, let reactionID, now <= until else { return nil }
-        delegated = true
-        return reactionID
-    }
-
-    /// For the stored turn of that delegation, once. With someone else listening the turn is stored without it.
-    public func forTurn(companionPresent: Bool) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard delegated, let reactionID else { return nil }
-        self.reactionID = nil
-        delegated = false
-        return companionPresent ? nil : reactionID
-    }
-}
-
-extension ShannonLiveVoiceDelegationRequestDTO {
-    /// The same request, naming the touch reaction it answers when it is the first turn after one.
-    func linkedToReaction(_ link: ShannonBodyReactionLink = .shared) -> Self {
-        var linked = self
-        linked.reactionId = link.forDelegation(ownerMode: participantMode == .owner)
-        return linked
-    }
-}
-
-extension ShannonRealtimeVoiceTurnRequestDTO {
-    func linkedToReaction(_ link: ShannonBodyReactionLink = .shared) -> Self {
-        var linked = self
-        linked.reactionId = link.forTurn(companionPresent: companionPresent == true)
-        return linked
-    }
+    /// Whether anything of hers that is not a conversation is speaking: a reach-out waits for it.
+    public var touchLineHoldsSound: Bool { touchLineIsActive }
 }
 
 /// Says her line for a touch in her voice, as her desktop body does, and then lets the owner answer.
 ///
 /// The voice is the one of a voice conversation, played by the speaker that says her own messages
-/// through the earphones (`ShannonEarphoneSpeaker`), in the same audio session category. While it
-/// plays, her figure is in the speaking phase and her mouth follows the sound. Nothing is said while
-/// a voice conversation is running.
+/// through the earphones (`ShannonEarphoneSpeaker`). While it plays, her figure is in the speaking
+/// phase and her mouth follows the sound. Nothing is said while the sound is taken, and the line is
+/// stopped the moment the owner leaves the screen, switches it off, or starts something else.
 @MainActor
 public final class ShannonBodyVoice {
     public typealias Listen = @MainActor (_ line: ShannonBodyTouchCoordinator.Line, _ seconds: Int) async -> Void
 
-    private let speaker: ShannonEarphoneSpeaker
+    /// A touch is answered at once or not aloud at all: later than this, the bubble is all there is.
+    public static let firstSoundSeconds: TimeInterval = 6
+
+    private let speaker: any ShannonReachOutSpeaking
+    private let arbiter: ShannonSpeechArbiter
     private let callIsActive: @MainActor () -> Bool
+    /// The surface still answers in voice: the body screen is up, 声で返す and 伝える are on, the app is in front.
+    public var mayAnswerInVoice: @MainActor () -> Bool = { true }
     /// Opens the microphone for his answer; nil where there is no voice conversation to continue in (the Mac).
     public var listen: Listen?
 
-    public init(streamSpeech: @escaping ShannonEarphoneSpeaker.StreamSpeech, callIsActive: @escaping @MainActor () -> Bool) {
-        speaker = ShannonEarphoneSpeaker(streamSpeech: streamSpeech, monitor: ShannonSystemAudioRouteMonitor())
+    public init(
+        streamSpeech: @escaping ShannonEarphoneSpeaker.StreamSpeech, callIsActive: @escaping @MainActor () -> Bool,
+        arbiter: ShannonSpeechArbiter = .shared
+    ) {
+        let speaker = ShannonEarphoneSpeaker(streamSpeech: streamSpeech, monitor: ShannonSystemAudioRouteMonitor())
+        speaker.firstSoundTimeout = Self.firstSoundSeconds
+        self.speaker = speaker
+        self.arbiter = arbiter
         self.callIsActive = callIsActive
-#if os(iOS)
-        // The category her earphone messages use: spoken audio that lowers other sound for its length.
-        speaker.beginSession = {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true)
-        }
-        speaker.endSession = { [callIsActive] in
-            guard !callIsActive() else { return }
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        }
-#endif
+        speaker.beginSession = { [arbiter] in try Self.beginSession(arbiter) }
+        speaker.endSession = { [arbiter, callIsActive] in Self.endSession(arbiter, callIsActive: callIsActive) }
     }
 
-    /// Speaks the line, then listens for `listenSeconds`. The window opens whether or not the sound could be played.
+    /// For tests: any speaker.
+    init(speaker: any ShannonReachOutSpeaking, arbiter: ShannonSpeechArbiter, callIsActive: @escaping @MainActor () -> Bool = { false }) {
+        self.speaker = speaker
+        self.arbiter = arbiter
+        self.callIsActive = callIsActive
+    }
+
+    /// Whether her line would be spoken if she said one now.
+    public var canSpeakNow: Bool { !isTaken && mayAnswerInVoice() }
+
+    private var isTaken: Bool { arbiter.isBusyForTouchLine || callIsActive() }
+    /// The same, not counting this line itself.
+    private var isTakenByOthers: Bool {
+        (arbiter.sessionInUse?() ?? false) || (arbiter.reachOutIsSpeaking?() ?? false) || callIsActive()
+    }
+
+    /// Speaks the line, then listens for `listenSeconds`. A line said with other people around is never spoken
+    /// and never listened for: the call that would hear his answer is an owner-alone conversation.
     public func say(_ line: ShannonBodyTouchCoordinator.Line) async {
-        guard !callIsActive() else { return }
-        _ = await speaker.speak(line.text, stillPrivate: { true })
+        guard line.audience == .owner, canSpeakNow else { return }
+        arbiter.touchLineIsActive = true
+        defer { arbiter.touchLineIsActive = false }
+        // Asked before the first sound, after the wait for the voice, and for every piece of sound.
+        let outcome = await speaker.speak(line.text) { [weak self] in
+            guard let self else { return false }
+            return !self.isTakenByOthers && self.mayAnswerInVoice()
+        }
         ShannonSpeechLevelPublisher.shared.end()
-        guard line.listenSeconds > 0, let listen, !callIsActive() else { return }
+        // Only a line that was said to its end is answered aloud; everything is asked once more before the microphone opens.
+        guard outcome == .spoken, line.listenSeconds > 0, let listen, !isTakenByOthers, mayAnswerInVoice() else { return }
         await listen(line, line.listenSeconds)
     }
 
+    /// The owner left the screen, switched her voice or the reporting off, or the app left the foreground.
     public func stop() {
         speaker.stop()
     }
+
+    private static func beginSession(_ arbiter: ShannonSpeechArbiter) throws {
+        // With the earphone standby in the app, it prepares the session and knows that a line is being said.
+        if let begin = arbiter.beginSpeech {
+            try begin()
+            return
+        }
+#if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        previous = (session.category, session.mode, session.categoryOptions)
+        try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try session.setActive(true)
+#endif
+    }
+
+    private static func endSession(_ arbiter: ShannonSpeechArbiter, callIsActive: @MainActor () -> Bool) {
+        if let end = arbiter.endSpeech {
+            end()
+            return
+        }
+#if os(iOS)
+        // Something else took the session meanwhile: it is theirs now.
+        guard !callIsActive(), !(arbiter.sessionInUse?() ?? false) else { return }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        if let previous {
+            try? session.setCategory(previous.category, mode: previous.mode, options: previous.options)
+        }
+        previous = nil
+#endif
+    }
+
+#if os(iOS)
+    /// What the session was before her line, without the standby: put back afterwards.
+    private static var previous: (category: AVAudioSession.Category, mode: AVAudioSession.Mode, options: AVAudioSession.CategoryOptions)?
+#endif
 }

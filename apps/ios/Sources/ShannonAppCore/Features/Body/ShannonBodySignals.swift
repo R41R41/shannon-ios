@@ -27,13 +27,28 @@ public enum ShannonBodyDoing: String, CaseIterable, Equatable, Sendable {
 public struct ShannonBodyAudienceRule: Equatable, Sendable {
     public static let holdSeconds: TimeInterval = 5 * 60
 
-    private var othersNow = false
-    private var othersUntil: Date?
+    public static let storageKey = "shannon.body.others-until"
 
-    public init() {}
+    private var othersNow = false
+    /// The end of the hold. Kept across a relaunch, so that closing the app does not make a friend disappear.
+    public private(set) var othersUntil: Date?
+
+    public init(othersUntil: Date? = nil) {
+        self.othersUntil = othersUntil
+    }
+
+    public init(defaults: UserDefaults) {
+        let stored = defaults.double(forKey: Self.storageKey)
+        self.init(othersUntil: stored > 0 ? Date(timeIntervalSince1970: stored) : nil)
+    }
+
+    public func save(to defaults: UserDefaults) {
+        defaults.set(othersUntil?.timeIntervalSince1970 ?? 0, forKey: Self.storageKey)
+    }
 
     public mutating func observe(othersMayBeListening: Bool, at now: Date) {
-        if othersNow, !othersMayBeListening { othersUntil = now.addingTimeInterval(Self.holdSeconds) }
+        // While someone is listening the hold is pushed on, so that an app that is closed mid-call still holds.
+        if othersMayBeListening || othersNow { othersUntil = now.addingTimeInterval(Self.holdSeconds) }
         othersNow = othersMayBeListening
     }
 
