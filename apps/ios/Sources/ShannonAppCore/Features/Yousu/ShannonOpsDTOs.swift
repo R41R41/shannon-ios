@@ -28,6 +28,8 @@ public enum ShannonOpsCommandType: String, Codable, Equatable, Sendable, CaseIte
 
 public enum ShannonOpsCommandStatus: String, Equatable, Sendable {
     case pending, claimed, done, failed, refused, expired
+    /// A state of a later server: not waited for, and not worded as anything it did not say.
+    case unknown
 
     /// Still waiting for its result; only then does the screen read again every few seconds.
     public var isOpen: Bool { self == .pending || self == .claimed }
@@ -231,7 +233,10 @@ public struct ShannonOpsSnapshotDTO: Decodable, Equatable, Sendable {
         runtime = (try? container.decodeIfPresent(Runtime.self, forKey: .runtime)) ?? Runtime(release: "", startedAt: "")
         services = (try? container.decode(ShannonLossyList<ShannonOpsServiceDTO>.self, forKey: .services))?.items ?? []
         minebot = (try? container.decode(ShannonLossyList<ShannonOpsMinebotDTO>.self, forKey: .minebot))?.items ?? []
-        schedules = (try? container.decode(ShannonLossyList<ShannonOpsScheduleDTO>.self, forKey: .schedules))?.items ?? []
+        // A schedule is addressed by its name: a second one of the same name could not be told apart.
+        var names = Set<String>()
+        schedules = ((try? container.decode(ShannonLossyList<ShannonOpsScheduleDTO>.self, forKey: .schedules))?.items ?? [])
+            .filter { names.insert($0.name).inserted }
         kpi = try? container.decodeIfPresent(ShannonOpsKPIDTO.self, forKey: .kpi)
         skills = (try? container.decode(ShannonLossyList<ShannonOpsSkillDTO>.self, forKey: .skills))?.items ?? []
     }
@@ -270,9 +275,9 @@ public struct ShannonOpsCommandDTO: Decodable, Equatable, Identifiable, Sendable
         // A type this app does not know is dropped by the lossy list: it cannot be worded.
         type = try container.decode(ShannonOpsCommandType.self, forKey: .type)
         target = try container.decode(String.self, forKey: .target)
-        // An unknown state is not waited for: it reads as failed rather than polling forever.
+        // An unknown state is not waited for (no polling forever) and is shown as 不明.
         let raw = try? container.decodeIfPresent(String.self, forKey: .status)
-        status = raw.flatMap(ShannonOpsCommandStatus.init(rawValue:)) ?? .failed
+        status = raw.flatMap(ShannonOpsCommandStatus.init(rawValue:)) ?? .unknown
         createdAt = (try? container.decodeIfPresent(String.self, forKey: .createdAt)) ?? ""
         expiresAt = (try? container.decodeIfPresent(String.self, forKey: .expiresAt)) ?? ""
         finishedAt = try? container.decodeIfPresent(String.self, forKey: .finishedAt)

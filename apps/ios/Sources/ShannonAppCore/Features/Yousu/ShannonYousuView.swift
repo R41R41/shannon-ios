@@ -15,6 +15,7 @@ public struct ShannonYousuView: View {
 
     @AppStorage(ShannonYousuSegment.storageKey) private var storedSegment = ShannonYousuSegment.now.rawValue
     @State private var forcedOps = false
+    @State private var didApplyRequest = false
     @Environment(\.colorScheme) private var colorScheme
 
     public init(
@@ -76,8 +77,12 @@ public struct ShannonYousuView: View {
         .navigationBarTitleDisplayMode(.inline)
 #endif
         .tint(palette.action)
-        .onAppear { apply(requested) }
-        .onChange(of: requested) { apply(requested) }
+        // Once: coming back from a pushed page must not undo the owner's own choice of segment.
+        .onAppear {
+            guard !didApplyRequest else { return }
+            didApplyRequest = true
+            apply(requested)
+        }
         // One read, so the switch can appear; the 運用 page does its own reading while it is on screen.
         .task {
             if !model.ops.didLoad { await model.ops.refresh() }

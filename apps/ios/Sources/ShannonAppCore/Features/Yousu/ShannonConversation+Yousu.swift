@@ -45,7 +45,11 @@ extension ShannonThreadListSheet {
     var yousuDestination: ShannonThreadListDestination {
         ShannonThreadListDestination(
             title: "ようす", symbol: "waveform.path.ecg", badge: nil, attention: yousu.needsAttention,
-            action: { showsYousu = true }
+            action: {
+                // The tile opens the remembered segment; only a link names one.
+                yousuSegment = nil
+                showsYousu = true
+            }
         )
     }
 

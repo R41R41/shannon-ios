@@ -75,10 +75,7 @@ public final class ShannonNowModel {
         guard let client, !isLoading else { return }
         isLoading = true
         errorMessage = nil
-        defer {
-            isLoading = false
-            didLoad = true
-        }
+        defer { isLoading = false }
         let scopeKey = scopeKey
         async let nowRead = Self.read { try await client.loadShannonNow(scopeKey: scopeKey) }
         async let ownTimeRead = Self.read { try await client.loadShannonOwnTime(scopeKey: scopeKey) }
@@ -86,6 +83,9 @@ public final class ShannonNowModel {
         async let activityRead = Self.read { try await client.loadShannonRecentActivity(scopeKey: scopeKey) }
         let (nowResult, ownTimeResult, studyResult, activityResult) = await (nowRead, ownTimeRead, studyRead, activityRead)
 
+        // The page went away mid-request: nothing was learned, nothing is claimed, and the next appearance reads again.
+        if case .cancelled = nowResult { return }
+        defer { didLoad = true }
         var failed = false
         switch nowResult {
         case .value(let value):
@@ -97,22 +97,26 @@ public final class ShannonNowModel {
             nowIsAvailable = false
         case .failed:
             failed = true
+        case .cancelled:
+            break
         }
         switch ownTimeResult {
         case .value(let value): ownTime = value
         case .absent: ownTime = nil
         case .failed: failed = true
+        case .cancelled: break
         }
         switch studyResult {
         case .value(let value): study = value
         case .absent: study = nil
         case .failed: failed = true
+        case .cancelled: break
         }
         switch activityResult {
         case .value(let value):
             latestActivity = value.days.flatMap(\.entries).filter { $0.actor == "shannon" }.max { $0.occurredAt < $1.occurredAt }
         case .absent: latestActivity = nil
-        case .failed: break
+        case .failed, .cancelled: break
         }
         if failed {
             errorMessage = didLoad
@@ -126,6 +130,7 @@ public final class ShannonNowModel {
         /// The server does not offer this read to this device.
         case absent
         case failed
+        case cancelled
     }
 
     private nonisolated static func read<Value: Sendable>(_ operation: @Sendable () async throws -> Value) async -> Read<Value> {
@@ -133,6 +138,8 @@ public final class ShannonNowModel {
             return .value(try await operation())
         } catch let error as ShannonAPIError where error == .rejected(status: 404) || error == .rejected(status: 403) {
             return .absent
+        } catch where ShannonOpsModel.isCancellation(error) {
+            return .cancelled
         } catch {
             return .failed
         }

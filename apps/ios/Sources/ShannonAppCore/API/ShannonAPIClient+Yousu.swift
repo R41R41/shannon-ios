@@ -19,6 +19,8 @@ public enum ShannonOpsSendOutcome: Equatable, Sendable {
     case accepted(ShannonOpsCommandDTO)
     /// The server refused it and recorded nothing.
     case refused(status: Int, code: String?)
+    /// The request could not be built: nothing left this device.
+    case notSent
     /// The request failed on the way: it may or may not have arrived.
     case unknownDelivery
     /// The server answered success in a shape this app cannot read.
@@ -57,7 +59,7 @@ extension ShannonAPIClient: ShannonYousuServing {
                 scopeKey: connection?.scopeKey ?? scopeKey, idempotencyKey: idempotencyKey, type: type, target: target
             ),
             connection: connection
-        ) else { return .unreadable }
+        ) else { return .notSent }
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else { return .unknownDelivery }
         guard (200..<300).contains(http.statusCode) else {

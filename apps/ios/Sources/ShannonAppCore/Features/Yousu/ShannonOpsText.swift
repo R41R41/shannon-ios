@@ -80,6 +80,7 @@ public enum ShannonOpsText {
         case .failed: "失敗"
         case .refused: "断られました"
         case .expired: "期限切れ"
+        case .unknown: "不明"
         }
     }
 
@@ -128,13 +129,19 @@ public enum ShannonOpsText {
 
     /// Minecraft servers the Minebot body can join: only the ones running now.
     public static func minebotServers(_ services: [ShannonOpsServiceDTO]) -> [ShannonOpsServiceDTO] {
-        services.filter { $0.id.hasPrefix(minecraftPrefix) && $0.status == .running }
+        services.filter { $0.id.hasPrefix(minecraftPrefix) && !isLabServer($0.id) && $0.status == .running }
+    }
+
+    /// Lab servers are never manageable (`docs/ops-contract.md`): `allowed.minecraft` does not cover them.
+    static func isLabServer(_ id: String) -> Bool {
+        id.hasPrefix("minecraft:progressive-lab-") || id.hasPrefix("progressive-lab-")
     }
 
     /// The controls for one service: only what the server said it would accept (`allowed`).
     /// A running one offers 停止, a stopped one 開始, and 不調 or 不明 both. The Minebot body
     /// is never started with a plain 開始: the screen offers 起動 with a server instead.
     public static func serviceActions(_ service: ShannonOpsServiceDTO, allowed: ShannonOpsAllowedDTO) -> [ShannonOpsAction] {
+        guard !isLabServer(service.id) else { return [] }
         let isServer = service.id.hasPrefix(minecraftPrefix)
         let canStart = service.id == minebotBody ? false : isServer ? allowed.minecraft : allowed.serviceStart.contains(service.id)
         let canStop = isServer ? allowed.minecraft : allowed.serviceStop.contains(service.id)
@@ -250,7 +257,10 @@ public enum ShannonOpsText {
     public static let unknownDelivery = "サーバーへ届いたか分かりません。下の「操作の記録」を確かめてから、必要ならもう一度押してください。"
     public static let staleBeforeSending = "報告が古くなったので、送りませんでした。報告が届いてから、もう一度どうぞ。"
     public static let noLongerAllowed = "いまは、この操作を受け付けていません。送りませんでした。"
-    public static let unreadableAnswer = "応答を読み取れませんでした。操作の記録を確かめてください。"
+    public static let unreadableAnswer = "サーバーは受け取りましたが、応答を読み取れませんでした。操作の記録を確かめてください。"
+    public static let notSentTitle = "送れませんでした"
+    public static let unknownDeliveryTitle = "届いたか分かりません"
+    public static let unreadableTitle = "応答を読み取れませんでした"
 }
 
 private extension Character {

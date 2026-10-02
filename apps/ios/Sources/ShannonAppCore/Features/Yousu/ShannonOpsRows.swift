@@ -98,13 +98,18 @@ struct ShannonOpsRow: View {
         }
         ForEach(actions) { action in
             let label = ShannonOpsText.commandLabel(action.type)
-            Button(label) { choose(action) }
+            Button { choose(action) } label: {
+                // The label itself is 44 points tall, so the whole capsule is the target.
+                Text(label)
+                    .lineLimit(1)
+                    .frame(minHeight: 44 - 14)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+            }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.capsule)
                 .tint(action.type == .serviceStop || action.type == .minecraftStop ? palette.textSecondary : palette.action)
-                .lineLimit(1)
                 .fixedSize()
-                .frame(minHeight: 44)
                 .accessibilityLabel("\(action.type == .scheduleRun ? "予定「\(title)」" : title) を\(label)")
                 .accessibilityHint("確認の画面を開きます")
         }
@@ -211,6 +216,7 @@ struct ShannonOpsCommandRow: View {
         case .failed: "xmark"
         case .refused: "hand.raised"
         case .expired: "clock.badge.xmark"
+        case .unknown: "questionmark"
         }
     }
 
@@ -219,6 +225,7 @@ struct ShannonOpsCommandRow: View {
         case .pending, .claimed: palette.action
         case .done: palette.textSecondary
         case .failed, .refused, .expired: palette.attention
+        case .unknown: palette.textSecondary
         }
     }
 }

@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// The two halves of 「ようす」.
 public enum ShannonYousuSegment: String, CaseIterable, Identifiable, Sendable {
@@ -60,6 +63,18 @@ public enum ShannonYousuLink {
     }
 
     @MainActor private static var pending: Request?
+}
+
+/// Whether the app is in front, asked of the system itself.
+@MainActor
+enum ShannonYousuForeground {
+    static var isActive: Bool {
+#if canImport(UIKit) && !os(watchOS)
+        UIApplication.shared.applicationState == .active
+#else
+        true
+#endif
+    }
 }
 
 public extension Notification.Name {

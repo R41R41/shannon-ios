@@ -107,7 +107,9 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertFalse(view.allowed.minebotStart)
         // An unknown state is not waited for; a command of an unknown type is dropped.
         XCTAssertEqual(view.commands.map(\.id), ["a"])
-        XCTAssertEqual(view.commands.first?.status, .failed)
+        XCTAssertEqual(view.commands.first?.status, .unknown)
+        XCTAssertFalse(view.commands[0].status.isOpen)
+        XCTAssertEqual(ShannonOpsText.commandStatusLabel(.unknown), "不明")
     }
 
     func testTheRecordHoldsTwentyCommands() throws {
@@ -190,7 +192,77 @@ final class ShannonYousuOpsTests: XCTestCase {
         // A confirmation that stayed open sends nothing.
         await model.send(stop)
         XCTAssertTrue(client.sent.isEmpty)
-        XCTAssertEqual(model.notice, .problem(ShannonOpsText.staleBeforeSending))
+        XCTAssertEqual(model.notice, .problem(title: "送れませんでした", message: ShannonOpsText.staleBeforeSending))
+    }
+
+    @MainActor
+    func testAgeIsCountedOnThisDeviceWhenTheServersClockIsMissingAndAnUnreadableTimeIsStale() async throws {
+        // No Date header: the report was received 170 seconds before this device read it.
+        let client = FakeYousuClient()
+        client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
+        let clock = TestClock()
+        clock.date = ShannonYousuTime.date("2026-10-03T07:00:00.000Z")!.addingTimeInterval(170)
+        let model = ShannonOpsModel(scopeKey: "owner", client: client, clock: { clock.date })
+        await model.refresh()
+        XCTAssertTrue(model.isCurrent())
+        clock.date.addTimeInterval(11)
+        XCTAssertFalse(model.isCurrent())
+        XCTAssertEqual(model.allowed(), .nothing)
+
+        let unreadable = try decode(#"{ "stale": false, "commandsSupported": true, "receivedAt": "sometime", "allowed": { "serviceStart": [], "serviceStop": ["twitter"], "minecraft": false, "scheduleRun": false }, "snapshot": { "services": [ { "id": "twitter", "status": "running" } ] } }"#)
+        let (undated, _, _) = await loaded(unreadable)
+        XCTAssertFalse(undated.isCurrent())
+        XCTAssertEqual(undated.actions(for: undated.snapshot!.services[0]), [])
+    }
+
+    func testLabServersAreNeverOffered() throws {
+        let allowed = ShannonOpsAllowedDTO(serviceStart: ["minecraft:progressive-lab-a"], serviceStop: ["minecraft:progressive-lab-a"], minecraft: true, scheduleRun: true, minebotStart: true)
+        let lab = ShannonOpsServiceDTO(id: "minecraft:progressive-lab-a", status: .running)
+        XCTAssertEqual(ShannonOpsText.serviceActions(lab, allowed: allowed), [])
+        XCTAssertEqual(ShannonOpsText.serviceActions(.init(id: "minecraft:progressive-lab-b", status: .stopped), allowed: allowed), [])
+        XCTAssertEqual(ShannonOpsText.minebotServers([lab, .init(id: "minecraft:main", status: .running)]).map(\.id), ["minecraft:main"])
+    }
+
+    @MainActor
+    func testACancelledReadClaimsNothingAndAnUnreachableServerIsNotPolledFast() async throws {
+        let (model, client, _) = await loaded(try current(commands: #"[{ "id": "a", "type": "service.stop", "target": "twitter", "status": "pending" }]"#))
+        XCTAssertEqual(model.pollInterval, .seconds(3))
+        client.loadError = URLError(.cancelled)
+        await model.refresh()
+        XCTAssertNil(model.unreachableMessage)
+        XCTAssertTrue(model.isCurrent())
+        client.loadError = URLError(.timedOut)
+        await model.refresh()
+        XCTAssertNotNil(model.unreachableMessage)
+        XCTAssertEqual(model.pollInterval, .seconds(30))
+
+        let fresh = ShannonOpsModel(scopeKey: "owner", client: client)
+        client.loadError = CancellationError()
+        await fresh.refresh()
+        XCTAssertFalse(fresh.didLoad)
+        XCTAssertNil(fresh.unreachableMessage)
+    }
+
+    @MainActor
+    func testAnAcceptedCommandWaitsEvenBeforeTheRecordShowsIt() async throws {
+        let (model, client, clock) = await loaded(try current())
+        let stop = ShannonOpsAction(type: .serviceStop, target: "twitter", name: "X（Twitter）")
+        client.outcome = .accepted(.init(id: "cmd-9", type: .serviceStop, target: "twitter", status: .pending, createdAt: ""))
+        // The reading after the send still predates the command.
+        await model.send(stop)
+        XCTAssertTrue(model.commands.isEmpty)
+        XCTAssertTrue(model.isWaiting(target: "twitter"))
+        XCTAssertEqual(model.actions(for: model.snapshot!.services[1]), [])
+        XCTAssertFalse(model.canSend(stop))
+        XCTAssertEqual(model.pollInterval, .seconds(3))
+        // It is not waited for beyond the time it may be claimed in.
+        clock.date.addTimeInterval(301)
+        XCTAssertFalse(model.isWaiting(target: "twitter"))
+    }
+
+    func testSchedulesOfOneNameAreOne() throws {
+        let view = try decode(#"{ "stale": false, "commandsSupported": true, "receivedAt": "2026-10-03T07:00:00.000Z", "snapshot": { "services": [], "schedules": [ { "name": "朝", "time": "08:00" }, { "name": "朝", "time": "09:00" } ] } }"#)
+        XCTAssertEqual(view.snapshot?.schedules, [.init(name: "朝", time: "08:00")])
     }
 
     @MainActor
@@ -208,7 +280,7 @@ final class ShannonYousuOpsTests: XCTestCase {
             await model.send(action)
         }
         XCTAssertTrue(client.sent.isEmpty)
-        XCTAssertEqual(model.notice, .problem(ShannonOpsText.noLongerAllowed))
+        XCTAssertEqual(model.notice, .problem(title: "送れませんでした", message: ShannonOpsText.noLongerAllowed))
         XCTAssertTrue(model.canSend(.init(type: .minebotStart, target: "minecraft:main", name: "x")))
         XCTAssertTrue(model.canSend(.init(type: .scheduleRun, target: "朝の占い", name: "朝の占い", postedToday: true)))
     }
@@ -233,15 +305,19 @@ final class ShannonYousuOpsTests: XCTestCase {
 
         client.outcome = .refused(status: 409, code: "OPS_STALE")
         await model.send(stop)
-        XCTAssertEqual(model.notice, .problem("旧ランタイムからの報告が届いていないので、操作を受け付けられません。"))
+        XCTAssertEqual(model.notice, .problem(title: "送れませんでした", message: "旧ランタイムからの報告が届いていないので、操作を受け付けられません。"))
 
         client.outcome = .refused(status: 500, code: nil)
         await model.send(stop)
-        XCTAssertEqual(model.notice, .problem("操作が受け付けられませんでした（500）。"))
+        XCTAssertEqual(model.notice, .problem(title: "送れませんでした", message: "操作が受け付けられませんでした（500）。"))
 
         client.outcome = .unknownDelivery
         await model.send(stop)
-        XCTAssertEqual(model.notice, .problem(ShannonOpsText.unknownDelivery))
+        // What may have arrived is never called "not sent".
+        XCTAssertEqual(model.notice, .problem(title: "届いたか分かりません", message: ShannonOpsText.unknownDelivery))
+        client.outcome = .unreadable
+        await model.send(stop)
+        XCTAssertEqual(model.notice, .problem(title: "応答を読み取れませんでした", message: ShannonOpsText.unreadableAnswer))
 
         // Accepted: the result is whatever the record says on the next reading.
         let accepted = ShannonOpsCommandDTO(id: "cmd-1", type: .serviceStop, target: "twitter", status: .pending, createdAt: "2026-10-03T07:00:10.000Z")
@@ -263,8 +339,8 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertEqual(model.pollInterval, .seconds(30))
 
         // One press, one key; a failed delivery was not sent again.
-        XCTAssertEqual(client.sent.count, 4)
-        XCTAssertEqual(Set(client.sent.map(\.key)).count, 4)
+        XCTAssertEqual(client.sent.count, 5)
+        XCTAssertEqual(Set(client.sent.map(\.key)).count, 5)
     }
 
     @MainActor

@@ -53,7 +53,8 @@ public struct ShannonOpsView: View {
     private func poll() async {
         guard scenePhase == .active else { return }
         while !Task.isCancelled {
-            await model.refresh()
+            // The scene phase seen inside a sheet is not trusted alone: nothing is read while the app is not in front.
+            if ShannonYousuForeground.isActive { await model.refresh() }
             do { try await Task.sleep(for: model.pollInterval) } catch { return }
         }
     }
@@ -214,8 +215,8 @@ public struct ShannonOpsView: View {
     @ViewBuilder
     private func notice(palette: ShannonPalette) -> some View {
         switch model.notice {
-        case .problem(let message):
-            ShannonOpsNoticeLine(symbol: "exclamationmark.circle", tint: palette.danger, title: "送れませんでした", message: message) {
+        case .problem(let title, let message):
+            ShannonOpsNoticeLine(symbol: "exclamationmark.circle", tint: palette.danger, title: title, message: message) {
                 model.dismissNotice()
             }
         case .accepted:

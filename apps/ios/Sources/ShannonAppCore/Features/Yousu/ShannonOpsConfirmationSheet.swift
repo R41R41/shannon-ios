@@ -22,7 +22,9 @@ struct ShannonOpsConfirmationSheet: View {
     private var action: ShannonOpsAction {
         let original = confirmation.action
         guard original.type == .minebotStart,
-              let server = servers.first(where: { $0.id == (chosenServerID ?? original.target) }) else { return original }
+              // A chosen server that stopped running meanwhile falls back to the one the sheet was opened for.
+              let server = servers.first(where: { $0.id == chosenServerID }) ?? servers.first(where: { $0.id == original.target })
+        else { return original }
         return ShannonOpsAction(type: .minebotStart, target: server.id, name: ShannonOpsText.serviceName(server))
     }
 
@@ -114,7 +116,7 @@ struct ShannonOpsConfirmationSheet: View {
                 .foregroundStyle(palette.textSecondary)
             Spacer(minLength: ShannonSpacing.small)
             Picker("入るサーバー", selection: Binding(
-                get: { chosenServerID ?? confirmation.action.target },
+                get: { action.target },
                 set: { chosenServerID = $0 }
             )) {
                 ForEach(servers) { server in
@@ -123,6 +125,7 @@ struct ShannonOpsConfirmationSheet: View {
             }
             .pickerStyle(.menu)
             .labelsHidden()
+            .frame(minHeight: 44)
             .accessibilityLabel("Minebot の体を入らせる Minecraft サーバー")
         }
         .padding(.horizontal, ShannonSpacing.medium)

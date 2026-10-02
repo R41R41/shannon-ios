@@ -154,6 +154,16 @@ final class ShannonYousuNowTests: XCTestCase {
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems), "感想 1・判断 2")
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems + [.init(id: "t", kind: .approval, title: "t", detail: "d")]), "感想 1・判断 2・許可 1")
 
+        // A reading that was cancelled (the page went away) claims nothing.
+        client.now = .failure(URLError(.cancelled))
+        await model.reload()
+        XCTAssertEqual(model.timeline.count, 8)
+        XCTAssertNil(model.errorMessage)
+        let fresh = ShannonNowModel(scopeKey: "owner", client: client)
+        await fresh.reload()
+        XCTAssertFalse(fresh.didLoad)
+        XCTAssertNil(fresh.errorMessage)
+
         // A reading that fails keeps what was shown and says so.
         client.now = .failure(URLError(.timedOut))
         await model.reload()

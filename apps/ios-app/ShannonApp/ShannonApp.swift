@@ -124,8 +124,8 @@ struct ShannonApp: App {
                     connectionModel.beforeDisconnect = { [calendarSharingModel] in
                         await calendarSharingModel.removeBeforeUnpairing()
                     }
-                    if let url = ShannonAppDelegate.takePendingConnectionURL(), !ShannonYousuLink.open(url) {
-                        await connectionModel.connect(using: url)
+                    if let url = ShannonAppDelegate.takePendingConnectionURL() {
+                        if !ShannonYousuLink.open(url) { await connectionModel.connect(using: url) }
                     } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
                         await connectionModel.pair(code: code)
                     }

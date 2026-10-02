@@ -18,8 +18,8 @@ public final class ShannonOpsModel {
     public enum Notice: Equatable, Sendable {
         /// Recorded by the server; the row of `commands` with this id says how it went.
         case accepted(ShannonOpsCommandDTO)
-        /// Not sent, refused, or of unknown delivery: one neutral sentence.
-        case problem(String)
+        /// Not sent, refused, or of unknown delivery: what is known, and one neutral sentence.
+        case problem(title: String, message: String)
     }
 
     public private(set) var view: ShannonOpsViewDTO?
@@ -37,6 +37,9 @@ public final class ShannonOpsModel {
     private let clock: @Sendable () -> Date
     private var fetchedAt: Date?
     private var ageAtFetch: TimeInterval = 0
+    private var acceptedAt: Date?
+    /// Set when a reading was asked for while another was in flight: one more follows it.
+    private var needsAnotherRead = false
 
     public init(
         scopeKey: String = "local-owner",
@@ -75,10 +78,23 @@ public final class ShannonOpsModel {
 
     public var commandsSupported: Bool { view?.commandsSupported == true }
     public var commands: [ShannonOpsCommandDTO] { view?.commands ?? [] }
-    public var openCommands: [ShannonOpsCommandDTO] { commands.filter(\.status.isOpen) }
+
+    /// Commands that await their result: the open ones of the record, and the one just accepted
+    /// until a reading of the record contains it (and no longer than the time it may be claimed in).
+    public var openCommands: [ShannonOpsCommandDTO] {
+        var open = commands.filter(\.status.isOpen)
+        if case .accepted(let accepted) = notice, accepted.status.isOpen, !commands.contains(where: { $0.id == accepted.id }),
+           let acceptedAt, clock().timeIntervalSince(acceptedAt) < Self.claimSeconds {
+            open.append(accepted)
+        }
+        return open
+    }
 
     /// Read every 30 seconds while the screen is visible, every 3 while a command awaits its result.
-    public var pollInterval: Duration { openCommands.isEmpty ? .seconds(30) : .seconds(3) }
+    /// While the server does not answer, nothing is waited for faster than the normal interval.
+    public var pollInterval: Duration {
+        unreachableMessage == nil && !openCommands.isEmpty ? .seconds(3) : .seconds(30)
+    }
 
     /// Something on the screen deserves a look: a report that stopped arriving, or a service that is not well.
     public var needsAttention: Bool {
@@ -140,12 +156,21 @@ public final class ShannonOpsModel {
     // MARK: Reading and sending
 
     public func refresh() async {
-        guard let client, !isLoading else { return }
-        isLoading = true
-        defer {
-            isLoading = false
-            didLoad = true
+        guard let client else { return }
+        guard !isLoading else {
+            // The reading in flight may predate what the caller wants to see.
+            needsAnotherRead = true
+            return
         }
+        isLoading = true
+        defer { isLoading = false }
+        repeat {
+            needsAnotherRead = false
+            await read(client)
+        } while needsAnotherRead && !Task.isCancelled
+    }
+
+    private func read(_ client: any ShannonYousuServing) async {
         do {
             let reading = try await client.loadOps(scopeKey: scopeKey)
             let readAt = clock()
@@ -154,23 +179,37 @@ public final class ShannonOpsModel {
             ageAtFetch = Self.age(of: reading, readAt: readAt)
             isSupported = true
             unreachableMessage = nil
+            didLoad = true
+        } catch where Self.isCancellation(error) {
+            // The screen went away mid-request. Nothing was learned, and nothing is claimed.
+            return
         } catch let error as ShannonAPIError where error == .rejected(status: 404) {
             // An older server has no operations console. The screen is not offered.
             isSupported = false
             view = nil
+            didLoad = true
         } catch let error as ShannonAPIError where error == .rejected(status: 401) {
             unreachableMessage = "接続が無効になりました。もう一度接続してください。"
+            didLoad = true
         } catch {
             unreachableMessage = "シャノンのサーバーに届きませんでした。サーバーが止まっているか、通信ができていません。"
+            didLoad = true
         }
     }
+
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled
+    }
+
+    /// A command that was not claimed in this time is expired by the server (`docs/ops-contract.md`).
+    private static let claimSeconds: TimeInterval = 300
 
     /// Asks for one operation. The caller has shown the confirmation; this checks once more
     /// that the command is still offered, sends it once, and reads the status again.
     public func send(_ action: ShannonOpsAction) async {
         guard let client, !isSending else { return }
         guard canSend(action) else {
-            notice = .problem(isCurrent() ? ShannonOpsText.noLongerAllowed : ShannonOpsText.staleBeforeSending)
+            notice = .problem(title: ShannonOpsText.notSentTitle, message: isCurrent() ? ShannonOpsText.noLongerAllowed : ShannonOpsText.staleBeforeSending)
             return
         }
         isSending = true
@@ -179,10 +218,17 @@ public final class ShannonOpsModel {
         )
         isSending = false
         switch outcome {
-        case .accepted(let command): notice = .accepted(command)
-        case .refused(let status, let code): notice = .problem(ShannonOpsText.refusal(status: status, code: code))
-        case .unknownDelivery: notice = .problem(ShannonOpsText.unknownDelivery)
-        case .unreadable: notice = .problem(ShannonOpsText.unreadableAnswer)
+        case .accepted(let command):
+            acceptedAt = clock()
+            notice = .accepted(command)
+        case .refused(let status, let code):
+            notice = .problem(title: ShannonOpsText.notSentTitle, message: ShannonOpsText.refusal(status: status, code: code))
+        case .notSent:
+            notice = .problem(title: ShannonOpsText.notSentTitle, message: ShannonOpsText.refusal(status: 400, code: "INVALID_REQUEST"))
+        case .unknownDelivery:
+            notice = .problem(title: ShannonOpsText.unknownDeliveryTitle, message: ShannonOpsText.unknownDelivery)
+        case .unreadable:
+            notice = .problem(title: ShannonOpsText.unreadableTitle, message: ShannonOpsText.unreadableAnswer)
         }
         await refresh()
     }
@@ -191,11 +237,11 @@ public final class ShannonOpsModel {
         notice = nil
     }
 
-    /// How old the report already was when it was read, on the server's own clock.
+    /// How old the report already was when it was read: on the server's own clock when the answer carried it,
+    /// otherwise on this device's. A report whose time cannot be read is not called current.
     private static func age(of reading: ShannonOpsReading, readAt: Date) -> TimeInterval {
-        guard let receivedAt = reading.view.receivedAt.flatMap(ShannonYousuTime.date),
-              let serverDate = reading.serverDate else { return 0 }
-        return max(0, serverDate.timeIntervalSince(receivedAt))
+        guard let receivedAt = reading.view.receivedAt.flatMap(ShannonYousuTime.date) else { return .infinity }
+        return max(0, (reading.serverDate ?? readAt).timeIntervalSince(receivedAt))
     }
 }
 
