@@ -176,7 +176,8 @@ export function noteShannonFeeling(
   if (isMoodLikeEmotion(feeling.primary) && feeling.intensity >= RULE.moodFrom) {
     const existing = list.find(item => item.kind === feeling.primary && item.target === feeling.target);
     const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
-    if (feeling.intensity > present) {
+    // A feeling she merely went on having is committed at the strength it was read at, a moment earlier: that is not a new height.
+    if (feeling.intensity > present + 0.02) {
       const strength = clamp(feeling.intensity, 0, 1);
       const noted: ShannonLingeringFeeling = {
         kind: feeling.primary, target: feeling.target, cause: existing?.cause ?? feeling.cause,
