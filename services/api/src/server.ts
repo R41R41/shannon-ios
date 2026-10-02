@@ -63,6 +63,7 @@ import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
+import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -95,6 +96,12 @@ const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
 const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(scopeKey), now, tasks: voyagerCatalog });
 const reachOuts = new SQLiteReachOutSpeaker(configuredDatabasePath());
 const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
+// Whether only the owner can hear one of his apps now, and which surface then says a message she started on her own
+// (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it; ..._REACH_OUTS=off keeps the state and stops the speaking.
+const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now, {
+  reports: reachOutReports, reportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0,
+  isBody: (scopeKey, deviceId) => bodyStore.capabilities(scopeKey, deviceId) !== null,
+});
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel,
@@ -130,7 +137,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore) },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), appLook: configuredAppLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: (scopeKey, deviceId) => privateListeningRoute.reachOuts.bodyPresence(scopeKey, deviceId, reachOuts.pending(scopeKey)), reachOutReports: privateListeningRoute.bodyReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -269,6 +276,7 @@ const server = createServer(async (request, response) => {
       handlePushRegistration(request, response, body, principal, { deviceAuth, pushStore });
       return;
     }
+    if (privateListeningRoute.handle(request, response, url, body, principal)) return;
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
     if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
@@ -292,7 +300,9 @@ const server = createServer(async (request, response) => {
         body: principal ? bindScope(body, principal.scopeKey) : body,
         ...(principal ? { deviceId: principal.deviceId } : {}),
       });
-      if (result) sendJson(response, result.status, result.body);
+      // Her body is not handed a message of hers that one of the owner's apps says through his earphones.
+      const forBody = result && principal && request.method === 'GET' && url.pathname === '/v1/initiatives';
+      if (result) sendJson(response, result.status, forBody ? privateListeningRoute.reachOuts.bodyInitiatives(principal.scopeKey, principal.deviceId, result.body) : result.body);
     } finally {
       if (isPairedChat) activeChats -= 1;
     }
@@ -343,6 +353,7 @@ function shutdown(): void {
     bodyStore.close();
     reachOuts.close();
     reachOutReports.close();
+    privateListeningRoute.close();
     ownerTurns.close();
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();

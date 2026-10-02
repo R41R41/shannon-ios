@@ -43,7 +43,7 @@ export interface ShannonBodyOptions {
   /** Looking through the camera of the app a turn came from (`appLook.ts`): its table and switch, the model call, and where her message is stored. */
   appLook?: AppLookOptions;
   /** Messages she started on her own that the owner has not read (`reachOutDelivery.ts`); absent, presence has no `reachOut`. */
-  reachOuts?: (scopeKey: string) => { pending: number; latestId?: string };
+  reachOuts?: (scopeKey: string, deviceId: string) => { pending: number; latestId?: string };
   /** What the body did with a message of hers, and when it last read presence (`reachOutReports.ts`); absent, the report route answers 404. */
   reachOutReports?: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
   /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero. Off, no report is taken and no presence read is noted for the loop. Unset means on. */
@@ -274,7 +274,7 @@ export class ShannonBody {
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },
       capabilities: this.store.capabilities(scopeKey, deviceId),
       ...(looking.look !== undefined ? { look: looking.look } : {}),
-      ...this.reachOut(scopeKey),
+      ...this.reachOut(scopeKey, deviceId),
     };
     const etag = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
     const key = `${scopeKey}\u0000${deviceId}`;
@@ -338,8 +338,8 @@ export class ShannonBody {
     } catch { /* presence is still answered */ }
   }
 
-  private reachOut(scopeKey: string): { reachOut?: { pending: number; latestId?: string } } {
-    try { return this.dependencies.reachOuts ? { reachOut: this.dependencies.reachOuts(scopeKey) } : {}; } catch { return {}; }
+  private reachOut(scopeKey: string, deviceId: string): { reachOut?: { pending: number; latestId?: string } } {
+    try { return this.dependencies.reachOuts ? { reachOut: this.dependencies.reachOuts(scopeKey, deviceId) } : {}; } catch { return {}; }
   }
 
   /** Who can see or hear the body, as it says on a presence read. Written when it changes, otherwise at most every thirty seconds. */
