@@ -82,7 +82,7 @@ export interface ChatResponse {
   state: CompanionStateSnapshot;
   artifacts?: ShannonGeneratedArtifact[];
   /** She looks through the app's camera now: the app captures one frame and answers `POST /v1/app/looks/{id}` before `expiresAt`. */
-  appLook?: { id: string; camera: 'back' | 'front'; expiresAt: string };
+  appLook?: { id: string; camera: 'back' | 'front'; expiresAt: string; lifetimeSeconds: number };
   uiBlocks?: Array<{
     type: 'agent_task_proposal';
     proposalId: string;

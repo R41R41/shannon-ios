@@ -31,6 +31,9 @@ type Turn = Parameters<typeof voiceRoomLookTurn>[1] & {
   guest: boolean;
 };
 
+/** The owner's plain request through the app, as the whole utterance: 「これ見れる？」「ねえ、これ見える？」「ここ見て」. */
+const PLAIN_APP_ASK = /^(?:ねえ|ねぇ|シャノン|ちょっと)*(?:これ|ここ|こっち|これって|ここって)(?:が|は|を)?(?:見れる|見れます|見える|見えます|見えてる|見られる|見て|見てみて|見てよ|見てくれる)(?:かな|か|の)?$/u;
+
 const viaBody = (turn: VoiceRoomLookTurn): VoiceLookTurn => ({ prompt: turn.prompt, open: turn.open, cutOff: turn.cutOff, ask: () => ({}) });
 
 export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environment: Readonly<Record<string, string | undefined>> = process.env): VoiceLookTurn {
@@ -50,9 +53,14 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     };
     const guarded = turn.audience !== 'owner';
     const score = turn.decision.roomLookProbability;
-    // With other people there the gateway's judgement may confirm a request, and never opens a look by itself.
-    const chosen = voiceRoomLookTurn({ voiceTurn: () => state },
-      guarded && score !== undefined ? { ...turn, decision: { ...turn.decision, roomLookProbability: Math.min(score, 0.99) } } : turn,
+    // With other people there, whose words they were is uncertain: a model tier has to agree that a look is asked for
+    // (words alone open nothing), and its judgement never opens a look by itself.
+    if (guarded && score === undefined && !app.unavailable) return { prompt: '', open: () => false, cutOff: () => undefined, ask: () => ({}) };
+    // Alone with her, 「これ見れる？」 said as the whole utterance is a request even when no model tier answered.
+    const plain = !guarded && score === undefined && PLAIN_APP_ASK.test(turn.transcript.normalize('NFKC').replace(/[\s、。，,.!！?？…]/gu, ''));
+    const decided = plain ? { ...turn, decision: { ...turn.decision, roomLookProbability: 1 } }
+      : guarded && score !== undefined ? { ...turn, decision: { ...turn.decision, roomLookProbability: Math.min(score, 0.99) } } : turn;
+    const chosen = voiceRoomLookTurn({ voiceTurn: () => state }, decided,
       { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on', ...(guarded ? { SHANNON_VOICE_ROOM_LOOK_THRESHOLD: '1' } : {}) });
     if (app.unavailable) {
       // The app cannot look now. Her body may, under its own rules; when neither can, the app's reason is the true one for this turn.

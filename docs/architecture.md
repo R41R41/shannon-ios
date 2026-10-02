@@ -289,6 +289,8 @@ Live2D and animated widgets remain future work. Current dialogue mode and Gemini
 
 Background voice activation remains deliberately later work. A call starts only from an explicit user tap and continues with the microphone in the background until explicit end or a system audio interruption that cannot resume. Sheet dismissal is minimization, not microphone shutdown.
 
+- **Looking through the camera** (`Features/Look/`; owner decision 2026-10-02). Each text turn and each owner voice turn says what the camera can do (`ShannonAppLookAvailability`: the owner's switch, the foreground, the hardware, the system permission). When the response carries `appLook`, `ShannonAppLookCoordinator` takes one frame of video with the asked camera (`ShannonAppLookCameraCapture`: no preview, no tap, no shutter sound, the call's audio session untouched), downsizes it to at most 960 pixels and 400,000 bytes in memory, shows 「いま見ました」 with a thumbnail for four seconds on the frontmost surface, and answers `POST /v1/app/looks/{id}`. The frame exists only for that request; the thumbnail is dropped with the sign. In the Talk her message is appended; in a call it is spoken behind the reply through the same segment path, so the echo guard knows it. Nothing is captured when the app is not active, when the switch 「会話中にシャノンがカメラで見る」 is off, when the ask has expired, or in 「友人も一緒」 (which sends no camera state). The first look shows an explanation before the system's camera prompt. The Mac app uses the same code for text turns with its one camera.
+
 ## macOS experience
 
 - `apps/macos-app` is a separate native macOS application target inside the Shannon repository. It is another client for the same Shannon product, not a separate personality, backend, or data store.

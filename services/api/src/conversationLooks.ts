@@ -30,7 +30,7 @@ export interface VoiceLooks {
   app: Pick<AppLooks, 'turn'>;
   /** The app of this request, when it said that it has a camera to offer. */
   client: AppLookClient | null;
-  /** Spread into the voice router's input: the app's questions are asked in place of the body's. */
+  /** Spread into the voice router's input: the app's questions are asked in place of the body's, only while the app can look. */
   routing: { appLook?: true };
 }
 
@@ -80,6 +80,6 @@ export class ConversationLooks implements VoiceLooks {
   of(request: { deviceId?: string; body?: unknown }): VoiceLooks {
     let client: AppLookClient | null = null;
     try { client = appLookClient(request.deviceId, appLookField(request.body)); } catch { client = null; }
-    return { of: next => this.of(next), body: this.body, app: this.app, client, routing: client && this.app.enabled ? { appLook: true } : {} };
+    return { of: next => this.of(next), body: this.body, app: this.app, client, routing: client && this.app.enabled && (client.state === 'ready' || client.state === 'undetermined') ? { appLook: true } : {} };
   }
 }

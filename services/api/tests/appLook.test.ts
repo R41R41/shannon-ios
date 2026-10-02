@@ -161,7 +161,7 @@ describe('a text turn from the app', () => {
     expect(turn.body.systemPrompt).toContain(APP_LOOK_OFFER_PROMPT);
     expect(APP_LOOK_OFFER_PROMPT).toContain('必ず見る');
     const ask = turn.body.appLook!;
-    expect(ask).toMatchObject({ camera: 'back', expiresAt: new Date(Date.parse(START) + APP_LOOK_LIMITS.lifetimeMilliseconds).toISOString() });
+    expect(ask).toMatchObject({ camera: 'back', lifetimeSeconds: 30, expiresAt: new Date(Date.parse(START) + APP_LOOK_LIMITS.lifetimeMilliseconds).toISOString() });
     expect(h.store.get(scope, ask.id)).toMatchObject({ deviceId: 'iphone', threadId: turn.body.threadId, camera: 'back', announced: true, guarded: false, outcome: 'pending' });
 
     const answered = await h.answer(ask.id);
@@ -259,7 +259,11 @@ describe('a text turn from the app', () => {
   it('treats a camera the system has not asked about yet as available: the first ask brings the prompt', async () => {
     const h = harness();
     h.model.appLook = 'asked_back';
-    expect((await h.chat('これ見れる？', { state: 'undetermined', cameras: ['back', 'front'], platform: 'ios' })).body.appLook).toBeTruthy();
+    const ask = (await h.chat('これ見れる？', { state: 'undetermined', cameras: ['back', 'front'], platform: 'ios' })).body.appLook!;
+    // He reads an explanation and answers the system first: the ask stays open for ninety seconds, not thirty.
+    expect(ask).toMatchObject({ lifetimeSeconds: 90, expiresAt: new Date(Date.parse(START) + 90_000).toISOString() });
+    h.advance(60 * SECOND);
+    expect((await h.answer(ask.id)).status).toBe(200);
   });
 
   it('reads a malformed appLook field as none, and a device without a camera as unable', async () => {
@@ -375,6 +379,7 @@ describe('POST /v1/app/looks/{id}', () => {
     const h = harness();
     const { id } = await open(h);
     expect((await h.answer(id, seen(), 'another-phone')).body).toMatchObject({ error: 'LOOK_NOT_YOURS' });
+    expect((await h.api.dispatch({ method: 'POST', path: `/v1/app/looks/${id}`, body: { scopeKey: 'someone-else', ...seen() }, deviceId: 'iphone' })).status).toBe(404);
     expect(h.viewer.calls).toEqual([]);
     expect((await h.answer(id)).status).toBe(200);
     expect((await h.answer(id)).body).toMatchObject({ error: 'LOOK_ALREADY_ANSWERED' });
@@ -504,6 +509,40 @@ describe('a voice turn from the app', () => {
     const off = await h.say('これ見れる？', null, {}, { appLook: { state: 'switched_off', cameras: ['back'], platform: 'ios' } });
     expect(off.body.appLook).toBeUndefined();
     expect(off.prompt).toContain(appLookUnavailablePrompt('switched_off', 'ios'));
+  });
+
+  it('takes his plain request as the whole utterance even when no model tier answered, alone with her only', async () => {
+    for (const words of ['これ見れる？', 'ねえ、これ見える？', 'ここ見て。']) {
+      const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+      const turn = await h.say(words);
+      expect(turn.body.appLook, words).toBeTruthy();
+      expect(turn.prompt, words).toContain(voiceAppLookPrompt(true, 'back'));
+    }
+    const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    for (const words of ['これ見て思ったんだけど、あの映画よかったね。', 'シャノン、これ見れる？']) {
+      const turn = await h.say(words, READY, {}, words.startsWith('シャノン') ? { companionPresent: true } : {});
+      expect(turn.body.appLook, words).toBeUndefined();
+    }
+    expect(h.store.waiting(scope)).toEqual([]);
+  });
+
+  it('opens nothing on words alone with someone beside the owner: a model tier has to agree', async () => {
+    const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    for (const words of ['シャノン、私のこと見える？', 'シャノン、カメラ使っていいよ。']) {
+      const turn = await h.say(words, READY, {}, { companionPresent: true });
+      expect(turn.body.appLook, words).toBeUndefined();
+    }
+    expect(h.store.waiting(scope)).toEqual([]);
+  });
+
+  it('asks the router in the app\'s terms only while the app can look', async () => {
+    const h = harness();
+    await h.say('今日は暑いね。', { state: 'background', cameras: ['back', 'front'], platform: 'ios' });
+    expect((h.decision as ReturnType<typeof gateway>).inputs.at(-1)!.appLook).toBeUndefined();
+    await h.say('今日は暑いね。', { state: 'switched_off', cameras: ['back'], platform: 'ios' });
+    expect((h.decision as ReturnType<typeof gateway>).inputs.at(-1)!.appLook).toBeUndefined();
+    await h.say('今日は暑いね。', { state: 'undetermined', cameras: ['back'], platform: 'ios' });
+    expect((h.decision as ReturnType<typeof gateway>).inputs.at(-1)!.appLook).toBe(true);
   });
 
   it('looks on her own when the router judges that a look is welcome, and not below its threshold', async () => {

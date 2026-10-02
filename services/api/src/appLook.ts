@@ -73,7 +73,7 @@ const VOICE_TURN_WAIT_MILLISECONDS = 8_000;
 const SEEING_GRACE_MILLISECONDS = 90_000;
 const RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
 /** She wrote that she would look: 「見てみますね」「のぞいてみますね」, not 「意見」「見つけ」. */
-const ANNOUNCES_LOOK = /見て|見ま|見る|みてみ|のぞい|カメラ/u;
+const ANNOUNCES_LOOK = /見て(?:み|き)ま|見てみる|見ますね|みてみま|のぞいてみ|カメラで/u;
 const CLOSED: Pick<AppLookTurn, 'request' | 'decide' | 'open' | 'cutOff'> = Object.freeze({
   request: Object.freeze({}), decide: () => null, open: () => null, cutOff: () => undefined,
 });
@@ -133,8 +133,11 @@ export class AppLooks {
             // Where other people can see the reply she looks only when asked: whose remark it was is too uncertain for a look of her own.
             if (!chosen || (audience.guarded && chosen.choice !== 'asked')) return null;
             // Her text about the look follows this turn, which is stored before this runs: nothing is waited for.
-            return open(threadId, chosen.camera, chosen.choice === 'asked' || ANNOUNCES_LOOK.test(reply),
-              [{ role: 'user', content: message ?? '' }, { role: 'assistant', content: reply }], null);
+            const announced = chosen.choice === 'asked' || ANNOUNCES_LOOK.test(reply);
+            const ask = open(threadId, chosen.camera, announced, [{ role: 'user', content: message ?? '' }, { role: 'assistant', content: reply }], null);
+            // Another look was opened while she was writing: if she said she would look, one honest line follows.
+            if (!ask && ANNOUNCES_LOOK.test(reply)) this.unopened(scopeKey, threadId, null, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
+            return ask;
           } catch { return null; }
         },
         open: (threadId, camera, spoken) => {
@@ -143,7 +146,7 @@ export class AppLooks {
             const wait = this.turns.await(scopeKey, threadId, spoken[0]?.content ?? '', since);
             // She says aloud that she will look, so a look that then does not happen always gets her one honest line.
             const ask = open(threadId, camera, true, spoken, wait);
-            if (!ask) this.unopened(scopeKey, threadId, wait, 'busy', appLookNotSeenLine('busy', client.platform));
+            if (!ask) this.unopened(scopeKey, threadId, wait, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
             return ask;
           } catch { return null; }
         },
@@ -164,14 +167,18 @@ export class AppLooks {
     // A look opened in a voice turn: what she says about it must follow that turn in the Talk, so the answer waits
     // until the client has stored the turn (bounded by `voiceTurnWaitMilliseconds`). The checks below run afterwards.
     const asked = this.store.get(scopeKey, id);
-    if (asked?.outcome === 'pending' && asked.deviceId === deviceId) await this.lookWaits.get(id)?.stored;
-    this.lookWaits.delete(id);
+    // Whether it came in time is judged by when it arrived, not by when the wait for the turn ended.
+    const arrivedAt = this.dependencies.now();
+    if (asked?.outcome === 'pending' && asked.deviceId === deviceId) {
+      await this.lookWaits.get(id)?.stored;
+      this.lookWaits.delete(id);
+    }
     const at = this.dependencies.now();
     const look = this.store.get(scopeKey, id);
     if (!look) return { kind: 'not_found' };
     if (look.deviceId !== deviceId) return { kind: 'wrong_device' };
     if (look.outcome !== 'pending') return { kind: look.outcome === 'expired' ? 'expired' : 'answered' };
-    if (Date.parse(at) >= Date.parse(look.expiresAt)) {
+    if (Date.parse(arrivedAt) >= Date.parse(look.expiresAt)) {
       this.sweep(scopeKey, at);
       return { kind: 'expired' };
     }
@@ -230,7 +237,8 @@ export class AppLooks {
     const at = this.dependencies.now();
     const time = Date.parse(at);
     this.store.prune(scopeKey, new Date(time - RETENTION_MILLISECONDS).toISOString());
-    const ask: AppLookAsk = { id: randomUUID(), camera: availableCamera(client, camera), expiresAt: new Date(time + APP_LOOK_LIMITS.lifetimeMilliseconds).toISOString() };
+    const lifetime = client.state === 'undetermined' ? APP_LOOK_LIMITS.firstUseLifetimeMilliseconds : APP_LOOK_LIMITS.lifetimeMilliseconds;
+    const ask: AppLookAsk = { id: randomUUID(), camera: availableCamera(client, camera), expiresAt: new Date(time + lifetime).toISOString(), lifetimeSeconds: lifetime / 1_000 };
     const opened = this.store.open({
       id: ask.id, scopeKey, deviceId: client.deviceId, threadId, camera: ask.camera, platform: client.platform,
       requestedAt: at, expiresAt: ask.expiresAt, ...marks,
@@ -241,7 +249,7 @@ export class AppLooks {
     if (wait) this.lookWaits.set(ask.id, wait);
     if (this.dependencies.timers !== false) {
       setTimeout(() => { try { this.sweep(scopeKey, this.dependencies.now()); } catch { /* the next turn sweeps */ } },
-        APP_LOOK_LIMITS.lifetimeMilliseconds + 250).unref();
+        lifetime + 250).unref();
     }
     return ask;
   }

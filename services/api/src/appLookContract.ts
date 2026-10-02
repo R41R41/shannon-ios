@@ -15,6 +15,8 @@ import { BODY_LOOK_BASE64_CHARACTERS, validatedBodyLookResult, type BodyLookImag
 export const APP_LOOK_LIMITS = Object.freeze({
   /** An ask the app has not answered by then is closed. Long enough for the first camera permission prompt. */
   lifetimeMilliseconds: 30_000,
+  /** The same when the system has not asked about the camera yet: the owner reads an explanation and answers a prompt first. */
+  firstUseLifetimeMilliseconds: 90_000,
   /** The loop guard: one look per turn, and no second one in the scope sooner than this (`SHANNON_APP_LOOK_MIN_INTERVAL_SECONDS`). */
   minimumIntervalMilliseconds: 5_000,
 });
@@ -71,15 +73,19 @@ export function appLookClient(deviceId: string | undefined, value: unknown): App
 }
 
 /** What the turn's response carries when she looks: the app captures one frame with this camera and answers before `expiresAt`. */
-export interface AppLookAsk { id: string; camera: AppLookCamera; expiresAt: string }
+export interface AppLookAsk {
+  id: string; camera: AppLookCamera; expiresAt: string;
+  /** Seconds from the ask to `expiresAt`, so that the app need not trust its own clock against the server's. */
+  lifetimeSeconds: number;
+}
 
 /**
- * Why the app did not look. Sent by the app, except `timeout` and `model_failed`, which the server adds itself.
+ * Why the app did not look. Sent by the app, except `timeout`, `model_failed` and `too_soon` (another look was open or just taken), which the server adds itself.
  * `declined`: the system had not asked about the camera yet, and the owner chose not to allow it for now.
  */
 export const APP_LOOK_REFUSAL_CODES = ['background', 'denied', 'declined', 'no_camera', 'switched_off', 'busy', 'failed'] as const;
 export type AppLookRefusalCode = typeof APP_LOOK_REFUSAL_CODES[number];
-export type AppLookCode = AppLookRefusalCode | 'timeout' | 'model_failed';
+export type AppLookCode = AppLookRefusalCode | 'timeout' | 'model_failed' | 'too_soon';
 
 export type AppLookResult =
   | { outcome: 'seen'; camera: AppLookCamera; image: BodyLookImage }

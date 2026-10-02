@@ -15,6 +15,7 @@ const NOT_SEEN_LINE: Readonly<Record<Exclude<AppLookCode, 'denied'>, string>> = 
   failed: 'うまく写せなくて、見られませんでした。',
   timeout: 'カメラの用意が間に合わなくて、いまは見られませんでした。',
   model_failed: '写してもらったのですが、うまく見られませんでした。',
+  too_soon: 'いま見たばかりなので、少し間をあけてから見ます。',
 });
 
 /** Where the owner allows the camera, by platform. */
@@ -38,6 +39,7 @@ const NOT_SEEN_REASON: Readonly<Record<AppLookCode, string>> = Object.freeze({
   failed: '写せなかった',
   timeout: 'アプリから返事がなかった',
   model_failed: '届いた1枚を見られなかった',
+  too_soon: '直前に見たばかりか、見ている途中だった',
 });
 
 export const APP_LOOK_TOOL = 'app.look';
