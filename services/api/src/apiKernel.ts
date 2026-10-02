@@ -83,7 +83,7 @@ import {
 } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
-import { BODY_ROUTE_PREFIX, dispatchBodyRequest } from './apiBodyRoutes.js';
+import { dispatchBodyRequest, isBodyRoute } from './apiBodyRoutes.js';
 import { CALENDAR_UPCOMING_PATH, dispatchCalendarRequest, localOwnerUpcoming, type OwnerUpcoming } from './calendarRoutes.js';
 import { ShannonBody, type ShannonBodyOptions } from './shannonBody.js';
 import {
@@ -223,7 +223,7 @@ export class ShannonApiKernel {
       voiceIdentity: this.voiceIdentity, now: this.now,
     });
     if (preferenceResponse) return preferenceResponse;
-    if (request.path.startsWith(BODY_ROUTE_PREFIX)) return dispatchBodyRequest(request, this.body);
+    if (isBodyRoute(request.path)) return dispatchBodyRequest(request, this.body);
     if (request.path === CALENDAR_UPCOMING_PATH) return dispatchCalendarRequest(request, this.upcoming, this.now);
 
     if (request.method === 'GET' && request.path === '/v1/state') {
@@ -322,7 +322,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.chatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.looks });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.turnLooks });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -381,7 +381,7 @@ export class ShannonApiKernel {
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
         { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming }, audience.capabilities);
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
-      const roomLook = this.body.looks.turn(body.scopeKey, message, occurredAt, audience.audience);
+      const roomLook = this.body.turnLooks.turn(body.scopeKey, message, occurredAt, audience.audience, request);
       const dailyMindPrompt = [audience.ownFocus(this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), captured, this.conversationStore, body.scopeKey),
         this.body.ownerContext(body.scopeKey, occurredAt, audience.audience), roomLook.prompt].filter(Boolean).join('\n\n');
       const systemPrompt = [
@@ -472,7 +472,7 @@ export class ShannonApiKernel {
         }];
       }
       response.thread = this.conversationStore.listThreads(body.scopeKey).find(thread => thread.threadId === threadId);
-      roomLook.decide(completion.roomLook, threadId); // One look at the room, only if this turn offered it (bodyLook.ts).
+      Object.assign(response, roomLook.decide({ ...completion, reply }, threadId)); // One look, only if this turn offered it (conversationLooks.ts).
       this.background.schedule(completedTurn, experience.id);
       // Her stored feeling toward the owner moves only on a turn that is his alone.
       if (audience.alone) commitReplyEmotionLater(this.stateStore, body.scopeKey, expressiveEmotion);
@@ -489,7 +489,7 @@ export class ShannonApiKernel {
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
-      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.looks,
+      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.turnLooks,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }

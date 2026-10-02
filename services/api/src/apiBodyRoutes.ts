@@ -8,9 +8,13 @@ import type { BodyLookAnswer } from './bodyLook.js';
 import type { BodyReactionOutcome } from './bodyReaction.js';
 import { BODY_REACTION_PATH, validatedBodyReactionRequest } from './bodyReactionContract.js';
 import type { ShannonBody } from './shannonBody.js';
+import { dispatchAppLookRequest } from './apiAppLookRoutes.js';
+import { APP_LOOK_ROUTE_PREFIX } from './appLookContract.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
 export const BODY_CAPABILITIES_PATH = '/v1/body/capabilities';
+/** Paths this module answers: her body's routes, and the answer of a look through the owner's app. */
+export const isBodyRoute = (path: string): boolean => path.startsWith(BODY_ROUTE_PREFIX) || path.startsWith(APP_LOOK_ROUTE_PREFIX);
 /** A fixed-token (local) caller has no paired device. */
 const LOCAL_DEVICE = 'local';
 
@@ -22,6 +26,7 @@ const LOCAL_DEVICE = 'local';
  * (`bodyReaction.ts`), which is kept out of the conversation unless the owner answers it.
  */
 export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): ApiResponse | Promise<ApiResponse> {
+  if (request.path.startsWith(APP_LOOK_ROUTE_PREFIX)) return dispatchAppLookRequest(request, body.appLooks);
   const deviceId = request.deviceId ?? LOCAL_DEVICE;
 
   if (request.method === 'GET') {

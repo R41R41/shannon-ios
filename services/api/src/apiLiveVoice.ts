@@ -61,12 +61,12 @@ import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePriva
 import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
-import { voiceRoomLookTurn } from './voiceRoomLook.js';
+import { voiceLookTurn, type VoiceLooks } from './voiceAppLook.js';
 import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
-  /** Looking at the room through her body's camera (`voiceRoomLook.ts`); absent, a voice turn never looks. */
-  looks?: Parameters<typeof voiceRoomLookTurn>[0];
+  /** Looking through her body's camera or the app's (`voiceAppLook.ts`); absent, a voice turn never looks. */
+  looks?: VoiceLooks;
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
@@ -118,7 +118,7 @@ export function dispatchLiveVoiceRequest(
   const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim()
     : participantMode === 'owner' ? reaction?.threadId ?? undefined : undefined;
   return completeLiveVoiceDelegation(scopeKey, requestedThreadId, request.body.transcript.trim(), participantMode, deviceContext,
-    reaction?.text ?? null, dependencies, observer);
+    reaction?.text ?? null, { ...dependencies, looks: dependencies.looks?.of(request) }, observer);
 }
 
 async function completeLiveVoiceDelegation(
@@ -168,7 +168,7 @@ async function completeLiveVoiceDelegation(
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
     context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
-    hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
+    hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined, ...dependencies.looks?.routing,
   });
   observer?.signal?.throwIfAborted();
   const uncertainTranscript = transcriptNeedsInterpretation(decision, deviceContext?.userUtterance);
@@ -179,7 +179,7 @@ async function completeLiveVoiceDelegation(
   if (address) decision = applyGuestAddressing(decision, address);
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
-  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), facts: turnFacts,
+  const roomLook = voiceLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), facts: turnFacts, guest: temporaryGuest,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
@@ -471,7 +471,7 @@ async function completeLiveVoiceDelegation(
       model: completion.model,
       reply: reply.trim(),
       webSources: combinedPlaceSources(placeSkill, withCapabilitySources(completion, capability).webSources),
-      ...(uiBlocks ? { uiBlocks } : {}),
+      ...(uiBlocks ? { uiBlocks } : {}), ...roomLook.ask(),
       // Tells the iPhone to keep marking this call's owner turns as "someone else may be listening".
       ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
       voicePlan,

@@ -17,6 +17,7 @@ import {
   priorThreadSummaryInstructions,
   stableScopeIdentifier,
 } from './chatModelSupport.js';
+import { APP_LOOK_SCHEMA } from './appLookContract.js';
 
 /**
  * The text-chat turn of the OpenAI Responses adapter: the request body and the reading of
@@ -137,9 +138,9 @@ export function chatTurnRequestBody(
                 },
               ],
             },
-            ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}),
+            ...(request.placeSearch ? { places: placeSearchSchema } : {}), ...(request.offerRoomLook ? { roomLook: ROOM_LOOK_SCHEMA } : {}), ...(request.offerAppLook ? { appLook: APP_LOOK_SCHEMA } : {}),
           },
-          required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
+          required: ['reply', 'threadSummary', 'taskDecision', 'taskProposal', 'intentPlan', 'artifacts', ...(request.placeSearch ? ['places'] : []), ...(request.offerRoomLook ? ['roomLook'] : []), ...(request.offerAppLook ? ['appLook'] : []), ...(request.generateThreadTitle ? ['threadTitle'] : [])],
         },
       },
     },
@@ -174,7 +175,7 @@ export function chatTurnResult(
     ...(structured.threadSummary ? { threadSummary: structured.threadSummary } : {}),
     ...(webSources.length ? { webSources } : {}),
     ...(structured.places.length ? { places: structured.places } : {}),
-    ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}),
+    ...(request.offerRoomLook && structured.roomLook ? { roomLook: structured.roomLook } : {}), ...(request.offerAppLook && structured.appLook ? { appLook: structured.appLook } : {}),
     ...(structured.artifacts.length ? { artifacts: structured.artifacts } : {}),
     ...(request.generateThreadTitle && structured.threadTitle ? { threadTitle: structured.threadTitle } : {}),
     taskDecision: structured.taskDecision,
