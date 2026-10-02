@@ -18,7 +18,7 @@ import {
 import {
   easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
-import { holdsShannonFeeling, isSupportEmotion, shannonEmotionSign } from './emotionState.js';
+import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
@@ -238,10 +238,12 @@ function committedFeeling(
   if (incoming.primary === present.primary && present.primary !== 'neutral') {
     if (event.continued !== false) return null;
     // And even with it, only a stronger one, an override, or a touch (felt each time) replaces the same feeling.
-    // For an unpleasant feeling toward the owner the bar is the height it was stored at, not what it has faded to since.
-    const easable = shannonEmotionSign(incoming.primary) < 0 && !isSupportEmotion(incoming.primary);
-    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= (easable ? present.height ?? present.intensity : present.intensity)) return null;
+    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
   }
+  // An unpleasant mood toward the owner is stored anew only above the height its kind was stored at, not above what it has
+  // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions.
+  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming)
+    && incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)) return null;
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   // The reading is made here, from the state being written to: the mood her concern covers holds as well.
   if (incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)

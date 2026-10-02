@@ -303,33 +303,29 @@ describe('a text conversation may leave a feeling that lingers', () => {
 });
 
 describe('every existing rule applies to it unchanged', () => {
-  it('cannot raise what lingers, or keep it from fading, by choosing strong turn after turn; only the reaction of the moment is felt again', async () => {
+  it('cannot raise what lingers, keep it from fading, or keep the reaction up by choosing strong turn after turn', async () => {
     const repeated = harness();
     const once = harness();
     await repeated.chat(HARSH, QUIET, strong('hurt'));
     await once.chat(HARSH, QUIET, strong('hurt'));
     const first = repeated.state().lingering![0]!;
+    const stored = repeated.state().expressiveEmotion;
     for (let index = 0; index < 30; index += 1) {
       repeated.advance(10 * MINUTE);
       once.advance(10 * MINUTE);
-      await repeated.chat('ふーん', QUIET, strong('hurt'));
+      const response = await repeated.chat('ふーん', QUIET, strong('hurt'));
       await once.chat('ふーん', QUIET);
-      // The reaction of the moment is felt again at the one step for as long as she keeps choosing it, never above it;
-      // what is underneath is never renewed: it is the entry of the first turn.
-      expect(repeated.state().expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+      // Chosen again at the strength it had, it is that hurt going on: nothing is stored, neither the reaction nor underneath.
+      expect(repeated.state().expressiveEmotion).toEqual(stored);
       expect(repeated.state().lingering).toEqual([first]);
+      // What she shows and feels is what is left of it, exactly as when she said it once and nothing after.
+      expect(repeated.present().intensity).toBe(once.present().intensity);
+      expect(repeated.present().intensity).toBeLessThan(0.9);
+      expect(response.messageEmotion.expression).toBe('sad');
     }
-    // Five awake hours later it has faded exactly as far as when she said it once and nothing after.
-    expect(repeated.underneath('hurt')!.strength).toBe(once.underneath('hurt')!.strength);
     expect(repeated.underneath('hurt')!.strength).toBeCloseTo(0.9 * 0.5 ** (5 / 8), 5);
     expect(repeated.state().lingering).toEqual(once.state().lingering);
-    // When she stops choosing it, the moment's reaction passes in minutes and what is left is that same fading entry.
-    repeated.advance(10 * MINUTE);
-    await repeated.chat('次の手順を教えて', PLAIN);
-    repeated.advance(10 * MINUTE);
-    await repeated.chat('次の手順を教えて', PLAIN);
-    expect(repeated.present().intensity).toBeLessThan(0.9 * 0.5 ** (5 / 8));
-    expect(repeated.state().lingering).toEqual([first]);
+    expect(repeated.state().expressiveEmotion).toEqual(once.state().expressiveEmotion);
   });
 
   it('does not outlive the four wall-clock days, however often she chooses it again', async () => {

@@ -70,6 +70,11 @@ export function isMoodLikeEmotion(kind: ShannonEmotionKind): boolean {
   return MOOD_LIKE.has(kind);
 }
 
+/** An unpleasant feeling that is kept underneath as her mood toward the owner (what his apology eases). Tones such as tired are not. */
+export function isKeptUnpleasant(kind: ShannonEmotionKind): boolean {
+  return MOOD_LIKE.has(kind) && NEGATIVE.has(kind);
+}
+
 /**
  * Cues in Shannon's own completed reply. They describe how she just spoke, so
  * they are evidence of her feeling; the speaker's words are never matched here.
@@ -277,9 +282,10 @@ export function resolveShannonEmotionState(
         const easable = shannonEmotionSign(primary) < 0 && !SUPPORT.has(primary);
         // He eased it a moment ago: nothing short of its earlier height brings it back up.
         const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
-        // An unpleasant feeling toward the owner is a new, stronger one only above the height it was stored at, not above
+        // An unpleasant mood toward the owner is a new, stronger one only above the height it was stored at, not above
         // what it has faded to since: the same strength decided turn after turn does not keep it up.
-        if (eased || intensity <= previous.intensity || (decidedStrength <= (previous.height ?? previous.intensity) && easable)) {
+        const belowHeight = isKeptUnpleasant(primary) && decidedStrength <= (previous.heights?.[primary] ?? previous.intensity);
+        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable) || belowHeight) {
           return continuedShannonEmotion(previous, primary, input.now);
         }
       }
@@ -287,6 +293,10 @@ export function resolveShannonEmotionState(
     } else if (previous.primary === primary) {
       // The same override again (he is still in danger) is felt anew, at full strength.
       strongerAgain = true;
+    } else if (!input.replaces && !overrideReason && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)) {
+      // The same bar when another feeling is on top: an unpleasant mood that is alive underneath is not stored anew at a
+      // strength it already had. What she feels goes on, with it beside.
+      return continuedShannonEmotion(previous, primary, input.now);
     } else if (!input.replaces && (holdsShannonFeeling(previous, { primary, intensity, overrideReason })
       // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
       || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
@@ -361,7 +371,7 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, height: _height, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;

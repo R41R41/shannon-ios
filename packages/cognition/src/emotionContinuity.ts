@@ -88,9 +88,13 @@ export function presentShannonFeeling(
   const stored = state.expressiveEmotion;
   const living = alive(state.lingering ?? [], awakeMs, now, timing);
   const under = living[0];
-  /** The strength a feeling of this kind was stored at: the reaction's, or its entry's underneath when that is higher. */
-  const heightOf = (kind: ShannonEmotionKind, stored: number) =>
-    ({ height: Math.max(stored, living.find(item => item.feeling.kind === kind)?.feeling.strength ?? 0) });
+  /** The strength each living kind was stored at: its entry's underneath, and for the reaction on top its own when that is higher. */
+  const heightsWith = (kind?: ShannonEmotionKind, stored = 0) => {
+    const heights: Partial<Record<ShannonEmotionKind, number>> = {};
+    for (const { feeling } of living) heights[feeling.kind] = Math.max(heights[feeling.kind] ?? 0, feeling.strength);
+    if (kind) heights[kind] = Math.max(heights[kind] ?? 0, stored);
+    return { heights: Object.freeze(heights) };
+  };
   let surface: ShannonExpressiveEmotion | undefined;
   // The wall-clock bound holds for the reaction as well: a strong one leaves a faint rest when she goes dormant, and that must not stay for weeks.
   const expired = stored !== undefined && Date.parse(now) - Date.parse(stored.updatedAt ?? stored.startedAt) > timing.lingeringMaxWallMs;
@@ -122,7 +126,7 @@ export function presentShannonFeeling(
       && !unsafeCombination(surface.primary, under.feeling.kind)
       ? Object.freeze([under.feeling.kind, ...surface.secondary].slice(0, 2)) : surface.secondary;
     return Object.freeze({
-      ...surface, secondary: beside, presentAt: now, ...recentlyEased(surface.primary), ...heightOf(surface.primary, stored!.intensity),
+      ...surface, secondary: beside, presentAt: now, ...recentlyEased(surface.primary), ...heightsWith(surface.primary, stored!.intensity),
       ...(under && under.strength > surface.intensity ? { underneath: { primary: under.feeling.kind, intensity: under.strength } } : {}),
     });
   }
@@ -132,7 +136,7 @@ export function presentShannonFeeling(
       primary: feeling.kind, secondary: Object.freeze([]), intensity: strength, target: feeling.target, cause: feeling.cause,
       ...emotionProfile(feeling.kind, strength), visibility: visibilityFor(strength), startedAt: feeling.startedAt,
       decay: decayFor(feeling.kind), carryover: clamp(strength, 0, 1), updatedAt: timestamp(now), awakeAt: awakeMs, presentAt: now,
-      ...recentlyEased(feeling.kind), height: feeling.strength,
+      ...recentlyEased(feeling.kind), ...heightsWith(),
     });
   }
   return Object.freeze({

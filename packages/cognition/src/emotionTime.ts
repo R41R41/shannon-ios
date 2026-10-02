@@ -39,7 +39,8 @@ export interface ShannonEmotionTiming {
   lingeringMaxWallMs: number;
   /**
    * An apology stays: for this long (awake) after a feeling was eased, the same kind of feeling is not
-   * brought back up by anything that is not above the height it had before.
+   * brought back up by anything that is not above the height it had before. For the same time a feeling
+   * that was eased (by him, or by a strong feeling of the opposite sign) is not eased again by a contrary feeling.
    */
   easedHoldMs: number;
 }
