@@ -1,6 +1,7 @@
 import Foundation
 
-/// When a voice conversation that went on in the background ends by itself (owner decision 2026-10-02).
+/// When a voice conversation that went on in the background ends by itself (owner decisions 2026-10-02 and
+/// 2026-10-03: one minute of silence, 「無言なら1分で終わりでいい」).
 ///
 /// A call keeps running after the owner leaves the app. While the app is in the background it ends
 /// once neither side has spoken for `limit`, exactly as if the owner had ended it. In the foreground
@@ -11,7 +12,7 @@ import Foundation
 /// Wall-clock time is used on purpose: it keeps counting while the app is suspended by an interruption.
 public struct ShannonVoiceBackgroundSilence: Equatable, Sendable {
     /// Silence from both sides, in the background, after which the call ends.
-    public static let limit: TimeInterval = 5 * 60
+    public static let limit: TimeInterval = 60
     /// How often a running call looks at the clock while in the background.
     public static let checkInterval: TimeInterval = 15
 
@@ -46,9 +47,21 @@ public struct ShannonVoiceBackgroundSilence: Equatable, Sendable {
         guard let silence = silence(at: now) else { return false }
         return silence >= Self.limit
     }
+
+    /// The same question asked by a running call. While a reply is being made or played (she is thinking, waiting for a
+    /// tool or a look, or still speaking a long answer) and while words of his wait to be answered, the call is not
+    /// silent however long it takes: the count starts again from that moment, so it runs from when she has finished.
+    public mutating func shouldEnd(at now: Date, replyInProgress: Bool) -> Bool {
+        guard isInBackground else { return false }
+        if replyInProgress {
+            lastSpeechAt = now
+            return false
+        }
+        return shouldEnd(at: now)
+    }
 }
 
 /// Fixed status text for a call that ended by itself. Neutral, not Shannon's voice.
 public enum ShannonVoiceBackgroundCopy {
-    public static let endedAfterSilence = "5分間お話がなかったので、音声会話を終了しました。会話は保存されています。"
+    public static let endedAfterSilence = "1分間お話がなかったので、音声会話を終了しました。会話は保存されています。"
 }

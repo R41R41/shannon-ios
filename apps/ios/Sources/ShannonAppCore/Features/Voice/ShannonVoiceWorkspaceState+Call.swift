@@ -27,7 +27,7 @@ extension ShannonVoiceWorkspaceState {
         geminiVoiceModel.guestPeriodEnded = { [weak self] period in
             self?.remember(period, threadID: context.threadID, using: conversationModel)
         }
-        // Five minutes without a word from either side, while the app is in the background, ends the call as 終了 does.
+        // One minute without a word from either side, while the app is in the background, ends the call as 終了 does.
         geminiVoiceModel.endAfterBackgroundSilence = { [weak self, weak geminiVoiceModel] in
             guard let self, let geminiVoiceModel else { return }
             self.endCall(geminiVoiceModel)
