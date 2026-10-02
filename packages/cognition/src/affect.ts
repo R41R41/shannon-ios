@@ -22,18 +22,22 @@ const CALM_CUES = ['安心', '落ち着いた', 'ほっとした', 'ゆっくり
 // the whole utterance has to be one of a few forms: an apology or a thanks, optionally with her name, a when, and what for.
 // Anything with more in it (another person, a quotation, a request that follows) does not match, and nothing is eased.
 const TAIL = '[？?ー〜。！!…\\s]*';
+// An apology does not end in a question mark: 「ごめん？」 asks, it does not apologise.
+const END = '[ー〜。！!…\\s]*';
+const OH = `(?:(?:あ|ああ|うん|えっと)${'[、,\\s]*'})?`;
 const SEP = '[、,\\s]*';
 const NAME = `(?:シャノン${SEP})?`;
 const WHEN = '(?:(?:さっき|昨日|昨夜|この前|今朝|今日|いつも|あの(?:時|とき))は?)?';
-const TRULY = '(?:本当に|ほんとに|ほんとうに)?';
-const SORRY = 'ごめん(?:なさい|ね|よ)?ね?';
+const TRULY = '(?:本当に|ほんとに|ほんとうに|本当|ほんと)?';
+const SORRY = '(?:(?:ごめん(?:なさい|ね|よ)?ね?|すみません(?:でした)?|すまない|すまん)[、,\\s]*){1,2}';
+const PARDON = '許して(?:ほしい|くれ|ください|ね)?';
 const DEED = '(?:(?:(?:ひどい|あんな|きつい)ことを?言って|言い(?:すぎ|過ぎ)て|傷つけて|怒って|八つ当たりして|(?:怒って|傷ついて)いたら)(?:しまって)?)?';
 const REGRET = '(?:言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|悪かった|申し訳な(?:い|かった)(?:です)?|傷つけた|ひどいことを?言った)(?:ね|よ)?';
 const APOLOGY = [
-  new RegExp(`^${NAME}${WHEN}${TRULY}${DEED}${SORRY}${TAIL}(?:${SEP}${REGRET})?${TAIL}(?:${SEP}シャノン)?${TAIL}$`, 'u'),
-  new RegExp(`^${NAME}${WHEN}${TRULY}(?:言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な(?:い|かった)(?:です)?)(?:ね|よ)?${TAIL}(?:${SEP}(?:${SORRY}|許して(?:ほしい|くれ|ください|ね)?))?${TAIL}$`, 'u'),
-  new RegExp(`^(?:あなた|きみ|シャノン)に(?:ひどいことを?言った|言い(?:すぎ|過ぎ)た)${SEP}${SORRY}${TAIL}$`, 'u'),
-  new RegExp(`^(?:ちゃんと)?謝りたい${SEP}${SORRY}${TAIL}$`, 'u'),
+  new RegExp(`^${OH}${NAME}${WHEN}${TRULY}${DEED}${SORRY}${END}(?:${SEP}シャノン)?${END}(?:${SEP}${REGRET})?${END}(?:${SEP}シャノン)?${END}$`, 'u'),
+  new RegExp(`^${OH}${NAME}${WHEN}${TRULY}(?:${REGRET}|${PARDON})${END}(?:${SEP}(?:${SORRY}|${PARDON}))?${END}$`, 'u'),
+  new RegExp(`^(?:あなた|きみ|シャノン)に(?:ひどいことを?言った|言い(?:すぎ|過ぎ)た)${SEP}${SORRY}${END}$`, 'u'),
+  new RegExp(`^(?:ちゃんと)?謝りたい${SEP}${SORRY}${END}$`, 'u'),
 ];
 const THANKS = '(?:ありがとう(?:ね|な|ございます)?|大好き(?:だよ)?|助かった(?:よ)?|助かる(?:よ)?|頼りにしてる(?:よ)?)';
 const FOR = '(?:(?:手伝って|助けて|聞いて|待っていて|待ってて|そばにいて|教えて|付き合って|いて)くれて)?';

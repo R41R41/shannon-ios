@@ -16,10 +16,10 @@ import {
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
 import {
-  easeLingering, easeShannonFeeling, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
+  easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
 import { holdsShannonFeeling } from './emotionState.js';
-import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
+import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
@@ -241,8 +241,14 @@ function committedFeeling(
     if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
   }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
-  if (incoming.primary !== present.primary && holdsShannonFeeling(present, incoming, touch)) return null;
-  const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, awakeAt: awakeMs });
+  // The reading is made here, from the state being written to: the mood her concern covers holds as well.
+  if (incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)
+    || (present.underneath !== undefined && holdsShannonFeeling(present.underneath, incoming, touch && { presentFromTouch: false })))) return null;
+  // He eased this feeling a moment ago: unless the stimulus is above the height it had before, it shows no stronger than it is now.
+  const easedEntry = (state.lingering ?? []).find(item => item.kind === incoming.primary && item.target === incoming.target && inEasedHold(item, awakeMs, timing));
+  const held = easedEntry && !incoming.overrideReason && incoming.intensity <= (easedEntry.peak ?? 0)
+    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
+  const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, intensity: held, awakeAt: awakeMs });
   return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing, event.decided === true) };
 }
 

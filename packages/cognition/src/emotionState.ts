@@ -208,6 +208,7 @@ export function resolveShannonEmotionState(
   const previous = input.previous ? (reading ? input.previous : carriedShannonEmotion(input.previous, input.now)) : undefined;
   let primary = isShannonEmotionKind(input.provisionalPrimary) ? input.provisionalPrimary : 'neutral';
   let intensity = clamp(input.provisionalIntensity, 0, 1);
+  const provisional = { primary, intensity };
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
   let cause = reply ? REPLY_CAUSE : PROVISIONAL_CAUSE;
   let fromCue = false;
@@ -225,11 +226,12 @@ export function resolveShannonEmotionState(
     cause = '深い悲しみや喪失へ静かに寄り添う';
   } else {
     const finalCue = FINAL_CUES.find(rule => rule.pattern.test(reply));
-    // Her own words name the feeling; unless the same kind was also decided for this reply, its strength is only the cue's.
-    fromCue = finalCue !== undefined && finalCue.emotion !== primary;
     if (finalCue) {
       primary = finalCue.emotion;
       intensity = Math.max(intensity, 0.52);
+      // Her own words name the feeling. Its strength was decided for this reply only when the same kind was decided at
+      // least as strongly as the cue's floor; a strength that comes from the floor alone is the cue's.
+      fromCue = provisional.primary !== primary || provisional.intensity < intensity;
     } else if (!reading && primary === 'neutral' && previous && previous.primary !== 'neutral'
       && previous.carryover >= SHANNON_EMOTION_CARRY_THRESHOLD) {
       primary = previous.primary;
@@ -251,9 +253,20 @@ export function resolveShannonEmotionState(
     // nothing is stored, so it can neither grow nor be raised back to this reading later. Only a stimulus that is
     // itself stronger is a new feeling, at its own strength. A weaker stimulus of another kind does not replace it.
     if (previous.primary === primary && !overrideReason) {
-      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength. Her own
-      // words naming the feeling she already has (also to deny it) are that feeling going on, whatever the cue's strength.
-      if (!input.replaces && (fromCue || intensity <= previous.intensity)) return continuedShannonEmotion(previous, primary, input.now);
+      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength.
+      if (!input.replaces) {
+        // What was decided for this reply, before the cue's floor: only that can be stronger than what she feels.
+        const decidedStrength = provisional.primary === primary ? provisional.intensity : 0;
+        // An unpleasant feeling toward the owner (what his apology eases) that her own words name, also to deny it, is
+        // that feeling going on whatever the cue's strength. Her concern, her apology and a pleasant feeling voiced
+        // again are felt anew for that reply, at the cue's strength.
+        const easable = shannonEmotionSign(primary) < 0 && !SUPPORT.has(primary);
+        // He eased it a moment ago: nothing short of its earlier height brings it back up.
+        const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
+        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable)) {
+          return continuedShannonEmotion(previous, primary, input.now);
+        }
+      }
       strongerAgain = true;
     } else if (previous.primary === primary) {
       // The same override again (he is still in danger) is felt anew, at full strength.
@@ -329,7 +342,7 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;

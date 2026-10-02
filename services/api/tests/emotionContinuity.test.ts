@@ -173,7 +173,7 @@ describe('(a) continuity across conversations, voice', () => {
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
     const held = (next.body as { voicePlan: Record<string, any> }).voicePlan;
     expect(held.emotion.primary).toBe('sulky');
-    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt']) expect(held.emotion).not.toHaveProperty(key);
+    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt', 'underneath', 'easedPeak']) expect(held.emotion).not.toHaveProperty(key);
     expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"|"awakeAt"|"cause"/u);
     // Carrying it through that turn stored nothing new: what is underneath is the entry from the night.
     expect(state().lingering).toMatchObject([{ kind: 'sulky', startedAt: NIGHT, strength: 0.52 }]);
@@ -588,10 +588,11 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
       SHANNON_EMOTION_IDLE_MINUTES: '15', SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES: '0.5', SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES: '8',
       SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: '120', SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES: '180',
       SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES: '20', SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS: '12',
-      SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS: '2',
+      SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS: '2', SHANNON_EMOTION_EASED_HOLD_MINUTES: '45',
     })).toEqual({
       clock: 'awake', idleCapMs: 15 * MINUTE, reactionHalfLifeMs: 30_000, passingHalfLifeMs: 8 * MINUTE, moodHalfLifeMs: 120 * MINUTE,
       moodValueHalfLifeMs: 180 * MINUTE, arousalHalfLifeMs: 20 * MINUTE, lingeringHalfLifeMs: 12 * HOUR, lingeringMaxWallMs: 48 * HOUR,
+      easedHoldMs: 45 * MINUTE,
     });
     // Nonsense, zero, negative and out-of-bound values leave the table's value.
     expect(emotionTiming({

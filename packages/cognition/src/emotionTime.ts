@@ -37,6 +37,11 @@ export interface ShannonEmotionTiming {
    * after it began. It only ends a feeling; it never makes one fade faster.
    */
   lingeringMaxWallMs: number;
+  /**
+   * An apology stays: for this long (awake) after a feeling was eased, the same kind of feeling is not
+   * brought back up by anything that is not above the height it had before.
+   */
+  easedHoldMs: number;
 }
 
 export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freeze({
@@ -49,6 +54,7 @@ export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freez
   arousalHalfLifeMs: 30 * MINUTE,
   lingeringHalfLifeMs: 8 * HOUR,
   lingeringMaxWallMs: 4 * 24 * HOUR,
+  easedHoldMs: 30 * MINUTE,
 });
 
 /** Strengths, not times: when a feeling counts as settled, held, noted underneath, or eased. */
@@ -69,6 +75,8 @@ export const SHANNON_EMOTION_CONTINUITY = Object.freeze({
   apologyEase: 0.6,
   kindnessEase: 0.3,
   /** How far what lies underneath colours the baseline of valence, and the most it may. Kept below the 0.24 at which the quiet face changes. */
+  /** Inside the hold after an easing, a same-kind reaction is stored at most this far above the eased strength. */
+  easedMargin: 0.05,
   moodColour: 0.3,
   moodColourLimit: 0.2,
 });

@@ -108,13 +108,17 @@ export function presentShannonFeeling(
   // while it is strong enough to show, stay on top of a stronger mood underneath until they have passed.
   const owed = surface !== undefined && surface.intensity >= 0.3
     && (surface.overrideReason !== undefined || isSupportEmotion(surface.primary));
+  const recentlyEased = (kind: ShannonEmotionKind) => {
+    const entry = (state.lingering ?? []).find(item => item.kind === kind && inEasedHold(item, awakeMs, timing));
+    return entry?.peak !== undefined ? { easedPeak: entry.peak } : {};
+  };
   if (surface && (!under || owed || surface.intensity >= under.strength)) {
     // What lies underneath stays beside the reaction of the moment.
     const beside = under && under.feeling.kind !== surface.primary && !surface.secondary.includes(under.feeling.kind)
       && !unsafeCombination(surface.primary, under.feeling.kind)
       ? Object.freeze([under.feeling.kind, ...surface.secondary].slice(0, 2)) : surface.secondary;
     return Object.freeze({
-      ...surface, secondary: beside, presentAt: now,
+      ...surface, secondary: beside, presentAt: now, ...recentlyEased(surface.primary),
       ...(under && under.strength > surface.intensity ? { underneath: { primary: under.feeling.kind, intensity: under.strength } } : {}),
     });
   }
@@ -124,6 +128,7 @@ export function presentShannonFeeling(
       primary: feeling.kind, secondary: Object.freeze([]), intensity: strength, target: feeling.target, cause: feeling.cause,
       ...emotionProfile(feeling.kind, strength), visibility: visibilityFor(strength), startedAt: feeling.startedAt,
       decay: decayFor(feeling.kind), carryover: clamp(strength, 0, 1), updatedAt: timestamp(now), awakeAt: awakeMs, presentAt: now,
+      ...recentlyEased(feeling.kind),
     });
   }
   return Object.freeze({
@@ -131,6 +136,11 @@ export function presentShannonFeeling(
     cause: stored && stored.primary !== 'neutral' ? SHANNON_SETTLED_CAUSE : INITIAL_SHANNON_EXPRESSIVE_EMOTION.cause,
     startedAt: timestamp(now), presentAt: now,
   });
+}
+
+/** Whether this feeling was eased within the hold: an apology stays for that long, whatever is decided or said. */
+export function inEasedHold(feeling: ShannonLingeringFeeling, awakeMs: number, timing: ShannonEmotionTiming): boolean {
+  return feeling.easedAwakeAt !== undefined && awakeMs - feeling.easedAwakeAt < timing.easedHoldMs;
 }
 
 /** Where the mood values return to: the fixed baseline, its valence coloured a little by what lies underneath. */
@@ -192,8 +202,10 @@ export function noteShannonFeeling(
     const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
     // A cue in her own words (also a denial of it) never renews what is already underneath: that keeps fading by awake time.
     // A decided strength renews it only when it is above what the feeling was at its height, so the same strength
-    // decided turn after turn does not hold it up either.
-    if (feeling.intensity > present && (!existing || present < RULE.settledBelow || (decided && feeling.intensity > existing.strength))) {
+    // decided turn after turn does not hold it up either; and while an easing holds, only above the height before it.
+    const height = existing ? (inEasedHold(existing, awakeMs, timing) ? Math.max(existing.strength, existing.peak ?? 0) : existing.strength) : 0;
+    const settled = present < RULE.settledBelow && !(existing && inEasedHold(existing, awakeMs, timing));
+    if (feeling.intensity > present && (!existing || settled || (decided && feeling.intensity > height))) {
       const strength = clamp(feeling.intensity, 0, 1);
       const noted: ShannonLingeringFeeling = {
         kind: feeling.primary, target: feeling.target, cause: existing?.cause ?? feeling.cause,
@@ -207,7 +219,11 @@ export function noteShannonFeeling(
 }
 
 function eased(feeling: ShannonLingeringFeeling, share: number, awakeMs: number, timing: ShannonEmotionTiming): ShannonLingeringFeeling {
-  return { ...feeling, strength: lingeringStrength(feeling, awakeMs, timing) * (1 - clamp(share, 0, 1)), awakeAt: awakeMs };
+  return {
+    ...feeling, strength: lingeringStrength(feeling, awakeMs, timing) * (1 - clamp(share, 0, 1)), awakeAt: awakeMs,
+    // The height it had before he eased it stays known, so that nothing weaker than that undoes the easing at once.
+    peak: Math.max(feeling.strength, feeling.peak ?? 0), easedAwakeAt: awakeMs,
+  };
 }
 
 /** An apology or a kind word of the owner's eases the unpleasant feelings she holds toward him. Pleasant ones stay. */
@@ -302,6 +318,8 @@ export function restoreLingering(value: unknown, awakeMs: number): readonly Shan
       kind, target, cause: Array.from(row.cause).slice(0, 240).join(''),
       span: row.span === 'lingering' ? 'lingering' : 'mood', strength: clamp(row.strength as number, 0, 1),
       awakeAt: row.awakeAt as number, startedAwakeAt: row.startedAwakeAt as number, startedAt: row.startedAt,
+      ...(number(row.peak) && number(row.easedAwakeAt) && (row.easedAwakeAt as number) <= awakeMs
+        ? { peak: clamp(row.peak as number, 0, 1), easedAwakeAt: row.easedAwakeAt as number } : {}),
     }));
   }
   return restored.slice(0, RULE.maximumLingering);

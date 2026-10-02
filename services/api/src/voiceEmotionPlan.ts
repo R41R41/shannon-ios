@@ -49,7 +49,7 @@ export function voicePlanResponse(
  * The feeling as the plan may carry it to a device. No client reads its cause, and the device may be heard by
  * others: the cause, her clock stamp and the resolver's notes to the reducer stay on the server.
  */
-function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided'> {
+function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak'> {
   const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
   return shown;
 }

@@ -65,6 +65,8 @@ export interface ShannonExpressiveEmotion {
   continued?: boolean;
   /** Only on a reading whose feeling is what she owes the owner (concern, apology, an override): the strongest feeling it is covering. Never stored. */
   underneath?: { primary: ShannonEmotionKind; intensity: number };
+  /** Only on a reading of a feeling the owner eased a moment ago: the height it had before. A stimulus of the same kind that is not above it is that feeling going on. Never stored. */
+  easedPeak?: number;
   /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
   decided?: boolean;
 }
@@ -93,6 +95,9 @@ export interface ShannonLingeringFeeling {
   /** When it began, on her awake clock and on the wall clock (the latter is a fact for wording, never used for fading). */
   startedAwakeAt: number;
   startedAt: string;
+  /** Set when it was eased (his apology, a kind word, a strong opposite feeling): the height it had before, and her awake clock then. */
+  peak?: number;
+  easedAwakeAt?: number;
 }
 
 /** Who was present when something was said to Shannon. The owner is always part of it. */
