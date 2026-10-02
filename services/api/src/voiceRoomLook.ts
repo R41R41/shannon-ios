@@ -24,9 +24,14 @@ export function voiceRoomLookEnabled(environment: Environment = process.env): bo
   return !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_VOICE_ROOM_LOOK?.trim().toLowerCase() ?? '');
 }
 
+/**
+ * How sure the gateway must be before she looks without being asked in so many words
+ * (`SHANNON_VOICE_ROOM_LOOK_THRESHOLD`). Its own value: opening a camera asks for more than choosing a capability does.
+ */
 function lookThreshold(environment: Environment): number {
-  const parsed = Number(environment.SHANNON_VOICE_SKILL_THRESHOLD ?? environment.SHANNON_JEV_SKILL_THRESHOLD);
-  return Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : 0.85;
+  const value = environment.SHANNON_VOICE_ROOM_LOOK_THRESHOLD?.trim();
+  const parsed = Number(value);
+  return value && Number.isFinite(parsed) && parsed > 0 && parsed <= 1 ? parsed : 0.85;
 }
 
 const SEE = '(?:見て|見える|見えて|見えます|見れる|見れます|見られる|見えない|のぞいて|写して|映して|映って)';

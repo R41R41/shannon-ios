@@ -44,7 +44,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'photo_understanding', audience: 'owner',
     text: '写真: iPhoneで選んだ1枚の内容を見る。' },
   { id: 'room_look', audience: 'owner',
-    text: `部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
+    text: `部屋を見る: 体のカメラが許されている時、二人だけの会話で部屋を一度見て、見えたことを次の発言で話す。自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
   { id: 'text_attachments', audience: 'owner',
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',

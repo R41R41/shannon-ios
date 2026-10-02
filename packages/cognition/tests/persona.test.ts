@@ -141,7 +141,8 @@ describe('canonical capability description', () => {
     ]);
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'room_look')!;
     expect(line.audience).toBe('owner');
-    expect(line.text).toBe('部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。'
+    // 「二人だけの会話」: a text turn and, since 2026-10-02, a voice turn with the owner alone.
+    expect(line.text).toBe('部屋を見る: 体のカメラが許されている時、二人だけの会話で部屋を一度見て、見えたことを次の発言で話す。'
       + '自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。'
       + '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい。ほかの人が写っていたら、誰かを言わず、見た目を評価しない。画面や書類の文字を読み上げず、覚えない。写ったほかの人を記憶に入れない。');
     expect(shannonCapabilityPrompt('owner')).toContain(line.text);

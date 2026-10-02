@@ -71,7 +71,8 @@ const SELF_TALK = 'よいしょ|どっこいしょ|よっこいしょ|よっこ�
   + '|おかしいな(?:あ)?|変だな(?:あ)?|まあ?いい(?:か|や)|どこ(?:いった|行った|やった|置いた)(?:かな|っけ|んだろう?)?|(?:なん|何)だこれ|(?:なに|何)これ'
   + '|動け(?:よ)?|動いて(?:よ|くれ)?|固まった|フリーズした|落ちた|重いな(?:あ)?|遅いな(?:あ)?|めんどくさい?(?:な(?:あ)?)?';
 const SOMEONE_ELSE = 'はーい|はいはーい|(?:今|いま|すぐ)(?:行く|いく)(?:よ|ね)?|もしもし|お世話になっております|いらっしゃい(?:ませ)?';
-const NOT_ADDRESSED = new RegExp(`^(?:${BACKCHANNEL})*(?:${SELF_TALK}|${SOMEONE_ELSE})(?:${BACKCHANNEL})*$`, 'u');
+/** Nothing but such phrases and fillers (a bare filler is a backchannel and is judged before this). */
+const NOT_ADDRESSED = new RegExp(`^(?:${BACKCHANNEL}|${SELF_TALK}|${SOMEONE_ELSE})+$`, 'u');
 
 const POLITE_QUESTION = /(?:ですか|ますか|でしょうか|ないか|かい)[。.!！…]*$/u;
 /** Wondering aloud: a question word that asks nobody in particular. A question mark still makes it a question. */
