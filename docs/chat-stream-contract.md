@@ -76,10 +76,9 @@ While the model writes, a sentence is sent once the characters that decide its e
 
 | Turn | Lines | When | `fallback` |
 | --- | --- | --- | --- |
-| Ordinary reply, owner alone, no Notion, Aether or Voyager read | `start`, sentences, `done` | **while the model writes** | |
+| Reply to the owner alone, with or without an Aether note or Voyager task read, and no Notion page read | `start`, sentences, `done` | **while the model writes** | |
 | The same turn producing `artifacts` or a work proposal (`uiBlocks: agent_task_proposal`) | the same; they are in `done.response` | **while the model writes** | |
 | `audience: "others"` | `start`, sentences, `done` | after the turn is complete | |
-| Owner alone, with an Aether note or Voyager task read, or any other capability context in the prompt (for example the reminder boundary) | `start`, sentences, `done` | after the turn is complete | |
 | `SHANNON_CHAT_STREAM_EARLY=off`, or a model that cannot stream (`local-stub`) | `start`, sentences, `done` | after the turn is complete | |
 | Reply with a source list (a Notion read) | single `done` | after | `sources` |
 | Explicit command (a fixed reply: 「〜をタスクにして」, 「〜をノートに残して」, an answer to a reminder, a work or memory command) or an organize turn (整理して) | single `done` | after | `command` |
@@ -94,7 +93,7 @@ All of this is decided before the model is called. When several fallbacks apply,
 - The reply is the one the non-streaming path returns: the model's `reply` field after the structured-output checks, with the source or map list appended. No other transformation of the reply text exists on the text path; a marker such as `【機微:…】` is placed on prompt input, and keeping it out of the reply is the model's instruction, streamed or not.
 - What reaches the model is decided before the model is called and is the same with and without `stream` (the audience gate, withheld memories, capability reads).
 - An `audience: "others"` turn is never sent while the model writes. Its lines are cut from the response after it was completed and reduced for that audience (`systemPrompt` empty, no `thread`, reduced `state`), so a streamed `others` turn exposes exactly the text its JSON response exposes. `start` carries only the thread id, the turn id and the audience.
-- A turn is sent while the model writes only when nothing after the model call can change its reply text: no list is appended (no web search, no place search, no Notion read), and by the owner's decision no Aether or Voyager read was made. Only the `reply` field of the model's structured output is ever decoded; the title, summary, work decision, proposal, plan and artifacts are never sent as text.
+- A turn is sent while the model writes only when nothing after the model call can change its reply text: no list is appended (no web search, no place search, no Notion page read). An Aether note or a Voyager task read happens before the model call and does not change the reply text, so such a turn is sent while the model writes (owner decision, 2026-10-02). Only the `reply` field of the model's structured output is ever decoded; the title, summary, work decision, proposal, plan and artifacts are never sent as text.
 - What early streaming gives up, by the owner's decision, is one thing: the checks on the *rest* of the model's output (work decision and proposal, artifacts, intent plan, a truncated or malformed turn) run when the model has finished. If they reject the turn, sentences of it have already been shown. The turn is then ended with `error`, nothing of it is stored, and the client discards what it showed. Without `stream` the same turn is a `502` and nothing is shown.
 - Commands, proposals, artifacts, the thread title and summary, the face, the stored feeling and the background work are not affected by the stream.
 

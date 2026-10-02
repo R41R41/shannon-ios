@@ -229,8 +229,6 @@ describe('turns that are not sent while the model writes', () => {
 
   it.each([
     ['other people can see the reply', { audience: 'others' }, {}, ['start', 'sentence', 'sentence', 'sentence', 'done'], undefined],
-    ['an Aether note was read', {}, { aetherContext: { promptFor: () => '[Aether note projection] メモ本文' } }, ['start', 'sentence', 'sentence', 'sentence', 'done'], undefined],
-    ['a Voyager task was read', { message: 'シャノンのタスクを見せて' }, { voyagerCatalog: { searchTasks: async () => [], listProjects: async () => [] } as never }, ['start', 'sentence', 'sentence', 'sentence', 'done'], undefined],
     ['a Notion page was read', { message: 'ウサカテのシナリオを読んで' }, { notion: fixtureNotionSource().source }, ['done'], 'sources'],
     ['attachments', { attachments: [{ name: 'notes.md', mimeType: 'text/markdown', text: '本文' }] }, {}, ['done'], 'attachments'],
     ['web search', { webSearch: true }, {}, ['done'], 'web_search'],
@@ -247,6 +245,17 @@ describe('turns that are not sent while the model writes', () => {
       // Sent after the turn was complete, so start already carries the turn id.
       expect(lines[0]).toMatchObject({ type: 'start', turnId: done.response.turnId });
     }
+  });
+
+  // Notes and tasks are read before the model call and do not change the reply text (owner decision 2026-10-02).
+  it.each([
+    ['an Aether note was read', {}, { aetherContext: { promptFor: () => '[Aether note projection] メモ本文' } }],
+    ['a Voyager task was read', { message: 'シャノンのタスクを見せて' }, { voyagerCatalog: { searchTasks: async () => [], listProjects: async () => [] } as never }],
+  ] as const)('still sends the turn while the model writes when %s', async (_name, extra, options) => {
+    const { model, lines } = await run(extra, options as ShannonApiKernelOptions);
+    expect(model.streamingRequests).toHaveLength(1);
+    expect(lines.map(line => line.type)).toEqual(['start', 'sentence', 'sentence', 'sentence', 'done']);
+    expect(text(lines)).toBe((lines.at(-1) as { response: ChatResponse }).response.reply);
   });
 
   it('holds an others turn back until the model has finished', async () => {

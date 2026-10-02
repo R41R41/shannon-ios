@@ -56,7 +56,7 @@ export async function generateChatTurn(
 ): Promise<ShannonChatModelResult> {
   if (turn.body.stream !== 'sentences') return model.generate(request);
   const fallback = plannedFallback(turn);
-  const early = sink && fallback === null && turn.audience.alone && !turn.capability.prompt && model.generateStreaming;
+  const early = sink && fallback === null && turn.audience.alone && model.generateStreaming;
   let completion: ShannonChatModelResult;
   if (early) {
     const splitter = new ChatSentenceSplitter();
