@@ -39,10 +39,11 @@ Things that happened to the body, in a batch.
 | `durationMs` | integer, 0–600,000 | touch types only, optional | |
 | `strength` | number, 0–1 | touch types only, optional | Stored to two decimals. |
 | `minutesAway` | integer, 0–10,080 | `ownerAway` / `ownerReturned` only, optional | |
+| `region` | `head` \| `face` \| `side` \| `hand` \| `body` | touch types only, optional | Which part of her was touched (added 2026-10-03). A value outside the list is left out, not refused. See [Which part, and on which surface](#which-part-and-on-which-surface). |
 
 | Group | `type` | Extra fields |
 | --- | --- | --- |
-| Touch | `pet`, `tickle`, `poke`, `carry`, `holdHand` | `durationMs`, `strength` |
+| Touch | `pet`, `tickle`, `poke`, `carry`, `holdHand` | `durationMs`, `strength`, `region` |
 | Owner at the PC | `ownerAway`, `ownerReturned` | `minutesAway` |
 | Plain | `callStarted`, `callEnded`, `windowHidden`, `windowShown`, `appStarted` | none |
 
@@ -71,6 +72,7 @@ A malformed request is refused as a whole with `400` and stores nothing. A well-
 | `ignored` + `reason: stale` | `occurredAt` is more than 24 hours old. | No |
 | `ignored` + `reason: future` | `occurredAt` is more than 5 minutes ahead of the server. | No; fix the clock |
 | `ignored` + `reason: daily_cap` | 2,000 events are already stored for this day (`Asia/Tokyo`). | No; drop it |
+| `ignored` + `reason: touch_only` | The device registered as a body that only feels touch and the event is not a touch. | No |
 
 Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` that was stored answers `duplicate` however late the retry arrives, within the retention period.
 
@@ -246,6 +248,7 @@ The body registers what it can express. One registration per device and scope; a
 | `expressions` | array of at most 64 ids | yes | |
 | `gestures` | array of at most 32 ids | yes | |
 | `flags` | object of at most 16 `id: boolean` | no | For example `shoulders`, `tears`. `camera: true` says the owner has switched the camera on. |
+| `surface` | `windows` \| `mac` \| `iphone` | no | Where this body is (added 2026-10-03). A value outside the list is left out, not refused; a later registration without it removes it. |
 
 An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`.
 
@@ -505,6 +508,7 @@ Owner decision 2026-10-02 (「触ったり動かしたりしたのがバック�
 | `touch.durationMs` | integer, 0–600,000 | yes | How long the touch has lasted when the request is sent. |
 | `touch.strength` | number, 0–1 | no | Stored to two decimals. |
 | `touch.ongoing` | boolean | yes | `true` while the touch is still going on. |
+| `touch.region` | `head` \| `face` \| `side` \| `hand` \| `body` | no | Which part of her is touched (added 2026-10-03). A value outside the list is left out, not refused. |
 | `audience` | `owner` \| `others` | yes | Decided as for events. |
 | `occurredAt` | ISO 8601 | yes | When the touch began on the PC. |
 
@@ -592,6 +596,35 @@ After a `said` answer the body listens for `listenSeconds`.
 - **An unknown, expired or already used `reactionId` is not an error**: the turn is handled as an ordinary one. Only a `reactionId` that is not a string is refused (`400`).
 - **Guest mode** (the body runs voice with `participantMode: "guest"` while a stream is live or 「友人も一緒」 is on). `reactionId` is accepted on the delegation and **only supplies context**: her line precedes the speaker's words for the model. History and memory follow the existing rules of that call; nothing is written into the owner's Talk as an owner-alone turn. The same holds for an owner-mode turn stored with `companionPresent: true`, and for a line that was said with `audience: "others"`: the stored turn follows the companion rules and her line is not added to the Talk. The stored-turn route cannot tell a guest-mode call by itself: a body in guest mode must not send `reactionId` on `/turns` (or must send `companionPresent: true` with it).
 
+## Which part, and on which surface
+
+Owner decisions 2026-10-03 (「触った部位によって反応してほしい」「撫でたのか、つついたのかも」「どこで触ったのかも伝えたい」). Two optional facts, both closed vocabularies, both additive: a body that sends neither is told about exactly as before, and the server accepts the old and the new shapes side by side. `services/api/src/bodyTouchWords.ts` holds the words.
+
+- **`region`**: the part that was touched, at the same level as `type` on an event (`{ id, type, audience, occurredAt, durationMs?, strength?, region? }`) and as `touch.region` on a reaction request. `head` 頭, `face` 頬, `side` 脇, `hand` 手, `body` 体.
+- **`surface`**: where the body is, at the top level of `PUT /v1/body/capabilities`. It is read for the device that sends a touch.
+
+What changes is only what she is told, in three places. The way of touching and the part become one phrase:
+
+| | `head` | `face` | `side` | `hand` | `body` | no `region` (as before) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pet` | 頭をなでられた | 頬をなでられた | 脇をなでられた | 手をなでられた | 体をなでられた | なでられた (text turn) ／ 頭をなでられた (reaction) |
+| `poke` | 頭をつつかれた | 頬をつつかれた | 脇をつつかれた | 手をつつかれた | 体をつつかれた | つつかれた |
+| `tickle` | 頭をくすぐられた | 頬をくすぐられた | 脇をくすぐられた | 手をくすぐられた | 体をくすぐられた | くすぐられた |
+| `holdHand` | 手をつないでもらった, whatever the region | | | | | 手をつないでもらった |
+| `carry` | 持ち上げて運ばれた, whatever the region | | | | | 持ち上げて運ばれた |
+
+While a touch is going on the reaction prompt says なでられている／つつかれている／くすぐられている; duration and strength are worded as before (`ライ氏に頬をつつかれた（ほんの一瞬）`, `ライ氏に頭をなでられている（3秒ほど、やさしく）`). A touch memory says 頭をなでてもらった／頬をつつかれた／脇をくすぐられた.
+
+1. **The `[体に起きたこと]` block** of an owner text turn. The heading names the surface of the touches in it: 「Windowsのデスクトップにいるボクの体にライ氏がしたこと」, 「Macのデスクトップにいるボクの体に…」, 「iPhoneのアプリの中のボクの体に…」; without a surface it stays 「PCに表示されているボクの体に…」. When touches from more than one surface stand in one block, the heading says 「ボクの体にライ氏がしたこと」 and each touch line ends with （Windowsで）／（Macで）／（iPhoneで）.
+2. **The reaction prompt**: 「iPhoneのアプリの中のボクの体に、いま触れられた。」 (and the Windows and Mac forms; without a surface 「PCに表示されているボクの体に、いま触れられた。」), the touch line, and the lines of this sitting, each with its part.
+3. **The memory of a touch**: 「体の記憶: 10月2日の午後、iPhoneのアプリの中で、ライ氏に頬をつつかれた（2回）。…」 (Windowsのデスクトップで、／Macのデスクトップで、; nothing without a surface).
+
+Touches of one kind are still one memory and one line; it keeps the part and the surface only while every touch of it named the same one. A touch id that is reported twice (the reaction request, then the finished event) keeps what its first message said.
+
+**The touch → feeling table is unchanged.** Her feeling still follows the kind of touch and how often (`packages/cognition/src/touchEmotion.ts`); the part reaches her words and her memory, through the prompt, and not the table. The cause the state sheet shows for a feeling keeps the table's own wording.
+
+Idempotency: `region` is part of an event's and a reaction's content only when it is sent, so a retry of a request that never named one answers as before.
+
 ## A body that only feels touch
 
 Added 2026-10-03 (owner: 「アプリの中でも体を画面に。指で触るのも」). The iPhone app can show her Live2D figure
@@ -608,9 +641,9 @@ else of a body. With it the device may use two routes exactly as the desktop bod
 fields, limits, idempotency and audience rules:
 
 - `POST /v1/body/reactions` (the registration is what lifts `403 BODY_REACTION_NOT_A_BODY`);
-- `POST /v1/body/events` with the touch types (`pet`, `tickle`, `poke`, `holdHand`; the page has no `carry`).
+- `POST /v1/body/events` with the touch types (`pet`, `tickle`, `poke`, `holdHand`; the page has no `carry`). Every other event type from such a device answers `ignored` with `reason: touch_only` and is not stored: the phone cannot write "he is back at the PC".
 
-What a touch does to her is unchanged: her feeling moves, she remembers it, and she may say one line.
+What a touch does to her is unchanged: her feeling moves, she remembers it, and she may say one line. The budgets are the shared ones: 120 body requests a minute per device, 12 reaction requests a minute and 2,000 stored events a day **per scope**, so touches on the phone and on the desktop body count together.
 
 Everything else that a registration means for the desktop body does **not** apply to a touch-only device:
 
@@ -629,15 +662,14 @@ What the phone does:
   「体に起きたことをシャノンに伝える」 (off by default, on the body screen and in Settings › すがた). With it off a
   touch animates in the page and stays on the device. Switching it off drops what was waiting to be sent.
   The registration itself stays on the server (there is no route to withdraw one); it grants nothing but the two routes above.
-- It asks for a reaction at the page's moment (the timing of [When to ask](#post-v1bodyreactions), decided by the same
-  acting code as on Windows), waits 4.5 seconds, and discards anything later. It reports the finished touch as an event with the same `id`.
-- `audience` is `owner`, or `others` while a call is in 「友人も一緒」.
-- Her line is shown in a bubble near the figure for a few seconds, and `mood` / `message.expression` go to the
-  page's `express`. **It is not spoken and no microphone opens**: the app has no speech outside a call, so
-  `listenSeconds` and `reactionId` are not used by the phone, and her line stays out of every Talk.
-- Known wording gap: the server's fixed texts still call the body 「PCに表示されているボクの体」 (the
-  `[体に起きたこと]` block and the reaction prompt), also for a touch that came from the phone. Changing
-  these sentences is a change to what she is told and awaits the owner's decision.
+- It registers with `surface: "iphone"` and sends `region` with every touch: the page's own, or, from a page that names none, what the gesture leaves no doubt about (a pet is on the head, a held hand is the hand, a tickle is on the side; a poke then has none).
+- It asks for a reaction at the page's moment (the timing of [When to ask](#post-v1bodyreactions), decided by the same acting code as on Windows), waits 4.5 seconds, and discards anything later. It reports the finished touch as an event with the same `id`.
+- `audience` is `owner`, or `others` while someone else may be listening to a call (「友人も一緒」, or a companion the owner mentioned) and for five minutes after that ends.
+- Her line follows the reply mode of the surface the owner is on (owner decision 2026-10-03):
+  - **Text** — Talk and the dialogue stage, and the body screen with 「文字で返す」 (the default): the line is shown in a bubble near the figure for a few seconds and `mood` / `message.expression` go to the page's `express`. It is not spoken, no microphone opens, and the line stays out of every Talk.
+  - **Voice** — the body screen with 「声で返す」: the bubble, and the line is spoken in her voice (the speech stream of a voice conversation, in the audio session category of her earphone messages), with her figure in the speaking phase and her mouth following the sound. Then the microphone opens for `listenSeconds` as an ordinary voice conversation on `message.threadId`. If he answers, the first delegation and the stored turn carry `reactionId` exactly as in [If he answers](#if-he-answers), and the conversation goes on in the call screen. If he does not, the call ends and nothing is stored. Without microphone permission she speaks and no window opens (the app never asks for the microphone from a touch).
+  - During a voice conversation the page asks for no reaction (its phase is not idle), as on the desktop body, and the call screen's figure takes no touch.
+- The Mac app shows her figure and sends nothing: no registration, no touch, no voice.
 
 ## Errors
 
