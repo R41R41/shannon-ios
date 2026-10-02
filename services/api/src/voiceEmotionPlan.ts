@@ -42,6 +42,8 @@ export function voicePlanResponse(
     decisionSource: decision.source,
     decisionLatencyMilliseconds: decision.elapsedMilliseconds,
     transcriptReliabilityProbability: decision.transcriptReliabilityProbability ?? null,
+    // The trace of an unanswered turn: which category decided it. Absent on a turn she answers.
+    ...(decision.silence && !decision.shouldRespond ? { silenceCategory: decision.silence } : {}),
   };
 }
 

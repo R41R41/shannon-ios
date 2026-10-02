@@ -46,6 +46,7 @@ import { establishedGuestName } from '../src/voiceGuestNames.js';
 import { wantsPlaceDiscovery } from '../src/placeDiscovery.js';
 import { distributeLatestInternalBuild } from '../src/testflightDistributor.js';
 import { VOICE_SKILLS, mandatorySkillPatterns, type VoiceSkill } from '../src/voiceDecisionContract.js';
+import { asksForLookAloud, voiceRoomLookTurn } from '../src/voiceRoomLook.js';
 import { createConfiguredVoiceVisionGateway } from '../src/voiceVision.js';
 
 const voiceSkill = (skill: VoiceSkill) => (VOICE_SKILLS as readonly string[]).includes(skill);
@@ -71,6 +72,8 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
   // One look: the model chooses it in the structured reply, the body answers, and the frame is seen under the four rules.
   room_look: () => exists(BodyLooks.prototype.turn, BodyLooks.prototype.answer, OpenAIRoomLookViewer.prototype.see)
     && ROOM_LOOK_SCHEMA.enum.includes('asked') && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookInstructions([]).includes(rule))
+    // In a voice turn with the owner alone: the same look, chosen before the spoken reply.
+    && exists(BodyLooks.prototype.voiceTurn, voiceRoomLookTurn) && asksForLookAloud('うん、じゃあ部屋を見て。')
     // In her own time: the loop step, the look it opens and waits for, the model call with her own key, under the same four rules.
     && exists(prepareRoomLook, ActivityRoomLooks.prototype.look, GeminiActivityRoomLookViewer.prototype.see)
     && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookNotePrompt().system.includes(rule))
