@@ -9,37 +9,6 @@ import AppKit
 typealias ShannonLive2DPlatformView = NSView
 #endif
 
-/// The rules of the stage that need no web view, so they can be tested.
-enum ShannonLive2DStagePolicy {
-    /// The page stops drawing while nobody can see it, while the app is not active, and while it rests.
-    static func paused(hasHost: Bool, appActive: Bool, resting: Bool) -> Bool {
-        !hasHost || !appActive || resting
-    }
-
-    /// With Reduce Motion or Low Power Mode on, an idle figure becomes a still picture after this long.
-    static let restAfterSeconds: TimeInterval = 5
-    static func rests(calm: Bool, phase: ShannonLive2DPhase, idleSeconds: TimeInterval) -> Bool {
-        calm && phase == .idle && idleSeconds >= restAfterSeconds
-    }
-
-    /// One automatic reload per minute; a second failure inside it is shown as failed.
-    static let reloadSpacingSeconds: TimeInterval = 60
-    static func mayReload(lastReloadAt: Date?, now: Date) -> Bool {
-        guard let lastReloadAt else { return true }
-        return now.timeIntervalSince(lastReloadAt) >= reloadSpacingSeconds
-    }
-
-    /// The page is given this long to say `ready`.
-    static let loadTimeoutSeconds: TimeInterval = 90
-    /// With no screen showing her, the model (about 85 MB of GPU memory) is let go after this long.
-    static let releaseAfterSeconds: TimeInterval = 90
-
-    /// A mouth level worth a call: any change of note, and always the return to zero.
-    static func sendsMouthLevel(_ level: Double, last: Double) -> Bool {
-        level <= 0 ? last > 0 : abs(level - last) >= 0.03
-    }
-}
-
 /// The one Live2D figure of the app. The model costs seconds to load and a large texture,
 /// so there is a single web view: the screen that appeared last shows it, and every other
 /// place her figure stands shows the Waterlight Eye meanwhile.
@@ -78,13 +47,13 @@ public final class ShannonLive2DStage {
     }
 
     @ObservationIgnored private var hosts: [Host] = []
-    @ObservationIgnored private var webView: WKWebView?
+    @ObservationIgnored private(set) var webView: WKWebView?
     @ObservationIgnored private var bridge: ShannonLive2DBridge?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var appActive = true
     @ObservationIgnored private var sentPaused: Bool?
     @ObservationIgnored private var lastReloadAt: Date?
-    @ObservationIgnored private var loadStartedAt: Date?
+    @ObservationIgnored private(set) var loadStartedAt: Date?
     @ObservationIgnored private var lastActivityAt = Date()
     @ObservationIgnored private var restTask: Task<Void, Never>?
     @ObservationIgnored private var releaseTask: Task<Void, Never>?
@@ -391,7 +360,7 @@ public final class ShannonLive2DStage {
     }
 
     /// The page failed, lost its drawing context, or its process ended: one reload, then an honest failure.
-    fileprivate func recover(generation failed: Int) {
+    func recover(generation failed: Int) {
         guard failed == generation else { return }
         let now = Date()
         let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: lastReloadAt, now: now)
@@ -405,13 +374,10 @@ public final class ShannonLive2DStage {
         mount()
     }
 
-    fileprivate func receive(_ message: ShannonLive2DMessage, generation received: Int) {
+    func receive(_ message: ShannonLive2DMessage, generation received: Int) {
         guard received == generation else { return }
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBodyStats") {
-            let seconds = loadStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-            NSLog("[ShannonBody] %@ (%.2f s after load began)", String(describing: message).prefix(160).description, seconds)
-        }
+        probe(message)
 #endif
         switch message {
         case let .ready(version, modelUpdatedAt, expressions, gestures):
@@ -512,59 +478,5 @@ public final class ShannonLive2DStage {
             guard (result as? String) == "lost" else { return }
             Task { @MainActor in self?.recover(generation: generation) }
         }
-    }
-}
-
-/// Receives the page's messages and navigation events. The web view's content controller keeps
-/// this object alive; it points back at the stage weakly, so the stage and the web view form no cycle.
-@MainActor
-private final class ShannonLive2DBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
-    static let handlerName = "shannonBody"
-    static let contextLossScript = """
-    document.addEventListener('webglcontextlost', function () {
-      try { window.webkit.messageHandlers.shannonBody.postMessage({ type: 'error', message: 'webglcontextlost' }); } catch (e) {}
-    }, true);
-    """
-    static let contextProbeScript = """
-    (function () {
-      var canvas = document.querySelector('#stage canvas');
-      if (!canvas) { return 'none'; }
-      var context = canvas.getContext('webgl2');
-      return context && !context.isContextLost() ? 'ok' : 'lost';
-    })();
-    """
-    static let offlineRules = #"[{"trigger":{"url-filter":"^(https?|wss?|ftp):"},"action":{"type":"block"}}]"#
-
-    private weak var stage: ShannonLive2DStage?
-    private let generation: Int
-    private let folder: URL
-
-    init(stage: ShannonLive2DStage, generation: Int, folder: URL) {
-        self.stage = stage
-        self.generation = generation
-        self.folder = folder.resolvingSymlinksInPath()
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == Self.handlerName, let parsed = ShannonLive2DMessage(body: message.body) else { return }
-        stage?.receive(parsed, generation: generation)
-    }
-
-    /// Only the bundled page: nothing else is ever navigated to.
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
-        guard let url = navigationAction.request.url, url.isFileURL else { return .cancel }
-        return url.resolvingSymlinksInPath().path.hasPrefix(folder.path + "/") ? .allow : .cancel
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        stage?.recover(generation: generation)
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        stage?.recover(generation: generation)
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        stage?.recover(generation: generation)
     }
 }
