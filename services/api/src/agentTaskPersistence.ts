@@ -22,6 +22,7 @@ import type {
 } from './agentTaskStore.js';
 import { AgentHostRegistry, isReasoningEffort } from './agentHostRegistry.js';
 import { projectHostEvent } from './agentTaskHostProjection.js';
+import { AgentTaskQueue } from './agentTaskQueue.js';
 import {
   AgentProjectProvisioningPersistence,
   type AgentProjectProvisioningEvent,
@@ -41,7 +42,6 @@ import {
   parseObject,
   pauseProjection,
   prepareDatabaseLocation,
-  projectedStatusForCommand,
   secureDatabaseFiles,
   timelineActivity,
   toneForHostEvent,
@@ -53,10 +53,12 @@ import {
 export { migrateAgentTasks } from './agentTaskPersistenceSupport.js';
 export class SQLiteAgentTaskStore implements AgentTaskStore {
   private readonly database: DatabaseSync;
+  private readonly queue: AgentTaskQueue;
 
   constructor(private readonly path: string) {
     prepareDatabaseLocation(path);
     this.database = new DatabaseSync(path);
+    this.queue = new AgentTaskQueue(this.database, (...event) => this.appendEvent(...event));
     this.database.exec(`
       PRAGMA busy_timeout = 5000;
       PRAGMA foreign_keys = ON;
@@ -102,6 +104,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         model: input.model,
         reasoningEffort: input.reasoningEffort,
       }, now);
+      this.queue.markWaiting(taskId, input.hostHint?.trim() || undefined, now);
       created = true;
     });
     return { task: this.requiredTask(scopeKey, taskId), created };
@@ -159,7 +162,7 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         return;
       }
       validateCommandTransition(task, input.type, input.payload ?? {});
-      const projection = projectedStatusForCommand(task.status, input.type, input.payload ?? {}, task.pendingApproval);
+      const { projection, settledByStore } = this.queue.admit(task, input.type, input.payload ?? {});
       // The host follows the projection made here, so a deny never continues a task this store cancelled.
       const denyContinues = input.type === 'resolve_approval' && input.payload?.decision === 'deny'
         && projection.status !== 'cancelled';
@@ -177,6 +180,8 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         projection.clearApproval ? null : task.pendingApproval ? JSON.stringify(task.pendingApproval) : null,
         projection.status === 'paused' ? 'owner' : null, now, taskId, scopeKey,
       );
+      if (input.type === 'interrupt') this.queue.withdrawTurns(taskId, input.payload ?? {}, now);
+      if (settledByStore) this.queue.settle(commandId, now);
       this.appendEvent(
         taskId,
         `command.${input.type}`,
@@ -204,41 +209,17 @@ export class SQLiteAgentTaskStore implements AgentTaskStore {
         SET status = 'pending', lease_owner = NULL, lease_until = NULL
         WHERE status = 'leased' AND lease_until <= ?
       `).run(now);
-      const row = this.database.prepare(`
-        SELECT c.command_id
-        FROM agent_task_commands c
-        JOIN agent_tasks t ON t.task_id = c.task_id
-        WHERE c.status = 'pending' AND c.available_at <= ?
-          AND (
-            t.assigned_host_id = ?
-            OR (
-              c.command_type = 'start' AND t.assigned_host_id IS NULL
-              AND NOT EXISTS (
-                SELECT 1 FROM agent_tasks active
-                WHERE active.assigned_host_id = ?
-                  AND active.status IN ('queued','starting','running','waiting_approval','paused')
-              )
-            )
-          )
-        ORDER BY c.sequence ASC LIMIT 1
-      `).get(now, hostId, hostId) as unknown as { command_id: string } | undefined;
-      if (!row) return;
+      const next = this.queue.nextCommand(hostId, now);
+      if (!next) return;
       const changed = this.database.prepare(`
         UPDATE agent_task_commands
         SET status = 'leased', lease_owner = ?, lease_until = ?, attempts = attempts + 1
         WHERE command_id = ? AND status = 'pending'
-      `).run(hostId, leaseUntil, row.command_id);
+      `).run(hostId, leaseUntil, next);
       if (Number(changed.changes) === 0) return;
-      commandId = row.command_id;
-      const command = this.command(commandId);
-      if (command?.type === 'start') {
-        this.database.prepare(`
-          UPDATE agent_tasks SET status = 'starting', summary = '作業を始める準備中。',
-            current_action = '作業環境へ接続中', assigned_host_id = ?, updated_at = ?
-          WHERE task_id = ? AND status = 'queued'
-        `).run(hostId, now, command.taskId);
-        this.appendEvent(command.taskId, 'starting', '作業環境が依頼を受け取った', undefined, 'progress', now, { hostId });
-      }
+      commandId = next;
+      const command = this.command(next);
+      if (command) this.queue.begin(command, hostId, now);
     });
     return commandId ? this.command(commandId, leaseUntil) : null;
   }

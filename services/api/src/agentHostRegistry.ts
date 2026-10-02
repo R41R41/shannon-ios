@@ -64,13 +64,17 @@ export class AgentHostRegistry {
       && supportsProject(host));
     const available = eligible.filter(host => host.status === 'available');
     const byKind = (kind: 'local' | 'cloud') => available.find(host => host.kind === kind)?.hostId;
-    if (requested === 'local') {
-      return byKind('local') ?? null;
-    }
     if (requested === 'cloud') {
       return byKind('cloud') ?? null;
     }
-    return byKind('local') ?? byKind('cloud') ?? fallbackHost;
+    // A task that names a project changes code. It waits in line on a Mac that is online, even a busy
+    // one, because a host without the Apple toolchain cannot verify it. Work without a project does not wait.
+    const local = byKind('local')
+      ?? (project ? eligible.find(host => host.kind === 'local')?.hostId : undefined);
+    if (requested === 'local') {
+      return local ?? null;
+    }
+    return local ?? byKind('cloud') ?? fallbackHost;
   }
 
   resolveProvisioningHost(preference: string | undefined, now: string): string | null {
@@ -108,7 +112,9 @@ export class AgentHostRegistry {
     ].flatMap(row => workspaceArray(row.workspaces_json));
     const explanation = resolved
       ? resolved.kind === 'local'
-        ? 'このMacが利用できるため、ローカルで実行します。'
+        ? resolved.status === 'busy'
+          ? 'このMacは別の作業中のため、前の作業が終わってから順番に実行します。'
+          : 'このMacが利用できるため、ローカルで実行します。'
         : 'このMacが利用できないため、クラウドで実行します。'
       : '利用できる作業ホストを待っています。';
     return Object.freeze({

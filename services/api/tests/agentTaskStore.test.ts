@@ -103,7 +103,7 @@ describe('SQLite Agent Task Store', () => {
     store.close();
   });
 
-  it('prefers an available local host and falls back to cloud when local is busy', () => {
+  it('prefers an available local host, queues code work on it while it is busy, and sends other work to cloud', () => {
     const store = new SQLiteAgentTaskStore(databasePath());
     const models = [{
       id: 'gpt-5.6-sol', displayName: 'GPT-5.6 Sol',
@@ -132,10 +132,24 @@ describe('SQLite Agent Task Store', () => {
       assignedHostID: 'local-mac', projectHint: 'shannon-ios',
       model: 'gpt-5.6-sol', reasoningEffort: 'high',
     });
+    // A task with a project changes code: it waits for the busy Mac instead of going to cloud.
     expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:00:12.000Z', 'legacy-cloud'))
+      .toBe('local-mac');
+    // Work without a project keeps the earlier routing: a busy Mac sends it to cloud.
+    expect(store.resolveHost(undefined, 'auto', '2026-09-04T00:00:12.000Z', 'legacy-cloud'))
+      .toBe('cloud-agent');
+    // The busy Mac does not carry this project, so there is no line to join.
+    expect(store.resolveHost('voyager', 'auto', '2026-09-04T00:00:12.000Z', 'legacy-cloud'))
+      .toBe('cloud-agent');
+    expect(store.resolveHost('shannon-ios', 'cloud', '2026-09-04T00:00:12.000Z', 'legacy-cloud'))
       .toBe('cloud-agent');
     const catalog = store.workspaceCatalog('shannon-ios', '2026-09-04T00:00:12.000Z', 'legacy-cloud');
-    expect(catalog.routing).toMatchObject({ resolvedHostId: 'cloud-agent' });
+    expect(catalog.routing).toMatchObject({
+      resolvedHostId: 'local-mac',
+      explanation: 'このMacは別の作業中のため、前の作業が終わってから順番に実行します。',
+    });
+    expect(store.workspaceCatalog(undefined, '2026-09-04T00:00:12.000Z', 'legacy-cloud').routing)
+      .toMatchObject({ resolvedHostId: 'cloud-agent', explanation: 'このMacが利用できないため、クラウドで実行します。' });
     expect(catalog.hosts).toEqual(expect.arrayContaining([
       expect.objectContaining({ hostId: 'local-mac', status: 'busy' }),
       expect.objectContaining({ hostId: 'cloud-agent', status: 'available' }),
@@ -143,6 +157,15 @@ describe('SQLite Agent Task Store', () => {
     expect(catalog.projects).toContainEqual(expect.objectContaining({
       key: 'shannon-ios', availableHostIds: ['local-mac', 'cloud-agent'],
     }));
+
+    // A Mac that is asleep has no line to wait in: code work goes to cloud as before.
+    store.heartbeat({
+      hostId: 'cloud-agent', displayName: 'Cloud Agent', kind: 'cloud',
+      capabilities: ['workspace-files', 'diff', 'git', 'build'],
+      projects: ['shannon-ios', 'aether', 'voyager'], models,
+    }, '2026-09-04T00:05:00.000Z');
+    expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:05:10.000Z', 'legacy-cloud'))
+      .toBe('cloud-agent');
     store.close();
   });
 
@@ -159,7 +182,7 @@ describe('SQLite Agent Task Store', () => {
     store.close();
   });
 
-  it('does not queue an explicit host preference while that host is busy', () => {
+  it('queues an explicit local preference for code work on a busy local host, and only there', () => {
     const store = new SQLiteAgentTaskStore(databasePath());
     store.heartbeat({
       hostId: 'local-mac', displayName: 'このMac', kind: 'local',
@@ -171,9 +194,18 @@ describe('SQLite Agent Task Store', () => {
     }, '2026-09-04T00:00:01.000Z');
 
     expect(task.task.assignedHostID).toBe('local-mac');
+    // Code work joins the line of the busy Mac, whether the owner asked for the Mac or left it to routing.
     expect(store.resolveHost('shannon-ios', 'local', '2026-09-04T00:00:02.000Z', 'cloud-agent'))
-      .toBeNull();
+      .toBe('local-mac');
     expect(store.resolveHost('shannon-ios', 'auto', '2026-09-04T00:00:02.000Z', null))
+      .toBe('local-mac');
+    // Work without a project, or for a project this Mac does not carry, is still not queued on it.
+    expect(store.resolveHost(undefined, 'local', '2026-09-04T00:00:02.000Z', 'cloud-agent'))
+      .toBeNull();
+    expect(store.resolveHost('voyager', 'local', '2026-09-04T00:00:02.000Z', 'cloud-agent'))
+      .toBeNull();
+    // An offline Mac is not a line to wait in.
+    expect(store.resolveHost('shannon-ios', 'local', '2026-09-04T00:02:00.000Z', 'cloud-agent'))
       .toBeNull();
     store.close();
   });
@@ -201,7 +233,17 @@ describe('SQLite Agent Task Store', () => {
       idempotencyKey: 'make-local-busy', conversationThreadID: 'thread-a', title: '進行中',
       goal: 'ローカルを使用中にする', summary: '作業中', hostHint: 'local-mac', projectHint: 'shannon-ios',
     }, '2026-09-04T00:00:11.000Z');
+    // Code work still resolves to the busy Mac, so the catalog keeps showing the Mac's checkout.
     expect(store.workspaceCatalog('shannon-ios', '2026-09-04T00:00:12.000Z', null).projects[0])
+      .toMatchObject({ currentBranch: 'local-branch', files: ['local.swift'] });
+    store.heartbeat({
+      hostId: 'cloud-agent', displayName: 'Cloud', kind: 'cloud', capabilities: [],
+      projects: ['shannon-ios'], models: [], workspaces: [{
+        key: 'shannon-ios', isGitRepository: true, currentBranch: 'cloud-branch',
+        files: ['cloud.swift'], changes: [],
+      }],
+    }, '2026-09-04T00:05:00.000Z');
+    expect(store.workspaceCatalog('shannon-ios', '2026-09-04T00:05:10.000Z', null).projects[0])
       .toMatchObject({ currentBranch: 'cloud-branch', files: ['cloud.swift'] });
     store.close();
   });

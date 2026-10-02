@@ -85,15 +85,19 @@ export function taskResultInstructions(): string[] {
   ];
 }
 
+/** Tasks of one host share a checkout; a paused task may have left its branch and uncommitted changes there. */
+const SHARED_CHECKOUT_INSTRUCTION = 'このチェックアウトは、同じ作業ホストの他の作業（一時停止中の作業を含む）と共有しています。この作業のものではない未コミットの変更が残っている場合は、破棄・stash・上書きをせず、そのチェックアウトのブランチも切り替えず、git worktree で別の作業ツリーを作ってそこで作業してください。';
+
 export function deliveryInstructions(config: AgentHostConfig, taskId?: string): string[] {
   if (config.deliveryMode !== 'cloud-testflight') {
-    return ['この作業ホストはMacのローカル実機配備モードです。'];
+    return ['この作業ホストはMacのローカル実機配備モードです。', SHARED_CHECKOUT_INSTRUCTION];
   }
   const suffix = taskId?.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 48) || 'unknown';
   return [
     'この作業ホストはAzure上のクラウド配備モードです。iPhoneを直接操作せず、Xcode Cloudと内部TestFlightを配備先にします。',
     `コード変更は専用ブランチ shannon/task-${suffix} で行い、実行中の本番APIディレクトリを変更しないでください。`,
     '作業を始める前に git fetch origin を実行し、未コミットの変更が無ければ最新の origin/main を土台にしてください。古い土台のまま進めてはいけません。',
+    SHARED_CHECKOUT_INSTRUCTION,
     'テスト成功前にmainへ統合またはpushしてはいけません。ユーザーがGitHubやTestFlightへの配布を明示的に依頼した場合、その依頼が対象変更の統合・push・配信を許可します。実行時に同じ許可を再確認しないでください。対象や範囲が変わった場合だけ、新しい判断を確認してください。',
     '配布を依頼されていない場合は、変更・テスト結果・専用ブランチ名までを報告して止めてください。配布を依頼された場合は、検証後にGitHubへ反映し、Xcode Cloudと内部TestFlightの結果まで確認してください。',
   ];

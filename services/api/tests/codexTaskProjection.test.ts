@@ -14,6 +14,16 @@ describe('cloud TestFlight task instructions', () => {
     expect(instructions).not.toContain('その操作時の承認が必要');
   });
 
+  it('tells every task, on either kind of host, to leave the uncommitted changes of another task alone', () => {
+    const local = { deliveryMode: 'local-device' } as AgentHostConfig;
+    for (const each of [config, local]) {
+      const instructions = deliveryInstructions(each, 'task-1').join('\n');
+      expect(instructions).toContain('同じ作業ホストの他の作業（一時停止中の作業を含む）と共有しています');
+      expect(instructions).toContain('破棄・stash・上書きをせず');
+      expect(instructions).toContain('git worktree で別の作業ツリーを作って');
+    }
+  });
+
   it('retains that authorization after a host restart while renewing expired permission grants', () => {
     const project = { key: 'shannon', path: '/tmp/shannon' } satisfies AgentHostProject;
     const prompt = recoveryPrompt(project, config, 'task-1', true, 'TestFlightへ配信して');
