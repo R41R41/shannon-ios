@@ -69,6 +69,15 @@ Motion and haptic defaults for these components: press feedback is immediate and
 - **Forgetting is narrow and reversible**: forgetting, rejecting or correcting one memory withholds only what used it, and the confirmation says what stops being used and that restoring brings it back.
 - **One identity**: Shannon's persona and her list of what she can and cannot do are defined once in `packages/cognition` (`persona.ts`, `capabilities.ts`) and projected into text, voice and fixed sentences. UI copy presented as her speech follows it (です・ます, 「ライ氏」, 「ボク」); system status stays neutral.
 
+## ようす (iPhone)
+
+Owner picks of 2026-10-03 (entry A, 運用 B, confirmation A, シャノンのいま A). Contract: [`docs/design/screens/ios/yousu.yaml`](design/screens/ios/yousu.yaml).
+
+- **Entry**: a fourth tile 「ようす」 on the thread list, pushed inside the list's own navigation. A segmented switch 「シャノンのいま／運用」 sits on top and remembers the last segment on the device; it appears only once the legacy runtime has reported. The tile carries a small attention mark (shape and VoiceOver text, not a count) only while a report stopped arriving or a service is 不調 or 不明.
+- **運用**: a native grouped list: サービス, Minebot (with the current task and its steps), Minecraft サーバー, スケジュール, 今日の数字 (only when sent), スキル, 操作の記録. 開始／停止／起動／今すぐ実行 sit in the row and exist only for what the server allows. A state is a glyph and a word (動いている／止まっている／不調／不明). A report older than three minutes shows 「報告が届いていません」, words every state in the past tense, dims the rows and removes every control; a server that cannot be reached says so separately.
+- **Confirmation**: a bottom sheet with the full text, kept word for word with the Windows app, the server to join for the Minebot body, and `ShannonHoldToConfirmButton`; a tap, the keyboard and VoiceOver get the same text in a dialog. What became of the press is shown as the server records it (実行待ち／実行中／完了／失敗／断られました／期限切れ with its reason), or as the one sentence why it was not sent.
+- **シャノンのいま**: one calm list. 待っていること first (感想／判断／許可, opening where each is decided), then her mood with 「いまの気持ち」 and 「まだ残っている気持ち」 (a face and since when, never a reason), 自分の時間 (the server's sentence, her reason for resting, today's budget), 体, and 最近のできごと: looks, touches and messages she started in one muted timeline with no counters. Empty is 「まだありません」. Nothing on this page can be changed.
+
 ## Preserve
 
 - Talk remains the primary surface, with Shannon messages visually distinct from the user's quieter bubbles.

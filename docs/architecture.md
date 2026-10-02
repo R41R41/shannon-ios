@@ -594,6 +594,13 @@ The legacy platform runtime reports its operational status and the owner's deskt
 - The desktop never connects to the legacy runtime and the server never calls it. `server.ts` dispatches every ops path to the ops route before the kernel; the store is held by that route alone, so neither the snapshot nor the command record is in a prompt, no worker reads them, and the activity loop cannot send a command.
 - `SHANNON_PLATFORM_OPS_INGEST=off` refuses reports and hides a stored snapshot. `SHANNON_PLATFORM_OPS_COMMANDS` is off unless set to `on`: off, a command is `403 OPS_COMMANDS_DISABLED`, a claim answers `null`, and the read says `commandsSupported: false`.
 
+## 「ようす」 on the owner's phone
+
+The iPhone thread list has a fourth tile, 「ようす」 (`apps/ios/Sources/ShannonAppCore/Features/Yousu`, API calls in `API/ShannonAPIClient+Yousu.swift`), with two pages behind one switch; `shannon://yousu`, `/now` and `/ops` open it. The views are public and compile for macOS; the Mac app does not present them yet.
+
+- **運用** reads `GET /v1/ops` every 30 seconds while the page is on screen and the app is in front (every 3 seconds while a command awaits its result) and sends `POST /v1/ops/commands`, once per press with a fresh idempotency key and no retry. `ShannonOpsModel` holds the rules of `docs/ops-contract.md` on the client: a control exists only for a command in `allowed`; a stale report, a missing report and an unreachable server allow nothing; the age of a report is counted from the server's `Date` header and the last reading, so it loses its controls after `staleAfterSeconds` without a new reading; and a command is checked against those rules again at the moment it is sent. Every operation is confirmed in a sheet with the Windows app's wording word for word (`ShannonOpsText`, held by `ShannonYousuOpsTests`) and the hold of the work approvals. The switch shows 運用 only once a report was received.
+- **シャノンのいま** reads `GET /v1/shannon/now` (`docs/shannon-now-contract.md`: `shannonNowContract.ts`, `shannonNowReader.ts`, `serverShannonNowRoute.ts`), `GET /v1/autonomy`, `GET /v1/autonomy/study` and the activity record, each on its own, when the page appears. The server read is owner-only and paired-device-only, goes through a `query_only` connection that selects no text column, writes nothing, and is held by its route alone (`SHANNON_NOW_READ=off` switches it off). On `403` or `404` the page shows what the other reads give.
+
 ## Durable store
 
 | Concern | Tables |
