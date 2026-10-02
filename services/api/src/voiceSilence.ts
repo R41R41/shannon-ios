@@ -63,8 +63,6 @@ const FOLLOWS_SECONDS = 30;
 /** An echo is her own line coming back while, or just after, her body speaks it; and it is long. */
 const ECHO_SECONDS = 30;
 const ECHO_CHARACTERS = 12;
-/** Her line to a touch is short, and the microphone opens for it: a smaller part of it is already an echo. */
-const TOUCH_ECHO_CHARACTERS = 4;
 const SHORT_ANSWER_CHARACTERS = 28;
 /** Fillers, holds and self-talk are short: the three phrase rules do not look at anything longer. */
 const PHRASE_RULE_CHARACTERS = 40;
@@ -160,10 +158,14 @@ export function ownerTurnVerdict(
   if (!marked && (!facts.sheAsked || facts.answersHerLine) && facts.followsShannon && facts.secondsSinceShannon !== undefined && facts.secondsSinceShannon <= ECHO_SECONDS
     && length >= ECHO_CHARACTERS && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
   const kinds = phraseKinds(bare);
-  // Her line to a touch, or a part of it (four characters or more), heard by the microphone that opened for his answer.
-  // A short reply or a backchannel that happens to be in her line is his: after her 「はい？」, his 「はい」 is answered.
-  if (facts.answersHerLine && !marked && length >= TOUCH_ECHO_CHARACTERS && !(kinds && /^b+$/u.test(kinds))
-    && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
+  // Her line to a touch, heard by the microphone that opened for his answer: the whole line (her 「なに？」 coming back), or
+  // a part that covers at least half of it. A backchannel word is his (after her 「はい？」, his 「はい」 is answered), and so
+  // is a greeting or thanks that happens to be in her longer line (「おはよう」「お疲れさま」「ありがとう」).
+  if (facts.answersHerLine && !(kinds && /^b+$/u.test(kinds))) {
+    const hers = bareText(facts.shannonLastLine ?? '');
+    const part = !marked && hers.includes(bare) && length * 2 >= characters(hers) && !GREETING.test(bare) && !ADDRESS_EVIDENCE.social.test(text);
+    if (bare === hers || part) return silent('echo');
+  }
   const follows = facts.followsShannon && recent(FOLLOWS_SECONDS);
   // Her question is open for a short reply. With someone else there, only right after she asked: 「醤油ある」 a minute later is for the friend.
   const answering = facts.sheAsked && (!facts.othersPresent || follows);

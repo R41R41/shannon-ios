@@ -179,7 +179,7 @@ async function completeLiveVoiceDelegation(
   if (address) decision = applyGuestAddressing(decision, address);
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
-  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), facts: turnFacts,
+  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), threadId, turnId: deviceContext?.userUtterance?.id,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
