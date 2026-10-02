@@ -3,7 +3,7 @@ screen_id: shannon-ios-yousu
 platform: ios
 baseline_commit: 68cfe7e
 last_verified_at: 2026-10-03
-verification_scope: "2026-10-03: 応答の読み取り（知らない値・欠けた欄）、出してよい操作の判定（allowed にあるものだけ、報告が古い・届かない・サーバーに届かない間は何も出さない、3分を過ぎたら読み直さなくても消える、送る直前の再確認）、確認の文（Windows アプリと一字一句同じ）、結果の文言、時系列の並びと文言、リンクの解釈を swift test で確認。iOS Debug と Mac Debug のビルド、Simulator（架空のデータ、-ShannonDesignPreview -ShannonPreviewYousu tile／now／ops／opsStale／opsConfirm）でライトとダークの表示を確認。実機、実サーバーとの往復、実際の長押しでの送信、30秒おきの読み直しと裏に回した時の停止、Dynamic Type の最大サイズ、VoiceOver の実読み上げは未確認"
+verification_scope: "2026-10-03: 応答の読み取り（知らない値・欠けた欄）、出してよい操作の判定（allowed にあるものだけ、報告が古い・届かない・サーバーに届かない間は何も出さない、3分を過ぎたら読み直さなくても消える、送る直前の再確認）、確認の文（Windows アプリと一字一句同じ）、結果の文言、時系列の並びと文言、リンクの解釈を swift test で確認。iOS Debug と Mac Debug のビルドが通ることを確認。Simulator（架空のデータ、-ShannonDesignPreview -ShannonPreviewYousu tile／now／ops／opsStale／opsConfirm）では、運用（ライト）・シャノンのいま（ダーク）・Minebot の体の起動の確認（ダーク）の3画面を目で確認した。Mac の負荷が高く、スクリーンショットは保存できていない（未取得）。タイル、報告が古いときの表示、残りの外観は Simulator でも未確認。実機、実サーバーとの往復、実際の長押しでの送信、30秒おきの読み直しと裏に回した時の停止、Dynamic Type の最大サイズ、VoiceOver の実読み上げは未確認"
 user_job: "サービスが動いているかとシャノンのいまのようすを確かめ、必要なときだけ、確認してから開始・停止・起動・今すぐ実行を頼む"
 primary_action: "トーク一覧の「ようす」を開き、上の切り替えで「シャノンのいま」と「運用」を見る"
 preserve:
@@ -34,17 +34,7 @@ accessibility:
   focus: "確認を閉じると運用の一覧へ戻る"
   reduce_motion: "長押しの進み具合は、動きを減らす設定では文字と割合で示す"
 evidence:
-  current:
-    - "docs/screenshots/shannon-ios-yousu-tile-light-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-tile-dark-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-now-light-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-now-dark-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-light-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-dark-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-stale-light-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-stale-dark-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-confirm-light-v1.png"
-    - "docs/screenshots/shannon-ios-yousu-ops-confirm-dark-v1.png"
+  current: []
   approved:
     - "Syzygy work/shannon-ios-ops-comparison（2026-10-03 の選択: 入口 A、運用 B、確認 A、シャノンのいま A）"
   privacy: "証跡は架空のデータだけで、実会話・実際の運用の報告・認証情報を含めない"
