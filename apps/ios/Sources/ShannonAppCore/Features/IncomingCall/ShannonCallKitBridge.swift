@@ -50,7 +50,7 @@ final class ShannonCallKitBridge: NSObject, ShannonSystemCalling {
         update.supportsUngrouping = false
         update.supportsDTMF = false
         showing.insert(id)
-        provider.reportNewIncomingCall(with: id, update: update) { error in
+        provider.reportNewIncomingCall(with: id, update: update) { @Sendable [weak self] error in
             let failure = error.map { ($0 as NSError).domain == CXErrorDomainIncomingCall ? ($0 as NSError).code : -1 }
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -124,8 +124,10 @@ extension ShannonCallKitBridge: CXProviderDelegate {
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
         let id = action.callUUID
-        MainActor.assumeIsolated { coordinator?.answered(id) }
-        action.fulfill()
+        // An answer to a call that is no longer ringing (its ring just ended, or it was only shown to be ended) fails,
+        // so the system does not keep a connected call with nothing in it.
+        let answered = MainActor.assumeIsolated { coordinator?.answered(id) ?? false }
+        if answered { action.fulfill() } else { action.fail() }
     }
 
     nonisolated func provider(_ provider: CXProvider, perform action: CXEndCallAction) {

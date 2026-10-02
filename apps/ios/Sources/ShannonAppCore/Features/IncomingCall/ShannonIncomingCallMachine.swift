@@ -184,6 +184,19 @@ public struct ShannonIncomingCallMachine: Equatable, Sendable {
         }
     }
 
+    /// The owner started a conversation in the app while her call was ringing or being connected: the app's conversation
+    /// stands, and the call ends without ringing on. A call that already is the conversation is left alone.
+    public mutating func superseded() -> [ShannonIncomingCallEffect] {
+        guard let current = call, current.phase != .conversation else { return [] }
+        call = nil
+        switch current.phase {
+        case .ringing, .connecting:
+            return [.cancelTimeouts, .endSystemCall(current.id, .answeredElsewhere), .report(callID: current.callID, .failed)]
+        case .speaking, .conversation:
+            return [.stopSpeaking, .endSystemCall(current.id, .remoteEnded)]
+        }
+    }
+
     /// The system's mute button. During the conversation it is the conversation's mute; before it, it is kept for it.
     public mutating func muted(_ id: UUID, _ muted: Bool) -> [ShannonIncomingCallEffect] {
         guard var current = call, current.id == id else { return [] }

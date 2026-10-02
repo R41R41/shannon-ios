@@ -149,6 +149,8 @@ export class PrivateReachOuts {
   /** A message her body holds is the body's. One an app holds is not, unless the app took it long ago and never said it spoke. */
   private claimLeavesItToBody(claim: ReachOutClaim, at: string): boolean {
     if (claim.surface === 'body') return true;
+    // A call he declined or did not answer stays the call's: nobody shows or says it after he chose not to hear it.
+    if (claim.surface === 'iphone_call') return false;
     return claim.spokenAt === null && Date.parse(at) - Date.parse(claim.claimedAt) > PRIVATE_REACH_OUT_LIMITS.abandonedMilliseconds;
   }
 

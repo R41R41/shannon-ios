@@ -14,6 +14,8 @@ extension ShannonVoiceWorkspaceState {
         conversationModel: ShannonConversationModel,
         geminiVoiceModel: ShannonGeminiLiveSessionModel
     ) -> Task<Void, Never> {
+        // A call from Shannon that still rings gives way to a conversation the owner starts himself.
+        ShannonVoiceCallHost.shared.calls?.appConversationWillBegin()
         // A call that failed without being ended may still hold a period; it is remembered like any other.
         geminiVoiceModel.finishGuestPeriod()
         geminiVoiceModel.stop()

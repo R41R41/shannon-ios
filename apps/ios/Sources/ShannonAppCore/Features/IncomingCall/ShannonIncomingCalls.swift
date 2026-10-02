@@ -45,7 +45,9 @@ public enum ShannonIncomingCalls {
                 server: client, system: bridge, speaker: speaker,
                 conversation: ShannonCallConversation(conversationModel: conversationModel)
             )
-            coordinator.isEnabled = { [weak settings] in settings?.isEnabled ?? false }
+            // Read where it is stored, at the moment of the push: a launch before the phone's first unlock could not
+            // read it, and the same process may still be running when he unlocks.
+            coordinator.isEnabled = { UserDefaults.standard.bool(forKey: ShannonIncomingCallSettings.enabledDefaultsKey) }
             // A report leaves after the call is over; iOS would otherwise suspend the app before it is sent.
             coordinator.protect = { work in
                 let assertion = ShannonBackgroundAssertion(name: "shannon.incoming-call.report")
@@ -53,9 +55,9 @@ public enum ShannonIncomingCalls {
                 assertion.end()
             }
             bridge.coordinator = coordinator
-            bridge.tokenChanged = { [weak settings] token in
+            bridge.tokenChanged = { token in
                 guard let token else { return }
-                settings?.received(token: token)
+                settings.received(token: token)
             }
             ShannonVoiceCallHost.shared.calls = coordinator
         }

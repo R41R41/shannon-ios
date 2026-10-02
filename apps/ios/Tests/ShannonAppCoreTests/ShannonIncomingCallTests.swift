@@ -291,8 +291,66 @@ final class ShannonIncomingCallTests: XCTestCase {
         // The conversation ends (終了 in the app, or five minutes of silence): the system's call ends with it.
         w.conversation.end()
         XCTAssertEqual(w.system.events, [.shown(callUUID), .ended(callUUID, .remoteEnded)])
+        // The audio session is the call's until the system took it back: standby does not start on it before.
+        XCTAssertTrue(w.coordinator.isActive)
+        w.coordinator.audioDeactivated()
         XCTAssertFalse(w.coordinator.isActive)
         await finish(w)
+    }
+
+    func testTheAudioIsLetGoEvenIfTheSystemNeverSaysItTookItBack() async {
+        let w = world()
+        w.coordinator.receivedPush(payload())
+        w.coordinator.answered(callUUID)
+        w.coordinator.audioActivated()
+        await w.coordinator.settle()
+        w.coordinator.hungUp(callUUID)
+        XCTAssertTrue(w.coordinator.isActive)
+        while !w.clock.sleepers.contains(where: { $0.seconds == 5 }) { await Task.yield() }
+        w.clock.wake(where: { $0 == 5 })
+        while w.coordinator.isActive { await Task.yield() }
+        await finish(w)
+    }
+
+    func testAnAnswerToACallThatNoLongerRingsFails() async {
+        let w = world()
+        XCTAssertFalse(w.coordinator.answered(callUUID))
+        w.coordinator.receivedPush(payload())
+        XCTAssertTrue(w.coordinator.answered(callUUID))
+        XCTAssertFalse(w.coordinator.answered(callUUID))
+        w.coordinator.hungUp(callUUID)
+        await finish(w)
+    }
+
+    func testAConversationTheOwnerStartsInTheAppEndsACallThatStillRings() async {
+        let ringing = world()
+        ringing.coordinator.receivedPush(payload())
+        ringing.coordinator.appConversationWillBegin()
+        XCTAssertEqual(ringing.system.events, [.shown(callUUID), .ended(callUUID, .answeredElsewhere)])
+        XCTAssertFalse(ringing.coordinator.isActive)
+        await finish(ringing)
+        XCTAssertEqual(ringing.server.reports, ["\(callID):failed"])
+
+        // It began just before he answered: the answer fails and the call ends the same way.
+        let answered = world()
+        answered.coordinator.receivedPush(payload())
+        answered.conversation.isBusy = true
+        XCTAssertFalse(answered.coordinator.answered(callUUID))
+        XCTAssertEqual(answered.system.events, [.shown(callUUID), .ended(callUUID, .answeredElsewhere)])
+        await finish(answered)
+        XCTAssertEqual(answered.server.answers, [])
+
+        // The call's own conversation is not what ends it.
+        let talking = world()
+        talking.coordinator.receivedPush(payload())
+        talking.coordinator.answered(callUUID)
+        talking.coordinator.audioActivated()
+        await talking.coordinator.settle()
+        talking.coordinator.appConversationWillBegin()
+        XCTAssertEqual(talking.coordinator.phase, .conversation)
+        talking.coordinator.hungUp(callUUID)
+        talking.coordinator.audioDeactivated()
+        await finish(talking)
     }
 
     func testHangingUpFromTheSystemEndsTheConversationAndMuteReachesIt() async {
@@ -307,6 +365,7 @@ final class ShannonIncomingCallTests: XCTestCase {
         XCTAssertEqual(w.conversation.stops, 1)
         // The system ended it itself: it is not told again.
         XCTAssertEqual(w.system.events, [.shown(callUUID)])
+        w.coordinator.audioDeactivated()
         XCTAssertFalse(w.coordinator.isActive)
         await finish(w)
     }
@@ -388,6 +447,7 @@ final class ShannonIncomingCallTests: XCTestCase {
         XCTAssertEqual(w.speaker.spoken, [])
         XCTAssertEqual(w.conversation.started, [])
         XCTAssertEqual(w.server.reports, ["\(callID):failed"])
+        w.coordinator.audioDeactivated()
         XCTAssertFalse(w.coordinator.isActive)
     }
 
@@ -400,6 +460,7 @@ final class ShannonIncomingCallTests: XCTestCase {
         await w.coordinator.settle()
         XCTAssertEqual(w.speaker.spoken, [line])
         XCTAssertEqual(w.system.events, [.shown(callUUID), .ended(callUUID, .remoteEnded)])
+        w.coordinator.audioDeactivated()
         XCTAssertFalse(w.coordinator.isActive)
         await finish(w)
     }
@@ -416,6 +477,7 @@ final class ShannonIncomingCallTests: XCTestCase {
         XCTAssertEqual(w.speaker.stops, 1)
         await finish(w)
         XCTAssertEqual(w.conversation.started, [])
+        w.coordinator.audioDeactivated()
         XCTAssertFalse(w.coordinator.isActive)
     }
 

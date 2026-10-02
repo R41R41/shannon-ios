@@ -456,6 +456,10 @@ describe('answering', () => {
     // Nobody says it after he chose not to hear it; the text stays in the Talk.
     expect(bodyOf(declined.beat(MAC, 'mac')).reachOut).toBeNull();
     expect(declined.speaker.text(scope, id)).toBe(TEXT);
+    // Her body is not told about it either, also long after the ring.
+    await declined.bodyOnline();
+    declined.advance(6 * MINUTE);
+    expect((await declined.bodyPresence())?.pending).toBe(0);
     declined.close();
 
     const failed = world();
@@ -586,7 +590,7 @@ describe('what she is told afterwards', () => {
   const lines = (value: ReachOutFacts) => reachOutHappenedLines(value, { at: '2026-10-03T03:03:00.000Z', timeZone: 'Asia/Tokyo' }).join('\n');
 
   it('has one fixed line for each outcome of a call', () => {
-    expect(lines(facts('answered', { replied: true, repliedAfterSeconds: 20 }))).toContain('- 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれて、声で伝えた。');
+    expect(lines(facts('answered', { replied: true, repliedAfterSeconds: 20 }))).toContain('- 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれた。');
     expect(lines(facts('declined'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏はいまは出ないことを選んだ。');
     expect(lines(facts('unanswered'))).toContain('- 電話の知らせ: iPhoneに電話をかけたが、ライ氏は出なかった。');
     expect(lines(facts('unanswered'))).toContain('3分待ったが、返事はまだない。');

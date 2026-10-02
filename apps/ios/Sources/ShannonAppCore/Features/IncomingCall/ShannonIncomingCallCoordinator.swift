@@ -52,6 +52,10 @@ public final class ShannonIncomingCallCoordinator {
     }
     /// Keeps the app running for a report that leaves after the call is over.
     @ObservationIgnored public var protect: @MainActor (@escaping @MainActor () async -> Void) async -> Void = { await $0() }
+    /// The system activated the audio session for a call and has not taken it back yet.
+    @ObservationIgnored private var audioHeld = false { didSet { if audioHeld != oldValue { isActive = machine.isActive || audioHeld } } }
+    @ObservationIgnored private var audioRelease: Task<Void, Never>?
+    static let audioReleasePatience: TimeInterval = 5
     @ObservationIgnored private var ringTimer: Task<Void, Never>?
     @ObservationIgnored private var connectTimer: Task<Void, Never>?
     /// Work a test waits for: claims, lines, reports.
@@ -86,11 +90,33 @@ public final class ShannonIncomingCallCoordinator {
     }
 
     public func showFailed(_ id: UUID, silenced: Bool) { perform(machine.showFailed(id, silenced: silenced)) }
-    public func answered(_ id: UUID) { perform(machine.answer(id)) }
+    /// He answered. False when there is no such ringing call (it timed out a moment ago, or it was only shown to be
+    /// ended): the system is then told the answer failed, so no silent call stays on the screen.
+    @discardableResult
+    public func answered(_ id: UUID) -> Bool {
+        guard machine.call?.id == id, machine.call?.phase == .ringing else { return false }
+        // A conversation began in the app while the phone rang: it stands, and the call ends.
+        if conversation.isBusy {
+            perform(machine.superseded())
+            return false
+        }
+        perform(machine.answer(id))
+        return true
+    }
+
+    /// The owner is starting a conversation in the app. A call that rings or is being connected gives way to it.
+    public func appConversationWillBegin() { perform(machine.superseded()) }
     public func hungUp(_ id: UUID) { perform(machine.hangUp(id)) }
     public func muted(_ id: UUID, _ muted: Bool) { perform(machine.muted(id, muted)) }
-    public func audioActivated() { perform(machine.audioActivated()) }
-    public func audioDeactivated() { perform(machine.audioDeactivated()) }
+    public func audioActivated() {
+        audioHeld = true
+        perform(machine.audioActivated())
+    }
+
+    public func audioDeactivated() {
+        audioHeld = false
+        perform(machine.audioDeactivated())
+    }
     public func systemReset() { perform(machine.reset()) }
 
     /// Waits until everything the last events started has finished. For tests.
@@ -141,7 +167,17 @@ public final class ShannonIncomingCallCoordinator {
             case let .setMuted(muted): conversation.setMuted(muted)
             }
         }
-        isActive = machine.isActive
+        // The system takes the audio session back a moment after the call is over; until it has, nothing else (standby)
+        // may start on it. Should the system never say so, the hold is let go after a few seconds.
+        if !machine.isActive, audioHeld, audioRelease == nil {
+            audioRelease = Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = await self.sleep(Self.audioReleasePatience)
+                self.audioRelease = nil
+                if !self.machine.isActive { self.audioHeld = false }
+            }
+        }
+        isActive = machine.isActive || audioHeld
     }
 
     private func claim(reachOutID: String, callID: String) {
@@ -194,6 +230,9 @@ public final class ShannonIncomingCallCoordinator {
                         return
                     } catch is ShannonAPIError {
                         // The server answered and will not take it: asking again changes nothing.
+                        return
+                    } catch is ShannonPrivateListeningError {
+                        // This phone is not paired (or its credential cannot be read yet): there is nobody to tell.
                         return
                     } catch {
                         guard attempt + 1 < Self.reportAttempts, await self.sleep(Double(attempt + 1) * 2) else { return }

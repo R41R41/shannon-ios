@@ -87,6 +87,9 @@ public final class ShannonIncomingCallSettings {
     }
 
     private func register() async {
+        // The stored switch is the truth: a launch before the phone's first unlock could not read it.
+        let stored = defaults.bool(forKey: Self.enabledDefaultsKey)
+        if stored != isEnabled { isEnabled = stored }
         let enabled = isEnabled
         // Nothing is sent about a phone whose owner never switched calls on.
         guard enabled || defaults.bool(forKey: Self.registeredDefaultsKey) else {

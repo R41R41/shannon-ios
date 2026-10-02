@@ -56,7 +56,7 @@ const EARPHONE_LINE: Readonly<Record<ReachOutAppSurface, string>> = Object.freez
 
 /** The server rang his iPhone with her message (owner decision 2026-10-03): what became of that call. A closed fact; never what was said. */
 const CALL_LINE: Readonly<Record<ReachOutCallOutcome, string>> = Object.freeze({
-  answered: `iPhoneに電話をかけたら、${SHANNON_OWNER_NAME}が出てくれて、声で伝えた。`,
+  answered: `iPhoneに電話をかけたら、${SHANNON_OWNER_NAME}が出てくれた。`,
   declined: `iPhoneに電話をかけたが、${SHANNON_OWNER_NAME}はいまは出ないことを選んだ。`,
   unanswered: `iPhoneに電話をかけたが、${SHANNON_OWNER_NAME}は出なかった。`,
   failed: 'iPhoneに電話をかけようとしたが、つながらなかった。',

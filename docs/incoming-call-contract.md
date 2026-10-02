@@ -120,7 +120,7 @@ After a message of hers she observes what she observes after any message: whethe
 
 | `call` | Line |
 | --- | --- |
-| `answered` | 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれて、声で伝えた。 |
+| `answered` | 電話の知らせ: iPhoneに電話をかけたら、ライ氏が出てくれた。 |
 | `declined` | 電話の知らせ: iPhoneに電話をかけたが、ライ氏はいまは出ないことを選んだ。 |
 | `unanswered` | 電話の知らせ: iPhoneに電話をかけたが、ライ氏は出なかった。 |
 | `failed` | 電話の知らせ: iPhoneに電話をかけようとしたが、つながらなかった。 |
