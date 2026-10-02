@@ -19,8 +19,9 @@ export interface ShannonCapability {
 
 /**
  * How she talks about what she sees when she looks at the room through her body's camera
- * (owner decision, Syzygy ADR-0002 addendum 2026-10-02). The capability line and the prompt
- * of the look itself both use these four lines, so they cannot drift apart.
+ * (owner decision, Syzygy ADR-0002 addendum 2026-10-02). The capability line, the prompt of a
+ * look in conversation and the prompt of a look in her own time all use these four lines, so
+ * they cannot drift apart.
  */
 export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
   '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい',
@@ -43,13 +44,15 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'photo_understanding', audience: 'owner',
     text: '写真: iPhoneで選んだ1枚の内容を見る。' },
   { id: 'room_look', audience: 'owner',
-    text: `部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
+    text: `部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
   { id: 'text_attachments', audience: 'owner',
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',
     text: 'Aether: 共有された範囲のノート（題名と短い抜粋）だけ読む。「〜をノートに残して」で保存案を提案受信箱へ送る。' },
   { id: 'notion_read', audience: 'owner',
     text: 'Notion: 共有されたページを読む（読むだけ）。' },
+  { id: 'own_folder', audience: 'owner',
+    text: '自分のフォルダ: ライ氏がPCに用意してくれている時、自分の時間に、メモと見せてもいい物語の写しをそこへ置く（置くだけ。中を読むことも、ほかの操作もまだできない）。' },
   { id: 'voyager_tasks', audience: 'owner',
     text: 'Voyager: タスクを検索して読む。「〜をタスクにして」「整理して」でタスク案を作り、確認カードで選ばれた分だけ反映される。' },
   { id: 'agent_tasks', audience: 'owner',

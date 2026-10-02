@@ -9,7 +9,9 @@ export const BODY_LOOK_LIMITS = Object.freeze({
   /** Owner's defaults; `SHANNON_BODY_LOOK_PER_HOUR` / `SHANNON_BODY_LOOK_PER_DAY` may lower or raise them. */
   perHour: 6,
   perDay: 30,
-  /** A look the body has not answered by then is closed as `timeout`. */
+  /** Stage 2: looks she takes in her own activity, per owner-local day, inside the two limits above (`SHANNON_AUTONOMY_MAX_ROOM_LOOKS`; 0 switches stage 2 off). */
+  activityPerDay: 3,
+  /** A look the body has not answered by then is closed as `timeout`. The same for a look opened by her activity loop. */
   lifetimeMilliseconds: 30_000,
   /** The body counts as present (window visible) while its last presence read is this recent. */
   presenceFreshMilliseconds: 30_000,
@@ -30,6 +32,12 @@ export const BODY_LOOK_LIMITS = Object.freeze({
 export const BODY_LOOK_BASE64_CHARACTERS = Math.ceil(BODY_LOOK_LIMITS.imageBytes / 3) * 4;
 /** The JSON body limit of `POST /v1/body/looks/{id}` only: the largest frame plus 2,048 bytes for the other fields. */
 export const BODY_LOOK_REQUEST_BYTES = BODY_LOOK_BASE64_CHARACTERS + 2_048;
+
+/**
+ * The `thread_id` of a look her activity loop opened: it belongs to no Talk. Such a look is never
+ * spoken about in a conversation and is recorded by the loop through the gate, not as a conversation action.
+ */
+export const BODY_LOOK_ACTIVITY_THREAD = 'activity:own-time';
 
 export const BODY_LOOK_RESULT_PREFIX = '/v1/body/looks/';
 const LOOK_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,79}$/u;
@@ -141,6 +149,8 @@ export interface BodyLookConfig {
   enabled: boolean;
   perHour: number;
   perDay: number;
+  /** Looks from her own activity per owner-local day, counted inside `perHour` and `perDay`. 0: stage 2 is off. */
+  activityPerDay: number;
 }
 
 function boundedLimit(value: string | undefined, fallback: number, maximum: number): number {
@@ -154,5 +164,6 @@ export function configuredBodyLook(environment: Readonly<Record<string, string |
     enabled: !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_BODY_LOOK?.trim().toLowerCase() ?? ''),
     perHour: boundedLimit(environment.SHANNON_BODY_LOOK_PER_HOUR, BODY_LOOK_LIMITS.perHour, 60),
     perDay: boundedLimit(environment.SHANNON_BODY_LOOK_PER_DAY, BODY_LOOK_LIMITS.perDay, 500),
+    activityPerDay: boundedLimit(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, BODY_LOOK_LIMITS.activityPerDay, 30),
   };
 }

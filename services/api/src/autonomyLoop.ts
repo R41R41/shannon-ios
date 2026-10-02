@@ -146,6 +146,7 @@ export class ShannonAutonomyLoop {
         service.recordAction(this.scopeKey, {
           decisionId: decision.activityId, summary: result.summary, outcome: result.outcome,
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
+          ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
         });
         if (committed?.plan) store.loop.setPlan(cycle.id, committed.plan, false);
       });

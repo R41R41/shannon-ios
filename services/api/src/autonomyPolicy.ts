@@ -71,6 +71,15 @@ export interface AutonomyPolicyContext {
   /** For `notion_read`: reads of the owner's shared Notion pages. Absent means none are allowed. */
   notionReadsToday?: number;
   maximumNotionReadsPerDay?: number;
+  /**
+   * For `room_look`: looks her own activity was allowed today, and every look (conversation and
+   * activity together) in the last hour and today, each with its limit. Absent means none are allowed.
+   */
+  roomLooks?: {
+    activityToday: number; maximumActivityPerDay: number;
+    lastHour: number; maximumPerHour: number;
+    today: number; maximumPerDay: number;
+  };
 }
 
 export interface AutonomyDecision {
@@ -131,6 +140,14 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
   // Reading is all this domain covers; the reader itself has no write request.
   if (domainId === 'notion_read' && (context.notionReadsToday ?? 0) + 1 > (context.maximumNotionReadsPerDay ?? 0)) {
     return refuse('forbidden', 'access_limit', domainId, '今日のNotionの読み取りが上限に達したため、実行しません。');
+  }
+  // One look at the room: her own daily count, inside the hour and day limits that conversation looks share.
+  if (domainId === 'room_look') {
+    const looks = context.roomLooks;
+    if (!looks || looks.activityToday + 1 > looks.maximumActivityPerDay
+      || looks.lastHour + 1 > looks.maximumPerHour || looks.today + 1 > looks.maximumPerDay) {
+      return refuse('forbidden', 'access_limit', domainId, '部屋を見る回数が上限に達したため、実行しません。');
+    }
   }
   if (request.paid) {
     if (!context.isKnownModel(request.paid.model)) {

@@ -1,4 +1,6 @@
 import type { BodyLookOptions } from './bodyLook.js';
+import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
+import { createConfiguredActivityRoomLookViewer } from './bodyLookActivityVision.js';
 import { BODY_LOOK_REQUEST_BYTES, bodyLookResultId, configuredBodyLook } from './bodyLookContract.js';
 import { SQLiteBodyLookSpeaker } from './bodyLookDelivery.js';
 import { SQLiteBodyLookStore } from './bodyLookStore.js';
@@ -8,7 +10,8 @@ import type { LlmUsageEvent } from './llmUsage.js';
 /**
  * What the API process gives the kernel for looking at the room: the small table, the
  * switch and limits from the environment, the conversation model as the viewer, and the
- * initiative path as the way her message reaches the apps.
+ * initiative path as the way her message reaches the apps. For a look her activity loop
+ * opened (stage 2) it adds the hand-off table and a viewer that uses the dedicated autonomy key.
  */
 export function configuredBodyLookOptions(
   environment: Readonly<Record<string, string | undefined>>,
@@ -17,8 +20,12 @@ export function configuredBodyLookOptions(
 ): BodyLookOptions {
   const store = new SQLiteBodyLookStore(databasePath);
   const speaker = new SQLiteBodyLookSpeaker(databasePath);
-  opened.push(store, speaker);
-  return { store, config: configuredBodyLook(environment), viewer: createConfiguredRoomLookViewer(environment, usageStore), speaker };
+  const hand = new SQLiteBodyLookActivityStore(databasePath);
+  opened.push(store, speaker, hand);
+  return {
+    store, config: configuredBodyLook(environment), viewer: createConfiguredRoomLookViewer(environment, usageStore), speaker,
+    activity: { hand, viewer: createConfiguredActivityRoomLookViewer(environment, (scopeKey, lookId, usage) => hand.recordUsage(scopeKey, lookId, usage)) },
+  };
 }
 
 const opened: Array<{ close(): void }> = [];

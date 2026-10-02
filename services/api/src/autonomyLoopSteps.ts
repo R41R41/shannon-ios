@@ -3,6 +3,7 @@ import { yenFromUsd, type AutonomyConfig } from './autonomyBudget.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
+import { ROOM_LOOK_DOMAIN, prepareRoomLook, roomLookAvailable, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
 import { planFromThought, storyNotes, thinkingMaterials, withNoteAfterReading, type Thought } from './autonomyLoopPlan.js';
 import {
   AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, parsedModelObject, revisePrompt, thinkingPrompt, type AutonomyPrompt,
@@ -43,6 +44,8 @@ export interface StepDependencies {
   reader: AutonomyPublicReader;
   showing: StudyShowing;
   notion?: AutonomyNotionReader;
+  /** Looking at the room through her body's camera; absent, a look is never planned. */
+  looks?: AutonomyRoomLooks;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */
@@ -52,6 +55,7 @@ interface BoundAdapters {
   notion?: AutonomyNotionReader;
   showing?: StudyShowing;
   folder?: HostFolderDesk;
+  looks?: AutonomyRoomLooks;
 }
 
 export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domain'>, dependencies: StepDependencies): BoundAdapters {
@@ -62,6 +66,7 @@ export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domai
     case 'owner_message': return { showing: dependencies.showing };
     case NOTION_READ_DOMAIN: return dependencies.notion ? { notion: dependencies.notion } : {};
     case 'host_folder': return { folder: dependencies.service.folder };
+    case ROOM_LOOK_DOMAIN: return dependencies.looks ? { looks: dependencies.looks } : {};
     default: return {};
   }
 }
@@ -74,6 +79,8 @@ export interface StepResult {
   link?: string;
   /** Replaces the tool name of the request in the record, when the step ended as something narrower. */
   tool?: string;
+  /** Why a failed step failed, as a code from a closed set. */
+  reasonCode?: string;
   /** Writes of the step's product; runs inside the reporting transaction. */
   commit?: (remaining: readonly AutonomyPlannedStep[], at: string) => StepCommit | void;
 }
@@ -87,7 +94,7 @@ export interface StepCommit {
 
 export interface PreparedStep {
   request: AutonomousActionRequest;
-  purpose?: AutonomyModelPurpose;
+  purpose?: AutonomyModelPurpose | typeof ROOM_LOOK_DOMAIN;
   estimate?: { inputTokens: number; outputTokens: number };
   /** Why she would ask for more budget if the cap blocks this step. Absent for steps she would not ask for. */
   budgetReason?: string;
@@ -110,6 +117,7 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
+    case 'look': return prepareRoomLook(dependencies, cycle, at);
     default: return null;
   }
 }
@@ -150,6 +158,7 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
     folderAvailable: service.folder.available(cycle.scopeKey, at),
+    lookAvailable: roomLookAvailable(dependencies, cycle.scopeKey, at),
   });
   const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials), OUTPUT_TOKENS.think);
   if (!call) return null;
@@ -162,7 +171,7 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       const thought: Thought = planFromThought(reply, {
         pursuits: materials.pursuits, pieces: store.study.list(cycle.scopeKey), unnotedReadingIds: materials.unnotedReadings.map(item => item.id),
         placeUrls: materials.places.map(place => place.url),
-      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true });
+      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true, lookAvailable: materials.lookAvailable === true });
       return {
         outcome: 'done', usage,
         summary: thought.text ? `次に何をするか考えました。「${thought.text}」` : '次に何をするか考えました。',

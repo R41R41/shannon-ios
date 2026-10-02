@@ -36,6 +36,8 @@ export interface AutonomyConfig {
   maximumPublicReadsPerDay: number;
   /** Reads of the owner's shared Notion pages per owner-local day. */
   maximumNotionReadsPerDay: number;
+  /** Looks at the room from her own activity per owner-local day, inside the overall look limits. 0 switches them off. */
+  maximumRoomLooksPerDay: number;
   /** Files she may queue for her folders per owner-local day. */
   maximumHostFolderWritesPerDay: number;
   /** How long a device may hold a claimed step before it is closed as failed. */
@@ -60,6 +62,7 @@ export function configuredAutonomy(
     timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || 'Asia/Tokyo',
     maximumPublicReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_PUBLIC_READS, 0, 10_000, 200)),
     maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
+    maximumRoomLooksPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, 0, 30, 3)),
     maximumHostFolderWritesPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_HOST_FOLDER_WRITES, 0, 1_000, 10)),
     hostStepLeaseMilliseconds: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS, 30, 3_600, 300)) * 1_000,
     modelPrices: configuredAutonomyModelPrices(environment),

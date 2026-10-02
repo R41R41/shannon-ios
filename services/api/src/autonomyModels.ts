@@ -47,6 +47,15 @@ export const AUTONOMY_DEFAULT_MODEL: Readonly<Record<AutonomyModelPurpose, strin
   critique: 'gpt-5.6-terra',
 });
 
+/**
+ * The model that is shown the one frame of a look she takes in her own time. Fixed, because it
+ * must accept an image and be reachable with the dedicated key; the API process calls it, and
+ * the gate prices it like any step.
+ */
+export const AUTONOMY_ROOM_LOOK_MODEL = 'gemini-3.8-flash';
+/** What the gate is asked to make room for: one frame of at most 960 by 1,920 pixels, and every output token the call may use (reasoning included). */
+export const AUTONOMY_ROOM_LOOK_TOKENS = Object.freeze({ frame: 2_000, output: 1_000 });
+
 export const AUTONOMY_MODEL_RECOMMENDATION: Readonly<Partial<Record<AutonomyModelPurpose, string>>> = Object.freeze({
   prose: '日本語の文章にはGeminiを勧める、というのが持ち主の推奨です（品質は未検証）。',
 });

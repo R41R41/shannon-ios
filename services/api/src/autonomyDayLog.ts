@@ -17,6 +17,9 @@ const STEP_WORDING: readonly { tool: string; stem: (count: number) => string; pl
   { tool: 'study.ready', stem: count => `物語を${count}つ「見せてもいい」にし`, plain: count => `物語を${count}つ「見せてもいい」にした` },
   { tool: 'study.show', stem: count => `物語を${count}つ見せ`, plain: count => `物語を${count}つ見せた` },
   { tool: 'study.put_away', stem: count => `下書きを${count}つしまい`, plain: count => `下書きを${count}つしまった` },
+  // Counted when the device reports the file is in place, not when she queues it.
+  { tool: 'folder.write', stem: count => `自分のフォルダに写しを${count}つ置き`, plain: count => `自分のフォルダに写しを${count}つ置いた` },
+  { tool: 'study.look', stem: count => `部屋を${count}回見`, plain: count => `部屋を${count}回見た` },
 ];
 
 function stepCounts(entries: readonly LoggedEntry[]): { wording: (typeof STEP_WORDING)[number]; count: number }[] {
