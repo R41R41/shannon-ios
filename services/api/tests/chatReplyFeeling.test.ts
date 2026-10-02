@@ -504,13 +504,13 @@ describe('guests and other people present never move her feeling toward the owne
     // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
     const directory = new URL('../src/', import.meta.url);
     const naming = readdirSync(directory).filter(file => file.endsWith('.ts'))
-      .filter(file => /ReplyFeeling|resolveTextReplyEmotion|usesDecidedFeeling/u.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
+      .filter(file => /replyFeeling|resolveTextReplyEmotion|usesDecidedFeeling/iu.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)
     expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
     const kernel = readFileSync(new URL('apiKernel.ts', directory), 'utf8');
     expect(kernel.match(/replyFeelingOffer\(audience\.alone\)/gu)).toHaveLength(1);
     expect(kernel.match(/resolveTextReplyEmotion\(\{[^}]*\}, completion, audience\.alone\)/gu)).toHaveLength(1);
-    expect(kernel.match(/ReplyFeeling|resolveTextReplyEmotion/gu)).toHaveLength(4);
+    expect(kernel.match(/replyFeeling|resolveTextReplyEmotion/giu)).toHaveLength(4);
   });
 });
 
