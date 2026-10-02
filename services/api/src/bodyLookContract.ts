@@ -6,11 +6,12 @@
  * once, and dropped. Nothing in this file, or in any module it is passed to, stores it.
  */
 export const BODY_LOOK_LIMITS = Object.freeze({
-  /** Owner's defaults; `SHANNON_BODY_LOOK_PER_HOUR` / `SHANNON_BODY_LOOK_PER_DAY` may lower or raise them. */
+  /** Owner's defaults. `SHANNON_BODY_LOOK_PER_HOUR` may lower or raise the hour's limit, the technical guard against a loop. */
   perHour: 6,
-  perDay: 30,
-  /** Stage 2: looks she takes in her own activity, per owner-local day, inside the two limits above (`SHANNON_AUTONOMY_MAX_ROOM_LOOKS`; 0 switches stage 2 off). */
-  activityPerDay: 3,
+  /** No count a day (owner decision 2026-10-03): the hour's limit is the guard. `SHANNON_BODY_LOOK_PER_DAY` may set one. */
+  perDay: Number.POSITIVE_INFINITY,
+  /** Stage 2: looks she takes in her own activity, inside the hour's limit above. No count a day unless `SHANNON_AUTONOMY_MAX_ROOM_LOOKS` sets one; 0 switches stage 2 off. */
+  activityPerDay: Number.POSITIVE_INFINITY,
   /** A look the body has not answered by then is closed as `timeout`. The same for a look opened by her activity loop. */
   lifetimeMilliseconds: 30_000,
   /** For a look in her own time: the body counts as present (window visible) while its last presence read is this recent. */
@@ -155,7 +156,7 @@ export interface BodyLookConfig {
   enabled: boolean;
   perHour: number;
   perDay: number;
-  /** Looks from her own activity per owner-local day, counted inside `perHour` and `perDay`. 0: stage 2 is off. */
+  /** Looks from her own activity per owner-local day, counted inside `perHour` and `perDay`; `Infinity` is no count. 0: stage 2 is off. */
   activityPerDay: number;
   /** How recent a presence read must be for a look in conversation. Absent: `BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds`. */
   presenceFreshMilliseconds?: number;
@@ -166,13 +167,26 @@ function boundedLimit(value: string | undefined, fallback: number, maximum: numb
   return value?.trim() && Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }
 
+/**
+ * A count a day that has no limit unless the owner sets one, read as `dailyCount` (`dailyCount.ts`) reads her other counts:
+ * unset, empty or `unlimited` is no limit; `0` and the words for off are none; a positive whole number is that many;
+ * anything else cannot be read and is none.
+ */
+function dailyCount(value: string | undefined): number {
+  const text = value?.trim().toLowerCase() ?? '';
+  if (!text || text === 'unlimited') return Number.POSITIVE_INFINITY;
+  const parsed = /^\d+(?:\.\d+)?$/u.test(text) ? Number(text) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.min(100_000, Math.trunc(parsed)) : 0;
+}
+
 /** Switching looks off needs only `SHANNON_BODY_LOOK=off` and a restart, not a deployment. */
 export function configuredBodyLook(environment: Readonly<Record<string, string | undefined>> = process.env): BodyLookConfig {
   return {
     enabled: !['off', 'false', '0', 'disabled'].includes(environment.SHANNON_BODY_LOOK?.trim().toLowerCase() ?? ''),
     perHour: boundedLimit(environment.SHANNON_BODY_LOOK_PER_HOUR, BODY_LOOK_LIMITS.perHour, 60),
-    perDay: boundedLimit(environment.SHANNON_BODY_LOOK_PER_DAY, BODY_LOOK_LIMITS.perDay, 500),
-    activityPerDay: boundedLimit(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, BODY_LOOK_LIMITS.activityPerDay, 30),
+    // Unset or `unlimited`: no count a day. 0: none (for her own time: stage 2 off). A positive number: that many a day.
+    perDay: dailyCount(environment.SHANNON_BODY_LOOK_PER_DAY),
+    activityPerDay: dailyCount(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS),
     presenceFreshMilliseconds: boundedLimit(environment.SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS,
       BODY_LOOK_LIMITS.conversationPresenceFreshMilliseconds / 1_000, 300, 10) * 1_000,
   };

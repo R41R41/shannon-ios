@@ -445,10 +445,10 @@ describe('body contract document', () => {
       'SHANNON_BODY_LOOK', 'SHANNON_BODY_LOOK_PER_HOUR', 'SHANNON_BODY_LOOK_PER_DAY',
     ]) expect(document, word).toContain(word);
     expect(BODY_LOOK_REQUEST_BYTES).toBe(535_384);
-    expect(BODY_LOOK_LIMITS).toMatchObject({ imageBytes: 400_000, imageWidth: 960, lifetimeMilliseconds: 30_000, fastPollSeconds: 3, perHour: 6, perDay: 30 });
+    expect(BODY_LOOK_LIMITS).toMatchObject({ imageBytes: 400_000, imageWidth: 960, lifetimeMilliseconds: 30_000, fastPollSeconds: 3, perHour: 6, perDay: Number.POSITIVE_INFINITY, activityPerDay: Number.POSITIVE_INFINITY });
     for (const path of ['../../../deploy/azure/api.env.example', '../../../.env.example']) {
       expect(readFileSync(new URL(path, import.meta.url), 'utf8'), path).toMatch(/^SHANNON_BODY_INGEST=on$/mu);
-      for (const line of [/^SHANNON_BODY_LOOK=on$/mu, /^SHANNON_BODY_LOOK_PER_HOUR=6$/mu, /^SHANNON_BODY_LOOK_PER_DAY=30$/mu]) {
+      for (const line of [/^SHANNON_BODY_LOOK=on$/mu, /^SHANNON_BODY_LOOK_PER_HOUR=6$/mu, /^SHANNON_BODY_LOOK_PER_DAY=unlimited$/mu, /^SHANNON_AUTONOMY_MAX_ROOM_LOOKS=unlimited$/mu]) {
         expect(readFileSync(new URL(path, import.meta.url), 'utf8'), path).toMatch(line);
       }
     }

@@ -456,9 +456,15 @@ describe('limits', () => {
     expect(h.activity().filter(entry => entry.outcome === 'done')).toHaveLength(7);
   });
 
-  it('allows 30 looks in an owner-local day and starts again the next day', async () => {
-    const h = harness();
+  it('has no count a day unless the owner sets one, and then starts again the next day', async () => {
+    const free = harness();
     // 2026-10-01T15:00Z is midnight in Tokyo.
+    free.clock.at = '2026-10-01T15:00:00.000Z';
+    await free.camera();
+    // More than the thirty a day there used to be, each inside the hour's limit.
+    for (let index = 0; index < 40; index += 1) expect(await look(free, 11 * MINUTE), `look ${index + 1}`).toBe(true);
+
+    const h = harness({ config: { perDay: 30 } });
     h.clock.at = '2026-10-01T15:00:00.000Z';
     await h.camera();
     for (let index = 0; index < 30; index += 1) expect(await look(h, 11 * MINUTE), `look ${index + 1}`).toBe(true);
@@ -469,17 +475,26 @@ describe('limits', () => {
   });
 
   it('reads the switch and the limits from the environment, with the owner\'s defaults', () => {
-    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 3, presenceFreshMilliseconds: 75_000 });
+    const none = Number.POSITIVE_INFINITY;
+    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: none, activityPerDay: none, presenceFreshMilliseconds: 75_000 });
     for (const off of ['off', 'OFF', 'false', '0', 'disabled']) expect(configuredBodyLook({ SHANNON_BODY_LOOK: off }).enabled).toBe(false);
     expect(configuredBodyLook({ SHANNON_BODY_LOOK: 'on', SHANNON_BODY_LOOK_PER_HOUR: '2', SHANNON_BODY_LOOK_PER_DAY: '5' }))
-      .toEqual({ enabled: true, perHour: 2, perDay: 5, activityPerDay: 3, presenceFreshMilliseconds: 75_000 });
-    // Stage 2 has its own count; 0 switches it off without touching looks in conversation.
-    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' })).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 0, presenceFreshMilliseconds: 75_000 });
+      .toEqual({ enabled: true, perHour: 2, perDay: 5, activityPerDay: none, presenceFreshMilliseconds: 75_000 });
+    // Stage 2 has its own switch; 0 switches it off without touching looks in conversation.
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' })).toEqual({ enabled: true, perHour: 6, perDay: none, activityPerDay: 0, presenceFreshMilliseconds: 75_000 });
     // How recent the body's presence read must be for a look in conversation: 75 seconds, 10–300 by the environment.
     expect(configuredBodyLook({ SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS: '90' }).presenceFreshMilliseconds).toBe(90_000);
     for (const invalid of ['5', '301', 'soon', '']) expect(configuredBodyLook({ SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS: invalid }).presenceFreshMilliseconds).toBe(75_000);
-    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '31' }).activityPerDay).toBe(3);
-    expect(configuredBodyLook({ SHANNON_BODY_LOOK_PER_HOUR: 'many', SHANNON_BODY_LOOK_PER_DAY: '-1' })).toMatchObject({ perHour: 6, perDay: 30 });
+    // No count a day: unset, empty or `unlimited`. A number is a cap (the stopgap of 30 stays a cap of 30). What cannot be read is none.
+    for (const unlimited of [undefined, '', ' ', 'unlimited', 'UNLIMITED']) {
+      expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: unlimited, SHANNON_BODY_LOOK_PER_DAY: unlimited })).toMatchObject({ perDay: none, activityPerDay: none });
+    }
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '30', SHANNON_BODY_LOOK_PER_DAY: '500' })).toMatchObject({ perDay: 500, activityPerDay: 30 });
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '31' }).activityPerDay).toBe(31);
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: 'many', SHANNON_BODY_LOOK_PER_DAY: '-1' })).toMatchObject({ perDay: 0, activityPerDay: 0 });
+    // The hour's limit is the guard that stays: a value that cannot be read keeps 6.
+    expect(configuredBodyLook({ SHANNON_BODY_LOOK_PER_HOUR: 'many' }).perHour).toBe(6);
+    expect(configuredBodyLook({ SHANNON_BODY_LOOK_PER_HOUR: 'unlimited' }).perHour).toBe(6);
   });
 });
 

@@ -166,7 +166,7 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
   if (domainId === 'notion_read' && (context.notionReadsToday ?? 0) + 1 > (context.maximumNotionReadsPerDay ?? 0)) {
     return refuse('forbidden', 'access_limit', domainId, '今日のNotionの読み取りが上限に達したため、実行しません。');
   }
-  // One look at the room: her own daily count, inside the hour and day limits that conversation looks share.
+  // One look at the room: inside the hour's limit that conversation looks share, and inside a count a day only where the owner set one.
   if (domainId === 'room_look') {
     const looks = context.roomLooks;
     if (!looks || looks.activityToday + 1 > looks.maximumActivityPerDay

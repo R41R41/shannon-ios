@@ -292,7 +292,7 @@ The lines are a **seed set of five, one per scene, awaiting the owner's review**
 
 ## Looking at the room
 
-Owner decision (Syzygy ADR-0002 addendum, 2026-10-02). Shannon may take **one look** at the room through the body's camera: one JPEG frame, only while her window is visible. Stage 1: in a conversation with the owner alone, by text or, since 2026-10-02, by voice (see [A look in a voice call](#a-look-in-a-voice-call)). Stage 2: also in her own time, a few times a day (see [A look in her own time](#a-look-in-her-own-time)). The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
+Owner decision (Syzygy ADR-0002 addendum, 2026-10-02). Shannon may take **one look** at the room through the body's camera: one JPEG frame, only while her window is visible. Stage 1: in a conversation with the owner alone, by text or, since 2026-10-02, by voice (see [A look in a voice call](#a-look-in-a-voice-call)). Stage 2: also in her own time, with no count a day since 2026-10-03 (see [A look in her own time](#a-look-in-her-own-time)). The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
 
 ### Order of one look
 
@@ -337,7 +337,7 @@ The next voice turn replays the stored message as history, so she knows what she
 
 ### A look in her own time
 
-Stage 2. Her activity loop may ask for a look too, at most 3 times an owner-local day (`SHANNON_AUTONOMY_MAX_ROOM_LOOKS`), inside the same 6 an hour and 30 a day. **Nothing new is on the wire.** The differences the body sees:
+Stage 2. Her activity loop may ask for a look too. There is no count a day (owner decision 2026-10-03; it was 3): `SHANNON_AUTONOMY_MAX_ROOM_LOOKS` unset or `unlimited` means as often as the other conditions allow, `0` switches stage 2 off, and a positive number is a cap. Every look stays inside the same 6 an hour, her daily budget, and the gate. **Nothing new is on the wire.** The differences the body sees:
 
 - `look` may appear in `presence` **without a conversation turn before it**. The server asks only while a device with `flags.camera: true` read presence in the last 30 seconds and the owner has not written or spoken to her for 10 minutes. Treat it exactly like any other look: the badge, one frame, the same refusal codes, the body's own limits.
 - The body polls every 10 seconds when nothing is happening, so it may first see the look up to 10 seconds after `requestedAt`. `expiresAt` is still 30 seconds after `requestedAt`: the body has at least 20 seconds to answer. Once it has read the look, `pollAfterSeconds` is 3 as for any open look.
@@ -430,7 +430,7 @@ Not seen:
 | `failed` | The frame could not be taken or encoded. |
 | `timeout` | The frame was not ready in time. (The server uses the same code for a look nobody answered.) |
 | `others_present` | Stream output is on, the 「友人も一緒」 switch is on, or the body cannot tell that the owner is alone. The camera is not opened. |
-| `rate_limited` | The body's own limit of 6 an hour and 30 a day, counted on looks actually taken. |
+| `rate_limited` | The body's own limit of 6 an hour, counted on looks actually taken. (The server no longer counts looks per day; a body that still keeps its own 30 a day may go on sending this code for it.) |
 
 The JSON body of this route may be at most **535,384 bytes** (the largest frame in base64 plus 2,048 bytes for the other fields). Every other route keeps the 64 KiB limit.
 
@@ -478,14 +478,14 @@ When the existing apps show it, without a change to them: the Mac app reads `GET
 - Camera off by default; the owner can switch it off at any time. Register `flags.camera` accordingly.
 - One JPEG frame per look, at most 960 pixels wide and 400,000 bytes (about 100–200 KB is expected). Show the badge while the camera is open. Keep no image.
 - Never open the camera while her window is hidden, a stream is live, or 「友人も一緒」 is on: refuse with the matching code.
-- Keep its own limit of 6 an hour and 30 a day.
+- Keep its own limit of 6 an hour. A count a day is no longer asked of the body (owner decision 2026-10-03).
 - Answer each look once. After `409`, `410` or `404`, drop the frame.
 
 ### What the server guarantees about the frame
 
 - It is sent to a model provider **once** and then dropped: for a look in conversation, the conversation model, with a request the provider is asked not to keep (`store: false`); for a look in her own time, the model of her own activity (Gemini, with the dedicated autonomy key). It is never written to the database, a file, a log line, the conversation history, or a turn capture. `body_looks` holds identifiers, timestamps, an outcome and a code, and has no column for a frame or a description. For a look in her own time, her short text about it rests in `body_look_activity` until her activity loop takes it (seconds), and is then a note in her study, which she may use in her own thinking and recall in conversation.
 - A frame is shown to the model only for a look opened in an owner text turn, an owner voice turn with nobody else listening, or by her activity loop through the gate, answered by the device it was given to, in time, with `audience: owner`. A text turn with `audience: others`, or a voice turn other people can hear, that arrives meanwhile ends the look: an unanswered one is closed, and what the model saw is not said.
-- Limits on the server: 6 an hour and 30 an owner-local day (`Asia/Tokyo`), counted on looks for which a frame arrived (`SHANNON_BODY_LOOK_PER_HOUR`, `SHANNON_BODY_LOOK_PER_DAY`).
+- Limits on the server: 6 an hour, counted on looks for which a frame arrived (`SHANNON_BODY_LOOK_PER_HOUR`): the technical guard against a loop. There is no count a day (owner decision 2026-10-03; it was 30): `SHANNON_BODY_LOOK_PER_DAY` unset or `unlimited` means none, and a number sets one (`Asia/Tokyo` day). Her line 「今日はもうたくさん見たので、少し間をあけます。」 is said only where such a number is set, or when the body refuses with `rate_limited`.
 - Every look is in the activity record. In conversation: one entry (tool `body.look`), 「部屋を一度見ました。」 or 「部屋を見ませんでした（…）。」 with the code. In her own time: the gate's decision and one result (tool `study.look`, domain 「体のカメラで部屋を見る」), with the cost. No entry contains what she saw.
 - The model is told, with the frame: that the person in view may be taken to be the owner and that she may speak of his appearance (owner decision 2026-10-02), not to say who any other person is or judge their appearance, not to read out or remember text on screens or documents, and not to put other people who appear into memory. Her message is display history: it has no user side and no completed-turn event, so no fact, relationship, promise, goal or person memory is extracted from it.
 - Voice calls, the platform bridge, turns with `audience: others`, guests, and the activity loop never start a look.
@@ -694,7 +694,7 @@ A refused or failed request must never stop the body from showing her.
 
 `SHANNON_BODY_INGEST=off` (also `false`, `0`, `disabled`) on the API makes `POST /v1/body/events` answer `403 BODY_INGEST_DISABLED` and keeps already stored events out of conversation turns. Presence, capabilities and nudges keep working. It is an app setting: changing it needs a restart, not a deployment. Unset means on.
 
-`SHANNON_BODY_LOOK=off` (same values) switches off looking at the room only: a look is never offered to the model, `presence` has no `look` field, and `POST /v1/body/looks/{id}` answers `403 BODY_LOOK_DISABLED`. `SHANNON_BODY_INGEST=off` switches looks off as well. `SHANNON_BODY_LOOK_PER_HOUR` (default 6) and `SHANNON_BODY_LOOK_PER_DAY` (default 30) set the server's limits. `SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS` (default 75) is how recent the camera device's presence read must be for a look in conversation. `SHANNON_VOICE_ROOM_LOOK=off` switches off looks from voice turns only; text turns and her own time are unchanged.
+`SHANNON_BODY_LOOK=off` (same values) switches off looking at the room only: a look is never offered to the model, `presence` has no `look` field, and `POST /v1/body/looks/{id}` answers `403 BODY_LOOK_DISABLED`. `SHANNON_BODY_INGEST=off` switches looks off as well. `SHANNON_BODY_LOOK_PER_HOUR` (default 6) sets the server's limit an hour; `SHANNON_BODY_LOOK_PER_DAY` (default: none) may set one a day. `SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS` (default 75) is how recent the camera device's presence read must be for a look in conversation. `SHANNON_VOICE_ROOM_LOOK=off` switches off looks from voice turns only; text turns and her own time are unchanged.
 
 `SHANNON_BODY_REACTIONS=off` (same values) switches off everything a touch does beyond being stored: `POST /v1/body/reactions` answers `403 BODY_REACTIONS_DISABLED`, a touch (by either route) moves no feeling and leaves no memory, and `reactionId` on a voice turn is ignored. Events are stored and shown in the `[体に起きたこと]` block as before. `SHANNON_BODY_INGEST=off` switches reactions off as well. `SHANNON_BODY_REACTION_LISTEN_SECONDS` (default 6, 0–30) sets `listenSeconds`; `SHANNON_BODY_REACTION_DEADLINE_MS` (default 3800, 200–4000) sets when the server gives up waiting for the model.
 

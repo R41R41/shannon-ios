@@ -612,8 +612,20 @@ describe('the limits of looking in her own time', () => {
     h.apiLooks.advance(scope, id, 'pending', 'seen', h.clock.at, { frameReceived: true });
   };
 
-  it('allows 3 looks from her own activity in an owner-local day and plans no fourth', async () => {
-    const h = stage2();
+  it('has no count a day for the looks of her own time, and keeps one the owner sets', async () => {
+    const free = stage2();
+    await free.camera();
+    for (let index = 0; index < 5; index += 1) {
+      await free.presence();
+      free.model.plans = [LOOK_PLAN];
+      await runUntilIdle(free.loop);
+      free.advance(25 * MINUTE);
+    }
+    // More than the three a day there used to be; each one went through the gate and inside the hour's limit.
+    expect(free.body.asked).toHaveLength(5);
+    expect(free.model.prompts('think').map(prompt => prompt.includes('look（'))).toEqual([true, true, true, true, true]);
+
+    const h = stage2({ environment: { SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '3' } });
     await h.camera();
     for (let index = 0; index < 4; index += 1) {
       await h.presence();
@@ -789,7 +801,7 @@ describe('the model call of her own look', () => {
     closeBodyLookStores();
     const keyed = configuredBodyLookOptions({ SHANNON_AUTONOMY_GEMINI_API_KEY: 'own' }, join(directory, 'wiring.sqlite'), { recordLlmUsage: () => undefined });
     expect(keyed.activity?.viewer).toBeInstanceOf(GeminiActivityRoomLookViewer);
-    expect(keyed.config?.activityPerDay).toBe(3);
+    expect(keyed.config?.activityPerDay).toBe(Number.POSITIVE_INFINITY);
     closeBodyLookStores();
   });
 });

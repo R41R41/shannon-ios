@@ -90,7 +90,7 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     // In her own time: the loop step, the look it opens and waits for, the model call with her own key, under the same four rules.
     && exists(prepareRoomLook, ActivityRoomLooks.prototype.look, GeminiActivityRoomLookViewer.prototype.see)
     && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookNotePrompt().system.includes(rule))
-    && configuredAutonomy({}).maximumRoomLooksPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' }).maximumRoomLooksPerDay === 0,
+    && configuredAutonomy({}).maximumRoomLooksPerDay === Number.POSITIVE_INFINITY && configuredAutonomy({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '30' }).maximumRoomLooksPerDay === 30 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' }).maximumRoomLooksPerDay === 0,
   // One look through the app the turn came from: offered in a text turn, chosen before the reply in a voice turn, answered with one frame.
   app_look: () => exists(AppLooks.prototype.turn, AppLooks.prototype.answer, ConversationLooks.prototype.turn, voiceLookTurn, dispatchAppLookRequest)
     && APP_LOOK_SCHEMA.enum.includes('asked_back') && APP_LOOK_SCHEMA.enum.includes('curious_front')
