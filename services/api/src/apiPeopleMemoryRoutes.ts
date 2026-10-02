@@ -10,6 +10,8 @@ import type { PersonCall, PersonMemoryItem, RememberedPerson } from './peopleMem
 import { platformDisplayName } from './platformPeople.js';
 import { GUEST_CALL_SUMMARY_TURNS, validatedGuestCallTurns } from './voiceGuestCall.js';
 import { cleanPersonName, personNameKey } from './voiceGuestNames.js';
+import { mutatePersonImpression, personImpressionViews } from './impressionViews.js';
+import type { ImpressionSource } from './impressions.js';
 
 export const VOICE_CALL_MEMORY_PATH = '/v1/voice/gemini/cascade/calls';
 export const VOICE_CALL_DISCARD_PATH = '/v1/voice/gemini/cascade/calls/discard';
@@ -53,10 +55,12 @@ interface PeopleRouteDependencies {
   stateStore: CompanionStateStore;
   chatModel?: ShannonChatModel;
   now: () => string;
+  /** Her impressions of remembered people, listed with what she knows of each person. */
+  impressions?: ImpressionSource;
 }
 
 /** What the owner sees under 頭の中 › 人. Forgotten items stay listed so they can be restored. */
-export function peopleMemoryOverview(people: PeopleMemory, stateStore: CompanionStateStore, scopeKey: string): PeopleMemoryOverview {
+export function peopleMemoryOverview(people: PeopleMemory, stateStore: CompanionStateStore, scopeKey: string, impressions?: ImpressionSource): PeopleMemoryOverview {
   const snapshot = stateStore.snapshot(scopeKey);
   const persons = people.listPeople(scopeKey);
   const nameOf = (id: string) => persons.find(person => person.id === id)?.displayName;
@@ -90,7 +94,7 @@ export function peopleMemoryOverview(people: PeopleMemory, stateStore: Companion
       return { id: person.id, displayName: person.displayName, aliases: person.aliases, howKnown: person.howKnown,
         createdAt: person.createdAt, forgotten: Boolean(person.forgottenAt), ...(lastTalkedAt ? { lastTalkedAt } : {}),
         // The exchanges themselves are kept for recall; the list shows what she took from them.
-        items: own.filter(item => item.kind !== 'turn').map(view),
+        items: [...own.filter(item => item.kind !== 'turn').map(view), ...personImpressionViews(impressions, snapshot, person.id, nameOf)],
         sources: sourcesOf(person.id),
         // Never merged automatically: the same name on a platform and in a call may be two people.
         mergeSuggestions: person.forgottenAt ? [] : listed.filter(other => other.id !== person.id && !other.forgottenAt
@@ -105,7 +109,7 @@ export function dispatchPeopleMemoryRequest(request: ApiRequest, dependencies: P
   if (request.method === 'GET' && request.path === PEOPLE_MEMORY_PATH) {
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
-    return { status: 200, body: peopleMemoryOverview(people, stateStore, scopeKey) };
+    return { status: 200, body: peopleMemoryOverview(people, stateStore, scopeKey, dependencies.impressions) };
   }
   if (request.method !== 'POST' || ![PEOPLE_MEMORY_ACTION_PATH, VOICE_CALL_MEMORY_PATH, VOICE_CALL_DISCARD_PATH].includes(request.path)) return null;
   if (!objectBody(request.body)) return badRequest('JSON object body is required');
@@ -127,14 +131,18 @@ export function dispatchPeopleMemoryRequest(request: ApiRequest, dependencies: P
         done = people.merge(scopeKey, intoPersonId, personId, at); break;
       case 'forget-person': if (!id(personId)) return badRequest('personId is required'); done = people.forgetPerson(scopeKey, personId, at); break;
       case 'restore-person': if (!id(personId)) return badRequest('personId is required'); done = people.restorePerson(scopeKey, personId, at); break;
-      case 'forget-item': if (!id(itemId)) return badRequest('itemId is required'); done = people.forgetItem(scopeKey, itemId, at); break;
-      case 'restore-item': if (!id(itemId)) return badRequest('itemId is required'); done = people.restoreItem(scopeKey, itemId, at); break;
+      // An item of 人 is a person memory or one of her impressions of that person; both take the same four actions.
+      case 'forget-item': if (!id(itemId)) return badRequest('itemId is required');
+        done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, 'forget', at) ?? people.forgetItem(scopeKey, itemId, at); break;
+      case 'restore-item': if (!id(itemId)) return badRequest('itemId is required');
+        done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, 'restore', at) ?? people.restoreItem(scopeKey, itemId, at); break;
       case 'mark-sensitive': case 'mark-ordinary':
         if (!id(itemId)) return badRequest('itemId is required');
-        done = people.setSensitivity(scopeKey, itemId, action === 'mark-sensitive' ? 'sensitive' : 'ordinary'); break;
+        done = mutatePersonImpression(stateStore, dependencies.impressions, scopeKey, itemId, action, at)
+          ?? people.setSensitivity(scopeKey, itemId, action === 'mark-sensitive' ? 'sensitive' : 'ordinary'); break;
       default: return badRequest('action is invalid');
     }
-    return done ? { status: 200, body: peopleMemoryOverview(people, stateStore, scopeKey) } : { status: 404, body: { error: 'PERSON_MEMORY_NOT_FOUND' } };
+    return done ? { status: 200, body: peopleMemoryOverview(people, stateStore, scopeKey, dependencies.impressions) } : { status: 404, body: { error: 'PERSON_MEMORY_NOT_FOUND' } };
   }
 
   const { callId } = request.body;

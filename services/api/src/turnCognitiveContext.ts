@@ -17,6 +17,8 @@ import {
 import type { ConversationStore } from './conversationStore.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
+import { recallImpressions } from './impressionRecall.js';
+import { IMPRESSION_MEMORY_PREFIX } from './impressions.js';
 
 export interface TurnCognitiveContext {
   situation: ShannonSituationSnapshot;
@@ -25,6 +27,8 @@ export interface TurnCognitiveContext {
   prompt: string;
   /** Who can hear or read the reply this context was built for. Later recall stages obey it. */
   present: MemoryAudience;
+  /** Her impressions of the people present (already included in `prompt`). Absent when there are none. */
+  impressionPrompt?: string;
 }
 
 /** A labelled memory from outside the conversation log, such as what was talked about with a person. */
@@ -114,19 +118,22 @@ export function prepareTurnCognitiveContext(
     ...(locations.length ? { locationLabels: Object.freeze([...locations]) } : {}),
     ...(currentGoal ? { currentGoal } : {}),
   });
+  // What she has come to notice about the people present. Deterministic, no model; empty when switched off.
+  const impressions = recallImpressions(conversationStore, full, input, recentExperiences);
   const frame: ShannonCognitiveFrame = Object.freeze({
     situation,
     ...(primaryIntent ? { primaryIntent } : {}),
     supportingIntentIDs: Object.freeze(intentCandidates.filter(intent => intent.status === 'active' && intent.id !== primaryIntent?.id).slice(0, 4).map(intent => intent.id)),
-    recalledMemoryIDs: Object.freeze(memories.map(memory => memory.id)),
+    recalledMemoryIDs: Object.freeze([...memories.map(memory => memory.id), ...impressions.ids]),
     responseMode: responseMode(input.message),
   });
   return Object.freeze({
     situation,
     memories: Object.freeze(memories),
     frame,
-    prompt: turnPrompt(snapshot, situation, memories, frame, gate),
+    prompt: [turnPrompt(snapshot, situation, memories, frame, gate), impressions.prompt].filter(Boolean).join('\n\n'),
     present: input.present,
+    ...(impressions.prompt ? { impressionPrompt: impressions.prompt } : {}),
   });
 }
 
@@ -139,15 +146,17 @@ export function withRecalledMemories(
   additionalRecalledIds: readonly string[] = [],
 ): TurnCognitiveContext {
   const frame: ShannonCognitiveFrame = Object.freeze({
-    ...context.frame, recalledMemoryIDs: Object.freeze([...new Set([...memories.map(memory => memory.id), ...additionalRecalledIds])]),
+    ...context.frame, recalledMemoryIDs: Object.freeze([...new Set([...memories.map(memory => memory.id), ...additionalRecalledIds,
+      ...context.frame.recalledMemoryIDs.filter(id => id.startsWith(IMPRESSION_MEMORY_PREFIX))])]),
   });
   const gate = new DisclosureGate(context.present, snapshot, null, snapshot.scopeKey);
   return Object.freeze({
     situation: context.situation,
     memories: Object.freeze([...memories]),
     frame,
-    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate), supplementalPrompt].filter(Boolean).join('\n\n'),
+    prompt: [turnPrompt(gate.snapshot(), context.situation, memories, frame, gate), context.impressionPrompt, supplementalPrompt].filter(Boolean).join('\n\n'),
     present: context.present,
+    ...(context.impressionPrompt ? { impressionPrompt: context.impressionPrompt } : {}),
   });
 }
 

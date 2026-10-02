@@ -34,6 +34,7 @@ database. Nothing is backfilled: an item without a label is owner-only and sensi
 | Person | id, display name, aliases, how known, created/updated, forgotten, optional platform identities | existing `people` table plus `aliases_json`, `how_known`, `forgotten_at` columns; `person_platform_identities` unchanged |
 | A 「友人も一緒」 period | call id, thread, people, unknown guest flag, status (`open` · `remembered` · `discarded`) | `person_calls` |
 | What is remembered from it | kind (`summary` · `turn` · `fact` · `promise` · `topic`), text, evidence, about-person, audience, sensitivity | `person_memory_items` |
+| An impression of a person | person (`owner` or a `people` id), kind, pattern, her feeling, counts for and against, first/last seen, evidence references, status, audience, sensitivity | `person_impressions` |
 
 Items with no label of their own are judged as unlabelled, that is owner-only and sensitive, and therefore marked when
 others are present: rolling thread summaries, Shannon's private knowledge, interests, intentions, today's focus. Each is
@@ -182,6 +183,25 @@ Owner request, 2026-10-02: 「人」は音声会話以外でもdiscordとかで�
 - **Forgetting.** The same controls as for a call. A forgotten person's later messages are not stored
   (the account is remembered only as "forgotten") until the owner restores them. A day's summary names everyone who
   spoke, so it is hidden while any of them is forgotten.
+
+## Impressions of people
+
+What she has noticed about how a person is with her, counted over separate turns (`docs/architecture.md`, Impressions of
+people). The audience rules above apply to them as follows.
+
+- **Of the owner.** Owner-only and sensitive by label, whatever the wording. With other people present the line reaches
+  the model marked and under the speak-time check; this is judgment, not a guarantee, by the owner's decision of
+  2026-10-02. Hard-withheld when he marked the impression 機微, or when a turn it was built from is hard-withheld (a
+  secret, a turn he marked 機微, a call with an unnamed guest). Never projected to a platform conversation.
+- **Of another person.** Formed only from messages of a platform account, never from a 「友人も一緒」 call, where the
+  speaker is unknown. Its audience is the conversation it formed in; seen in a second place it narrows to that person
+  alone. With other people present it is used only when everyone present was in that audience, or in the person's own
+  DM. An impression of person A is not given in a context where person B, who was not there, can read the reply, and an
+  absent person's impression is not given at all while anyone else is present. Alone with the owner it is used when the
+  message names the person.
+- **Guests.** Nothing is formed about a guest without a remembered name, or from any turn whose speaker is unknown.
+- **Forgetting.** A forgotten turn leaves an impression's count; one left without a usable supporting turn is not used.
+  Forgetting an impression is the memory control `impression:<id>`; a forgotten person's impressions are not used.
 
 ## Forgetting
 

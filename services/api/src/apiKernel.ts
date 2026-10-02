@@ -301,7 +301,7 @@ export class ShannonApiKernel {
     });
     if (agentResponse) return agentResponse;
 
-    const peopleResponse = dispatchPeopleMemoryRequest(request, { people: this.people, stateStore: this.stateStore, chatModel: this.chatModel, now: this.now });
+    const peopleResponse = dispatchPeopleMemoryRequest(request, { people: this.people, stateStore: this.stateStore, chatModel: this.chatModel, now: this.now, impressions: this.conversationStore.impressionStore?.() });
     if (peopleResponse) return await peopleResponse;
 
     const dataResponse = dispatchDataRequest(request, {

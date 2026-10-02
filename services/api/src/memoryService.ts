@@ -18,6 +18,7 @@ import { SNOOZE_MILLISECONDS } from './commitmentInitiative.js';
 import type { CommitmentSleepReview } from './sleepCommitmentReview.js';
 import type { InitiativeEvaluationReader, InitiativeEvaluationSummary } from './initiativeStore.js';
 import type { DailyMindFocus, DailyMindReader } from './dailyMind.js';
+import { isImpressionMemoryId, mutateOwnerImpression, ownerImpressionItems } from './impressionViews.js';
 
 import {
   actionControl,
@@ -215,6 +216,8 @@ export class ShannonMemoryService implements ShannonMemoryStore {
         evidence: relationship.evidence,
       }, controls.get(relationship.id), metadata.get(relationship.id)), disclosure: disclosureView(state, relationship.id, relationship.disclosure) });
     }
+    // What she has come to notice about how he is with her: listed with the rest of 「ふたりの関係」.
+    items.push(...ownerImpressionItems(this.history as Partial<ConversationStore> | null, state, this.now(), experiences));
     // Overview pagination must never orphan a durable control or pinned item.
     const managedExperiences = experiences.filter((experience, index) =>
       index >= experiences.length - 80 || controls.has(experience.id));
@@ -279,6 +282,11 @@ export class ShannonMemoryService implements ShannonMemoryStore {
   }
 
   mutate(scopeKey: string, mutation: MemoryMutation): MemoryDashboard {
+    if (isImpressionMemoryId(mutation.memoryId)) {
+      // An impression has no source turn of its own to hide: only its own control is written.
+      if (!mutateOwnerImpression(this.stateStore, this.history as Partial<ConversationStore> | null, scopeKey, mutation, this.now())) throw new Error('MEMORY_NOT_FOUND');
+      return this.dashboard(scopeKey);
+    }
     const current = this.dashboard(scopeKey);
     const item = current.items.find(candidate => candidate.id === mutation.memoryId);
     if (!item) throw new Error('MEMORY_NOT_FOUND');
