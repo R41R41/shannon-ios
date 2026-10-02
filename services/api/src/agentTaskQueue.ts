@@ -110,10 +110,10 @@ export class AgentTaskQueue {
             SELECT 1 FROM agent_tasks holder
             WHERE holder.assigned_host_id = ? AND holder.task_id != t.task_id AND (
               holder.status IN ${WORKING}
-              -- A task the owner just stopped is still running on the host until its interrupt is applied.
+              -- A task the owner just stopped is still running on the host until that command is applied.
               OR EXISTS (
                 SELECT 1 FROM agent_task_commands stop
-                WHERE stop.task_id = holder.task_id AND stop.command_type = 'interrupt'
+                WHERE stop.task_id = holder.task_id AND stop.command_type IN ('interrupt','resolve_approval')
                   AND stop.status IN ('pending','leased')
               )
             )
