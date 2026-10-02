@@ -109,6 +109,46 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(ShannonLive2DBridge.isCancellation(NSError(domain: NSURLErrorDomain, code: NSURLErrorFileDoesNotExist)))
     }
 
+    func testAPinchAndDragStayWhereTheFingersLeftThem() {
+        var tracker = ShannonLive2DGestureTracker()
+        var layout = ShannonLive2DLayout(mode: .full)
+        let bounds = CGSize(width: 400, height: 600)
+        tracker.beginPinch()
+        tracker.beginPan()
+        for (scale, x) in [(1.2, 10.0), (1.5, 30.0), (2.0, 40.0)] {
+            layout = layout.adjusted(scaleBy: tracker.pinch(scale: scale), movedBy: .zero, in: bounds)
+            layout = layout.adjusted(scaleBy: 1, movedBy: tracker.pan(translation: CGSize(width: x, height: 0)), in: bounds)
+        }
+        // The pinch ends first; the drag goes on. Nothing snaps back.
+        layout = layout.adjusted(scaleBy: 1, movedBy: tracker.pan(translation: CGSize(width: 60, height: -20)), in: bounds)
+        XCTAssertEqual(layout.scale, 2, accuracy: 0.0001)
+        XCTAssertEqual(layout.offsetX, 60, accuracy: 0.0001)
+        XCTAssertEqual(layout.offsetY, -20, accuracy: 0.0001)
+        // A second gesture starts from where the first one ended.
+        tracker.beginPinch()
+        tracker.beginPan()
+        layout = layout.adjusted(scaleBy: tracker.pinch(scale: 0.5), movedBy: tracker.pan(translation: CGSize(width: -10, height: 0)), in: bounds)
+        XCTAssertEqual(layout.scale, 1, accuracy: 0.0001)
+        XCTAssertEqual(layout.offsetX, 50, accuracy: 0.0001)
+        XCTAssertEqual(tracker.pinch(scale: .nan), 1)
+    }
+
+    func testOthersStayTheAudienceForAWhileAfterAFriendWasListening() {
+        var rule = ShannonBodyAudienceRule()
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(rule.audience(at: start), .owner)
+        rule.observe(othersMayBeListening: true, at: start)
+        XCTAssertEqual(rule.audience(at: start.addingTimeInterval(3_600)), .others)
+        // The call returns to the owner alone, or ends: the friend is still in the room.
+        rule.observe(othersMayBeListening: false, at: start.addingTimeInterval(3_600))
+        XCTAssertEqual(rule.audience(at: start.addingTimeInterval(3_600 + 299)), .others)
+        XCTAssertEqual(rule.audience(at: start.addingTimeInterval(3_600 + 300)), .owner)
+        // Observing "nobody" again does not extend the hold.
+        rule.observe(othersMayBeListening: false, at: start.addingTimeInterval(3_600 + 200))
+        XCTAssertEqual(rule.audience(at: start.addingTimeInterval(3_600 + 300)), .owner)
+        XCTAssertEqual(ShannonBodyAudienceRule.holdSeconds, 300)
+    }
+
     // MARK: The stage's rules
 
     func testThePageDrawsOnlyWhileSomeoneCanSeeIt() {
@@ -301,6 +341,39 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(calls, ["register", "events:t1:owner:900", "events:t1:owner:900,t2:owner:900", "events:t3:owner:900", "events:t4:owner:900"])
     }
 
+    func testATouchThatArrivesDuringASendIsSentRightAfterIt() async {
+        let client = FakeBodyClient()
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in }))
+        await client.holdEvents()
+        let first = coordinator.handle(.touch(Self.touch("t1")))
+        while await client.calls.count < 2 { await Task.yield() }
+        // The first batch is on its way; a second touch comes in and its own flush finds one already running.
+        await coordinator.handle(.touch(Self.touch("t2")))?.value
+        await client.releaseEvents()
+        await first?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "events:t1:owner:900", "events:t2:owner:900"])
+    }
+
+    func testSwitchingOffWhileRegisteringSendsNothing() async {
+        let client = FakeBodyClient()
+        let reports = FlagBox(true)
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { reports.value }, capabilities: { ([], []) }, express: { _, _ in }))
+        await client.onRegister { await MainActor.run { reports.value = false } }
+        await coordinator.handle(.touch(Self.touch("t1")))?.value
+        reports.value = true
+        await client.onRegister { await MainActor.run { reports.value = false } }
+        // Registered already, so the next ask goes out; switch off before a fresh coordinator's ask instead.
+        let second = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: .init(
+            reportsTouch: { reports.value }, capabilities: { ([], []) }, express: { _, _ in }))
+        await second.handle(.askReaction(Self.touch("t2")))?.value
+        let calls = await client.calls
+        XCTAssertEqual(calls, ["register", "register"])
+        XCTAssertNil(second.line)
+    }
+
     func testAnOlderServerIsSaidToBeUnsupported() async {
         let client = FakeBodyClient()
         await client.failNextEvents(ShannonBodyRefusal(status: 403, code: "BODY_INGEST_DISABLED"))
@@ -348,16 +421,33 @@ private actor FakeBodyClient: ShannonBodyServing {
     private var askFailure: (any Error)?
     private var eventsFailure: (any Error)?
 
+    private var registerHook: (@Sendable () async -> Void)?
+    private var eventsHeld = false
+    private var eventsWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func onRegister(_ hook: @escaping @Sendable () async -> Void) { registerHook = hook }
+    func holdEvents() { eventsHeld = true }
+    func releaseEvents() {
+        eventsHeld = false
+        eventsWaiters.forEach { $0.resume() }
+        eventsWaiters = []
+    }
+
     func setAnswer(_ value: ShannonBodyReactionAnswerDTO) { answer = value }
     func failNextAsk(_ error: any Error) { askFailure = error }
     func failNextEvents(_ error: any Error) { eventsFailure = error }
 
     func registerTouchBody(scopeKey: String, expressions: [String], gestures: [String]) async throws {
         calls.append("register")
+        if let hook = registerHook {
+            registerHook = nil
+            await hook()
+        }
     }
 
     func sendBodyTouches(scopeKey: String, events: [ShannonBodyTouchEventDTO]) async throws {
         calls.append("events:" + events.map { "\($0.id):\($0.audience.rawValue):\($0.durationMs)" }.joined(separator: ","))
+        if eventsHeld { await withCheckedContinuation { eventsWaiters.append($0) } }
         if let error = eventsFailure {
             eventsFailure = nil
             throw error

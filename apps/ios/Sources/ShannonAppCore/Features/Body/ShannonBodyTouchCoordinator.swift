@@ -114,31 +114,41 @@ public final class ShannonBodyTouchCoordinator {
     }
 
     private func flush() async {
-        guard let client, !isFlushing, !pending.isEmpty else { return }
+        guard let client, !isFlushing else { return }
         isFlushing = true
         defer { isFlushing = false }
-        let batch = pending.map(\.event)
-        do {
-            // Only a device that registered as a (touch-only) body reports what happened to it.
-            if !registered { try await register(client) }
-            try await client.sendBodyTouches(scopeKey: scopeKey, events: batch)
-            pending.removeAll { item in batch.contains { $0.id == item.event.id } }
-            delivery = .fine
-        } catch let refusal as ShannonBodyRefusal {
-            switch refusal.status {
-            case 401:
-                delivery = .notConnected
-            case 400, 403, 404, 405:
-                // Switched off on the server, an older server, or a batch it will never take: keeping it helps nobody.
-                pending.removeAll()
-                delivery = .unsupported
-            default:
+        // Touches that arrive while a batch is under way are sent by the next turn of this loop.
+        while !pending.isEmpty {
+            let batch = pending.map(\.event)
+            do {
+                // Only a device that registered as a (touch-only) body reports what happened to it.
+                if !registered { try await register(client) }
+                // Switched off while registering: nothing is sent, nothing stays queued.
+                guard sends else {
+                    pending.removeAll()
+                    return
+                }
+                try await client.sendBodyTouches(scopeKey: scopeKey, events: batch)
+                pending.removeAll { item in batch.contains { $0.id == item.event.id } }
+                delivery = .fine
+            } catch let refusal as ShannonBodyRefusal {
+                switch refusal.status {
+                case 401:
+                    delivery = .notConnected
+                case 400, 403, 404, 405:
+                    // Switched off on the server, an older server, or a batch it will never take: keeping it helps nobody.
+                    pending.removeAll()
+                    delivery = .unsupported
+                default:
+                    delivery = .failed
+                }
+                break
+            } catch {
                 delivery = .failed
+                break
             }
-        } catch {
-            delivery = .failed
         }
-        // Switched off while the request was under way: nothing stays queued.
+        // Switched off while a request was under way: nothing stays queued.
         if !environment.reportsTouch() { pending.removeAll() }
     }
 
@@ -169,6 +179,8 @@ public final class ShannonBodyTouchCoordinator {
     /// Registers as a touch-only body before the first request, and once more if the server does not know this device.
     private func answer(to request: ShannonBodyReactionRequestDTO, client: any ShannonBodyServing) async throws -> ShannonBodyReactionAnswerDTO {
         if !registered { try await register(client) }
+        // Switched off while registering: the question is not asked.
+        guard sends else { throw CancellationError() }
         do {
             return try await client.askBodyReaction(request)
         } catch let refusal as ShannonBodyRefusal where refusal.code == "BODY_REACTION_NOT_A_BODY" {

@@ -14,8 +14,9 @@ public final class ShannonBodyModel {
     public var showsScreenFromSettings = false
     public internal(set) var face = ShannonFace(expression: .calm)
     public internal(set) var doingLine: String?
-    /// 「友人も一緒」: touches are then reported as seen by others.
-    public internal(set) var audience: ShannonBodyAudience = .owner
+    /// Someone else may be listening, or was a moment ago: touches are then reported as seen by others.
+    var audienceRule = ShannonBodyAudienceRule()
+    public var audience: ShannonBodyAudience { audienceRule.audience(at: Date()) }
     public internal(set) var touch: ShannonBodyTouchCoordinator
     @ObservationIgnored var isConnected = false
 
@@ -24,11 +25,20 @@ public final class ShannonBodyModel {
     }
 
     /// Gives the touch coordinator the conversation's own client and scope, once.
-    func connect(scopeKey: String, client: (any ShannonBodyServing)?, isDesignPreview: @escaping @MainActor @Sendable () -> Bool) {
+    func connect(
+        scopeKey: String, client: (any ShannonBodyServing)?,
+        isDesignPreview: @escaping @MainActor @Sendable () -> Bool,
+        othersMayBeListening: @escaping @MainActor @Sendable () -> Bool
+    ) {
         guard !isConnected else { return }
         isConnected = true
         touch = ShannonBodyTouchCoordinator(scopeKey: scopeKey, client: client, environment: .init(
-            audience: { [weak self] in self?.audience ?? .others },
+            // Read from the call itself at the moment of the touch, not from a value a view update left behind.
+            audience: { [weak self] in
+                guard let self else { return .others }
+                self.audienceRule.observe(othersMayBeListening: othersMayBeListening(), at: Date())
+                return self.audience
+            },
             maySend: { !isDesignPreview() }
         ))
         ShannonLive2DStage.shared.onTouchMessage = { [weak self] message in
@@ -70,9 +80,10 @@ struct ShannonBodyAttachment: ViewModifier {
 #endif
     }
 
-    private var isGuestCall: Bool {
+    /// 「友人も一緒」, or a companion the owner mentioned in an owner call.
+    private var othersMayBeListening: Bool {
 #if os(iOS)
-        voice.phase != .idle && voice.participantMode == .guest
+        voice.othersMayBeListening
 #else
         false
 #endif
@@ -115,7 +126,7 @@ struct ShannonBodyAttachment: ViewModifier {
             .task { connect() }
             .task(id: scenePhase) { await keepClock() }
             .onAppear {
-                bodyModel.audience = isGuestCall ? .others : .owner
+                bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date())
                 applyForm()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBody") { bodyModel.showsScreen = true }
@@ -130,7 +141,7 @@ struct ShannonBodyAttachment: ViewModifier {
             .onChange(of: conversation.state?.emotion) { pushMood() }
             .onChange(of: presence) { presenceChanged() }
             .onChange(of: phase) { phaseChanged() }
-            .onChange(of: isGuestCall) { bodyModel.audience = isGuestCall ? .others : .owner }
+            .onChange(of: othersMayBeListening) { bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date()) }
             .onChange(of: reportsTouch) { bodyModel.touch.reportingChanged() }
             .onChange(of: scenePhase) { if scenePhase != .active { ShannonSpeechLevelPublisher.shared.end() } }
     }
@@ -144,12 +155,22 @@ struct ShannonBodyAttachment: ViewModifier {
 
     private func connect() {
         let conversation = conversation
+        let voice = voice
         bodyModel.connect(
             scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonBodyServing,
-            isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true }
+            isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true },
+            othersMayBeListening: { [weak voice] in Self.othersMayBeListening(voice) }
         )
         refreshWords()
         pushAll()
+    }
+
+    private static func othersMayBeListening(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {
+#if os(iOS)
+        voice?.othersMayBeListening ?? false
+#else
+        false
+#endif
     }
 
     private func keepClock() async {

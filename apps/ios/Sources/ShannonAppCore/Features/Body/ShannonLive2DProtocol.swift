@@ -41,6 +41,29 @@ public struct ShannonLive2DLayout: Equatable, Sendable {
     }
 }
 
+/// Turns a pinch's running scale and a drag's running translation into steps, so that the layout
+/// is moved a little on every change and simply stays where it is when a finger lifts.
+struct ShannonLive2DGestureTracker: Equatable {
+    private var lastScale = 1.0
+    private var lastTranslation = CGSize.zero
+
+    mutating func beginPinch() { lastScale = 1 }
+    mutating func beginPan() { lastTranslation = .zero }
+
+    /// The factor since the last call.
+    mutating func pinch(scale: Double) -> Double {
+        guard scale.isFinite, scale > 0, lastScale > 0 else { return 1 }
+        defer { lastScale = scale }
+        return scale / lastScale
+    }
+
+    /// The movement since the last call.
+    mutating func pan(translation: CGSize) -> CGSize {
+        defer { lastTranslation = translation }
+        return CGSize(width: translation.width - lastTranslation.width, height: translation.height - lastTranslation.height)
+    }
+}
+
 public enum ShannonLive2DPhase: String, Equatable, Sendable {
     case idle, thinking, listening, speaking
 

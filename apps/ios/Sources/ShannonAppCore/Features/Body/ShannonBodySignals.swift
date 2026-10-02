@@ -21,6 +21,27 @@ public enum ShannonBodyDoing: String, CaseIterable, Equatable, Sendable {
     }
 }
 
+/// Who a touch is reported as seen by. While someone other than the owner may be listening to a call
+/// (「友人も一緒」, or a companion he mentioned) it is `others`, and it stays `others` for a few minutes
+/// after that ends: the friend has not left the room because the call's mode changed or the call ended.
+public struct ShannonBodyAudienceRule: Equatable, Sendable {
+    public static let holdSeconds: TimeInterval = 5 * 60
+
+    private var othersNow = false
+    private var othersUntil: Date?
+
+    public init() {}
+
+    public mutating func observe(othersMayBeListening: Bool, at now: Date) {
+        if othersNow, !othersMayBeListening { othersUntil = now.addingTimeInterval(Self.holdSeconds) }
+        othersNow = othersMayBeListening
+    }
+
+    public func audience(at now: Date) -> ShannonBodyAudience {
+        othersNow || (othersUntil.map { now < $0 } ?? false) ? .others : .owner
+    }
+}
+
 public enum ShannonBodySignals {
     /// The server's own table (`shannonBody.ts`, `STEP_DOING`).
     static let stepDoing: [String: ShannonBodyDoing] = [

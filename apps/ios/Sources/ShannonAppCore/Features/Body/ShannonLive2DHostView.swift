@@ -39,7 +39,7 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
     private var layout = ShannonLive2DLayout()
     private var touchEnabled = true
     private var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
-    private var gestureStart: ShannonLive2DLayout?
+    private var tracker = ShannonLive2DGestureTracker()
     private lazy var pinch = UIPinchGestureRecognizer(target: self, action: #selector(gestureChanged))
     private lazy var pan: UIPanGestureRecognizer = {
         let recognizer = UIPanGestureRecognizer(target: self, action: #selector(gestureChanged))
@@ -98,21 +98,22 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
 
     @objc private func gestureChanged(_ recognizer: UIGestureRecognizer) {
         guard let onLayoutChange else { return }
-        let active: (UIGestureRecognizer) -> Bool = { $0.state == .began || $0.state == .changed }
-        if recognizer.state == .began, gestureStart == nil { gestureStart = layout }
-        guard let start = gestureStart else { return }
-        let translation = active(pan) ? pan.translation(in: self) : .zero
-        let next = start.adjusted(
-            scaleBy: active(pinch) ? Double(pinch.scale) : 1,
-            movedBy: CGSize(width: translation.x, height: translation.y),
-            in: bounds.size
-        )
-        if next != layout {
-            layout = next
-            ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
-            onLayoutChange(next)
+        var factor = 1.0
+        var movement = CGSize.zero
+        switch (recognizer.state, recognizer === pinch) {
+        case (.began, true): tracker.beginPinch()
+        case (.began, false): tracker.beginPan()
+        case (.changed, true): factor = tracker.pinch(scale: Double(pinch.scale))
+        case (.changed, false):
+            let translation = pan.translation(in: self)
+            movement = tracker.pan(translation: CGSize(width: translation.x, height: translation.y))
+        default: return // A finger lifting changes nothing: the layout stays where the gesture left it.
         }
-        if !active(pinch), !active(pan) { gestureStart = nil }
+        let next = layout.adjusted(scaleBy: factor, movedBy: movement, in: bounds.size)
+        guard next != layout else { return }
+        layout = next
+        ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
+        onLayoutChange(next)
     }
 
     func gestureRecognizer(
