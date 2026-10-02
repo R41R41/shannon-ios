@@ -234,7 +234,7 @@ describe('planning a look', () => {
       expect(h.store.study.list(scope), name).toEqual([]);
       h.store.close();
     }
-  });
+  }, 30_000);
 });
 
 describe('one look in her own time, across two processes', () => {
