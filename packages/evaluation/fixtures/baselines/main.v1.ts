@@ -10,9 +10,17 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * split into evidence-driven and fixed traits, and the conversational-feeling
  * line now appears only when the caller supplies a turn clock. Every scenario
  * still passes its own assertions.
+ *
+ * 2026-10-02 (awake clock): three fingerprints were re-recorded by hand.
+ * `state-transaction-atomic`: an emotion event now starts her awake clock, so the
+ * output state carries `emotionClock` and an empty `lingering`. `affect-bounds`
+ * and `affect-baseline-drift`: on the awake clock the mood returns to its baseline
+ * with awake time in the reducer, so the per-turn projection is the stimulus alone,
+ * scaled by the room left toward the bound. Every scenario still passes its own
+ * assertions.
  */
 const resultFingerprints = {
-  'state-transaction-atomic': '8b988f47',
+  'state-transaction-atomic': '858b6d1a',
   'state-nested-transaction-rejected': '3a85bfa8',
   'state-malformed-restore-safe': 'aa257526',
   'state-interest-limit': 'fa0b8f1d',
@@ -36,8 +44,8 @@ const resultFingerprints = {
   'affect-negative': '4685cf3d',
   'affect-calm': '258f91d5',
   'affect-sleepy': '0a4a281b',
-  'affect-bounds': 'c6bc87af',
-  'affect-baseline-drift': 'de3c78ae',
+  'affect-bounds': '440ab202',
+  'affect-baseline-drift': '005850b0',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',
   'prompt-plan-is-not-proof': '7cec918d',

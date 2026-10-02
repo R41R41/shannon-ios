@@ -3,7 +3,9 @@ import type {
   ShannonEmotion,
   ShannonTemperament,
 } from './types.js';
+import { restoreLingering } from './emotionContinuity.js';
 import { restoreShannonExpressiveEmotion } from './emotionState.js';
+import { restoreEmotionClock } from './emotionTime.js';
 import {
   MAX_ACTIVE_MEMORIES,
   MAX_INTERESTS,
@@ -201,5 +203,8 @@ export function restoreCompanionState(
     prospectiveMemories,
     memoryControls,
     ...(Array.isArray(row.sharedDays) ? { sharedDays: restoreSharedDays(row.sharedDays) } : {}),
+    // Additive: a snapshot stored before the awake clock has neither, and starts with a clock at zero and nothing underneath.
+    ...(restoreEmotionClock(row.emotionClock) ? { emotionClock: restoreEmotionClock(row.emotionClock)! } : {}),
+    ...(Array.isArray(row.lingering) ? { lingering: restoreLingering(row.lingering) } : {}),
   });
 }
