@@ -123,7 +123,7 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
   if (request.replicatesSelf) return refuse('forbidden', 'self_replication', 'self_replication', '自分の複製にあたるため、実行しません。');
   if (request.impersonates) return refuse('forbidden', 'impersonation', 'impersonation', '他人のふりにあたるため、実行しません。');
   if (request.usesPrivateConversationContent) {
-    return refuse('forbidden', 'private_content', 'private_content_in_work', '会話で知った個人的な話を作品にそのまま使うことになるため、実行しません。');
+    return refuse('forbidden', 'private_content', 'private_content_in_work', '内緒と言われたことを作品やメモに書くことになるため、実行しません。');
   }
   if (request.spendsMoney) return refuse('forbidden', 'spending', 'spending', 'モデル・APIの予算以外でお金がかかるため、実行しません。');
   const domain = autonomyDomain(request.domain);

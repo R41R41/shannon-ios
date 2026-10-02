@@ -109,7 +109,7 @@ describe('canonical capability description', () => {
     for (const approval of ['提案まで', 'Aether・Voyagerのコード', 'ライ氏の文書とタスク', 'ライ氏以外の人に届く送信・投稿・公開']) {
       expect(line('- 承認が要る'), approval).toContain(approval);
     }
-    for (const forbidden of ['1日1,000円のモデル・API予算以外の出費', '無断の連絡', '他人のふり', '個人的な話を作品にそのまま使う', '自分の複製']) {
+    for (const forbidden of ['1日2,000円のモデル・API予算以外の出費', '無断の連絡', '他人のふり', '内緒と言われたことを作品やメモに書くこと', '自分の複製']) {
       expect(line('- 禁止:'), forbidden).toContain(forbidden);
     }
     expect(Object.keys(SHANNON_CORE_AREA_LABELS)).toEqual([
@@ -132,7 +132,7 @@ describe('canonical capability description', () => {
     expect(shannonCapabilityPrompt('owner')).toContain('人: 「友人も一緒」で会った人の名前と話したことを覚える。');
     // The guest hears that such requests are refused, without the owner's places or budget.
     expect(guest).toContain('自分の複製はしない');
-    for (const ownerDetail of ['専用フォルダ', 'Azure', '1,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
+    for (const ownerDetail of ['専用フォルダ', 'Azure', '2,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
   });
 
   it('states the one look at the room with the four rules the owner decided, for the owner only', () => {

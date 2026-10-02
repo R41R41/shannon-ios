@@ -12,7 +12,9 @@ import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
  * `SHANNON_AUTONOMY_PACING=cycles` the fixed cycles, `SHANNON_AUTONOMY_OWNER_CONTEXT=off` prompts without the owner's context.
  *
  * The digests below were produced by running `autonomyLoopKillSwitchScenario.ts` on commit 78c3493, the last one before
- * sessions and the owner's context existed. They are sha-256 prefixes of each prompt as sent (system, then prompt) with
+ * sessions and the owner's context existed. Since then the owner raised the default of the day's budget to 2,000 yen, which
+ * a thinking prompt of the old loop prints: with the cap configured as it was (1,000) every prompt equals that commit's, and
+ * with the new default the prompts equal that commit's with the default changed and nothing else. They are sha-256 prefixes of each prompt as sent (system, then prompt) with
  * random identifiers replaced. A changed byte in any prompt of the old loop changes a digest here.
  */
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-'));
@@ -25,6 +27,26 @@ const AGENTIC_DAY_AT_78C3493 = [
   ['reach_out', 'dc7ea65dbc2f2977'], ['think', '1479f8d14555668d'], ['think', '765457454c05b3f8'], ['reach_out', 'f675aa9fb5535f58'], ['think', '7fdb457bfea50eed'],
   ['think', 'f57db961db246070'], ['reach_out', '78bc54ed4d10c8da'], ['think', '86ea8a16f3d80719'], ['think', '69a19c6639403507'],
 ];
+/**
+ * The same scenario on 78c3493 with four strings changed and nothing else (owner decisions 2026-10-02): the default of the
+ * day's budget in `packages/cognition/src/autonomy.ts` (1_000 → 2_000), the forbidden item of the identity prompt and the
+ * label of `private_content_in_work` there, and the refusal sentence of that domain in `autonomyPolicy.ts`. Only the
+ * thinking prompts differ from the unchanged commit, and only by the budget they print (「予算 約…円」); the persona and
+ * the forbidden item are not part of any prompt of the loop.
+ */
+const AGENTIC_DAY_AT_78C3493_WITH_2000_YEN = [
+  ['think', '0816a524af4da9aa'], ['reach_out', '0ee3d0600b349738'], ['think', 'e67e41543c170db5'], ['think', '13131a69ad57996f'], ['follow_up', '516aa0c49c1b329e'],
+  ['think', 'c649dcaa8616c3ff'], ['note', '2977210b0f7b5e1c'], ['reach_out', 'd99aaf1008918710'], ['think', '4533092569973f86'], ['think', '6c4d45e8156c21e6'],
+  ['note', '81264d2ee7bde300'], ['draft', '73d45990e026d56b'], ['think', '6216c1acbc13f9f6'], ['think', '16392261e20ce824'], ['revise', '550384af7d8f856d'],
+  ['reach_out', 'dc7ea65dbc2f2977'], ['think', 'e24c687f096fe8cb'], ['think', 'be27eb2d8bdcea40'], ['reach_out', 'f675aa9fb5535f58'], ['think', 'f966e2d0e0d1717a'],
+  ['think', '90dd6ffdefcb7232'], ['reach_out', '78bc54ed4d10c8da'], ['think', '582fd809da318164'], ['think', '88e1ac8b511fcfd1'],
+];
+const PLAIN_DAY_AT_78C3493_WITH_2000_YEN = [
+  ['think', 'f6d2e644587c294d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '820127755247f5a8'],
+  ['reach_out', '2ca5da4023801847'],
+];
+/** The day's cap as it was by default on 78c3493: with it configured, every prompt is that commit's, unchanged. */
+const CAP_OF_78C3493 = { environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '1000' } };
 const PLAIN_DAY_AT_78C3493 = [
   ['think', '60cf87edbe87f21d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '95c8b348a7144662'],
   ['reach_out', '2ca5da4023801847'],
@@ -36,9 +58,24 @@ const BUILDERS_AT_78C3493 = {
 };
 
 describe('with pacing and the owner\'s context switched off, the loop is what it was', () => {
-  it('sends byte for byte the prompts of the commit before, through a whole day with every step kind', async () => {
-    expect((await agenticDay(directory)).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
-    expect((await plainDay(directory)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);
+  it('sends byte for byte the prompts of the commit before, through a whole day with every step kind, when the day\'s cap is that commit\'s', async () => {
+    expect((await agenticDay(directory, CAP_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+    expect((await plainDay(directory, CAP_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);
+  });
+
+  it('differs from the commit before, with the default cap of 2,000 yen, only in the budget a thinking prompt prints', async () => {
+    const other = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-default-'));
+    try {
+      const agentic = (await agenticDay(other)).map(call => [call.kind, call.digest]);
+      const plain = (await plainDay(other)).map(call => [call.kind, call.digest]);
+      expect(agentic).toEqual(AGENTIC_DAY_AT_78C3493_WITH_2000_YEN);
+      expect(plain).toEqual(PLAIN_DAY_AT_78C3493_WITH_2000_YEN);
+      // Every prompt that is not a thinking prompt is the unchanged commit's.
+      for (const [now, before] of [[agentic, AGENTIC_DAY_AT_78C3493], [plain, PLAIN_DAY_AT_78C3493]] as const) {
+        expect(now.filter(([kind]) => kind !== 'think')).toEqual(before.filter(([kind]) => kind !== 'think'));
+        expect(now.filter(([kind], index) => kind === 'think' && before[index]![1] === now[index]![1])).toEqual([]);
+      }
+    } finally { rmSync(other, { recursive: true, force: true }); }
   });
 
   it('sends the same prompts when the owner\'s context is wired but switched off, and other prompts when it is on', async () => {
@@ -50,9 +87,9 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     const off = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-off-'));
     const on = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-on-'));
     try {
-      expect((await agenticDay(off, { ownerContext: wired, loop: { ownerContext: false } })).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+      expect((await agenticDay(off, { ...CAP_OF_78C3493, ownerContext: wired, loop: { ownerContext: false } })).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
       // The fixed cycles alone do not restore the old prompts: the two switches are independent.
-      const withContext = await agenticDay(on, { ownerContext: wired, loop: { ownerContext: true } });
+      const withContext = await agenticDay(on, { ...CAP_OF_78C3493, ownerContext: wired, loop: { ownerContext: true } });
       expect(withContext.filter(call => call.kind === 'think').every(call => !AGENTIC_DAY_AT_78C3493.some(([, digest]) => digest === call.digest))).toBe(true);
     } finally {
       rmSync(off, { recursive: true, force: true });
