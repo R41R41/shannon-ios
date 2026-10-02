@@ -394,6 +394,10 @@ describe('the body notices a reach-out', () => {
     const initiatives = (await api.dispatch({ method: 'GET', path: '/v1/initiatives', query: new URLSearchParams({ scopeKey: scope }) })).body as
       { unreadCount: number; messages: { id: string; kind?: string; reason?: string; content: string }[] };
     expect(initiatives.messages).toEqual([expect.objectContaining({ kind: 'reach_out', reason: 'wonder', content: 'ライ氏、いま何をしていますか。ボクは少し気になりました。' })]);
+    // The Talk the apps load shows it as one of her messages.
+    const talk = (await api.dispatch({ method: 'GET', path: '/v1/conversation', query: new URLSearchParams({ scopeKey: scope, threadId: w.threadId }) })).body as
+      { messages: { role: string; content: string }[] };
+    expect(talk.messages.map(message => [message.role, message.content])).toEqual([['assistant', 'ライ氏、いま何をしていますか。ボクは少し気になりました。']]);
     expect(after.etag).not.toBe(before.etag);
     expect(after.reachOut).toEqual({ pending: 1, latestId: initiatives.messages[0]!.id });
     // Read in the app: nothing is pending any more.
