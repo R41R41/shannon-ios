@@ -206,6 +206,7 @@ extension ShannonGeminiLiveSessionModel {
             }
             segmentDuration += duration
             outputAudioSeconds += duration
+            backgroundSilence.speech(at: Date())
             playbackLevel = 0.55
             phase = .speaking
             responseDelivery.scheduledAudio(seconds: duration)

@@ -170,6 +170,8 @@ public final class ShannonVoiceConversationModel: NSObject {
     private var meteringTask: Task<Void, Never>?
     private var diagnosticSessionID: String?
     private let diagnostics: ShannonVoiceDiagnostics
+    /// Only a session this model activated is deactivated by it; a running voice conversation keeps its own.
+    private let audioLease = ShannonVoiceAudioSessionLease()
 
     public override convenience init() {
         self.init(diagnostics: .shared)
@@ -249,7 +251,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         self.recorder = nil
         recordingURL = nil
         stopMetering()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        audioLease.release()
 
         let byteCount = ((try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size]) as? NSNumber)?.intValue ?? 0
         diagnostics.record(
@@ -306,7 +308,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         stopSpeaking()
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try audioLease.activate()
         let player = try AVAudioPlayer(data: speech.audio)
         player.delegate = self
         guard player.prepareToPlay(), player.play() else { throw PlaybackError.startFailed }
@@ -318,7 +320,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
         if audioPlayer?.isPlaying == true { audioPlayer?.stop() }
         audioPlayer = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        audioLease.release()
         if phase == .speaking { phase = .idle }
     }
 
@@ -347,7 +349,7 @@ public final class ShannonVoiceConversationModel: NSObject {
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
         diagnostics.record("capture.session.category.after", sessionID: sessionID)
         diagnostics.record("capture.session.activate.before", sessionID: sessionID)
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        try audioLease.activate()
         diagnostics.record(
             "capture.session.activate.after",
             sessionID: sessionID,
@@ -404,7 +406,7 @@ public final class ShannonVoiceConversationModel: NSObject {
             try? FileManager.default.removeItem(at: recordingURL)
         }
         recordingURL = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        audioLease.release()
         diagnostics.record("capture.stop.after", sessionID: diagnosticSessionID, metadata: ["reason": reason])
         diagnosticSessionID = nil
     }
@@ -461,7 +463,7 @@ extension ShannonVoiceConversationModel: AVAudioRecorderDelegate, AVSpeechSynthe
         Task { @MainActor [weak self] in
             guard self?.audioPlayer === player else { return }
             self?.audioPlayer = nil
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            self?.audioLease.release()
             self?.phase = flag ? .idle : .failed
             if !flag { self?.errorMessage = "Gemini音声を最後まで再生できませんでした。" }
         }

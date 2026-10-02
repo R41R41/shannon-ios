@@ -68,6 +68,13 @@ public final class ShannonGeminiLiveSessionModel {
     var handleDelegationResponse: (@MainActor (ShannonLiveVoiceDelegationResponseDTO) -> Void)?
     /// Receives each finished 「友人も一緒」 period. Set by the owner of the call, not per start.
     var guestPeriodEnded: (@MainActor (ShannonVoiceGuestPeriod) -> Void)?
+    /// The call going on while the app is in the background (`ShannonGeminiLiveSessionModel+Background.swift`).
+    var backgroundSilence = ShannonVoiceBackgroundSilence()
+    var backgroundWatchTask: Task<Void, Never>?
+    var lastAudioReconnectAt: Date?
+    var interruptionGeneration = 0
+    /// Ends the call the way the owner's own 終了 does. Set by the owner of the call.
+    var endAfterBackgroundSilence: (@MainActor () -> Void)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
     public init() {
         let stored = UserDefaults.standard.string(forKey: Self.inputPreferenceDefaultsKey)
@@ -92,6 +99,7 @@ public final class ShannonGeminiLiveSessionModel {
         let retainedStart = sameCall ? callStartedAt : nil
         let retainedGuestCall = sameCall ? guestCall : ShannonVoiceGuestCallState()
         stop()
+        backgroundSilence.speech(at: Date())
         guestCall = retainedGuestCall
         setKeepsScreenAwake(true)
         pendingTurns = retained
@@ -153,6 +161,10 @@ public final class ShannonGeminiLiveSessionModel {
                 inputStateHandler: { [weak self] state in
                     guard self?.sessionGenerationID == generation else { return }
                     self?.inputState = state
+                },
+                audioStateHandler: { [weak self] state in
+                    guard self?.sessionGenerationID == generation else { return }
+                    self?.handleAudioState(state)
                 }
             )
             transport = next
@@ -281,27 +293,12 @@ public final class ShannonGeminiLiveSessionModel {
         }
     }
 
-    public func shareCameraSnapshot(
-        jpegData: Data,
-        analyze: @escaping @MainActor (Data) async throws -> String
-    ) async throws {
-        guard participantMode.allowsCameraSharing else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
-        let generation = sessionGenerationID
-        let description = try await analyze(jpegData)
-        guard sessionGenerationID == generation, participantMode.allowsCameraSharing,
-              transport != nil else { throw ShannonRealtimeVoiceCameraError.sessionUnavailable }
-        interruptResponse()
-        pendingTurns.append(rawText: "写真を共有しました。",
-            text: "いま共有した写真を見て、会話の流れに合わせて短くコメントして。画像の内容: \(description)",
-            source: .camera)
-        beginResponse()
-    }
-
     private func handle(_ event: ShannonTranscriptionEvent) {
         switch event {
         case .sessionReady:
             phase = .listening
             if callStartedAt == nil { callStartedAt = Date() }
+            backgroundSilence.speech(at: Date())
         case .speechStarted:
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
@@ -314,12 +311,14 @@ public final class ShannonGeminiLiveSessionModel {
                     shannonTurnEndedAt: echoWindow.playbackEndedAt, isSpeaking: responseTask != nil,
                     now: ProcessInfo.processInfo.systemUptime)
             }
+            backgroundSilence.speech(at: Date())
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
             interruptResponse()
             scheduleFinalization(turnComplete: false)
-        case .goAway:
+        case let .goAway(reason):
+            if reason == ShannonGeminiLiveTransport.audioFailure, reconnectAfterAudioFailure() { return }
             fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
         }
     }
@@ -337,6 +336,7 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     func markPlaybackEnded() {
+        backgroundSilence.speech(at: Date())
         echoWindow.playbackEnded(at: ProcessInfo.processInfo.systemUptime)
     }
 

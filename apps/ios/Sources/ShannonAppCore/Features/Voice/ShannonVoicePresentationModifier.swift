@@ -108,6 +108,11 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         geminiVoiceModel.guestPeriodEnded = { [workspace, conversationModel] period in
             workspace.remember(period, threadID: context.threadID, using: conversationModel)
         }
+        // Five minutes without a word from either side, while the app is in the background, ends the call as 終了 does.
+        geminiVoiceModel.endAfterBackgroundSilence = { [conversationModel] in
+            endCall()
+            conversationModel.statusMessage = ShannonVoiceBackgroundCopy.endedAfterSilence
+        }
         // Session-owned, not sheet-owned: minimization must not cancel startup.
         Task {
             guard workspace.connectionRequestID == requestID else { return }
