@@ -171,7 +171,12 @@ public enum ShannonNowText {
         case ("app", "read"): "トークで読んだ"
         case ("app", "shown"): "アプリに表示された"
         case ("app", _): "アプリ"
-        case ("earphones", "spoken"): "イヤホンで届いた"
+        case ("earphones", "spoken"):
+            switch delivery.device {
+            case "iphone": "イヤホンで届いた（iPhone）"
+            case "mac": "イヤホンで届いた（Mac）"
+            default: "イヤホンで届いた"
+            }
         case ("earphones", _): "イヤホン"
         case ("call", "answered"): "電話で届いた"
         case ("call", _): "電話"

@@ -30,7 +30,20 @@ public struct ShannonOpsView: View {
         .sheet(item: $confirming) { confirmation in
             ShannonOpsConfirmationSheet(model: model, confirmation: confirmation) { confirming = nil }
         }
+#if DEBUG
+        .onChange(of: model.didLoad, initial: true) { presentPreviewConfirmation() }
+#endif
     }
+
+#if DEBUG
+    /// `-ShannonPreviewYousu opsConfirm`: opens the longest confirmation over fixture data, for screenshots.
+    private func presentPreviewConfirmation() {
+        guard ShannonYousuFixtureClient.launchVariant == "opsConfirm", confirming == nil,
+              let body = model.snapshot?.services.first(where: { $0.id == ShannonOpsText.minebotBody }),
+              let server = model.minebotStartServers(for: body)?.first else { return }
+        confirming = ShannonOpsConfirmation(action: .init(type: .minebotStart, target: server.id, name: ShannonOpsText.serviceName(server)))
+    }
+#endif
 
     /// Restarts the loop when the app comes to the front and when the interval changes.
     private var pollingKey: String {

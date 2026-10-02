@@ -114,11 +114,14 @@ public struct ShannonNowDeliveryDTO: Decodable, Equatable, Sendable {
     public let surface: String
     public let outcome: String?
     public let at: String?
+    /// For `earphones`: which app said it, `mac` or `iphone`.
+    public let device: String?
 
-    public init(surface: String, outcome: String? = nil, at: String? = nil) {
+    public init(surface: String, outcome: String? = nil, at: String? = nil, device: String? = nil) {
         self.surface = surface
         self.outcome = outcome
         self.at = at
+        self.device = device
     }
 }
 
