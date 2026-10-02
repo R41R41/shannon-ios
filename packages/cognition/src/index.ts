@@ -32,6 +32,7 @@ export {
 export {
   SHANNON_CAPABILITIES,
   SHANNON_LIMITATIONS,
+  SHANNON_ROOM_LOOK_RULES,
   shannonCapabilityPrompt,
   type ShannonCapability,
   type ShannonCapabilityId,
@@ -40,6 +41,7 @@ export {
   SHANNON_AUTONOMY_DAILY_BUDGET_YEN,
   SHANNON_AUTONOMY_DOMAINS,
   SHANNON_AUTONOMY_SYSTEM_DOMAIN,
+  SHANNON_CONVERSATION_ACTION_DOMAIN,
   SHANNON_CORE_AREA_LABELS,
   autonomyDomain,
   autonomyDomainLabel,

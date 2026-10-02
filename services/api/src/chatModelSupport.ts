@@ -56,6 +56,15 @@ export function extractOutputText(value: unknown): string {
   return parts.join('').trim();
 }
 
+/**
+ * The field of the structured reply by which she chooses one look at the room. It is in the
+ * schema only in a turn where the look is offered; the server ignores it in any other turn.
+ */
+export const ROOM_LOOK_SCHEMA = Object.freeze({
+  type: 'string', enum: ['none', 'asked', 'curious'],
+  description: '体のカメラで部屋を一度見るか。none=見ない。asked=ライ氏に見てと言われたので見る。curious=言われていないが自分が見たいので見る',
+});
+
 export function parseStructuredTurn(raw: string): {
   threadTitle?: string;
   threadSummary?: string;
@@ -65,6 +74,7 @@ export function parseStructuredTurn(raw: string): {
   intentPlan: ShannonIntentPlan | null;
   artifacts: ShannonGeneratedArtifact[];
   places: ShannonPlace[];
+  roomLook?: 'asked' | 'curious';
 } {
   if (!raw) throw new Error('OPENAI_RESPONSE_EMPTY');
   const value = parseJson(raw);
@@ -88,10 +98,11 @@ export function parseStructuredTurn(raw: string): {
   const intentPlan = validatedIntentPlan(object.intentPlan);
   const threadTitle = normalizedThreadTitle(object.threadTitle);
   const threadSummary = normalizedThreadSummary(object.threadSummary);
+  const roomLook = object.roomLook === 'asked' || object.roomLook === 'curious' ? { roomLook: object.roomLook } as const : {};
   if (object.taskProposal === null) {
     if (taskDecision.disposition === 'propose') throw new Error('OPENAI_RESPONSE_SCHEMA_INVALID');
     return {
-      reply: object.reply.trim(), taskDecision, taskProposal: null, intentPlan, artifacts, places,
+      reply: object.reply.trim(), taskDecision, taskProposal: null, intentPlan, artifacts, places, ...roomLook,
       ...(threadTitle ? { threadTitle } : {}),
       ...(threadSummary ? { threadSummary } : {}),
     };
@@ -113,6 +124,7 @@ export function parseStructuredTurn(raw: string): {
     intentPlan,
     artifacts,
     places,
+    ...roomLook,
     taskProposal: {
       title: proposal.title.trim(),
       goal: proposal.goal.trim(),

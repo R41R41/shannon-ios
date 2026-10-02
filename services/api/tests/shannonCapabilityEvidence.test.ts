@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
+  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
 } from '@shannon/cognition';
 import { FileAetherContextReader } from '../src/aetherContext.js';
@@ -12,9 +12,11 @@ import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { StudyStore } from '../src/studyStore.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
+import { BodyLooks } from '../src/bodyLook.js';
+import { OpenAIRoomLookViewer, roomLookInstructions } from '../src/bodyLookVision.js';
 import { validatedChatAttachments } from '../src/apiValidation.js';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
-import { GENERATED_ARTIFACT_INSTRUCTIONS, WEB_SEARCH_INSTRUCTIONS, agentTaskInstructions } from '../src/chatModelSupport.js';
+import { GENERATED_ARTIFACT_INSTRUCTIONS, ROOM_LOOK_SCHEMA, WEB_SEARCH_INSTRUCTIONS, agentTaskInstructions } from '../src/chatModelSupport.js';
 import { executeConversationCommand } from '../src/conversationCommands.js';
 import { prepareConversationOrganize } from '../src/conversationOrganize.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
@@ -50,6 +52,9 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     && mandatorySkillPatterns.current_web!.test('今日の天気を調べて'),
   place_search: () => voiceSkill('place_discovery') && wantsPlaceDiscovery('近くのカフェを探して'),
   photo_understanding: () => exists(createConfiguredVoiceVisionGateway),
+  // One look: the model chooses it in the structured reply, the body answers, and the frame is seen under the four rules.
+  room_look: () => exists(BodyLooks.prototype.turn, BodyLooks.prototype.answer, OpenAIRoomLookViewer.prototype.see)
+    && ROOM_LOOK_SCHEMA.enum.includes('asked') && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookInstructions([]).includes(rule)),
   text_attachments: () => validatedChatAttachments([{ name: 'memo.md', mimeType: 'text/markdown', text: '内容' }])?.length === 1
     && validatedChatAttachments(Array.from({ length: 5 }, (_, index) => (
       { name: `${index}.txt`, mimeType: 'text/plain', text: 'x' }))) === null

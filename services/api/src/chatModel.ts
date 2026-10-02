@@ -40,6 +40,8 @@ export interface ShannonChatModelRequest {
   attachments?: readonly ShannonChatAttachment[];
   useWebSearch?: boolean;
   placeSearch?: PlaceSearchContext;
+  /** The structured reply gets a `roomLook` field: she may choose one look at the room (`bodyLook.ts`). */
+  offerRoomLook?: boolean;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -71,6 +73,7 @@ export interface ShannonChatModelResult {
   reply: string;
   webSources?: ShannonWebSource[];
   places?: ShannonPlace[];
+  roomLook?: 'asked' | 'curious';
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;

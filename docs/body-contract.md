@@ -4,7 +4,7 @@ What Shannon's body must send and may read. The body is the Live2D desktop appli
 
 Everything here is additive. No existing route, table, or prompt wording changed.
 
-The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), and **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`). The server never calls the body, never generates a reply because of an event, and never calls a model on these routes.
+The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`), and **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`). The server never calls the body and never generates a reply because of an event. Only the answer to a look calls a model; no other route here does.
 
 ## Transport
 
@@ -12,7 +12,7 @@ The contract in one paragraph: the body **reports facts** (`POST /v1/body/events
 - `scopeKey` is required on every route (query parameter for `GET`, body field otherwise). For a paired device the server replaces it with the device's own scope, so the body can send any non-empty value.
 - The device that sends a request is taken from its token. Events and capabilities are stored with that device id.
 - `PUT` is accepted for `/v1/body/capabilities` only; every other path keeps answering `405` to it.
-- Request bodies are at most 64 KiB. One device may send at most 120 requests a minute to `/v1/body/*` (polling presence every 10 seconds uses 6).
+- Request bodies are at most 64 KiB, except `POST /v1/body/looks/{id}` (535,384 bytes; see [Looking at the room](#looking-at-the-room)). One device may send at most 120 requests a minute to `/v1/body/*` (polling presence every 10 seconds uses 6).
 
 ## `POST /v1/body/events`
 
@@ -107,7 +107,7 @@ What the server returns to the body is safe to show to others unless marked:
 
 ## `GET /v1/body/presence`
 
-A read-only snapshot of what the body should show. Reading it writes nothing.
+A read-only snapshot of what the body should show. Reading it writes nothing to the database; the server remembers in memory when each device last read it, which is how it knows her window is showing.
 
 `GET /v1/body/presence?scopeKey=owner`
 
@@ -121,7 +121,8 @@ A read-only snapshot of what the body should show. Reading it writes nothing.
   "doing": "drafting",
   "autonomy": { "state": "active" },
   "study": { "awaitingReaction": 1 },
-  "capabilities": { "expressions": ["smile"], "gestures": ["stretch"], "flags": { "tears": true }, "updatedAt": "2026-10-02T02:00:00.000Z" }
+  "capabilities": { "expressions": ["smile"], "gestures": ["stretch"], "flags": { "tears": true }, "updatedAt": "2026-10-02T02:00:00.000Z" },
+  "look": null
 }
 ```
 
@@ -137,6 +138,7 @@ A read-only snapshot of what the body should show. Reading it writes nothing.
 | `autonomy.state` | `disabled` \| `paused` \| `active` | `GET /v1/autonomy` → `control.state` |
 | `study.awaitingReaction` | integer | Number of study cards with `awaitingReaction: true` (`GET /v1/autonomy/study`). |
 | `capabilities` | what this device registered, or `null` | `PUT /v1/body/capabilities` |
+| `look` | `{ id, requestedAt, expiresAt }` \| `null`; absent while looks are switched off | A look this device is asked to take now. See [Looking at the room](#looking-at-the-room). |
 
 `doing` is `idle` unless the loop is running (enabled, not paused, reporting in, budget left) and its latest step was recorded within the last 3 minutes. Then: thinking about what to do next → `thinking`; reading a public page or a shared Notion page → `reading`; writing a note → `noting`; writing a story draft → `drafting`; revising → `revising`; marking a story 「見せてもいい」 or telling the owner → `showing`. Putting a draft away is `idle`. The body should treat an unknown `doing` or `expression` as `idle` / `neutral`.
 
@@ -144,7 +146,7 @@ The emotion source is not changed by this contract, and nothing the body sends c
 
 ### Polling
 
-There is no stream and no push (see [Not built](#not-built)). Poll every `pollAfterSeconds`.
+There is no stream and no push (see [Not built](#not-built)). Poll every `pollAfterSeconds`: 10, or 3 for a minute after a text turn and while a look is open.
 
 - `etag` identifies the content (everything except `changedAt`). Send the last one back as `?etag=<etag>`; when nothing changed the answer is short:
 
@@ -167,11 +169,11 @@ The body registers what it can express. One registration per device and scope; a
 | --- | --- | --- | --- |
 | `expressions` | array of at most 64 ids | yes | |
 | `gestures` | array of at most 32 ids | yes | |
-| `flags` | object of at most 16 `id: boolean` | no | For example `shoulders`, `tears`. |
+| `flags` | object of at most 16 `id: boolean` | no | For example `shoulders`, `tears`. `camera: true` says the owner has switched the camera on. |
 
 An id is 1–40 characters of `[A-Za-z0-9_.-]`, starting with a letter or digit, without repeats in a list. No names in Japanese, no descriptions, no other field. The answer is `200` with the stored registration and `updatedAt`.
 
-The registration is stored and returned in `presence`, and nothing more: it is not in any prompt, so Shannon does not yet know what her body can do.
+The registration is stored and returned in `presence`. One flag is read by the server: `camera`. Nothing else of the registration is in any prompt, so Shannon does not yet know which expressions and gestures her body has.
 
 ## `GET /v1/body/nudges`
 
@@ -209,6 +211,119 @@ Limits the body must respect (the server cannot see what the body shows):
 
 The lines are a **seed set of five, one per scene, awaiting the owner's review** (`services/api/src/bodyNudges.ts`). `packages/cognition` holds no canonical list of short lines, so they were written in the voice of the existing fixed sentences (ボク, ライ氏, です・ます). Persona is core: changing or adding a line is the owner's decision.
 
+## Looking at the room
+
+Owner decision (Syzygy ADR-0002 addendum, 2026-10-02), stage 1. Shannon may take **one look** at the room through the body's camera: one JPEG frame, only in a text conversation with the owner alone, only while her window is visible. The server asks through `presence`; the body answers with `POST /v1/body/looks/{id}`. `services/api/src/bodyLookContract.ts` holds the bounds, `bodyLook.ts` the rules.
+
+### Order of one look
+
+1. The body registers `flags.camera: true` with `PUT /v1/body/capabilities` while the owner has the camera switched on, and `flags.camera: false` (or no `camera` flag) when it is off. It reads `GET /v1/body/presence` **only while her window is visible**: the server takes a presence read in the last 30 seconds as "the window is showing".
+2. In a `POST /v1/chat` turn whose applied `audience` is `owner`, the conversation model is offered the look and may choose it. The chat reply returns at once (she may say she will take a look). No keyword starts a look, and a look the model asks for without the offer is ignored.
+3. The next presence read **of the device with the camera** carries `look`:
+
+   ```json
+   { "look": { "id": "0b6c1f0e-5a47-4d0c-9d1c-7a2f6f1f0a11", "requestedAt": "2026-10-02T03:00:00.000Z", "expiresAt": "2026-10-02T03:00:30.000Z" } }
+   ```
+
+   `look` is part of the snapshot, so it changes the `etag`. It is `null` when nothing is asked, for every other device, and again once the look is answered or expired. The field is absent while looks are switched off on the server.
+4. The body shows its badge, takes one frame, and answers before `expiresAt` (30 seconds after `requestedAt`). It keeps no copy of the frame.
+5. The server shows the frame to the conversation model once and drops it. What she says arrives as her next message in the same Talk (see [How her message reaches a client](#how-her-message-reaches-a-client)).
+
+There is at most one open look per scope. While a text turn happened in the last 60 seconds, or a look is open, `pollAfterSeconds` is **3** instead of 10; the body should accept 3–10.
+
+### `POST /v1/body/looks/{id}`
+
+Seen:
+
+```json
+{ "scopeKey": "owner", "outcome": "seen", "audience": "owner", "image": { "mediaType": "image/jpeg", "base64": "/9j/4AAQ…", "width": 960, "height": 540 } }
+```
+
+Not seen:
+
+```json
+{ "scopeKey": "owner", "outcome": "refused", "code": "camera_off" }
+```
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `outcome` | `seen` \| `refused` | No other top-level field than the ones listed for the outcome is accepted; there is no text field. |
+| `audience` | `owner` \| `others` | `seen` only, required. The body decides it as for events. With `others` the frame is **dropped without being shown to the model** and the look is recorded as refused (`others_present`). The body should not send this: it should refuse with `others_present` before opening the camera. |
+| `image.mediaType` | `image/jpeg` | Nothing else. |
+| `image.base64` | standard base64, no `data:` prefix, no line breaks | The decoded JPEG is at most **400,000 bytes** (533,336 base64 characters). The bytes must start with the JPEG marker and contain a frame header. |
+| `image.width` / `image.height` | integers, 1–960 / 1–1,920 | Must equal the size in the JPEG's own frame header. |
+| `code` | see below | `refused` only, required. |
+
+| `code` | The body sends it when |
+| --- | --- |
+| `camera_off` | The owner has the camera switched off. |
+| `window_hidden` | Her window is hidden or minimised. |
+| `busy` | The camera or the body is doing something else. |
+| `no_camera` | No camera is attached. |
+| `denied` | The operating system refuses camera access. |
+| `failed` | The frame could not be taken or encoded. |
+| `timeout` | The frame was not ready in time. (The server uses the same code for a look nobody answered.) |
+| `others_present` | Stream output is on, the 「友人も一緒」 switch is on, or the body cannot tell that the owner is alone. The camera is not opened. |
+| `rate_limited` | The body's own limit of 6 an hour and 30 a day, counted on looks actually taken. |
+
+The JSON body of this route may be at most **535,384 bytes** (the largest frame in base64 plus 2,048 bytes for the other fields). Every other route keeps the 64 KiB limit.
+
+The answer is `200`:
+
+```json
+{ "schemaVersion": 1, "id": "0b6c1f0e-…", "status": "seen", "message": { "id": "8f0f…", "threadId": "c1a2…", "text": "机の上にマグカップが見えます。", "initiativeId": "5d3e…" } }
+```
+
+| `status` | Meaning | `message` |
+| --- | --- | --- |
+| `seen` | The model saw the frame; `message.text` is what she says about it. | present |
+| `refused` | The refusal was recorded. | her one honest line if the owner had asked her to look, otherwise `null` |
+| `discarded` | A frame with `audience: others` was dropped unseen. | as for `refused` |
+| `failed` | The frame arrived and no message came of it (the model call failed, or someone else joined the conversation meanwhile). | as for `refused`, or `null` |
+
+The request is held while the model looks (up to 20 seconds); the answer is the fastest way for the body to learn what she said. Refusals of the request itself:
+
+| Status | `error` | Meaning | Retry |
+| --- | --- | --- | --- |
+| 400 | `BAD_REQUEST` | A field is missing, out of bounds, or not allowed; the frame is not a JPEG, too large, or wider than 960. The look stays open. | With a corrected answer, before `expiresAt` |
+| 403 | `LOOK_NOT_YOURS` | The look was given to another device. Only that device may answer. | No |
+| 403 | `BODY_LOOK_DISABLED` | Looks are switched off on the server. | No |
+| 404 | `LOOK_NOT_FOUND` | Unknown id. | No |
+| 409 | `LOOK_ALREADY_ANSWERED` | The look was answered (or withdrawn) before. A look is answered once. | No |
+| 410 | `LOOK_EXPIRED` | `expiresAt` has passed. | No |
+| 413 | `REQUEST_TOO_LARGE` | Body above 535,384 bytes. | No |
+
+### How her message reaches a client
+
+Her message about a look is one ordinary assistant message, delivered the way she says anything on her own. A client learns of it in three places, and each names the look:
+
+| Where | Field |
+| --- | --- |
+| The answer of `POST /v1/body/looks/{id}` | `message.text` (with `message.id`, `message.threadId`, `message.initiativeId`). The body can show and speak it at once. |
+| `GET /v1/conversation?threadId=…` | An assistant message with `bodyLook: { "id": "<look id>", "outcome": "seen" \| "not_seen" }`, `content` = the text, `sourceExperienceId` = `initiative:<initiativeId>`. |
+| `GET /v1/initiatives` | An unread message with `bodyLookId: "<look id>"`, `sourceTitle: "部屋を見た"`, `sourceURL: ""`, `expression: "curious"` (`"thinking"` for a line about a look that did not happen). The push worker sends it like any initiative. |
+
+When the existing apps show it, without a change to them: the Mac app reads `GET /v1/initiatives` every 60 seconds and reloads the Talk, so the message appears within a minute. The iPhone receives it as a push notification (the first 180 characters as the banner text) and loads it into the Talk when the app next becomes active or the banner is opened; an iPhone that stays in the foreground on that Talk shows the banner but not yet the message. The body gets it in the answer of its own `POST`.
+
+`not_seen` messages are fixed sentences (`bodyLookLines.ts`), one per reason, and exist only when the owner had asked her to look. A look she chose herself that did not happen leaves no message. A look that expired unanswered has no `POST` to return its line in; it arrives through the other two.
+
+### What the body must do
+
+- Camera off by default; the owner can switch it off at any time. Register `flags.camera` accordingly.
+- One JPEG frame per look, at most 960 pixels wide and 400,000 bytes (about 100–200 KB is expected). Show the badge while the camera is open. Keep no image.
+- Never open the camera while her window is hidden, a stream is live, or 「友人も一緒」 is on: refuse with the matching code.
+- Keep its own limit of 6 an hour and 30 a day.
+- Answer each look once. After `409`, `410` or `404`, drop the frame.
+
+### What the server guarantees about the frame
+
+- It is sent to the conversation model provider **once**, with a request the provider is asked not to keep (`store: false`), and then dropped. It is never written to the database, a file, a log line, the conversation history, or a turn capture. `body_looks` holds identifiers, timestamps, an outcome and a code, and has no column for a frame or a description.
+- A frame is shown to the model only for a look opened in an owner text turn, answered by the device it was given to, in time, with `audience: owner`. A text turn with `audience: others` that arrives meanwhile ends the look: an unanswered one is closed, and what the model saw is not said.
+- Limits on the server: 6 an hour and 30 an owner-local day (`Asia/Tokyo`), counted on looks for which a frame arrived (`SHANNON_BODY_LOOK_PER_HOUR`, `SHANNON_BODY_LOOK_PER_DAY`).
+- Every look is one entry in the activity record (tool `body.look`): 「部屋を一度見ました。」 or 「部屋を見ませんでした（…）。」 with the code. The entry never contains what she saw.
+- The model is told, with the frame: not to say who a person is, not to judge appearance, not to read out or remember text on screens or documents, and not to put other people who appear into memory. Her message is display history: it has no user side and no completed-turn event, so no fact, relationship, promise, goal or person memory is extracted from it.
+- Voice calls, the platform bridge, turns with `audience: others`, guests, and the activity loop never start a look.
+
 ## Errors
 
 Body: `{ "error": "<code>", "message": "…" }`.
@@ -221,7 +336,7 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 403 | `BODY_INGEST_DISABLED` | Body events are switched off on the server (`POST /v1/body/events` only). | No; drop the events and keep polling |
 | 404 | `NOT_FOUND` | Unknown path under `/v1/body/`, including `/v1/body/presence/stream`. | No |
 | 405 | `METHOD_NOT_ALLOWED` | `PUT` anywhere but `/v1/body/capabilities`, or another method. | No |
-| 413 | `REQUEST_TOO_LARGE` | Body above 64 KiB. | No |
+| 413 | `REQUEST_TOO_LARGE` | Body above 64 KiB (535,384 bytes for a look answer). | No |
 | 429 | `RATE_LIMITED` | More than 120 body requests from the device in a minute. | After a minute |
 
 A refused or failed request must never stop the body from showing her.
@@ -229,6 +344,8 @@ A refused or failed request must never stop the body from showing her.
 ## Server switch
 
 `SHANNON_BODY_INGEST=off` (also `false`, `0`, `disabled`) on the API makes `POST /v1/body/events` answer `403 BODY_INGEST_DISABLED` and keeps already stored events out of conversation turns. Presence, capabilities and nudges keep working. It is an app setting: changing it needs a restart, not a deployment. Unset means on.
+
+`SHANNON_BODY_LOOK=off` (same values) switches off looking at the room only: a look is never offered to the model, `presence` has no `look` field, and `POST /v1/body/looks/{id}` answers `403 BODY_LOOK_DISABLED`. `SHANNON_BODY_INGEST=off` switches looks off as well. `SHANNON_BODY_LOOK_PER_HOUR` (default 6) and `SHANNON_BODY_LOOK_PER_DAY` (default 30) set the server's limits.
 
 ## Not built
 
@@ -239,5 +356,6 @@ Deliberately, for this version:
 - **Sentence streaming for `/v1/chat`.** A text reply still arrives whole.
 - **Per-moment generated nudges.** Stage 1 is fixed lines only: no model call, no cost, nothing about the moment sent to a model.
 - **A reply, a feeling, or a memory from a touch.** Events do not change her stored emotion, are not remembered as experience, and do not start a turn.
-- **Body awareness in the prompt.** The persona and the capabilities wording are unchanged. Telling her what her body can do (from the registered capabilities) and letting a reply choose an expression or gesture are later changes to core that need the owner's approval.
+- **Body awareness in the prompt, beyond the look.** The capabilities wording names one ability of the body: one look at the room, with its four rules. Telling her what else her body can do (from the registered capabilities) and letting a reply choose an expression or gesture are later changes to core that need the owner's approval.
+- **Looking from a voice call, from the activity loop, or on her own schedule; more than one frame; any stored image.** Stage 1 is one frame in a text turn with the owner alone.
 - **The `audience` field of `POST /v1/chat`.** It belongs to a separate change; this contract only reads it if present.

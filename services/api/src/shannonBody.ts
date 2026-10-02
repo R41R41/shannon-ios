@@ -6,6 +6,9 @@ import {
   BODY_LIMITS, BODY_SCHEMA_VERSION,
   type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge,
 } from './bodyContract.js';
+import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
+import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
+import { noteBodyLookSpeaker } from './bodyLookDelivery.js';
 import { bodyNudgeCandidates } from './bodyNudges.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
@@ -24,12 +27,14 @@ export interface ShannonBodyOptions {
   store?: SQLiteBodyStore;
   /** `SHANNON_BODY_INGEST`; unset means on. */
   ingestEnabled?: boolean;
+  /** Looking at the room (`bodyLook.ts`): its table, switch and limits, the model call, and the way her message is delivered. */
+  look?: BodyLookOptions;
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
   stateStore: CompanionStateStore;
   autonomy: ShannonAutonomyService;
-  conversationStore: Pick<ConversationStore, 'listThreads'>;
+  conversationStore: Pick<ConversationStore, 'listThreads' | 'history' | 'appendNote'>;
   now: () => string;
 }
 
@@ -58,6 +63,8 @@ export interface BodyPresence {
   autonomy: { state: AutonomyControlLabel };
   study: { awaitingReaction: number };
   capabilities: StoredBodyCapabilities | null;
+  /** A look this device is asked to take now, or null. Absent while looks are switched off on the server. */
+  look?: { id: string; requestedAt: string; expiresAt: string } | null;
 }
 
 export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds'> & { unchanged: true };
@@ -102,10 +109,19 @@ export class ShannonBody {
   private readonly store: SQLiteBodyStore;
   private readonly ingestEnabled: boolean;
   private readonly seen = new Map<string, { etag: string; changedAt: string }>();
+  /** Looking at the room through the body's camera. */
+  readonly looks: BodyLooks;
 
   constructor(private readonly dependencies: ShannonBodyDependencies) {
     this.store = dependencies.store ?? new SQLiteBodyStore(':memory:');
     this.ingestEnabled = dependencies.ingestEnabled ?? true;
+    this.looks = new BodyLooks({
+      speaker: noteBodyLookSpeaker(dependencies.conversationStore), ...dependencies.look,
+      ingestEnabled: this.ingestEnabled, now: dependencies.now, dayKey: ownerDay,
+      cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'),
+      context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
+      record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
+    });
   }
 
   /** Stores a validated batch. Each event answers for itself; nothing here calls a model or writes a reply. */
@@ -173,6 +189,8 @@ export class ShannonBody {
     const mood = presentCompanionState(snapshot, at).presence.mood;
     const current = currentShannonEmotion(snapshot.expressiveEmotion, at);
     const overview = this.dependencies.autonomy.overview(scopeKey);
+    // This read is what tells her the window is visible; an open look for this device rides on the snapshot.
+    const looking = this.looks.presence(scopeKey, deviceId, at);
     const content = {
       mood: {
         expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}),
@@ -185,6 +203,7 @@ export class ShannonBody {
       autonomy: { state: overview.control.state },
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },
       capabilities: this.store.capabilities(scopeKey, deviceId),
+      ...(looking.look !== undefined ? { look: looking.look } : {}),
     };
     const etag = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
     const key = `${scopeKey}\u0000${deviceId}`;
@@ -194,7 +213,10 @@ export class ShannonBody {
       mark = { etag, changedAt: at };
       this.seen.set(key, mark);
     }
-    const head = { schemaVersion: BODY_SCHEMA_VERSION, etag, changedAt: mark.changedAt, pollAfterSeconds: BODY_LIMITS.presencePollSeconds };
+    const head = {
+      schemaVersion: BODY_SCHEMA_VERSION, etag, changedAt: mark.changedAt,
+      pollAfterSeconds: looking.fastPoll ? BODY_LOOK_LIMITS.fastPollSeconds : BODY_LIMITS.presencePollSeconds,
+    };
     return knownEtag === etag ? { ...head, unchanged: true } : { ...head, ...content };
   }
 

@@ -1,5 +1,6 @@
 import {
   SHANNON_AUTONOMY_SYSTEM_DOMAIN,
+  SHANNON_CONVERSATION_ACTION_DOMAIN,
   buildShannonOwnWorkPrompt,
   buildShannonPursuitsPrompt,
   withAutonomyRunning,
@@ -170,6 +171,18 @@ export class ShannonAutonomyService {
         costYen, outcome: report.outcome, ...(report.link ? { link: report.link } : {}),
         approval: 'not_needed', relatedId: decision.id,
       });
+    });
+  }
+
+  /**
+   * Something she did inside a conversation with the owner, such as one look at the room.
+   * It was not an autonomous step, so no gate decision precedes it and no budget is spent
+   * from her own day; it is appended to the same record so the owner can see it happened.
+   */
+  recordConversationAction(scopeKey: string, report: { summary: string; tool: string; outcome: 'done' | 'failed'; reasonCode?: string }): AutonomyActivityEntry {
+    return this.record(scopeKey, {
+      kind: 'action', actor: 'shannon', summary: report.summary, domain: SHANNON_CONVERSATION_ACTION_DOMAIN.id, tool: report.tool,
+      outcome: report.outcome, approval: 'not_needed', ...(report.reasonCode ? { reasonCode: report.reasonCode } : {}),
     });
   }
 

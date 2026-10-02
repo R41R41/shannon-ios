@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { restoreCompanionState } from '@shannon/cognition';
 import type { DailyMindFocus } from './dailyMind.js';
 import { commitmentAwaitingTodaySlot, dueCommitmentCandidate } from './commitmentInitiative.js';
+import { bodyLookIdOfSource } from './bodyLookDelivery.js';
 import { groundedWorldOpening, topicMatchesSource, worldVisibleInterests } from './worldInterestRelevance.js';
 import {
   intentInitiativeCandidateIsCurrent,
@@ -46,6 +47,8 @@ export interface InitiativeMessage {
   sourceURL: string;
   createdAt: string;
   readAt?: string;
+  /** Set when the message is what she says about one look at the room (`bodyLook.ts`). */
+  bodyLookId?: string;
 }
 
 export interface InitiativeInbox {
@@ -254,7 +257,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
 
   unreadMessages(scopeKey: string): readonly InitiativeMessage[] {
     const rows = this.database.prepare(`
-      SELECT initiative_id, thread_id, content, expression, source_title, source_url, created_at, read_at
+      SELECT initiative_id, thread_id, content, expression, source_title, source_url, created_at, read_at, source_item_id
       FROM initiative_messages
       WHERE scope_key = ? AND read_at IS NULL
       ORDER BY created_at ASC LIMIT 20
@@ -268,6 +271,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       sourceURL: String(row.source_url),
       createdAt: String(row.created_at),
       ...(row.read_at ? { readAt: String(row.read_at) } : {}),
+      ...(bodyLookIdOfSource(row.source_item_id) ? { bodyLookId: bodyLookIdOfSource(row.source_item_id)! } : {}),
     })));
   }
 

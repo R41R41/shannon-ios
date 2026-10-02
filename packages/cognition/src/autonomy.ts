@@ -45,8 +45,15 @@ export function autonomyDomain(id: unknown): ShannonAutonomyDomain | null {
   return SHANNON_AUTONOMY_DOMAINS.find(domain => domain.id === id) ?? null;
 }
 
+/**
+ * Something she did inside a conversation with the owner, not on her own. It is written to the
+ * activity record and is not a gate domain: `authorizeAutonomousAction` does not know it.
+ */
+export const SHANNON_CONVERSATION_ACTION_DOMAIN = Object.freeze({ id: 'conversation' as const, label: '会話の中で' });
+
 export function autonomyDomainLabel(id: string): string {
   if (id === SHANNON_AUTONOMY_SYSTEM_DOMAIN.id) return SHANNON_AUTONOMY_SYSTEM_DOMAIN.label;
+  if (id === SHANNON_CONVERSATION_ACTION_DOMAIN.id) return SHANNON_CONVERSATION_ACTION_DOMAIN.label;
   return autonomyDomain(id)?.label ?? '不明な範囲';
 }
 

@@ -5,6 +5,7 @@ import {
   SHANNON_CORE_PROMPT,
   SHANNON_LIMITATIONS,
   SHANNON_ONE_LINE_VOICE,
+  SHANNON_ROOM_LOOK_RULES,
   SHANNON_SUITE_PRODUCTS,
   assembleShannonSystemPrompt,
   createInitialCompanionState,
@@ -52,8 +53,8 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_420);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_350);
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_537);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_467);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -132,5 +133,19 @@ describe('canonical capability description', () => {
     // The guest hears that such requests are refused, without the owner's places or budget.
     expect(guest).toContain('自分の複製はしない');
     for (const ownerDetail of ['専用フォルダ', 'Azure', '1,000円', '書斎', '基幹', 'ライ氏']) expect(guest).not.toContain(ownerDetail);
+  });
+
+  it('states the one look at the room with the four rules the owner decided, for the owner only', () => {
+    expect(SHANNON_ROOM_LOOK_RULES).toEqual([
+      '写った人が誰かを言わない', '見た目を評価しない', '画面や書類の文字を読み上げず、覚えない', '写ったほかの人を記憶に入れない',
+    ]);
+    const line = SHANNON_CAPABILITIES.find(item => item.id === 'room_look')!;
+    expect(line.audience).toBe('owner');
+    expect(line.text).toBe('部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。'
+      + '写った人が誰かを言わない。見た目を評価しない。画面や書類の文字を読み上げず、覚えない。写ったほかの人を記憶に入れない。');
+    expect(shannonCapabilityPrompt('owner')).toContain(line.text);
+    expect(shannonCapabilityPrompt('guest')).not.toContain('部屋を見る');
+    // A stream of frames stays something she cannot read.
+    expect(shannonCapabilityPrompt('owner')).toContain('連続したカメラ映像');
   });
 });

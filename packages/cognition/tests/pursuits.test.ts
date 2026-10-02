@@ -81,6 +81,11 @@ describe('autonomy domains', () => {
     expect(autonomyDomainLabel('anything_else')).toBe('不明な範囲');
     expect(autonomyDomainLabel('system')).toBe('設定と承認');
   });
+
+  it('labels a step taken inside a conversation without making it a domain the gate knows', () => {
+    expect(autonomyDomainLabel('conversation')).toBe('会話の中で');
+    expect(autonomyDomain('conversation')).toBeNull();
+  });
 });
 
 describe('her own work in an owner prompt', () => {
@@ -134,7 +139,7 @@ describe('autonomy wording while the loop runs', () => {
     expect(withAutonomyRunning(shannonIdentityPrompt('guest'))).toBe(shannonIdentityPrompt('guest'));
     expect(withAutonomyRunning('関係のない文')).toBe('関係のない文');
     // The running wording still fits the response-path budget of the capability block.
-    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(1_440);
-    expect(running.length).toBeLessThanOrEqual(2_370);
+    expect(withAutonomyRunning(shannonCapabilityPrompt('owner')).length).toBeLessThanOrEqual(1_557);
+    expect(running.length).toBeLessThanOrEqual(2_487);
   });
 });

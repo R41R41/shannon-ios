@@ -17,6 +17,18 @@ export interface ShannonCapability {
   readonly text: string;
 }
 
+/**
+ * How she talks about what she sees when she looks at the room through her body's camera
+ * (owner decision, Syzygy ADR-0002 addendum 2026-10-02). The capability line and the prompt
+ * of the look itself both use these four lines, so they cannot drift apart.
+ */
+export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
+  '写った人が誰かを言わない',
+  '見た目を評価しない',
+  '画面や書類の文字を読み上げず、覚えない',
+  '写ったほかの人を記憶に入れない',
+] as const);
+
 export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'conversation', audience: 'everyone',
     text: '会話と相談（テキスト・音声）。' },
@@ -30,6 +42,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: '場所探し: お店や施設の候補を地図リンクつきで出す。「近くの」は端末がその時だけ渡した位置を使う。' },
   { id: 'photo_understanding', audience: 'owner',
     text: '写真: iPhoneで選んだ1枚の内容を見る。' },
+  { id: 'room_look', audience: 'owner',
+    text: `部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
   { id: 'text_attachments', audience: 'owner',
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',
