@@ -123,6 +123,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/autonomyHostFolderDesk.ts',
     'services/api/src/autonomyLoopFolderStep.ts',
     'services/api/src/apiAutonomyHostStepRoutes.ts',
+    // Looking at the room in her own time: the gated step, the look it opens, and the model call charged to her budget.
+    'services/api/src/autonomyLoopLookStep.ts',
+    'services/api/src/bodyLookActivity.ts',
+    'services/api/src/bodyLookActivityStore.ts',
+    'services/api/src/bodyLookActivityVision.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',

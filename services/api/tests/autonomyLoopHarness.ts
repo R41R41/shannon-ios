@@ -1,9 +1,10 @@
 import { configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
 import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.js';
 import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
+import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
-import { ShannonAutonomyService } from '../src/autonomyService.js';
+import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/autonomyService.js';
 import type { ShowablePiece, ShowingOutcome, StudyShowing } from '../src/autonomyShowing.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from '../src/autonomyTextModel.js';
@@ -95,6 +96,9 @@ export interface LoopHarnessOptions {
   model?: FakeModel;
   reader?: FakeReader;
   showing?: FakeShowing;
+  /** Looking at the room in her own time: the desk the loop asks, and the counts its service hands the gate. */
+  looks?: AutonomyRoomLooks;
+  roomLooks?: AutonomyServiceDependencies['roomLooks'];
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -106,13 +110,13 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   });
   const loopConfig: AutonomyLoopConfig = { ...configuredAutonomyLoop({}), ...options.loop };
   const now = () => clock.at;
-  const service = new ShannonAutonomyService({ store, config, now });
+  const service = new ShannonAutonomyService({ store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}) });
   const model = options.model ?? new FakeModel();
   const reader = options.reader ?? new FakeReader();
   const showing = options.showing ?? new FakeShowing();
   const newLoop = (workerId: string) => new ShannonAutonomyLoop({
     store, service, config, loop: loopConfig, model, reader, showing, now, workerId,
-    ...(options.notion ? { notion: options.notion } : {}),
+    ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

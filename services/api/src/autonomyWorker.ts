@@ -8,6 +8,13 @@ import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { configuredAutonomyTextModel } from './autonomyTextModel.js';
+import { bodyIngestEnabled } from './bodyContract.js';
+import { ActivityRoomLooks } from './bodyLookActivity.js';
+import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
+import { configuredBodyLook } from './bodyLookContract.js';
+import { SQLiteBodyLookStore } from './bodyLookStore.js';
+import { SQLiteBodyStore } from './bodyStore.js';
+import { ownerDay } from './companionPresence.js';
 import { notionLoopReader } from './notionLoopReader.js';
 import { configuredNotionSource } from './notionSource.js';
 import { configuredDatabasePath } from './sqliteStore.js';
@@ -25,7 +32,16 @@ const config = configuredAutonomy(process.env, { databasePath });
 const announcer = new SQLiteAutonomyAnnouncer(databasePath);
 // The same zone as the initiative loop, so both share one message slot per day.
 const showing = new SQLiteStudyShowing(databasePath);
-const service = new ShannonAutonomyService({ store, config, now, announcer });
+// Looking at the room in her own time (stage 2). This process opens the look row and reads its outcome;
+// the body's answer, and the frame, go to the API process. SHANNON_AUTONOMY_MAX_ROOM_LOOKS=0 switches it off.
+const bodyStore = new SQLiteBodyStore(databasePath);
+const lookStore = new SQLiteBodyLookStore(databasePath);
+const lookHand = new SQLiteBodyLookActivityStore(databasePath);
+const looks = new ActivityRoomLooks({
+  looks: lookStore, hand: lookHand, config: configuredBodyLook(process.env), ingestEnabled: bodyIngestEnabled(process.env),
+  cameraDevices: scopeKey => bodyStore.devicesWithFlag(scopeKey, 'camera'), now, dayKey: ownerDay,
+});
+const service = new ShannonAutonomyService({ store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at) });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
 const loop = new ShannonAutonomyLoop({
@@ -34,7 +50,7 @@ const loop = new ShannonAutonomyLoop({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
   }),
-  showing, now, ...(notion ? { notion } : {}),
+  showing, now, looks, ...(notion ? { notion } : {}),
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');
@@ -66,6 +82,9 @@ try {
   } while (!stopping);
 } finally {
   try { loop.release(); } catch { /* the lease runs out by itself */ }
+  lookHand.close();
+  lookStore.close();
+  bodyStore.close();
   showing.close();
   announcer.close();
   store.close();

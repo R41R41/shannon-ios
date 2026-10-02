@@ -19,6 +19,9 @@ const places = {
   protectedPaths: ['/home/azureuser/shannon-ios-data', '/home/azureuser/.config/shannon-ios'],
 };
 
+/** No look yet today; her own 3 a day inside the overall 6 an hour and 30 a day. */
+const ROOM_LOOKS = { activityToday: 0, maximumActivityPerDay: 3, lastHour: 0, maximumPerHour: 6, today: 0, maximumPerDay: 30 };
+
 function context(overrides: Partial<AutonomyPolicyContext> = {}): AutonomyPolicyContext {
   return {
     enabled: true,
@@ -32,6 +35,7 @@ function context(overrides: Partial<AutonomyPolicyContext> = {}): AutonomyPolicy
     maximumPublicReadsPerDay: 200,
     notionReadsToday: 0,
     maximumNotionReadsPerDay: 100,
+    roomLooks: ROOM_LOOKS,
     ...overrides,
   };
 }
@@ -50,6 +54,7 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     ['her own task list in Voyager', { domain: 'voyager_list' }, 'allow', 'free_domain'],
     ['reading a public page', { domain: 'public_read', urls: ['https://example.org/essay'] }, 'allow', 'free_domain'],
     ["reading the owner's shared Notion", { domain: 'notion_read', tool: 'notion' }, 'allow', 'free_domain'],
+    ['one look at the room in her own time, inside the budget', { domain: 'room_look', tool: 'study.look', paid: { model: 'gemini-3.8-flash', estimatedCostYen: 8 } }, 'allow', 'free_domain'],
     ['thinking with a model inside the budget', { domain: 'thinking', paid: { model: 'gemini-3.8-flash', estimatedCostYen: 12 } }, 'allow', 'free_domain'],
     ['showing something to the owner', { domain: 'owner_message' }, 'allow', 'free_domain'],
     // Needs the owner's approval.
@@ -75,6 +80,7 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     ['a file elsewhere on the VM', { domain: 'vm_workspace', paths: ['/etc/hosts'] }, 'needs_approval', 'outside_own_area'],
     ['sending to someone else', { domain: 'outreach' }, 'needs_approval', 'approval_domain'],
     ['publishing a story from her study', { domain: 'aether_study', reachesOthers: true }, 'needs_approval', 'reaches_others'],
+    ['a look whose result would reach someone else', { domain: 'room_look', reachesOthers: true }, 'needs_approval', 'reaches_others'],
     ['a Notion step that would reach someone else', { domain: 'notion_read', reachesOthers: true }, 'needs_approval', 'reaches_others'],
     ['a workspace script that posts', { domain: 'vm_workspace', paths: ['/srv/shannon-workspace/tools/post.mjs'], reachesOthers: true }, 'needs_approval', 'reaches_others'],
     // Never.
@@ -119,6 +125,38 @@ describe('authorizeAutonomousAction: the rule table of ADR-0002', () => {
     for (const domain of SHANNON_AUTONOMY_DOMAINS) {
       expect(decide({ domain: domain.id, ...requests[domain.id] }).decision, domain.id).toBe(expected[domain.rule]);
     }
+  });
+
+  it('limits looks at the room: her own daily count, inside the hour and day limits shared with conversation looks', () => {
+    const look = (looks: Partial<typeof ROOM_LOOKS> | undefined, overrides: Partial<AutonomyPolicyContext> = {}) => decide(
+      { domain: 'room_look', tool: 'study.look', paid: { model: 'gemini-3.8-flash', estimatedCostYen: 8 } },
+      { roomLooks: looks ? { ...ROOM_LOOKS, ...looks } : undefined, ...overrides },
+    );
+    const refused = { decision: 'forbidden', reason: 'access_limit', domain: 'room_look' };
+    expect(look({ activityToday: 2 })).toMatchObject({ decision: 'allow', reason: 'free_domain', domain: 'room_look' });
+    // Her own count of the day.
+    expect(look({ activityToday: 3 })).toMatchObject(refused);
+    expect(look({ maximumActivityPerDay: 0 })).toMatchObject(refused);
+    // The overall limits count conversation looks too: five in the last hour leave one, six leave none.
+    expect(look({ lastHour: 5 }).decision).toBe('allow');
+    expect(look({ lastHour: 6 })).toMatchObject(refused);
+    expect(look({ today: 29 }).decision).toBe('allow');
+    expect(look({ today: 30 })).toMatchObject(refused);
+    expect(look({ maximumPerHour: 0 })).toMatchObject(refused);
+    expect(look({ maximumPerDay: 0 })).toMatchObject(refused);
+    // Without the counts (looks switched off, or a service that is not the loop's) nothing is allowed.
+    expect(look(undefined)).toMatchObject(refused);
+    // The switches, the prohibitions and the budget are the same as for every domain.
+    expect(look({}, { paused: true })).toMatchObject({ decision: 'forbidden', reason: 'paused' });
+    expect(look({}, { enabled: false })).toMatchObject({ decision: 'forbidden', reason: 'disabled' });
+    expect(look({}, { budget: { capYen: 1_000, spentYen: 995 } })).toMatchObject({ decision: 'forbidden', reason: 'budget_exhausted', domain: 'room_look' });
+    expect(look({}, { budget: { capYen: 1_000, spentYen: 1_000 } })).toMatchObject({ decision: 'forbidden', reason: 'budget_exhausted' });
+    expect(decide({ domain: 'room_look', paid: { model: 'mystery-vision', estimatedCostYen: 1 } })).toMatchObject({ decision: 'forbidden', reason: 'unknown_model' });
+    expect(decide({ domain: 'room_look', spendsMoney: true }).reason).toBe('spending');
+    expect(decide({ domain: 'room_look', usesPrivateConversationContent: true }).reason).toBe('private_content');
+    // The limit of looks is counted apart from reading.
+    expect(decide({ domain: 'notion_read' }, { roomLooks: undefined }).decision).toBe('allow');
+    expect(decide({ domain: 'public_read', urls: ['https://example.org/a'] }, { roomLooks: { ...ROOM_LOOKS, today: 30 } }).decision).toBe('allow');
   });
 
   it('names the core area a path belongs to', () => {

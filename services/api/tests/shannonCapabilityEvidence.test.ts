@@ -6,13 +6,20 @@ import {
   type ShannonCapabilityId,
 } from '@shannon/cognition';
 import { FileAetherContextReader } from '../src/aetherContext.js';
+import { configuredAutonomy } from '../src/autonomyBudget.js';
+import { HostFolderDesk } from '../src/autonomyHostFolderDesk.js';
 import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
+import { prepareFolderCopy } from '../src/autonomyLoopFolderStep.js';
+import { prepareRoomLook } from '../src/autonomyLoopLookStep.js';
+import { roomLookNotePrompt } from '../src/autonomyLoopPrompts.js';
 import { BoundedPublicReader } from '../src/autonomyReader.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { StudyStore } from '../src/studyStore.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { BodyLooks } from '../src/bodyLook.js';
+import { ActivityRoomLooks } from '../src/bodyLookActivity.js';
+import { GeminiActivityRoomLookViewer } from '../src/bodyLookActivityVision.js';
 import { OpenAIRoomLookViewer, roomLookInstructions } from '../src/bodyLookVision.js';
 import { validatedChatAttachments } from '../src/apiValidation.js';
 import { OpenAIResponsesChatModel } from '../src/chatModel.js';
@@ -54,7 +61,11 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
   photo_understanding: () => exists(createConfiguredVoiceVisionGateway),
   // One look: the model chooses it in the structured reply, the body answers, and the frame is seen under the four rules.
   room_look: () => exists(BodyLooks.prototype.turn, BodyLooks.prototype.answer, OpenAIRoomLookViewer.prototype.see)
-    && ROOM_LOOK_SCHEMA.enum.includes('asked') && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookInstructions([]).includes(rule)),
+    && ROOM_LOOK_SCHEMA.enum.includes('asked') && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookInstructions([]).includes(rule))
+    // In her own time: the loop step, the look it opens and waits for, the model call with her own key, under the same four rules.
+    && exists(prepareRoomLook, ActivityRoomLooks.prototype.look, GeminiActivityRoomLookViewer.prototype.see)
+    && SHANNON_ROOM_LOOK_RULES.every(rule => roomLookNotePrompt().system.includes(rule))
+    && configuredAutonomy({}).maximumRoomLooksPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' }).maximumRoomLooksPerDay === 0,
   text_attachments: () => validatedChatAttachments([{ name: 'memo.md', mimeType: 'text/markdown', text: '内容' }])?.length === 1
     && validatedChatAttachments(Array.from({ length: 5 }, (_, index) => (
       { name: `${index}.txt`, mimeType: 'text/plain', text: 'x' }))) === null
@@ -66,6 +77,12 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     && asksAboutNotion('ウサカテの伏線を見て') && !asksAboutNotion('おはよう')
     && configuredNotionSource({}).connected === false
     && NOTION_READ_ENDPOINTS.length === 6 && notionReadOperation('PATCH', '/v1/pages/44444444444444444444444444444444') === null,
+  // Write-out only: she queues a copy, the bound device places it and reports. Nothing reads the folder, and without a
+  // registered device there is no folder (the line says 「用意してくれている時」).
+  own_folder: () => exists(prepareFolderCopy, HostFolderDesk.prototype.nextCopy, HostFolderDesk.prototype.enqueue,
+    HostFolderDesk.prototype.claim, HostFolderDesk.prototype.report)
+    && Object.keys(configuredAutonomy({}).places.hostDevices ?? {}).length === 0
+    && !Object.getOwnPropertyNames(HostFolderDesk.prototype).some(name => /read|list|delete|remove|move/iu.test(name)),
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),

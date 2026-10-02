@@ -2,7 +2,7 @@
 
 What the device that works in Shannon's own folder must send and may read. Her folder is one folder the owner chose on the owner's Windows PC or Mac (Syzygy ADR-0002: a free domain, `host_folder`). The process that touches the folder lives in another repository and has no network and no token; the desktop application's main process, paired like any other device, pulls work from this server and hands it over. This document and the contract test `services/api/tests/autonomyHostFolder.test.ts` are what that side is built against. The bounds and codes are in `services/api/src/autonomyHostFolderPath.ts`.
 
-Everything here is additive. No existing route or table changed, and the persona, base prompt, and capability wording are unchanged.
+Everything here is additive. No existing route or table changed, and the persona and base prompt are unchanged. (One capability line about the folder was added on 2026-10-02 with the owner's approval; see the last section.)
 
 The contract in one paragraph: in her own time Shannon may **queue a copy** of a note, or of a story she has called 「見せてもいい」, for her folder. The one device bound to that host **claims** at most one step (`POST /v1/autonomy/host-steps/claim`), writes the file inside the folder, and **reports** an outcome and a code (`POST /v1/autonomy/host-steps/{id}/report`). The server never calls the device, never sees the folder, and reads nothing back from it.
 
@@ -185,4 +185,4 @@ Deliberately, for stage 1:
 - **A server-side folder path for a bound host.** The owner chooses the folder on the device; the server stores no path for it.
 - **Mac specifics.** The mechanism is the same; the Mac application needs its own host entry and its own resident process.
 - **A dedicated rate limit** for these routes, and an owner route that lists the queue. The owner sees every hand-out and result in the activity record.
-- **Wording in her persona, capabilities, or the day's short log.** She is not told about the folder in conversation, and 「今日したこと」 does not count copies. Both are changes to core that need the owner's approval.
+- **Wording in her persona.** Since the owner's approval of 2026-10-02 the capability description has one line about the folder (「自分のフォルダ」: only when the owner has set it up, copies only, nothing read back), and 「今日したこと」 counts a copy once the device reports it is in place (「自分のフォルダに写しを1つ置いた」). Her persona text is unchanged.

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { shannonCapabilityPrompt, shannonIdentityPrompt } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
-import { autonomyDayLog, autonomyLoopStatus } from '../src/autonomyDayLog.js';
+import { autonomyDayLog, autonomyDayPhrases, autonomyLoopStatus } from '../src/autonomyDayLog.js';
 import { summarizeAutonomyDay, type AutonomyActivityEntry } from '../src/autonomyActivity.js';
 import { SQLiteStudyShowing, studyShowingMessage } from '../src/autonomyShowing.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
@@ -207,6 +207,12 @@ describe('what the owner is told about the loop', () => {
     expect(summarizeAutonomyDay('2026-10-02', entries).summary)
       .toBe('次にすることを考え、公開ページを2つ読み、メモを2つ書き、物語の下書きを1つ書きました。うまくいかなかったこと1件。使った費用は24.50円です。');
     expect(autonomyDayLog([entry('study.revise'), entry('study.show')])).toBe('物語を1回直し、物語を1つ見せました。');
+    // A copy counts once the device reports the file is in her folder; queueing it (`folder.copy`) and a failed write do not.
+    const folder = [entry('study.note'), entry('folder.copy'), entry('folder.copy'), entry('folder.write'), entry('folder.write', 'failed'), entry('study.look')];
+    expect(autonomyDayLog(folder)).toBe('メモを1つ書き、自分のフォルダに写しを1つ置き、部屋を1回見ました。');
+    expect(autonomyDayPhrases(folder)).toEqual(['メモを1つ書いた', '自分のフォルダに写しを1つ置いた', '部屋を1回見た']);
+    // A look inside a conversation is not something she did in her own time.
+    expect(autonomyDayPhrases([entry('body.look')])).toEqual([]);
     // A day without loop steps keeps the earlier count wording.
     expect(summarizeAutonomyDay('2026-10-02', [entry('outline')]).summary).toBe('したこと1件。使った費用は3.50円です。');
     expect(autonomyDayLog([])).toBeNull();

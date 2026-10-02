@@ -14,8 +14,10 @@ export interface RoomLookContextLine { role: 'user' | 'assistant'; content: stri
 export interface RoomLookViewRequest {
   scopeKey: string;
   image: BodyLookImage;
-  /** The last few messages of the Talk the look was requested in, oldest first. */
+  /** The last few messages of the Talk the look was requested in, oldest first. Empty for a look she took in her own time. */
   context: readonly RoomLookContextLine[];
+  /** Present only for a look her activity loop opened: the look, and the model the gate priced for it. */
+  activity?: { lookId: string; model: string };
 }
 
 export interface RoomLookViewer {

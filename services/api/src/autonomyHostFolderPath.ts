@@ -71,9 +71,12 @@ export function hostFolderRelativePath(value: unknown): { path: string } | { pro
   return { path: segments.join('/') };
 }
 
-/** A note, or a story whose current version she has called 「見せてもいい」. Never a draft, never a piece put away. */
+/**
+ * A note, or a story whose current version she has called 「見せてもいい」. Never a draft, never a piece put away,
+ * and never her note about a look at the room: what she saw stays in the study, for the owner alone.
+ */
 export function copyableStudyPiece(piece: StudyPiece): boolean {
-  if (piece.status === 'put_away' || piece.readableVersion !== piece.version) return false;
+  if (piece.status === 'put_away' || piece.readableVersion !== piece.version || piece.origin === 'room_look') return false;
   return piece.kind === 'note' || piece.status === 'ready' || piece.status === 'shown';
 }
 

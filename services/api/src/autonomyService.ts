@@ -45,6 +45,8 @@ export interface AutonomyServiceDependencies {
   defaultThread?: (scopeKey: string) => string;
   defaultAgentHost?: string | null;
   resolvePath?: AutonomyPathResolver;
+  /** Every look at the room in the last hour and today, with the overall limits; null while looks are switched off. Only the activity loop's service has it. */
+  roomLooks?: (scopeKey: string, at: string) => { lastHour: number; maximumPerHour: number; today: number; maximumPerDay: number } | null;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -79,6 +81,8 @@ export interface ActionReport {
   tool?: string;
   /** Actual usage of a paid step, from the provider response. */
   usage?: { inputTokens: number; outputTokens: number; purpose?: string };
+  /** Why a step failed, as a code from a closed set. */
+  reasonCode?: string;
 }
 
 export class ShannonAutonomyService {
@@ -112,6 +116,7 @@ export class ShannonAutonomyService {
     // A stop switch that cannot be read counts as on.
     try { paused = this.store.control(scopeKey).paused; } catch { paused = true; }
     const budget = this.budget(scopeKey, dayKey);
+    const looks = this.dependencies.roomLooks?.(scopeKey, at) ?? null;
     const decision = authorizeAutonomousAction(request, {
       enabled: this.config.enabled,
       paused,
@@ -123,6 +128,10 @@ export class ShannonAutonomyService {
       maximumPublicReadsPerDay: this.config.maximumPublicReadsPerDay,
       notionReadsToday: this.store.activity.countForDay(scopeKey, dayKey, 'notion_read', 'allowed'),
       maximumNotionReadsPerDay: this.config.maximumNotionReadsPerDay,
+      ...(looks ? { roomLooks: {
+        activityToday: this.store.activity.countForDay(scopeKey, dayKey, 'room_look', 'allowed'),
+        maximumActivityPerDay: this.config.maximumRoomLooksPerDay, ...looks,
+      } } : {}),
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {
@@ -169,6 +178,7 @@ export class ShannonAutonomyService {
         ...(decision.model ? { model: decision.model } : {}),
         ...(report.tool ?? decision.tool ? { tool: report.tool ?? decision.tool } : {}),
         costYen, outcome: report.outcome, ...(report.link ? { link: report.link } : {}),
+        ...(report.reasonCode ? { reasonCode: report.reasonCode } : {}),
         approval: 'not_needed', relatedId: decision.id,
       });
     });

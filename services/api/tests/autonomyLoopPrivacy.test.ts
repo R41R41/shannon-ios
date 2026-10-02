@@ -97,12 +97,14 @@ describe('what reaches the prompts of her own activity', () => {
     const sourceDirectory = join(import.meta.dirname, '../src');
     const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
-      'autonomyLoop.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoop.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
     ]);
     const allowed = new Set([
       'node:crypto', 'node:sqlite', '@shannon/cognition',
       // Her folder on the owner's machines: checked below to reach nothing but her study and its own queue.
       './autonomyHostFolderDesk.js', './autonomyHostFolderPath.js', './autonomyLoopFolderStep.js',
+      // One look at the room: the step names an interface and imports no module of the body; it is handed text and token counts.
+      './autonomyLoopLookStep.js',
       './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
       './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
       './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',

@@ -15,6 +15,7 @@ import type { DatabaseSync } from 'node:sqlite';
 export type StudyPieceKind = 'story' | 'note';
 export type StudyPieceStatus = 'draft' | 'ready' | 'shown' | 'put_away';
 export type StudyReaction = 'like' | 'more' | 'unclear';
+export type StudyPieceOrigin = 'room_look';
 
 export const STUDY_STATUS_LABEL: Readonly<Record<StudyPieceStatus, string>> = Object.freeze({
   draft: '下書き', ready: '見せてもいい', shown: '見せた', put_away: 'しまった',
@@ -49,6 +50,8 @@ export interface StudyPiece {
   updatedAt: string;
   shownAt?: string;
   putAwayBy?: 'shannon' | 'owner';
+  /** `room_look`: her note about one look at the owner's room. It is for the owner alone and is never material for a story or a copy. */
+  origin?: StudyPieceOrigin;
 }
 
 export interface StudyVersion {
@@ -80,6 +83,7 @@ export interface StudyDraft {
   pursuitId?: string;
   sources?: readonly StudySource[];
   model?: string;
+  origin?: StudyPieceOrigin;
 }
 
 export type StudyRejection = 'STUDY_INVALID' | 'STUDY_LIMIT' | 'STUDY_NOT_FOUND' | 'STUDY_CLOSED' | 'STUDY_NOT_READABLE';
@@ -87,6 +91,7 @@ export type StudyRejection = 'STUDY_INVALID' | 'STUDY_LIMIT' | 'STUDY_NOT_FOUND'
 interface PieceRow {
   piece_id: string; kind: string; title: string; body: string; status: string; version: number; readable_version: number | null;
   pursuit_id: string | null; sources_json: string; created_at: string; updated_at: string; shown_at: string | null; put_away_by: string | null;
+  origin: string | null;
 }
 
 export class StudyStore {
@@ -135,6 +140,9 @@ export class StudyStore {
       );
       CREATE INDEX IF NOT EXISTS study_feedback_piece ON study_feedback (scope_key, piece_id, created_at);
     `);
+    // Additive: where a note came from, when that matters for who may be given it.
+    const columns = database.prepare(`PRAGMA table_info('study_pieces')`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'origin')) database.exec('ALTER TABLE study_pieces ADD COLUMN origin TEXT');
   }
 
   /** Newest change first. */
@@ -175,10 +183,10 @@ export class StudyStore {
     const note = normalized.kind === 'note';
     this.database.prepare(`
       INSERT INTO study_pieces
-        (scope_key, piece_id, kind, title, body, status, version, readable_version, pursuit_id, sources_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+        (scope_key, piece_id, kind, title, body, status, version, readable_version, pursuit_id, sources_json, created_at, updated_at, origin)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, id, normalized.kind, normalized.title, normalized.body, note ? 'ready' : 'draft', note ? 1 : null,
-      normalized.pursuitId ?? null, JSON.stringify(normalized.sources), at, at);
+      normalized.pursuitId ?? null, JSON.stringify(normalized.sources), at, at, note && draft.origin === 'room_look' ? 'room_look' : null);
     this.appendVersion(scopeKey, id, 1, normalized.title, normalized.body, normalized.changeNote || '最初の稿です。', normalized.model, at);
     return this.get(scopeKey, id)!;
   }
@@ -351,5 +359,6 @@ function piece(row: PieceRow): StudyPiece {
     updatedAt: row.updated_at,
     ...(row.shown_at ? { shownAt: row.shown_at } : {}),
     ...(row.put_away_by ? { putAwayBy: row.put_away_by as 'shannon' | 'owner' } : {}),
+    ...(row.origin === 'room_look' ? { origin: 'room_look' as const } : {}),
   });
 }

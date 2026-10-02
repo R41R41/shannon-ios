@@ -466,10 +466,13 @@ describe('limits', () => {
   });
 
   it('reads the switch and the limits from the environment, with the owner\'s defaults', () => {
-    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: 30 });
+    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 3 });
     for (const off of ['off', 'OFF', 'false', '0', 'disabled']) expect(configuredBodyLook({ SHANNON_BODY_LOOK: off }).enabled).toBe(false);
     expect(configuredBodyLook({ SHANNON_BODY_LOOK: 'on', SHANNON_BODY_LOOK_PER_HOUR: '2', SHANNON_BODY_LOOK_PER_DAY: '5' }))
-      .toEqual({ enabled: true, perHour: 2, perDay: 5 });
+      .toEqual({ enabled: true, perHour: 2, perDay: 5, activityPerDay: 3 });
+    // Stage 2 has its own count; 0 switches it off without touching looks in conversation.
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' })).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 0 });
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '31' }).activityPerDay).toBe(3);
     expect(configuredBodyLook({ SHANNON_BODY_LOOK_PER_HOUR: 'many', SHANNON_BODY_LOOK_PER_DAY: '-1' })).toMatchObject({ perHour: 6, perDay: 30 });
   });
 });
@@ -683,14 +686,30 @@ describe('the frame is never kept', () => {
     for (const name of ['bodyLookStore.ts', 'bodyLookDelivery.ts', 'bodyLookLines.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest/u);
     }
-    // One place starts a look: the text chat turn. Voice, the platform bridge and the activity loop have no path to it,
-    // and the gate's policy does not know the look.
+    // Two places start a look. In a conversation: the text chat turn. In her own time (stage 2): one gated step of the
+    // activity loop, which the gate knows as the domain `room_look`. Voice and the platform bridge have no path to it.
     const sourceDirectory = new URL('../src/', import.meta.url);
     const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.looks\.turn\(|offerRoomLook: true/u.test(source(name)));
     expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts']);
-    for (const name of readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))) {
-      expect(source(name), name).not.toMatch(/bodyLook|roomLook|RoomLook/u);
+    const openers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /looks\.open\(|store\.open\(/u.test(source(name)));
+    expect(openers.sort()).toEqual(['bodyLook.ts', 'bodyLookActivity.ts']);
+    const aware = readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
+      .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
+    expect(aware.sort()).toEqual(['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts']);
+    // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.
+    for (const name of ['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts', 'bodyLookActivity.ts', 'bodyLookActivityStore.ts']) {
+      expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
+    const handOff = [...source('bodyLookActivityStore.ts').matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\s*\);/gu)]
+      .map(match => [match[1], match[2]!.split('\n').map(line => line.trim().split(/\s+/u)[0]!).filter(name => name && name !== 'PRIMARY')]);
+    expect(handOff).toEqual([
+      ['body_look_activity', ['look_id', 'scope_key', 'model', 'created_at', 'note', 'input_tokens', 'output_tokens', 'taken_at']],
+      ['body_look_presence', ['scope_key', 'device_id', 'read_at']],
+    ]);
+    expect(source('bodyLookActivityStore.ts')).not.toMatch(/BLOB|image|frame_/iu);
+    // The one module that sends a frame for her own activity: no store, no file, no log, and never the conversation key.
+    expect(imports('bodyLookActivityVision.ts').sort()).toEqual(['./autonomyLoopPrompts.js', './autonomyModels.js', './autonomyTextModel.js', './bodyLookVision.js']);
+    expect(source('bodyLookActivityVision.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|OPENAI_API_KEY|environment\.GEMINI_API_KEY|recordLlmUsage/u);
     // The answer of a look is not passed to the speaker, the store, or the activity record.
     const service = source('bodyLook.ts');
     expect(service.match(/result\.image/gu)).toHaveLength(1);

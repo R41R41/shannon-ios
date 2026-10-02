@@ -53,8 +53,8 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_578);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_508);
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_691);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_621);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -142,10 +142,19 @@ describe('canonical capability description', () => {
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'room_look')!;
     expect(line.audience).toBe('owner');
     expect(line.text).toBe('部屋を見る: 体のカメラが許されている時、二人だけのテキスト会話で部屋を一度見て、見えたことを次の発言で話す。'
+      + '自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。'
       + '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい。ほかの人が写っていたら、誰かを言わず、見た目を評価しない。画面や書類の文字を読み上げず、覚えない。写ったほかの人を記憶に入れない。');
     expect(shannonCapabilityPrompt('owner')).toContain(line.text);
     expect(shannonCapabilityPrompt('guest')).not.toContain('部屋を見る');
     // A stream of frames stays something she cannot read.
     expect(shannonCapabilityPrompt('owner')).toContain('連続したカメラ映像');
+  });
+
+  it('states her own folder as it is: only when the owner set it up, copies only, nothing read back', () => {
+    const line = SHANNON_CAPABILITIES.find(item => item.id === 'own_folder')!;
+    expect(line.audience).toBe('owner');
+    expect(line.text).toBe('自分のフォルダ: ライ氏がPCに用意してくれている時、自分の時間に、メモと見せてもいい物語の写しをそこへ置く（置くだけ。中を読むことも、ほかの操作もまだできない）。');
+    expect(shannonCapabilityPrompt('owner')).toContain(`- ${line.text}`);
+    expect(shannonCapabilityPrompt('guest')).not.toContain('自分のフォルダ');
   });
 });
