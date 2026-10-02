@@ -11,6 +11,12 @@ import { HostFolderDesk } from '../src/autonomyHostFolderDesk.js';
 import { ShannonAutonomyLoop } from '../src/autonomyLoop.js';
 import { prepareFolderCopy } from '../src/autonomyLoopFolderStep.js';
 import { prepareRoomLook } from '../src/autonomyLoopLookStep.js';
+import { prepareReachOut } from '../src/autonomyLoopReachOutStep.js';
+import { calendarIngestEnabled } from '../src/calendarContract.js';
+import { dispatchCalendarRequest } from '../src/calendarRoutes.js';
+import { OwnerUpcoming, asksAboutSchedule } from '../src/ownerUpcoming.js';
+import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
+import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
 import { roomLookNotePrompt } from '../src/autonomyLoopPrompts.js';
 import { BoundedPublicReader } from '../src/autonomyReader.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
@@ -86,7 +92,13 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
   voyager_tasks: () => voiceSkill('voyager_tasks') && isOrganizeCommand('整理して') && exists(prepareConversationOrganize),
   agent_tasks: () => voiceSkill('agent_status') && agentTaskInstructions().includes('TestFlight')
     && exists(distributeLatestInternalBuild),
-  initiative: () => exists(SQLiteInitiativeStore),
+  // Read-only: a device sends a bounded snapshot, and the one projection gives it to a turn that asks about the schedule. Nothing writes a calendar.
+  calendar_read: () => exists(dispatchCalendarRequest, SQLiteUpcomingStore.prototype.replaceCalendar, OwnerUpcoming.prototype.promptFor)
+    && asksAboutSchedule('今日の予定は？') && !asksAboutSchedule('おはよう') && calendarIngestEnabled({}) && !calendarIngestEnabled({ SHANNON_CALENDAR_INGEST: 'off' })
+    && !Object.getOwnPropertyNames(SQLiteUpcomingStore.prototype).some(name => /event(?:Create|Update|Write)/iu.test(name)),
+  // The day's one topic or due promise, and, from her own activity, a few messages of her own a day (0 switches them off).
+  initiative: () => exists(SQLiteInitiativeStore, prepareReachOut, SQLiteReachOutSpeaker.prototype.say)
+    && configuredAutonomy({}).maximumReachOutsPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
 };
 
 describe('Shannon capability description', () => {
@@ -104,7 +116,8 @@ describe('Shannon capability description', () => {
     for (const mimeType of ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']) {
       expect(validatedChatAttachments([{ name: 'file', mimeType, text: 'x' }])).toBeNull();
     }
-    // No calendar, mail, alarm, or media-generation integration exists in the API sources.
+    // No mail, alarm, or media-generation integration exists in the API sources, and no calendar is reached from the server:
+    // the apps send a snapshot of upcoming events (`calendar_read`); nothing here reads or writes a calendar service.
     const sourceDirectory = join(import.meta.dirname, '../src');
     const sources = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts'))
       .map(name => readFileSync(join(sourceDirectory, name), 'utf8')).join('\n');
