@@ -52,6 +52,7 @@ public struct ShannonConversationView: View {
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.scenePhase) var scenePhase
+    @Environment(ShannonPrivateListeningModel.self) var privateListening: ShannonPrivateListeningModel?
 
     public init(
         model: ShannonConversationModel = ShannonConversationModel(),
@@ -105,6 +106,12 @@ public struct ShannonConversationView: View {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
+#if os(iOS)
+        // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
+        .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
+            privateListening?.othersPresent = geminiLiveVoiceModel.othersMayBeListening
+        }
+#endif
 #if DEBUG
         .onAppear { applyDesignPreviewLaunchState() }
 #endif

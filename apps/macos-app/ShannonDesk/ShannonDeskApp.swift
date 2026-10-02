@@ -12,6 +12,7 @@ struct ShannonDeskApp: App {
     @State private var releaseModel: ShannonTestFlightDeliveryModel
     @State private var appIconModel: ShannonAppIconModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
+    @State private var privateListeningModel: ShannonPrivateListeningModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -47,6 +48,14 @@ struct ShannonDeskApp: App {
         )
 #endif
         _calendarSharingModel = State(initialValue: calendarSharing)
+#if DEBUG
+        _privateListeningModel = State(initialValue: usesDesignPreview
+            ? .designPreview(outputs: [], registered: [], status: .notListening)
+            : ShannonPrivateListeningModel(client: client, monitor: ShannonSystemAudioRouteMonitor()))
+#else
+        _privateListeningModel = State(initialValue: ShannonPrivateListeningModel(
+            client: client, monitor: ShannonSystemAudioRouteMonitor()))
+#endif
         let connection = ShannonConnectionModel(
             baseURL: ShannonDeskRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
@@ -76,6 +85,8 @@ struct ShannonDeskApp: App {
             )
             .preferredColorScheme(preferredColorScheme)
             .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: false)
+            // The Mac app runs whether or not its window is in front, so its report stays fresh.
+            .shannonPrivateListening(privateListeningModel, runsInBackground: true)
             .onOpenURL { url in
                 Task {
                     if await connectionModel.connect(using: url) {
@@ -100,6 +111,7 @@ struct ShannonDeskApp: App {
                 appIcon: appIconModel
             )
             .environment(calendarSharingModel)
+            .environment(privateListeningModel)
         }
     }
 
@@ -222,6 +234,7 @@ private struct ShannonDesktopSettingsScene: View {
                 showsAppIconSettings = true
             }
             ShannonCalendarSharingSettingsSection()
+            ShannonPrivateListeningSettingsSection()
             if connection.isConnected {
                 Button("接続を確認") {
                     Task { await connection.verifyConnection() }

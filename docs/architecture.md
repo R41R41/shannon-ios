@@ -541,6 +541,14 @@ Shannon's body is the Live2D desktop application on the owner's Windows PC; her 
 - **Nudges** (`GET /v1/body/nudges`): five fixed seed lines (`bodyNudges.ts`, awaiting the owner's review) with a scene, face, and voice direction, and the limits the body must keep (not during a conversation or 15 minutes after one, 2 an hour, 10 a day). No model is called.
 - `SHANNON_BODY_INGEST=off` refuses events and keeps stored ones out of conversation turns, and switches looks off. `SHANNON_BODY_LOOK=off` switches off looks only.
 
+## Private listening
+
+Contract: `docs/private-listening-contract.md` (`privateListeningContract.ts`, `privateListeningRoutes.ts`, `privateListeningStore.ts`, `serverPrivateListeningRoute.ts`). Owner decision 2026-10-02.
+
+- **What it is.** One of the owner's apps says that only he can hear it now: every current output is wired headphones or earphones he registered on that device, nobody else is known to be present (「友人も一緒」 or a mentioned companion is never private), and the app is able to run. The decision is made on the device (`ShannonPrivateListeningJudge`); Bluetooth earphones and speakers cannot be told apart, so the owner registers his earphones in Settings (イヤホン), matched by identity and stored only on that device. The route comes from `AVAudioSession.currentRoute` on iOS and from the CoreAudio default output device on macOS, with a listener for route, default-device and jack changes.
+- **Reporting.** `POST /v1/private-listening` with a kind (`mac` or `iphone`), a yes or no, and optionally when the owner last used that device; nothing else is accepted, and no device name or identifier is sent. It is a heartbeat: repeated every 15 seconds, counted for 45, withdrawn at once when the route changes, a friend joins, the iPhone app leaves the foreground, or the app closes. Only a paired device in the owner's scope may report (`403 PAIRED_DEVICE_REQUIRED`, `403 PRIVATE_LISTENING_OWNER_ONLY`). `private_listening` is additive, one row per device, and needs nothing after a restart because freshness is read from the clock. The route is handled in the HTTP layer (`serverPrivateListeningRoute.ts`), not the kernel, and calls no model.
+- `SHANNON_PRIVATE_LISTENING=off` refuses every report; nobody then counts as privately listening.
+
 ## Calendar and upcoming items
 
 Contract: `docs/calendar-contract.md` (`calendarContract.ts`, `calendarRoutes.ts`, `upcomingStore.ts`, `ownerUpcoming.ts`, `ownerUpcomingWiring.ts`). Owner decision 2026-10-02.

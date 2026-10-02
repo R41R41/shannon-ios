@@ -76,6 +76,8 @@ extension ShannonConversationView {
 
                 ShannonCalendarSharingSettingsSection()
 
+                ShannonPrivateListeningSettingsSection()
+
                 ShannonAutonomySettingsSection(model: memoryModel.autonomy)
 
                 Section("接続と詳細") {

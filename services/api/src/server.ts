@@ -63,6 +63,7 @@ import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
+import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -151,6 +152,8 @@ const opsRoute = createOpsRoute({
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
+// Whether only the owner can hear one of his apps now (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it.
+const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now);
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -269,6 +272,7 @@ const server = createServer(async (request, response) => {
       handlePushRegistration(request, response, body, principal, { deviceAuth, pushStore });
       return;
     }
+    if (privateListeningRoute.handle(request, response, url, body, principal)) return;
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
     if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
@@ -343,6 +347,7 @@ function shutdown(): void {
     bodyStore.close();
     reachOuts.close();
     reachOutReports.close();
+    privateListeningRoute.close();
     ownerTurns.close();
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();

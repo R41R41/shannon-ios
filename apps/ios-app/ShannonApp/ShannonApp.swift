@@ -17,6 +17,7 @@ struct ShannonApp: App {
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
+    @State private var privateListeningModel: ShannonPrivateListeningModel
     @State private var pendingPushToken: String?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -51,9 +52,14 @@ struct ShannonApp: App {
         _calendarSharingModel = State(initialValue: usesDesignPreview
             ? .designPreview(previewCalendar ?? .off)
             : ShannonCalendarSharingModel(client: client))
+        _privateListeningModel = State(initialValue: usesDesignPreview
+            ? .designPreview(outputs: [], registered: [], status: .notListening)
+            : ShannonPrivateListeningModel(client: client, monitor: ShannonSystemAudioRouteMonitor()))
 #else
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
         _calendarSharingModel = State(initialValue: ShannonCalendarSharingModel(client: client))
+        _privateListeningModel = State(initialValue: ShannonPrivateListeningModel(
+            client: client, monitor: ShannonSystemAudioRouteMonitor()))
 #endif
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
@@ -76,6 +82,8 @@ struct ShannonApp: App {
                 worldSubscriptionModel: worldSubscriptionModel
             )
                 .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: true)
+                // An iPhone app in the background is suspended: it withdraws its report when it leaves the foreground.
+                .shannonPrivateListening(privateListeningModel, runsInBackground: false)
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }

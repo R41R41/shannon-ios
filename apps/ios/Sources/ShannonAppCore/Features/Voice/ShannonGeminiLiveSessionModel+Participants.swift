@@ -89,6 +89,12 @@ extension ShannonGeminiLiveSessionModel {
     /// Owner mode: someone may be listening, so protected memories are not read out and the turn is marked.
     var companionSuspected: Bool { participantMode == .owner && guestCall.companionSuspected }
 
+    /// Someone other than the owner may hear the phone now: 「友人も一緒」, or a companion he mentioned.
+    /// While this holds the app never says that only he can hear.
+    public var othersMayBeListening: Bool {
+        phase != .idle && (participantMode == .guest || guestCall.companionSuspected)
+    }
+
     /// Keeps the call screen readable on a table. Released when the call ends.
     func setKeepsScreenAwake(_ awake: Bool) {
         guard UIApplication.shared.isIdleTimerDisabled != awake else { return }
