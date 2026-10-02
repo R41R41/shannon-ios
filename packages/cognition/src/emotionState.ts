@@ -206,6 +206,7 @@ export function resolveShannonEmotionState(
   let intensity = clamp(input.provisionalIntensity, 0, 1);
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
   let cause = reply ? REPLY_CAUSE : PROVISIONAL_CAUSE;
+  let fromCue = false;
 
   const support = supportOverrideFor(transcript);
   if (support === 'emergency') {
@@ -220,6 +221,8 @@ export function resolveShannonEmotionState(
     cause = '深い悲しみや喪失へ静かに寄り添う';
   } else {
     const finalCue = FINAL_CUES.find(rule => rule.pattern.test(reply));
+    // Her own words name the feeling; unless the same kind was also decided for this reply, its strength is only the cue's.
+    fromCue = finalCue !== undefined && finalCue.emotion !== primary;
     if (finalCue) {
       primary = finalCue.emotion;
       intensity = Math.max(intensity, 0.52);
@@ -238,11 +241,16 @@ export function resolveShannonEmotionState(
     cause = '事実・安全・記憶・進捗では遊びより正確さを優先する';
   }
 
+  let strongerAgain = false;
   if (reading && previous && previous.primary !== 'neutral') {
-    // The same feeling again does not weaken it, and does not grow it either: only a stimulus that is itself
-    // stronger makes it stronger. A weaker stimulus does not replace a feeling she still has.
-    if (previous.primary === primary && !overrideReason) intensity = Math.max(intensity, previous.intensity);
-    else if (!input.replaces && holdsShannonFeeling(previous, { primary, intensity, overrideReason })) {
+    // The same feeling again, from a stimulus that is not stronger than what she feels, is that feeling going on:
+    // nothing is stored, so it can neither grow nor be raised back to this reading later. Only a stimulus that is
+    // itself stronger is a new feeling, at its own strength. A weaker stimulus of another kind does not replace it.
+    if (previous.primary === primary && !overrideReason) {
+      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength.
+      if (!input.replaces && intensity <= previous.intensity) return continuedShannonEmotion(previous, primary, input.now);
+      strongerAgain = true;
+    } else if (!input.replaces && holdsShannonFeeling(previous, { primary, intensity, overrideReason })) {
       return continuedShannonEmotion(previous, primary, input.now);
     }
   }
@@ -271,6 +279,8 @@ export function resolveShannonEmotionState(
     carryover,
     updatedAt: validTimestamp(input.now),
     ...(overrideReason ? { overrideReason } : {}),
+    ...(strongerAgain ? { continued: false } : {}),
+    ...(fromCue ? {} : { decided: true }),
   });
 }
 
@@ -279,8 +289,9 @@ export function resolveShannonEmotionState(
  * writer of the feeling goes through (a reply in text or voice, a touch, her line about a touch):
  * a feeling is not replaced by a weaker stimulus, which is kept as the secondary feeling instead.
  * It gives way to a stimulus that is at least as strong, to one of the opposite sign that is
- * strong in its own right, and always to what she owes the owner: the overrides (emergency, grief,
- * accuracy) and her concern, reassurance, apology and sympathy for him, at any strength.
+ * strong in its own right, and to what she owes the owner: always to the overrides (emergency,
+ * grief, accuracy), and to her concern, reassurance, apology and sympathy for him when they are
+ * strong enough to show (0.30) and the present feeling is not itself held by an override.
  * A touch additionally never displaces a feeling held for the owner's sake, and a feeling that
  * itself came from a touch always gives way to the next touch.
  */
@@ -290,7 +301,8 @@ export function holdsShannonFeeling(
   touch?: { presentFromTouch: boolean },
 ): boolean {
   if (!present || present.primary === 'neutral' || present.intensity < SHANNON_EMOTION_CONTINUITY.settledBelow) return false;
-  if (incoming.overrideReason || SUPPORT.has(incoming.primary)) return false;
+  if (incoming.overrideReason) return false;
+  if (SUPPORT.has(incoming.primary) && incoming.intensity >= 0.3 && !present.overrideReason) return false;
   if (touch) {
     if (touch.presentFromTouch) return false;
     if (present.overrideReason) return true;
@@ -307,11 +319,12 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const secondary = incoming !== 'neutral' && !unsafeCombination(previous.primary, incoming)
+  const { continued: _continued, decided: _decided, ...rest } = kept;
+  const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;
   return Object.freeze({
-    ...kept, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
+    ...rest, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
     continued: true,
   });
 }

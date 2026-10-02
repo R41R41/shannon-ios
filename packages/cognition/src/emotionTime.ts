@@ -20,6 +20,7 @@ export type ShannonEmotionClockMode = 'awake' | 'wall';
  * |                       | `moodValueHalfLifeMs` | a few hours (valence and openness returning to their baseline) |
  * |                       | `arousalHalfLifeMs`   | about an hour (activation returning to its baseline) |
  * | what lingers          | `lingeringHalfLifeMs` | one to two awake days of 16 hours (a strong feeling) |
+ * |                       | `lingeringMaxWallMs`  | and never more than four days on the wall clock |
  */
 export interface ShannonEmotionTiming {
   clock: ShannonEmotionClockMode;
@@ -31,6 +32,11 @@ export interface ShannonEmotionTiming {
   moodValueHalfLifeMs: number;
   arousalHalfLifeMs: number;
   lingeringHalfLifeMs: number;
+  /**
+   * The one wall-clock bound: however rarely she is awake, nothing stays underneath longer than this
+   * after it began. It only ends a feeling; it never makes one fade faster.
+   */
+  lingeringMaxWallMs: number;
 }
 
 export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freeze({
@@ -42,6 +48,7 @@ export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freez
   moodValueHalfLifeMs: 2 * HOUR,
   arousalHalfLifeMs: 30 * MINUTE,
   lingeringHalfLifeMs: 8 * HOUR,
+  lingeringMaxWallMs: 4 * 24 * HOUR,
 });
 
 /** Strengths, not times: when a feeling counts as settled, held, noted underneath, or eased. */

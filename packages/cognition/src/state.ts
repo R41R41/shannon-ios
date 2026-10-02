@@ -233,10 +233,13 @@ function committedFeeling(
   if (event.continued) return null;
   const incoming = normalizeShannonExpressiveEmotion(event);
   const present = presentShannonFeeling(state, nowIso, timing);
+  // The same kind as what she feels now is stored only when the resolver said the stimulus was itself stronger. Without
+  // that word (a caller that rebuilt the object, an older reading) it is the feeling going on, and nothing is raised.
+  if (incoming.primary === present.primary && present.primary !== 'neutral' && event.continued !== false) return null;
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   if (incoming.primary !== present.primary && holdsShannonFeeling(present, incoming, touch)) return null;
   const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, awakeAt: awakeMs });
-  return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing) };
+  return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing, event.decided === true) };
 }
 
 export function reduceCompanionState(
@@ -307,7 +310,7 @@ export function reduceCompanionState(
       // Resolution comes from what happens (here: his apology or kind word) and from awake time, never from a new conversation starting.
       if (timing.clock !== 'awake') return current;
       const { state, awakeMs } = awakeState(current, nowIso, timing);
-      const lingering = easeLingering(state.lingering ?? [], event.by, awakeMs, timing);
+      const lingering = easeLingering(state.lingering ?? [], event.by, awakeMs, nowIso, timing);
       const eased = easeShannonFeeling(state.expressiveEmotion, event.by, awakeMs, timing);
       if (sameLingering(lingering, state.lingering ?? []) && eased === state.expressiveEmotion) return state === current ? current : freezeSnapshot(state);
       next = { ...state, lingering, ...(eased ? { expressiveEmotion: eased } : {}) };

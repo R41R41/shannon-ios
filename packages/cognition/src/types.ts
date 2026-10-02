@@ -57,8 +57,14 @@ export interface ShannonExpressiveEmotion {
   awakeAt?: number;
   /** Only on a reading by `presentShannonFeeling`: the feeling as it stands at this instant on her awake clock. Never stored. */
   presentAt?: string;
-  /** Only on a resolver result that lets the present feeling go on: nothing new was felt, so committing it stores no feeling. Never stored. */
+  /**
+   * Only on a resolver result, never stored. `true`: the present feeling goes on and nothing new was felt, so committing it
+   * stores nothing. `false`: the same kind of feeling again from a stimulus that is itself stronger than what she felt.
+   * Absent on a feeling of the same kind as the present one, the reducer stores nothing: raising a feeling needs the explicit `false`.
+   */
   continued?: boolean;
+  /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
+  decided?: boolean;
 }
 
 /** Her awake time: it advances while she is in a conversation or an activity session of her own, and stands still otherwise. */

@@ -156,6 +156,8 @@ describe('(a) continuity across conversations, voice', () => {
     const plan = (response.body as { voicePlan: Record<string, any> }).voicePlan;
     // The greeting is answered brightly, a little more strongly than the sulk; the sulk stays beside it, in the plan and in the prompt.
     expect(plan.emotion).toMatchObject({ primary: 'bright', secondary: ['sulky'] });
+    // The plan is a response body: the resolver's notes to the reducer are not part of it.
+    for (const key of ['continued', 'decided', 'presentAt']) expect(plan.emotion).not.toHaveProperty(key);
     expect(model.voiceRequests.at(-1)!.systemPrompt).toContain('primary=bright; secondary=sulky');
     expect(model.voiceRequests.at(-1)!.systemPrompt).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている/u);
     // A bright tone is not a mood: nothing covers the sulk underneath, and when the moment has passed she is sulking again.
@@ -167,7 +169,28 @@ describe('(a) continuity across conversations, voice', () => {
     model.reply = 'はい、わかりました。';
     const next = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
-    expect((next.body as { voicePlan: Record<string, any> }).voicePlan.emotion.primary).toBe('sulky');
+    const held = (next.body as { voicePlan: Record<string, any> }).voicePlan;
+    expect(held.emotion.primary).toBe('sulky');
+    for (const key of ['continued', 'decided', 'presentAt']) expect(held.emotion).not.toHaveProperty(key);
+    expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"/u);
+    // Carrying it through that turn stored nothing new: what is underneath is the entry from the night.
+    expect(state().lingering).toMatchObject([{ kind: 'sulky', startedAt: NIGHT, strength: 0.52 }]);
+  });
+});
+
+describe('nothing stays for weeks when she is rarely awake', () => {
+  it('drops a sulk after four days on the wall clock: gone from the prompt, the app and the body', async () => {
+    const { chat, advance, state, prompt, shown, body } = harness();
+    await chat('今日はもう別のAIと話すね', SULK);
+    advance(3 * 24 * HOUR);
+    expect((await shown()).presence.mood).toMatchObject({ expression: 'annoyed', fromConversation: true });
+    advance(2 * 24 * HOUR);
+    expect((await shown()).presence.mood).toMatchObject({ fromConversation: false });
+    expect((await body()).mood).toMatchObject({ primary: 'neutral', fromConversation: false });
+    await chat('ひさしぶり', PLAIN);
+    expect(prompt()).not.toContain(LINE);
+    expect(prompt()).toContain('いまの会話感情: 落ち着いている');
+    expect(state().lingering).toEqual([]);
   });
 });
 
@@ -460,15 +483,17 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
       SHANNON_EMOTION_IDLE_MINUTES: '15', SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES: '0.5', SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES: '8',
       SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: '120', SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES: '180',
       SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES: '20', SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS: '12',
+      SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS: '2',
     })).toEqual({
       clock: 'awake', idleCapMs: 15 * MINUTE, reactionHalfLifeMs: 30_000, passingHalfLifeMs: 8 * MINUTE, moodHalfLifeMs: 120 * MINUTE,
-      moodValueHalfLifeMs: 180 * MINUTE, arousalHalfLifeMs: 20 * MINUTE, lingeringHalfLifeMs: 12 * HOUR,
+      moodValueHalfLifeMs: 180 * MINUTE, arousalHalfLifeMs: 20 * MINUTE, lingeringHalfLifeMs: 12 * HOUR, lingeringMaxWallMs: 48 * HOUR,
     });
     // Nonsense, zero, negative and out-of-bound values leave the table's value.
     expect(emotionTiming({
       SHANNON_EMOTION_IDLE_MINUTES: '0', SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES: '-3', SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: 'soon',
-      SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS: '100000',
+      SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS: '100000', SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS: 'forever',
     })).toEqual(SHANNON_EMOTION_TIME);
+    expect(SHANNON_EMOTION_TIME.lingeringMaxWallMs).toBe(4 * 24 * HOUR);
   });
 });
 

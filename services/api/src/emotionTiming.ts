@@ -12,6 +12,7 @@ import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from '@shannon/cognit
  *   kept or shown underneath the feeling of the moment.
  * - `SHANNON_EMOTION_IDLE_MINUTES`: the gap after which she counts as dormant.
  * - `SHANNON_EMOTION_*_HALF_LIFE_MINUTES` / `SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS`: one value of the table each.
+ * - `SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS`: the wall-clock bound on anything kept underneath.
  */
 const MINUTE = 60_000;
 let cached: { key: string; timing: ShannonEmotionTiming } | undefined;
@@ -20,7 +21,7 @@ const NAMES = [
   'SHANNON_EMOTION_CLOCK', 'SHANNON_EMOTION_IDLE_MINUTES', 'SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES',
   'SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES', 'SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES',
   'SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES', 'SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES',
-  'SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS',
+  'SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS', 'SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS',
 ] as const;
 
 export function emotionTiming(environment: Readonly<Record<string, string | undefined>> = process.env): ShannonEmotionTiming {
@@ -40,6 +41,7 @@ export function emotionTiming(environment: Readonly<Record<string, string | unde
     moodValueHalfLifeMs: duration('SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES', MINUTE, SHANNON_EMOTION_TIME.moodValueHalfLifeMs, 1_440),
     arousalHalfLifeMs: duration('SHANNON_EMOTION_AROUSAL_HALF_LIFE_MINUTES', MINUTE, SHANNON_EMOTION_TIME.arousalHalfLifeMs, 1_440),
     lingeringHalfLifeMs: duration('SHANNON_EMOTION_LINGERING_HALF_LIFE_HOURS', 60 * MINUTE, SHANNON_EMOTION_TIME.lingeringHalfLifeMs, 168),
+    lingeringMaxWallMs: duration('SHANNON_EMOTION_LINGERING_MAX_WALL_DAYS', 24 * 60 * MINUTE, SHANNON_EMOTION_TIME.lingeringMaxWallMs, 60),
   });
   cached = { key, timing };
   return timing;

@@ -61,12 +61,14 @@ export function livingLingering(
   timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
 ): readonly { feeling: ShannonLingeringFeeling; strength: number }[] {
   if (timing.clock !== 'awake') return [];
-  return alive(state.lingering ?? [], awakeTimeAt(state.emotionClock, now, timing), timing);
+  return alive(state.lingering ?? [], awakeTimeAt(state.emotionClock, now, timing), now, timing);
 }
 
-function alive(lingering: readonly ShannonLingeringFeeling[], awakeMs: number, timing: ShannonEmotionTiming) {
+function alive(lingering: readonly ShannonLingeringFeeling[], awakeMs: number, now: string, timing: ShannonEmotionTiming) {
+  const time = Date.parse(now);
   return lingering.map(feeling => ({ feeling, strength: lingeringStrength(feeling, awakeMs, timing) }))
-    .filter(item => item.strength >= RULE.settledBelow)
+    // Settled by awake time, or older on the wall clock than anything may stay.
+    .filter(item => item.strength >= RULE.settledBelow && !(time - Date.parse(item.feeling.startedAt) > timing.lingeringMaxWallMs))
     .sort((left, right) => right.strength - left.strength);
 }
 
@@ -83,9 +85,11 @@ export function presentShannonFeeling(
   if (timing.clock !== 'awake') return currentShannonEmotion(state.expressiveEmotion, now);
   const awakeMs = awakeTimeAt(state.emotionClock, now, timing);
   const stored = state.expressiveEmotion;
-  const under = alive(state.lingering ?? [], awakeMs, timing)[0];
+  const under = alive(state.lingering ?? [], awakeMs, now, timing)[0];
   let surface: ShannonExpressiveEmotion | undefined;
-  if (stored && stored.primary !== 'neutral') {
+  // The wall-clock bound holds for the reaction as well: a strong one leaves a faint rest when she goes dormant, and that must not stay for weeks.
+  const expired = stored !== undefined && Date.parse(now) - Date.parse(stored.updatedAt ?? stored.startedAt) > timing.lingeringMaxWallMs;
+  if (stored && stored.primary !== 'neutral' && !expired) {
     if (stored.awakeAt === undefined) {
       // Stored before the awake clock existed: it settles by the wall-clock rule it was written under.
       const legacy = currentShannonEmotion(stored, now);
@@ -122,8 +126,8 @@ export function presentShannonFeeling(
 }
 
 /** Where the mood values return to: the fixed baseline, its valence coloured a little by what lies underneath. */
-export function moodBaseline(lingering: readonly ShannonLingeringFeeling[], awakeMs: number, timing: ShannonEmotionTiming): ShannonEmotion {
-  const colour = alive(lingering, awakeMs, timing)
+export function moodBaseline(lingering: readonly ShannonLingeringFeeling[], awakeMs: number, now: string, timing: ShannonEmotionTiming): ShannonEmotion {
+  const colour = alive(lingering, awakeMs, now, timing)
     .reduce((sum, item) => sum + shannonEmotionSign(item.feeling.kind) * item.strength * RULE.moodColour, 0);
   return { ...SHANNON_MOOD_BASELINE, valence: SHANNON_MOOD_BASELINE.valence + clamp(colour, -RULE.moodColourLimit, RULE.moodColourLimit) };
 }
@@ -141,10 +145,10 @@ export function settleEmotionTime(
   const { clock, elapsedMs } = advanceEmotionClock(state.emotionClock, now, timing);
   const awakeMs = clock?.awakeMs ?? 0;
   const before = state.lingering ?? [];
-  const lingering = alive(before, awakeMs, timing).map(item => item.feeling);
+  const lingering = alive(before, awakeMs, now, timing).map(item => item.feeling);
   let emotion = state.emotion;
   if (elapsedMs > 0) {
-    const base = moodBaseline(lingering, awakeMs, timing);
+    const base = moodBaseline(lingering, awakeMs, now, timing);
     const toward = (value: number, target: number, halfLifeMs: number) => target + (value - target) * remainingShare(elapsedMs, halfLifeMs);
     emotion = {
       valence: clamp(toward(emotion.valence, base.valence, timing.moodValueHalfLifeMs), -1, 1),
@@ -166,6 +170,7 @@ export function noteShannonFeeling(
   awakeMs: number,
   now: string,
   timing: ShannonEmotionTiming,
+  decided = false,
 ): readonly ShannonLingeringFeeling[] {
   const sign = shannonEmotionSign(feeling.primary);
   let list = [...lingering];
@@ -177,7 +182,8 @@ export function noteShannonFeeling(
   if (isMoodLikeEmotion(feeling.primary) && feeling.intensity >= RULE.moodFrom) {
     const existing = list.find(item => item.kind === feeling.primary && item.target === feeling.target);
     const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
-    if (feeling.intensity > present) {
+    // A cue in her own words (also a denial of it) never renews what is already underneath: that keeps fading by awake time.
+    if (feeling.intensity > present && (!existing || present < RULE.settledBelow || decided)) {
       const strength = clamp(feeling.intensity, 0, 1);
       const noted: ShannonLingeringFeeling = {
         kind: feeling.primary, target: feeling.target, cause: existing?.cause ?? feeling.cause,
@@ -187,7 +193,7 @@ export function noteShannonFeeling(
       list = [noted, ...list.filter(item => item !== existing)];
     }
   }
-  return alive(list, awakeMs, timing).slice(0, RULE.maximumLingering).map(item => item.feeling);
+  return alive(list, awakeMs, now, timing).slice(0, RULE.maximumLingering).map(item => item.feeling);
 }
 
 function eased(feeling: ShannonLingeringFeeling, share: number, awakeMs: number, timing: ShannonEmotionTiming): ShannonLingeringFeeling {
@@ -199,11 +205,12 @@ export function easeLingering(
   lingering: readonly ShannonLingeringFeeling[],
   by: 'apology' | 'kindness',
   awakeMs: number,
+  now: string,
   timing: ShannonEmotionTiming,
 ): readonly ShannonLingeringFeeling[] {
   const share = by === 'apology' ? RULE.apologyEase : RULE.kindnessEase;
   return alive(lingering.map(item => item.target === SHANNON_OWNER_NAME && shannonEmotionSign(item.kind) < 0
-    ? eased(item, share, awakeMs, timing) : item), awakeMs, timing).map(item => item.feeling);
+    ? eased(item, share, awakeMs, timing) : item), awakeMs, now, timing).map(item => item.feeling);
 }
 
 /** The same easing for the reaction of the moment, when it is an unpleasant feeling toward the owner that no override holds. */

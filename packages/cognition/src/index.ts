@@ -125,6 +125,7 @@ export {
   carriedShannonEmotion,
   currentShannonEmotion,
   holdsShannonFeeling,
+  normalizeShannonExpressiveEmotion,
   isMoodLikeEmotion,
   isReactionEmotion,
   isShannonEmotionKind,

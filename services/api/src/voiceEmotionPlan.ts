@@ -1,4 +1,4 @@
-import { deriveShannonFace, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
+import { deriveShannonFace, normalizeShannonExpressiveEmotion, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
@@ -34,7 +34,8 @@ export function voicePlanResponse(
     affect: emotion?.primary ?? decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
-    ...(emotion ? { emotion, ...deriveShannonFace(mood, emotion) } : {}),
+    // The plan carries the feeling as it is stored: the resolver's notes to the reducer stay on the server.
+    ...(emotion ? { emotion: normalizeShannonExpressiveEmotion(emotion), ...deriveShannonFace(mood, emotion) } : {}),
     selectedSkills: decision.selectedSkills,
     skillScores: decision.skillScores,
     waitingPhrase,
