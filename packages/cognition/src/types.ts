@@ -67,6 +67,12 @@ export interface ShannonExpressiveEmotion {
   underneath?: { primary: ShannonEmotionKind; intensity: number };
   /** Only on a reading of a feeling the owner eased a moment ago: the height it had before. A stimulus of the same kind that is not above it is that feeling going on. Never stored. */
   easedPeak?: number;
+  /**
+   * Only on a reading, never stored: the strength this feeling was stored at (the reaction, or the entry of its kind
+   * underneath, whichever is higher), before it faded to the reading. An unpleasant feeling toward the owner decided again
+   * is a new, stronger feeling only above this height; up to it, it is the same feeling going on.
+   */
+  height?: number;
   /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
   decided?: boolean;
 }

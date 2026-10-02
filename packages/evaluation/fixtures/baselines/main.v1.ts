@@ -28,6 +28,12 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * decided is resolved and committed as the server does it (the new `replyFeeling`
  * and `later` inputs of the runner), and the state prompt of the next morning is read.
  * The scenario-set fingerprint and the total changed with them.
+ *
+ * 2026-10-03 (reducer bounds): one fingerprint re-recorded by hand,
+ * `feeling-text-strong-again-renews-nothing`: the same strong hurt decided again the
+ * next morning is now that hurt going on, so the reaction is no longer stored anew
+ * at 0.90 (its `updatedAt` and `awakeAt` stay those of the night). Its assertions,
+ * which are about what is underneath, are unchanged and pass.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '858b6d1a',
@@ -63,7 +69,7 @@ const resultFingerprints = {
   'feeling-text-undecided-cue-stays-a-mood': '152b2d1d',
   'feeling-text-undecided-without-cue-leaves-nothing': '29cbf07d',
   'feeling-text-strong-eased-by-apology': 'bf8d27bd',
-  'feeling-text-strong-again-renews-nothing': 'bb38b534',
+  'feeling-text-strong-again-renews-nothing': '9d8a1563',
   'feeling-text-strong-sadness-is-not-kept': '74a8a052',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',

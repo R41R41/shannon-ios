@@ -277,7 +277,9 @@ export function resolveShannonEmotionState(
         const easable = shannonEmotionSign(primary) < 0 && !SUPPORT.has(primary);
         // He eased it a moment ago: nothing short of its earlier height brings it back up.
         const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
-        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable)) {
+        // An unpleasant feeling toward the owner is a new, stronger one only above the height it was stored at, not above
+        // what it has faded to since: the same strength decided turn after turn does not keep it up.
+        if (eased || intensity <= previous.intensity || (decidedStrength <= (previous.height ?? previous.intensity) && easable)) {
           return continuedShannonEmotion(previous, primary, input.now);
         }
       }
@@ -359,7 +361,7 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, height: _height, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;

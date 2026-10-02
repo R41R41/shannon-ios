@@ -18,7 +18,7 @@ import {
 import {
   easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
-import { holdsShannonFeeling } from './emotionState.js';
+import { holdsShannonFeeling, isSupportEmotion, shannonEmotionSign } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
@@ -238,7 +238,9 @@ function committedFeeling(
   if (incoming.primary === present.primary && present.primary !== 'neutral') {
     if (event.continued !== false) return null;
     // And even with it, only a stronger one, an override, or a touch (felt each time) replaces the same feeling.
-    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
+    // For an unpleasant feeling toward the owner the bar is the height it was stored at, not what it has faded to since.
+    const easable = shannonEmotionSign(incoming.primary) < 0 && !isSupportEmotion(incoming.primary);
+    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= (easable ? present.height ?? present.intensity : present.intensity)) return null;
   }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   // The reading is made here, from the state being written to: the mood her concern covers holds as well.

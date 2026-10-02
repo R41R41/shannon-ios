@@ -86,7 +86,11 @@ export function presentShannonFeeling(
   if (timing.clock !== 'awake') return currentShannonEmotion(state.expressiveEmotion, now);
   const awakeMs = awakeTimeAt(state.emotionClock, now, timing);
   const stored = state.expressiveEmotion;
-  const under = alive(state.lingering ?? [], awakeMs, now, timing)[0];
+  const living = alive(state.lingering ?? [], awakeMs, now, timing);
+  const under = living[0];
+  /** The strength a feeling of this kind was stored at: the reaction's, or its entry's underneath when that is higher. */
+  const heightOf = (kind: ShannonEmotionKind, stored: number) =>
+    ({ height: Math.max(stored, living.find(item => item.feeling.kind === kind)?.feeling.strength ?? 0) });
   let surface: ShannonExpressiveEmotion | undefined;
   // The wall-clock bound holds for the reaction as well: a strong one leaves a faint rest when she goes dormant, and that must not stay for weeks.
   const expired = stored !== undefined && Date.parse(now) - Date.parse(stored.updatedAt ?? stored.startedAt) > timing.lingeringMaxWallMs;
@@ -118,7 +122,7 @@ export function presentShannonFeeling(
       && !unsafeCombination(surface.primary, under.feeling.kind)
       ? Object.freeze([under.feeling.kind, ...surface.secondary].slice(0, 2)) : surface.secondary;
     return Object.freeze({
-      ...surface, secondary: beside, presentAt: now, ...recentlyEased(surface.primary),
+      ...surface, secondary: beside, presentAt: now, ...recentlyEased(surface.primary), ...heightOf(surface.primary, stored!.intensity),
       ...(under && under.strength > surface.intensity ? { underneath: { primary: under.feeling.kind, intensity: under.strength } } : {}),
     });
   }
@@ -128,7 +132,7 @@ export function presentShannonFeeling(
       primary: feeling.kind, secondary: Object.freeze([]), intensity: strength, target: feeling.target, cause: feeling.cause,
       ...emotionProfile(feeling.kind, strength), visibility: visibilityFor(strength), startedAt: feeling.startedAt,
       decay: decayFor(feeling.kind), carryover: clamp(strength, 0, 1), updatedAt: timestamp(now), awakeAt: awakeMs, presentAt: now,
-      ...recentlyEased(feeling.kind),
+      ...recentlyEased(feeling.kind), height: feeling.strength,
     });
   }
   return Object.freeze({
@@ -194,7 +198,9 @@ export function noteShannonFeeling(
   let list = [...lingering];
   if (feeling.overrideReason || feeling.target !== SHANNON_OWNER_NAME) return list;
   if (sign !== 0 && feeling.intensity >= RULE.contraryFrom) {
-    list = list.map(item => item.target === feeling.target && shannonEmotionSign(item.kind) * sign < 0
+    // Once per episode: an entry that was eased a moment ago (by a contrary feeling, or by him) is not eased again by a
+    // contrary feeling until the hold has passed, so a strong feeling repeated turn after turn does not dissolve it.
+    list = list.map(item => item.target === feeling.target && shannonEmotionSign(item.kind) * sign < 0 && !inEasedHold(item, awakeMs, timing)
       ? eased(item, RULE.contraryEase, awakeMs, timing) : item);
   }
   if (isMoodLikeEmotion(feeling.primary) && feeling.intensity >= RULE.moodFrom) {
