@@ -46,6 +46,8 @@ extension ShannonDesktopRootView {
                 }
             }
 
+            ShannonFormSettingsSection(openBody: { showsBody = true }, showsTouchSwitch: false)
+
             ShannonCalendarSharingSettingsSection()
 
             ShannonAppLookSettingsSection()
@@ -65,6 +67,10 @@ extension ShannonDesktopRootView {
         .formStyle(.grouped)
         .padding(24)
         .navigationTitle("設定")
+        .sheet(isPresented: $showsBody) {
+            NavigationStack { ShannonBodyScreen(memory: memory) }
+                .frame(minWidth: 460, minHeight: 720)
+        }
         .task { await worldSubscriptions.reload() }
     }
 

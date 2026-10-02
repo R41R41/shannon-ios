@@ -52,6 +52,7 @@ import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, isBodyRoute } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
+import { isFullBody } from './bodyTouchOnly.js';
 import { bodyLookRequestBytes, closeBodyLookStores, configuredAppLookOptions, configuredBodyLookOptions } from './bodyLookWiring.js';
 import { closeBodyReactionStores, configuredBodyReactionOptions } from './bodyReactionWiring.js';
 import { opsCommandsEnabled } from './opsCommandContract.js';
@@ -100,7 +101,7 @@ const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
 // (docs/private-listening-contract.md). SHANNON_PRIVATE_LISTENING=off refuses it; ..._REACH_OUTS=off keeps the state and stops the speaking.
 const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now, {
   reports: reachOutReports, reportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0,
-  isBody: (scopeKey, deviceId) => bodyStore.capabilities(scopeKey, deviceId) !== null,
+  isBody: (scopeKey, deviceId) => isFullBody(bodyStore.capabilities(scopeKey, deviceId)),
 });
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {

@@ -66,6 +66,8 @@ public struct ShannonStudyPieceCardDTO: Codable, Equatable, Identifiable, Sendab
     public let version: Int?
     public let revising: Bool
     public let updatedAt: String
+    /// A story the owner can read and has not reacted to. Absent from an older server.
+    public var awaitingReaction: Bool? = nil
 
     public init(
         id: String, kind: String, kindLabel: String, status: String, statusLabel: String, hidden: Bool,

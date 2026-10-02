@@ -15,6 +15,7 @@ public struct ShannonConversationView: View {
     @State var appIconModel = ShannonAppIconModel()
     @State var voiceModel = ShannonVoiceConversationModel()
     @State var geminiLiveVoiceModel = ShannonGeminiLiveSessionModel()
+    @State var bodyModel = ShannonBodyModel()
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
     @State var showsAppIconSettings = false
@@ -71,6 +72,7 @@ public struct ShannonConversationView: View {
     public var body: some View {
         let activeColorScheme = resolvedColorScheme
         workspaceWithPresentations
+        .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel))
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)

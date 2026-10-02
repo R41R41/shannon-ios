@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { BodyAudience, BodyCapabilities, BodyEvent, BodyEventType } from './bodyContract.js';
+import { BODY_TOUCH_ONLY_FLAG } from './bodyTouchOnly.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -153,9 +154,13 @@ export class SQLiteBodyStore {
     const reports = this.database.prepare('SELECT audience FROM body_audience WHERE scope_key = ? AND reported_at >= ? AND reported_at <= ?')
       .all(scopeKey, new Date(time - freshMilliseconds).toISOString(), at) as unknown as Array<{ audience: string }>;
     if (reports.length) return reports.some(report => report.audience === 'others');
+    // A touch-only body (the phone) says who was around the phone, not who can see her window: its events do not stand in.
+    const touchOnly = this.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG);
     const latest = this.database.prepare(`
-      SELECT audience FROM body_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ? ORDER BY occurred_at DESC, received_at DESC LIMIT 1
-    `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at) as unknown as { audience: string } | undefined;
+      SELECT audience FROM body_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ?
+        ${touchOnly.length ? `AND device_id NOT IN (${touchOnly.map(() => '?').join(', ')})` : ''}
+      ORDER BY occurred_at DESC, received_at DESC LIMIT 1
+    `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at, ...touchOnly) as unknown as { audience: string } | undefined;
     return latest?.audience === 'others';
   }
 
@@ -190,7 +195,10 @@ export class SQLiteBodyStore {
   devicesWithFlag(scopeKey: string, flag: string): readonly string[] {
     const rows = this.database.prepare('SELECT device_id, flags_json FROM body_capabilities WHERE scope_key = ?')
       .all(scopeKey) as unknown as Array<{ device_id: string; flags_json: string }>;
-    return rows.filter(row => (JSON.parse(row.flags_json) as Record<string, boolean>)[flag] === true).map(row => row.device_id);
+    // No flag of a touch-only body counts, except the one that says what it is: its camera is never her body's camera.
+    return rows.map(row => ({ deviceId: row.device_id, flags: JSON.parse(row.flags_json) as Record<string, boolean> }))
+      .filter(row => row.flags[flag] === true && (flag === BODY_TOUCH_ONLY_FLAG || row.flags[BODY_TOUCH_ONLY_FLAG] !== true))
+      .map(row => row.deviceId);
   }
 
   /** Every device of the scope that registered as her body. */

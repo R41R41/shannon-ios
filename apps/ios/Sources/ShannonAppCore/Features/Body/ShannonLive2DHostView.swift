@@ -141,7 +141,7 @@ extension ShannonLive2DHostView: NSViewRepresentable {
 /// and a trackpad pinch scales her. Moving her is not offered on the Mac.
 final class ShannonLive2DContainerView: NSView {
     let hostID: UUID
-    private var layout = ShannonLive2DLayout()
+    private var figureLayout = ShannonLive2DLayout()
     private var touchEnabled = true
     private var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
     private var gestureStart: ShannonLive2DLayout?
@@ -158,7 +158,7 @@ final class ShannonLive2DContainerView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(layout: ShannonLive2DLayout, touchEnabled: Bool, onLayoutChange: ((ShannonLive2DLayout) -> Void)?) {
-        self.layout = layout
+        figureLayout = layout
         self.touchEnabled = touchEnabled
         self.onLayoutChange = onLayoutChange
         magnify.isEnabled = onLayoutChange != nil
@@ -170,7 +170,7 @@ final class ShannonLive2DContainerView: NSView {
         if window == nil {
             ShannonLive2DStage.shared.detach(host: hostID)
         } else {
-            ShannonLive2DStage.shared.attach(host: hostID, container: self, layout: layout, touchEnabled: touchEnabled)
+            ShannonLive2DStage.shared.attach(host: hostID, container: self, layout: figureLayout, touchEnabled: touchEnabled)
         }
     }
 
@@ -188,11 +188,11 @@ final class ShannonLive2DContainerView: NSView {
 
     @objc private func magnified(_ recognizer: NSMagnificationGestureRecognizer) {
         guard let onLayoutChange else { return }
-        if recognizer.state == .began { gestureStart = layout }
+        if recognizer.state == .began { gestureStart = figureLayout }
         guard let start = gestureStart else { return }
         let next = start.adjusted(scaleBy: 1 + Double(recognizer.magnification), movedBy: .zero, in: bounds.size)
-        if next != layout {
-            layout = next
+        if next != figureLayout {
+            figureLayout = next
             ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
             onLayoutChange(next)
         }

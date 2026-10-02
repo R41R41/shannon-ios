@@ -35,6 +35,7 @@ public struct ShannonDesktopRootView: View {
     @State var showsConnection = false
     @State var showsWorldSubscriptions = false
     @State var showsAppIconSettings = false
+    @State var showsBody = false
     @State var renameThread: ChatThreadDTO?
     @State var renameText = ""
     @State var selectedDevelopmentTool = DesktopDevelopmentTool.initialValue

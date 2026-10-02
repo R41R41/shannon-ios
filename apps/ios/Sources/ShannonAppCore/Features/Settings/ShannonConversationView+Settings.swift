@@ -74,6 +74,8 @@ extension ShannonConversationView {
                     Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
                 }
 
+                ShannonFormSettingsSection(openBody: { bodyModel.showsScreenFromSettings = true })
+
                 ShannonCalendarSharingSettingsSection()
 
                 ShannonAppLookSettingsSection()
@@ -126,6 +128,9 @@ extension ShannonConversationView {
             }
         }
         .foregroundStyle(palette.textPrimary)
+        .sheet(isPresented: $bodyModel.showsScreenFromSettings) {
+            NavigationStack { ShannonBodyScreen(memory: memoryModel) }
+        }
         .sheet(isPresented: $showsStateDetails) {
             ShannonStateSheet(state: model.state, face: model.presentFace)
         }

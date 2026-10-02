@@ -153,7 +153,7 @@ public struct ShannonGeminiLiveVoiceView: View {
                     .frame(maxWidth: 560)
             }
             // The call's own per-turn emotion; before the first reply, the thread's last face.
-            ShannonWaterlightEyeView(
+            ShannonBodyView(
                 expression: model.callFace?.expression ?? expression, activity: eyeActivity, size: eyeSize,
                 feeling: model.callFace?.feeling
             )

@@ -7,6 +7,8 @@ import AppKit
 
 struct ShannonEmptyConversation: View {
     @State private var waterlightReaction = 0
+    @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
+    @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -35,18 +37,22 @@ struct ShannonEmptyConversation: View {
     private var hero: some View {
 #if os(iOS)
         if ShannonConversationFeatureFlags.waterlightHero {
+            // In the Live2D form the small figure is the way to the body screen, where she can be touched.
+            let opensBody = formRawValue == ShannonForm.live2d.rawValue && bodyModel != nil
             Button {
-                waterlightReaction &+= 1
+                if opensBody { bodyModel?.showsScreen = true } else { waterlightReaction &+= 1 }
             } label: {
-                ShannonWaterlightEyeView(
+                ShannonBodyView(
                     expression: .curious,
                     size: 96,
-                    reactionTrigger: waterlightReaction
+                    reactionTrigger: waterlightReaction,
+                    allowsTouch: false,
+                    showsLine: false
                 )
             }
             .buttonStyle(.plain)
             .accessibilityLabel("シャノン")
-            .accessibilityHint("触れると表情が変わります")
+            .accessibilityHint(opensBody ? ShannonBodyCopy.openBodyHint : "触れると表情が変わります")
         } else {
             ShannonAvatarView(expression: .curious, size: 96)
                 .accessibilityLabel("シャノン")

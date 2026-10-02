@@ -269,6 +269,7 @@ final class ShannonGeminiLiveTransport {
         audioEngine.attach(pitchNode)
         audioEngine.attach(keepAliveSource)
         audioEngine.connect(playerNode, to: playbackFormatMixerNode, format: outputFormat)
+        ShannonSpeechLevelPublisher.shared.observe(playerNode) // her mouth, for whoever draws her
         audioEngine.connect(playbackFormatMixerNode, to: pitchNode, format: deviceOutputFormat)
         audioEngine.connect(pitchNode, to: audioEngine.mainMixerNode, format: deviceOutputFormat)
         // PlayerNode has no buffers until Gemini speaks. A continuously rendered

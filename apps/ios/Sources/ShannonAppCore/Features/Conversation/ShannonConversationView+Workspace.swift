@@ -35,6 +35,13 @@ extension ShannonConversationView {
                 }
                 .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
 
+                Button { bodyModel.showsScreen = true } label: {
+                    Image(systemName: "figure.stand")
+                }
+                .accessibilityLabel(ShannonBodyCopy.screenTitle)
+                .accessibilityHint(ShannonBodyCopy.openBodyHint)
+                .accessibilityIdentifier("open-body")
+
                 Button(action: createThreadFromHeader) {
                     Image(systemName: "square.and.pencil")
                 }

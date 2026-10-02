@@ -10,6 +10,8 @@ import SwiftUI
 public final class ShannonBodyModel {
     /// The body screen 「からだ」. Any entry (the toolbar, a tile, her figure) sets this.
     public var showsScreen = false
+    /// The same screen, opened from Settings (which is itself a cover over the workspace).
+    public var showsScreenFromSettings = false
     public internal(set) var face = ShannonFace(expression: .calm)
     public internal(set) var doingLine: String?
     /// 「友人も一緒」: touches are then reported as seen by others.
@@ -40,7 +42,7 @@ public final class ShannonBodyModel {
 /// environment reaches every sheet and cover. With the Waterlight form chosen it only keeps
 /// the model's words current; nothing is sent to a page that is not loaded.
 struct ShannonBodyAttachment: ViewModifier {
-    let body: ShannonBodyModel
+    let bodyModel: ShannonBodyModel
     let conversation: ShannonConversationModel
     let memory: ShannonMemoryModel
     let voice: ShannonGeminiLiveSessionModel
@@ -48,6 +50,8 @@ struct ShannonBodyAttachment: ViewModifier {
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @Environment(\.scenePhase) private var scenePhase
+    /// Moves on so that a step of hers stops being shown once it is three minutes old.
+    @State private var clock = Date()
 
     private var stage: ShannonLive2DStage { .shared }
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
@@ -79,7 +83,7 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     private var doing: ShannonBodyDoing {
-        ShannonBodySignals.doing(loopState: memory.autonomy.overview?.loop?.state, days: memory.autonomy.days, now: Date())
+        ShannonBodySignals.doing(loopState: memory.autonomy.overview?.loop?.state, days: memory.autonomy.days, now: clock)
     }
 
     private var awaitingReaction: Int {
@@ -105,53 +109,82 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
-            .environment(body)
-            .modifier(ShannonBodyScreenPresentation(body: body, memory: memory))
-            .task {
-                body.connect(
-                    scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonBodyServing,
-                    isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true }
-                )
-                refreshWords()
-                pushAll()
+        feelings(signals(content))
+            .environment(bodyModel)
+            .modifier(ShannonBodyScreenPresentation(bodyModel: bodyModel, memory: memory))
+            .task { connect() }
+            .task(id: scenePhase) { await keepClock() }
+            .onAppear {
+                bodyModel.audience = isGuestCall ? .others : .owner
+                applyForm()
             }
+    }
+
+    private func signals(_ content: Content) -> some View {
+        content
             .onChange(of: formRawValue) { applyForm() }
             .onChange(of: stage.status) { if stage.status == .ready { pushAll() } }
             .onChange(of: conversation.state?.emotion) { pushMood() }
-            .onChange(of: presence) {
-                refreshWords()
-                if usesLive2D { stage.setPresence(presence) }
-            }
-            .onChange(of: phase) {
-                refreshWords()
-                guard usesLive2D else { return }
-                stage.setPhase(phase)
-                if phase != .speaking { stage.setMouthLevel(0) }
-            }
-            .onChange(of: replyFace) {
-                refreshWords()
-                guard usesLive2D, callActivity == nil, let face = replyFace?.face else { return }
-                stage.express(face.expression.rawValue, feeling: face.feeling?.rawValue)
-            }
-            .onChange(of: callFeeling) {
-                refreshWords()
-                guard usesLive2D else { return }
-                // The voice's own emotion has more faces than the 22 the app draws; the turn's face is the fallback.
-                if let emotion = callFeeling.emotion {
-                    stage.expressEmotion(emotion.primary, intensity: emotion.intensity)
-                } else if let face = callFeeling.face {
-                    stage.express(face.expression.rawValue, feeling: face.feeling?.rawValue)
-                }
-            }
-            .onChange(of: conversation.presentFace) { refreshWords() }
-            .onChange(of: isGuestCall) { body.audience = isGuestCall ? .others : .owner }
-            .onChange(of: reportsTouch) { body.touch.reportingChanged() }
+            .onChange(of: presence) { presenceChanged() }
+            .onChange(of: phase) { phaseChanged() }
+            .onChange(of: isGuestCall) { bodyModel.audience = isGuestCall ? .others : .owner }
+            .onChange(of: reportsTouch) { bodyModel.touch.reportingChanged() }
             .onChange(of: scenePhase) { if scenePhase != .active { ShannonSpeechLevelPublisher.shared.end() } }
-            .onAppear {
-                body.audience = isGuestCall ? .others : .owner
-                applyForm()
-            }
+    }
+
+    private func feelings(_ content: some View) -> some View {
+        content
+            .onChange(of: replyFace) { replyFaceChanged() }
+            .onChange(of: callFeeling) { callFeelingChanged() }
+            .onChange(of: conversation.presentFace) { refreshWords() }
+    }
+
+    private func connect() {
+        let conversation = conversation
+        bodyModel.connect(
+            scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonBodyServing,
+            isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true }
+        )
+        refreshWords()
+        pushAll()
+    }
+
+    private func keepClock() async {
+        guard scenePhase == .active else { return }
+        if usesLive2D { await memory.autonomy.loadIfNeeded() }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(30))
+            clock = Date()
+        }
+    }
+
+    private func presenceChanged() {
+        refreshWords()
+        if usesLive2D { stage.setPresence(presence) }
+    }
+
+    private func phaseChanged() {
+        refreshWords()
+        guard usesLive2D else { return }
+        stage.setPhase(phase)
+        if phase != .speaking { stage.setMouthLevel(0) }
+    }
+
+    private func replyFaceChanged() {
+        refreshWords()
+        guard usesLive2D, callActivity == nil, let face = replyFace?.face else { return }
+        stage.express(face.expression.rawValue, feeling: face.feeling?.rawValue)
+    }
+
+    private func callFeelingChanged() {
+        refreshWords()
+        guard usesLive2D else { return }
+        // The voice's own emotion has more faces than the 22 the app draws; the turn's face is the fallback.
+        if let emotion = callFeeling.emotion {
+            stage.expressEmotion(emotion.primary, intensity: emotion.intensity)
+        } else if let face = callFeeling.face {
+            stage.express(face.expression.rawValue, feeling: face.feeling?.rawValue)
+        }
     }
 
     /// Her mouth follows the played speech only while the Live2D form is the one in use.
@@ -161,7 +194,7 @@ struct ShannonBodyAttachment: ViewModifier {
             pushAll()
         } else {
             ShannonSpeechLevelPublisher.shared.setSink(nil)
-            body.touch.clearLine()
+            bodyModel.touch.clearLine()
         }
     }
 
@@ -183,8 +216,8 @@ struct ShannonBodyAttachment: ViewModifier {
 #else
         let callFace: ShannonFace? = nil
 #endif
-        body.face = callFace ?? (conversation.isSending ? conversation.currentFace : conversation.presentFace)
-        body.doingLine = ShannonBodySignals.doingLine(phase: phase, doing: doing, awaitingReaction: awaitingReaction)
+        bodyModel.face = callFace ?? (conversation.isSending ? conversation.currentFace : conversation.presentFace)
+        bodyModel.doingLine = ShannonBodySignals.doingLine(phase: phase, doing: doing, awaitingReaction: awaitingReaction)
     }
 
     private struct ReplyFace: Equatable {

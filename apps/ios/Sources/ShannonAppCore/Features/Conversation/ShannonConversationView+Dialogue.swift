@@ -32,7 +32,7 @@ extension ShannonConversationView {
                     .blur(radius: 42)
                     .position(x: geometry.size.width / 2, y: geometry.size.height * 0.50)
 
-                ShannonWaterlightEyeView(
+                ShannonBodyView(
                     expression: model.currentExpression,
                     activity: dialogueActivity,
                     size: faceSize,

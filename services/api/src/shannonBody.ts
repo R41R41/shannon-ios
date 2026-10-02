@@ -17,6 +17,7 @@ import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } 
 import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches } from './bodyTouch.js';
+import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
 import { ConversationLooks } from './conversationLooks.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
@@ -151,7 +152,7 @@ export class ShannonBody {
     this.looks = new BodyLooks({
       speaker: noteBodyLookSpeaker(dependencies.conversationStore), ...dependencies.look,
       ingestEnabled: this.ingestEnabled, now: dependencies.now, dayKey: ownerDay,
-      cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'), bodyDevices: scopeKey => this.store.devices(scopeKey),
+      cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'), bodyDevices: scopeKey => this.fullBodies(scopeKey),
       context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
     });
@@ -252,7 +253,8 @@ export class ShannonBody {
 
   presence(scopeKey: string, deviceId: string, knownEtag?: string, audience?: BodyAudience): BodyPresence | BodyPresenceUnchanged {
     const at = this.dependencies.now();
-    if (audience && this.ingestEnabled) this.noteAudience(scopeKey, deviceId, audience, at);
+    // What a touch-only body says about its audience is not who can see or hear her body.
+    if (audience && this.ingestEnabled && !isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId))) this.noteAudience(scopeKey, deviceId, audience, at);
     if (this.ingestEnabled) this.notePresence(scopeKey, deviceId, at);
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
     // 「いま」 as the state sheet shows it. Its cause is between her and the owner and stays out: the body may be on a stream.
@@ -317,7 +319,7 @@ export class ShannonBody {
     if (!reports) return 'unavailable';
     if (this.dependencies.reachOutReportsEnabled === false) return 'reports_disabled';
     if (!this.ingestEnabled) return 'disabled';
-    if (!this.store.capabilities(scopeKey, deviceId)) return 'not_a_body';
+    if (!isFullBody(this.store.capabilities(scopeKey, deviceId))) return 'not_a_body';
     return reports.report(scopeKey, deviceId, initiativeId, outcome, this.dependencies.now());
   }
 
@@ -333,9 +335,15 @@ export class ShannonBody {
     if (this.presenceMarks.size >= 256) this.presenceMarks.clear();
     this.presenceMarks.set(key, time);
     try {
-      if (!this.store.capabilities(scopeKey, deviceId)) return;
+      if (!isFullBody(this.store.capabilities(scopeKey, deviceId))) return;
       reports.markPresence(scopeKey, deviceId, at);
     } catch { /* presence is still answered */ }
+  }
+
+  /** Bodies that show her: every registration except one that only feels touch (`bodyTouchOnly.ts`). */
+  private fullBodies(scopeKey: string): readonly string[] {
+    const touchOnly = new Set(this.store.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG));
+    return this.store.devices(scopeKey).filter(deviceId => !touchOnly.has(deviceId));
   }
 
   private reachOut(scopeKey: string, deviceId: string): { reachOut?: { pending: number; latestId?: string } } {
