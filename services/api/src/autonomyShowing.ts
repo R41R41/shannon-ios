@@ -32,6 +32,8 @@ export interface StudyShowing {
   tell(scopeKey: string, piece: ShowablePiece, at: string): ShowingOutcome;
   /** Whether the owner wrote or spoke since the given instant. A yes or no; no content leaves. */
   ownerActiveSince(scopeKey: string, since: string): boolean;
+  /** When the owner first wrote or spoke after the given instant, in any Talk, or null. A timestamp; no content leaves. */
+  ownerFirstActiveAfter?(scopeKey: string, after: string): string | null;
 }
 
 /** Sentence presented as Shannon speaking (です・ます, ボク, ライ氏). */
@@ -46,6 +48,7 @@ export class DisabledStudyShowing implements StudyShowing {
   mayMessageNow(): ShowingOutcome { return 'unavailable'; }
   tell(): ShowingOutcome { return 'unavailable'; }
   ownerActiveSince(): boolean { return false; }
+  ownerFirstActiveAfter(): string | null { return null; }
 }
 
 export class SQLiteStudyShowing implements StudyShowing {
@@ -116,6 +119,14 @@ export class SQLiteStudyShowing implements StudyShowing {
     return Boolean(this.database.prepare(`
       SELECT 1 AS found FROM conversation_messages WHERE scope_key = ? AND role = 'user' AND observed_at >= ? LIMIT 1
     `).get(scopeKey, since));
+  }
+
+  ownerFirstActiveAfter(scopeKey: string, after: string): string | null {
+    if (!this.tableExists('conversation_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT MIN(observed_at) AS first_at FROM conversation_messages WHERE scope_key = ? AND role = 'user' AND observed_at > ?
+    `).get(scopeKey, after) as unknown as { first_at: string | null } | undefined;
+    return row?.first_at ?? null;
   }
 
   close(): void {

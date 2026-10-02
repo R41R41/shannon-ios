@@ -19,6 +19,7 @@ import { notionLoopReader } from './notionLoopReader.js';
 import { configuredNotionSource } from './notionSource.js';
 import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
+import { SQLiteReachOutReports, reachOutBodyFacts } from './reachOutReports.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 
 /**
@@ -47,12 +48,22 @@ const looks = new ActivityRoomLooks({
 // SHANNON_AUTONOMY_MAX_REACH_OUTS=0 switches it off.
 const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => bodyIngestEnabled(process.env)
   && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds));
+// After a message of hers she stays with it for a short while (SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS): what her body reported about
+// showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
+const reachOutReports = new SQLiteReachOutReports(databasePath);
+const observer = {
+  delivery: (scopeKey: string, initiativeId: string) => (bodyIngestEnabled(process.env) ? reachOutReports.delivery(scopeKey, initiativeId) : null),
+  body: (scopeKey: string, at: string) => (bodyIngestEnabled(process.env)
+    ? reachOutBodyFacts(reachOutReports, bodyStore, scopeKey, at, { freshMilliseconds: BODY_LIMITS.audienceFreshMilliseconds, eventWindowMilliseconds: BODY_LIMITS.audienceEventWindowMilliseconds })
+    : { windowVisible: false, owner: 'unknown' as const, others: false }),
+};
 // The owner's upcoming items: calendar snapshots, promises with a due time, and the task snapshot the API process keeps. No Voyager credential here.
 const ownerState = sqliteOwnerSnapshot(databasePath);
 const ownerUpcoming = configuredOwnerUpcoming(process.env, databasePath, { snapshot: ownerState.read, now });
 const service = new ShannonAutonomyService({
   store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at),
   reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
+  reachOutFollowUps: (scopeKey, at) => ({ today: reachOuts.followUpsOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }),
 });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
@@ -63,7 +74,7 @@ const loop = new ShannonAutonomyLoop({
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
   }),
   showing, now, looks, ...(notion ? { notion } : {}),
-  reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) },
+  reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');
@@ -98,6 +109,7 @@ try {
   ownerUpcoming.close();
   ownerState.close();
   reachOuts.close();
+  reachOutReports.close();
   lookHand.close();
   lookStore.close();
   bodyStore.close();

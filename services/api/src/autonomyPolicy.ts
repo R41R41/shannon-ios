@@ -85,10 +85,17 @@ export interface AutonomyPolicyContext {
    * limit. Absent means none are allowed. Showing a story and asking for budget keep their own limits.
    */
   reachOuts?: { today: number; maximumPerDay: number };
+  /**
+   * For `owner_message` with the tool `owner.reach_out_follow_up`: second calls after a message of hers got no
+   * answer today, and the limit. Absent means none are allowed. They are not counted as `reachOuts`.
+   */
+  reachOutFollowUps?: { today: number; maximumPerDay: number };
 }
 
 /** The tool name of a message she starts on her own from her own activity (話しかける). */
 export const AUTONOMY_REACH_OUT_TOOL = 'owner.reach_out';
+/** The tool name of the one second call after such a message got no answer. */
+export const AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL = 'owner.reach_out_follow_up';
 
 export interface AutonomyDecision {
   decision: AutonomyDecisionKind;
@@ -161,6 +168,11 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
   if (domainId === 'owner_message' && request.tool === AUTONOMY_REACH_OUT_TOOL
     && (!context.reachOuts || context.reachOuts.today + 1 > context.reachOuts.maximumPerDay)) {
     return refuse('forbidden', 'access_limit', domainId, '今日はもう十分に話しかけたため、実行しません。');
+  }
+  // The one second call after a message of hers got no answer: its own daily count.
+  if (domainId === 'owner_message' && request.tool === AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL
+    && (!context.reachOutFollowUps || context.reachOutFollowUps.today + 1 > context.reachOutFollowUps.maximumPerDay)) {
+    return refuse('forbidden', 'access_limit', domainId, '今日はもう十分に声をかけ直したため、実行しません。');
   }
   if (request.paid) {
     if (!context.isKnownModel(request.paid.model)) {

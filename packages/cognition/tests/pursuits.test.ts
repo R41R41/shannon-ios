@@ -108,6 +108,23 @@ describe('her own work in an owner prompt', () => {
     ]);
   });
 
+  it('adds what followed a message she started on her own, with room of its own, and is unchanged without it', () => {
+    const work = { today: ['次にすることを考えた', '自分から1回話しかけた'], pieces: [{ title: '傘のある駅', stage: '第1稿・見せた' }] };
+    const line = '10:02に話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが返事はなかった。';
+    expect(buildShannonOwnWorkPrompt({ ...work, reachOuts: [line] }).split('\n')).toEqual([
+      '[ボクがひとりの時間にしていること]（記録にある事実。何をしていたか聞かれたら自分の言葉で話す）',
+      '- 今日したこと: 次にすることを考えた、自分から1回話しかけた',
+      `- 自分から話しかけた時のこと（気になるなら自分から触れてよい）: ${line}`,
+      '- 物語「傘のある駅」: 第1稿・見せた',
+    ]);
+    expect(buildShannonOwnWorkPrompt({ ...work, reachOuts: [] })).toBe(buildShannonOwnWorkPrompt(work));
+    // At most two, each cut at 200 characters, and the pieces still fit after them.
+    const many = buildShannonOwnWorkPrompt({ ...work, reachOuts: Array.from({ length: 5 }, (_, index) => `${index}${'あ'.repeat(400)}`) });
+    expect(many.split('\n').filter(item => item.includes('話しかけた時のこと'))).toHaveLength(2);
+    expect(many).toContain('- 物語「傘のある駅」: 第1稿・見せた');
+    expect(many.length).toBeLessThanOrEqual(320 + 2 * 240);
+  });
+
   it('stays bounded', () => {
     const long = buildShannonOwnWorkPrompt({
       today: Array.from({ length: 20 }, (_, index) => `とても長い説明${'あ'.repeat(40)}${index}`),

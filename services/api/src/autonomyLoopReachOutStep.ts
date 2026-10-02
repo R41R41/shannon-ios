@@ -4,6 +4,7 @@ import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
   type PromptUpcoming, type ReachOutReason,
 } from './autonomyLoopPrompts.js';
+import { agenticLoop, observeReachOut } from './autonomyLoopObserve.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
@@ -28,6 +29,14 @@ export interface AutonomyReachOuts {
   /** While someone other than the owner may see or hear her body: the speak-time rule text and the marker for owner-private lines. Otherwise null. */
   audience(scopeKey: string, at: string): { instructions: string; marker: string } | null;
   say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): 'sent' | 'limit' | 'unavailable';
+  /** The newest message she started: its initiative id and when it was written. An identifier, never its words. */
+  latest?(scopeKey: string): { id: string; at: string } | null;
+  /** Second calls she made on the owner-local day. */
+  followUpsOn?(scopeKey: string, dayKey: string): number;
+  /** Whether the message with this id was already called after. */
+  followedUp?(scopeKey: string, originId: string): boolean;
+  /** The one second call after her message `originId` got no answer. `seen`: its words were written with her note of a look in front of her. */
+  sayAgain?(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean }, at: string): 'sent' | 'limit' | 'unavailable';
 }
 
 /** The owner's upcoming items as bounded lines; `others` leaves out what he keeps from the people present. */
@@ -42,7 +51,7 @@ export const REACH_OUT_HELD_TOOL = 'owner.reach_out_held';
 export const REACH_OUT_OWNER_QUIET_MILLISECONDS = 10 * 60_000;
 const OUTPUT_TOKENS = 600;
 
-function conversationInProgress(dependencies: StepDependencies, scopeKey: string, at: string): boolean {
+export function conversationInProgress(dependencies: StepDependencies, scopeKey: string, at: string): boolean {
   const quiet = Math.max(dependencies.loop.ownerActiveMilliseconds, REACH_OUT_OWNER_QUIET_MILLISECONDS);
   return dependencies.showing.ownerActiveSince(scopeKey, new Date(Date.parse(at) - quiet).toISOString());
 }
@@ -63,7 +72,7 @@ export function reachOutsRemaining(dependencies: StepDependencies, scopeKey: str
 export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store, config, reachOuts, upcoming } = dependencies;
   const reason = step.reason;
-  if (!reason || !reachOuts || reachOutsRemaining(dependencies, cycle.scopeKey, at) < 1) return null;
+  if (!reason || reason === 'follow_up' || !reachOuts || reachOutsRemaining(dependencies, cycle.scopeKey, at) < 1) return null;
   const others = reachOuts.audience(cycle.scopeKey, at);
   // Each reason has its own material, and nothing to be about means nothing to say.
   const notes = reason === 'share' ? storyNotes(store, cycle.scopeKey, undefined, 12).filter(note => !note.seen).slice(0, 4) : [];
@@ -114,13 +123,32 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
         delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(performAt, config), maximumPerDay: config.maximumReachOutsPerDay }, performAt);
       } catch { delivery = 'unavailable'; }
       // What she said is in the Talk; the record keeps only that she spoke and why.
-      if (delivery === 'sent') return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
+      if (delivery === 'sent') {
+        const sent = agenticLoop(dependencies) ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
+        if (!sent) return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
+        // She stays with it for a short while: did he answer, and what did her body do with it. Facts only.
+        let observed: Awaited<ReturnType<typeof observeReachOut>>;
+        try {
+          observed = await observeReachOut(dependencies, cycle.scopeKey, { id: sent.id, at: sent.at, reason }, { wait: true, signal });
+        } catch {
+          // The message is sent whatever comes of watching: the step is reported as before.
+          return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
+        }
+        return {
+          outcome: 'done', usage, observed, reasonCode: observed.replied ? 'replied' : 'no_reply',
+          summary: `持ち主に話しかけました（理由: ${label}）。${observed.replied ? '返事がありました。' : observed.waitedSeconds >= 60 ? `${Math.round(observed.waitedSeconds / 60)}分待ちましたが、返事はまだありません。` : '返事はまだありません。'}`,
+        };
+      }
       return {
         outcome: 'failed', usage, reasonCode: delivery === 'limit' ? 'daily_limit' : 'nowhere_to_speak',
         summary: delivery === 'limit' ? `今日はもう十分に話しかけたので、やめておきました（理由: ${label}）。` : `話しかける場所がなかったので、話しかけませんでした（理由: ${label}）。`,
       };
     },
   };
+}
+
+function latestOf(reachOuts: AutonomyReachOuts, scopeKey: string): { id: string; at: string } | null {
+  try { return reachOuts.latest?.(scopeKey) ?? null; } catch { return null; }
 }
 
 function localTime(at: string, timeZone: string): string {

@@ -21,6 +21,30 @@ export type BodyAudience = 'owner' | 'others';
 export const BODY_DOING = ['idle', 'thinking', 'reading', 'noting', 'drafting', 'revising', 'showing'] as const;
 export type BodyDoing = typeof BODY_DOING[number];
 
+/**
+ * What the body did with a message she started on her own (`POST /v1/body/reach-outs/{id}/delivery`):
+ * shown and spoken, shown without sound, or not shown because the owner is away from the PC, her window is
+ * hidden, or 「話しかける」 is switched off on the body.
+ */
+export const BODY_REACH_OUT_DELIVERY_OUTCOMES = ['shown_spoken', 'shown', 'away', 'hidden', 'muted'] as const;
+export type BodyReachOutDeliveryOutcome = typeof BODY_REACH_OUT_DELIVERY_OUTCOMES[number];
+export const BODY_REACH_OUT_REPORT_PREFIX = '/v1/body/reach-outs/';
+const REACH_OUT_ID = /^[A-Za-z0-9-]{1,80}$/u;
+
+/** The initiative id in `/v1/body/reach-outs/{id}/delivery`, or null. */
+export function bodyReachOutReportId(path: string): string | null {
+  const match = /^\/v1\/body\/reach-outs\/([^/]+)\/delivery$/u.exec(path);
+  return match && REACH_OUT_ID.test(match[1]!) ? match[1]! : null;
+}
+
+/** The one field of a delivery report besides `scopeKey`, or why the request is refused. There is no text field. */
+export function validatedBodyReachOutReport(body: Record<string, unknown>): { outcome: BodyReachOutDeliveryOutcome } | string {
+  const unknown = Object.keys(body).find(key => key !== 'scopeKey' && key !== 'outcome');
+  if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
+  const outcome = BODY_REACH_OUT_DELIVERY_OUTCOMES.find(value => value === body.outcome);
+  return outcome ? { outcome } : `outcome must be one of ${BODY_REACH_OUT_DELIVERY_OUTCOMES.join(', ')}`;
+}
+
 export const BODY_NUDGE_SCENES = ['ownerReturned', 'longQuiet', 'morning', 'lateNight', 'awaitingReaction'] as const;
 export type BodyNudgeScene = typeof BODY_NUDGE_SCENES[number];
 

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { autonomyDayKey } from './autonomyBudget.js';
+import { observeStep } from './autonomyLoopObserve.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { adaptersFor, prepareStep, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
@@ -15,6 +16,10 @@ import { resolveAutonomyModel } from './autonomyTextModel.js';
  * domains are the gate's. The loop only refrains from asking when the answer is known
  * (off, paused), so the record is not filled with refusals.
  *
+ * A step's outcome is kept as an observation, and one that could change her plan puts a thinking step
+ * at the front of the plan, a bounded number of times per cycle (`autonomyLoopObserve.ts`; owner decision
+ * 2026-10-02). That thinking step is a step like any other: journalled, asked of the gate, counted.
+ *
  * It runs in its own process, apart from the API, so chat and voice never wait for it.
  * A single lease in SQLite lets exactly one runner step; a second runner idles. The
  * loop starts no process, no additional runner, and no copy of itself.
@@ -23,6 +28,7 @@ export type AutonomyLoopTick =
   | 'not-leader' | 'disabled' | 'not-configured' | 'paused' | 'idle' | 'owner-active' | 'budget' | 'stepped' | 'cycle-ended';
 
 export interface AutonomyLoopDependencies extends StepDependencies {
+  /** The loop's clock; a step that waits reads the same one. */
   now: () => string;
   workerId?: string;
 }
@@ -102,7 +108,8 @@ export class ShannonAutonomyLoop {
       step = plan.shift() ?? (cycle.kind === 'activity' && !cycle.thought ? { kind: 'think' } : undefined);
       if (!step) return this.endCycle(cycle, 'plan-done', at);
       prepared = prepareStep(this.dependencies, cycle, step, at);
-      if (!prepared && step.kind === 'think') return this.endCycle(cycle, 'no-model', at);
+      // Without a model there is no first thought and no cycle; a second thought that cannot be had is simply skipped.
+      if (!prepared && step.kind === 'think' && !step.again) return this.endCycle(cycle, 'no-model', at);
     }
     const current = step!;
     const ready = prepared;
@@ -118,7 +125,7 @@ export class ShannonAutonomyLoop {
       return { row, decision, allowed };
     });
     if (!begun) return 'not-leader';
-    if (!begun.allowed) return this.refused(cycle, current, plan, ready, begun.decision, at);
+    if (!begun.allowed) return this.refused(cycle, begun.row, plan, ready, begun.decision, at);
 
     let result: StepResult;
     try {
@@ -148,7 +155,12 @@ export class ShannonAutonomyLoop {
           ...(link ? { link } : {}), ...(result.tool ? { tool: result.tool } : {}), ...(usage ? { usage } : {}),
           ...(result.reasonCode ? { reasonCode: result.reasonCode } : {}),
         });
-        if (committed?.plan) store.loop.setPlan(cycle.id, committed.plan, false);
+        // What the step led to, as facts; when it is worth thinking about, she thinks again before going on.
+        const rethought = this.observed(cycle, row, {
+          outcome: result.outcome, ...(result.observed ? { observed: result.observed } : {}),
+          ...(result.reasonCode ?? (result.tool?.endsWith('_held') ? 'held' : undefined) ? { code: result.reasonCode ?? 'held' } : {}),
+        }, committed?.plan ?? plan, at);
+        if (rethought ?? committed?.plan) store.loop.setPlan(cycle.id, rethought ?? committed!.plan!, false);
       });
     } catch {
       // The product could not be saved. The call was still made, so its cost is still reported.
@@ -164,10 +176,11 @@ export class ShannonAutonomyLoop {
   }
 
   private refused(
-    cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, plan: readonly AutonomyPlannedStep[],
+    cycle: AutonomyLoopCycle, row: AutonomyLoopStep, plan: readonly AutonomyPlannedStep[],
     prepared: PreparedStep, decision: RecordedDecision, at: string,
   ): AutonomyLoopTick {
     const { store, service, config } = this.dependencies;
+    const step = row.step;
     if (decision.reason === 'paused' || decision.reason === 'disabled') {
       // The step was not performed; it waits at the front of the plan for the owner to resume.
       store.loop.setPlan(cycle.id, [step, ...plan], cycle.thought);
@@ -180,8 +193,22 @@ export class ShannonAutonomyLoop {
       if (prepared.budgetReason) this.askForBudget(prepared.budgetReason, at);
       return 'budget';
     }
-    // Needs approval, forbidden, or over a limit: never performed. The rest of the plan may still go on.
+    // Needs approval, forbidden, or over a limit: never performed. The rest of the plan may still go on,
+    // after she has seen that it was not allowed, when she may think again.
+    try {
+      store.transaction(() => {
+        const rethought = this.observed(cycle, row, { outcome: 'refused', code: decision.reason }, plan, at);
+        if (rethought) store.loop.setPlan(cycle.id, rethought, false);
+      });
+    } catch { /* the plan goes on as it was */ }
     return 'stepped';
+  }
+
+  /** The step's observation and the plan with a thinking step in front, or null. An observation that cannot be kept never undoes the step's report. */
+  private observed(
+    cycle: AutonomyLoopCycle, row: AutonomyLoopStep, outcome: Parameters<typeof observeStep>[3], remaining: readonly AutonomyPlannedStep[], at: string,
+  ): AutonomyPlannedStep[] | null {
+    try { return observeStep(this.dependencies, cycle, row, outcome, remaining, at); } catch { return null; }
   }
 
   /** 「せがむ」: at most once a day (the store refuses a second), never at night or while he is talking. */

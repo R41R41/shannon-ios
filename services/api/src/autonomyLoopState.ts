@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { ReachOutReason } from './autonomyLoopPrompts.js';
+import { AutonomyLoopObservations, type ObservedReachOutReason } from './autonomyLoopObservations.js';
 
 /**
  * Durable state of the activity loop (Syzygy ADR-0002 step 3): the single-runner
@@ -12,7 +12,7 @@ import type { ReachOutReason } from './autonomyLoopPrompts.js';
  * the same transaction that writes its activity-record entry and its cost. A step a
  * crash left `planned` or `authorized` is closed as `abandoned` and never run again.
  */
-export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out';
+export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out' | 'jot';
 export type AutonomyStepStatus = 'planned' | 'authorized' | 'reported' | 'refused' | 'abandoned';
 /** What the loop process last said about itself; the API reads it to describe the loop to the owner. */
 export type AutonomyLoopReadiness = 'ready' | 'disabled' | 'no_credential';
@@ -23,12 +23,18 @@ export interface AutonomyPlannedStep {
   readingId?: string;
   pursuitId?: string;
   pieceId?: string;
-  /** What she means to write or change, in her words. */
+  /** What she means to write or change, in her words; for `jot`, the short note itself. */
   intent?: string;
   /** For `notion`: what she is looking for in the shared pages. */
   query?: string;
-  /** For `reach_out`: why she speaks up, from the closed set. */
-  reason?: ReachOutReason;
+  /** For `reach_out`: why she speaks up, from the closed set. `follow_up` is the one second call after a message got no answer. */
+  reason?: ObservedReachOutReason;
+  /** For `reach_out` with `follow_up`: the initiative id of the message that got no answer. */
+  originId?: string;
+  /** For `think`: a thinking step after something happened in this cycle, with what happened in front of her. */
+  again?: true;
+  /** For `look`: chosen after a message of hers got no answer; she thinks once more with what she saw. */
+  chain?: true;
 }
 
 export interface AutonomyLoopCycle {
@@ -75,7 +81,11 @@ export interface AutonomyLoopHeartbeat {
 const LEASE_NAME = 'activity-loop';
 
 export class AutonomyLoopState {
+  /** What her steps led to, as facts (`autonomyLoopObservations.ts`). */
+  readonly observations: AutonomyLoopObservations;
+
   constructor(private readonly database: DatabaseSync) {
+    this.observations = new AutonomyLoopObservations(database);
     database.exec(`
       CREATE TABLE IF NOT EXISTS autonomy_loop_lease (
         name TEXT PRIMARY KEY,

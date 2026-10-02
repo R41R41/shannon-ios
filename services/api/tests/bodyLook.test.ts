@@ -695,9 +695,9 @@ describe('the frame is never kept', () => {
     expect(openers.sort()).toEqual(['bodyLook.ts', 'bodyLookActivity.ts']);
     const aware = readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
-    expect(aware.sort()).toEqual(['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts']);
+    expect(aware.sort()).toEqual(['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts']);
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.
-    for (const name of ['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts', 'bodyLookActivity.ts', 'bodyLookActivityStore.ts']) {
+    for (const name of ['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts', 'bodyLookActivity.ts', 'bodyLookActivityStore.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
     }
     const handOff = [...source('bodyLookActivityStore.ts').matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\n\s*\);/gu)]

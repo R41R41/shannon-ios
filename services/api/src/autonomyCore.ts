@@ -20,6 +20,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // What her own activity is asked to do, and from which materials.
     'services/api/src/autonomyLoopPrompts.ts',
     'services/api/src/autonomyLoopPlan.ts',
+    // The words for what her steps led to, and the prompt of the one second call after an unanswered message.
+    'services/api/src/autonomyLoopObservePrompts.ts',
   ]),
   persona: Object.freeze([
     'packages/cognition/src/persona.ts',
@@ -137,6 +139,14 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     // Speaking up on her own: the gated step and the one way its message leaves.
     'services/api/src/autonomyLoopReachOutStep.ts',
     'services/api/src/reachOutDelivery.ts',
+    // Act, observe, think again: what a step led to as closed facts, the wait after a message of hers, the thinking step,
+    // the one second call, and what her body reports about a message.
+    'services/api/src/autonomyLoopObservations.ts',
+    'services/api/src/autonomyLoopObserve.ts',
+    'services/api/src/autonomyLoopThinkStep.ts',
+    'services/api/src/autonomyLoopFollowUpStep.ts',
+    'services/api/src/autonomyLoopCalls.ts',
+    'services/api/src/reachOutReports.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',

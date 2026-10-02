@@ -4,7 +4,7 @@ import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION,
-  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge,
+  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
@@ -13,6 +13,7 @@ import { bodyNudgeCandidates } from './bodyNudges.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
 import type { ConversationStore } from './conversationStore.js';
+import type { ReachOutReportResult, SQLiteReachOutReports } from './reachOutReports.js';
 
 /**
  * Shannon's body (the Live2D desktop application), seen from her mind.
@@ -31,6 +32,8 @@ export interface ShannonBodyOptions {
   look?: BodyLookOptions;
   /** Messages she started on her own that the owner has not read (`reachOutDelivery.ts`); absent, presence has no `reachOut`. */
   reachOuts?: (scopeKey: string) => { pending: number; latestId?: string };
+  /** What the body did with a message of hers, and when it last read presence (`reachOutReports.ts`); absent, the report route answers 404. */
+  reachOutReports?: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -114,6 +117,7 @@ export class ShannonBody {
   private readonly ingestEnabled: boolean;
   private readonly seen = new Map<string, { etag: string; changedAt: string }>();
   private readonly audiences = new Map<string, { audience: BodyAudience; at: number }>();
+  private readonly presenceMarks = new Map<string, number>();
   /** Looking at the room through the body's camera. */
   readonly looks: BodyLooks;
 
@@ -190,6 +194,7 @@ export class ShannonBody {
   presence(scopeKey: string, deviceId: string, knownEtag?: string, audience?: BodyAudience): BodyPresence | BodyPresenceUnchanged {
     const at = this.dependencies.now();
     if (audience && this.ingestEnabled) this.noteAudience(scopeKey, deviceId, audience, at);
+    if (this.ingestEnabled) this.notePresence(scopeKey, deviceId, at);
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
     // 「いま」 as the state sheet shows it. Its cause is conversation text and stays out: the body may be on a stream.
     const mood = presentCompanionState(snapshot, at).presence.mood;
@@ -242,6 +247,34 @@ export class ShannonBody {
       quietUntil: quiet ? new Date(quietEnd).toISOString() : null,
       nudges: quiet ? [] : bodyNudgeCandidates(at, this.awaitingReaction(scopeKey)),
     };
+  }
+
+  /**
+   * What this device did with one of her own messages. Only a device that registered as her body may report,
+   * each device once per message; nothing is said in return, and no model is called.
+   */
+  reportReachOut(scopeKey: string, deviceId: string, initiativeId: string, outcome: BodyReachOutDeliveryOutcome): ReachOutReportResult | 'disabled' | 'unavailable' | 'not_a_body' {
+    const reports = this.dependencies.reachOutReports;
+    if (!reports) return 'unavailable';
+    if (!this.ingestEnabled) return 'disabled';
+    if (!this.store.capabilities(scopeKey, deviceId)) return 'not_a_body';
+    return reports.report(scopeKey, deviceId, initiativeId, outcome, this.dependencies.now());
+  }
+
+  /** When a registered body last read presence, for her activity loop (another process). Written at most every ten seconds per device. */
+  private notePresence(scopeKey: string, deviceId: string, at: string): void {
+    const reports = this.dependencies.reachOutReports;
+    if (!reports) return;
+    const key = `${scopeKey}\u0000${deviceId}`;
+    const time = Date.parse(at);
+    const last = this.presenceMarks.get(key);
+    if (last !== undefined && time - last >= 0 && time - last < BODY_LIMITS.presencePollSeconds * 1_000) return;
+    try {
+      if (!this.store.capabilities(scopeKey, deviceId)) return;
+      if (this.presenceMarks.size >= 256) this.presenceMarks.clear();
+      this.presenceMarks.set(key, time);
+      reports.markPresence(scopeKey, deviceId, at);
+    } catch { /* presence is still answered */ }
   }
 
   private reachOut(scopeKey: string): { reachOut?: { pending: number; latestId?: string } } {

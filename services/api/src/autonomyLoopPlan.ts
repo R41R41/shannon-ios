@@ -1,5 +1,6 @@
 import type { ShannonPursuit, ShannonPursuitStatus } from '@shannon/cognition';
 import { copyableStudyPiece } from './autonomyHostFolderPath.js';
+import { AUTONOMY_JOT_MAXIMUM_CHARACTERS } from './autonomyLoopObservePrompts.js';
 import type { AutonomyPlannedStep } from './autonomyLoopState.js';
 import { REACH_OUT_REASONS, type PromptNote, type PromptUpcoming, type ReachOutReason, type ThinkingMaterials } from './autonomyLoopPrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
@@ -28,8 +29,9 @@ export interface Thought {
   steps: readonly AutonomyPlannedStep[];
 }
 
-export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6): PromptNote[] {
-  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away');
+export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
+  // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
+  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out'));
   // Notes written for the same pursuit come first; the rest follow by recency.
   const ordered = pursuitId ? [...notes.filter(note => note.pursuitId === pursuitId), ...notes.filter(note => note.pursuitId !== pursuitId)] : notes;
   return ordered.slice(0, limit).map(note => ({
@@ -61,7 +63,7 @@ export function thinkingMaterials(
       id: piece.id, title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status], version: piece.version,
       characters: piece.body.length, lastChange: store.study.versions(scopeKey, piece.id).at(-1)?.changeNote ?? '',
     })),
-    notes: storyNotes(store, scopeKey),
+    notes: storyNotes(store, scopeKey, undefined, 6, true),
     unnotedReadings: store.loop.unnotedReadings(scopeKey).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
     feedback: stories.flatMap(piece => store.study.pendingFeedback(scopeKey, piece.id).map(feedback => ({
       pieceId: piece.id, pieceTitle: piece.title, version: feedback.version,
@@ -79,7 +81,15 @@ export function thinkingMaterials(
 export function planFromThought(
   reply: Record<string, unknown>,
   known: { pursuits: readonly ShannonPursuit[]; pieces: readonly StudyPiece[]; unnotedReadingIds: readonly string[]; placeUrls?: readonly string[] },
-  bounds: { maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean; reachOut?: { upcoming: boolean } | null },
+  bounds: {
+    maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean; reachOut?: { upcoming: boolean } | null;
+    /** Thinking again after a message of hers got no answer: the message a second call would follow, while she may make one. */
+    followUp?: { originId: string } | null;
+    /** A look planned now is taken to find out whether he is there; she thinks again after it. */
+    chainLook?: boolean;
+    /** She may write down what she thinks about it. */
+    jot?: boolean;
+  },
 ): Thought {
   const pursuitIds = new Set(known.pursuits.map(item => item.id));
   const stories = new Map(known.pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away').map(piece => [piece.id, piece]));
@@ -126,7 +136,13 @@ export function planFromThought(
       steps.push({ kind: 'copy', ...(pieceId ? { pieceId } : {}) });
     } else if (action === 'look' && bounds.lookAvailable && !steps.some(step => step.kind === 'look')) {
       // One look in a plan at most; the step checks again that the body is there when it runs.
-      steps.push({ kind: 'look' });
+      steps.push({ kind: 'look', ...(bounds.chainLook ? { chain: true as const } : {}) });
+    } else if (action === 'follow_up' && bounds.followUp && !steps.some(step => step.kind === 'reach_out')) {
+      // The one second call after the message that got no answer: nothing of the reply but the action survives.
+      steps.push({ kind: 'reach_out', reason: 'follow_up', originId: bounds.followUp.originId });
+    } else if (action === 'jot' && bounds.jot && !steps.some(step => step.kind === 'jot')) {
+      const text = string(item?.text, AUTONOMY_JOT_MAXIMUM_CHARACTERS);
+      if (text) steps.push({ kind: 'jot', intent: text });
     } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
       // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
       const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;

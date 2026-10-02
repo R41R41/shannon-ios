@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { UNLABELLED_DISCLOSURE_MARKER } from '@shannon/cognition';
-import { REACH_OUT_REASONS, type ReachOutReason } from './autonomyLoopPrompts.js';
+import { OBSERVED_REACH_OUT_REASONS, type ObservedReachOutReason } from './autonomyLoopObservations.js';
+import type { ReachOutReason } from './autonomyLoopPrompts.js';
 import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
 
 /**
@@ -13,19 +14,27 @@ import { speakTimePrivacyCheck } from './voiceCompanionPresence.js';
  * `reach-out:<owner-local day>:<n>`, and the unique day key of `initiative_messages`
  * makes the daily count hold even if two writers race. The message has no user side and
  * no `turn.completed` event, so nothing is learned about the owner from it.
+ *
+ * The one second call after a message got no answer (`follow_up`) leaves the same way and is not one
+ * of the day's three: its key is `reach-out-follow-up:<owner-local day>:<id of the message it follows>`,
+ * so the same unique key allows one per message, and the day's count is read from those keys.
  */
 export const REACH_OUT_SOURCE_PREFIX = 'reach-out:';
 export const REACH_OUT_SOURCE_TITLE = 'シャノンから';
 
-const EXPRESSION: Readonly<Record<ReachOutReason, 'curious' | 'excited' | 'thinking'>> = Object.freeze({
-  share: 'excited', wonder: 'curious', upcoming: 'thinking', saw: 'curious',
+export const REACH_OUT_FOLLOW_UP_KEY_PREFIX = 'reach-out-follow-up:';
+/** A second call whose prompt held her note of a look: the lock screen shows the fixed line of a look, as for `saw`. */
+export const REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX = `${REACH_OUT_SOURCE_PREFIX}follow_up:seen:`;
+
+const EXPRESSION: Readonly<Record<ObservedReachOutReason, 'curious' | 'excited' | 'thinking'>> = Object.freeze({
+  share: 'excited', wonder: 'curious', upcoming: 'thinking', saw: 'curious', follow_up: 'curious',
 });
 
 /** What a source reference says about a reach-out, or null. `GET /v1/initiatives` returns it as `kind` and `reason`. */
-export function reachOutOfSource(sourceItemId: unknown): { kind: 'reach_out'; reason: ReachOutReason } | null {
+export function reachOutOfSource(sourceItemId: unknown): { kind: 'reach_out'; reason: ObservedReachOutReason } | null {
   if (typeof sourceItemId !== 'string' || !sourceItemId.startsWith(REACH_OUT_SOURCE_PREFIX)) return null;
   const reason = sourceItemId.slice(REACH_OUT_SOURCE_PREFIX.length).split(':')[0];
-  return (REACH_OUT_REASONS as readonly string[]).includes(reason ?? '') ? { kind: 'reach_out', reason: reason as ReachOutReason } : null;
+  return (OBSERVED_REACH_OUT_REASONS as readonly string[]).includes(reason ?? '') ? { kind: 'reach_out', reason: reason as ObservedReachOutReason } : null;
 }
 
 export type ReachOutDelivery = 'sent' | 'limit' | 'unavailable';
@@ -82,21 +91,71 @@ export class SQLiteReachOutSpeaker {
     try { return this.others(scopeKey, at) ? REACH_OUT_OTHERS_AUDIENCE : null; } catch { return null; }
   }
 
+/** The newest message she started on her own: its initiative id and when it was written. Identifiers only. */
+  latest(scopeKey: string): { id: string; at: string } | null {
+    if (!this.tableExists('initiative_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT initiative_id, created_at FROM initiative_messages WHERE scope_key = ? AND source_item_id LIKE ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+    `).get(scopeKey, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as { initiative_id: string; created_at: string } | undefined;
+    return row ? { id: row.initiative_id, at: row.created_at } : null;
+  }
+
+  /** Second calls she made on the owner-local day. */
+  followUpsOn(scopeKey: string, dayKey: string): number {
+    if (!this.tableExists('initiative_messages')) return 0;
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
+    `).get(scopeKey, `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}${dayKey}:%`) as unknown as { count: number };
+    return Number(row.count);
+  }
+
+  /** Whether the message with this initiative id was already called after. */
+  followedUp(scopeKey: string, originId: string): boolean {
+    if (!this.tableExists('initiative_messages')) return false;
+    return Boolean(this.database.prepare(`
+      SELECT 1 AS found FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ? LIMIT 1
+    `).get(scopeKey, `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}%:${originId}`));
+  }
+
   say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): ReachOutDelivery {
-    // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
-    for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
-      if (!this.tableExists(table)) return 'unavailable';
-    }
-    const initiativeId = randomUUID();
-    const sourceItemId = `${REACH_OUT_SOURCE_PREFIX}${input.reason}:${initiativeId}`;
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
+    return this.write(scopeKey, { reason: input.reason, text: input.text, at }, () => {
       const taken = new Set((this.database.prepare(`
         SELECT day_key FROM initiative_messages WHERE scope_key = ? AND day_key LIKE ?
       `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:%`) as unknown as Array<{ day_key: string }>).map(row => row.day_key));
       const slot = Array.from({ length: Math.max(0, input.maximumPerDay) }, (_, index) => `${REACH_OUT_SOURCE_PREFIX}${input.dayKey}:${index + 1}`)
         .find(key => !taken.has(key));
-      if (!slot || taken.size >= input.maximumPerDay) {
+      return slot && taken.size < input.maximumPerDay ? slot : null;
+    });
+  }
+
+  /**
+   * The one second call after her message `originId` got no answer. It must be one of her own messages that is not
+   * itself a second call, not yet called after, and the day's count must have room; otherwise `limit`.
+   */
+  sayAgain(scopeKey: string, input: { originId: string; text: string; dayKey: string; maximumPerDay: number; seen?: boolean }, at: string): ReachOutDelivery {
+    return this.write(scopeKey, { reason: 'follow_up', text: input.text, at, seen: input.seen === true }, () => {
+      const origin = this.database.prepare(`
+        SELECT source_item_id FROM initiative_messages WHERE scope_key = ? AND initiative_id = ?
+      `).get(scopeKey, input.originId) as unknown as { source_item_id: string } | undefined;
+      const known = reachOutOfSource(origin?.source_item_id);
+      if (!known || known.reason === 'follow_up' || this.followedUp(scopeKey, input.originId)) return null;
+      return this.followUpsOn(scopeKey, input.dayKey) < input.maximumPerDay ? `${REACH_OUT_FOLLOW_UP_KEY_PREFIX}${input.dayKey}:${input.originId}` : null;
+    });
+  }
+
+  /** One assistant message and one initiative, under the key `slot` hands out inside the transaction; no key, no message. */
+  private write(scopeKey: string, input: { reason: ObservedReachOutReason; text: string; at: string; seen?: boolean }, slot: () => string | null): ReachOutDelivery {
+    // The conversation and initiative tables belong to other stores; without them there is nowhere to speak.
+    for (const table of ['initiative_messages', 'conversation_messages', 'conversation_threads']) {
+      if (!this.tableExists(table)) return 'unavailable';
+    }
+    const { at } = input;
+    const initiativeId = randomUUID();
+    const sourceItemId = input.reason === 'follow_up' && input.seen ? `${REACH_OUT_FOLLOW_UP_SEEN_SOURCE_PREFIX}${initiativeId}` : `${REACH_OUT_SOURCE_PREFIX}${input.reason}:${initiativeId}`;
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const dayKey = slot();
+      if (!dayKey) {
         this.database.exec('ROLLBACK');
         return 'limit';
       }
@@ -106,7 +165,7 @@ export class SQLiteReachOutSpeaker {
           (initiative_id, scope_key, thread_id, source_item_id, source_title, source_url,
            content, expression, day_key, created_at)
         VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)
-      `).run(initiativeId, scopeKey, threadId, sourceItemId, REACH_OUT_SOURCE_TITLE, input.text, EXPRESSION[input.reason], slot, at);
+      `).run(initiativeId, scopeKey, threadId, sourceItemId, REACH_OUT_SOURCE_TITLE, input.text, EXPRESSION[input.reason], dayKey, at);
       if (!inserted.changes) {
         this.database.exec('ROLLBACK');
         return 'limit';
