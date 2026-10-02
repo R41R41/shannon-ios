@@ -1,0 +1,18 @@
+Shannon Live2D embed page (the `embed` folder)
+
+This folder is generated output of the shannon-desktop project (`npm run build`, `dist/embed/`).
+It is copied here unchanged; see docs/live2d-embed.md for the version and the update procedure.
+
+embed/live2d/live2dcubismcore.min.js
+  Live2D Cubism Core. (C) Live2D Inc. All rights reserved.
+  Licensed under the Live2D Proprietary Software License Agreement:
+  https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html
+  It is "Redistributable Code" under that agreement and is kept only inside this folder, as delivered.
+
+embed/live2d/live2d.js
+  Includes the Live2D Cubism SDK for Web Framework. (C) Live2D Inc.
+  Licensed under the Live2D Open Software License Agreement:
+  https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html
+
+Publishing an application that uses the Cubism SDK is subject to Live2D's SDK release licence terms.
+The owner confirmed the licence question on 2026-10-03.

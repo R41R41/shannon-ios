@@ -19,7 +19,8 @@ let package = Package(
             dependencies: [
                 .product(name: "WebRTC", package: "WebRTC", condition: .when(platforms: [.iOS])),
             ],
-            resources: [.process("Resources")]
+            // `Live2D` is copied as a folder: the embed page loads its scripts by relative path (docs/live2d-embed.md).
+            resources: [.process("Resources"), .copy("Live2D")]
         ),
         .testTarget(name: "ShannonAppCoreTests", dependencies: ["ShannonAppCore"]),
     ]

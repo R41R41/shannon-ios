@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0",
+  "builtAt": "2026-10-02T17:55:59.106Z",
+  "modelUpdatedAt": "2026-10-02T17:09:06.469Z",
+  "files": [
+    "model/Shannon.model3.json",
+    "model/Shannon.moc3",
+    "model/Shannon.physics3.json",
+    "model/Shannon.4096/texture_00.png",
+    "live2d/shaders/fragshadersrcalphablend.frag",
+    "live2d/shaders/fragshadersrccolorblend.frag",
+    "live2d/shaders/fragshadersrccopy.frag",
+    "live2d/shaders/fragshadersrcmaskinvertedpremultipliedalpha.frag",
+    "live2d/shaders/fragshadersrcmaskpremultipliedalpha.frag",
+    "live2d/shaders/fragshadersrcpremultipliedalpha.frag",
+    "live2d/shaders/fragshadersrcpremultipliedalphablend.frag",
+    "live2d/shaders/fragshadersrcsetupmask.frag",
+    "live2d/shaders/vertshadersrc.vert",
+    "live2d/shaders/vertshadersrcblend.vert",
+    "live2d/shaders/vertshadersrccopy.vert",
+    "live2d/shaders/vertshadersrcmasked.vert",
+    "live2d/shaders/vertshadersrcsetupmask.vert"
+  ]
+}
