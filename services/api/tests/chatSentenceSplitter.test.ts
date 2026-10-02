@@ -91,6 +91,7 @@ describe('chat sentence splitter', () => {
       const text = Array.from({ length: 1 + Math.floor(random() * 30) }, () => pieces[Math.floor(random() * pieces.length)]).join('');
       const whole = splitChatSentences(text);
       expect(whole.join('')).toBe(text);
+      if (text.trim()) for (const sentence of whole) expect(sentence.trim(), JSON.stringify(text)).not.toBe('');
       const splitter = new ChatSentenceSplitter();
       const streamed: string[] = [];
       for (let index = 0; index < text.length;) {

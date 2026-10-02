@@ -8,7 +8,7 @@ Azure VMで動かす専用APIとworkerの置き場所。
 - `GET /v1/state?scopeKey=...`
 - `GET /v1/conversation?scopeKey=...`
 - `POST /v1/events`
-- `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`）
+- `POST /v1/chat`（`OPENAI_API_KEY`設定時はResponses API、未設定時は`local-stub`。`stream: "sentences"`で文単位のNDJSON）
 - `POST /v1/voice/transcriptions`（ペアリング済み端末のM4Aを一時的に受け取り、既定`gpt-transcribe`で日本語文字起こし）
 - `POST /v1/voice/gemini/speech`（ペアリング済み端末のShannon返答を、サーバー側Gemini 3.8 TTSで24 kHz WAVへ変換）
 - `POST /v1/voice/gemini/speech/stream`（同じ返答を24 kHz mono PCMとして生成中からchunked転送）
@@ -35,7 +35,9 @@ Worldのタイトル・本文・release notes・抄録はすべて非信頼の�
 
 loopback以外で起動するときは32文字以上の`SHANNON_API_TOKEN`が必須で、全endpointが`Authorization: Bearer ...`を要求する。実機用の`lan`モードは全インターフェースではなく、MacのプライベートIPv4アドレスを1つ選んで待ち受ける。
 
-`POST /v1/chat`のリクエスト項目: `scopeKey`、`message`（1〜8000文字）、任意の`threadId`、`attachments`、`webSearch`、`placeLocation`、`audience`。
+`POST /v1/chat`のリクエスト項目: `scopeKey`、`message`（1〜8000文字）、任意の`threadId`、`attachments`、`webSearch`、`placeLocation`、`audience`、`stream`。
+
+`stream`は任意項目で、省略時は従来どおり1つのJSONを返す（追加前と同一の挙動）。`"sentences"`を送ると、成功したターンをNDJSON（`application/x-ndjson`）で返す: `start`（`threadId`・`turnId`・適用した`audience`）、`sentence`（`index`・`text`）を順番に、最後に`done`（`response`は`stream`なしのレスポンスと同じオブジェクト）。`sentence`の`text`を順に連結すると`done.response.reply`と1文字単位で一致する（空白・改行も保持）。それ以外の値は400（`stream is invalid`）で、モデルは呼ばない。現在は第1段階で、ターンを通常どおり完了・保存してから文に分けて送るため、最初の文が届く時刻は早くならない。明示コマンド・整理・添付・Web検索・場所検索・情報源リスト付きの返答は`fallback`付きの`done`1行だけを返す。400・401・429・502は従来どおりJSONで返る。途中で切断してもターンは保存済みで、`GET /v1/conversation`で取得できる。契約は`docs/chat-stream-contract.md`。
 
 `audience`は返答を見聞きできる相手を示す任意項目で、`"owner"`（省略時も同じ。追加前と同一の挙動）か`"others"`。それ以外の値は400（`audience is invalid`）で、モデルは呼ばない。レスポンスは適用した値を`audience`として返す。`"others"`は「本人だけの通話に同席者がいる」場合と同じ扱いで、同じ開示ゲートを通す。秘密・手動で機微にした記憶・それを含むスレッドの要約はモデルへ渡さず、それ以外の保護対象は`【機微:…】`付きで渡し、発話前チェックの指示を付ける。Notion・Aetherノート・Voyagerタスクは読まない。操作系コマンド（整理など）、目標の記録、作業提案、感情の保存は行わない。ターンは従来どおり本人のスレッドに保存するが`speaker: unknown`として記録し、事実・関係・約束・目標・感情を抽出しない。`"others"`のレスポンスは本人の情報を含まない: `systemPrompt`は空文字列、`thread`は返さず、`state`は`scopeKey`・`version`・`updatedAt`・`temperament`・`emotion`・`presence`（表情のみ。理由は空文字列）だけを持ち、記憶の配列は空で返す。`"owner"`のレスポンスは変わらない。サーバーは同席者を観測できないため、この項目を送らないクライアントは本人だけとして扱う。
 

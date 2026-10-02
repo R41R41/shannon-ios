@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel, type ShannonApiKernel } from '../src/apiKernel.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
+import { CHAT_SENTENCE_MAXIMUM_LENGTH } from '../src/chatSentenceSplitter.js';
 import { chatSentenceStreamLines, withSentenceStream, type ChatStreamLine } from '../src/chatSentenceStream.js';
 import type { ApiResponse, ChatResponse } from '../src/contracts.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
@@ -196,6 +197,16 @@ describe('POST /v1/chat with stream: sentences', () => {
   });
 });
 
+describe('docs/chat-stream-contract.md', () => {
+  it('names every line type and every fallback the code can send', () => {
+    const document = readFileSync(new URL('../../../docs/chat-stream-contract.md', import.meta.url), 'utf8');
+    for (const word of ['"stream": "sentences"', '`start`', '`sentence`', '`done`', '`error`', 'STREAM_FAILED',
+      '`command`', '`attachments`', '`web_search`', '`place_search`', '`sources`', `${CHAT_SENTENCE_MAXIMUM_LENGTH} UTF-16 units`]) {
+      expect(document, word).toContain(word);
+    }
+  });
+});
+
 /** Words that exist only in hard-withheld content: a secret, and an item the owner marked 機微 by hand. */
 const HARD = ['ウォンバット会', 'アルマジロ'];
 
@@ -277,7 +288,7 @@ function fakeResponse(behaviour: { closeAfter?: number; throwOn?: number; destro
       written.push(value);
       if (behaviour.closeAfter === writes) {
         // The reader went away: the write is not flushed and the connection closes.
-        queueMicrotask(() => { this.destroyed = true; this.emit('close'); });
+        queueMicrotask(() => { response.destroyed = true; response.emit('close'); });
         return false;
       }
       return true;
