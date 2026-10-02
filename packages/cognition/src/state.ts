@@ -16,7 +16,7 @@ import {
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
 import {
-  easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
+  easeLingering, easeShannonFeeling, hasPlaceUnderneath, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
 import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
@@ -241,9 +241,14 @@ function committedFeeling(
     if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
   }
   // An unpleasant mood toward the owner is stored anew only above the height its kind was stored at, not above what it has
-  // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions.
-  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming)
-    && incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)) return null;
+  // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions. (No resolver result is
+  // an unpleasant mood held by an override; an event built elsewhere could be, so the guard stays.)
+  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming)) {
+    if (incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)) return null;
+    // Nor is it stored when it is strong enough to be her mood and every place underneath is held by an unpleasant mood
+    // that does not give way to it: a fifth such mood in rotation would otherwise be stored anew every time.
+    if (incoming.intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && !hasPlaceUnderneath(state.lingering ?? [], incoming, awakeMs, nowIso, timing)) return null;
+  }
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
   // The reading is made here, from the state being written to: the mood her concern covers holds as well.
   if (incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)

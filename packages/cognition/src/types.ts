@@ -73,6 +73,8 @@ export interface ShannonExpressiveEmotion {
    * expressed again is a new, stronger feeling only above the height of its kind; up to it, it is that feeling going on.
    */
   heights?: Partial<Record<ShannonEmotionKind, number>>;
+  /** Only on a reading, never stored: for the same kinds, what is left of each at this instant. An unpleasant mood expressed again up to its height shows at this strength. */
+  strengths?: Partial<Record<ShannonEmotionKind, number>>;
   /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
   decided?: boolean;
 }

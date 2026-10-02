@@ -142,9 +142,8 @@ export interface ResolveShannonEmotionInput {
   /** The caller already decided by `holdsShannonFeeling` that this stimulus replaces the present feeling (a touch). */
   replaces?: boolean;
   /**
-   * The provisional feeling was decided by the writer of the reply itself (a text turn's chat model), so it is the feeling
-   * of that reply: a cue word of another kind in her words does not rename it and stays beside it as the secondary feeling.
-   * Absent (a voice turn, whose provisional affect was decided before the reply existed), the cue names the kind as before.
+   * The provisional feeling was decided by the writer of the reply itself (a text turn): a cue word of another kind does not
+   * rename it and stays beside it. Absent (a voice turn, decided before the reply existed), the cue names the kind as before.
    */
   decidedKindWins?: boolean;
 }
@@ -293,14 +292,15 @@ export function resolveShannonEmotionState(
     } else if (previous.primary === primary) {
       // The same override again (he is still in danger) is felt anew, at full strength.
       strongerAgain = true;
-    } else if (!input.replaces && !overrideReason && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)) {
-      // The same bar when another feeling is on top: an unpleasant mood that is alive underneath is not stored anew at a
-      // strength it already had. What she feels goes on, with it beside.
-      return continuedShannonEmotion(previous, primary, input.now);
     } else if (!input.replaces && (holdsShannonFeeling(previous, { primary, intensity, overrideReason })
       // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
       || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
       return continuedShannonEmotion(previous, primary, input.now);
+    } else if (!input.replaces && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)) {
+      // The same bar when another feeling is on top and gives way: an unpleasant mood that is alive underneath is not
+      // stored anew at a strength it already had. It is that mood going on, and the reply shows it at what is left of it.
+      // (An override never arrives here: no override names an unpleasant mood.)
+      return resurfacedShannonEmotion(previous, primary, previous.strengths?.[primary] ?? 0, input.now);
     }
   }
 
@@ -371,12 +371,28 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, strengths: _strengths, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;
   return Object.freeze({
     ...rest, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
+    continued: true,
+  });
+}
+
+/**
+ * A mood she carries underneath comes up again for this reply, at what is left of it, in place of another feeling that
+ * was on top. It is that mood going on (`continued`), so committing it stores nothing; the feeling it replaces stays beside it.
+ */
+function resurfacedShannonEmotion(previous: ShannonExpressiveEmotion, kind: ShannonEmotionKind, strength: number, now: string): ShannonExpressiveEmotion {
+  const intensity = clamp(strength, 0, 1);
+  const secondary = previous.primary !== 'neutral' && previous.primary !== kind && !unsafeCombination(kind, previous.primary) ? [previous.primary] : [];
+  return Object.freeze({
+    primary: kind, secondary: Object.freeze(secondary), intensity, target: previous.target, cause: CARRIED_CAUSE,
+    ...emotionProfile(kind, intensity), visibility: visibilityFor(intensity), startedAt: validTimestamp(now),
+    decay: decayFor(kind), carryover: intensity, updatedAt: validTimestamp(now),
+    ...(previous.awakeAt !== undefined ? { awakeAt: previous.awakeAt } : {}),
     continued: true,
   });
 }
