@@ -18,15 +18,16 @@ const PERSONAL_CUES = ['僕は', '私は', '自分は', '実は', '本当は', '
 const CURIOUS_CUES = ['気になる', '知りたい', 'なぜ', 'どうして', '面白い', 'おもしろい', '考えたい'];
 const SLEEPY_CUES = ['眠い', '眠たい', 'ねむい', '寝る', 'おやすみ'];
 const CALM_CUES = ['安心', '落ち着いた', 'ほっとした', 'ゆっくり'];
-const APOLOGY = /(?:ごめん|すまん|すまない|悪かった|申し訳|許して)/u;
-const KINDNESS = /(?:ありがとう|大好き|好きだよ|助かった|さすが|えらい|頼りにして)/u;
+// Narrow on purpose: 「天気が悪かった」「ごめん、ちょっと待って」「さすがに無理」 are neither an apology nor a kind word to her.
+const APOLOGY = /(?:ごめんなさい|ごめんね|ごめんよ|ごめん[。！!\s]*$|ごめん[、,\s]*(?:言いすぎ|言い過ぎ|ひどいこと|傷つけ)|(?:さっき|昨日|昨夜|この前|今朝)は?ごめん|言いすぎた|言い過ぎた|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な|許して(?:ほしい|くれ|ください|ね)?[。！!\s]*$)/u;
+const KINDNESS = /(?:ありがとう|大好き|助かった|助かる|頼りにして)/u;
 
 /**
  * Whether the owner's words are an apology or a kind word. This reads his words as something that
  * happens to her, like the mood cues above; it never decides the label of her feeling.
  */
 export function soothingIn(userMessage: string): 'apology' | 'kindness' | null {
-  const text = userMessage.slice(0, 8_000);
+  const text = userMessage.trim().slice(0, 8_000);
   return APOLOGY.test(text) ? 'apology' : KINDNESS.test(text) ? 'kindness' : null;
 }
 
@@ -65,7 +66,7 @@ export function deriveEmotionDelta(
 
   if (timing.clock === 'awake') {
     const room = (current: number, base: number, minimum: number, maximum: number, step: number) =>
-      step * Math.max(0, step > 0 ? (maximum - current) / (maximum - base) : (current - minimum) / (base - minimum));
+      step * Math.min(1, Math.max(0, step > 0 ? (maximum - current) / (maximum - base) : (current - minimum) / (base - minimum)));
     return {
       valence: room(snapshot.emotion.valence, BASELINE.valence, -1, 1, positive * 0.14 - negative * 0.16),
       arousal: room(snapshot.emotion.arousal, BASELINE.arousal, 0, 1, questionEnergy + exclamationEnergy + lengthEnergy

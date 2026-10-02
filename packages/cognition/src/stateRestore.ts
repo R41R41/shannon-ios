@@ -96,10 +96,16 @@ export function restoreCompanionState(
     arousal: restoredNumber(emotionRow?.arousal, initial.emotion.arousal, 0, 1),
     openness: restoredNumber(emotionRow?.openness, initial.emotion.openness, 0, 1),
   };
-  const expressiveEmotion = restoreShannonExpressiveEmotion(
+  // A feeling can never lie ahead of her clock. Without a readable clock the awake stamps mean nothing:
+  // the feeling then settles by the wall-clock rule, and nothing is kept underneath.
+  const emotionClock = restoreEmotionClock(row.emotionClock);
+  const restoredFeeling = restoreShannonExpressiveEmotion(
     row.expressiveEmotion,
     initial.expressiveEmotion!,
   );
+  const { awakeAt: storedAwakeAt, ...unstampedFeeling } = restoredFeeling;
+  const expressiveEmotion = emotionClock && storedAwakeAt !== undefined
+    ? { ...unstampedFeeling, awakeAt: Math.min(storedAwakeAt, emotionClock.awakeMs) } : unstampedFeeling;
   const interests = Array.isArray(row.interests)
     ? [...new Set(row.interests.map(value => restoredText(value, 120)).filter(Boolean))].slice(0, MAX_INTERESTS)
     : [];
@@ -204,7 +210,7 @@ export function restoreCompanionState(
     memoryControls,
     ...(Array.isArray(row.sharedDays) ? { sharedDays: restoreSharedDays(row.sharedDays) } : {}),
     // Additive: a snapshot stored before the awake clock has neither, and starts with a clock at zero and nothing underneath.
-    ...(restoreEmotionClock(row.emotionClock) ? { emotionClock: restoreEmotionClock(row.emotionClock)! } : {}),
-    ...(Array.isArray(row.lingering) ? { lingering: restoreLingering(row.lingering) } : {}),
+    ...(emotionClock ? { emotionClock } : {}),
+    ...(emotionClock && Array.isArray(row.lingering) ? { lingering: restoreLingering(row.lingering, emotionClock.awakeMs) } : {}),
   });
 }

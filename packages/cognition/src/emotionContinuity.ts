@@ -94,7 +94,8 @@ export function presentShannonFeeling(
       const share = remainingShare(awakeMs - stored.awakeAt, isReactionEmotion(stored.primary) ? timing.reactionHalfLifeMs : timing.passingHalfLifeMs);
       const intensity = stored.intensity * share;
       if (intensity >= RULE.settledBelow) {
-        surface = { ...stored, intensity, carryover: clamp(stored.carryover * share, 0, 1), visibility: visibilityFor(intensity) };
+        // The reading is the feeling at this instant: its strength and the awake time it is true for go together.
+        surface = { ...stored, intensity, carryover: clamp(stored.carryover * share, 0, 1), visibility: visibilityFor(intensity), awakeAt: awakeMs };
       }
     }
   }
@@ -176,8 +177,7 @@ export function noteShannonFeeling(
   if (isMoodLikeEmotion(feeling.primary) && feeling.intensity >= RULE.moodFrom) {
     const existing = list.find(item => item.kind === feeling.primary && item.target === feeling.target);
     const present = existing ? lingeringStrength(existing, awakeMs, timing) : 0;
-    // A feeling she merely went on having is committed at the strength it was read at, a moment earlier: that is not a new height.
-    if (feeling.intensity > present + 0.02) {
+    if (feeling.intensity > present) {
       const strength = clamp(feeling.intensity, 0, 1);
       const noted: ShannonLingeringFeeling = {
         kind: feeling.primary, target: feeling.target, cause: existing?.cause ?? feeling.cause,
@@ -264,8 +264,8 @@ export function lingeringFeelingLine(
   ].join('');
 }
 
-/** Restores the stored list through the same bounds the reducer keeps. Anything unreadable is dropped. */
-export function restoreLingering(value: unknown): readonly ShannonLingeringFeeling[] {
+/** Restores the stored list through the same bounds the reducer keeps. Anything unreadable, or stamped ahead of her clock, is dropped. */
+export function restoreLingering(value: unknown, awakeMs: number): readonly ShannonLingeringFeeling[] {
   if (!Array.isArray(value)) return [];
   const restored: ShannonLingeringFeeling[] = [];
   for (const candidate of value) {
@@ -275,6 +275,7 @@ export function restoreLingering(value: unknown): readonly ShannonLingeringFeeli
     if (typeof row.kind !== 'string' || !isShannonEmotionKind(row.kind) || row.kind === 'neutral') continue;
     if (typeof row.target !== 'string' || typeof row.cause !== 'string' || typeof row.startedAt !== 'string') continue;
     if (!number(row.strength) || !number(row.awakeAt) || !number(row.startedAwakeAt) || !Number.isFinite(Date.parse(row.startedAt))) continue;
+    if ((row.awakeAt as number) > awakeMs || (row.startedAwakeAt as number) > (row.awakeAt as number)) continue;
     restored.push(Object.freeze({
       kind: row.kind, target: Array.from(row.target).slice(0, 80).join(''), cause: Array.from(row.cause).slice(0, 240).join(''),
       span: row.span === 'lingering' ? 'lingering' : 'mood', strength: clamp(row.strength as number, 0, 1),

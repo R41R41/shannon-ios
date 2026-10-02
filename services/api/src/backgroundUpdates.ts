@@ -108,7 +108,7 @@ export class TurnRefinementProcessor {
       delta: deriveEmotionDelta(current, userMessage, emotionTiming()),
     });
     // His apology or kind word eases what she still holds against him. Only a turn of the owner's own reaches this line.
-    const soothing = soothingIn(userMessage);
+    const soothing = emotionTiming().clock === 'awake' ? soothingIn(userMessage) : null;
     if (soothing) this.stateStore.apply(scopeKey, { type: 'feeling-eased', by: soothing });
 
     const immediate = captureImmediateExplicitMemory(

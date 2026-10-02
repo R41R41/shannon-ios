@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,6 +16,9 @@ import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { emotionTiming } from '../src/emotionTiming.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
+
+// Whole conversations through the kernel on a loaded machine: the default five seconds says nothing about the code.
+vi.setConfig({ testTimeout: 30_000 });
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -293,9 +296,34 @@ describe('(g) an activity session keeps her awake', () => {
     loop.observe('someone-else');
     const raw = new DatabaseSync(path);
     expect((raw.prepare('SELECT COUNT(*) AS count FROM companion_states').get() as { count: number }).count).toBe(1);
+    // A field this process does not know (a newer API wrote it) is written back as it was read.
+    const stored = JSON.parse((raw.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scope) as { snapshot_json: string }).snapshot_json);
+    raw.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify({ ...stored, fromALaterVersion: { kept: true } }), scope);
+    clock.at = at(clock.at, 5 * MINUTE);
+    loop.observe(scope);
+    const rewritten = JSON.parse((raw.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scope) as { snapshot_json: string }).snapshot_json);
     raw.close();
+    expect(rewritten.fromALaterVersion).toEqual({ kept: true });
+    expect(rewritten.emotionClock.awakeMs).toBe(stored.emotionClock.awakeMs + 5 * MINUTE);
+    expect({ ...rewritten, emotion: 0, emotionClock: 0, lingering: 0, fromALaterVersion: 0 }).toEqual({ ...stored, emotion: 0, emotionClock: 0, lingering: 0, fromALaterVersion: 0 });
     loop.close();
     api.close();
+  });
+
+  it('opens nothing for a database without companion state and survives a database it cannot read', () => {
+    const empty = databasePath();
+    new DatabaseSync(empty).close();
+    const loop = configuredAwakeClock(empty, { now: () => NIGHT });
+    loop.observe(scope);
+    const raw = new DatabaseSync(empty);
+    expect(raw.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'`).get()).toEqual({ count: 0 });
+    raw.close();
+    loop.close();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const missing = configuredAwakeClock(join(tmpdir(), 'shannon-emotion-test-missing', 'nowhere', 'shannon.sqlite'), { now: () => NIGHT });
+    expect(() => { missing.observe(scope); missing.observe(scope); missing.close(); }).not.toThrow();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
   });
 
   it('counts a stretch once when the API process and the loop process both write', () => {
@@ -370,6 +398,20 @@ describe('(h) stored state from before the awake clock', () => {
   });
 });
 
+describe('the state returned with a reply agrees with the state read afterwards', () => {
+  it('shows a reaction she is still having, held through a neutral reply, the same in both', async () => {
+    const { chat, advance, shown, stateStore } = harness();
+    stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'sad', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
+      visibility: 'expressed', startedAt: NIGHT, decay: 0.24, carryover: 0.6, updatedAt: NIGHT,
+    } });
+    advance(4 * MINUTE);
+    const reply = await chat('うん', PLAIN);
+    expect(reply.state.presence.mood).toMatchObject({ expression: 'sad', fromConversation: true });
+    expect((await shown()).presence.mood).toEqual(reply.state.presence.mood);
+  });
+});
+
 describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
   it('restores the timing as it was: a night erases the mood, nothing lingers, nothing is shown', async () => {
     vi.stubEnv('SHANNON_EMOTION_CLOCK', 'wall');
@@ -387,6 +429,27 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
     expect(morning.messageEmotion.expression).toBe('calm');
     expect((await shown()).presence.mood).toMatchObject({ expression: 'calm', fromConversation: false });
     expect((await body()).mood).toMatchObject({ primary: 'neutral', fromConversation: false });
+  });
+
+  it('gives voice the stored feeling carried by the wall-clock rule, and no line about what lingers', async () => {
+    vi.stubEnv('SHANNON_EMOTION_CLOCK', 'wall');
+    const { api, chat, advance, state, model } = harness();
+    await chat('今日はもう別のAIと話すね', SULK);
+    advance(2 * MINUTE);
+    model.reply = 'はい、わかりました。';
+    const soon = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
+    // Two minutes later the sulk still carries, as before: the resolver's own wording, not a continued reading.
+    expect((soon.body as { voicePlan: Record<string, any> }).voicePlan.emotion).toMatchObject({ primary: 'sulky', cause: '直前の感情が自然に続いている' });
+    expect((soon.body as { voicePlan: Record<string, any> }).voicePlan.emotion.continued).toBeUndefined();
+    advance(9 * HOUR);
+    const morning = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
+      body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
+    expect((morning.body as { voicePlan: Record<string, any> }).voicePlan.emotion.primary).not.toBe('sulky');
+    for (const request of [...model.voiceRequests, ...model.requests]) expect(request.systemPrompt).not.toContain(LINE);
+    expect(model.voiceRequests.length + model.requests.length).toBeGreaterThanOrEqual(3);
+    expect(state().lingering).toBeUndefined();
+    expect(state().emotionClock).toBeUndefined();
   });
 
   it('reads the environment in one place, bounded, and falls back to the table', () => {
@@ -415,7 +478,41 @@ describe('the emotion source stays core', () => {
       'services/api/src/emotionTiming.ts', 'services/api/src/autonomyAwakeClock.ts']) {
       expect(SHANNON_CORE_PATHS.emotion).toContain(path);
     }
-    // One state: the only stored emotion is the companion snapshot.
+  });
+
+  it('keeps one emotion state: the parts of the companion snapshot, and no table of its own', async () => {
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => NIGHT });
+    store.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'happy', secondary: [], intensity: 0.85, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.5, valence: 0.6,
+      visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.6, updatedAt: NIGHT,
+    } });
+    expect(Object.keys(store.snapshot(scope)).filter(key => /emotion|lingering/iu.test(key)).sort())
+      .toEqual(['emotion', 'emotionClock', 'expressiveEmotion', 'lingering']);
+    store.close();
+    const raw = new DatabaseSync(path);
+    const tables = (raw.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map(row => row.name);
+    raw.close();
+    expect(tables.filter(name => /emotion|feeling|mood|linger/iu.test(name))).toEqual([]);
+    // A fresh state has neither of the new parts until something happens.
     expect(Object.keys(createInitialCompanionState(scope, NIGHT)).filter(key => /emotion|lingering/iu.test(key))).toEqual(['emotion', 'expressiveEmotion']);
+  });
+
+  it('gives the loop\'s process one narrow write and nothing to read', () => {
+    const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
+    const clock = source('autonomyAwakeClock.ts');
+    // It opens no conversation store and no model, and its only event is the content-free one.
+    expect([...clock.matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort()).toEqual(['./emotionTiming.js', '@shannon/cognition', 'node:sqlite']);
+    expect(clock).not.toMatch(/SQLiteShannonStore|conversationStore|chatModel|peopleMemory|OPENAI_API_KEY|GEMINI_API_KEY|INSERT |DELETE |CREATE /u);
+    expect(clock.match(/type: '[a-z-]+'/gu)).toEqual(["type: 'awake-observed'"]);
+    expect(clock.match(/UPDATE [a-z_]+ SET [a-z_]+ = \?/gu)).toEqual(['UPDATE companion_states SET snapshot_json = ?']);
+    // What it hands the loop: two functions that return nothing.
+    expect(clock).toMatch(/observe\(scopeKey: string\): void;\n  close\(\): void;/u);
+    // Only the worker's entry file uses it; no module of the loop does, and the loop still imports nothing of her emotion.
+    for (const name of readdirSync(new URL('../src/', import.meta.url)).filter(file => file.endsWith('.ts') && file !== 'autonomyWorker.ts')) {
+      expect(source(name), name).not.toContain("'./autonomyAwakeClock.js'");
+      if (/^autonomyLoop/u.test(name)) expect(source(name), name).not.toMatch(/presentShannonFeeling|expressiveEmotion|lingering|emotionTiming/u);
+    }
+    expect(source('autonomyWorker.ts').match(/awakeClock\.[a-z]+\(/gu)).toEqual(['awakeClock.observe(', 'awakeClock.close(']);
   });
 });

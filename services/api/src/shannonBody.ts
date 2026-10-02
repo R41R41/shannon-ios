@@ -239,7 +239,7 @@ export class ShannonBody {
     if (audience && this.ingestEnabled) this.noteAudience(scopeKey, deviceId, audience, at);
     if (this.ingestEnabled) this.notePresence(scopeKey, deviceId, at);
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
-    // 「いま」 as the state sheet shows it. Its cause is conversation text and stays out: the body may be on a stream.
+    // 「いま」 as the state sheet shows it. Its cause is between her and the owner and stays out: the body may be on a stream.
     const mood = presentCompanionState(snapshot, at).presence.mood;
     const current = presentShannonFeeling(snapshot, at, emotionTiming());
     const overview = this.dependencies.autonomy.overview(scopeKey);

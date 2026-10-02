@@ -18,7 +18,7 @@ import {
 import {
   easeLingering, easeShannonFeeling, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
 } from './emotionContinuity.js';
-import { continuedShannonEmotion, holdsShannonFeeling } from './emotionState.js';
+import { holdsShannonFeeling } from './emotionState.js';
 import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
@@ -216,23 +216,26 @@ function awakeState(current: CompanionStateSnapshot, nowIso: string, timing: Sha
 }
 
 /**
- * Stores a conversational feeling on the awake clock. Every writer ends here, so the rule that a
- * feeling is not replaced by a weaker stimulus (`holdsShannonFeeling`) holds for all of them, also
- * for one that resolved its feeling from an older snapshot; what was committed is noted underneath.
+ * Stores a conversational feeling on the awake clock, or nothing. Every writer ends here, so the
+ * rule that a feeling is not replaced by a weaker stimulus (`holdsShannonFeeling`) holds for all of
+ * them, also for one that resolved its feeling from an older snapshot. A feeling that merely went
+ * on (the resolver's `continued`), and one the present feeling holds against, store nothing: what
+ * she already feels keeps fading from where it was, and is never raised back to an earlier reading
+ * (an apology that landed in between stays). What is stored is noted underneath.
  */
 function committedFeeling(
   state: CompanionStateSnapshot,
-  incoming: ShannonExpressiveEmotion,
+  event: ShannonExpressiveEmotion,
   awakeMs: number,
   nowIso: string,
   timing: ShannonEmotionTiming,
-): Pick<CompanionStateSnapshot, 'expressiveEmotion' | 'lingering'> {
+): Pick<CompanionStateSnapshot, 'expressiveEmotion' | 'lingering'> | null {
+  if (event.continued) return null;
+  const incoming = normalizeShannonExpressiveEmotion(event);
   const present = presentShannonFeeling(state, nowIso, timing);
   const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
-  const kept = incoming.primary !== present.primary && holdsShannonFeeling(present, incoming, touch)
-    ? continuedShannonEmotion(present, incoming.primary, nowIso)
-    : incoming;
-  const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...kept, awakeAt: awakeMs });
+  if (incoming.primary !== present.primary && holdsShannonFeeling(present, incoming, touch)) return null;
+  const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, awakeAt: awakeMs });
   return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing) };
 }
 
@@ -270,7 +273,9 @@ export function reduceCompanionState(
     case 'expressive-emotion-updated': {
       if (timing.clock === 'awake') {
         const { state, awakeMs } = awakeState(current, nowIso, timing);
-        const committed = committedFeeling(state, normalizeShannonExpressiveEmotion(event.emotion), awakeMs, nowIso, timing);
+        const committed = committedFeeling(state, event.emotion, awakeMs, nowIso, timing);
+        // Nothing new was felt: only her clock moved, which is no new version.
+        if (!committed) return state === current ? current : freezeSnapshot(state);
         if (state === current && current.expressiveEmotion && sameShannonExpressiveEmotion(committed.expressiveEmotion!, current.expressiveEmotion)
           && sameLingering(committed.lingering ?? [], current.lingering ?? [])) return current;
         next = { ...state, ...committed };
@@ -287,8 +292,9 @@ export function reduceCompanionState(
       const felt = feelTouch(state, event.touch, nowIso, timing);
       if (timing.clock === 'awake') {
         // A feeling that was held through the touch is left exactly as stored; only the mood moved.
-        const feeling = felt.expressiveEmotion === state.expressiveEmotion ? {}
+        const feeling = felt.expressiveEmotion === state.expressiveEmotion ? null
           : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing);
+        if (!feeling && sameEmotion(felt.emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
         next = { ...state, emotion: felt.emotion, ...feeling };
         break;
       }

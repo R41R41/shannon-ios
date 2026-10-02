@@ -57,6 +57,8 @@ export interface ShannonExpressiveEmotion {
   awakeAt?: number;
   /** Only on a reading by `presentShannonFeeling`: the feeling as it stands at this instant on her awake clock. Never stored. */
   presentAt?: string;
+  /** Only on a resolver result that lets the present feeling go on: nothing new was felt, so committing it stores no feeling. Never stored. */
+  continued?: boolean;
 }
 
 /** Her awake time: it advances while she is in a conversation or an activity session of her own, and stands still otherwise. */

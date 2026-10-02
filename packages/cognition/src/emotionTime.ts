@@ -52,8 +52,6 @@ export const SHANNON_EMOTION_CONTINUITY = Object.freeze({
   moodFrom: 0.5,
   /** At least this strong, it lingers for one to two awake days. */
   lingersFrom: 0.72,
-  /** Expressed again while it is still alive, it grows by this much (a quarrel over several turns, repeated praise). */
-  reinforcement: 0.08,
   /** How many feelings are kept underneath at most; the weakest gives way. */
   maximumLingering: 4,
   /** A stimulus of the opposite sign at least this strong replaces a stronger feeling and eases what lies underneath. */

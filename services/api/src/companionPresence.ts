@@ -122,10 +122,12 @@ export function commitReplyEmotionLater(
   scopeKey: string,
   emotion: ShannonExpressiveEmotion,
 ): void {
+  // A neutral reply adds no feeling: a stored one settles by itself at read time. On her awake clock it still was a moment awake.
+  const neutral = emotion.primary === 'neutral';
+  if (neutral && emotionTiming().clock !== 'awake') return;
   setImmediate(() => {
     try {
-      // A neutral reply adds no feeling: a stored one settles by itself at read time. Her awake clock still moves.
-      stateStore.apply(scopeKey, emotion.primary === 'neutral' ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion });
+      stateStore.apply(scopeKey, neutral ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion });
     } catch (error) {
       console.error('Shannon reply emotion commit failed', error);
     }

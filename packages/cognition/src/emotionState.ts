@@ -47,6 +47,12 @@ const MOOD_LIKE = new Set<ShannonEmotionKind>([
   'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky', 'leftOut', 'lonely', 'lightPossessive', 'hurt',
 ]);
 
+/**
+ * Her answer to the owner rather than a feeling of her own: concern, protection, reassurance,
+ * apology, sympathy. A mood she is in, however strong, never keeps these from showing.
+ */
+const SUPPORT = new Set<ShannonEmotionKind>(['caring', 'protective', 'reassurance', 'apologetic', 'sad', 'anxious', 'regret']);
+
 /** -1 for an unpleasant feeling, 1 for a pleasant one, 0 for one that is neither. */
 export function shannonEmotionSign(kind: ShannonEmotionKind): -1 | 0 | 1 {
   return NEGATIVE.has(kind) ? -1 : POSITIVE.has(kind) ? 1 : 0;
@@ -233,12 +239,10 @@ export function resolveShannonEmotionState(
   }
 
   if (reading && previous && previous.primary !== 'neutral') {
-    // The same feeling expressed again while it is alive grows a little (a quarrel over several turns, repeated
-    // praise); a touch is as strong as the touch. A weaker stimulus does not replace a feeling she still has.
-    if (previous.primary === primary && !overrideReason) {
-      intensity = input.replaces ? Math.max(intensity, previous.intensity)
-        : clamp(Math.max(intensity, previous.intensity + SHANNON_EMOTION_CONTINUITY.reinforcement), 0, 1);
-    } else if (!input.replaces && holdsShannonFeeling(previous, { primary, intensity, overrideReason })) {
+    // The same feeling again does not weaken it, and does not grow it either: only a stimulus that is itself
+    // stronger makes it stronger. A weaker stimulus does not replace a feeling she still has.
+    if (previous.primary === primary && !overrideReason) intensity = Math.max(intensity, previous.intensity);
+    else if (!input.replaces && holdsShannonFeeling(previous, { primary, intensity, overrideReason })) {
       return continuedShannonEmotion(previous, primary, input.now);
     }
   }
@@ -275,7 +279,8 @@ export function resolveShannonEmotionState(
  * writer of the feeling goes through (a reply in text or voice, a touch, her line about a touch):
  * a feeling is not replaced by a weaker stimulus, which is kept as the secondary feeling instead.
  * It gives way to a stimulus that is at least as strong, to one of the opposite sign that is
- * strong in its own right, and always to support for the owner (emergency, grief, accuracy).
+ * strong in its own right, and always to what she owes the owner: the overrides (emergency, grief,
+ * accuracy) and her concern, reassurance, apology and sympathy for him, at any strength.
  * A touch additionally never displaces a feeling held for the owner's sake, and a feeling that
  * itself came from a touch always gives way to the next touch.
  */
@@ -285,7 +290,7 @@ export function holdsShannonFeeling(
   touch?: { presentFromTouch: boolean },
 ): boolean {
   if (!present || present.primary === 'neutral' || present.intensity < SHANNON_EMOTION_CONTINUITY.settledBelow) return false;
-  if (incoming.overrideReason) return false;
+  if (incoming.overrideReason || SUPPORT.has(incoming.primary)) return false;
   if (touch) {
     if (touch.presentFromTouch) return false;
     if (present.overrideReason) return true;
@@ -307,6 +312,7 @@ export function continuedShannonEmotion(
     : previous.secondary;
   return Object.freeze({
     ...kept, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
+    continued: true,
   });
 }
 
