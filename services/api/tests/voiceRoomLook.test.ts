@@ -240,7 +240,10 @@ describe('the owner asks her to look, aloud', () => {
     for (const transcript of [
       'あの子、僕を見てくれない。', '息子に、カメラ使っていいよ、って言ったんだ。', '田中さんなら、カメラ使っていいよ。', '録画、私が見れるよ。', '向こうからは、私が見える？',
       '明日の撮影は、カメラ使っていいから。', 'その番組、僕が見れるの。', '犬がね、私を見てくれるの。', '先生は、私を見てくれるよ。',
+      // A long clause before it is part of the utterance, and his own question is not leave.
+      '田中さんが来週うちに来て配信の機材を全部セットしてくれることになったんだけどその時は、カメラ使っていいよ', 'カメラ使っていい？', 'カメラ使っていい',
     ]) expect(lookRequest(transcript), transcript).not.toBe('plain');
+    expect(['カメラ使っていいよ', 'カメラ使っていいですよ', 'カメラ使っていいから', 'うん、カメラ使って大丈夫だよ'].map(lookRequest)).toEqual(Array(4).fill('plain'));
     for (const transcript of [
       ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', '僕が見える?', '僕のこと見えてる?', 'カメラで見てみて', 'カメラ使ってもいいよ', '何が見える?', '机の上見てくれる',
       '部屋を見てほしいんだけど',
@@ -295,7 +298,8 @@ describe('the owner asks her to look, aloud', () => {
       expect(cold.lookStore.waiting(scope), transcript).toEqual([]);
     }
     // Her line was about something else, or her offer is old: a bare 「見て」 is not about the camera.
-    for (const [hers, wait] of [['その資料、ボクが見てみましょうか？', 0], ['メモを見てみますね。', 0], ['カメラの設定は終わりましたか？', 0], ['見てみましょうか？', 120]] as const) {
+    for (const [hers, wait] of [['その資料、ボクが見てみましょうか？', 0], ['メモを見てみますね。', 0], ['カメラの設定は終わりましたか？', 0], ['見てみましょうか？', 120],
+      ['Voyagerのタスク、見てみましょうか？', 0], ['届いたメール、ちょっと見てみましょうか？', 0]] as const) {
       const other = harness();
       await other.ready();
       await other.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'ねえ', shannonTranscript: hers });
@@ -492,6 +496,48 @@ describe('what she saw reaches the voice conversation', () => {
     expect(h.messages().map(message => message.content)).toEqual(['僕のこと見れる?', '見てみますね。', SEEN_TEXT]);
   });
 
+  it('is not released by a late store of the turn before it, and does not hold a text look in the same Talk', async () => {
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    await h.say('僕のこと見れる?');
+    const look = await h.openLook();
+    let answered = false;
+    const answer = h.answer(look!.id).then(response => { answered = true; return response; });
+    // The client now stores the turn BEFORE this one: other words, so this look still waits.
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '今日は何してたの', shannonTranscript: '本を読んでいました。' });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(answered).toBe(false);
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと 見れる？', shannonTranscript: '見てみますね。' });
+    expect((await answer).body).toMatchObject({ status: 'seen' });
+
+    // A voice turn whose promised look was cut off is still waiting to be stored; a text look in the same Talk is answered at once.
+    const mixed = harness({ turnWait: 5_000 });
+    await mixed.ready();
+    const stopped = new AbortController();
+    mixed.model.generateVoiceStreaming = async (_request, onDelta) => { await onDelta('見てみ'); stopped.abort(); throw new Error('aborted'); };
+    await expect(mixed.api.streamLiveVoiceDelegation({ method: 'POST', path: delegations, deviceId: 'body-pc',
+      body: { scopeKey: scope, threadId: 'voice-thread', transcript: '僕のこと見れる?' } },
+    { signal: stopped.signal, onPlan: () => undefined, onTextDelta: () => undefined })).rejects.toThrow();
+    const looks = (mixed.api as unknown as { body: { looks: { turn(scopeKey: string, message: string, at: string, audience: string): { decide(choice: unknown, threadId: string): void } } } }).body.looks;
+    looks.turn(scope, '部屋を見て', mixed.clock.at, 'owner').decide('asked', 'voice-thread');
+    const started = performance.now();
+    expect((await mixed.answer((await mixed.openLook())!.id)).body).toMatchObject({ status: 'seen' });
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+
+  it('says nothing about a look that was not opened when someone else has joined while the line was waiting', async () => {
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    const speak = h.model.generateVoice.bind(h.model);
+    let first = true;
+    h.model.generateVoice = async request => { if (first) { first = false; await h.camera(false); } return speak(request); };
+    await h.say('僕のこと見れる?');
+    await h.say('シャノン、こんにちは。', { participantMode: 'guest' });
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと見れる?', shannonTranscript: '見てみますね。' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(h.messages().map(message => message.content)).toEqual(['僕のこと見れる?', '見てみますね。']);
+  });
+
   it('does not wait for ever: after the bound her message is stored whatever the client did', async () => {
     const h = harness({ turnWait: 40 });
     await h.ready();
@@ -547,6 +593,17 @@ describe('switches and the gateway question', () => {
     expect(voiceRoomLookTurn(looks as never, { scopeKey: scope, transcript: '部屋を見て。', at: START, audience: 'owner', uncertain: false,
       decision: { shouldRespond: true, roomLookProbability: 1 } as never })).toMatchObject({ prompt: '' });
     expect(looks.voiceTurn).not.toHaveBeenCalled();
+  });
+
+  it('takes a cut-off as a broken promise only when what she had said was about looking', () => {
+    const cut = (said: string) => {
+      const state = { unavailable: null, open: vi.fn(() => true), cutOff: vi.fn() };
+      voiceRoomLookTurn({ voiceTurn: () => state }, { scopeKey: scope, transcript: '僕のこと見れる?', at: START, audience: 'owner', uncertain: false,
+        decision: { shouldRespond: true } as never }).cutOff('thread', said);
+      return state.cutOff.mock.calls.length;
+    };
+    for (const said of ['見てみ', 'ちょっと見ますね', 'みてみますね', 'のぞいてみますね', 'カメラで確認しますね']) expect(cut(said), said).toBe(1);
+    for (const said of ['', 'そうなんですね、', 'ご意見ありがとうございます', '見つけました']) expect(cut(said), said).toBe(0);
   });
 
   it('a turn she does not answer opens nothing', () => {

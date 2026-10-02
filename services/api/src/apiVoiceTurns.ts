@@ -13,7 +13,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
   /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
   reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
-  looks?: { turnStored(scopeKey: string, threadId: string): void };
+  looks?: { turnStored(scopeKey: string, threadId: string, said: string): void };
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -58,7 +58,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     messageEmotion, completedAt, timeZone, ...companion };
   const experience = dependencies.background.recordTurn(turn);
   // Her message about a look opened in this turn was waiting for the turn to be in the Talk (bodyLook.ts).
-  try { dependencies.looks?.turnStored(scopeKey, threadId); } catch { /* the turn is stored either way */ }
+  try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage); } catch { /* the turn is stored either way */ }
   dependencies.background.schedule(turn, experience.id);
   return { status: 201, body: { threadId, turnId: experience.id, messageEmotion, state: presentCompanionState(captured, completedAt) } };
 }

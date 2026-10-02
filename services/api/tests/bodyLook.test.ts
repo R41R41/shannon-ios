@@ -682,7 +682,10 @@ describe('the frame is never kept', () => {
     // Modules a frame passes through: what they import, and that none of them opens a file, a database, or a log.
     const imports = (name: string) => [...source(name).matchAll(/from '([^']+)'/gu)].map(match => match[1]!);
     expect(imports('bodyLookContract.ts')).toEqual([]);
-    expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
+    expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookTurnWait.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
+    // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
+    expect(imports('bodyLookTurnWait.ts')).toEqual([]);
+    expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
     expect(imports('bodyLookVision.ts').sort()).toEqual(['./bodyLookContract.js', './chatModelSupport.js', './llmUsage.js', '@shannon/cognition']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiValidation.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {

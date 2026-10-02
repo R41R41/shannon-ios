@@ -58,9 +58,9 @@ const LEAD = '^(?:もちろん|そう|うん|はい|それじゃあ?|じゃあ?|
 const PLAIN_TAIL = '(?:みて)?(?:ほしい|欲しい|ください)?(?:かな|か|よ|ね)?';
 const PLAIN_ASKS = [
   new RegExp(`${LEAD}(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:(?:のこと|の顔|の姿|の様子)(?:が|を)?(?:${LOOK}|${CAN_SEE})|を${LOOK}|が(?:見える|見えてる|見えます|見えてます))${PLAIN_TAIL}$`, 'u'),
-  // A statement of leave, not his own question (「カメラ使っていいかな」).
-  new RegExp(`${LEAD}(?:体の)?カメラ(?:を|は)?使って(?:も)?(?:いい|大丈夫)(?:だよ|です|よ|ね)?(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
 ];
+/** Leave to use her camera, stated and not asked: 「カメラ使っていいよ」, not 「カメラ使っていい？」「カメラ使っていいかな」. */
+const PLAIN_LEAVE = new RegExp(`${LEAD}(?:体の)?カメラ(?:を|は)?使って(?:も)?(?:いい|大丈夫)(?:だよ|ですよ|です|から|よ|ね)(?:自由に|好きに|いつでも|どうぞ)?$`, 'u');
 /** The same forms as one clause among others, or with a looser ending: a model tier has to agree. */
 const CLAUSE_ASKS = [
   new RegExp(`${LEAD}${ME}(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
@@ -75,35 +75,47 @@ const AMBIGUOUS_ASKS = [
 ];
 /** 「見てみて」「じゃあ見て」「見てよ」: a request only as the answer to her own offer to look. */
 const BARE_ASK = new RegExp(`${LEAD}${LOOK}${TAIL}$`, 'u');
-/** Her own line offers a look at the room or at him: 「見てみましょうか？」「見てと言ってくれれば見られます」, not 「その資料、ボクが見てみましょうか？」. */
-const HER_OFFER = [/^(?:ちょっと|一度|今|いま|部屋を|カメラで)*見て(?:みましょうか|もいいですか|みてもいいですか)$/u, /見てと言/u, /^(?:いつでも|カメラで|部屋を)*見られます/u];
+/**
+ * Her own line offers a look at the room or at him. The whole sentence is the offer, or names the room, the camera or him:
+ * 「見てみましょうか？」「部屋を見てみましょうか？」「見てと言ってくれれば見られます」, not 「Voyagerのタスク、見てみましょうか？」.
+ */
+const HER_OFFER = [
+  /^(?:じゃあ|では|ちょっと|一度|今|いま)*(?:(?:部屋|ライ氏|ライ氏のこと)を|カメラで)?見て(?:みましょうか|もいいですか|みてもいいですか)$/u,
+  /見てと言(?:って|われ|え)/u, /^(?:いつでも|カメラで|部屋を)*見られます/u,
+];
 const OFFER_OPEN_SECONDS = 60;
 const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて|って(?:聞かれ|言われ|言っ)/u;
 const CLAUSE_CHARACTERS = 40;
 
-function clauses(transcript: string): string[] {
+/** Every clause of the utterance, of any length; none when it refuses or reports. */
+function allClauses(transcript: string): string[] {
   const text = transcript.normalize('NFKC');
   if (REFUSES.test(text)) return [];
-  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, '')).filter(clause => clause.length > 0 && clause.length <= CLAUSE_CHARACTERS);
+  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, '')).filter(clause => clause.length > 0);
 }
+const clauses = (transcript: string) => allClauses(transcript).filter(clause => clause.length <= CLAUSE_CHARACTERS);
 const matches = (transcript: string, patterns: readonly RegExp[]) => clauses(transcript).some(clause => patterns.some(pattern => pattern.test(clause)));
 
 /**
- * How the owner's words ask her to look now, if they do. `plain`: the whole utterance, with its commas removed, is one
- * of the two plain requests, and stands by itself. `ambiguous`: one short clause is a request from its first word to its
- * last (「私も見てみたい映画がある」 is not one), and a model tier has to agree. null is no request.
+ * How the owner's words ask her to look now, if they do. `plain`: the whole utterance, with its commas removed and nothing
+ * left out, is one of the two plain requests, and stands by itself. `ambiguous`: one short clause is a request from its
+ * first word to its last (「私も見てみたい映画がある」 is not one), and a model tier has to agree. null is no request.
  */
 export function lookRequest(transcript: string): 'plain' | 'ambiguous' | null {
-  const parts = clauses(transcript);
-  const whole = parts.join('');
-  if (whole.length > 0 && whole.length <= CLAUSE_CHARACTERS && PLAIN_ASKS.some(pattern => pattern.test(whole))) return 'plain';
-  return parts.some(clause => [...CLAUSE_ASKS, ...AMBIGUOUS_ASKS].some(pattern => pattern.test(clause))) ? 'ambiguous' : null;
+  const whole = allClauses(transcript).join('');
+  if (whole.length > 0 && whole.length <= CLAUSE_CHARACTERS
+    && (PLAIN_ASKS.some(pattern => pattern.test(whole)) || (PLAIN_LEAVE.test(whole) && !/[?？]/u.test(transcript)))) return 'plain';
+  return clauses(transcript).some(clause => [...CLAUSE_ASKS, ...AMBIGUOUS_ASKS].some(pattern => pattern.test(clause))) ? 'ambiguous' : null;
 }
 /** Either kind. */
 export const asksForLookAloud = (transcript: string): boolean => lookRequest(transcript) !== null;
+/** Her line as sentences, each without spaces and commas. */
+const sentences = (line: string) => line.normalize('NFKC').split(/[。.!！?？…\n]/u).map(sentence => sentence.replace(/[\s、，,]/gu, '')).filter(Boolean);
 /** A bare 「見て」 right after she herself offered to look. */
 const acceptsHerOffer = (transcript: string, offered: string | undefined) => offered !== undefined
-  && clauses(offered).some(clause => HER_OFFER.some(pattern => pattern.test(clause))) && matches(transcript, [BARE_ASK]);
+  && sentences(offered).some(sentence => HER_OFFER.some(pattern => pattern.test(sentence))) && matches(transcript, [BARE_ASK]);
+/** She had begun to say that she would look: 「見てみますね」「みてみますね」「のぞいてみますね」「カメラで確認しますね」, not 「意見」「見つけ」. */
+const ANNOUNCES_LOOK = /見て|見ま|見る|みてみ|のぞい|カメラ/u;
 
 const ROUTER_INSTRUCTIONS = 'Would one look through the camera of her desktop body be right now? True when the speaker asks her to look at him, at the room, or at something he is showing, or asks what she can see; also when he is clearly showing her something, so that one look is what he would welcome. False for talk about cameras, photos, screens, notes or seeing in general, for past or hypothetical looking, and when he asks her not to look.';
 const ROUTER_QUESTION = Object.freeze({
@@ -223,9 +235,9 @@ export function voiceRoomLookTurn(
     },
     cutOff: (threadId, said) => {
       // Only when what was spoken had reached the looking (「見てみますね」): 「そうなんですね、」 promised nothing.
-      if (settled || !/見/u.test(said)) return;
+      if (settled || !ANNOUNCES_LOOK.test(said)) return;
       settled = true;
-      state.cutOff(threadId);
+      state.cutOff(threadId, turn.transcript);
     },
   };
 }

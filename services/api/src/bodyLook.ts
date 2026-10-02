@@ -5,6 +5,7 @@ import {
   type BodyLookCode, type BodyLookConfig, type BodyLookResult, type RoomLookChoice,
 } from './bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, ROOM_LOOK_UNAVAILABLE_REASON, UNOPENED_LINE, bodyLookNotSeenLine, type BodyLookUnavailable } from './bodyLookLines.js';
+import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
 import { SQLiteBodyLookStore, type BodyLookOutcome, type StoredBodyLook } from './bodyLookStore.js';
 import type { RoomLookContextLine, RoomLookViewer } from './bodyLookVision.js';
 
@@ -103,8 +104,8 @@ export interface BodyLookVoiceTurn {
    * for the model that sees the frame: the client stores a voice turn in a request of its own, which may come later.
    */
   open(threadId: string, choice: RoomLookChoice, spoken?: readonly RoomLookContextLine[]): boolean;
-  /** The call was cut off after she had begun to say she would look: no look, and one honest line once the turn is stored. */
-  cutOff(threadId: string): void;
+  /** The call was cut off after she had begun to say she would look: no look, and one honest line once the turn (`said`: his words) is stored. */
+  cutOff(threadId: string, said: string): void;
 }
 
 export type BodyLookAnswer =
@@ -171,12 +172,13 @@ export class BodyLooks {
   private readonly spoken = new Map<string, readonly RoomLookContextLine[]>();
   /** How many turns other people could hear, per scope: a turn that sees the number change opens nothing. */
   private readonly othersTurns = new Map<string, number>();
-  /** Voice turns the client has not stored yet, by scope and thread: her message about their look waits for them. */
-  private readonly unstored = new Map<string, { stored: Promise<void>; done: () => void }>();
-  /** How many voice turns the client stored, by scope and thread: a turn already stored when its look opens is not waited for. */
-  private readonly storedTurns = new Map<string, number>();
+  /** Voice turns the client has not stored yet: her message about such a turn's look waits for it (`bodyLookTurnWait.ts`). */
+  private readonly turns: VoiceTurnWaits;
+  /** The wait of each open voice look, by look id. */
+  private readonly lookWaits = new Map<string, TurnWait>();
 
   constructor(private readonly dependencies: BodyLookDependencies) {
+    this.turns = new VoiceTurnWaits(dependencies.voiceTurnWaitMilliseconds ?? VOICE_TURN_WAIT_MILLISECONDS);
     this.store = dependencies.store ?? new SQLiteBodyLookStore(':memory:');
     this.config = dependencies.config ?? configuredBodyLook({});
     this.viewer = dependencies.viewer ?? null;
@@ -201,36 +203,15 @@ export class BodyLooks {
         prompt: ROOM_LOOK_OFFER_PROMPT,
         request: { offerRoomLook: true },
         // A turn other people could hear that arrived while the reply was written stops the look.
-        decide: (choice, threadId) => { try { if (this.othersTurns.get(scopeKey) === others) this.open(scopeKey, threadId, choice); } catch { /* the reply is already written */ } },
+        decide: (choice, threadId) => { try { if (this.othersTurns.get(scopeKey) === others) this.open(scopeKey, threadId, choice); } catch { /* the reply is already written */ } }, // No wait: a text turn is stored before this runs.
       };
     } catch { return NO_TURN; }
   }
 
   /** The client stored a voice turn of this Talk (`POST /v1/voice/…/turns`): her message about its look may follow now. */
-  turnStored(scopeKey: string, threadId: string): void {
-    const key = `${scopeKey}\u0000${threadId}`;
-    if (this.storedTurns.size >= 256) this.storedTurns.clear();
-    this.storedTurns.set(key, (this.storedTurns.get(key) ?? 0) + 1);
-    this.unstored.get(key)?.done();
-  }
-
-  /** Marks a voice turn as not stored yet; it counts as stored after `voiceTurnWaitMilliseconds` whatever the client does. */
-  private awaitTurn(scopeKey: string, threadId: string): void {
-    const wait = this.dependencies.voiceTurnWaitMilliseconds ?? VOICE_TURN_WAIT_MILLISECONDS;
-    const key = `${scopeKey}\u0000${threadId}`;
-    if (wait <= 0 || this.unstored.has(key)) return;
-    if (this.unstored.size >= 64) for (const entry of [...this.unstored.values()]) entry.done();
-    let done = (): void => undefined;
-    const stored = new Promise<void>(resolve => { done = () => { this.unstored.delete(key); resolve(); }; });
-    this.unstored.set(key, { stored, done });
-    setTimeout(done, wait).unref();
-  }
-
-  /** Runs once the voice turn of that Talk is stored: at once when nothing is waited for. */
-  private afterTurn(scopeKey: string, threadId: string, then: () => void): void {
-    const waiting = this.unstored.get(`${scopeKey}\u0000${threadId}`);
-    if (waiting) void waiting.stored.then(() => { try { then(); } catch { /* nothing more to do */ } });
-    else then();
+  /** The client stored a voice turn of this Talk (`POST /v1/voice/…/turns`) with these words of his: her message about that turn's look may follow now. */
+  turnStored(scopeKey: string, threadId: string, said: string): void {
+    this.turns.turnStored(scopeKey, threadId, said);
   }
 
   /**
@@ -245,29 +226,28 @@ export class BodyLooks {
       // A turn other people could hear that arrived while she was replying stops the look, and nothing is said about it.
       const alone = () => this.othersTurns.get(scopeKey) === others;
       // The client may already have stored this turn by the time her reply is written: then nothing is waited for.
-      const storedBefore = new Map(this.storedTurns);
-      const wait = (threadId: string) => {
-        const key = `${scopeKey}\u0000${threadId}`;
-        if (this.storedTurns.get(key) === storedBefore.get(key)) this.awaitTurn(scopeKey, threadId);
-      };
+      const since = this.turns.mark;
       return {
         unavailable: null,
         open: (threadId, choice, spoken) => {
           try {
             if (!alone()) return false;
-            wait(threadId);
-            if (this.open(scopeKey, threadId, choice, spoken)) return true;
+            const wait = this.turns.await(scopeKey, threadId, spoken?.[0]?.content ?? '', since);
+            const id = this.open(scopeKey, threadId, choice, spoken);
+            if (id) {
+              if (wait) this.lookWaits.set(id, wait);
+              return true;
+            }
             const state = this.availability(scopeKey, this.dependencies.now(), 'owner');
             const line = typeof state === 'string' ? UNOPENED_LINE[state] : UNOPENED_LINE.busy;
-            if (line) this.unopened(scopeKey, threadId, line.code, line.line, typeof state === 'string' ? ROOM_LOOK_UNAVAILABLE_REASON[state] : ROOM_LOOK_UNAVAILABLE_REASON.busy);
+            if (line) this.unopened(scopeKey, threadId, wait, alone, line.code, line.line, typeof state === 'string' ? ROOM_LOOK_UNAVAILABLE_REASON[state] : ROOM_LOOK_UNAVAILABLE_REASON.busy);
+            else wait?.done();
           } catch { /* the reply is already spoken */ }
           return false;
         },
-        cutOff: threadId => {
+        cutOff: (threadId, said) => {
           try {
-            if (!alone()) return;
-            wait(threadId);
-            this.unopened(scopeKey, threadId, 'failed', BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
+            if (alone()) this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since), alone, 'failed', BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
           } catch { /* nothing more to do */ }
         },
       };
@@ -309,7 +289,8 @@ export class BodyLooks {
     // A look opened in a voice turn: what she says about it must follow that turn in the Talk, so the answer waits
     // until the client has stored the turn (bounded by `voiceTurnWaitMilliseconds`). The checks below run afterwards.
     const asked = this.store.get(scopeKey, id);
-    if (asked?.outcome === 'pending' && asked.deviceId === deviceId && this.spoken.has(id)) await this.unstored.get(`${scopeKey}\u0000${asked.threadId}`)?.stored;
+    if (asked?.outcome === 'pending' && asked.deviceId === deviceId) await this.lookWaits.get(id)?.stored;
+    this.lookWaits.delete(id);
     const at = this.dependencies.now();
     const look = this.store.get(scopeKey, id);
     if (!look) return { kind: 'not_found' };
@@ -402,12 +383,12 @@ export class BodyLooks {
   }
 
   /** Opens the look the model chose. The conditions are checked again: the reply took time. */
-  private open(scopeKey: string, threadId: string, choice: unknown, spoken?: readonly RoomLookContextLine[]): boolean {
+  private open(scopeKey: string, threadId: string, choice: unknown, spoken?: readonly RoomLookContextLine[]): string | null {
     const chosen = roomLookChoice(choice);
-    if (!chosen) return false;
+    if (!chosen) return null;
     const at = this.dependencies.now();
     const state = this.availability(scopeKey, at, 'owner');
-    if (typeof state === 'string') return false;
+    if (typeof state === 'string') return null;
     const time = Date.parse(at);
     this.store.prune(scopeKey, new Date(time - RETENTION_MILLISECONDS).toISOString());
     const id = randomUUID();
@@ -415,7 +396,7 @@ export class BodyLooks {
       id, scopeKey, deviceId: state.deviceId, threadId, requestedAt: at,
       expiresAt: new Date(time + BODY_LOOK_LIMITS.lifetimeMilliseconds).toISOString(), ownerAsked: chosen === 'asked',
     }, this.dependencies.dayKey(at));
-    if (!opened) return false;
+    if (!opened) return null;
     if (spoken?.length) {
       if (this.spoken.size >= 64) this.spoken.clear();
       this.spoken.set(id, spoken.slice(-2));
@@ -424,20 +405,24 @@ export class BodyLooks {
       setTimeout(() => { try { this.sweep(scopeKey, this.dependencies.now()); } catch { /* the next read sweeps */ } },
         BODY_LOOK_LIMITS.lifetimeMilliseconds + 250).unref();
     }
-    return true;
+    return id;
   }
 
   /**
    * A voice turn in which she said aloud that she would look, and no look was opened (the conditions stopped holding,
    * or the call was cut off): one honest line in the Talk and one activity entry, once the client has stored the turn,
-   * so that the line follows it.
+   * so that the line follows it. Nothing is said if a turn other people could hear arrived meanwhile.
    */
-  private unopened(scopeKey: string, threadId: string, code: BodyLookCode, line: string, reason: string): void {
-    this.afterTurn(scopeKey, threadId, () => {
-      const at = this.dependencies.now();
-      try { this.dependencies.record(scopeKey, { summary: `部屋を見ませんでした（${reason}）。`, outcome: 'failed', reasonCode: code }); } catch { /* her line still says it */ }
-      this.dependencies.speaker.say(scopeKey, threadId, { id: randomUUID(), outcome: 'not_seen' }, line, at);
-    });
+  private unopened(scopeKey: string, threadId: string, wait: TurnWait | null, alone: () => boolean, code: BodyLookCode, line: string, reason: string): void {
+    const say = () => {
+      try {
+        if (!alone()) return;
+        const at = this.dependencies.now();
+        try { this.dependencies.record(scopeKey, { summary: `部屋を見ませんでした（${reason}）。`, outcome: 'failed', reasonCode: code }); } catch { /* her line still says it */ }
+        this.dependencies.speaker.say(scopeKey, threadId, { id: randomUUID(), outcome: 'not_seen' }, line, at);
+      } catch { /* nothing more to do */ }
+    };
+    if (wait) void wait.stored.then(say); else say();
   }
 
   /** The last few messages of the look's Talk, then the voice turn it was opened in while that turn is not stored yet. */
@@ -459,6 +444,7 @@ export class BodyLooks {
   private close(look: StoredBodyLook, from: BodyLookOutcome, to: BodyLookOutcome, code: BodyLookCode, at: string, frameReceived = false): { message: BodyLookMessage | null } | null {
     if (!this.store.advance(look.scopeKey, look.id, from, to, at, { code, frameReceived })) return null;
     this.spoken.delete(look.id);
+    this.lookWaits.delete(look.id);
     // Her activity loop reads the outcome and records it through the gate; nothing is said in a Talk.
     if (look.threadId === BODY_LOOK_ACTIVITY_THREAD) return { message: null };
     try {

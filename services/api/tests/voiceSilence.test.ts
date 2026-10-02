@@ -160,8 +160,12 @@ describe('the facts of the moment', () => {
     const long = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。もう、ライ氏ったら。' });
     expect(ownerTurnVerdict('くすぐったいです。もう、ライ氏ったら', long)).toEqual({ respond: false, category: 'echo' });
     expect(ownerTurnVerdict('ごめんごめん', long)).toEqual({ respond: true, reason: 'answers_her_question' });
-    // Her whole line is an echo however short it is.
+    // Her whole line, or a part of four characters or more, is an echo...
     expect(ownerTurnVerdict('わっ、くすぐったいです', facts)).toEqual({ respond: false, category: 'echo' });
+    expect(ownerTurnVerdict('くすぐったい', facts)).toEqual({ respond: false, category: 'echo' });
+    // ...but a short reply or a backchannel that happens to be in her line is his answer.
+    const yes = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？なんでしょう、ライ氏。' });
+    for (const reply of ['はい', 'うん', 'ライ氏', 'なんでしょう?']) expect(ownerTurnVerdict(reply, yes)?.respond, reply).toBe(true);
   });
 
   it('finds her question anywhere in her line', () => {
