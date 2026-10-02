@@ -64,6 +64,9 @@ import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
+import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './shannonNowContract.js';
+import { SQLiteShannonNowReader } from './shannonNowReader.js';
+import { createShannonNowRoute } from './serverShannonNowRoute.js';
 import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';
 const now = () => new Date().toISOString();
@@ -166,6 +169,12 @@ const opsRoute = createOpsRoute({
   device: authorization => deviceAuth ? deviceAuth.authenticate(authorization)
     : bearerAuthorized(authorization, apiToken) ? { scopeKey: null } : null,
 });
+// 「シャノンのいま」 for the owner's own app (docs/shannon-now-contract.md): a read-only connection, held by this route only.
+const shannonNowReader = new SQLiteShannonNowReader(configuredDatabasePath());
+const shannonNowRoute = createShannonNowRoute({
+  reader: shannonNowReader, snapshot: scopeKey => (shannonNowReader.hasState(scopeKey) ? persistentStore.snapshot(scopeKey) : null), now,
+  enabled: () => shannonNowEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
+});
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -232,6 +241,10 @@ const server = createServer(async (request, response) => {
       : bearerAuthorized(request.headers.authorization, apiToken);
     if (!authorized) {
       sendJson(response, 401, { error: 'PAIRING_REQUIRED', message: '接続コードでシャノンと接続してください。' });
+      return;
+    }
+    if (url.pathname === SHANNON_NOW_PATH) {
+      shannonNowRoute(request, response, principal);
       return;
     }
     if (
@@ -369,6 +382,7 @@ function shutdown(): void {
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
+    shannonNowReader.close();
     autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;

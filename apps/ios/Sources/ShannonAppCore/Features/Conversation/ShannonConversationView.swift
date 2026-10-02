@@ -31,6 +31,9 @@ public struct ShannonConversationView: View {
     @State var showsGeminiLiveVoice = false
     @State var showsSettings = false
     @State var showsThreadList = false
+    @State var yousu: ShannonYousuModel
+    @State var yousuRequest: ShannonYousuLink.Request?
+    @State var didApplyYousuPreview = false
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -72,6 +75,7 @@ public struct ShannonConversationView: View {
         _memoryModel = State(initialValue: memoryModel)
         _testFlightDeliveryModel = State(initialValue: testFlightDeliveryModel)
         _worldSubscriptionModel = State(initialValue: worldSubscriptionModel)
+        _yousu = State(initialValue: ShannonYousuModel.make(for: model))
     }
 
     public var body: some View {
@@ -113,6 +117,8 @@ public struct ShannonConversationView: View {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
+        .onAppear { openPendingYousuLink() }
+        .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in openPendingYousuLink() }
 #if os(iOS)
         // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
         .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
@@ -159,6 +165,9 @@ public struct ShannonConversationView: View {
         .sheet(isPresented: $showsThreadList) {
             ShannonThreadListSheet(
                 model: model,
+                yousu: yousu,
+                autonomy: memoryModel.autonomy.isSupported ? memoryModel.autonomy : nil,
+                yousuRequest: $yousuRequest,
                 selectedThreadId: model.selectedThreadId,
                 openTalk: openTalkFromThreadList,
                 openWork: openWorkFromThreadList,

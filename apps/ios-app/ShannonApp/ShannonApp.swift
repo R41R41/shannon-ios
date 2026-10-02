@@ -96,6 +96,8 @@ struct ShannonApp: App {
                 // An iPhone app in the background is suspended unless it stands by: it withdraws its report when it leaves the foreground.
                 .shannonPrivateListening(privateListeningModel)
                 .onOpenURL { url in
+                    // `shannon://yousu` opens 「ようす」; every other link is a pairing link, as before.
+                    guard !ShannonYousuLink.open(url) else { return }
                     Task { await connectionModel.connect(using: url) }
                 }
                 .onChange(of: scenePhase) {
@@ -142,7 +144,7 @@ struct ShannonApp: App {
                         await calendarSharingModel.removeBeforeUnpairing()
                     }
                     if let url = ShannonAppDelegate.takePendingConnectionURL() {
-                        await connectionModel.connect(using: url)
+                        if !ShannonYousuLink.open(url) { await connectionModel.connect(using: url) }
                     } else if let code = ShannonRuntimeConfiguration.launchPairingCode {
                         await connectionModel.pair(code: code)
                     }

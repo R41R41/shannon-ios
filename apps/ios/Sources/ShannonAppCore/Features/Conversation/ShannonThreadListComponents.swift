@@ -4,11 +4,14 @@ struct ShannonThreadListDestination: Identifiable {
     let title: String
     let symbol: String
     let badge: Int?
+    /// A small mark instead of a count: something there deserves a look.
+    var attention = false
     let action: () -> Void
 
     var id: String { title }
 
     var accessibilityLabel: String {
+        if attention { return "\(title)、確かめたいことがあります" }
         guard let badge, badge > 0 else { return title }
         return "\(title)、\(badge)件"
     }
@@ -45,6 +48,11 @@ struct ShannonThreadListDestinationTile: View {
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
                     .background(palette.action, in: Capsule())
+                    .padding(ShannonSpacing.small)
+            } else if destination.attention {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(palette.attention)
                     .padding(ShannonSpacing.small)
             }
         }
@@ -128,6 +136,7 @@ struct ShannonDrawerDestinationRow: View {
     let detail: String?
     let symbol: String
     let badge: Int?
+    var attention = false
     let palette: ShannonPalette
 
     var body: some View {
@@ -158,6 +167,10 @@ struct ShannonDrawerDestinationRow: View {
                     .padding(.horizontal, 6)
                     .frame(minWidth: 20, minHeight: 20)
                     .background(palette.action, in: Capsule())
+            } else if attention {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(palette.attention)
             }
 
             Image(systemName: "chevron.right")

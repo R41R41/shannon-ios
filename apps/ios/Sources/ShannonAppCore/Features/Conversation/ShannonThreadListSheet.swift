@@ -5,9 +5,13 @@ import UIKit
 import AppKit
 #endif
 
-/// iPhone conversation list: search on top, three destination tiles, then threads grouped by date.
+/// iPhone conversation list: search on top, four destination tiles, then threads grouped by date.
 struct ShannonThreadListSheet: View {
     let model: ShannonConversationModel
+    /// 「ようす」: its models, the autonomy model its waiting items open, and a link's request for it.
+    let yousu: ShannonYousuModel
+    let autonomy: ShannonAutonomyModel?
+    @Binding var yousuRequest: ShannonYousuLink.Request?
     let selectedThreadId: String?
     let openTalk: () -> Void
     let openWork: () -> Void
@@ -22,6 +26,8 @@ struct ShannonThreadListSheet: View {
     @State var isCreating = false
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
+    @State var showsYousu = false
+    @State var yousuSegment: ShannonYousuSegment?
 
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,6 +56,7 @@ struct ShannonThreadListSheet: View {
                 action: openWork
             ),
             ShannonThreadListDestination(title: "頭の中", symbol: "brain.head.profile", badge: nil, action: openMemory),
+            yousuDestination,
             ShannonThreadListDestination(title: "設定", symbol: "gearshape", badge: nil, action: openSettings),
         ]
     }
@@ -110,6 +117,10 @@ struct ShannonThreadListSheet: View {
                 }
             }
             .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
+            .navigationDestination(isPresented: $showsYousu) { yousuPage }
+            .onChange(of: yousuRequest, initial: true) { applyYousuRequest() }
+            // One read when the list opens, so the tile can carry its mark; no polling here.
+            .task { await yousu.ops.refresh() }
             .navigationTitle("シャノン")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -154,7 +165,7 @@ struct ShannonThreadListSheet: View {
         }
     }
 
-    /// Three equal tiles; accessibility text sizes fall back to full-width native rows.
+    /// Four equal tiles; accessibility text sizes fall back to full-width native rows.
     @ViewBuilder
     func destinationsSection(palette: ShannonPalette) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -166,6 +177,7 @@ struct ShannonThreadListSheet: View {
                             detail: nil,
                             symbol: destination.symbol,
                             badge: destination.badge,
+                            attention: destination.attention,
                             palette: palette
                         )
                     }
