@@ -34,8 +34,10 @@ export interface VoiceLooks {
   routing: { appLook?: true };
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** `appLook` of a turn's body; a voice turn may carry it inside `deviceContext`, beside the other facts of the device. */
 const appLookField = (body: unknown): unknown =>
-  typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as { appLook?: unknown }).appLook : undefined;
+  !isRecord(body) ? undefined : body.appLook ?? (isRecord(body.deviceContext) ? body.deviceContext.appLook : undefined);
 
 export class ConversationLooks implements VoiceLooks {
   readonly client: AppLookClient | null = null;

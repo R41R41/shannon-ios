@@ -91,6 +91,8 @@ extension ShannonGeminiLiveSessionModel {
                     if response.companionPresent == true { guestCall.companionReported() }
                     handleDelegationResponse?(response)
                 }
+                // She looks through this app's camera while the reply is spoken (owner turns only).
+                let look = mode == .owner && localReply == nil ? ShannonAppLookSpeech.begin(response.appLook, with: performAppLook) : nil
                 ShannonVoiceDiagnostics.shared.record("gemini.response.completed", sessionID: generation.uuidString,
                     metadata: ["acknowledged_input_count": String(batch.turns.count)])
                 if mode.allowsTranscriptPersistence, !response.reply.isEmpty, let commitTurn {
@@ -111,6 +113,8 @@ extension ShannonGeminiLiveSessionModel {
                 }
                 if response.voicePlan?.shouldRespond != false {
                     failureStage = "synthesis_stream"
+                    // What she saw is her next utterance, spoken behind this reply and known to the echo guard.
+                    if let seen = await look?.value { await onSegment(seen, response.voicePlan) }
                     try await coordinator.finish()
                     try requireCurrentResponse(generation)
                     failureStage = "playback"

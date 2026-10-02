@@ -157,6 +157,8 @@ public struct ShannonVoiceDeviceContextDTO: Codable, Equatable, Sendable {
     public let requestedLocation: Bool
     public let location: ShannonVoiceDeviceLocationDTO?
     public var userUtterance: ShannonVoiceUserUtteranceDTO? = nil
+    /// What this app's camera can do in this turn; absent in 「友人も一緒」 and on a client that never looks.
+    public var appLook: ShannonAppLookClientStateDTO? = nil
 
     public init(
         timeZoneIdentifier: String,
@@ -285,6 +287,8 @@ public struct ShannonLiveVoiceDelegationResponseDTO: Codable, Equatable, Sendabl
     public let voiceMetrics: ShannonVoiceServerMetricsDTO?
     /// The server answered this owner turn as if someone else may be listening.
     public var companionPresent: Bool? = nil
+    /// She looks through this app's camera now: capture one frame and answer it.
+    public var appLook: ShannonAppLookAskDTO? = nil
 
     public init(
         threadId: String,

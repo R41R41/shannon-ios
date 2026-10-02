@@ -139,7 +139,7 @@ extension ShannonConversationModel {
                 requestedLocation: requestedLocation,
                 location: location,
                 userUtterance: userUtterance
-            )
+            ).withAppLook(participantMode == .owner ? appLookClientState() : nil)
         )
         if participantMode == .owner {
             if selectedThreadId == requestedThreadID { selectedThreadId = result.threadId }
@@ -174,7 +174,7 @@ extension ShannonConversationModel {
                 requestedLocation: requestedLocation,
                 location: location,
                 userUtterance: userUtterance
-            ),
+            ).withAppLook(participantMode == .owner ? appLookClientState() : nil),
             onSegment: onSegment
         )
         if participantMode == .owner {
