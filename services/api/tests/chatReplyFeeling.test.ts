@@ -119,9 +119,20 @@ describe('the field of the structured reply', () => {
     expect([...schema.required].sort()).toEqual(Object.keys(schema.properties).sort());
     expect(schema.properties.feeling).toEqual(REPLY_FEELING_SCHEMA);
     // With every other optional field as well, reply is still first and every key is required.
-    const all = offered({ generateThreadTitle: true, offerRoomLook: true, placeSearch: {} }).text.format.schema;
-    expect(Object.keys(all.properties)[0]).toBe('reply');
+    const all = offered({ generateThreadTitle: true, offerRoomLook: true, offerAppLook: true, placeSearch: {} }).text.format.schema;
+    expect(Object.keys(all.properties).slice(0, 2)).toEqual(['reply', 'feeling']);
+    expect(Object.keys(all.properties)).toEqual(expect.arrayContaining(['appLook', 'roomLook', 'places', 'threadTitle']));
     expect([...all.required].sort()).toEqual(Object.keys(all.properties).sort());
+    // Every combination of the optional fields keeps reply first and requires exactly its properties.
+    for (let mask = 0; mask < 32; mask += 1) {
+      const { properties, required } = (chatTurnRequestBody('gpt-test', { ...GOLDEN_BASE,
+        ...(mask & 1 ? { offerReplyFeeling: true } : {}), ...(mask & 2 ? { offerAppLook: true } : {}), ...(mask & 4 ? { offerRoomLook: true } : {}),
+        ...(mask & 8 ? { generateThreadTitle: true } : {}), ...(mask & 16 ? { placeSearch: {} } : {}) }, undefined) as ReturnType<typeof offered>).text.format.schema;
+      expect(Object.keys(properties)[0]).toBe('reply');
+      expect(Object.keys(properties).includes('feeling')).toBe(Boolean(mask & 1));
+      expect(Object.keys(properties).includes('appLook')).toBe(Boolean(mask & 2));
+      expect([...required].sort()).toEqual(Object.keys(properties).sort());
+    }
   });
 
   it('offers the existing vocabulary and the three steps voice uses, and nothing of its own', () => {
@@ -141,9 +152,9 @@ describe('the field of the structured reply', () => {
     const plain = chatTurnRequestBody('gpt-test', GOLDEN_BASE, undefined) as ReturnType<typeof offered>;
     const body = offered();
     expect(body.instructions).toBe(`${plain.instructions}\n\n${REPLY_FEELING_INSTRUCTIONS}`);
-    expect(Array.from(REPLY_FEELING_INSTRUCTIONS).length).toBeLessThanOrEqual(480);
+    expect(Array.from(REPLY_FEELING_INSTRUCTIONS).length).toBeLessThanOrEqual(580);
     expect(body.max_output_tokens).toBe(plain.max_output_tokens);
-    for (const phrase of ['strongはまれ', '人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない', 'moderate=数時間は気分として残る',
+    for (const phrase of ['strongはまれ', 'strongで何日も残るのは', '人なら後まで残る出来事のときだけ使い、一つの会話で何度も使わない', 'moderate=数時間は気分として残る',
       '新しい出来事がなければ、前より弱くするかnullにする', '別の気持ちに替えて強く出し続けたりしない', 'すでに謝ってもらったことを理由にしない',
       'moderate以上にしてよいのは、今回のライ氏の発言そのものに実際の原因があるときだけ', '特に動いていなければnull', 'replyの文面と食い違う気持ちは選ばない']) {
       expect(REPLY_FEELING_INSTRUCTIONS).toContain(phrase);
@@ -209,7 +220,9 @@ describe('reading the field', () => {
   });
 
   it('lets the stream decoder give the whole reply before one byte of the field has arrived, and without the field', () => {
-    for (const json of [turn({ feeling: { kind: 'hurt', strength: 'strong' } }), turn({ feeling: null }), turn()]) {
+    for (const json of [turn({ feeling: { kind: 'hurt', strength: 'strong' } }), turn({ feeling: null }), turn(),
+      `${turn({ feeling: { kind: 'hurt', strength: 'strong' } }).slice(0, -1)},"appLook":"none"}`, `${turn().slice(0, -1)},"appLook":"asked"}`]) {
+      expect((JSON.parse(json) as { reply: string }).reply).toBe('はい。');
       const cut = json.indexOf('"', json.indexOf('はい。')) + 1;
       const early = new ChatReplyStreamDecoder();
       expect(early.push(json.slice(0, cut))).toBe('はい。');
@@ -503,7 +516,7 @@ describe('guests and other people present never move her feeling toward the owne
     expect(decidedReplyFeeling({ replyFeeling: { kind: 'furious' as never, intensity: 0.9 } }, true, {})).toEqual({});
     // Every production source is read: the field is named only by the adapter, this module, the presence entry and the kernel's chat turn.
     const directory = new URL('../src/', import.meta.url);
-    const naming = readdirSync(directory).filter(file => file.endsWith('.ts'))
+    const naming = (readdirSync(directory, { recursive: true }) as string[]).filter(file => file.endsWith('.ts'))
       .filter(file => /replyFeeling|resolveTextReplyEmotion|usesDecidedFeeling/iu.test(readFileSync(new URL(file, directory), 'utf8'))).sort();
     // (`autonomyCore.ts` names the module's path among the core paths.)
     expect(naming).toEqual(['apiKernel.ts', 'autonomyCore.ts', 'chatModel.ts', 'chatModelSupport.ts', 'chatModelTurn.ts', 'chatReplyFeeling.ts', 'companionPresence.ts']);
@@ -543,7 +556,7 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     }
   });
 
-  it('offers no field and derives the reply\'s feeling exactly as at 7e227e6, also from a model that returns one', async () => {
+  it('offers no field and derives the reply\'s feeling exactly as the base without this change, also from a model that returns one', async () => {
     const script: Array<[string, string, ChatReplyFeeling | undefined]> = [
       [HARSH, QUIET, strong('hurt')],
       ['今日はもう別のAIと話すね', 'ボク、ちょっとすねちゃいます。', strong('seriousAnger')],
@@ -561,8 +574,10 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     const off = await run(true);
     const before = await run(false);
     expect(off.seen).toEqual(before.seen);
-    // Recorded by running these four turns on the sources of 7e227e6 (responses, stored state and model requests, ids by order).
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('ddddfebb24392e5957bfb741795ae44361c9fce57defdaad21846c966e0b7abd');
+    // Recorded by running these four turns on the sources of the base without this change (responses, stored state and model
+    // requests, ids by order). First on 7e227e6 (ddddfebb…); re-recorded on main 68cfe7e after the merge, because that commit
+    // added the app camera look to her capability text and every system prompt grew by 125 characters.
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('62314c5f3faac759cda1058938b3ead345180218303af62500397dd1f1d13994');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
