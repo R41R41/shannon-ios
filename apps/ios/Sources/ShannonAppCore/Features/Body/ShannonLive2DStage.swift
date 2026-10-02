@@ -68,11 +68,11 @@ public final class ShannonLive2DStage {
     private init() {}
 
     /// The bundled page, or nil in a build without it.
-    public static var embedFolder: URL? {
+    public static let embedFolder: URL? = {
         guard let folder = Bundle.module.url(forResource: "Live2D", withExtension: nil)?.appendingPathComponent("embed", isDirectory: true),
               FileManager.default.fileExists(atPath: folder.appendingPathComponent("embed.html").path) else { return nil }
         return folder
-    }
+    }()
 
     public static var isAvailable: Bool { embedFolder != nil }
 
@@ -313,10 +313,15 @@ public final class ShannonLive2DStage {
 
         // The page makes no request by itself; this makes sure of it for anything it might load later.
         Task { [weak self, weak webView] in
-            let rules = try? await WKContentRuleListStore.default().compileContentRuleList(
-                forIdentifier: "shannon-live2d-offline", encodedContentRuleList: ShannonLive2DBridge.offlineRules)
+            let rules = try? await ShannonLive2DBridge.offlineRuleList()
             guard let self, let webView, self.generation == generation, self.webView === webView else { return }
-            if let rules { webView.configuration.userContentController.add(rules) }
+            // Fail closed: without the block list the page is not loaded at all.
+            guard let rules else {
+                NSLog("[ShannonBody] the offline content rules did not compile; the Live2D page was not loaded")
+                self.refuse()
+                return
+            }
+            webView.configuration.userContentController.add(rules)
             webView.loadFileURL(folder.appendingPathComponent("embed.html"), allowingReadAccessTo: folder)
         }
 
@@ -357,6 +362,12 @@ public final class ShannonLive2DStage {
         framesPerSecond = nil
         lastMouthLevel = 0
         status = .unloaded
+    }
+
+    /// Something that a reload cannot mend: shown as failed until the owner asks again.
+    private func refuse() {
+        release()
+        status = .failed
     }
 
     /// The page failed, lost its drawing context, or its process ended: one reload, then an honest failure.

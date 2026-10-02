@@ -92,6 +92,23 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(moved.isMoved)
     }
 
+    func testTheOfflineRulesCompileAndNameEachScheme() async throws {
+        // The pattern language of content rules has no alternation; one rule per scheme.
+        XCTAssertFalse(ShannonLive2DBridge.offlineRules.contains("|"))
+        let rules = try JSONSerialization.jsonObject(with: Data(ShannonLive2DBridge.offlineRules.utf8)) as? [[String: Any]]
+        let filters = rules?.compactMap { ($0["trigger"] as? [String: Any])?["url-filter"] as? String }
+        XCTAssertEqual(filters, ["^https?:", "^wss?:", "^ftp:"])
+        XCTAssertEqual(rules?.compactMap { ($0["action"] as? [String: Any])?["type"] as? String }, ["block", "block", "block"])
+        // WebKit itself must accept them: the page is not loaded otherwise.
+        _ = try await ShannonLive2DBridge.offlineRuleList()
+    }
+
+    func testACancelledNavigationIsNotABrokenPage() {
+        XCTAssertTrue(ShannonLive2DBridge.isCancellation(NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)))
+        XCTAssertTrue(ShannonLive2DBridge.isCancellation(NSError(domain: "WebKitErrorDomain", code: 102)))
+        XCTAssertFalse(ShannonLive2DBridge.isCancellation(NSError(domain: NSURLErrorDomain, code: NSURLErrorFileDoesNotExist)))
+    }
+
     // MARK: The stage's rules
 
     func testThePageDrawsOnlyWhileSomeoneCanSeeIt() {

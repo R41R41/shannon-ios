@@ -19,7 +19,22 @@ final class ShannonLive2DBridge: NSObject, WKScriptMessageHandler, WKNavigationD
       return context && !context.isContextLost() ? 'ok' : 'lost';
     })();
     """
-    static let offlineRules = #"[{"trigger":{"url-filter":"^(https?|wss?|ftp):"},"action":{"type":"block"}}]"#
+    /// One rule per scheme: the content-blocker pattern language has no alternation.
+    static let offlineRules = #"""
+    [{"trigger":{"url-filter":"^https?:"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^wss?:"},"action":{"type":"block"}},
+     {"trigger":{"url-filter":"^ftp:"},"action":{"type":"block"}}]
+    """#
+    static let offlineRulesIdentifier = "shannon-live2d-offline-v2"
+
+    /// The compiled block list. The page is not loaded without it.
+    static func offlineRuleList() async throws -> WKContentRuleList {
+        guard let rules = try await WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: offlineRulesIdentifier, encodedContentRuleList: offlineRules) else {
+            throw CocoaError(.featureUnsupported)
+        }
+        return rules
+    }
 
     private weak var stage: ShannonLive2DStage?
     private let generation: Int
@@ -43,11 +58,20 @@ final class ShannonLive2DBridge: NSObject, WKScriptMessageHandler, WKNavigationD
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard !Self.isCancellation(error) else { return }
         stage?.recover(generation: generation)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard !Self.isCancellation(error) else { return }
         stage?.recover(generation: generation)
+    }
+
+    /// A navigation this delegate refused, or one that was cancelled, is not a broken page.
+    static func isCancellation(_ error: Error) -> Bool {
+        let error = error as NSError
+        return (error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled)
+            || (error.domain == "WebKitErrorDomain" && error.code == 102)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
