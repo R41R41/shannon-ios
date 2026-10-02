@@ -5,6 +5,8 @@ import {
 } from './bodyContract.js';
 import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
 import type { BodyLookAnswer } from './bodyLook.js';
+import type { BodyReactionOutcome } from './bodyReaction.js';
+import { BODY_REACTION_PATH, validatedBodyReactionRequest } from './bodyReactionContract.js';
 import type { ShannonBody } from './shannonBody.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
@@ -15,8 +17,9 @@ const LOCAL_DEVICE = 'local';
 /**
  * Routes of Shannon's body (`docs/body-contract.md`). The body reports facts, reads a
  * snapshot, registers what it can express, and reads fixed nudge lines. No route here
- * carries text from the body into a prompt. Only the answer to a look calls a model and
- * writes as Shannon (`bodyLook.ts`); every other route does neither.
+ * carries text from the body into a prompt. Two routes call a model: the answer to a look,
+ * which writes as Shannon (`bodyLook.ts`), and a touch she may answer with one line
+ * (`bodyReaction.ts`), which is kept out of the conversation unless the owner answers it.
  */
 export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): ApiResponse | Promise<ApiResponse> {
   const deviceId = request.deviceId ?? LOCAL_DEVICE;
@@ -59,6 +62,13 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     return body.looks.answer(scopeKey, deviceId, id, result).then(lookResponse);
   }
 
+  // When she is touched: her feeling moves, she remembers, and she may say one line.
+  if (request.method === 'POST' && request.path === BODY_REACTION_PATH) {
+    const reaction = validatedBodyReactionRequest(request.body);
+    if (typeof reaction === 'string') return badRequest(reaction);
+    return body.reactions.react(scopeKey, deviceId, reaction).then(reactionResponse);
+  }
+
   // What the body did with a message she started on her own: one closed outcome, no text.
   if (request.method === 'POST' && request.path.startsWith(BODY_REACH_OUT_REPORT_PREFIX)) {
     const id = bodyReachOutReportId(request.path);
@@ -88,6 +98,21 @@ const REACH_OUT_REPORT_REFUSALS = {
   conflict: [409, 'REACH_OUT_ALREADY_REPORTED', 'This device already reported another outcome for this message.'],
   expired: [410, 'REACH_OUT_EXPIRED', 'This message is too old to report on.'],
 } as const;
+
+const REACTION_REFUSALS = {
+  disabled: [403, 'BODY_REACTIONS_DISABLED', 'Reactions to a touch are switched off on the server.'],
+  ingest_disabled: [403, 'BODY_INGEST_DISABLED', 'Body events are switched off on the server.'],
+  not_owner: [403, 'BODY_REACTION_OWNER_ONLY', 'Only the body in the owner\'s own scope may ask for a reaction.'],
+  not_a_body: [403, 'BODY_REACTION_NOT_A_BODY', 'Only a device that registered its capabilities as her body may ask.'],
+  conflict: [409, 'BODY_REACTION_CONFLICT', 'This id was already used for a reaction with different content.'],
+  rate_limited: [429, 'RATE_LIMITED', 'Too many reaction requests; retry after a minute.'],
+} as const;
+
+function reactionResponse(outcome: BodyReactionOutcome): ApiResponse {
+  if (outcome.kind === 'done') return { status: 200, body: outcome.answer };
+  const [status, error, message] = REACTION_REFUSALS[outcome.kind];
+  return { status, body: { error, message } };
+}
 
 const LOOK_REFUSALS = {
   disabled: [403, 'BODY_LOOK_DISABLED', 'Looking is switched off on the server.'],

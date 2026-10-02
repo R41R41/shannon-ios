@@ -11,7 +11,9 @@ import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle,
 /**
  * One fixed day of her own activity, with every step kind and every optional part of a prompt, run with the
  * fixed cycles and without the owner's context. The same file was run on the commit before sessions and the
- * owner's context existed (78c3493); `autonomyLoopKillSwitch.test.ts` holds the digests it produced there.
+ * owner's context existed (78c3493), unchanged, and on that commit with only the owner-approved default of the
+ * day's budget (1,000 → 2,000 yen) and the wording of one forbidden item changed; `autonomyLoopKillSwitch.test.ts`
+ * holds the digests of both runs.
  * Identifiers are random, so they are replaced before a prompt is digested; nothing else is.
  */
 const MINUTE = 60_000;
@@ -42,8 +44,8 @@ export async function agenticDay(directory: string, extra: Partial<LoopHarnessOp
     path, clock, model, showing: new FakeShowing(), reachOuts: speaker, agentic: true, looks, notion,
     roomLooks: () => ({ lastHour: 0, maximumPerHour: 6, today: 0, maximumPerDay: 30 }),
     upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 15:00〜16:00' }, { kindLabel: '約束', title: '母に電話する', when: '今日 17:00' }] },
-    environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: '6', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"mac":{"deviceId":"0123456789abcdef"}}' },
-    ...extra, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
+    ...extra, environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: '6', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"mac":{"deviceId":"0123456789abcdef"}}', ...extra.environment },
+    loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
   });
   const cycle = async (plans: unknown[], minutes = 10) => {
     harness.advance(minutes * MINUTE);
@@ -78,7 +80,7 @@ export async function agenticDay(directory: string, extra: Partial<LoopHarnessOp
 }
 
 /** The loop with act → observe → think again off as well: the loop as it first was. */
-export async function plainDay(directory: string): Promise<ScenarioCall[]> {
+export async function plainDay(directory: string, extra: Partial<LoopHarnessOptions> = {}): Promise<ScenarioCall[]> {
   const path = join(directory, 'kill-switch-plain.sqlite');
   const clock = { at: '2026-10-02T04:00:00.000Z' };
   const now = () => clock.at;
@@ -89,7 +91,7 @@ export async function plainDay(directory: string): Promise<ScenarioCall[]> {
   const harness = loopHarness({
     path, clock, model, reachOuts: speaker,
     upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 15:00〜16:00' }] },
-    loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0 },
+    ...extra, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
   });
   model.plans = [{ ...FULL_PLAN, steps: [...FULL_PLAN.steps, { action: 'reach_out', reason: 'upcoming' }] }];
   await runUntilIdle(harness.loop);

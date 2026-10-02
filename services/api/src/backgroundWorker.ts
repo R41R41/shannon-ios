@@ -21,6 +21,8 @@ export interface BackgroundWorkerOptions {
   knowledgeConsolidator?: { consolidate(scopeKey: string, startAt: string, endAt: string): Promise<unknown> };
   /** The replay summary of the turn's thread is refreshed after its refinement; its failure never fails the job. */
   replaySummarizer?: { refreshForTurn(scopeKey: string, experienceId: string): Promise<unknown> };
+  /** Her impressions of the owner are updated after the turn's refinement; a failure never fails the job. */
+  impressionUpdater?: { observeTurn(scopeKey: string, experienceId: string): Promise<unknown> };
 }
 
 export class ShannonBackgroundWorker {
@@ -34,6 +36,7 @@ export class ShannonBackgroundWorker {
   private readonly minimumSleepMessages: number;
   private readonly knowledgeConsolidator: BackgroundWorkerOptions['knowledgeConsolidator'];
   private readonly replaySummarizer: BackgroundWorkerOptions['replaySummarizer'];
+  private readonly impressionUpdater: BackgroundWorkerOptions['impressionUpdater'];
   private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
 
@@ -54,6 +57,7 @@ export class ShannonBackgroundWorker {
     this.minimumSleepMessages = Math.max(1, Math.trunc(options.minimumSleepMessages ?? 3));
     this.knowledgeConsolidator = options.knowledgeConsolidator;
     this.replaySummarizer = options.replaySummarizer;
+    this.impressionUpdater = options.impressionUpdater;
   }
 
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
@@ -94,6 +98,11 @@ export class ShannonBackgroundWorker {
         await this.replaySummarizer?.refreshForTurn(job.scopeKey, payload.experienceId);
       } catch (error) {
         this.reportError(`REPLAY_SUMMARY_${safeErrorCode(error)}`);
+      }
+      try {
+        await this.impressionUpdater?.observeTurn(job.scopeKey, payload.experienceId);
+      } catch (error) {
+        this.reportError(`IMPRESSIONS_${safeErrorCode(error)}`);
       }
       return;
     }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
-import { OWNER_CONTEXT_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
+import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
 import { createOwnerContext } from '../src/autonomyOwnerContext.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
@@ -492,9 +492,12 @@ describe('a session: with the owner\'s context', () => {
     const order = [OWNER_CONTEXT_HEADER, '[さっき起きたこと]', SESSION_FACTS_HEADER].map(header => again!.prompt.indexOf(header));
     expect(order.every(index => index > 0)).toBe(true);
     expect(order).toEqual([...order].sort((left, right) => left - right));
-    // The story step is not given his context, only the rule that what came from it is not written as it is.
-    expect(draft!.prompt).not.toContain(OWNER_CONTEXT_HEADER);
+    // The story step is given his context too, at the end of its materials, with the rule that she may write about him.
+    expect(draft!.prompt).toContain(`${OWNER_CONTEXT_WRITING_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ氏: 今日は夕方の駅で写真を撮ってきました。`);
+    expect(draft!.prompt.slice(draft!.prompt.indexOf(OWNER_CONTEXT_WRITING_HEADER))).toContain('ボク: いいですね、ライ氏。どんな光でしたか。');
+    expect(draft!.prompt.indexOf(OWNER_CONTEXT_WRITING_HEADER)).toBeGreaterThan(draft!.prompt.indexOf('[自分のメモ]'));
     expect(draft!.system).toContain(ownerPrivateRule('story', true)!);
+    expect(draft!.system).not.toContain('実在の個人をモデルにしない');
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', restReason: 'つづきは夕方に' });
     store.close(); persistent.close();
   });

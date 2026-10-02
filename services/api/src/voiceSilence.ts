@@ -200,7 +200,13 @@ export function ownerVoiceTurnFacts(input: {
   at: string;
   othersPresent: boolean;
   source?: VoiceTurnFacts['source'];
+  /** Her line to a touch that this utterance answers (the body opened its microphone for the answer): a short reply is for her. */
+  answersHer?: string | null;
 }): VoiceTurnFacts {
+  if (input.answersHer) {
+    return { sheAsked: true, followsShannon: true, secondsSinceShannon: 0, shannonLastLine: Array.from(input.answersHer).slice(0, 600).join(''),
+      othersPresent: input.othersPresent, ...(input.source ? { source: input.source } : {}) };
+  }
   const last = input.history.at(-1);
   const followsShannon = last?.role === 'assistant';
   const asked = last?.role === 'assistant' && asksSomething(last.content);

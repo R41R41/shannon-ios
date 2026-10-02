@@ -242,7 +242,7 @@ describe('what the owner is told about the loop', () => {
     await runUntilIdle(harness.loop);
     const body = (await activity()).body as { loop: { state: string; label: string }; budget: { spentYen: number; capYen: number }; days: { summary: string; costYen: number }[] };
     expect(body.loop).toMatchObject({ state: 'running', label: '動いています' });
-    expect(body.budget.capYen).toBe(1_000);
+    expect(body.budget.capYen).toBe(2_000);
     expect(body.budget.spentYen).toBeGreaterThan(0);
     expect(body.days[0]!.costYen).toBe(body.budget.spentYen);
     expect(body.days[0]!.summary).toMatch(/^次にすることを考え、公開ページを1つ読み、メモを1つ書き、物語の下書きを1つ書きました。使った費用は[\d.,]+円です。$/u);
@@ -290,7 +290,7 @@ describe('what the owner\'s own prompts say about her activity', () => {
     for (const prompt of [on.text, on.voice, on.voiceTurn]) {
       expect(prompt).not.toContain('仕組みは準備中');
       expect(prompt).toContain('自分から動く時の約束（いまは調べて、書斎にメモと物語を書き、見せている。記録に残り、ライ氏が止められる）:');
-      expect(prompt).toContain('- 禁止: 1日1,000円のモデル・API予算以外の出費');
+      expect(prompt).toContain('- 禁止: 1日2,000円のモデル・API予算以外の出費、無断の連絡、他人のふり、内緒と言われたことを作品やメモに書くこと、自分の複製。');
     }
     // A guest never hears either wording.
     expect(on.guest).not.toContain('自分から動く時の約束');

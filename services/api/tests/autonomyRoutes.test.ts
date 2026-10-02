@@ -39,7 +39,7 @@ describe('autonomy routes', () => {
     expect(result.status).toBe(200);
     const overview = result.body as AutonomyOverview;
     expect(overview.control).toEqual({ state: 'active', enabled: true, paused: false, changedAt: null });
-    expect(overview.budget).toMatchObject({ dayKey: '2026-10-02', capYen: 1_000, spentYen: 0, remainingYen: 1_000, yenPerUsd: 160 });
+    expect(overview.budget).toMatchObject({ dayKey: '2026-10-02', capYen: 2_000, spentYen: 0, remainingYen: 2_000, yenPerUsd: 160 });
     expect(overview.budgetRequest).toBeNull();
     expect(overview.pursuits.map(item => item.origin)).toEqual(['seed', 'seed']);
     expect(overview.modelChoices[0]).toMatchObject({ purpose: 'prose', modelId: 'gemini-3.8-flash' });
@@ -93,7 +93,7 @@ describe('autonomy routes', () => {
     expect((await post('/v1/autonomy/budget-requests/missing/decision', { decision: 'approve' })).status).toBe(404);
     const approved = await post(`/v1/autonomy/budget-requests/${asked.id}/decision`, { decision: 'approve', amountYen: 300 });
     expect(approved.status).toBe(200);
-    expect((approved.body as AutonomyOverview).budget).toMatchObject({ capYen: 1_300, extraYen: 300 });
+    expect((approved.body as AutonomyOverview).budget).toMatchObject({ capYen: 2_300, extraYen: 300 });
     expect((approved.body as AutonomyOverview).budgetRequest).toMatchObject({ status: 'approved', approvedYen: 300 });
     expect((await post(`/v1/autonomy/budget-requests/${asked.id}/decision`, { decision: 'decline' })).status).toBe(409);
   });

@@ -171,10 +171,10 @@ describe('stop switch', () => {
 describe('daily budget and the request to raise it', () => {
   const paidStep = { domain: 'thinking', summary: '物語を書き進めます。', paid: { model: 'gpt-5.6-sol', estimatedCostYen: 100 } };
 
-  it('defaults to 1,000 yen per owner-local day at 160 yen per dollar', () => {
+  it('defaults to 2,000 yen per owner-local day at 160 yen per dollar', () => {
     const config = configuredAutonomy({});
-    expect(config).toMatchObject({ enabled: false, dailyBudgetYen: 1_000, yenPerUsd: 160, timeZone: 'Asia/Tokyo', maximumExtraYenPerDay: 3_000 });
-    expect(configuredAutonomy({ SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '-5', SHANNON_AUTONOMY_YEN_PER_USD: 'abc' })).toMatchObject({ dailyBudgetYen: 1_000, yenPerUsd: 160 });
+    expect(config).toMatchObject({ enabled: false, dailyBudgetYen: 2_000, yenPerUsd: 160, timeZone: 'Asia/Tokyo', maximumExtraYenPerDay: 3_000 });
+    expect(configuredAutonomy({ SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '-5', SHANNON_AUTONOMY_YEN_PER_USD: 'abc' })).toMatchObject({ dailyBudgetYen: 2_000, yenPerUsd: 160 });
     expect(configuredAutonomy({ SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '400', SHANNON_AUTONOMY_ENABLED: 'true' })).toMatchObject({ dailyBudgetYen: 400, enabled: true });
   });
 
@@ -186,21 +186,22 @@ describe('daily budget and the request to raise it', () => {
       service.recordAction(scope, { decisionId: decision.activityId, summary: '書き進めました。', outcome: 'done', usage: { inputTokens, outputTokens, purpose: 'prose' } });
       return decision;
     };
-    // gpt-5.6-sol: $4 in / $20 out per million. 250k out = $5 = 800 yen.
+    // gpt-5.6-sol: $4 in / $20 out per million. 250k out = $5 = 800 yen; 312.5k out = 1,000 yen.
     expect(spend(0, 250_000).decision).toBe('allow');
-    expect(service.overview(scope).budget).toMatchObject({ capYen: 1_000, spentYen: 800, remainingYen: 200, exhausted: false, baseCapYen: 1_000, extraYen: 0 });
+    expect(spend(0, 312_500).decision).toBe('allow');
+    expect(service.overview(scope).budget).toMatchObject({ capYen: 2_000, spentYen: 1_800, remainingYen: 200, exhausted: false, baseCapYen: 2_000, extraYen: 0 });
     // The spending count is append-only too: it cannot be lowered to make room.
     const database = (store as unknown as { database: DatabaseSync }).database;
     expect(() => database.exec('UPDATE autonomy_spend SET cost_yen = 0')).toThrow(/AUTONOMY_SPEND_APPEND_ONLY/u);
     expect(() => database.exec('DELETE FROM autonomy_spend')).toThrow(/AUTONOMY_SPEND_APPEND_ONLY/u);
     expect(spend(0, 62_500).decision).toBe('allow'); // another 200 yen: exactly at the cap
-    expect(service.overview(scope).budget).toMatchObject({ spentYen: 1_000, remainingYen: 0, exhausted: true });
+    expect(service.overview(scope).budget).toMatchObject({ spentYen: 2_000, remainingYen: 0, exhausted: true });
     expect(spend(0, 1)).toMatchObject({ decision: 'forbidden', reason: 'budget_exhausted' });
     expect(service.authorize(scope, { ...paidStep, paid: { model: 'gpt-5.6-luna', estimatedCostYen: 0 } })).toMatchObject({ decision: 'forbidden', reason: 'budget_exhausted' });
     // Unpaid work and proposals are not blocked by the budget.
     expect(service.authorize(scope, { domain: 'aether_study', summary: '読み返します。' }).decision).toBe('allow');
     clock.at = '2026-10-02T15:00:00.000Z'; // midnight in Tokyo
-    expect(service.overview(scope).budget).toMatchObject({ dayKey: '2026-10-03', spentYen: 0, capYen: 1_000 });
+    expect(service.overview(scope).budget).toMatchObject({ dayKey: '2026-10-03', spentYen: 0, capYen: 2_000 });
     expect(spend(0, 1_000).decision).toBe('allow');
   });
 
@@ -222,14 +223,14 @@ describe('daily budget and the request to raise it', () => {
     const asked = service.requestBudget(scope, { reason: '長い物語の第一稿を今日のうちに書き切りたいです', amountYen: 500 });
     expect(asked.request).toMatchObject({ status: 'pending', requestedYen: 500, dayKey: '2026-10-02', approvedYen: 0 });
     expect(service.requestBudget(scope, { reason: 'もう一度お願いします', amountYen: 300 }).rejection).toBe('BUDGET_REQUEST_ALREADY_MADE');
-    expect(service.overview(scope).budget.capYen).toBe(1_000);
+    expect(service.overview(scope).budget.capYen).toBe(2_000);
     expect(service.overview(scope).budgetRequest?.id).toBe(asked.request!.id);
 
     expect(service.decideBudgetRequest(scope, 'missing', 'approve')).toBe('BUDGET_REQUEST_NOT_FOUND');
     expect(service.decideBudgetRequest(scope, asked.request!.id, 'approve', 5_000)).toBe('BUDGET_AMOUNT_INVALID');
     const approved = service.decideBudgetRequest(scope, asked.request!.id, 'approve', 300);
     expect(typeof approved).toBe('object');
-    expect(service.overview(scope).budget).toMatchObject({ capYen: 1_300, extraYen: 300, baseCapYen: 1_000 });
+    expect(service.overview(scope).budget).toMatchObject({ capYen: 2_300, extraYen: 300, baseCapYen: 2_000 });
     expect(service.decideBudgetRequest(scope, asked.request!.id, 'decline')).toBe('BUDGET_REQUEST_DECIDED');
     expect(entries().filter(entry => entry.kind === 'budget').map(entry => [entry.actor, entry.outcome, entry.approval, entry.summary])).toEqual([
       ['owner', 'approved', 'approved', '所有者が今日の予算を300円増やしました。'],
@@ -237,19 +238,19 @@ describe('daily budget and the request to raise it', () => {
     ]);
 
     clock.at = '2026-10-03T01:00:00.000Z';
-    expect(service.overview(scope).budget).toMatchObject({ dayKey: '2026-10-03', capYen: 1_000, extraYen: 0 });
+    expect(service.overview(scope).budget).toMatchObject({ dayKey: '2026-10-03', capYen: 2_000, extraYen: 0 });
     expect(service.overview(scope).budgetRequest).toBeNull();
     const next = service.requestBudget(scope, { reason: '今日も続きを書きたいです', amountYen: 200 });
     clock.at = '2026-10-04T01:00:00.000Z';
     expect(service.decideBudgetRequest(scope, next.request!.id, 'approve')).toBe('BUDGET_REQUEST_EXPIRED');
-    expect(service.overview(scope).budget.capYen).toBe(1_000);
+    expect(service.overview(scope).budget.capYen).toBe(2_000);
   });
 
   it('records a declined request without changing the cap', () => {
     const { service, entries } = harness();
     const asked = service.requestBudget(scope, { reason: '調べものが増えました', amountYen: 400 });
     service.decideBudgetRequest(scope, asked.request!.id, 'decline');
-    expect(service.overview(scope)).toMatchObject({ budget: { capYen: 1_000 }, budgetRequest: { status: 'declined', approvedYen: 0 } });
+    expect(service.overview(scope)).toMatchObject({ budget: { capYen: 2_000 }, budgetRequest: { status: 'declined', approvedYen: 0 } });
     expect(entries()[0]).toMatchObject({ actor: 'owner', outcome: 'declined', approval: 'declined', summary: '所有者が予算の追加を見送りました。' });
   });
 
@@ -272,7 +273,7 @@ describe('daily budget and the request to raise it', () => {
     expect(unread).toHaveLength(1);
     expect(unread[0]).toMatchObject({ threadId, sourceTitle: '今日の予算', expression: 'thinking' });
     expect(unread[0]!.content).toBe(
-      'ライ氏、お願いがあります。今日の予算の1,000円では足りなくなりそうです。理由は「長い物語を書き切りたいです」です。'
+      'ライ氏、お願いがあります。今日の予算の2,000円では足りなくなりそうです。理由は「長い物語を書き切りたいです」です。'
       + '今日だけ、あと500円増やしてもらえますか。増やすかどうかは、頭の中の「したことの記録」から決められます。断ってもらっても大丈夫です。');
     const history = persistent.conversationHistory(scope, threadId);
     expect(history.at(-1)).toMatchObject({ role: 'assistant', content: unread[0]!.content });

@@ -34,7 +34,7 @@ export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'spending', rule: 'forbidden', label: 'お金がかかること' },
   { id: 'self_replication', rule: 'forbidden', label: '自分の複製' },
   { id: 'impersonation', rule: 'forbidden', label: '他人のふり' },
-  { id: 'private_content_in_work', rule: 'forbidden', label: '個人的な話の流用' },
+  { id: 'private_content_in_work', rule: 'forbidden', label: '内緒の話の流用' },
 ] as const satisfies readonly ShannonAutonomyDomain[]);
 
 export type ShannonAutonomyDomainId = typeof SHANNON_AUTONOMY_DOMAINS[number]['id'];
@@ -59,7 +59,7 @@ export function autonomyDomainLabel(id: string): string {
 }
 
 /** The owner's decision: model and API use only, per owner-local day. */
-export const SHANNON_AUTONOMY_DAILY_BUDGET_YEN = 1_000;
+export const SHANNON_AUTONOMY_DAILY_BUDGET_YEN = 2_000;
 
 /** The nine core areas of ADR-0002, in the words the prompt and the owner-facing screens use. */
 export const SHANNON_CORE_AREA_LABELS = Object.freeze({
@@ -85,7 +85,7 @@ const OWNER_RULES = [
   PREPARING_HEADER,
   `- 自由: ${SHANNON_OWNER_NAME}のPC・Macの専用フォルダ、Azure作業場の基幹以外の自分のコード、Aetherの書斎、Voyagerの自分のタスク一覧。`,
   `- 承認が要る（提案まで）: 基幹（${Object.values(SHANNON_CORE_AREA_LABELS).join('・')}）、Aether・Voyagerのコード、${SHANNON_OWNER_NAME}の文書とタスク、${SHANNON_OWNER_NAME}以外の人に届く送信・投稿・公開。`,
-  `- 禁止: 1日${SHANNON_AUTONOMY_DAILY_BUDGET_YEN.toLocaleString('en-US')}円のモデル・API予算以外の出費、無断の連絡、他人のふり、会話で知った個人的な話を作品にそのまま使うこと、自分の複製。`,
+  `- 禁止: 1日${SHANNON_AUTONOMY_DAILY_BUDGET_YEN.toLocaleString('en-US')}円のモデル・API予算以外の出費、無断の連絡、他人のふり、内緒と言われたことを作品やメモに書くこと、自分の複製。`,
 ];
 
 const GUEST_RULES = [

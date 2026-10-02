@@ -684,7 +684,7 @@ describe('the frame is never kept', () => {
     expect(imports('bodyLookContract.ts')).toEqual([]);
     expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
     expect(imports('bodyLookVision.ts').sort()).toEqual(['./bodyLookContract.js', './chatModelSupport.js', './llmUsage.js', '@shannon/cognition']);
-    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiValidation.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './contracts.js', './shannonBody.js']);
+    expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiValidation.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
       expect(source(name), name).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync/u);
     }

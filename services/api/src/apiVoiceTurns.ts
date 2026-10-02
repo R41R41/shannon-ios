@@ -11,6 +11,8 @@ import { ownerSaysCompanionPresent } from './voiceCompanionPresence.js';
 export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   stateStore: CompanionStateStore; conversationStore: ConversationStore;
   background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
+  /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
+  reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -28,20 +30,29 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
     if (typeof timeZone !== 'string' || timeZone.length > 64) return badRequest('timeZone is invalid');
     new Intl.DateTimeFormat('ja-JP', { timeZone });
   } catch { return badRequest('timeZone is invalid'); }
+  if (request.body.reactionId !== undefined && typeof request.body.reactionId !== 'string') return badRequest('reactionId is invalid');
+  if (request.body.companionPresent !== undefined && typeof request.body.companionPresent !== 'boolean') return badRequest('companionPresent is invalid');
   const userMessage = userTranscript.trim();
   const shannonReply = shannonTranscript.trim();
+  // Taken once, after the request is known to be valid: an unknown or expired reaction leaves an ordinary turn.
+  const reaction = dependencies.reactions?.claim(scopeKey, request.body.reactionId) ?? null;
   const threadId = dependencies.conversationStore.threadId(scopeKey,
-    typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined);
+    typeof request.body.threadId === 'string' ? request.body.threadId.trim() : reaction?.threadId ?? undefined);
   const captured = dependencies.stateStore.snapshot(scopeKey);
   const completedAt = dependencies.now();
   // The stored face is the feeling the voice acted with: the client returns the reconciled
   // emotion of this reply. Older clients send none; the reply's own cues decide instead.
   const { messageEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage, reply: shannonReply, now: completedAt,
     ...(decidedEmotion(request.body.emotion) ?? {}) });
-  if (request.body.companionPresent !== undefined && typeof request.body.companionPresent !== 'boolean') return badRequest('companionPresent is invalid');
   // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
   const companion = request.body.companionPresent === true || ownerSaysCompanionPresent(userMessage)
     ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};
+  // He answered her line aloud, so it becomes conversation: her line, his words, her reply. It is display history
+  // (no user side, no experience). With someone else able to hear, the turn follows the companion rules and her
+  // line stays out of the Talk: it was context for the reply and remains in the memory of the touch.
+  if (reaction && reaction.audience === 'owner' && !('audience' in companion)) {
+    dependencies.conversationStore.appendNote?.(scopeKey, threadId, reaction.text, reaction.saidAt, 'body-reaction');
+  }
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion, completedAt, timeZone, ...companion };
   const experience = dependencies.background.recordTurn(turn);

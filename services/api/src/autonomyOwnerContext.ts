@@ -1,8 +1,8 @@
 import {
   OWNER_AUDIENCE, SHANNON_OWNER_NAME, UNKNOWN_GUEST_PRESENCE, UNLABELLED_DISCLOSURE_MARKER, filterMeaningfulInterests, memoryIdentifier,
-  visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience,
+  visibleMemoryText, type CompanionStateSnapshot, type MemoryAudience, type MemoryDisclosure,
 } from '@shannon/cognition';
-import { OWNER_CONTEXT_HEADER, type AutonomyOwnerContext, type OwnerContextBlock } from './autonomyLoopOwnerContext.js';
+import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_SECRET_MARK, OWNER_CONTEXT_WRITING_HEADER, type AutonomyOwnerContext, type OwnerContextBlock } from './autonomyLoopOwnerContext.js';
 import type { ShannonConversationItem } from './chatModel.js';
 import type { ConversationStore } from './conversationStore.js';
 import { replayWindow } from './conversationWindow.js';
@@ -23,8 +23,9 @@ import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
  *
  * Two audiences, because her thinking stays in her head and her words do not:
  * - her thinking is the owner alone (`OWNER_AUDIENCE`): what a one-to-one conversation with him may use;
- * - a message of hers is judged as if someone whose name is not known could read it (`UNKNOWN_GUEST_PRESENCE`),
- *   because a push banner or her body may show it to anyone: what the owner asked to keep secret, what he marked
+ * - what she writes in her study (a story, a note) and a message of hers are judged as if someone whose name is not
+ *   known could read it (`UNKNOWN_GUEST_PRESENCE`): a story is meant to be shown one day, and
+ *   a push banner or her body may show a message to anyone: what the owner asked to keep secret, what he marked
  *   機微 by hand, and what was said with an unnamed guest present never reach that prompt. While someone else is
  *   present every protected line also carries the marker a conversation with other people present uses.
  */
@@ -49,9 +50,26 @@ const MARKER = /【機微:[^】]*】/gu;
 const SECRETS_MAXIMUM = 4_000;
 const SECRET_CHARACTERS = 2_000;
 
-type Mode = 'thinking' | 'message' | 'message_others';
+type Mode = 'thinking' | 'writing' | 'message' | 'message_others';
 /** The gate of a message, and the words of what her thinking was shown that this gate withholds. */
 interface Unspeakable { gate: DisclosureGate; words: string[] }
+
+/**
+ * A label that says secret whatever a later correction or a narrower category made of it: stored as a secret, or said
+ * with a guest present whose name was never established. Such an item never leaves her thinking.
+ */
+function storedSecret(disclosure: MemoryDisclosure | undefined): boolean {
+  return disclosure?.category === 'secret' || disclosure?.category === 'unknown_audience'
+    || (disclosure?.audience?.kind === 'people' && disclosure.audience.unknownGuest === true);
+}
+
+/** The ids of his stored items that must reach nobody else: what the gate of an unnamed guest leaves out, and what is stored as a secret. */
+function protectedIds(state: CompanionStateSnapshot, guest: DisclosureGate): ReadonlySet<string> {
+  const kept = guest.snapshot();
+  const open = new Set([...kept.userFacts, ...kept.relationships, ...kept.prospectiveMemories].map(item => item.id));
+  return new Set([...state.userFacts, ...state.relationships, ...state.prospectiveMemories]
+    .filter(item => !open.has(item.id) || storedSecret(item.disclosure)).map(item => item.id));
+}
 
 export function createOwnerContext(sources: OwnerContextSources, options: { characters: number; timeZone: string }): AutonomyOwnerContext {
   const build = (scopeKey: string, at: string, topic: string, mode: Mode): OwnerContextBlock | null => {
@@ -62,19 +80,24 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
     const present: MemoryAudience = alone ? OWNER_AUDIENCE : UNKNOWN_GUEST_PRESENCE;
     const budget = Math.max(0, alone ? options.characters : Math.floor(options.characters / 2));
     const gate = new DisclosureGate(present, state, sources.conversations, scopeKey);
+    const guest = alone ? new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, sources.conversations, scopeKey) : gate;
     // What her thinking is shown that a message could never carry: collected while the block is built, for the check of her own free text.
-    const unspeakable: Unspeakable | null = alone ? { gate: new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, sources.conversations, scopeKey), words: [] } : null;
+    const unspeakable: Unspeakable | null = alone ? { gate: guest, words: [] } : null;
+    let secret: ReadonlySet<string>;
+    // Without knowing which items are secret nothing of his can be handed on safely: then there is no block.
+    try { secret = protectedIds(state, guest); } catch { return null; }
     // A marker tells her to check before she speaks; without anyone else present there is nothing to check.
     const shown = (text: string) => (marked ? text : text.replace(MARKER, ''));
     const parts = [
-      part('〈覚えていること〉', guarded(() => about(sources, gate, state, scopeKey, alone, marked)), budget * SHARE.about),
+      part('〈覚えていること〉', guarded(() => about(sources, gate, state, scopeKey, alone, marked, secret)), budget * SHARE.about),
       part('〈最近のふたりの会話（古い順）〉', guarded(() => talk(sources, state, scopeKey, present, marked, budget * SHARE.talk, options.timeZone, unspeakable)), budget * SHARE.talk, 'newest'),
-      part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone, unspeakable).map(shown)), budget * SHARE.recalled),
-      ...(alone ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic)), budget * SHARE.people)] : []),
+      part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone, unspeakable, secret).map(shown)), budget * SHARE.recalled),
+      // The people she remembers: for her thinking, and for her writing without what the gate of a message withholds. A message is not given them.
+      ...(alone || mode === 'writing' ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic, guest, alone)), budget * SHARE.people)] : []),
       part('〈今日の関心〉', guarded(() => focus(sources, gate, scopeKey, at, options.timeZone, marked, unspeakable)), budget * SHARE.focus),
     ].filter(Boolean);
     if (!parts.length) return null;
-    const section = [OWNER_CONTEXT_HEADER, ...parts].join('\n');
+    const section = [mode === 'writing' ? OWNER_CONTEXT_WRITING_HEADER : OWNER_CONTEXT_HEADER, ...parts].join('\n');
     if (!unspeakable) return { section, secrets: [] };
     // Without the list of what must reach nobody else her free text could not be checked: then she is given no block at all.
     try {
@@ -83,6 +106,7 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
   };
   return {
     forThinking: (scopeKey, at, topic) => build(scopeKey, at, topic, 'thinking'),
+    forWriting: (scopeKey, at, topic) => build(scopeKey, at, topic, 'writing'),
     forMessage: (scopeKey, at, topic, others) => build(scopeKey, at, topic, others ? 'message_others' : 'message'),
   };
 }
@@ -101,7 +125,12 @@ function part(title: string, lines: readonly string[], characters: number, keep:
   let used = 0;
   for (const line of keep === 'newest' ? [...lines].reverse() : lines) {
     const text = clip(line, LINE_CHARACTERS);
-    if (!text || used + text.length > characters) break;
+    if (!text) break;
+    // A first line longer than the share is cut to it, so a long list of names does not empty the part.
+    if (used + text.length > characters) {
+      if (!kept.length && characters >= 24) kept.push(clip(text, Math.floor(characters)));
+      break;
+    }
     kept.push(text);
     used += text.length;
   }
@@ -110,11 +139,13 @@ function part(title: string, lines: readonly string[], characters: number, keep:
 }
 
 /** What she knows about him: facts, relationships, open promises, interests, and, alone, the answers of the profile projection. */
-function about(sources: OwnerContextSources, gate: DisclosureGate, state: CompanionStateSnapshot, scopeKey: string, alone: boolean, marked: boolean): string[] {
+function about(sources: OwnerContextSources, gate: DisclosureGate, state: CompanionStateSnapshot, scopeKey: string, alone: boolean, marked: boolean, secret: ReadonlySet<string>): string[] {
   const disclosed = gate.snapshot();
   const line = (id: string, original: string, stored: Parameters<DisclosureGate['marker']>[1], prefix = '') => {
     const text = visibleMemoryText(state, id, original);
-    return text ? [`- ${marked ? gate.marker(id, stored) : ''}${prefix}${text}`] : [];
+    // Her thinking sees a secret with its mark; nothing else is given it at all.
+    if (!text || (!alone && secret.has(id))) return [];
+    return [`- ${alone && secret.has(id) ? OWNER_CONTEXT_SECRET_MARK : ''}${marked ? gate.marker(id, stored) : ''}${prefix}${text}`];
   };
   const newest = <T extends { observedAt?: string; createdAt?: string }>(items: readonly T[]) =>
     [...items].sort((left, right) => (right.observedAt ?? right.createdAt ?? '').localeCompare(left.observedAt ?? left.createdAt ?? ''));
@@ -131,7 +162,9 @@ function about(sources: OwnerContextSources, gate: DisclosureGate, state: Compan
   // The projection is already filtered for forgetting and corrections; it has no labels, so it is for her thinking only.
   // An answer that only repeats a fact above is not listed twice.
   const answers = alone ? projectionAnswers(sources.profile?.promptProjection(scopeKey) ?? '').filter(answer => !lines.some(known => known.includes(answer.answer))) : [];
-  return [...lines, ...answers.map(item => `- ${item.question === item.answer ? item.answer : `${item.question}: ${item.answer}`}`)];
+  // An answer has no label of its own: it is secret when it says what a secret item says.
+  const secretWords = [...state.userFacts, ...state.relationships].filter(item => secret.has(item.id)).flatMap(item => [item.statement, visibleMemoryText(state, item.id, item.statement) ?? '']).filter(Boolean);
+  return [...lines, ...answers.map(item => `- ${secretWords.some(words => item.answer.includes(words) || words.includes(item.answer)) ? OWNER_CONTEXT_SECRET_MARK : ''}${item.question === item.answer ? item.answer : `${item.question}: ${item.answer}`}`)];
 }
 
 /** The `[User knowledge]` lines of the profile projection as question and answer, without their bookkeeping. */
@@ -152,10 +185,18 @@ function talk(sources: OwnerContextSources, state: CompanionStateSnapshot, scope
   let left = Math.floor(characters);
   for (const thread of sources.conversations.listThreads(scopeKey).slice(0, RECENT_THREADS)) {
     if (left < 40) break;
-    const visible = visibleReplayMessages(state, sources.conversations, scopeKey, thread.threadId, present, 60).messages;
-    for (const entry of unspeakable ? visible : []) if (!unspeakable!.gate.allowsMessage(entry.message)) unspeakable!.words.push(entry.message.content);
+    const replayed = visibleReplayMessages(state, sources.conversations, scopeKey, thread.threadId, present, 60).messages;
+    // Outside her thinking only completed turns are replayed. A message of hers that belongs to no turn (one she started, a
+    // reminder, the summary of a call) has no label to be judged by, and may speak of something secret.
+    const turns = unspeakable ? null : new Set((sources.conversations.experiencesById?.(scopeKey, [...new Set(replayed.flatMap(entry => entry.message.sourceExperienceId ?? []))]) ?? []).map(turn => turn.id));
+    const visible = turns ? replayed.filter(entry => entry.message.sourceExperienceId !== undefined && turns.has(entry.message.sourceExperienceId)) : replayed;
+    const withheld = new Set(unspeakable ? visible.filter(entry => !unspeakable.gate.allowsMessage(entry.message)).map(entry => entry.message.id) : []);
+    for (const entry of visible) if (withheld.has(entry.message.id)) unspeakable!.words.push(entry.message.content);
     // With someone else present the user side carries the marker the gate gave it; otherwise the stored words as they are.
-    const items: ShannonConversationItem[] = visible.map(entry => ({ role: entry.message.role, content: marked ? entry.item.content : entry.message.content }));
+    // Her thinking sees a secret turn with its mark.
+    const items: ShannonConversationItem[] = visible.map(entry => ({
+      role: entry.message.role, content: `${withheld.has(entry.message.id) ? OWNER_CONTEXT_SECRET_MARK : ''}${marked ? entry.item.content : entry.message.content}`,
+    }));
     const window = replayWindow(items, {
       budgetCharacters: left, maximumMessages: 40, minimumMessages: 0, recentCharacters: MESSAGE_CHARACTERS, olderCharacters: MESSAGE_CHARACTERS, spoken: true,
     });
@@ -170,26 +211,35 @@ function talk(sources: OwnerContextSources, state: CompanionStateSnapshot, scope
 }
 
 /** Memories that fit what she is pursuing, by the deterministic recall of a turn: no model, the same gates. */
-function recalled(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, at: string, topic: string, present: MemoryAudience, timeZone: string, unspeakable: Unspeakable | null): string[] {
+function recalled(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, at: string, topic: string, present: MemoryAudience, timeZone: string, unspeakable: Unspeakable | null, secret: ReadonlySet<string>): string[] {
   if (!topic.trim()) return [];
-  const peopleRecall = sources.people?.recall(scopeKey, state, topic, present);
+  const candidates = sources.people?.recall(scopeKey, state, topic, present).candidates ?? [];
+  const secretPeople = new Set(candidates.filter(item => storedSecret(item.disclosure)).map(item => item.id));
   const context = prepareTurnCognitiveContext(state, sources.conversations, {
     scopeKey, message: topic, occurredAt: at, channel: 'text', present, timeZone, locationLabels: [],
-    ...(peopleRecall ? { additionalCandidates: peopleRecall.candidates } : {}),
+    // Outside her thinking, what was said with an unnamed guest present is not even a candidate.
+    additionalCandidates: unspeakable ? candidates : candidates.filter(item => !secretPeople.has(item.id)),
   });
-  for (const memory of unspeakable ? context.memories : []) if (!unspeakable!.gate.allowsRecallId(memory.id)) unspeakable!.words.push(memory.summary);
-  return context.memories.map(memory => `- (${memory.observedAt.slice(0, 10)}) ${memory.summary}`);
+  const isSecret = (id: string) => secret.has(id) || secretPeople.has(id) || Boolean(unspeakable && !unspeakable.gate.allowsRecallId(id));
+  for (const memory of unspeakable ? context.memories : []) if (isSecret(memory.id)) unspeakable!.words.push(memory.summary);
+  return context.memories.filter(memory => unspeakable || !secret.has(memory.id))
+    .map(memory => `- ${unspeakable && isSecret(memory.id) ? OWNER_CONTEXT_SECRET_MARK : ''}(${memory.observedAt.slice(0, 10)}) ${memory.summary}`);
 }
 
-/** Who she remembers, and what was last talked about with them. For her thinking only: these carry no label a message could be judged by. */
-function people(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, topic: string): string[] {
+/**
+ * Who she remembers, and what was last talked about with them. Her thinking sees all of it, a secret with its mark; her
+ * writing only what the gate of an unnamed guest lets through and what was not said with an unnamed guest present.
+ */
+function people(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, topic: string, guest: DisclosureGate, alone: boolean): string[] {
   if (!sources.people) return [];
   const known = sources.people.listPeople(scopeKey).filter(person => !person.forgottenAt).slice(0, 8);
+  const secret = (item: { recallId: string; disclosure: MemoryDisclosure }) => storedSecret(item.disclosure) || !guest.allows(item.recallId, item.disclosure);
   const items = [...sources.people.recall(scopeKey, state, topic, OWNER_AUDIENCE).items].filter(item => item.kind !== 'turn')
+    .filter(item => alone || !secret(item))
     .sort((left, right) => right.observedAt.localeCompare(left.observedAt)).slice(0, 4);
   return [
-    ...(known.length ? [`- ${known.map(person => `${person.displayName}さん${person.howKnown ? `（${person.howKnown}）` : ''}`).join('、')}`] : []),
-    ...items.map(item => `- (${item.observedAt.slice(0, 10)} ${item.audienceLabel}) ${item.text.replace(/\n/gu, ' / ')}`),
+    ...(known.length ? [`- ${known.map(person => `${person.displayName}さん`).join('、')}`] : []),
+    ...items.map(item => `- ${alone && secret(item) ? OWNER_CONTEXT_SECRET_MARK : ''}(${item.observedAt.slice(0, 10)} ${item.audienceLabel}) ${item.text.replace(/\n/gu, ' / ')}`),
   ];
 }
 
@@ -212,19 +262,19 @@ function secrets(sources: OwnerContextSources, state: CompanionStateSnapshot, sc
   // Whatever of his state a conversation with an unnamed guest would not be given: an item withheld by its own label, and
   // one derived from a withheld turn, whatever its own label says. Each with its wording as stored and as she is shown it.
   const kept = gate.snapshot();
-  const missing = <T extends { id: string }>(all: readonly T[], open: readonly T[]) => all.filter(item => !open.some(other => other.id === item.id));
+  const secret = protectedIds(state, gate);
   const worded = (id: string, text: string, evidence?: string) => [text, visibleMemoryText(state, id, text) ?? '', evidence ?? ''];
   const items = [
-    ...missing(state.userFacts, kept.userFacts).flatMap(item => worded(item.id, item.statement, item.evidence)),
-    ...missing(state.relationships, kept.relationships).flatMap(item => worded(item.id, item.statement, item.evidence)),
-    ...missing(state.prospectiveMemories, kept.prospectiveMemories).flatMap(item => worded(item.id, item.summary)),
+    ...state.userFacts.filter(item => secret.has(item.id)).flatMap(item => worded(item.id, item.statement, item.evidence)),
+    ...state.relationships.filter(item => secret.has(item.id)).flatMap(item => worded(item.id, item.statement, item.evidence)),
+    ...state.prospectiveMemories.filter(item => secret.has(item.id)).flatMap(item => worded(item.id, item.summary)),
     ...state.interests.filter(interest => !kept.interests.includes(interest)),
   ];
   // A turn is withheld with its own label, and also when a secret was in front of her when she answered it.
-  const turns = sources.conversations.experienceCandidates(scopeKey).filter(turn => !gate.allowsTurn(turn))
+  const turns = sources.conversations.experienceCandidates(scopeKey).filter(turn => storedSecret(turn.disclosure) || !gate.allowsTurn(turn))
     .flatMap(turn => [turn.userMessage, turn.shannonReply]);
   const told = sources.people ? sources.people.recall(scopeKey, state, '', OWNER_AUDIENCE).items
-    .filter(item => !gate.allows(item.recallId, item.disclosure)).map(item => item.text) : [];
+    .filter(item => storedSecret(item.disclosure) || !gate.allows(item.recallId, item.disclosure)).map(item => item.text) : [];
   const all = [...new Set([...unspeakable.words, ...items, ...told, ...turns].map(text => text.trim().slice(0, SECRET_CHARACTERS)).filter(Boolean))];
   // A list too long to check in full would leave some of it unchecked: then she is given no block.
   if (all.length > SECRETS_MAXIMUM) throw new Error('OWNER_CONTEXT_SECRETS_TOO_MANY');

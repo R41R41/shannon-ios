@@ -15,6 +15,7 @@ import {
 } from './platformPeople.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import type { ConversationStore } from './conversationStore.js';
+import { platformImpressionLines } from './impressionRecall.js';
 
 export const SHANNON_PLATFORM_TURN_PATH = '/v1/platform/turns';
 export const SHANNON_PLATFORM_CONTEXT_PATH = '/v1/platform/context';
@@ -209,11 +210,14 @@ export class PlatformBridgeService {
       .filter(id => id !== binding.ownerUserId).slice(0, MAXIMUM_CONTEXT_PARTICIPANTS);
     const peopleLines = this.people && this.peopleEnabled() && !gate.ownerOnly
       ? this.people.contextLines(scopeKey, request.platform, userIds, present, ownerPresent) : [];
+    // Her impressions of the people here, only those everyone in this conversation has seen form.
+    const impressionLines = peopleLines.length ? platformImpressionLines(this.conversationStore, snapshot, scopeKey, {
+      personIds: userIds.flatMap(id => this.people!.person(scopeKey, request.platform, id)?.id ?? []), present, at: this.now() }) : [];
     // A conversation other people can read: items that must not reach a model are removed, protected ones are
     // marked, and the projection carries the check to make before saying them.
     const projection = gate.ownerOnly
       ? buildCompanionStatePrompt(snapshot, { maximumCharacters: 2_400 })
-      : [SHARED_AUDIENCE_HEADER, ...peopleLines, sharedProfilePrompt(gate, 16, !ownerPresent)].join('\n').slice(0, 2_400);
+      : [SHARED_AUDIENCE_HEADER, ...peopleLines, ...impressionLines, sharedProfilePrompt(gate, 16, !ownerPresent)].join('\n').slice(0, 2_400);
     return Object.freeze({
       schemaVersion: 1 as const,
       stateVersion: gate.ownerOnly ? snapshot.version : 0,

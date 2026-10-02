@@ -279,6 +279,8 @@ export class SQLitePeopleMemoryStore implements PeopleMemoryStore {
         this.database.prepare('UPDATE OR IGNORE person_platform_identities SET person_id = ? WHERE scope_key = ? AND person_id = ?')
           .run(intoId, scopeKey, fromId);
       } catch { /* the identity registry has not been created in this database */ }
+      // Her impressions of the merged person move with them; the next update merges near-duplicates.
+      try { this.database.prepare('UPDATE person_impressions SET person_key = ? WHERE scope_key = ? AND person_key = ?').run(intoId, scopeKey, fromId); } catch { /* no impressions table here */ }
       this.database.prepare('DELETE FROM people WHERE scope_key = ? AND person_id = ?').run(scopeKey, fromId);
       return this.updatePerson(scopeKey, intoId, { aliases: [...into.aliases, from.displayName, ...from.aliases] }, at);
     });

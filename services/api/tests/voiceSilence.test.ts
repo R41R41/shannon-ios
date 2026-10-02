@@ -132,6 +132,12 @@ describe('the facts of the moment', () => {
     expect(facts).toEqual({ sheAsked: true, followsShannon: true, secondsSinceShannon: 10, shannonLastLine: 'おはようございます。今日は何をしますか？', othersPresent: false, source: 'speech' });
   });
 
+  it('takes an utterance that answers her line to a touch as said to her', () => {
+    const facts = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。' });
+    expect(facts).toMatchObject({ sheAsked: true, followsShannon: true, shannonLastLine: 'わっ、くすぐったいです。' });
+    expect(ownerTurnVerdict('うん', facts)).toEqual({ respond: true, reason: 'answers_her_question' });
+  });
+
   it('finds her question anywhere in her line', () => {
     for (const content of ['何にしますか？決まったら教えてくださいね。', '散歩に行きましょうか。', 'どれがいいかな', 'コーヒーにしますか、それとも紅茶にしますか？']) {
       expect(ownerVoiceTurnFacts({ history: [{ role: 'assistant', content }], at, othersPresent: false }).sheAsked, content).toBe(true);

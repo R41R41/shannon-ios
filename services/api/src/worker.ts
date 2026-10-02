@@ -10,21 +10,28 @@ import { SQLitePeopleMemoryStore } from './peopleMemoryStore.js';
 import { PlatformPeople } from './platformPeople.js';
 import { createConfiguredPlatformSummaryWriter, PlatformConversationSummarizer } from './platformPeopleSummaries.js';
 import { ConversationReplaySummarizer, createConfiguredReplaySummaryWriter } from './conversationReplaySummary.js';
+import { createConfiguredImpressionAnalyzer, ImpressionUpdater } from './impressionUpdater.js';
 
 const store = new SQLiteShannonStore({ path: configuredDatabasePath(), now: () => new Date().toISOString() });
 const knowledge = new ShannonKnowledgeConsolidator(store, store, store, createConfiguredKnowledgeAnalyzer(process.env, store), store);
 const peopleStore = new SQLitePeopleMemoryStore(configuredDatabasePath());
 const platformSummaries = new PlatformConversationSummarizer(peopleStore, new PlatformPeople(peopleStore, store),
   createConfiguredPlatformSummaryWriter(process.env, store), store);
+// Her impressions of people: one bounded call after a turn (the owner) and after the sleep batch (people met on a platform).
+const impressions = new ImpressionUpdater(store, store, store.impressionStore(), createConfiguredImpressionAnalyzer(process.env, store), store,
+  { people: peopleStore, timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo' });
 const worker = new ShannonBackgroundWorker(store, store, store, createConfiguredSleepMemoryAnalyzer(process.env, store), {
   timeZone: process.env.SHANNON_SLEEP_TIMEZONE?.trim() || 'Asia/Tokyo',
   sleepHour: parseInteger(process.env.SHANNON_SLEEP_HOUR, 3),
   minimumSleepMessages: parseInteger(process.env.SHANNON_SLEEP_MIN_MESSAGES, 3),
   // What left a thread's replay window is summarized here, after the turn's refinement, inside the shared background budget.
   replaySummarizer: new ConversationReplaySummarizer(store, store, createConfiguredReplaySummaryWriter(process.env, store), store),
-  // Both run after a completed sleep batch, inside the shared background budget; neither can fail the batch.
+  impressionUpdater: impressions,
+  // All run after a completed sleep batch, inside the shared background budget; none can fail the batch.
   knowledgeConsolidator: { consolidate: async (scopeKey, startAt, endAt) => {
-    try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally { await platformSummaries.consolidate(scopeKey, startAt, endAt); }
+    try { await knowledge.consolidate(scopeKey, startAt, endAt); } finally {
+      try { await platformSummaries.consolidate(scopeKey, startAt, endAt); } finally { await impressions.observePlatformPeople(scopeKey, startAt, endAt); }
+    }
   } },
 });
 const embeddingWorker = new MemoryEmbeddingWorker(store, store, configuredMemoryModelGateway(process.env, store), store, {

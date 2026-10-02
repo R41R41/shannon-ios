@@ -163,6 +163,8 @@ export interface ConversationStore {
   saveReplaySummary?(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void;
   /** The thread a completed turn was stored in. */
   threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
+  /** Her impressions of people (`impressions.ts`). Absent: none are read or written. */
+  impressionStore?(): import('./impressions.js').ImpressionStore;
 }
 
 export class InMemoryConversationStore implements ConversationStore {

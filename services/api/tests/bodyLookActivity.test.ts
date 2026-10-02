@@ -676,9 +676,9 @@ describe('the limits of looking in her own time', () => {
   it('does not look when the day\'s budget has no room for the call, and does not ask for more', async () => {
     const h = stage2();
     await h.bodyShowing();
-    // While she thinks, the day's spending reaches 996 of 1,000 yen: the look's estimate no longer fits.
+    // While she thinks, the day's spending reaches 1,996 of 2,000 yen: the look's estimate no longer fits.
     h.model.during = () => {
-      h.store.recordSpend(scope, '2026-10-02', h.clock.at, { model: 'gemini-3.8-flash', inputTokens: 0, outputTokens: 0, costUsd: 0, costYen: 996 });
+      h.store.recordSpend(scope, '2026-10-02', h.clock.at, { model: 'gemini-3.8-flash', inputTokens: 0, outputTokens: 0, costUsd: 0, costYen: 1_996 });
     };
     h.model.plans = [LOOK_PLAN];
     expect(await runUntilIdle(h.loop)).toEqual(['stepped', 'budget']);

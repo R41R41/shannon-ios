@@ -35,6 +35,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/voiceConversationInstructions.ts',
     'services/api/src/voiceIntroductionInstructions.ts',
     'services/api/src/chatModelSupport.ts',
+    // What she is told, and how her line is read, when she is touched.
+    'services/api/src/bodyReactionPrompt.ts',
   ]),
   emotion: Object.freeze([
     'packages/cognition/src/affect.ts',
@@ -47,6 +49,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/stateRestore.ts',
     'services/api/src/companionPresence.ts',
     'services/api/src/voiceEmotionPlan.ts',
+    // A touch as an input to the one emotion state: the touch → feeling table, and the one entrance that applies it.
+    'packages/cognition/src/touchEmotion.ts',
+    'services/api/src/bodyTouch.ts',
   ]),
   authentication: Object.freeze([
     'services/api/src/apiAuth.ts',
@@ -93,6 +98,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/apiPeopleMemoryRoutes.ts',
     'services/api/src/platformPeople.ts',
     'services/api/src/platformPeopleSummaries.ts',
+    // Her impressions of people: what is kept, what reaches a reply, and how the owner forgets them.
+    'services/api/src/impressions.ts',
+    'services/api/src/sqliteImpressions.ts',
+    'services/api/src/impressionRecall.ts',
+    'services/api/src/impressionUpdater.ts',
+    'services/api/src/impressionViews.ts',
     'services/api/src/platformBridge.ts',
     'services/api/src/voiceCompanionPresence.ts',
     'services/api/src/memoryForgetCommand.ts',
@@ -109,6 +120,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/upcomingStore.ts',
     'services/api/src/ownerUpcoming.ts',
     'services/api/src/ownerUpcomingWiring.ts',
+    // A touch as an experience she recalls, and her line while it waits outside the conversation.
+    'services/api/src/bodyTouchMemory.ts',
+    'services/api/src/bodyReactionStore.ts',
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/autonomyCore.ts',
@@ -195,6 +209,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/chatReplyStreamDecoder.ts',
     'services/api/src/serverGeminiLiveRoute.ts',
     'services/api/src/serverGeminiSpeechRoute.ts',
+    // The reflex from a touch to her answer, and its one model call.
+    'services/api/src/bodyReaction.ts',
+    'services/api/src/bodyReactionModel.ts',
   ]),
   deployment: Object.freeze([
     'deploy/',
