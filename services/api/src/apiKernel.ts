@@ -1,13 +1,13 @@
 import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
-  resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
-import { commitReplyEmotionLater, presentCompanionState } from './companionPresence.js';
+import { commitReplyEmotionLater, presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
+import { emotionTiming } from './emotionTiming.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
@@ -495,5 +495,5 @@ export class ShannonApiKernel {
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }
 }
 export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString(), options: ShannonApiKernelOptions = {}): ShannonApiKernel {
-  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now), now, options);
+  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now, emotionTiming()), now, options);
 }

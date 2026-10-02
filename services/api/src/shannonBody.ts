@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { SHANNON_OWNER_NAME, currentShannonEmotion, type CompanionStateStore } from '@shannon/cognition';
+import { SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
 import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
@@ -18,6 +18,7 @@ import { BodyTouches } from './bodyTouch.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
+import { emotionTiming } from './emotionTiming.js';
 import type { ConversationStore } from './conversationStore.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from './reachOutReports.js';
 
@@ -240,7 +241,7 @@ export class ShannonBody {
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
     // 「いま」 as the state sheet shows it. Its cause is conversation text and stays out: the body may be on a stream.
     const mood = presentCompanionState(snapshot, at).presence.mood;
-    const current = currentShannonEmotion(snapshot.expressiveEmotion, at);
+    const current = presentShannonFeeling(snapshot, at, emotionTiming());
     const overview = this.dependencies.autonomy.overview(scopeKey);
     // This read is what tells her the window is visible; an open look for this device rides on the snapshot.
     const looking = this.looks.presence(scopeKey, deviceId, at);

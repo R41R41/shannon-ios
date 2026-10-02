@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore } from '@shannon/cognition';
+import type { CompanionClock, CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore, ShannonEmotionTiming } from '@shannon/cognition';
 import type { BackgroundJobStore, ClaimedBackgroundJob, DailyUserMessage } from './backgroundJobStore.js';
 import type { ShannonConversationItem } from './chatModel.js';
 import type {
@@ -38,7 +38,7 @@ import { SQLiteImpressionStore } from './sqliteImpressions.js';
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 export interface PersistedExperienceEvent { sequence: number; id: string; scopeKey: string; type: string; observedAt: string; payload: unknown; }
-export interface SQLiteShannonStoreOptions { path: string; now: CompanionClock; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number; }
+export interface SQLiteShannonStoreOptions { path: string; now: CompanionClock; /** Absent: this process's `emotionTiming()`. */ emotionTiming?: ShannonEmotionTiming; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number; }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
   private readonly context: SQLiteStoreContext;

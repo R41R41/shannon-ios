@@ -622,7 +622,7 @@ describe('Shannon local API kernel', () => {
 
   it('captures one immutable state version for a chat turn', async () => {
     let tick = 0;
-    const api = createLocalApiKernel(() => `2026-08-31T00:00:0${tick++}.000Z`);
+    const api = createLocalApiKernel(() => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`);
     const first = await api.dispatch({
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: 'こんにちは' },
     });
@@ -646,7 +646,7 @@ describe('Shannon local API kernel', () => {
     let tick = 0;
     const model = new RecordingChatModel();
     const api = createLocalApiKernel(
-      () => `2026-08-31T00:00:0${tick++}.000Z`,
+      () => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`,
       { chatModel: model },
     );
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '最初' } });
@@ -1055,7 +1055,7 @@ describe('Shannon local API kernel', () => {
 
   it('updates emotion and recalled memories only behind the response lane', async () => {
     let tick = 0;
-    const api = createLocalApiKernel(() => `2026-08-31T00:00:0${tick++}.000Z`);
+    const api = createLocalApiKernel(() => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`);
     const first = await api.dispatch({
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '創作を進められて嬉しい！' },
     });

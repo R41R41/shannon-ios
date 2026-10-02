@@ -14,6 +14,7 @@ import {
   type ShannonIntent,
   type ShannonSituationSnapshot,
 } from '@shannon/cognition';
+import { emotionTiming } from './emotionTiming.js';
 import type { ConversationStore } from './conversationStore.js';
 import { MemoryWithholding } from './memoryVisibility.js';
 import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
@@ -175,7 +176,7 @@ function turnPrompt(
   }
   return [buildTurnCognitivePrompt(situation, memories), buildIntentPrompt(frame),
     // KnowledgeStore projections may not yet contain the commitment extension.
-    buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200, now: situation.occurredAt }),
+    buildCompanionStatePrompt({ ...snapshot, interests: [], userFacts: [], relationships: [], activeMemories: [] }, { maximumCharacters: 1_200, now: situation.occurredAt, timing: emotionTiming() }),
   ].join('\n\n');
 }
 

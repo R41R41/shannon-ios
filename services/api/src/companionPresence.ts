@@ -1,7 +1,11 @@
 import {
   calibrateTemperament,
   explainTemperament,
+  presentShannonFeeling,
   presentShannonMood,
+  resolveReplyEmotion as resolveReplyEmotionWith,
+  type ReplyEmotion,
+  type ReplyEmotionInput,
   type CompanionStateEvent,
   type CompanionStateSnapshot,
   type CompanionStateStore,
@@ -9,6 +13,9 @@ import {
   type ShannonPresentMood,
   type ShannonTemperamentReasons,
 } from '@shannon/cognition';
+import { emotionTiming } from './emotionTiming.js';
+
+export { emotionTiming };
 
 const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 const SHARED_TIME_LOOKBACK_MILLISECONDS = 31 * 24 * 60 * 60_000;
@@ -49,7 +56,7 @@ export function sharedTimeEvent(
 }
 
 export interface CompanionPresence {
-  /** 「いま」: the feeling at read time, through the carry-over rule shared by text and voice. */
+  /** 「いま」: the feeling at read time on her awake clock, through the one reading shared by text, voice and the body. */
   mood: ShannonPresentMood;
   /** What the shown trait values are made of. Neutral status text, not Shannon speaking. */
   temperamentReasons: ShannonTemperamentReasons;
@@ -68,6 +75,7 @@ export function presentCompanionState(
   snapshot: CompanionStateSnapshot,
   now: string,
   feeling?: ShannonExpressiveEmotion,
+  timing = emotionTiming(),
 ): PresentedCompanionState {
   // An unreadable clock keeps the last calibrated day instead of pretending a month has passed.
   const today = Number.isFinite(Date.parse(now)) ? ownerDay(now) : snapshot.sharedDays?.at(-1) ?? ownerDay(now);
@@ -75,26 +83,40 @@ export function presentCompanionState(
     ...snapshot,
     temperament: snapshot.sharedDays ? calibrateTemperament(snapshot, today) : snapshot.temperament,
     presence: {
-      mood: presentShannonMood(feeling ? { ...snapshot, expressiveEmotion: feeling } : snapshot, now),
+      mood: presentShannonMood(feeling ? { ...snapshot, expressiveEmotion: feeling } : snapshot, now, timing),
       temperamentReasons: explainTemperament(snapshot, today),
     },
   };
 }
 
 /**
+ * The feeling a turn starts from. On her awake clock it is what she feels now (the reaction of the
+ * moment or what lies underneath), which the resolver uses as it stands; under `clock: 'wall'` it
+ * is the stored feeling, which the resolver carries by the wall-clock rule as before.
+ */
+export function feelingBeforeTurn(snapshot: CompanionStateSnapshot, now: string, timing = emotionTiming()): ShannonExpressiveEmotion | undefined {
+  return timing.clock === 'awake' ? presentShannonFeeling(snapshot, now, timing) : snapshot.expressiveEmotion;
+}
+
+/** Her feeling for one completed reply, with this process's emotion timing. Callers on the server use this, not the pure function. */
+export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
+  return resolveReplyEmotionWith({ timing: emotionTiming(), ...input });
+}
+
+/**
  * Stores the feeling of a text reply on a later tick, after the response has
  * been returned, so the reply never waits for it. A failure only loses carry-over.
+ * A neutral reply stores no feeling; it still was a moment she was awake.
  */
 export function commitReplyEmotionLater(
   stateStore: CompanionStateStore,
   scopeKey: string,
   emotion: ShannonExpressiveEmotion,
 ): void {
-  // A neutral reply adds nothing: a stored feeling already settles by itself at read time.
-  if (emotion.primary === 'neutral') return;
   setImmediate(() => {
     try {
-      stateStore.apply(scopeKey, { type: 'expressive-emotion-updated', emotion });
+      // A neutral reply adds no feeling: a stored one settles by itself at read time. Her awake clock still moves.
+      stateStore.apply(scopeKey, emotion.primary === 'neutral' ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion });
     } catch (error) {
       console.error('Shannon reply emotion commit failed', error);
     }

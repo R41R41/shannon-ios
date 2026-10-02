@@ -64,8 +64,13 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       // API and sleep worker share this database. Read only after obtaining
       // the write lock so a later writer cannot overwrite a fresh correction.
       const current = this.snapshot(scopeKey);
-      const next = reduceCompanionState(current, event, this.context.now());
+      const next = reduceCompanionState(current, event, this.context.now(), this.context.emotionTiming());
       if (next === current) return current;
+      if (event.type === 'awake-observed') {
+        // Her clock alone moved: no event row, no version, no prompt projection.
+        this.context.database.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify(next), scopeKey);
+        return next;
+      }
       this.context.database.prepare(`
         UPDATE companion_states
         SET version = ?, updated_at = ?, snapshot_json = ?
