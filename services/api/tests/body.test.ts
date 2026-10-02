@@ -166,12 +166,15 @@ describe('body events in an owner conversation turn', () => {
     );
     expect(store.recent(scope, 'others', ago(10 * MINUTE), 10)).toHaveLength(3);
     const prompt = await chat('こんにちは');
-    for (const word of [HEADER, 'くすぐられた', '手をつないで', '席へ戻った']) expect(prompt).not.toContain(word);
+    // The block and its dated lines stay owner-only. A touch moves her feeling whoever was around (owner decision
+    // 2026-10-02), so the feeling line of the prompt may name it as its cause; that is not the block.
+    for (const word of [HEADER, '分前にくすぐられた', '分前に手をつないで', '席へ戻った']) expect(prompt).not.toContain(word);
     // With an owner event next to them, only the owner's appears.
     await events({ id: 'k1', type: 'poke', audience: 'owner', occurredAt: ago(0) });
     const mixed = await chat('どうしたの');
-    expect(mixed).toContain('- たったいま、つつかれた');
-    for (const word of ['くすぐられた', '手をつないで', '席へ戻った']) expect(mixed).not.toContain(word);
+    const block = mixed.slice(mixed.indexOf(HEADER)).split('\n\n')[0]!;
+    expect(block).toContain('- たったいま、つつかれた');
+    for (const word of ['くすぐられた', '手をつないで', '席へ戻った']) expect(block).not.toContain(word);
   });
 
   it('stays out of a turn that is not for the owner alone', async () => {

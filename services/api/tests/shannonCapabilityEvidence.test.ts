@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
+  SHANNON_CAPABILITIES, SHANNON_LIMITATIONS, SHANNON_ROOM_LOOK_RULES, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, isForgetCitedMemoriesCommand, shannonCapabilityPrompt, withAutonomyRunning,
   type ShannonCapabilityId,
 } from '@shannon/cognition';
 import { FileAetherContextReader } from '../src/aetherContext.js';
@@ -24,6 +24,9 @@ import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { StudyStore } from '../src/studyStore.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { BodyLooks } from '../src/bodyLook.js';
+import { BodyReactions } from '../src/bodyReaction.js';
+import { OpenAIBodyReactionSpeaker } from '../src/bodyReactionModel.js';
+import { BodyTouches } from '../src/bodyTouch.js';
 import { ActivityRoomLooks } from '../src/bodyLookActivity.js';
 import { GeminiActivityRoomLookViewer } from '../src/bodyLookActivityVision.js';
 import { OpenAIRoomLookViewer, roomLookInstructions } from '../src/bodyLookVision.js';
@@ -97,6 +100,9 @@ const capabilityEvidence: Record<ShannonCapabilityId, () => boolean> = {
     && asksAboutSchedule('今日の予定は？') && !asksAboutSchedule('おはよう') && calendarIngestEnabled({}) && !calendarIngestEnabled({ SHANNON_CALENDAR_INGEST: 'off' })
     && !Object.getOwnPropertyNames(SQLiteUpcomingStore.prototype).some(name => /event(?:Create|Update|Write)/iu.test(name)),
   // The day's one topic or due promise, and, from her own activity, a few messages of her own a day (0 switches them off).
+  // A touch reaches her feeling and memory through one entrance, and she may answer it with one line.
+  body_touch: () => exists(BodyTouches.prototype.observe, BodyReactions.prototype.react, OpenAIBodyReactionSpeaker.prototype.decide)
+    && SHANNON_TOUCH_KINDS.every(kind => SHANNON_TOUCH_FEELINGS[kind].steps.length > 0),
   initiative: () => exists(SQLiteInitiativeStore, prepareReachOut, SQLiteReachOutSpeaker.prototype.say)
     && configuredAutonomy({}).maximumReachOutsPerDay === 3 && configuredAutonomy({ SHANNON_AUTONOMY_MAX_REACH_OUTS: '0' }).maximumReachOutsPerDay === 0,
 };

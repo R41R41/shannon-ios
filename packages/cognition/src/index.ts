@@ -110,6 +110,17 @@ export {
   resolveShannonEmotionState,
   type ResolveShannonEmotionInput,
 } from './emotionState.js';
+export {
+  SHANNON_TOUCH_FEELINGS,
+  SHANNON_TOUCH_MOOD_RATE,
+  SHANNON_TOUCH_MOOD_STEP,
+  feelTouch,
+  isShannonTouchKind,
+  touchCause,
+  touchFeeling,
+  type ShannonTouchFeeling,
+  type ShannonTouchFeelingStep,
+} from './touchEmotion.js';
 export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,
@@ -186,7 +197,8 @@ export type {
   ShannonTemperament,
   UserFact,
 } from './types.js';
-export { SHANNON_EMOTION_KINDS } from './types.js';
+export { SHANNON_EMOTION_KINDS, SHANNON_TOUCH_KINDS } from './types.js';
+export type { ShannonTouch, ShannonTouchKind } from './types.js';
 export {
   OWNER_AUDIENCE,
   SENSITIVITY_CATEGORY_LABELS,

@@ -15,6 +15,7 @@ import {
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
+import { feelTouch } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
 import type { MemoryDisclosure } from './types.js';
 
@@ -220,6 +221,14 @@ export function reduceCompanionState(
       const expressiveEmotion = normalizeShannonExpressiveEmotion(event.emotion);
       if (current.expressiveEmotion && sameShannonExpressiveEmotion(expressiveEmotion, current.expressiveEmotion)) return current;
       next = { ...current, expressiveEmotion };
+      break;
+    }
+    case 'body-touched': {
+      // One table decides both parts of the one emotion state; nothing else reads a touch as feeling.
+      const felt = feelTouch(current, event.touch, nowIso);
+      if (sameEmotion(felt.emotion, current.emotion) && current.expressiveEmotion
+        && sameShannonExpressiveEmotion(felt.expressiveEmotion, current.expressiveEmotion)) return current;
+      next = { ...current, emotion: felt.emotion, expressiveEmotion: felt.expressiveEmotion };
       break;
     }
     case 'shared-time-observed': {
