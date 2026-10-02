@@ -203,7 +203,8 @@ describe('Notion in conversation', () => {
 
   it('does not read Notion when a companion is present', async () => {
     for (const body of [
-      { scopeKey: 'owner', transcript: 'ウサカテのシナリオを読んで', deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } },
+      // With a companion present she answers only when addressed (voiceSilence.ts), so the request names her and is answered.
+      { scopeKey: 'owner', transcript: 'シャノン、ウサカテのシナリオを読んで', deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } },
       { scopeKey: 'owner', transcript: '友達と一緒にいるんだけど、ウサカテのシナリオを読んで' },
     ]) {
       const model = new RecordingChatModel();
@@ -212,6 +213,7 @@ describe('Notion in conversation', () => {
       const result = await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body });
       expect(result.status).toBe(200);
       expect((result.body as { companionPresent?: boolean }).companionPresent, JSON.stringify(body)).toBe(true);
+      expect((result.body as { reply: string }).reply, JSON.stringify(body)).not.toBe('');
       expect(lastPrompt(model)).not.toContain('[Notion');
       expect(fake.calls).toEqual([]);
       expect((result.body as { webSources: unknown[] }).webSources).toEqual([]);

@@ -42,31 +42,52 @@ const CAN_SEE = '(?:見える|見えてる|見えます|見えてます|見れ�
  * or where he is. Not 「ここ」「これ」「外」「周り」: those are as often a screen, a document, the weather, a video call.
  */
 const ME = '(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:(?:のこと|の顔|の姿|の様子)(?:が|を)?|が|を)';
-const ROOM = '(?<!次の|隣の|別の)(?:部屋|机|手元)(?:の中|の様子|の上)?(?:が|を)?';
+const ROOM = '(?:部屋|机|手元)(?:の中|の様子|の上)?(?:が|を)?';
 /** What may close the clause after the verb, each part once and in this order: 「見てみて」「見てくれる」「見えるかな」「見てほしいんだけど」. */
 const TAIL = '(?:みて)?(?:ほしい|欲しい|くれる|くれない|くれ|もらえる|ください)?(?:んだけど|けど)?(?:かな|か|の|よね|よ|ね|な)?';
-/** The object stands directly before the verb: 「僕の予定見て」「カメラの設定を見て」 are about something else. */
-const ASKS = [
-  new RegExp(`(?:${ME}|${ROOM})(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
-  // 「こっち見て」 is a request; 「こっちは見えてるよ」 is a video call.
-  new RegExp(`(?:こっち|こちら)を?${LOOK}${TAIL}$`, 'u'),
-  // Her camera, with leave to use it; not some other camera (「このカメラ使ってみて」「スマホのカメラで見て」).
-  new RegExp(`(?<!防犯|監視|この|その|新しい|スマホの|レフ)カメラ(?:で|を|から|越しに)?(?:${LOOK}|${CAN_SEE}|使って(?:も)?(?:いい|大丈夫))${TAIL}(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
-  /(?:何|なに)が見え(?:る|てる|ます|てます)(?:かな|か|の)?$/u,
+/**
+ * What may stand before the object. The clause is the request from its first word: 「子供部屋を見て」「昔の僕を見て」
+ * 「ビデオカメラで見て」「窓から何が見える」 are about something else.
+ */
+const LEAD = '^(?:もちろん|そう|うん|はい|それじゃあ?|じゃあ?|なら|ねえ|ねぇ|シャノン|今|いま|ちょっと|もう一回|もう一度)*';
+/** Said plainly: himself as what is looked at, or leave to use her camera. These stand without a model's judgement. */
+const PLAIN_ASKS = [
+  new RegExp(`${LEAD}${ME}(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
+  // A statement of leave, not his own question (「カメラ使っていいかな」).
+  new RegExp(`${LEAD}(?:体の)?カメラ(?:を|は)?使って(?:も)?(?:いい|大丈夫)(?:だよ|です|から|よ|ね)?(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
 ];
+/** A request to look that the words alone do not settle: a room (whose?), 「こっち」, a camera (which?), "what can be seen" (by whom?). */
+const AMBIGUOUS_ASKS = [
+  new RegExp(`${LEAD}(?:この)?${ROOM}(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
+  new RegExp(`${LEAD}(?:こっち|こちら)を?${LOOK}${TAIL}$`, 'u'),
+  new RegExp(`${LEAD}(?:体の)?カメラ(?:で|を|から|越しに)?(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
+  new RegExp(`${LEAD}(?:そこから)?(?:何|なに)が見え(?:る|てる|ます|てます)(?:かな|か|の)?$`, 'u'),
+];
+/** 「見てみて」「じゃあ見て」「見てよ」: a request only as the answer to her own offer to look. */
+const BARE_ASK = new RegExp(`${LEAD}${LOOK}${TAIL}$`, 'u');
+const HER_OFFER = /見(?:て|られ|ましょう|ます|る)|カメラ/u;
 const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて|って(?:聞かれ|言われ)/u;
 const CLAUSE_CHARACTERS = 40;
 
-/**
- * The owner asks her, in so many words, to look now. Judged clause by clause, and only where a short
- * clause ends on the looking: 「私も見てみたい映画がある」 is not a request.
- */
-export function asksForLookAloud(transcript: string): boolean {
+function clauses(transcript: string): string[] {
   const text = transcript.normalize('NFKC');
-  if (REFUSES.test(text)) return false;
-  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, ''))
-    .some(clause => clause.length > 0 && clause.length <= CLAUSE_CHARACTERS && ASKS.some(pattern => pattern.test(clause)));
+  if (REFUSES.test(text)) return [];
+  return text.split(/[、。，,.!！?？…\n]/u).map(clause => clause.replace(/\s/gu, '')).filter(clause => clause.length > 0 && clause.length <= CLAUSE_CHARACTERS);
 }
+const matches = (transcript: string, patterns: readonly RegExp[]) => clauses(transcript).some(clause => patterns.some(pattern => pattern.test(clause)));
+
+/**
+ * How the owner's words ask her to look now, if they do. Judged clause by clause, and only where a short clause
+ * is the request from its first word to its last: 「私も見てみたい映画がある」 is not one.
+ * `plain` stands by itself; `ambiguous` needs a model tier that does not disagree; null is no request.
+ */
+export function lookRequest(transcript: string): 'plain' | 'ambiguous' | null {
+  return matches(transcript, PLAIN_ASKS) ? 'plain' : matches(transcript, AMBIGUOUS_ASKS) ? 'ambiguous' : null;
+}
+/** Either kind. */
+export const asksForLookAloud = (transcript: string): boolean => lookRequest(transcript) !== null;
+/** A bare 「見て」 right after she herself spoke of looking. */
+const acceptsHerOffer = (transcript: string, offered: string | undefined) => offered !== undefined && HER_OFFER.test(offered) && matches(transcript, [BARE_ASK]);
 
 const ROUTER_INSTRUCTIONS = 'Would one look through the camera of her desktop body be right now? True when the speaker asks her to look at him, at the room, or at something he is showing, or asks what she can see; also when he is clearly showing her something, so that one look is what he would welcome. False for talk about cameras, photos, screens, notes or seeing in general, for past or hypothetical looking, and when he asks her not to look.';
 const ROUTER_QUESTION = Object.freeze({
@@ -109,11 +130,10 @@ export const voiceRoomLookPrompt = (asked: boolean) => `[部屋を見る]（${as
 /** The camera was mentioned, nobody chose a look, and she could take one. */
 export const VOICE_ROOM_LOOK_READY_PROMPT = `[部屋を見る]（いまは体のカメラで部屋を一度見られる状態。この返事では見ない。${SHANNON_OWNER_NAME}に見てと言われたら見られる、と伝えてよい。見えたものや、カメラの許可・接続の不具合を作って言わない）`;
 
-export type VoiceRoomLookUnavailable = BodyLookUnavailable | 'voice_off';
-const VOICE_OFF_REASON = '声の会話で部屋を見る機能は止めてある';
+export type VoiceRoomLookUnavailable = BodyLookUnavailable;
 /** She cannot look: the server's own reason, and nothing else, in one short sentence. */
 export const voiceRoomLookUnavailablePrompt = (reason: VoiceRoomLookUnavailable) =>
-  `[部屋を見る]（体のカメラで見てほしいという頼みなら、いまは見られない。本当の理由: ${reason === 'voice_off' ? VOICE_OFF_REASON : ROOM_LOOK_UNAVAILABLE_REASON[reason]}。`
+  `[部屋を見る]（体のカメラで見てほしいという頼みなら、いまは見られない。本当の理由: ${ROOM_LOOK_UNAVAILABLE_REASON[reason]}。`
   // 「体からの知らせが届いていない」 is itself about the link to her body, so that reason does not forbid the word.
   + `この理由だけを短い一文で正直に伝える。見たふりをしない。カメラの許可、${reason === 'body_away' ? '' : '接続、'}画像が届かないなど、ここに書かれていない原因を作って言わない）`;
 
@@ -124,43 +144,69 @@ export interface VoiceRoomLookTurn {
   unavailable?: VoiceRoomLookUnavailable;
   /** Called with her finished reply. Opens the look only when this turn chose one and the conditions still hold. */
   open(threadId: string, reply: string): boolean;
+  /**
+   * The call was cut off after she had begun to say that she would look (`said` is what was spoken so far):
+   * no look is opened, and one honest line is left. Nothing happens once `open` ran, or when she had said nothing.
+   */
+  cutOff(threadId: string, said: string): void;
 }
 
 /** The fixed rule on his words is set aside when the gateway is this sure that no look is wanted. */
 const ASKED_CONTRADICTED_BELOW = 0.2;
-const NO_LOOK: VoiceRoomLookTurn =Object.freeze({ prompt: '', open: () => false });
-const cannot = (reason: VoiceRoomLookUnavailable): VoiceRoomLookTurn => ({ prompt: voiceRoomLookUnavailablePrompt(reason), unavailable: reason, open: () => false });
+/** Looser words (「見てみて」「これ見て」) count as a request when the gateway is at least this sure. */
+const LOOSE_ASK_CONFIRMED_FROM = 0.5;
+const NO_LOOK: VoiceRoomLookTurn = Object.freeze({ prompt: '', open: () => false, cutOff: () => undefined });
+const cannot = (reason: VoiceRoomLookUnavailable): VoiceRoomLookTurn => ({ ...NO_LOOK, prompt: voiceRoomLookUnavailablePrompt(reason), unavailable: reason });
 
 /**
  * What one voice turn is told about looking, and the way to open the look afterwards.
  * `audience` is `owner` only for the owner alone in 本人だけ: 「友人も一緒」, an owner call with
  * someone listening, and a stream all read `others`, and end a look that is in progress.
+ * `offered` is her own last line when this utterance directly follows it.
+ * With `SHANNON_VOICE_ROOM_LOOK=off` nothing here runs: a voice turn is what it was before voice could look.
  */
 export function voiceRoomLookTurn(
   looks: { voiceTurn(scopeKey: string, at: string, audience: unknown): BodyLookVoiceTurn } | undefined,
-  turn: { scopeKey: string; transcript: string; at: string; audience: 'owner' | 'others'; decision: VoiceTurnDecision; uncertain: boolean },
+  turn: { scopeKey: string; transcript: string; at: string; audience: 'owner' | 'others'; decision: VoiceTurnDecision; uncertain: boolean; offered?: string },
   environment: Environment = process.env,
 ): VoiceRoomLookTurn {
-  if (!looks) return NO_LOOK;
+  if (!looks || !voiceRoomLookEnabled(environment)) return NO_LOOK;
   // Every voice turn passes here, as every text turn passes `BodyLooks.turn`: a turn other people hear withdraws an open look.
   const state = looks.voiceTurn(turn.scopeKey, turn.at, turn.audience);
   if (!turn.decision.shouldRespond) return NO_LOOK;
-  // His words ask for it, and a model tier that also judged the turn did not say plainly that no look is wanted.
-  // Nor on words a model tier scored as unreliable; with no model's score (the local tier) his words are taken as heard.
+  const score = turn.decision.roomLookProbability;
+  // Words a model tier scored as unreliable open nothing.
   const distrusted = turn.uncertain && turn.decision.transcriptReliabilityProbability !== undefined;
-  const asked = !distrusted && asksForLookAloud(turn.transcript) && (turn.decision.roomLookProbability ?? 1) >= ASKED_CONTRADICTED_BELOW;
+  const request = lookRequest(turn.transcript);
+  const loose = asksToLook(turn.transcript);
+  // His words ask for it: plainly (then only a model tier that is sure of the opposite sets it aside); or in words that need
+  // a model tier's judgement not to disagree, which the local tier cannot give; or loosely, when the gateway is fairly sure;
+  // or with a bare 「見て」 in answer to her own offer.
+  const asked = !distrusted && (
+    (request === 'plain' && (score ?? 1) >= ASKED_CONTRADICTED_BELOW)
+    || (request === 'ambiguous' && score !== undefined && score >= ASKED_CONTRADICTED_BELOW)
+    || (loose && score !== undefined && score >= LOOSE_ASK_CONFIRMED_FROM)
+    || (acceptsHerOffer(turn.transcript, turn.offered) && (score ?? 1) >= ASKED_CONTRADICTED_BELOW));
   // Her own wish to look comes only from the gateway's judgement, and not from words it could not trust.
-  const judged = !turn.uncertain && (turn.decision.roomLookProbability ?? 0) >= lookThreshold(environment);
-  const mentioned = asked || judged || asksToLook(turn.transcript);
+  const judged = !turn.uncertain && (score ?? 0) >= lookThreshold(environment);
+  const mentioned = asked || judged || request !== null || loose;
   if (!mentioned) return NO_LOOK;
-  if (!voiceRoomLookEnabled(environment)) return cannot('voice_off');
   if (state.unavailable) return cannot(state.unavailable);
   if (!asked && !judged) return { ...NO_LOOK, prompt: VOICE_ROOM_LOOK_READY_PROMPT };
+  let settled = false;
   return {
     prompt: voiceRoomLookPrompt(asked),
     // She says aloud that she will look, so a look that then does not happen always gets her one honest line (`asked`).
-    open: (threadId, reply) => state.open(threadId, 'asked', [
-      { role: 'user', content: turn.transcript }, ...(reply.trim() ? [{ role: 'assistant' as const, content: reply.trim() }] : []),
-    ]),
+    open: (threadId, reply) => {
+      settled = true;
+      return state.open(threadId, 'asked', [
+        { role: 'user', content: turn.transcript }, ...(reply.trim() ? [{ role: 'assistant' as const, content: reply.trim() }] : []),
+      ]);
+    },
+    cutOff: (threadId, said) => {
+      if (settled || !said.trim()) return;
+      settled = true;
+      state.cutOff(threadId);
+    },
   };
 }

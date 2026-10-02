@@ -178,7 +178,8 @@ async function completeLiveVoiceDelegation(
   decision = settleOwnerVoiceTurn(decision, { transcript, facts: turnFacts, uncertain: uncertainTranscript });
   if (address) decision = applyGuestAddressing(decision, address);
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
-  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: occurredAt,
+  // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
+  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), offered: turnFacts?.followsShannon ? turnFacts.shannonLastLine : undefined,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
@@ -188,14 +189,15 @@ async function completeLiveVoiceDelegation(
   // Notion is the owner's private material: read only when he is alone, by a fixed rule on his words.
   const notionTurn = alone && !temporaryGuest && decision.shouldRespond && asksAboutNotion(transcript);
   if (notionTurn && dependencies.notion?.connected) decision = withMemorySearchLatency(decision);
-  let orchestrationState = !alone || uncertainTranscript ? null : observeConversationTurn({
+  // A turn the silence rules left unanswered (overheard, an echo, a fragment) writes no orchestration state and runs no command.
+  let orchestrationState = !alone || uncertainTranscript || decision.silence ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone.
-  const command = alone && !uncertainTranscript && deviceContext?.userUtterance
+  const command = alone && !uncertainTranscript && !decision.silence && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })
@@ -376,6 +378,7 @@ async function completeLiveVoiceDelegation(
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;
   let streamedReplyPrefix = '';
+  observer?.signal?.addEventListener('abort', () => roomLook.cutOff(threadId, streamedReplyPrefix), { once: true });
   let streamedEmotionUpdated = false;
   const requiresStructuredTaskDecision = orchestrationState?.pendingAction?.kind === 'implement'
     && (orchestrationState.pendingAction.status === 'pending'

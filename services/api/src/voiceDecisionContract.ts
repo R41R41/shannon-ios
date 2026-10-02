@@ -46,6 +46,8 @@ export interface VoiceWaitingDirection {
 export interface VoiceTurnFacts {
   /** Her last utterance ended with a question, recently enough that a short reply answers it. */
   sheAsked: boolean;
+  /** The utterance answers her line to a touch: the body opened its microphone for it, and may also hear that line itself. */
+  answersHerLine?: boolean;
   /** The newest stored message of the call is hers (the owner has not spoken since). */
   followsShannon: boolean;
   /** Seconds since her last stored utterance; absent when there is none. */

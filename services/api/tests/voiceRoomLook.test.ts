@@ -5,7 +5,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/bodyLook.js';
 import { configuredBodyLook, type BodyLookConfig } from '../src/bodyLookContract.js';
-import { bodyLookNotSeenLine } from '../src/bodyLookLines.js';
+import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/bodyLookLines.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
@@ -17,7 +17,7 @@ import {
   type VoiceDecisionGateway, type VoiceDecisionInput,
 } from '../src/voiceDecision.js';
 import {
-  VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
+  VOICE_ROOM_LOOK_READY_PROMPT, asksForLookAloud, lookRequest, voiceRoomLookPrompt, voiceRoomLookTurn, voiceRoomLookUnavailablePrompt,
 } from '../src/voiceRoomLook.js';
 
 const scope = 'owner';
@@ -48,6 +48,7 @@ class VoiceModel implements ShannonChatModel {
   readonly model = 'test-model';
   readonly voiceRequests: ShannonVoiceModelRequest[] = [];
   reply = '見てみますね。';
+  generateVoiceStreaming?: ShannonChatModel['generateVoiceStreaming'];
   async generate(request: ShannonChatModelRequest) { return { mode: this.mode, model: this.model, reply: `文字の返事:${request.message}` }; }
   async generateVoice(request: ShannonVoiceModelRequest) {
     this.voiceRequests.push(request);
@@ -67,7 +68,7 @@ function gateway(extra: { roomLookProbability?: number; transcriptReliabilityPro
   return { mode: 'jev', model: 'test', inputs, decide: async input => { inputs.push(input); return { ...await local.decide(input), source: 'jev', ...extra }; } };
 }
 
-function harness(options: { config?: Partial<BodyLookConfig>; ingestEnabled?: boolean; viewer?: RoomLookViewer | null; voiceDecision?: VoiceDecisionGateway } = {}) {
+function harness(options: { config?: Partial<BodyLookConfig>; ingestEnabled?: boolean; viewer?: RoomLookViewer | null; voiceDecision?: VoiceDecisionGateway; turnWait?: number } = {}) {
   const clock = { at: START };
   const now = () => clock.at;
   const model = new VoiceModel();
@@ -77,10 +78,11 @@ function harness(options: { config?: Partial<BodyLookConfig>; ingestEnabled?: bo
   const autonomy = createInMemoryAutonomyService(now);
   const api = createLocalApiKernel(now, {
     stateStore: new InMemoryCompanionStateStore(now), conversationStore, chatModel: model, autonomy,
-    voiceDecision: options.voiceDecision ?? gateway({ transcriptReliabilityProbability: 0.95 }),
+    // A model tier that trusts the transcript and neither confirms nor contradicts a look.
+    voiceDecision: options.voiceDecision ?? gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.3 }),
     body: {
       store: new SQLiteBodyStore(':memory:'), ingestEnabled: options.ingestEnabled ?? true,
-      look: { store: lookStore, config: { ...configuredBodyLook({}), ...options.config }, viewer, timers: false },
+      look: { store: lookStore, config: { ...configuredBodyLook({}), ...options.config }, viewer, timers: false, voiceTurnWaitMilliseconds: options.turnWait ?? 0 },
     },
   });
   const advance = (milliseconds: number) => { clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString(); };
@@ -229,7 +231,11 @@ describe('the owner asks her to look, aloud', () => {
       'こっちは見えてるよ', 'こっちも見えます', 'ビデオ会議でこっち見えてる', '相手にこっちが見えてますか', '向こうからこっち見える',
       '新しいカメラ使ってみて', '一眼レフカメラ使ってみてよ', 'このカメラ使ってね', 'このカメラ使っていい', 'カメラを使ってほしい', 'スマホのカメラで見て',
       'カメラ使っていい?って聞かれた', '周り見えてる', '次の部屋を見て',
+      // The object has a modifier, the view is someone else's, the camera is another one, or he asks for leave himself.
+      '窓から何が見える？', 'その展望台から何が見えるの', '子供部屋を見て', '昔の僕を見て', 'ビデオカメラで見て', 'カメラ使っていいかな',
     ]) expect(asksForLookAloud(transcript), transcript).toBe(false);
+    expect(['僕のこと見れる?', '僕が見える?', 'カメラ使っていいよ', 'カメラ使ってもいいよ'].map(lookRequest)).toEqual(['plain', 'plain', 'plain', 'plain']);
+    expect(['部屋を見て', 'こっち見て', 'カメラで見てみて', '何が見える?', '机の上見てくれる'].map(lookRequest)).toEqual(Array(5).fill('ambiguous'));
     for (const transcript of [
       ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', '僕が見える?', '僕のこと見えてる?', 'カメラで見てみて', 'カメラ使ってもいいよ', '何が見える?', '机の上見てくれる',
       '部屋を見てほしいんだけど',
@@ -254,10 +260,85 @@ describe('the owner asks her to look, aloud', () => {
     await distrusted.ready();
     expect((await distrusted.say('部屋を見て。')).prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
     expect(distrusted.lookStore.waiting(scope)).toEqual([]);
-    const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
-    await local.ready();
-    expect((await local.say('部屋を見て。')).prompt).toContain(voiceRoomLookPrompt(true));
-    expect(local.lookStore.waiting(scope)).toHaveLength(1);
+    // The local tier alone: words that say it plainly (himself as what is looked at, leave to use the camera) open the look...
+    for (const transcript of ['僕のこと見れる?', 'もちろん、そう、カメラ使っていいよ、自由に。']) {
+      const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+      await local.ready();
+      expect((await local.say(transcript)).prompt, transcript).toContain(voiceRoomLookPrompt(true));
+      expect(local.lookStore.waiting(scope), transcript).toHaveLength(1);
+    }
+    // ...and words that could be about another room, camera or view do not, without a model to judge them.
+    for (const transcript of ['部屋を見て。', 'こっち見て', 'カメラで見てみて', '何が見える?']) {
+      const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+      await local.ready();
+      expect((await local.say(transcript)).prompt, transcript).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+      expect(local.lookStore.waiting(scope), transcript).toEqual([]);
+    }
+  });
+
+  it('a bare 「見て」 opens the look as the answer to her own offer, or when the gateway is fairly sure', async () => {
+    for (const transcript of ['見てみて', 'じゃあ見て', '見てよ', 'うん、見て。']) {
+      const offered = harness();
+      await offered.ready();
+      await offered.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '今日の服どうかな', shannonTranscript: '見てみましょうか？' });
+      expect((await offered.say(transcript)).prompt, transcript).toContain(voiceRoomLookPrompt(true));
+      expect(offered.lookStore.waiting(scope), transcript).toHaveLength(1);
+      // Without her offer the same words are not a request to use the camera.
+      const cold = harness();
+      await cold.ready();
+      await cold.say(transcript);
+      expect(cold.lookStore.waiting(scope), transcript).toEqual([]);
+    }
+    const sure = harness({ voiceDecision: gateway({ roomLookProbability: 0.6, transcriptReliabilityProbability: 0.95 }) });
+    await sure.ready();
+    expect((await sure.say('これ見てよ')).prompt).toContain(voiceRoomLookPrompt(true));
+    expect(sure.lookStore.waiting(scope)).toHaveLength(1);
+  });
+
+  it('a presence read that arrives while the router decides does not make the body look away', async () => {
+    const router = gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.3 });
+    const h = harness({ voiceDecision: router });
+    await h.camera();
+    await h.presence();
+    h.advance(80 * SECOND);
+    const decide = router.decide.bind(router);
+    router.decide = async input => { h.advance(SECOND); await h.presence(); return decide(input); };
+    expect((await h.say('僕のこと見れる?')).prompt).toContain(voiceRoomLookPrompt(true));
+    expect(h.lookStore.waiting(scope)).toHaveLength(1);
+    // The same for a caller that passes the instant the turn began (the text path): a later read is fresh, not "from the future".
+    const text = harness();
+    await text.camera();
+    text.advance(2 * SECOND);
+    await text.presence();
+    const looks = (text.api as unknown as { body: { looks: { voiceTurn(scopeKey: string, at: string, audience: string): { unavailable: string | null } } } }).body.looks;
+    expect(looks.voiceTurn(scope, START, 'owner').unavailable).toBeNull();
+  });
+
+  it('a turn someone else can hear that arrives while she is replying stops the look, and nothing is said', async () => {
+    const h = harness();
+    await h.ready();
+    const speak = h.model.generateVoice.bind(h.model);
+    let interrupted = false;
+    h.model.generateVoice = async request => {
+      if (!interrupted) { interrupted = true; await h.say('シャノン、こんにちは。', { participantMode: 'guest' }); }
+      return speak(request);
+    };
+    expect((await h.say('僕のこと見れる?')).prompt).toContain(voiceRoomLookPrompt(true));
+    expect(h.lookStore.waiting(scope)).toEqual([]);
+    expect(h.messages()).toEqual([]);
+  });
+
+  it('leaves one honest line when the call is cut off after she began to say she would look', async () => {
+    const h = harness();
+    await h.ready();
+    const stopped = new AbortController();
+    h.model.generateVoiceStreaming = async (_request, onDelta) => { await onDelta('見てみ'); stopped.abort(); throw new Error('aborted'); };
+    await expect(h.api.streamLiveVoiceDelegation({ method: 'POST', path: delegations, deviceId: 'body-pc',
+      body: { scopeKey: scope, threadId: 'voice-thread', transcript: '僕のこと見れる?' } },
+    { signal: stopped.signal, onPlan: () => undefined, onTextDelta: () => undefined })).rejects.toThrow();
+    expect(h.lookStore.waiting(scope)).toEqual([]);
+    expect(h.messages().map(message => [message.role, message.content])).toEqual([['assistant', BODY_LOOK_CUT_OFF_LINE]]);
+    expect(BODY_LOOK_CUT_OFF_LINE).toBe('話が途中になったので、いまは見ないでおきました。');
   });
 
   it('opens nothing when the call is cut off before her reply is written', async () => {
@@ -353,6 +434,50 @@ describe('what she saw reaches the voice conversation', () => {
     expect(response.body).toMatchObject({ status: 'refused', message: { threadId: 'voice-thread', text: bodyLookNotSeenLine('window_hidden') } });
   });
 
+  it('holds her message until the client has stored the voice turn, so the Talk reads question, 「見てみますね」, what she saw', async () => {
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    await h.say('僕のこと見れる?');
+    const look = await h.openLook();
+    let answered = false;
+    const answer = h.answer(look!.id).then(response => { answered = true; return response; });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(answered).toBe(false);
+    expect(h.messages()).toEqual([]);
+    h.advance(SECOND);
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと見れる?', shannonTranscript: '見てみますね。' });
+    h.advance(SECOND);
+    expect((await answer).body).toMatchObject({ status: 'seen', message: { text: SEEN_TEXT } });
+    const stored = h.messages();
+    expect(stored.map(message => [message.role, message.content])).toEqual([['user', '僕のこと見れる?'], ['assistant', '見てみますね。'], ['assistant', SEEN_TEXT]]);
+    expect(Date.parse(stored[2]!.observedAt)).toBeGreaterThanOrEqual(Date.parse(stored[1]!.observedAt));
+  });
+
+  it('does not wait for ever: after the bound her message is stored whatever the client did', async () => {
+    const h = harness({ turnWait: 40 });
+    await h.ready();
+    await h.say('僕のこと見れる?');
+    const response = await h.answer((await h.openLook())!.id);
+    expect(response.body).toMatchObject({ status: 'seen', message: { text: SEEN_TEXT } });
+    expect(h.messages().map(message => message.content)).toEqual([SEEN_TEXT]);
+  });
+
+  it('holds the line about a look that could not be opened in the same way, and gives the hourly limit its own true line', async () => {
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    const speak = h.model.generateVoice.bind(h.model);
+    h.model.generateVoice = async request => { await h.camera(false); return speak(request); };
+    await h.say('僕のこと見れる?');
+    expect(h.messages()).toEqual([]);
+    h.advance(SECOND);
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと見れる?', shannonTranscript: '見てみますね。' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(h.messages().map(message => message.content)).toEqual(['僕のこと見れる?', '見てみますね。', bodyLookNotSeenLine('camera_off')]);
+    expect(UNOPENED_LINE.limit_hour).toEqual({ code: 'rate_limited', line: 'この1時間はもうたくさん見たので、少し間をあけます。' });
+    expect(UNOPENED_LINE.limit_day!.line).toBe(bodyLookNotSeenLine('rate_limited'));
+    for (const silent of ['not_alone', 'switched_off', 'no_viewer'] as const) expect(UNOPENED_LINE[silent]).toBeUndefined();
+  });
+
   it('counts voice looks in the same hourly limit as text looks', async () => {
     const h = harness({ config: { perHour: 1 } });
     await h.ready();
@@ -367,17 +492,26 @@ describe('what she saw reaches the voice conversation', () => {
 });
 
 describe('switches and the gateway question', () => {
-  it('SHANNON_VOICE_ROOM_LOOK=off takes the look out of voice turns and says so truthfully', async () => {
-    vi.stubEnv('SHANNON_VOICE_ROOM_LOOK', 'off');
+  it('SHANNON_VOICE_ROOM_LOOK=off makes a voice turn what it was before voice could look: no line, no look, no effect on a text look', async () => {
     const h = harness();
     await h.ready();
-    const turn = await h.say('部屋を見て。');
-    expect(turn.prompt).toContain('本当の理由: 声の会話で部屋を見る機能は止めてある。');
-    expect(h.lookStore.waiting(scope)).toEqual([]);
+    await h.say('僕のこと見れる?');
+    const open = await h.openLook();
+    vi.stubEnv('SHANNON_VOICE_ROOM_LOOK', 'off');
+    for (const extra of [{}, { participantMode: 'guest' }]) {
+      const turn = await h.say('シャノン、部屋を見て。', extra);
+      expect(turn.prompt).not.toContain('[部屋を見る]');
+    }
+    // Before voice could look, a voice turn did not touch a look in progress; it does not now.
+    expect(h.lookStore.waiting(scope).map(look => look.id)).toEqual([open!.id]);
+    const looks = { voiceTurn: vi.fn() };
+    expect(voiceRoomLookTurn(looks as never, { scopeKey: scope, transcript: '部屋を見て。', at: START, audience: 'owner', uncertain: false,
+      decision: { shouldRespond: true, roomLookProbability: 1 } as never })).toMatchObject({ prompt: '' });
+    expect(looks.voiceTurn).not.toHaveBeenCalled();
   });
 
   it('a turn she does not answer opens nothing', () => {
-    const state = { unavailable: null, open: vi.fn(() => true) };
+    const state = { unavailable: null, open: vi.fn(() => true), cutOff: vi.fn() };
     const turn = voiceRoomLookTurn({ voiceTurn: () => state }, { scopeKey: scope, transcript: '部屋を見て。', at: START, audience: 'owner', uncertain: false,
       decision: { shouldRespond: false, roomLookProbability: 1 } as never });
     expect(turn.prompt).toBe('');

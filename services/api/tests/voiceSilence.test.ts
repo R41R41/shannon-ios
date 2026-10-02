@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
+import { InMemoryOrganizeStore } from '../src/organize.js';
 import {
   JevVoiceDecisionGateway, LocalVoiceDecisionGateway, OpenAIVoiceDecisionGateway, VOICE_SKILLS,
   type VoiceDecisionGateway, type VoiceDecisionInput, type VoiceTurnDecision,
@@ -25,8 +26,17 @@ describe('the local rules, one category at a time', () => {
   };
 
   it('(a) is silent for self-talk and for words said to someone else or to the computer', () => {
-    for (const transcript of ['よいしょ。', 'えーっと、なんだっけ。', 'あれ、おかしいな。', 'なんでだろう。', 'はーい、今行く。', 'もしもし。', 'あー、固まった。', 'まあいいか。']) {
+    for (const transcript of ['よいしょ。', 'えーっと、なんだっけ。', 'あれ、おかしいな。', 'なんでだろう。', 'はーい、今行く。', 'もしもし、お世話になっております。', 'あー、固まった。', 'まあいいか。']) {
       expect(quiet(transcript), transcript).toBe('not_addressed');
+    }
+    // After her own question the same words answer her.
+    for (const transcript of ['はーい', 'はいはーい', 'まあいいや', 'まあいいか', '今行く', 'どこだっけ']) {
+      expect(quiet(transcript, asked), transcript).toBe('answer:answers_her_question');
+    }
+    // Alone with her, 「もしもし」 is a greeting to her; with someone else there it may be a phone.
+    for (const transcript of ['もしもし', 'もしもし？', 'あ、もしもし。']) {
+      expect(quiet(transcript), transcript).toBe('answer:greeting');
+      expect(quiet(transcript, withOthers), transcript).toBe('not_addressed');
     }
     // Words that may as well be a request to her are not judged here.
     for (const transcript of ['動いて。', '落ちた。', '重いな。', 'なにこれ。']) expect(quiet(transcript), transcript).not.toBe('not_addressed');
@@ -113,7 +123,16 @@ describe('the local rules, one category at a time', () => {
     expect(quiet('眠い。', withOthers)).toBe('not_addressed');
     expect(quiet('うん、そうそう。', withOthers)).toBe('not_addressed');
     expect(quiet('シャノン、どう思う?', withOthers)).toBe('answer:named');
-    expect(quiet('これ読んで。', withOthers)).toBe('answer:request');
+    // A plain request is for her only right after her own utterance; otherwise it may be for the friend.
+    expect(quiet('これ読んで。', withOthers)).toBe('not_addressed');
+    expect(quiet('醤油とって', withOthers)).toBe('not_addressed');
+    expect(quiet('これ読んで。', { ...withOthers, followsShannon: true, secondsSinceShannon: 5 })).toBe('answer:request');
+    expect(quiet('その話、聞かせて。', withOthers)).toBe('answer:request');
+    // Her open question is answered by a short reply only right after she asked.
+    const stale = { ...withOthers, sheAsked: true, followsShannon: true, secondsSinceShannon: 100 };
+    expect(quiet('醤油ある', stale)).toBe('not_addressed');
+    expect(quiet('うん。', stale)).toBe('backchannel');
+    expect(quiet('醤油ある', { ...stale, secondsSinceShannon: 10 })).toBe('answer:answers_her_question');
     // A short remark right after her utterance continues the exchange with her; a long one, or a late one, is the people talking.
     const after = { ...withOthers, followsShannon: true, secondsSinceShannon: 5 };
     expect(quiet('へえ、面白いね。', after)).toBe('answer:reaction');
@@ -136,6 +155,10 @@ describe('the facts of the moment', () => {
     const facts = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。' });
     expect(facts).toMatchObject({ sheAsked: true, followsShannon: true, shannonLastLine: 'わっ、くすぐったいです。' });
     expect(ownerTurnVerdict('うん', facts)).toEqual({ respond: true, reason: 'answers_her_question' });
+    // The microphone opened for his answer may hear her own line: that is still an echo, not an answer.
+    const long = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。もう、ライ氏ったら。' });
+    expect(ownerTurnVerdict('くすぐったいです。もう、ライ氏ったら', long)).toEqual({ respond: false, category: 'echo' });
+    expect(ownerTurnVerdict('ごめんごめん', long)).toEqual({ respond: true, reason: 'answers_her_question' });
   });
 
   it('finds her question anywhere in her line', () => {
@@ -189,7 +212,11 @@ describe('settling the router\'s answer against the rules', () => {
   });
 
   it('a short utterance the router could not trust is a fragment; a long one is still answered', async () => {
-    const unsure = await base({ transcriptReliabilityProbability: 0.3 });
+    const unsure = await base({ transcriptReliabilityProbability: 0.3, replyRequiredProbability: 0.3 });
+    // What the router itself wants answered is not a fragment, however little it trusts the words.
+    for (const transcript of ['火事だ', '倒れた', '救急車呼ぶ', '今日カレー']) {
+      expect(settleOwnerVoiceTurn(await base({ transcriptReliabilityProbability: 0.4, replyRequiredProbability: 0.95 }), { transcript, facts: alone, uncertain: true }).shouldRespond, transcript).toBe(true);
+    }
     expect(settleOwnerVoiceTurn(unsure, { transcript: 'あれ、ウェブコミに乗っ出るの。', facts: alone, uncertain: true })).toMatchObject({ shouldRespond: false, silence: 'unfinished' });
     expect(settleOwnerVoiceTurn(unsure, { transcript: '昨日さ、会社で部長にめちゃくちゃ言われたんだよね、もう参った。', facts: alone, uncertain: true }).shouldRespond).toBe(true);
     // Missing reliability (the local tier) is not low reliability.
@@ -209,7 +236,11 @@ describe('settling the router\'s answer against the rules', () => {
     expect([...voiceSilenceRules({})].sort()).toEqual(['backchannel', 'echo', 'hold', 'not_addressed', 'unfinished']);
     for (const off of ['off', 'OFF', 'false', '0', 'disabled']) expect(voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: off }).size).toBe(0);
     expect([...voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: 'backchannel, hold' })].sort()).toEqual(['backchannel', 'hold']);
-    expect(voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: 'on' }).size).toBe(5);
+    for (const on of ['on', 'true', '1', 'yes', 'all', ' ']) expect(voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: on }).size).toBe(5);
+    // 「no」 is off, and a misspelt name is ignored rather than read as "all".
+    expect(voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: 'no' }).size).toBe(0);
+    expect(voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: 'backchanel' }).size).toBe(0);
+    expect([...voiceSilenceRules({ SHANNON_VOICE_SILENCE_RULES: 'backchanel,hold' })]).toEqual(['hold']);
 
     const off = { SHANNON_VOICE_SILENCE_RULES: 'off' };
     const answering = await base();
@@ -305,15 +336,19 @@ describe('an owner call, end to end', () => {
     async generateVoice(request: ShannonVoiceModelRequest) { this.voiceRequests.push(request); return { mode: this.mode, model: this.model, reply: 'はい、ライ氏。' }; }
   }
 
-  /** A router like the one of 2026-10-02: it wants to answer everything, and trusts short fragments little. */
+  /**
+   * A router like the one of 2026-10-02 in its class (it would answer everything), which trusts short fragments
+   * little and, asked the new question, is no longer sure that they need a reply.
+   */
   function eager(): VoiceDecisionGateway & { inputs: VoiceDecisionInput[] } {
     const local = new LocalVoiceDecisionGateway();
     const inputs: VoiceDecisionInput[] = [];
     return { mode: 'jev', model: 'test', inputs, decide: async input => {
       inputs.push(input);
       const decision = await local.decide({ ...input, turn: undefined });
-      return { ...decision, source: 'jev', shouldRespond: true, conversationClass: 'direct', replyRequiredProbability: 0.8,
-        transcriptReliabilityProbability: Array.from(input.transcript).length <= 16 ? 0.3 : 0.95 };
+      const short = Array.from(input.transcript).length <= 16;
+      return { ...decision, source: 'jev', shouldRespond: true, conversationClass: 'direct', replyRequiredProbability: short ? 0.4 : 0.8,
+        transcriptReliabilityProbability: short ? 0.3 : 0.95 };
     } };
   }
 
@@ -322,7 +357,8 @@ describe('an owner call, end to end', () => {
     const clock = { at: START };
     const model = new VoiceModel();
     const store = new InMemoryConversationStore();
-    const api = createLocalApiKernel(() => clock.at, { chatModel: model, conversationStore: store, voiceDecision });
+    const organize = new InMemoryOrganizeStore();
+    const api = createLocalApiKernel(() => clock.at, { chatModel: model, conversationStore: store, voiceDecision, organizeStore: organize });
     const advance = (seconds: number) => { clock.at = new Date(Date.parse(clock.at) + seconds * 1_000).toISOString(); };
     const say = async (transcript: string, context: Record<string, unknown> = {}) => {
       const response = await api.dispatch({ method: 'POST', path: delegations, body: {
@@ -336,8 +372,28 @@ describe('an owner call, end to end', () => {
     /** The client stores a spoken turn after her reply, as it does today. */
     const stored = (userTranscript: string, shannonTranscript: string) => api.dispatch({ method: 'POST', path: '/v1/voice/realtime/turns',
       body: { scopeKey: 'owner', threadId: 'call', userTranscript, shannonTranscript } });
-    return { api, model, store, clock, advance, say, stored, routed: voiceDecision.inputs };
+    return { api, model, store, organize, clock, advance, say, stored, routed: voiceDecision.inputs };
   }
+
+  it('a turn left unanswered runs no command and writes no orchestration state', async () => {
+    const command = '先週の旅行の写真整理をタスクにして';
+    // Said to her, the words are a command and are carried out.
+    const direct = harness();
+    expect(await direct.say(command)).toHaveProperty('receipt');
+    expect(direct.organize.list('owner', 'call')).toHaveLength(1);
+    // The same words as an echo of her own line, heard by the microphone a few seconds later, do nothing.
+    const h = harness();
+    await h.stored('タスクの作り方を教えて', `「${command}」と言ってくれれば登録します。`);
+    h.advance(5);
+    const orchestration = (h.api as unknown as { conversationOrchestration: { read(scopeKey: string, threadId: string): unknown } }).conversationOrchestration;
+    const before = JSON.stringify(orchestration.read('owner', 'call'));
+    const body = await h.say(command);
+    expect(body).toMatchObject({ reply: '', voicePlan: { shouldRespond: false, silenceCategory: 'echo' } });
+    expect(body).not.toHaveProperty('receipt');
+    expect(h.organize.list('owner', 'call')).toEqual([]);
+    expect(JSON.stringify(orchestration.read('owner', 'call'))).toBe(before);
+    expect(h.model.voiceRequests).toEqual([]);
+  });
 
   it('leaves unanswered what she answered on 2026-10-02, without a model call and without storing anything', async () => {
     const h = harness();

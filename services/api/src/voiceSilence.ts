@@ -33,9 +33,10 @@ type Environment = Readonly<Record<string, string | undefined>>;
 /** The rules in force. Empty: the kill switch is on. */
 export function voiceSilenceRules(environment: Environment = process.env): ReadonlySet<VoiceSilenceRule> {
   const value = environment.SHANNON_VOICE_SILENCE_RULES?.trim().toLowerCase() ?? '';
-  if (['off', 'false', '0', 'disabled', 'none'].includes(value)) return new Set();
-  const listed = value.split(',').map(item => item.trim()).filter((item): item is VoiceSilenceRule => (RULE_CATEGORIES as readonly string[]).includes(item));
-  return new Set(listed.length ? listed : RULE_CATEGORIES);
+  if (['', 'on', 'true', '1', 'yes', 'enabled', 'all'].includes(value)) return new Set(RULE_CATEGORIES);
+  if (['off', 'false', '0', 'no', 'disabled', 'none'].includes(value)) return new Set();
+  // A list keeps the rules it names. A name it misspells is ignored, never read as "all".
+  return new Set(value.split(',').map(item => item.trim()).filter((item): item is VoiceSilenceRule => (RULE_CATEGORIES as readonly string[]).includes(item)));
 }
 
 function boundedNumber(value: string | undefined, fallback: number, minimum: number, maximum: number): number {
@@ -53,6 +54,8 @@ const replySilenceBelow = (environment: Environment) => boundedNumber(environmen
  */
 const fragmentReliability = (environment: Environment) => boundedNumber(environment.SHANNON_VOICE_FRAGMENT_RELIABILITY, 0.5, 0, 1);
 
+/** The fragment rule applies only while the router's own reply-required probability is below this. */
+const FRAGMENT_REPLY_BELOW = 0.5;
 /** Her question stays open for a short answer this long. */
 const QUESTION_OPEN_SECONDS = 120;
 /** A reaction counts as following her utterance this long after it was stored. */
@@ -150,24 +153,34 @@ export function ownerTurnVerdict(
   const recent = (seconds: number) => facts.secondsSinceShannon === undefined || facts.secondsSinceShannon <= seconds;
   // (e) Noise, or her own voice coming back through the microphone: a long stretch of the line she is speaking or has just
   // spoken. Not after her question (「紅茶にします」 quotes her to answer her), and not a short quote (「傘を忘れないで」).
+  // After her line to a touch the body listens for his answer, and may hear her line instead: that one is still an echo.
   if (!bare) return silent('echo');
-  if (!marked && !facts.sheAsked && facts.followsShannon && facts.secondsSinceShannon !== undefined && facts.secondsSinceShannon <= ECHO_SECONDS
+  if (!marked && (!facts.sheAsked || facts.answersHerLine) && facts.followsShannon && facts.secondsSinceShannon !== undefined && facts.secondsSinceShannon <= ECHO_SECONDS
     && length >= ECHO_CHARACTERS && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
+  const follows = facts.followsShannon && recent(FOLLOWS_SECONDS);
+  // Her question is open for a short reply. With someone else there, only right after she asked: 「醤油ある」 a minute later is for the friend.
+  const answering = facts.sheAsked && (!facts.othersPresent || follows);
   const kinds = phraseKinds(bare);
   // (d) 「ちょっと待ってね」: she waits and says nothing.
   if (kinds && HOLD_KINDS.test(kinds)) return silent('hold');
   // (b) A backchannel asks nothing, unless she had just asked: then 「うん」 is the answer.
-  if (kinds && /^b+$/u.test(kinds)) return facts.sheAsked ? answer('answers_her_question') : silent('backchannel');
-  // (a) Said to himself or to someone else: nothing but such phrases and fillers.
-  if (kinds && /^[bso]+$/u.test(kinds)) return silent('not_addressed');
+  if (kinds && /^b+$/u.test(kinds)) return answering ? answer('answers_her_question') : silent('backchannel');
+  // (a) Said to himself or to someone else: nothing but such phrases and fillers. After her question 「はーい」「まあいいや」
+  // answer her; and alone with her, 「もしもし」 is a greeting to her.
+  if (kinds && /^[bso]+$/u.test(kinds)) {
+    if (answering) return answer('answers_her_question');
+    const rest = bare.replaceAll('もしもし', '');
+    const hello = rest !== bare && !facts.othersPresent && (rest === '' || /^b+$/u.test(phraseKinds(rest) ?? ''));
+    return hello ? answer('greeting') : silent('not_addressed');
+  }
   if (ADDRESS_EVIDENCE.name.test(text)) return answer('named');
-  if (facts.sheAsked && length <= SHORT_ANSWER_CHARACTERS) return answer('answers_her_question');
+  if (answering && length <= SHORT_ANSWER_CHARACTERS) return answer('answers_her_question');
   if (facts.othersPresent) {
     // With someone else there, the table rule of 「友人も一緒」 decides: she answers only when addressed.
-    // The call is still the owner's own, so a plain request (「読んで」) counts as said to her.
-    if (TE_REQUEST.test(text)) return answer('request');
+    // A plain request (「読んで」) counts as said to her only right after her own utterance; 「醤油とって」 is for the friend.
+    if (follows && TE_REQUEST.test(text)) return answer('request');
     const address = guestAddressDecision(text, {
-      turns: [], addressedByName: false, introductionStart: false, followsShannonTurn: facts.followsShannon && recent(FOLLOWS_SECONDS),
+      turns: [], addressedByName: false, introductionStart: false, followsShannonTurn: follows,
     }, 'speech');
     return address.respond ? answer(ADDRESS_REASON[address.reason] ?? 'reaction') : silent('not_addressed');
   }
@@ -204,7 +217,7 @@ export function ownerVoiceTurnFacts(input: {
   answersHer?: string | null;
 }): VoiceTurnFacts {
   if (input.answersHer) {
-    return { sheAsked: true, followsShannon: true, secondsSinceShannon: 0, shannonLastLine: Array.from(input.answersHer).slice(0, 600).join(''),
+    return { sheAsked: true, answersHerLine: true, followsShannon: true, secondsSinceShannon: 0, shannonLastLine: Array.from(input.answersHer).slice(0, 600).join(''),
       othersPresent: input.othersPresent, ...(input.source ? { source: input.source } : {}) };
   }
   const last = input.history.at(-1);
@@ -256,8 +269,9 @@ export function settleOwnerVoiceTurn(
   if (!decision.shouldRespond) return silenced(decision, decision.silence ?? 'model');
   if (decision.source !== 'fallback' && decision.replyRequiredProbability < replySilenceBelow(environment)) return silenced(decision, 'model');
   const reliability = decision.transcriptReliabilityProbability;
+  // A fragment is short, untrusted, and not something the router itself wants answered (「火事だ」「倒れた」 are answered).
   if (rules.has('unfinished') && reliability !== undefined && reliability < fragmentReliability(environment)
-    && characters(bareText(turn.transcript)) <= fragmentCharacters(environment)) return silenced(decision, 'unfinished');
+    && decision.replyRequiredProbability < FRAGMENT_REPLY_BELOW && characters(bareText(turn.transcript)) <= fragmentCharacters(environment)) return silenced(decision, 'unfinished');
   return decision;
 }
 
