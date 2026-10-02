@@ -18,6 +18,13 @@ export interface AutonomyLoopConfig {
   ownerActiveMilliseconds: number;
   /** Shortest time between two messages she starts on her own. */
   reachOutSpacingMilliseconds: number;
+  /**
+   * After a message of hers, how long the step stays open to see whether he answers. 0 observes at once.
+   * Never longer than the lease allows (`reachOutWait`).
+   */
+  reachOutWaitMilliseconds: number;
+  /** Thinking steps a cycle may add after the first, when a step's outcome is worth thinking about again. */
+  maximumRethinksPerCycle: number;
   /** How long a runner owns the loop without renewing. Longer than any single step. */
   leaseMilliseconds: number;
   /** What she asks for when the day's cap blocks a step she cares about. */
@@ -42,10 +49,17 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     maximumReadsPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_READS, 0, 6, 2),
     ownerActiveMilliseconds: integer(environment.SHANNON_AUTONOMY_OWNER_ACTIVE_MINUTES, 0, 240, 10) * 60_000,
     reachOutSpacingMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES, 0, 24 * 60, 60) * 60_000,
+    reachOutWaitMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS, 0, 300, 180) * 1_000,
+    maximumRethinksPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_RETHINKS, 0, 3, 2),
     leaseMilliseconds: integer(environment.SHANNON_AUTONOMY_LEASE_SECONDS, 240, 3_600, 600) * 1_000,
     budgetRequestYen: integer(environment.SHANNON_AUTONOMY_BUDGET_REQUEST_YEN, 1, 100_000, 300),
     readingSeeds: readingSeeds(environment.SHANNON_AUTONOMY_READING_SEEDS_JSON),
   });
+}
+
+/** The wait after a message of hers, kept two minutes inside the lease so the model call that follows still fits in it. */
+export function reachOutWait(loop: Pick<AutonomyLoopConfig, 'reachOutWaitMilliseconds' | 'leaseMilliseconds'>): number {
+  return Math.max(0, Math.min(loop.reachOutWaitMilliseconds, loop.leaseMilliseconds - 120_000));
 }
 
 /** `[{"title":"…","url":"https://…"}]`; anything unreadable falls back to the defaults. */

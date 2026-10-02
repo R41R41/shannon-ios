@@ -148,8 +148,9 @@ describe('what reaches the prompts of her own activity', () => {
     const sourceDirectory = join(import.meta.dirname, '../src');
     const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
     expect(loopSources.sort()).toEqual([
-      'autonomyLoop.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopReachOutStep.ts',
-      'autonomyLoopState.ts', 'autonomyLoopSteps.ts',
+      'autonomyLoop.ts', 'autonomyLoopCalls.ts', 'autonomyLoopConfig.ts', 'autonomyLoopFolderStep.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopLookStep.ts',
+      'autonomyLoopObservations.ts', 'autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopPlan.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopReachOutStep.ts',
+      'autonomyLoopState.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts',
     ]);
     const allowed = new Set([
       'node:crypto', 'node:sqlite', '@shannon/cognition',
@@ -159,6 +160,10 @@ describe('what reaches the prompts of her own activity', () => {
       './autonomyLoopLookStep.js',
       // One message of her own: the step names two interfaces (the way her words leave, the owner's upcoming items as lines) and imports neither store.
       './autonomyLoopReachOutStep.js',
+      // Act, observe, think again: what a step led to as closed facts, the words for those facts, the wait after a message of hers,
+      // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
+      './autonomyLoopObservations.js', './autonomyLoopObserve.js', './autonomyLoopObservePrompts.js', './autonomyLoopFollowUpStep.js',
+      './autonomyLoopThinkStep.js', './autonomyLoopCalls.js',
       './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
       './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
       './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',
@@ -171,7 +176,7 @@ describe('what reaches the prompts of her own activity', () => {
       expect(source, name).not.toMatch(/assembleShannonSystemPrompt|buildCompanionPrompt|promptProjection|CompanionState|conversationHistory|knowledgeAnswers|PeopleMemory|recall/u);
     }
     // The loop's journal and her study share the autonomy database connection, and name no table but their own.
-    for (const [name, prefix] of [['autonomyLoopState.ts', 'autonomy_loop_'], ['studyStore.ts', 'study_'], ['autonomyHostFolderSteps.ts', 'autonomy_host_']] as const) {
+    for (const [name, prefix] of [['autonomyLoopState.ts', 'autonomy_loop_'], ['autonomyLoopObservations.ts', 'autonomy_loop_observations'], ['studyStore.ts', 'study_'], ['autonomyHostFolderSteps.ts', 'autonomy_host_']] as const) {
       const source = readFileSync(join(sourceDirectory, name), 'utf8');
       const tables = [...source.matchAll(/\b(?:FROM|INTO|UPDATE|TABLE IF NOT EXISTS|ON)\s+([a-z_]+)\b(?=\s|\()/gu)].map(match => match[1]!)
         .filter(table => table !== 'conflict');
@@ -207,11 +212,26 @@ describe('what reaches the prompts of her own activity', () => {
     expect(delivery).not.toMatch(/SELECT\s+(?:content|\*)|FROM conversation_messages|companion_states/u);
     const step = readFileSync(join(sourceDirectory, 'autonomyLoopReachOutStep.ts'), 'utf8');
     expect(step).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|ownerUpcoming|upcomingStore|calendarContract/u);
+    // Watching for an answer, calling again and thinking again open no store either: an answer is a timestamp from the showing desk,
+    // and what her body did with a message is a closed outcome from an interface.
+    for (const name of ['autonomyLoopObserve.ts', 'autonomyLoopObservePrompts.ts', 'autonomyLoopFollowUpStep.ts', 'autonomyLoopThinkStep.ts', 'autonomyLoopCalls.ts']) {
+      expect(readFileSync(join(sourceDirectory, name), 'utf8'), name).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|reachOutReports|bodyStore|conversationStore|sqliteStore/u);
+    }
+    // An observation has no column and no field for words.
+    const observations = readFileSync(join(sourceDirectory, 'autonomyLoopObservations.ts'), 'utf8');
+    expect(observations).not.toMatch(/\b(?:content|text|message|body|summary|title)\s+TEXT\b/iu);
+    expect([...observations.matchAll(/^\s+([a-z_]+) (?:TEXT|INTEGER)/gmu)].map(match => match[1])).toEqual(['observation_id', 'scope_key', 'cycle_id', 'ordinal', 'step_kind', 'facts_json', 'observed_at']);
+    // What her body reports about a message is a closed outcome: the report table and the reader hold no text, and read no conversation.
+    const reports = readFileSync(join(sourceDirectory, 'reachOutReports.ts'), 'utf8');
+    expect(reports).not.toMatch(/conversation_messages|companion_states|SELECT\s+(?:content|\*)/u);
+    expect([...reports.matchAll(/FROM ([a-z_]+)/gu)].map(match => match[1]).sort()).toEqual(['initiative_messages', 'reach_out_body_presence', 'reach_out_deliveries', 'reach_out_deliveries', 'sqlite_master']);
+    expect([...reports.matchAll(/SELECT ([^`]*?) FROM initiative_messages/gu)].map(match => match[1]!.trim())).toEqual(['created_at']);
     // The only module of the loop that opens the conversation tables answers with an outcome, never with content.
     const showing = readFileSync(join(sourceDirectory, 'autonomyShowing.ts'), 'utf8');
     expect(showing).not.toMatch(/SELECT\s+(?:content|\*)[^`]*FROM conversation_messages/u);
+    // From the conversation it takes a yes or no, and the time of the owner's first turn after an instant: never a column that holds words.
     expect([...showing.matchAll(/SELECT ([^`]*?) FROM (conversation_messages|companion_states)/gu)].map(match => `${match[2]}:${match[1]!.trim()}`).sort())
-      .toEqual(['companion_states:snapshot_json', 'conversation_messages:1 AS found']);
+      .toEqual(['companion_states:snapshot_json', 'conversation_messages:1 AS found', 'conversation_messages:MIN(observed_at) AS first_at']);
   });
 
   it('builds each prompt from her ledger, her study, public reading and reader feedback only', () => {

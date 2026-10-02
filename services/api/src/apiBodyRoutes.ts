@@ -1,8 +1,10 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
+import { REACH_OUT_DELIVERY_OUTCOMES, type ReachOutDeliveryOutcome } from './autonomyLoopObservations.js';
 import { BODY_SCHEMA_VERSION, validatedBodyCapabilities, validatedBodyEvents } from './bodyContract.js';
 import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
 import type { BodyLookAnswer } from './bodyLook.js';
+import { REACH_OUT_REPORT_PREFIX, reachOutReportId, validatedReachOutReport } from './reachOutReports.js';
 import type { ShannonBody } from './shannonBody.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
@@ -57,6 +59,18 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     return body.looks.answer(scopeKey, deviceId, id, result).then(lookResponse);
   }
 
+  // What the body did with a message she started on her own: one closed outcome, no text.
+  if (request.method === 'POST' && request.path.startsWith(REACH_OUT_REPORT_PREFIX)) {
+    const id = reachOutReportId(request.path);
+    if (!id) return { status: 404, body: { error: 'NOT_FOUND' } };
+    const outcome = validatedReachOutReport(request.body);
+    if (!(REACH_OUT_DELIVERY_OUTCOMES as readonly string[]).includes(outcome)) return badRequest(outcome);
+    const result = body.reportReachOut(scopeKey, deviceId, id, outcome as ReachOutDeliveryOutcome);
+    if (result === 'stored' || result === 'duplicate') return { status: 200, body: { schemaVersion: BODY_SCHEMA_VERSION, id, status: result } };
+    const [status, error, message] = REACH_OUT_REPORT_REFUSALS[result];
+    return { status, body: { error, message } };
+  }
+
   if (request.method === 'PUT' && request.path === BODY_CAPABILITIES_PATH) {
     const capabilities = validatedBodyCapabilities(request.body);
     if (typeof capabilities === 'string') return badRequest(capabilities);
@@ -64,6 +78,15 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };
 }
+
+const REACH_OUT_REPORT_REFUSALS = {
+  unavailable: [404, 'NOT_FOUND', 'This server does not take delivery reports.'],
+  disabled: [403, 'BODY_INGEST_DISABLED', 'Body events are switched off on the server.'],
+  not_a_body: [403, 'REACH_OUT_NOT_A_BODY', 'Only a device that registered its capabilities as her body may report.'],
+  not_found: [404, 'REACH_OUT_NOT_FOUND', 'No such message of hers.'],
+  conflict: [409, 'REACH_OUT_ALREADY_REPORTED', 'This device already reported another outcome for this message.'],
+  expired: [410, 'REACH_OUT_EXPIRED', 'This message is too old to report on.'],
+} as const;
 
 const LOOK_REFUSALS = {
   disabled: [403, 'BODY_LOOK_DISABLED', 'Looking is switched off on the server.'],

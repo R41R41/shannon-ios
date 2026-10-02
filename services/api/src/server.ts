@@ -60,6 +60,7 @@ import { dispatchWithChatSentences } from './serverChatSentenceStream.js';
 import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract.js';
 import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
+import { SQLiteReachOutReports } from './reachOutReports.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -89,6 +90,7 @@ const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
 // The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated Voyager tasks when configured.
 const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(scopeKey), now, tasks: voyagerCatalog });
 const reachOuts = new SQLiteReachOutSpeaker(configuredDatabasePath());
+const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel,
@@ -124,7 +126,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey) },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -336,6 +338,7 @@ function shutdown(): void {
     autonomyAnnouncer.close();
     bodyStore.close();
     reachOuts.close();
+    reachOutReports.close();
     ownerUpcoming.close();
     closeBodyLookStores();
     opsStore.close();

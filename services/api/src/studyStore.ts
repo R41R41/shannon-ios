@@ -15,7 +15,7 @@ import type { DatabaseSync } from 'node:sqlite';
 export type StudyPieceKind = 'story' | 'note';
 export type StudyPieceStatus = 'draft' | 'ready' | 'shown' | 'put_away';
 export type StudyReaction = 'like' | 'more' | 'unclear';
-export type StudyPieceOrigin = 'room_look';
+export type StudyPieceOrigin = 'room_look' | 'reach_out';
 
 export const STUDY_STATUS_LABEL: Readonly<Record<StudyPieceStatus, string>> = Object.freeze({
   draft: '下書き', ready: '見せてもいい', shown: '見せた', put_away: 'しまった',
@@ -50,7 +50,10 @@ export interface StudyPiece {
   updatedAt: string;
   shownAt?: string;
   putAwayBy?: 'shannon' | 'owner';
-  /** `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; it is never copied to her folder, and never written into a story as it is. */
+  /**
+   * `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; it is never copied to her folder, and never written into a story as it is.
+   * `reach_out`: what she wrote down after a message of hers got no answer. Hers to think with; it is not material for a story or for a message.
+   */
   origin?: StudyPieceOrigin;
 }
 
@@ -186,7 +189,7 @@ export class StudyStore {
         (scope_key, piece_id, kind, title, body, status, version, readable_version, pursuit_id, sources_json, created_at, updated_at, origin)
       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, id, normalized.kind, normalized.title, normalized.body, note ? 'ready' : 'draft', note ? 1 : null,
-      normalized.pursuitId ?? null, JSON.stringify(normalized.sources), at, at, note && draft.origin === 'room_look' ? 'room_look' : null);
+      normalized.pursuitId ?? null, JSON.stringify(normalized.sources), at, at, note && (draft.origin === 'room_look' || draft.origin === 'reach_out') ? draft.origin : null);
     this.appendVersion(scopeKey, id, 1, normalized.title, normalized.body, normalized.changeNote || '最初の稿です。', normalized.model, at);
     return this.get(scopeKey, id)!;
   }
@@ -359,6 +362,6 @@ function piece(row: PieceRow): StudyPiece {
     updatedAt: row.updated_at,
     ...(row.shown_at ? { shownAt: row.shown_at } : {}),
     ...(row.put_away_by ? { putAwayBy: row.put_away_by as 'shannon' | 'owner' } : {}),
-    ...(row.origin === 'room_look' ? { origin: 'room_look' as const } : {}),
+    ...(row.origin === 'room_look' || row.origin === 'reach_out' ? { origin: row.origin } : {}),
   });
 }

@@ -40,6 +40,11 @@ export interface AutonomyConfig {
   maximumRoomLooksPerDay: number;
   /** Messages she may start on her own, from her own activity, per owner-local day. 0 switches them off. */
   maximumReachOutsPerDay: number;
+  /**
+   * Second calls after a message of hers got no answer, per owner-local day, at most one per message. 0 switches off the whole
+   * act → observe → think-again mechanism: no waiting after a message, no observation, no second thinking step.
+   */
+  maximumReachOutFollowUpsPerDay: number;
   /** Files she may queue for her folders per owner-local day. */
   maximumHostFolderWritesPerDay: number;
   /** How long a device may hold a claimed step before it is closed as failed. */
@@ -66,6 +71,7 @@ export function configuredAutonomy(
     maximumNotionReadsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_NOTION_READS, 0, 10_000, 100)),
     maximumRoomLooksPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_ROOM_LOOKS, 0, 30, 3)),
     maximumReachOutsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_REACH_OUTS, 0, 10, 3)),
+    maximumReachOutFollowUpsPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_FOLLOW_UPS, 0, 10, 3)),
     maximumHostFolderWritesPerDay: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_MAX_HOST_FOLDER_WRITES, 0, 1_000, 10)),
     hostStepLeaseMilliseconds: Math.trunc(boundedNumber(environment.SHANNON_AUTONOMY_HOST_STEP_LEASE_SECONDS, 30, 3_600, 300)) * 1_000,
     modelPrices: configuredAutonomyModelPrices(environment),

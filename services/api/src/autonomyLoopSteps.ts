@@ -1,22 +1,25 @@
 import type { ShannonAutonomyDomainId } from '@shannon/cognition';
-import { yenFromUsd, type AutonomyConfig } from './autonomyBudget.js';
+import type { AutonomyConfig } from './autonomyBudget.js';
 import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
+import { callModel, paidCall } from './autonomyLoopCalls.js';
 import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
 import { ROOM_LOOK_DOMAIN, prepareRoomLook, roomLookAvailable, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
-import { prepareReachOut, reachOutsRemaining, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
-import { planFromThought, storyNotes, thinkingMaterials, withNoteAfterReading, type Thought } from './autonomyLoopPlan.js';
-import {
-  AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, parsedModelObject, revisePrompt, thinkingPrompt, type AutonomyPrompt,
-} from './autonomyLoopPrompts.js';
+import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
+import type { ReachOutFacts } from './autonomyLoopObservations.js';
+import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';
+import { prepareReachOut, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
+import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
+import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
-import { autonomyModelCostUsd, type AutonomyModelPurpose } from './autonomyModels.js';
+import { prepareThinking } from './autonomyLoopThinkStep.js';
+import type { AutonomyModelPurpose } from './autonomyModels.js';
 import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
-import { AutonomyModelError, resolveAutonomyModel, type AutonomyTextModel } from './autonomyTextModel.js';
+import type { AutonomyTextModel } from './autonomyTextModel.js';
 import { STUDY_LIMITS, STUDY_REACTION_LABEL } from './studyStore.js';
 
 /**
@@ -51,10 +54,16 @@ export interface StepDependencies {
   reachOuts?: AutonomyReachOuts;
   /** The owner's upcoming items, for a reach-out; absent, there are none. */
   upcoming?: AutonomyUpcoming;
+  /** What her body reported about a message of hers and what the server knows of the body; absent, both are unknown. */
+  observer?: AutonomyReachOutObserver;
+  /** The loop's clock, read while a step waits. */
+  now?: () => string;
+  /** The pause between two looks at whether the owner answered; absent, a real timer. */
+  wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */
-interface BoundAdapters {
+export interface BoundAdapters {
   model?: AutonomyTextModel;
   reader?: AutonomyPublicReader;
   notion?: AutonomyNotionReader;
@@ -88,6 +97,8 @@ export interface StepResult {
   tool?: string;
   /** Why a failed step failed, as a code from a closed set. */
   reasonCode?: string;
+  /** What followed a message she sent in this step, as closed facts; kept as the step's observation. */
+  observed?: ReachOutFacts;
   /** Writes of the step's product; runs inside the reporting transaction. */
   commit?: (remaining: readonly AutonomyPlannedStep[], at: string) => StepCommit | void;
 }
@@ -108,14 +119,12 @@ export interface PreparedStep {
   perform(adapters: BoundAdapters, at: string, signal?: AbortSignal): Promise<StepResult>;
 }
 
-interface PaidCall { model: string; estimate: { inputTokens: number; outputTokens: number }; estimatedCostYen: number; prompt: AutonomyPrompt; maximumOutputTokens: number }
-
-const OUTPUT_TOKENS: Readonly<Record<'think' | 'note' | 'draft' | 'revise', number>> = Object.freeze({ think: 1_500, note: 1_500, draft: 6_000, revise: 6_000 });
+const OUTPUT_TOKENS: Readonly<Record<'note' | 'draft' | 'revise', number>> = Object.freeze({ note: 1_500, draft: 6_000, revise: 6_000 });
 
 /** Null when the step cannot be carried out at all (nothing to note, an unknown piece, no usable model); it is then skipped unasked. */
 export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   switch (step.kind) {
-    case 'think': return prepareThinking(dependencies, cycle, at);
+    case 'think': return prepareThinking(dependencies, cycle, step, at);
     case 'read': return prepareReading(dependencies, cycle, step);
     case 'notion': return prepareNotion(dependencies, cycle, step);
     case 'note': return prepareNote(dependencies, cycle, step);
@@ -125,76 +134,10 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
-    case 'reach_out': return prepareReachOut(dependencies, cycle, step, at);
+    case 'reach_out': return step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
+    case 'jot': return prepareJot(dependencies, cycle, step, at);
     default: return null;
   }
-}
-
-function paidCall(dependencies: StepDependencies, scopeKey: string, purpose: AutonomyModelPurpose, prompt: AutonomyPrompt, maximumOutputTokens: number): PaidCall | null {
-  const model = resolveAutonomyModel(purpose, dependencies.store.modelPreferences(scopeKey), id => dependencies.model.canUse(id));
-  if (!model) return null;
-  // Japanese runs near one token per character; the estimate assumes more so the gate errs high.
-  const estimate = { inputTokens: Math.ceil((prompt.system.length + prompt.prompt.length) * 1.5) + 64, outputTokens: maximumOutputTokens };
-  const costUsd = autonomyModelCostUsd(model, estimate, dependencies.config.modelPrices);
-  if (costUsd === null) return null;
-  return { model, estimate, estimatedCostYen: yenFromUsd(costUsd, dependencies.config), prompt, maximumOutputTokens };
-}
-
-async function callModel(adapters: BoundAdapters, call: PaidCall, signal?: AbortSignal):
-  Promise<{ reply: Record<string, unknown> | null; usage?: { inputTokens: number; outputTokens: number }; failure?: string }> {
-  if (!adapters.model) return { reply: null, failure: 'AUTONOMY_STEP_NOT_BOUND' };
-  try {
-    const result = await adapters.model.generate({
-      model: call.model, system: call.prompt.system, prompt: call.prompt.prompt, maximumOutputTokens: call.maximumOutputTokens, signal,
-    });
-    return { reply: parsedModelObject(result.text), usage: result.usage };
-  } catch (error) {
-    // The provider answered with an error: charged only what it reported. No answer at all (a timeout, a lost
-    // connection, a shutdown) leaves the cost unknown, so the estimate is charged and the count errs high.
-    const usage = error instanceof AutonomyModelError ? error.usage : call.estimate;
-    return { reply: null, failure: error instanceof Error ? error.message : 'AUTONOMY_MODEL_FAILED', ...(usage ? { usage } : {}) };
-  }
-}
-
-function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycle, at: string): PreparedStep | null {
-  const { store, service, config, loop } = dependencies;
-  const overview = service.overview(cycle.scopeKey);
-  const readsToday = store.activity.countForDay(cycle.scopeKey, overview.budget.dayKey, 'public_read', 'allowed');
-  const maximumSteps = Math.max(0, loop.maximumStepsPerCycle - cycle.stepsTaken - 1);
-  const reachOuts = reachOutsRemaining(dependencies, cycle.scopeKey, at);
-  const materials = thinkingMaterials(store, cycle.scopeKey, {
-    at, localTime: localTime(at, config.timeZone), remainingYen: overview.budget.remainingYen,
-    remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
-    readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
-    folderAvailable: service.folder.available(cycle.scopeKey, at),
-    lookAvailable: roomLookAvailable(dependencies, cycle.scopeKey, at),
-    reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
-  });
-  const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials), OUTPUT_TOKENS.think);
-  if (!call) return null;
-  return {
-    request: { domain: 'thinking', summary: '次に何をするか、自分の台帳と書斎を見て考えます。', tool: 'study.think', paid: { model: call.model, estimatedCostYen: call.estimatedCostYen } },
-    purpose: 'planning', estimate: call.estimate,
-    async perform(adapters, _at, signal) {
-      const { reply, usage, failure } = await callModel(adapters, call, signal);
-      if (!reply) return { outcome: 'failed', summary: failure ? '考えようとしましたが、モデルから返事をもらえませんでした。' : '考えましたが、次の一歩にまとまりませんでした。', usage };
-      const thought: Thought = planFromThought(reply, {
-        pursuits: materials.pursuits, pieces: store.study.list(cycle.scopeKey), unnotedReadingIds: materials.unnotedReadings.map(item => item.id),
-        placeUrls: materials.places.map(place => place.url),
-      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true, lookAvailable: materials.lookAvailable === true, reachOut: materials.reachOut ? { upcoming: (materials.upcoming?.length ?? 0) > 0 } : null });
-      return {
-        outcome: 'done', usage,
-        summary: thought.text ? `次に何をするか考えました。「${thought.text}」` : '次に何をするか考えました。',
-        commit: () => {
-          for (const change of thought.pursuits) {
-            if (change.op === 'add') service.addPursuit(cycle.scopeKey, { kind: change.kind!, title: change.title!, why: change.why!, origin: 'self' });
-            else service.updatePursuit(cycle.scopeKey, change.id!, { ...(change.status ? { status: change.status } : {}), ...(change.why ? { why: change.why } : {}) });
-          }
-          return { plan: thought.steps };
-        },
-      };
-    },
-  };
 }
 
 function prepareReading(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
@@ -396,10 +339,6 @@ function preparePutAway(dependencies: StepDependencies, cycle: AutonomyLoopCycle
   };
 }
 
-function upcomingLines(dependencies: StepDependencies, scopeKey: string, at: string) {
-  try { return dependencies.upcoming?.lines(scopeKey, at, 'owner') ?? []; } catch { return []; }
-}
-
 function waitingReason(outcome: ShowingOutcome): string {
   switch (outcome) {
     case 'quiet-hours': return '夜の静かな時間のため';
@@ -442,12 +381,4 @@ function clip(value: string, maximum: number): string {
 
 function hostOf(url: string): string {
   try { return new URL(url).hostname; } catch { return '不明な宛先'; }
-}
-
-function localTime(at: string, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('ja-JP', { timeZone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).format(new Date(at));
-  } catch {
-    return at.slice(0, 13);
-  }
 }
