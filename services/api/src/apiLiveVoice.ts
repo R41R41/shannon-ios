@@ -78,6 +78,8 @@ interface LiveVoiceDependencies extends ConversationReadCapabilities, Conversati
   conversationOrchestration: ConversationOrchestrationStore;
   memoryRecall?: TurnMemoryRecall | null;
   people?: PeopleMemory;
+  /** Her line from a touch (`bodyReaction.ts`), named by the first voice turn that answers it. */
+  reactions?: { link(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null } | null };
 }
 
 export interface LiveVoiceStreamObserver {
@@ -106,16 +108,13 @@ export function dispatchLiveVoiceRequest(
   const deviceContext = validatedVoiceDeviceContext(request.body.deviceContext, dependencies.now());
   if (deviceContext === false) return badRequest('deviceContext is invalid');
 
-  const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim() : undefined;
-  return completeLiveVoiceDelegation(
-    scopeKey,
-    requestedThreadId,
-    request.body.transcript.trim(),
-    participantMode,
-    deviceContext,
-    dependencies,
-    observer,
-  );
+  if (request.body.reactionId !== undefined && typeof request.body.reactionId !== 'string') return badRequest('reactionId is invalid');
+  // An unknown or expired reaction is not an error: the turn is then an ordinary one.
+  const reaction = dependencies.reactions?.link(scopeKey, request.body.reactionId) ?? null;
+  const requestedThreadId = typeof request.body.threadId === 'string' ? request.body.threadId.trim()
+    : participantMode === 'owner' ? reaction?.threadId ?? undefined : undefined;
+  return completeLiveVoiceDelegation(scopeKey, requestedThreadId, request.body.transcript.trim(), participantMode, deviceContext,
+    reaction?.text ?? null, dependencies, observer);
 }
 
 async function completeLiveVoiceDelegation(
@@ -124,6 +123,7 @@ async function completeLiveVoiceDelegation(
   transcript: string,
   participantMode: VoiceParticipantMode,
   deviceContext: VoiceDeviceContext | null,
+  reactionLine: string | null,
   dependencies: LiveVoiceDependencies,
   observer?: LiveVoiceStreamObserver,
 ): Promise<ApiResponse> {
@@ -354,9 +354,11 @@ async function completeLiveVoiceDelegation(
     } }) : null;
   observer?.signal?.throwIfAborted();
   const turnPrompt = placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt;
+  const replayed = replay?.request(turnPrompt) ?? { systemPrompt: turnPrompt, history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) };
   const modelRequest = {
-    scopeKey,
-    ...(replay?.request(turnPrompt) ?? { systemPrompt: turnPrompt, history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) }),
+    scopeKey, ...replayed,
+    // What she said when she was touched is what he is answering: it precedes his words, in every mode, as context only.
+    ...(reactionLine ? { history: [...replayed.history, { role: 'assistant' as const, content: reactionLine }] } : {}),
     message: transcript,
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,

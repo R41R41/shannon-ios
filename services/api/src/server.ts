@@ -53,6 +53,7 @@ import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
 import { bodyLookRequestBytes, closeBodyLookStores, configuredBodyLookOptions } from './bodyLookWiring.js';
+import { closeBodyReactionStores, configuredBodyReactionOptions } from './bodyReactionWiring.js';
 import { opsCommandsEnabled } from './opsCommandContract.js';
 import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
@@ -129,7 +130,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0 },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0, reactions: configuredBodyReactionOptions(process.env, configuredDatabasePath(), persistentStore) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -344,7 +345,7 @@ function shutdown(): void {
     reachOutReports.close();
     ownerTurns.close();
     ownerUpcoming.close();
-    closeBodyLookStores();
+    closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
     autonomyStore.close();
     persistentStore.close();

@@ -3,13 +3,19 @@ import { SHANNON_OWNER_NAME, currentShannonEmotion, type CompanionStateStore } f
 import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
-  BODY_LIMITS, BODY_SCHEMA_VERSION,
+  BODY_LIMITS, BODY_SCHEMA_VERSION, BODY_TOUCH_EVENT_TYPES,
   type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
 import { noteBodyLookSpeaker } from './bodyLookDelivery.js';
 import { bodyNudgeCandidates } from './bodyNudges.js';
+import { BodyReactions } from './bodyReaction.js';
+import { BODY_REACTION_TOOL, configuredBodyReactions, type BodyReactionConfig } from './bodyReactionContract.js';
+import type { BodyReactionSpeaker } from './bodyReactionModel.js';
+import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
+import { BodyTouches } from './bodyTouch.js';
+import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
 import type { ConversationStore } from './conversationStore.js';
@@ -36,12 +42,14 @@ export interface ShannonBodyOptions {
   reachOutReports?: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
   /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero. Off, no report is taken and no presence read is noted for the loop. Unset means on. */
   reachOutReportsEnabled?: boolean;
+  /** When she is touched (`bodyReaction.ts`): its tables, switch and timings, the fast model, and where a touch becomes an experience. */
+  reactions?: { store?: SQLiteBodyReactionStore; config?: Partial<BodyReactionConfig>; speaker?: BodyReactionSpeaker | null; experiences?: TouchExperienceWriter | null };
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
   stateStore: CompanionStateStore;
   autonomy: ShannonAutonomyService;
-  conversationStore: Pick<ConversationStore, 'listThreads' | 'history' | 'appendNote'>;
+  conversationStore: ConversationStore;
   now: () => string;
 }
 
@@ -122,6 +130,10 @@ export class ShannonBody {
   private readonly presenceMarks = new Map<string, number>();
   /** Looking at the room through the body's camera. */
   readonly looks: BodyLooks;
+  /** A touch as feeling and memory, behind both entrances (an event, a reaction request). */
+  readonly touches: BodyTouches;
+  /** When she is touched: her answer, and her line while it waits for his. */
+  readonly reactions: BodyReactions;
 
   constructor(private readonly dependencies: ShannonBodyDependencies) {
     this.store = dependencies.store ?? new SQLiteBodyStore(':memory:');
@@ -132,6 +144,18 @@ export class ShannonBody {
       cameraDevices: scopeKey => this.store.devicesWithFlag(scopeKey, 'camera'),
       context: (scopeKey, threadId) => dependencies.conversationStore.history(scopeKey, threadId).slice(-BODY_LOOK_LIMITS.contextMessages),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_LOOK_TOOL }); },
+    });
+    const reactionStore = dependencies.reactions?.store ?? new SQLiteBodyReactionStore(':memory:');
+    const config = { ...configuredBodyReactions({}), ...dependencies.reactions?.config };
+    this.touches = new BodyTouches({
+      store: reactionStore, stateStore: dependencies.stateStore, experiences: dependencies.reactions?.experiences ?? null,
+      enabled: config.enabled && this.ingestEnabled, now: dependencies.now,
+    });
+    this.reactions = new BodyReactions({
+      store: reactionStore, touches: this.touches, stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
+      speaker: dependencies.reactions?.speaker ?? null, config, ingestEnabled: this.ingestEnabled, now: dependencies.now,
+      isBody: (scopeKey, deviceId) => this.store.capabilities(scopeKey, deviceId) !== null,
+      record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); },
     });
   }
 
@@ -157,11 +181,27 @@ export class ShannonBody {
         return { id: event.id, status };
       });
     });
+    this.feel(scopeKey, events, results);
     return {
       schemaVersion: BODY_SCHEMA_VERSION, results,
       stored: results.filter(result => result.status === 'stored').length,
       duplicates: results.filter(result => result.status === 'duplicate').length,
     };
+  }
+
+  /**
+   * A stored touch reaches her feeling and her memory, whoever was around (owner decision 2026-10-02). An id a
+   * reaction request already counted only brings that touch's duration up to date. After the store's own
+   * transaction, so no two connections write at once; a failure loses the feeling of one touch, never the receipt.
+   */
+  private feel(scopeKey: string, events: readonly BodyEvent[], results: readonly BodyEventResult[]): void {
+    for (const [index, event] of events.entries()) {
+      const type = BODY_TOUCH_EVENT_TYPES.find(value => value === event.type);
+      if (!type || results[index]?.status !== 'stored') continue;
+      try { this.touches.observe(scopeKey, { ...event, type }); } catch (error) {
+        console.error('Shannon touch failed', error instanceof Error ? error.message : 'unknown');
+      }
+    }
   }
 
   /**

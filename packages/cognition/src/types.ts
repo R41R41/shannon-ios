@@ -157,6 +157,22 @@ export interface MemoryControl {
   sensitivity?: MemorySensitivity;
 }
 
+/** What can happen to her body by touch: the closed vocabulary of `docs/body-contract.md`. */
+export const SHANNON_TOUCH_KINDS = ['pet', 'tickle', 'poke', 'carry', 'holdHand'] as const;
+export type ShannonTouchKind = typeof SHANNON_TOUCH_KINDS[number];
+
+/** One touch as her feeling receives it (`touchEmotion.ts`). Facts and numbers only. */
+export interface ShannonTouch {
+  kind: ShannonTouchKind;
+  durationMs?: number;
+  /** 0 (light) to 1 (firm). */
+  strength?: number;
+  /** Touches of this kind in the current sitting, this one included. */
+  countInWindow: number;
+  /** False when someone other than the owner may have been the one touching. Absent: the owner. */
+  ownerAlone?: boolean;
+}
+
 export interface CompanionStateSnapshot {
   scopeKey: string;
   version: number;
@@ -182,6 +198,8 @@ export type CompanionStateEvent =
   | { type: 'memory-transaction'; events: readonly CompanionStateEvent[] }
   | { type: 'emotion-adjusted'; delta: Partial<ShannonEmotion> }
   | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
+  /** Her body was touched: moves the continuous mood and the conversational feeling by the one table in `touchEmotion.ts`. */
+  | { type: 'body-touched'; touch: ShannonTouch }
   /** An owner turn was recorded on these owner-local days; `today` anchors the 30-day window. */
   | { type: 'shared-time-observed'; days: readonly string[]; today: string }
   | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }
