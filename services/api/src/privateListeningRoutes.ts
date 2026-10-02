@@ -6,6 +6,8 @@ import {
 } from './privateListeningContract.js';
 import type { SQLitePrivateListeningStore } from './privateListeningStore.js';
 import type { PrivateReachOuts } from './privateReachOuts.js';
+import { validCallId } from './incomingCallContract.js';
+import type { IncomingCalls } from './incomingCalls.js';
 
 export interface PrivateListeningDependencies {
   store: SQLitePrivateListeningStore;
@@ -15,6 +17,8 @@ export interface PrivateListeningDependencies {
   ownerScopeKey: string;
   /** Her messages spoken through his earphones (`privateReachOuts.ts`); absent, nothing is offered and the routes answer 404. */
   reachOuts?: PrivateReachOuts | null;
+  /** A call from her that this device answered (`incomingCalls.ts`): a claim that names its call takes her words through here. */
+  calls?: () => Pick<IncomingCalls, 'answer'> | null;
   now: () => string;
 }
 
@@ -93,8 +97,9 @@ function dispatchReachOut(
   const reachOuts = dependencies.reachOuts;
   if (!reachOuts) return { status: 404, body: { error: 'NOT_FOUND' } };
   if (route.action === 'claim') {
-    const unknown = Object.keys(body).find(key => key !== 'scopeKey');
+    const unknown = Object.keys(body).find(key => key !== 'scopeKey' && key !== 'callId');
     if (unknown) return badRequest(`${unknown.slice(0, 40)} is not allowed`);
+    if (body.callId !== undefined) return answerCall(body.callId, scopeKey, deviceId, route.id, dependencies);
     const claim = reachOuts.claim(scopeKey, deviceId, route.id);
     if (claim.kind !== 'claimed') {
       const [status, error, message] = CLAIM_REFUSALS[claim.kind];
@@ -114,4 +119,31 @@ function dispatchReachOut(
   if (result.kind === 'done') return { status: 200, body: { schemaVersion: PRIVATE_LISTENING_SCHEMA_VERSION, id: route.id, status: result.status } };
   const [status, error, message] = REPORT_REFUSALS[result.kind];
   return { status, body: { error, message } };
+}
+
+const CALL_REFUSALS = {
+  disabled: [403, 'INCOMING_CALLS_DISABLED', 'Calls from her are switched off on the server.'],
+  not_found: [404, 'CALL_NOT_FOUND', 'No such call for this message.'],
+  not_yours: [409, 'CALL_NOT_YOURS', 'Another device was called.'],
+  expired: [410, 'CALL_EXPIRED', 'This call is no longer ringing.'],
+  ended: [409, 'CALL_ENDED', 'This call already ended.'],
+} as const;
+
+/** The device that answered her call takes her words: the same answer as a claim, with the call as its surface and no listening window. */
+function answerCall(callId: unknown, scopeKey: string, deviceId: string, initiativeId: string, dependencies: PrivateListeningDependencies): ApiResponse {
+  const calls = dependencies.calls?.() ?? null;
+  if (!calls) return { status: 404, body: { error: 'NOT_FOUND' } };
+  if (!validCallId(callId)) return badRequest('callId must be a call identifier');
+  const answer = calls.answer(scopeKey, deviceId, initiativeId, callId);
+  if (answer.kind !== 'answered') {
+    const [status, error, message] = CALL_REFUSALS[answer.kind];
+    return { status, body: { error, message } };
+  }
+  return {
+    status: 200,
+    body: {
+      schemaVersion: PRIVATE_LISTENING_SCHEMA_VERSION, id: initiativeId, status: answer.status, surface: 'iphone_call', spoken: false,
+      listenSeconds: 0, message: answer.message,
+    },
+  };
 }

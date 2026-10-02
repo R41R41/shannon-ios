@@ -73,7 +73,8 @@ export class PrivateReachOuts {
     const { claims } = this.dependencies;
     const newest = claims.unread(scopeKey).find(message => {
       if (!fresh(message.createdAt, at)) return false;
-      if (message.claim) return message.claim.deviceId === deviceId && message.claim.surface !== 'body' && message.claim.spokenAt === null;
+      // A message the server rang his iPhone with is the call's: no heartbeat is offered it, whoever asks.
+      if (message.claim) return message.claim.deviceId === deviceId && isApp(message.claim.surface) && message.claim.spokenAt === null;
       return this.speaker(scopeKey, at, message.id)?.deviceId === deviceId;
     });
     if (!newest || claims.ownerActiveAfter(scopeKey, newest.createdAt)) return null;
@@ -92,7 +93,7 @@ export class PrivateReachOuts {
     if (!listener) return { kind: 'not_listening' };
     const held = claims.holder(scopeKey, initiativeId);
     // A repeated request of the device that holds it gets the same answer, so a lost reply can be asked for again.
-    if (held?.deviceId === deviceId && held.surface !== 'body') {
+    if (held?.deviceId === deviceId && isApp(held.surface)) {
       return { kind: 'claimed', status: 'held', surface: held.surface, spoken: held.spokenAt !== null, message, listenSeconds };
     }
     if (held) return { kind: 'taken' };
@@ -115,7 +116,8 @@ export class PrivateReachOuts {
     const { claims, reports, enabled, reportsEnabled } = this.dependencies;
     if (!enabled) return { kind: 'disabled' };
     const held = claims.holder(scopeKey, initiativeId);
-    if (!held || held.deviceId !== deviceId || held.surface === 'body') return { kind: 'not_claimed' };
+    // A call's outcome is reported on the call's own route (`incomingCalls.ts`), never here.
+    if (!held || held.deviceId !== deviceId || !isApp(held.surface)) return { kind: 'not_claimed' };
     const at = this.dependencies.now();
     if (outcome === 'not_spoken') {
       if (held.spokenAt !== null) return { kind: 'already_spoken' };
@@ -202,6 +204,11 @@ export class PrivateReachOuts {
   private safeIsBody(scopeKey: string, deviceId: string): boolean {
     try { return this.dependencies.isBody(scopeKey, deviceId); } catch { return false; }
   }
+}
+
+/** One of the owner's apps saying it through his earphones: not her body, and not a call the server placed. */
+function isApp(surface: ReachOutClaim['surface']): surface is 'mac' | 'iphone' {
+  return surface === 'mac' || surface === 'iphone';
 }
 
 /** What a body reports when it did not show her message. */

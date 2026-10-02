@@ -18,6 +18,10 @@ export type ReachOutDeliveryOutcome = BodyReachOutDeliveryOutcome;
 export const REACH_OUT_APP_SURFACES = ['mac', 'iphone'] as const;
 export type ReachOutAppSurface = typeof REACH_OUT_APP_SURFACES[number];
 
+/** What became of the call the server placed with a message of hers (`incomingCalls.ts`): the owner's iPhone rang. */
+export const REACH_OUT_CALL_OUTCOMES = ['answered', 'declined', 'unanswered', 'failed'] as const;
+export type ReachOutCallOutcome = typeof REACH_OUT_CALL_OUTCOMES[number];
+
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];
 
@@ -38,6 +42,8 @@ export interface ReachOutFacts {
   delivery: ReachOutDeliveryOutcome | 'unknown';
   /** Set when `delivery` came from one of the owner's apps, which spoke it through his earphones; absent for her body. */
   surface?: ReachOutAppSurface;
+  /** Set when the server rang his iPhone with this message: what became of that call. Absent when nothing was rung, or it still rings. */
+  call?: ReachOutCallOutcome;
   /** A body read presence in the last half minute, so her window was showing. */
   windowVisible: boolean;
   /** The newest of the body's away and returned events of the last hour. */
@@ -145,10 +151,11 @@ function reachOutFacts(value: unknown): ReachOutFacts | null {
   const seconds = (item: unknown) => (typeof item === 'number' && Number.isFinite(item) ? Math.max(0, Math.min(86_400, Math.round(item))) : 0);
   const delivery = REACH_OUT_DELIVERY_OUTCOMES.find(item => item === raw.delivery) ?? 'unknown';
   const surface = REACH_OUT_APP_SURFACES.find(item => item === raw.surface);
+  const call = REACH_OUT_CALL_OUTCOMES.find(item => item === raw.call);
   return Object.freeze({
     id: raw.id, reason, sentAt: new Date(Date.parse(raw.sentAt)).toISOString(), waitedSeconds: seconds(raw.waitedSeconds),
     replied: raw.replied === true, ...(raw.replied === true ? { repliedAfterSeconds: seconds(raw.repliedAfterSeconds) } : {}),
-    delivery, ...(surface && delivery !== 'unknown' ? { surface } : {}), windowVisible: raw.windowVisible === true,
+    delivery, ...(surface && delivery !== 'unknown' ? { surface } : {}), ...(call ? { call } : {}), windowVisible: raw.windowVisible === true,
     owner: raw.owner === 'away' || raw.owner === 'returned' ? raw.owner : 'unknown', others: raw.others === true,
     ...(raw.unwatched === true ? { unwatched: true as const } : {}),
   });
