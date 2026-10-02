@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SHANNON_EMOTION_KINDS,
+  SHANNON_EMOTION_TIME,
   buildCompanionStatePrompt,
   createInitialCompanionState,
   currentShannonEmotion,
@@ -14,9 +15,19 @@ import {
 } from '../src/index.js';
 
 const NOW = '2026-10-02T03:00:00.000Z';
+/** The kill switch: the timing rules as they were before the awake clock. */
+const WALL = { ...SHANNON_EMOTION_TIME, clock: 'wall' as const };
 const fresh = (): CompanionStateSnapshot => createInitialCompanionState('owner', NOW);
-const face = (userMessage: string, reply: string, snapshot = fresh(), now = NOW) =>
-  resolveReplyEmotion({ snapshot, userMessage, reply, now }).messageEmotion;
+const face = (userMessage: string, reply: string, snapshot = fresh(), now = NOW, timing = SHANNON_EMOTION_TIME) =>
+  resolveReplyEmotion({ snapshot, userMessage, reply, now, timing }).messageEmotion;
+/** She stays awake from `from` for this many minutes: one content-free event every ten minutes, as a session of her own gives. */
+const awakeFor = (state: CompanionStateSnapshot, from: string, minutes: number): CompanionStateSnapshot => {
+  let next = state;
+  for (let passed = 10; passed <= minutes; passed += 10) {
+    next = reduceCompanionState(next, { type: 'awake-observed' }, new Date(Date.parse(from) + passed * 60_000).toISOString());
+  }
+  return next;
+};
 
 describe('expression beside the name is her feeling for that reply', () => {
   it('ignores words in the owner message', () => {
@@ -48,13 +59,26 @@ describe('expression beside the name is her feeling for that reply', () => {
     expect(faceForEmotionKind('apologetic')).toEqual({ expression: 'concerned', feeling: 'apologetic' });
   });
 
-  it('lets a strong feeling linger one beat and a day-old feeling settle', () => {
+  it('lets a strong feeling linger one beat and a day-old feeling of one reply settle', () => {
     const proud = resolveShannonEmotionState({
       provisionalPrimary: 'triumphant', provisionalIntensity: 0.9, transcript: '動いた！', now: NOW,
     });
     const snapshot = reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: proud }, NOW);
     expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-02T03:01:00.000Z').feeling).toBe('proud');
+    // The pride of one reply passes in the minutes she stays awake after it: the next day it has settled.
     expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-03T03:00:00.000Z').expression).toBe('calm');
+    // The same within one sitting: a quarter of an hour awake settles it.
+    const later = awakeFor(snapshot, NOW, 20);
+    expect(face('次は何をする？', '次はテストを書きます。', later, '2026-10-02T03:21:00.000Z').expression).toBe('calm');
+  });
+
+  it('under the kill switch a day-old feeling settles on the wall clock as before', () => {
+    const proud = resolveShannonEmotionState({
+      provisionalPrimary: 'triumphant', provisionalIntensity: 0.9, transcript: '動いた！', now: NOW,
+    });
+    const snapshot = reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: proud }, NOW, WALL);
+    expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-02T03:01:00.000Z', WALL).feeling).toBe('proud');
+    expect(face('次は何をする？', '次はテストを書きます。', snapshot, '2026-10-03T03:00:00.000Z', WALL).expression).toBe('calm');
   });
 
   it('uses a feeling decided for the reply, as a voice turn does', () => {
@@ -71,11 +95,11 @@ describe('expression beside the name is her feeling for that reply', () => {
   });
 });
 
-describe('one carry-over rule for text and voice', () => {
+describe('the wall-clock carry-over rule (a feeling stored before the awake clock, and the kill switch)', () => {
   const sulky = resolveShannonEmotionState({
     provisionalPrimary: 'sulky', provisionalIntensity: 0.8, transcript: '今日は別のAIと遊ぶ', now: NOW,
   });
-  const snapshot = reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: sulky }, NOW);
+  const snapshot = reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: sulky }, NOW, WALL);
 
   it('reads the stored feeling through the same decay everywhere', () => {
     expect(currentShannonEmotion(sulky, '2026-10-02T03:02:00.000Z').primary).toBe('sulky');
@@ -102,10 +126,13 @@ describe('one carry-over rule for text and voice', () => {
   });
 
   it('puts the current feeling in the text prompt only with a clock', () => {
-    expect(buildCompanionStatePrompt(snapshot)).not.toContain('会話感情');
-    expect(buildCompanionStatePrompt(snapshot, { now: '2026-10-02T03:01:00.000Z' })).toContain('いまの会話感情: sulky');
-    expect(buildCompanionStatePrompt(snapshot, { now: '2026-10-02T22:00:00.000Z' }))
+    expect(buildCompanionStatePrompt(snapshot, { timing: WALL })).not.toContain('会話感情');
+    expect(buildCompanionStatePrompt(snapshot, { now: '2026-10-02T03:01:00.000Z', timing: WALL })).toContain('いまの会話感情: sulky');
+    expect(buildCompanionStatePrompt(snapshot, { now: '2026-10-02T22:00:00.000Z', timing: WALL }))
       .toContain('いまの会話感情: 落ち着いている');
+    // Nothing is kept or shown underneath under the kill switch.
+    expect(snapshot.lingering).toBeUndefined();
+    expect(buildCompanionStatePrompt(snapshot, { now: '2026-10-02T03:01:00.000Z', timing: WALL })).not.toContain('まだ残っている気持ち');
   });
 
   it('is at full strength when just expressed and fades with the remaining carry-over', () => {
@@ -121,10 +148,10 @@ describe('one carry-over rule for text and voice', () => {
   });
 
   it('shows the same settled feeling as 「いま」', () => {
-    expect(presentShannonMood(snapshot, '2026-10-02T03:01:00.000Z')).toMatchObject({
+    expect(presentShannonMood(snapshot, '2026-10-02T03:01:00.000Z', WALL)).toMatchObject({
       expression: 'annoyed', fromConversation: true,
     });
-    expect(presentShannonMood(snapshot, '2026-10-02T22:00:00.000Z')).toMatchObject({
+    expect(presentShannonMood(snapshot, '2026-10-02T22:00:00.000Z', WALL)).toMatchObject({
       expression: 'calm', fromConversation: false,
     });
   });

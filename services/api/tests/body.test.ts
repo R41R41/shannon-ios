@@ -299,8 +299,14 @@ describe('GET /v1/body/presence', () => {
     expect(presence.mood.intensity).toBeGreaterThan(0);
     expect(JSON.stringify(presence)).not.toContain('内緒');
     expect(JSON.stringify(presence)).not.toContain('cause');
-    // The feeling settles by itself; the body sees the same quiet mood the app shows.
+    // A day in which she was dormant: her clock stood still, so the body still sees the feeling the app shows.
     advance(24 * 60 * MINUTE);
+    expect(((await get('/v1/body/presence')).body as BodyPresence).mood).toMatchObject({ primary: 'happy', fromConversation: true });
+    // A feeling this strong lingers; it settles with the time she is awake (here: a day and a half of her own sessions).
+    for (let step = 0; step < 36 * 6; step += 1) {
+      advance(10 * MINUTE);
+      stateStore.apply(scope, { type: 'awake-observed' });
+    }
     expect(((await get('/v1/body/presence')).body as BodyPresence).mood).toMatchObject({ primary: 'neutral', intensity: 0, fromConversation: false });
   });
 

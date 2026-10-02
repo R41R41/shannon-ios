@@ -1,13 +1,13 @@
 import {
   InMemoryCompanionStateStore,
   assembleShannonSystemPrompt,
-  resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateEvent,
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
-import { commitReplyEmotionLater, presentCompanionState } from './companionPresence.js';
+import { commitReplyEmotionLater, presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
+import { emotionTiming } from './emotionTiming.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
 import { dispatchDataRequest } from './apiDataRoutes.js';
@@ -322,7 +322,7 @@ export class ShannonApiKernel {
     if (liveVoiceResponse) return await liveVoiceResponse;
 
     const turnResponse = dispatchVoiceTurn(request, { stateStore: this.stateStore, chatModel: this.chatModel,
-      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions });
+      conversationStore: this.conversationStore, background: this.background, now: this.now, reactions: this.body.reactions, looks: this.body.looks });
     if (turnResponse) return await turnResponse;
 
     if (request.method === 'POST' && request.path === '/v1/chat') {
@@ -489,11 +489,11 @@ export class ShannonApiKernel {
       aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
-      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions,
+      conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people, reactions: this.body.reactions, looks: this.body.looks,
     };
   }
   waitForBackground(scopeKey: string): Promise<void> { return this.background.waitForIdle(scopeKey); }
 }
 export function createLocalApiKernel(now: CompanionClock = () => new Date().toISOString(), options: ShannonApiKernelOptions = {}): ShannonApiKernel {
-  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now), now, options);
+  return new ShannonApiKernel(options.stateStore ?? new InMemoryCompanionStateStore(now, emotionTiming()), now, options);
 }

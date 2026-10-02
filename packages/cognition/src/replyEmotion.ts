@@ -1,5 +1,7 @@
 import { projectEmotionReaction } from './affect.js';
-import { currentShannonEmotion, isShannonEmotionKind, resolveShannonEmotionState } from './emotionState.js';
+import { presentShannonFeeling } from './emotionContinuity.js';
+import { isShannonEmotionKind, resolveShannonEmotionState } from './emotionState.js';
+import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { createShannonMessageEmotion, deriveShannonFace, type ShannonFace, type ShannonMessageEmotion } from './expression.js';
 import type { CompanionStateSnapshot, ShannonExpressiveEmotion } from './types.js';
 
@@ -13,6 +15,10 @@ export interface ReplyEmotionInput {
    * emotion). Text has none and starts from neutral.
    */
   decided?: { primary: string; intensity: number };
+  /** The server's emotion timing; the table's defaults when absent. */
+  timing?: ShannonEmotionTiming;
+  /** The reply is her line about a touch that already went through the shared rule: its feeling is not held back again. */
+  replaces?: boolean;
 }
 
 export interface ReplyEmotion {
@@ -31,15 +37,18 @@ export interface ReplyEmotion {
  */
 export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
   const decided = input.decided && isShannonEmotionKind(input.decided.primary) ? input.decided : undefined;
+  const timing = input.timing ?? SHANNON_EMOTION_TIME;
   const expressiveEmotion = resolveShannonEmotionState({
-    ...(input.snapshot.expressiveEmotion ? { previous: input.snapshot.expressiveEmotion } : {}),
+    ...(timing.clock === 'awake' ? { previous: presentShannonFeeling(input.snapshot, input.now, timing) }
+      : input.snapshot.expressiveEmotion ? { previous: input.snapshot.expressiveEmotion } : {}),
+    ...(input.replaces ? { replaces: true } : {}),
     provisionalPrimary: decided?.primary ?? 'neutral',
     provisionalIntensity: decided?.intensity ?? 0.15,
     transcript: input.userMessage,
     reply: input.reply,
     now: input.now,
   });
-  const mood = projectEmotionReaction(input.snapshot, input.userMessage);
+  const mood = projectEmotionReaction(input.snapshot, input.userMessage, timing);
   return { messageEmotion: createShannonMessageEmotion(mood, expressiveEmotion), expressiveEmotion };
 }
 
@@ -51,8 +60,12 @@ export interface ShannonPresentMood extends ShannonFace {
 }
 
 /** 「いま」: the feeling at `now` with no new stimulus, for the state sheet and Memory. */
-export function presentShannonMood(snapshot: CompanionStateSnapshot, now: string): ShannonPresentMood {
-  const current = currentShannonEmotion(snapshot.expressiveEmotion, now);
+export function presentShannonMood(
+  snapshot: CompanionStateSnapshot,
+  now: string,
+  timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
+): ShannonPresentMood {
+  const current = presentShannonFeeling(snapshot, now, timing);
   const fromConversation = current.primary !== 'neutral' && current.visibility !== 'hidden';
   return Object.freeze({
     ...deriveShannonFace(snapshot.emotion, current),

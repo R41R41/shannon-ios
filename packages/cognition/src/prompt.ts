@@ -4,7 +4,8 @@ import { memoryControlFor, memoryIdentifier, visibleMemoryText } from './memory.
 import { filterMeaningfulInterests } from './interests.js';
 import { shannonPersonaPrompt, shannonSuitePrompt, type ShannonAudience } from './persona.js';
 import { shannonCapabilityPrompt } from './capabilities.js';
-import { currentShannonEmotion } from './emotionState.js';
+import { lingeringFeelingLine, presentShannonFeeling } from './emotionContinuity.js';
+import type { ShannonEmotionTiming } from './emotionTime.js';
 
 /**
  * Stable identity block: canonical persona, suite roles, and capabilities. It is the
@@ -20,6 +21,8 @@ export interface CompanionPromptOptions {
   maximumCharacters?: number;
   /** Turn time. When given, the prompt states the conversational feeling as it stands at that moment. */
   now?: string;
+  /** The server's emotion timing; the table's defaults when absent. */
+  timing?: ShannonEmotionTiming;
 }
 
 function fixed(value: number): string {
@@ -80,7 +83,8 @@ export function buildCompanionStatePrompt(
     `経験で育つ気質: 親密さ ${fixed(snapshot.temperament.closeness)} / 好奇心 ${fixed(snapshot.temperament.curiosity)} / ユーザー理解の確信 ${fixed(snapshot.temperament.confidenceAboutUser)}`,
     `変わらない性格: 自発性 ${fixed(snapshot.temperament.initiative)} / 落ち着き ${fixed(snapshot.temperament.calmness)} / 継続欲求 ${fixed(snapshot.temperament.needForContinuity)}`,
     `感情: 快・不快 ${fixed(snapshot.emotion.valence)} / 活性 ${fixed(snapshot.emotion.arousal)} / 開放性 ${fixed(snapshot.emotion.openness)}`,
-    currentFeelingLine(snapshot, options.now),
+    currentFeelingLine(snapshot, options.now, options.timing),
+    lingeringFeelingLine(snapshot, options.now, options.timing),
     interests.length ? `今日の関心: ${interests[0]!.text}` : '今日の関心: まだ形成されていない',
     interests.length > 1 ? `ほかに育っている関心: ${interests.slice(1).map(item => item.text).join('、')}` : '',
     fitSections([facts.length
@@ -100,9 +104,9 @@ export function buildCompanionStatePrompt(
  * shared with voice. Without a clock (a cached projection) the line is left out
  * rather than showing a stored feeling that may be hours old.
  */
-function currentFeelingLine(snapshot: CompanionStateSnapshot, now: string | undefined): string {
+function currentFeelingLine(snapshot: CompanionStateSnapshot, now: string | undefined, timing: ShannonEmotionTiming | undefined): string {
   if (!now) return '';
-  const feeling = currentShannonEmotion(snapshot.expressiveEmotion, now);
+  const feeling = presentShannonFeeling(snapshot, now, timing);
   return feeling.primary === 'neutral'
     ? `いまの会話感情: 落ち着いている (${feeling.cause})`
     : `いまの会話感情: ${feeling.primary} / 強度 ${fixed(feeling.intensity)} / 対象 ${feeling.target} / 理由 ${feeling.cause} / 表出 ${feeling.visibility}`;

@@ -3,6 +3,7 @@ import type {
   CompanionStateEvent,
   CompanionStateSnapshot,
   ShannonEmotion,
+  ShannonExpressiveEmotion,
   ShannonTemperament,
   MemoryControl,
   ProspectiveMemory,
@@ -14,8 +15,13 @@ import {
   normalizeShannonExpressiveEmotion,
   sameShannonExpressiveEmotion,
 } from './emotionState.js';
+import {
+  easeLingering, easeShannonFeeling, inEasedHold, lingeringStrength, noteShannonFeeling, presentShannonFeeling, sameLingering, settleEmotionTime,
+} from './emotionContinuity.js';
+import { holdsShannonFeeling } from './emotionState.js';
+import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
-import { feelTouch } from './touchEmotion.js';
+import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
 import type { MemoryDisclosure } from './types.js';
 
@@ -194,30 +200,100 @@ export function createInitialCompanionState(scopeKey: string, nowIso: string): C
   });
 }
 
+/**
+ * The state brought to `nowIso` on her awake clock before an emotion event is applied: the clock
+ * advanced, the mood returned toward its baseline, what has settled underneath dropped. Under
+ * `clock: 'wall'` nothing is aged here and the state is returned as it is.
+ */
+function awakeState(current: CompanionStateSnapshot, nowIso: string, timing: ShannonEmotionTiming): { state: CompanionStateSnapshot; awakeMs: number } {
+  if (timing.clock !== 'awake') return { state: current, awakeMs: 0 };
+  const settled = settleEmotionTime(current, nowIso, timing);
+  if (!settled.changed) return { state: current, awakeMs: settled.awakeMs };
+  return {
+    state: { ...current, emotion: settled.emotion, lingering: settled.lingering, ...(settled.emotionClock ? { emotionClock: settled.emotionClock } : {}) },
+    awakeMs: settled.awakeMs,
+  };
+}
+
+/**
+ * Stores a conversational feeling on the awake clock, or nothing. Every writer ends here, so the
+ * rule that a feeling is not replaced by a weaker stimulus (`holdsShannonFeeling`) holds for all of
+ * them, also for one that resolved its feeling from an older snapshot. A feeling that merely went
+ * on (the resolver's `continued`), and one the present feeling holds against, store nothing: what
+ * she already feels keeps fading from where it was, and is never raised back to an earlier reading
+ * (an apology that landed in between stays). What is stored is noted underneath.
+ */
+function committedFeeling(
+  state: CompanionStateSnapshot,
+  event: ShannonExpressiveEmotion,
+  awakeMs: number,
+  nowIso: string,
+  timing: ShannonEmotionTiming,
+): Pick<CompanionStateSnapshot, 'expressiveEmotion' | 'lingering'> | null {
+  if (event.continued) return null;
+  const incoming = normalizeShannonExpressiveEmotion(event);
+  const present = presentShannonFeeling(state, nowIso, timing);
+  // The same kind as what she feels now is stored only when the resolver said the stimulus was itself stronger. Without
+  // that word (a caller that rebuilt the object, an older reading) it is the feeling going on, and nothing is raised.
+  if (incoming.primary === present.primary && present.primary !== 'neutral') {
+    if (event.continued !== false) return null;
+    // And even with it, only a stronger one, an override, or a touch (felt each time) replaces the same feeling.
+    if (!incoming.overrideReason && !isTouchFeeling(incoming) && incoming.intensity <= present.intensity) return null;
+  }
+  const touch = isTouchFeeling(incoming) ? { presentFromTouch: isTouchFeeling(present) } : undefined;
+  // The reading is made here, from the state being written to: the mood her concern covers holds as well.
+  if (incoming.primary !== present.primary && (holdsShannonFeeling(present, incoming, touch)
+    || (present.underneath !== undefined && holdsShannonFeeling(present.underneath, incoming, touch && { presentFromTouch: false })))) return null;
+  // He eased this feeling a moment ago: unless the stimulus is above the height it had before, it shows no stronger than it is now.
+  const easedEntry = (state.lingering ?? []).find(item => item.kind === incoming.primary && item.target === incoming.target && inEasedHold(item, awakeMs, timing));
+  const held = easedEntry && !incoming.overrideReason && incoming.intensity <= (easedEntry.peak ?? 0)
+    ? Math.min(incoming.intensity, lingeringStrength(easedEntry, awakeMs, timing) + SHANNON_EMOTION_CONTINUITY.easedMargin) : incoming.intensity;
+  const expressiveEmotion = normalizeShannonExpressiveEmotion({ ...incoming, intensity: held, awakeAt: awakeMs });
+  return { expressiveEmotion, lingering: noteShannonFeeling(state.lingering ?? [], expressiveEmotion, awakeMs, nowIso, timing, event.decided === true) };
+}
+
 export function reduceCompanionState(
   current: CompanionStateSnapshot,
   event: CompanionStateEvent,
   nowIso: string,
+  timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
 ): CompanionStateSnapshot {
   let next: CompanionStateSnapshot;
   switch (event.type) {
     case 'memory-transaction': {
       if (!event.events.length) return current;
       if (event.events.some(item => item.type === 'memory-transaction')) throw new Error('Nested memory transaction');
-      next = event.events.reduce((state, item) => reduceCompanionState(state, item, nowIso), current);
+      next = event.events.reduce((state, item) => reduceCompanionState(state, item, nowIso, timing), current);
       if (next === current) return current;
       break;
     }
+    case 'awake-observed': {
+      // Her clock moves and nothing else happened: no new version, so prompts and indexes keyed by it stay as they are.
+      const { state } = awakeState(current, nowIso, timing);
+      return state === current ? current : freezeSnapshot(state);
+    }
     case 'emotion-adjusted': {
-      const emotion = { ...current.emotion };
+      const { state } = awakeState(current, nowIso, timing);
+      const emotion = { ...state.emotion };
       if (event.delta.valence !== undefined) emotion.valence = clamp(emotion.valence + event.delta.valence, -1, 1);
       if (event.delta.arousal !== undefined) emotion.arousal = clamp(emotion.arousal + event.delta.arousal, 0, 1);
       if (event.delta.openness !== undefined) emotion.openness = clamp(emotion.openness + event.delta.openness, 0, 1);
-      if (sameEmotion(emotion, current.emotion)) return current;
-      next = { ...current, emotion };
+      // An adjustment that moves nothing on a state whose clock has not started leaves it untouched.
+      if (sameEmotion(emotion, current.emotion)) return state === current || !current.emotionClock ? current : freezeSnapshot(state);
+      next = { ...state, emotion };
       break;
     }
     case 'expressive-emotion-updated': {
+      if (timing.clock === 'awake') {
+        const { state, awakeMs } = awakeState(current, nowIso, timing);
+        const committed = committedFeeling(state, event.emotion, awakeMs, nowIso, timing);
+        // Nothing new was felt: only her clock moved, which is no new version.
+        if (!committed) return state === current ? current : freezeSnapshot(state);
+        if (state === current && current.expressiveEmotion && sameShannonExpressiveEmotion(committed.expressiveEmotion!, current.expressiveEmotion)
+          && sameLingering(committed.lingering ?? [], current.lingering ?? [])) return current;
+        next = { ...state, ...committed };
+        break;
+      }
       const expressiveEmotion = normalizeShannonExpressiveEmotion(event.emotion);
       if (current.expressiveEmotion && sameShannonExpressiveEmotion(expressiveEmotion, current.expressiveEmotion)) return current;
       next = { ...current, expressiveEmotion };
@@ -225,10 +301,29 @@ export function reduceCompanionState(
     }
     case 'body-touched': {
       // One table decides both parts of the one emotion state; nothing else reads a touch as feeling.
-      const felt = feelTouch(current, event.touch, nowIso);
+      const { state, awakeMs } = awakeState(current, nowIso, timing);
+      const felt = feelTouch(state, event.touch, nowIso, timing);
+      if (timing.clock === 'awake') {
+        // A feeling that was held through the touch is left exactly as stored; only the mood moved.
+        const feeling = felt.expressiveEmotion === state.expressiveEmotion ? null
+          : committedFeeling(state, felt.expressiveEmotion, awakeMs, nowIso, timing);
+        if (!feeling && sameEmotion(felt.emotion, state.emotion)) return state === current ? current : freezeSnapshot(state);
+        next = { ...state, emotion: felt.emotion, ...feeling };
+        break;
+      }
       if (sameEmotion(felt.emotion, current.emotion) && current.expressiveEmotion
         && sameShannonExpressiveEmotion(felt.expressiveEmotion, current.expressiveEmotion)) return current;
       next = { ...current, emotion: felt.emotion, expressiveEmotion: felt.expressiveEmotion };
+      break;
+    }
+    case 'feeling-eased': {
+      // Resolution comes from what happens (here: his apology or kind word) and from awake time, never from a new conversation starting.
+      if (timing.clock !== 'awake') return current;
+      const { state, awakeMs } = awakeState(current, nowIso, timing);
+      const lingering = easeLingering(state.lingering ?? [], event.by, awakeMs, nowIso, timing);
+      const eased = easeShannonFeeling(state.expressiveEmotion, event.by, awakeMs, timing);
+      if (sameLingering(lingering, state.lingering ?? []) && eased === state.expressiveEmotion) return state === current ? current : freezeSnapshot(state);
+      next = { ...state, lingering, ...(eased ? { expressiveEmotion: eased } : {}) };
       break;
     }
     case 'shared-time-observed': {
@@ -372,6 +467,8 @@ export function freezeSnapshot(snapshot: CompanionStateSnapshot): CompanionState
   return Object.freeze({
     ...snapshot, temperament, emotion, ...(expressiveEmotion ? { expressiveEmotion } : {}),
     ...(snapshot.sharedDays ? { sharedDays: Object.freeze([...snapshot.sharedDays]) } : {}),
+    ...(snapshot.emotionClock ? { emotionClock: Object.freeze({ ...snapshot.emotionClock }) } : {}),
+    ...(snapshot.lingering ? { lingering: Object.freeze(snapshot.lingering.map(item => Object.freeze({ ...item }))) } : {}),
     interests, userFacts, activeMemories, relationships, prospectiveMemories, memoryControls,
   });
 }

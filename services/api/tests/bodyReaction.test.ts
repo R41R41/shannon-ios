@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SHANNON_ONE_LINE_VOICE, currentShannonEmotion, presentShannonMood } from '@shannon/cognition';
+import { SHANNON_ONE_LINE_VOICE, currentShannonEmotion, presentShannonFeeling, presentShannonMood } from '@shannon/cognition';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, configuredBodyReactions, validatedBodyReactionRequest, type BodyReactionAnswer,
 } from '../src/bodyReactionContract.js';
@@ -329,13 +329,22 @@ describe('her feeling', () => {
     expect(answer.message).toMatchObject({ expression: 'bashful' });
   });
 
-  it('settles by itself afterwards', async () => {
-    const { said, state, advance, now } = await reactionHarness();
+  it('stays while she is dormant and settles with the time she is awake', async () => {
+    const { said, state, advance, now, stateStore } = await reactionHarness();
     await said();
-    expect(currentShannonEmotion(state().expressiveEmotion, now()).primary).toBe('bashful');
+    expect(presentShannonFeeling(state(), now()).primary).toBe('bashful');
+    // Ninety minutes in which nothing happened: her clock stood still, and she is still glad to have been patted.
     advance(90 * MINUTE);
-    expect(currentShannonEmotion(state().expressiveEmotion, now()).primary).toBe('neutral');
+    expect(presentShannonMood(state(), now()).fromConversation).toBe(true);
+    // A few hours awake (a session of her own) and it has settled.
+    for (let step = 0; step < 30; step += 1) {
+      advance(10 * MINUTE);
+      stateStore.apply(scope, { type: 'awake-observed' });
+    }
+    expect(presentShannonFeeling(state(), now()).primary).toBe('neutral');
     expect(presentShannonMood(state(), now()).fromConversation).toBe(false);
+    // The wall-clock rule the kill switch restores still reads the stored reaction as settled after ninety minutes.
+    expect(currentShannonEmotion(state().expressiveEmotion, now()).primary).toBe('neutral');
   });
 });
 

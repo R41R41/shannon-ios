@@ -41,6 +41,11 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
   emotion: Object.freeze([
     'packages/cognition/src/affect.ts',
     'packages/cognition/src/emotionState.ts',
+    // Her awake clock, the one table of how long feelings last, and what stays underneath the feeling of the moment.
+    'packages/cognition/src/emotionTime.ts',
+    'packages/cognition/src/emotionContinuity.ts',
+    'services/api/src/emotionTiming.ts',
+    'services/api/src/autonomyAwakeClock.ts',
     'packages/cognition/src/emotionOverrides.ts',
     'packages/cognition/src/replyEmotion.ts',
     'packages/cognition/src/expression.ts',

@@ -1,5 +1,6 @@
 import { JevVoiceDecisionGateway } from '../src/voiceDecision.js';
-import { voiceDecisionEvaluationCases } from './voiceDecisionEvaluationCases.js';
+import { settleOwnerVoiceTurn } from '../src/voiceSilence.js';
+import { ownerCallFacts, voiceDecisionEvaluationCases } from './voiceDecisionEvaluationCases.js';
 
 const apiKey = process.env.TYPESAFE_API_KEY?.trim();
 if (!apiKey) throw new Error('TYPESAFE_API_KEY is required for the live voice-router evaluation');
@@ -25,13 +26,16 @@ const failureDetails: Array<{
 }> = [];
 
 for (const testCase of voiceDecisionEvaluationCases) {
-  const decision = await gateway.decide({
+  // The facts of the moment as the owner call sends them, and the router's answer settled against the local rules as in a real turn.
+  const turn = { ...ownerCallFacts, ...testCase.turn };
+  const decision = settleOwnerVoiceTurn(await gateway.decide({
     scopeKey: `live-eval:${testCase.id}`,
     transcript: testCase.transcript,
     participantMode: 'owner',
     requestedLocation: testCase.expectedSkills.includes('device_context'),
     hasFreshLocation: testCase.expectedSkills.includes('device_context'),
-  });
+    turn, context: turn.shannonLastLine ? [{ role: 'assistant', content: turn.shannonLastLine }] : [],
+  }), { transcript: testCase.transcript, facts: turn, uncertain: false });
   latencies.push(decision.elapsedMilliseconds);
   const missingSkills = testCase.expectedSkills.filter(skill => !decision.selectedSkills.includes(skill));
   const unexpectedSkills = decision.selectedSkills.filter(skill => !testCase.expectedSkills.includes(skill));

@@ -187,6 +187,26 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
     initialState: snapshot({ emotion: { valence: 0.8, arousal: 0.8, openness: 0.8 } }),
     affect: { message: '通常の会話' },
   }, [{ type: 'number-in-range', path: 'emotion.valence', minimum: 0, maximum: 0.8 }]),
+  // On the awake clock the mood returns to its baseline with awake time, in the reducer: two instants, ten minutes apart.
+  scenario('affect-returns-with-awake-time', 'state-transition', {
+    now,
+    initialState: snapshot({ emotion: { valence: 0.8, arousal: 0.8, openness: 0.8 }, emotionClock: { awakeMs: 0, at: '2026-09-25T23:50:00.000Z' } }),
+    events: [{ type: 'awake-observed' }],
+  }, [
+    { type: 'state-equals', path: 'state.emotionClock.awakeMs', value: 600_000 },
+    { type: 'number-in-range', path: 'state.emotion.valence', minimum: 0.74, maximum: 0.77 },
+    { type: 'number-in-range', path: 'state.emotion.arousal', minimum: 0.68, maximum: 0.71 },
+    { type: 'state-equals', path: 'state.version', value: 0 },
+  ]),
+  // Weeks in which she was dormant count as the idle cap, twelve minutes, and no more.
+  scenario('affect-stands-still-while-dormant', 'state-transition', {
+    now,
+    initialState: snapshot({ emotion: { valence: 0.8, arousal: 0.8, openness: 0.8 }, emotionClock: { awakeMs: 0, at: old } }),
+    events: [{ type: 'awake-observed' }],
+  }, [
+    { type: 'state-equals', path: 'state.emotionClock.awakeMs', value: 720_000 },
+    { type: 'number-in-range', path: 'state.emotion.valence', minimum: 0.73, maximum: 0.76 },
+  ]),
 
   scenario('intent-current-thread-priority', 'intent-selection', {
     now, intents: { message: '続きを進めて', threadId: 'thread-a', values: [
