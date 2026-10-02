@@ -36,7 +36,7 @@ final class ShannonYousuNowTests: XCTestCase {
                           { "surface": "body", "outcome": "spoken", "at": "2026-10-03T05:50:05.000Z" },
                           { "surface": "app", "outcome": "read", "at": "2026-10-03T06:20:00.000Z" } ] },
         { "id": "r2", "at": "2026-10-03T03:00:00.000Z", "reason": "follow_up",
-          "deliveries": [ { "surface": "earphones", "outcome": "spoken", "device": "iphone", "at": "x" }, { "surface": "call", "outcome": "ringing" },
+          "deliveries": [ { "surface": "earphones", "outcome": "spoken", "device": "iphone", "at": "x" }, { "surface": "call", "outcome": "an_outcome_of_a_later_server" },
                           { "surface": "a_surface_of_a_later_server" }, { "outcome": "no surface" } ] },
         { "id": "r3", "at": "2026-10-03T02:00:00.000Z", "deliveries": [] } ],
       "limits": { "items": 30, "days": 14 }, "a_field_of_a_later_server": { "x": 1 } }
@@ -94,7 +94,11 @@ final class ShannonYousuNowTests: XCTestCase {
         // An outcome this app does not know is never worded as delivered.
         XCTAssertEqual(label("earphones", "missed"), "イヤホン")
         XCTAssertEqual(label("call", "answered"), "電話で届いた")
-        XCTAssertEqual(label("call", "missed"), "電話")
+        XCTAssertEqual(label("call", "unanswered"), "電話に出なかった")
+        XCTAssertEqual(label("call", "declined"), "電話を断った")
+        XCTAssertEqual(label("call", "failed"), "電話がつながらなかった")
+        XCTAssertEqual(label("call", "ringing"), "電話を鳴らしているところ")
+        XCTAssertEqual(label("call", "an_outcome_of_a_later_server"), "電話")
     }
 
     func testFeelingAndBodyLines() throws {

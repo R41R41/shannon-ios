@@ -10,6 +10,7 @@ import { SQLiteBodyLookActivityStore } from '../src/bodyLookActivityStore.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import { SQLiteBodyReactionStore } from '../src/bodyReactionStore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
+import { SQLiteIncomingCallStore } from '../src/incomingCallStore.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutReports } from '../src/reachOutReports.js';
 import { createShannonNowRoute, shannonNowResponse } from '../src/serverShannonNowRoute.js';
@@ -291,6 +292,42 @@ describe('GET /v1/shannon/now: what it answers', () => {
     raw.exec('CREATE TABLE private_listening_test (scope_key TEXT, initiative_id TEXT, heard_at TEXT)');
     raw.prepare('INSERT INTO private_listening_test VALUES (?, ?, ?)').run(OWNER, 'reach-1', ago(9 * MINUTE));
     expect((await read()).body.reachOuts[0]!.deliveries).toEqual([{ surface: 'earphones', outcome: 'spoken', at: ago(9 * MINUTE) }]);
+  });
+
+  it('says how a call she rang him with ended', async () => {
+    const { path, read } = await harness();
+    const { raw, reachOut, reports } = seed(path);
+    const calls = new SQLiteIncomingCallStore(path);
+    closers.push(calls);
+    const call = (id: string, state: string, minutesAgo: number, ended: number | null) => {
+      reachOut(id, `reach-out:share:${id}`, `reach-out:2026-10-03:${id}`, ago(minutesAgo * MINUTE));
+      raw.prepare(`
+        INSERT INTO incoming_calls (call_id, scope_key, initiative_id, device_id, thread_id, state, created_at, expires_at, ended_at)
+        VALUES (?, ?, ?, 'iphone', 'thread-1', ?, ?, ?, ?)
+      `).run(`call-${id}`, OWNER, id, state, ago(minutesAgo * MINUTE - 1_000), NOW, ended === null ? null : ago(ended * MINUTE));
+    };
+    call('answered', 'answered', 50, 49);
+    call('declined', 'declined', 40, 39.5);
+    call('unanswered', 'unanswered', 30, 29);
+    call('failed', 'failed', 20, 20);
+    call('open', 'ringing', 1, null);
+    // The iPhone also reported having said the answered one: the same event, listed once, as the call.
+    expect(reports.report(OWNER, 'iphone', 'answered', 'shown_spoken', ago(48 * MINUTE), 'iphone')).toBe('stored');
+    // A call of another scope is not the owner's.
+    raw.prepare(`
+      INSERT INTO incoming_calls (call_id, scope_key, initiative_id, device_id, thread_id, state, created_at, expires_at) VALUES ('x', 'guest-of-the-evening', 'open', 'g', 't', 'answered', ?, ?)
+    `).run(NOW, NOW);
+
+    const { body } = await read();
+    const delivered = Object.fromEntries(body.reachOuts.map(item => [item.id, item.deliveries]));
+    expect(delivered).toEqual({
+      open: [{ surface: 'call', outcome: 'ringing', at: ago(MINUTE - 1_000) }],
+      failed: [{ surface: 'call', outcome: 'failed', at: ago(20 * MINUTE) }],
+      unanswered: [{ surface: 'call', outcome: 'unanswered', at: ago(29 * MINUTE) }],
+      declined: [{ surface: 'call', outcome: 'declined', at: ago(39.5 * MINUTE) }],
+      answered: [{ surface: 'call', outcome: 'answered', at: ago(49 * MINUTE) }],
+    });
+    expect(JSON.stringify(body)).not.toContain('SECRET WORDS');
   });
 
   it('holds each list to thirty entries and fourteen days', async () => {

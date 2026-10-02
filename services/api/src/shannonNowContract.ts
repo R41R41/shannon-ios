@@ -89,9 +89,9 @@ export interface ShannonNowTouch {
 
 /** How one message of hers reached the owner on one surface. Surfaces and outcomes may be added. */
 export interface ShannonNowDelivery {
-  /** `body` (her desktop body), `earphones` (an app said it in his earphones), `app` (read in a Talk); later `call`. */
+  /** `body` (her desktop body), `earphones` (an app said it in his earphones), `call` (she rang his iPhone), `app` (read in a Talk). */
   surface: string;
-  /** `spoken`, `shown`, `away`, `hidden`, `muted` for the body; `spoken` for earphones; `read` for the app. */
+  /** `spoken`, `shown`, `away`, `hidden`, `muted` for the body; `spoken` for earphones; `ringing`, `answered`, `declined`, `unanswered`, `failed` for a call; `read` for the app. */
   outcome: string;
   at: string;
   /** For `earphones`: which app said it, `mac` or `iphone`. */

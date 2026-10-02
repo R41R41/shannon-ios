@@ -179,6 +179,10 @@ public enum ShannonNowText {
             }
         case ("earphones", _): "イヤホン"
         case ("call", "answered"): "電話で届いた"
+        case ("call", "unanswered"): "電話に出なかった"
+        case ("call", "declined"): "電話を断った"
+        case ("call", "failed"): "電話がつながらなかった"
+        case ("call", "ringing"): "電話を鳴らしているところ"
         case ("call", _): "電話"
         default: "ほかの方法"
         }

@@ -48,7 +48,23 @@ const reportedDeliveries: ReachOutDeliverySource = (database, scopeKey, ids, tab
   }));
 };
 
-export const REACH_OUT_DELIVERY_SOURCES: readonly ReachOutDeliverySource[] = Object.freeze([reportedDeliveries]);
+/**
+ * A message she rang the owner's iPhone with (`incoming_calls`, `docs/incoming-call-contract.md`): one call per
+ * message. `answered`, `declined`, `unanswered` or `failed` once it ended; `ringing` while it is still open.
+ */
+const callDeliveries: ReachOutDeliverySource = (database, scopeKey, ids, tableExists) => {
+  if (!ids.length || !tableExists('incoming_calls')) return [];
+  const rows = database.prepare(`
+    SELECT initiative_id, state, created_at, ended_at FROM incoming_calls
+    WHERE scope_key = ? AND initiative_id IN (${placeholders(ids)})
+  `).all(scopeKey, ...ids) as unknown as Array<{ initiative_id: string; state: string; created_at: string; ended_at: string | null }>;
+  return rows.map(row => ({
+    id: row.initiative_id, surface: 'call', at: row.ended_at ?? row.created_at,
+    outcome: ['pending', 'sending', 'ringing'].includes(row.state) ? 'ringing' : row.state,
+  }));
+};
+
+export const REACH_OUT_DELIVERY_SOURCES: readonly ReachOutDeliverySource[] = Object.freeze([reportedDeliveries, callDeliveries]);
 
 export class SQLiteShannonNowReader {
   private readonly database: DatabaseSync;
@@ -154,6 +170,12 @@ export class SQLiteShannonNowReader {
       try { for (const { id, ...delivery } of source(this.database, scopeKey, ids, name => this.tableExists(name))) add(id, delivery); } catch { /* that surface is left out */ }
     }
     for (const row of rows) if (row.read_at) add(row.initiative_id, { surface: 'app', outcome: 'read', at: row.read_at });
+    // A call he answered is how the message was said: the iPhone's own report of having spoken it is the same event.
+    for (const [id, deliveries] of delivered) {
+      if (deliveries.some(delivery => delivery.surface === 'call' && delivery.outcome === 'answered')) {
+        delivered.set(id, deliveries.filter(delivery => !(delivery.surface === 'earphones' && delivery.device === 'iphone')));
+      }
+    }
     return rows.map(row => {
       const reason = reachOutOfSource(row.source_item_id)?.reason;
       return {
