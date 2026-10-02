@@ -1,6 +1,6 @@
 import {
   OWNER_AUDIENCE, disclosureDecision, isMemoryEvidenceVisible, isOwnerOnly, memoryControlFor, type memoryWithholdingRules,
-  resolveDisclosure, ruleWithholdsText, visibleMemoryText,
+  resolveDisclosure, ruleWithholdsText,
   type CompanionStateSnapshot, type MemoryAudience,
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
@@ -67,8 +67,9 @@ export class ImpressionEvidenceCheck {
   visible(evidenceId: string): boolean {
     if ((memoryControlFor(this.state, evidenceId)?.status ?? 'active') !== 'active') return false;
     if (evidenceId.startsWith('person:') || this.withholding.inactive) return true;
+    // The evidence is what the person said. Whether her reply of that turn may be replayed is a separate question.
     const turn = this.turns.get(evidenceId);
-    return !turn || (isMemoryEvidenceVisible(this.state, turn.userMessage) && !this.withholding.withholdsExperience(turn));
+    return !turn || isMemoryEvidenceVisible(this.state, turn.userMessage);
   }
 }
 
@@ -81,8 +82,9 @@ export function usableImpression(
   row: PersonImpression, state: CompanionStateSnapshot, check: ImpressionEvidenceCheck, people: readonly ImpressionPerson[],
 ): UsableImpression | null {
   const memoryId = impressionMemoryId(row.id);
-  const shown = visibleMemoryText(state, memoryId, row.pattern);
-  if (shown === null) return null;
+  const control = memoryControlFor(state, memoryId);
+  if (control && control.status !== 'active') return null;
+  const shown = control?.overrideText || row.pattern;
   const corrected = shown !== row.pattern;
   const support = row.evidence.filter(item => item.stance === 'support');
   const kept = support.filter(item => check.visible(item.id));
@@ -90,7 +92,10 @@ export function usableImpression(
   const subject = impressionSubject(row, people);
   const statement = corrected ? shown : `${subject}は、${row.pattern}`;
   const feeling = corrected ? '' : row.herFeeling;
-  if (check.rules.some(rule => rule.memoryId !== memoryId && !rule.wide && ruleWithholdsText(rule, `${statement}\n${feeling}`, row.updatedAt))) return null;
+  // A forgotten turn of its own evidence is taken out of the count above. Anything else the owner forgot,
+  // rejected or corrected withholds an impression whose wording restates it.
+  const own = new Set([memoryId, ...row.evidence.map(item => item.id)]);
+  if (check.rules.some(rule => !own.has(rule.memoryId) && !rule.wide && ruleWithholdsText(rule, `${statement}\n${feeling}`, row.updatedAt))) return null;
   const forgotten = support.length - kept.length;
   return {
     row, memoryId, statement, feeling, corrected,
