@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
+import { OWNER_CONTEXT_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
+import { createOwnerContext } from '../src/autonomyOwnerContext.js';
+import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
 import type { AutonomyTextRequest, AutonomyTextResult } from '../src/autonomyTextModel.js';
 import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
@@ -453,6 +456,35 @@ describe('a session: she sees her budget as facts', () => {
     expect(sessionFactsSection({ ...base, previous: { endedClock: '9:00', code: 'session_steps' } })).toContain('- 前の時間: 9:00に、一度にできる歩数の上限に届いて止まった（自分で休んだのではない）。');
     expect(sessionFactsSection({ ...base, previous: { endedClock: '9:00', code: 'rest' } })).toContain('- 前の時間: 9:00に、自分で一区切りにした。');
     expect(sessionFactsSection({ ...base, previous: null, draftYen: undefined })).not.toMatch(/前の時間|下書き/u);
+  });
+});
+
+describe('a session: with the owner\'s context', () => {
+  it('puts what she knows of him before what just happened, and the facts of the moment last', async () => {
+    const path = join(directory, 'owner-context.sqlite');
+    const clock = { at: '2026-10-02T01:00:00.000Z' };
+    const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
+    persistent.appendTurn(scope, persistent.threadId(scope), '今日は夕方の駅で写真を撮ってきました。', 'いいですね、ライ氏。どんな光でしたか。', '2026-10-02T00:30:00.000Z');
+    persistent.apply(scope, { type: 'user-fact-upserted', source: 'sleep', fact: { id: 'photo', statement: 'ユーザーは写真を撮るのが好き', confidence: 0.9, observedAt: clock.at, evidence: '写真' } });
+    const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
+    const { loop, model, store } = sessions({ path, clock, ownerContext });
+    model.plans = [{ thought: '読んで、書きます。', steps: [read('station'), { action: 'draft', idea: '駅で写真を撮る人' }] }, { thought: '休みます。', steps: [rest(120, 'つづきは夕方に')] }];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'note', 'draft', 'think']);
+    const [first, , draft, again] = model.calls;
+    for (const call of [first!, again!]) {
+      expect(call.prompt).toContain(`${OWNER_CONTEXT_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ氏: 今日は夕方の駅で写真を撮ってきました。\nボク: いいですね、ライ氏。どんな光でしたか。`);
+      expect(call.system).toContain(ownerPrivateRule('thinking', true)!);
+      expect(call.prompt.endsWith(facts(call.prompt))).toBe(true);
+    }
+    const order = [OWNER_CONTEXT_HEADER, '[さっき起きたこと]', SESSION_FACTS_HEADER].map(header => again!.prompt.indexOf(header));
+    expect(order.every(index => index > 0)).toBe(true);
+    expect(order).toEqual([...order].sort((left, right) => left - right));
+    // The story step is not given his context, only the rule that what came from it is not written as it is.
+    expect(draft!.prompt).not.toContain(OWNER_CONTEXT_HEADER);
+    expect(draft!.system).toContain(ownerPrivateRule('story', true)!);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', restReason: 'つづきは夕方に' });
+    store.close(); persistent.close();
   });
 });
 

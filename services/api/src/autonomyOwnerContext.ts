@@ -107,22 +107,28 @@ function about(sources: OwnerContextSources, gate: DisclosureGate, state: Compan
   const newest = <T extends { observedAt?: string; createdAt?: string }>(items: readonly T[]) =>
     [...items].sort((left, right) => (right.observedAt ?? right.createdAt ?? '').localeCompare(left.observedAt ?? left.createdAt ?? ''));
   const interests = filterMeaningfulInterests(disclosed.interests).flatMap(interest => visibleMemoryText(state, memoryIdentifier('interest', interest), interest) ?? []).slice(0, 6);
-  return [
+  const lines = [
     ...newest(disclosed.userFacts).flatMap(item => line(item.id, item.statement, item.disclosure)),
     ...newest(disclosed.relationships).flatMap(item => line(item.id, item.statement, item.disclosure)),
     ...newest(disclosed.prospectiveMemories.filter(item => item.status === 'pending')).flatMap(item => line(item.id, item.summary, item.disclosure, '約束: ')),
     ...(interests.length ? [`- ${marked ? UNLABELLED_DISCLOSURE_MARKER : ''}最近の関心: ${interests.join('、')}`] : []),
-    // The projection is already filtered for forgetting and corrections; it has no labels, so it is for her thinking only.
-    ...(alone ? projectionAnswers(sources.profile?.promptProjection(scopeKey) ?? '') : []),
   ];
+  // The projection is already filtered for forgetting and corrections; it has no labels, so it is for her thinking only.
+  // An answer that only repeats a fact above is not listed twice.
+  const answers = alone ? projectionAnswers(sources.profile?.promptProjection(scopeKey) ?? '').filter(answer => !lines.some(known => known.includes(answer.answer))) : [];
+  return [...lines, ...answers.map(item => `- ${item.question === item.answer ? item.answer : `${item.question}: ${item.answer}`}`)];
 }
 
-/** The `[User knowledge]` lines of the profile projection, without their bookkeeping. */
-function projectionAnswers(projection: string): string[] {
+/** The `[User knowledge]` lines of the profile projection as question and answer, without their bookkeeping. */
+function projectionAnswers(projection: string): { question: string; answer: string }[] {
   const start = projection.indexOf('[User knowledge]\n');
   if (start < 0) return [];
   const body = projection.slice(start + '[User knowledge]\n'.length).split('\n\n[')[0] ?? '';
-  return body.split('\n').filter(line => line.startsWith('- ')).map(line => line.replace(/\s*\(confidence [^)]*\)\s*$/u, ''));
+  return body.split('\n').filter(line => line.startsWith('- ')).flatMap(line => {
+    const text = line.slice(2).replace(/\s*\(confidence [^)]*\)\s*$/u, '');
+    const cut = text.indexOf(': ');
+    return cut > 0 ? [{ question: text.slice(0, cut), answer: text.slice(cut + 2) }] : [];
+  });
 }
 
 /** The newest messages of the most recent Talks, through the replay the reply model gets: forgetting and disclosure first, a character budget second. */
