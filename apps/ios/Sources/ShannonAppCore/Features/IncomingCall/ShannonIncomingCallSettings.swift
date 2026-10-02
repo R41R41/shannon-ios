@@ -125,11 +125,11 @@ public final class ShannonIncomingCallSettings {
 public enum ShannonIncomingCallCopy {
     public static let sectionTitle = "シャノンからの電話"
     public static let toggleTitle = "シャノンからの着信を受ける"
-    public static let toggleHint = "オンにすると、シャノンが自分から話しかけたいときに、このiPhoneへ電話をかけます"
+    public static let toggleHint = "オンにすると、シャノンが電話で伝えたいと思ったときに、このiPhoneへ電話をかけます"
     /// The name the phone shows for the caller.
     public static let callerName = "シャノン"
 
-    public static let explanation = "オンにすると、シャノンが自分から話しかけたいときに、ほかの方法で声を届けられなければ、このiPhoneに電話をかけます。"
+    public static let explanation = "オンにすると、シャノンが自分の時間に、電話で伝えたいと思ったときに、このiPhoneに電話をかけます。かけるかどうかはシャノンが自分で決めます。回数の上限はありませんが、続けてかけるときは少なくとも数分あけます。"
         + "アプリを閉じていても、画面をロックしていても鳴ります。出るかどうかは、そのとき選べます。"
         + "出ると、シャノンがまず一言話し、そのまま音声会話になります。会話はいつもどおり保存されます。"
         + "出なかったときは不在着信として残り、シャノンの言葉はトークに残ります。\n\n"
@@ -140,7 +140,7 @@ public enum ShannonIncomingCallCopy {
         + "最初はオフです。"
 
     public static let confirmTitle = "シャノンからの着信を受けますか"
-    public static let confirmMessage = "シャノンが自分から話しかけたいときに、このiPhoneに電話をかけます。時間帯の制限はなく、夜中に鳴ることもあります（集中モード中は鳴りません）。"
+    public static let confirmMessage = "シャノンが電話で伝えたいと思ったときに、このiPhoneに電話をかけます。時間帯や回数の制限はなく、夜中に鳴ることもあります（集中モード中は鳴りません）。"
         + "出るかどうかは、そのとき選べます。着信は「電話」アプリの履歴にも残ります。"
     public static let confirmAccept = "受ける"
     public static let confirmCancel = "やめておく"

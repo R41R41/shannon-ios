@@ -75,14 +75,14 @@ Rows not reported for a day are deleted at the next report.
 
 ## Speaking a message she started
 
-A message she starts on her own (`reach_out`, and its one `follow_up`) is written exactly as before: one assistant message in the Talk and one initiative, which the apps show and the phone is notified of. Nothing about when she may write one changes: at most three an owner-local day, never while a conversation is in progress, through the approval gate. What is added is that the message may also be **said aloud through his earphones**, and that exactly one surface says it.
+A message she starts on her own (`reach_out`, and its one `follow_up`) is written exactly as before: one assistant message in the Talk and one initiative, which the apps show and the phone is notified of. Nothing about when she may write one changes here: never while a conversation is in progress, through the approval gate (since 2026-10-03 with no count a day unless the owner sets one, and at least five minutes apart). What is added is that the message may also be **said aloud through his earphones**, and that exactly one surface says it.
 
 ### Which surface speaks
 
 1. **An app that is privately listening and speaks.** When several are, the one whose device the owner used most recently (`ownerActiveAt`; a device with a known last use before one without; then the run that began later).
 2. **Her body**, only when no app is privately listening and able to speak, and by its own rules as before.
 
-3. **A call**, by the owner's decision of 2026-10-03, when he switched 「シャノンからの着信を受ける」 on in the iPhone app: when neither an app in his ears nor her body takes the message, the server rings his iPhone with it, once. See `docs/incoming-call-contract.md`. A message the call holds (`surface: iphone_call`) is offered to no app and not told to her body.
+A third surface exists since 2026-10-03, and it is never chosen here: **a call** to his iPhone is a step she chooses herself (`docs/incoming-call-contract.md`). A message she phones with is the call's from the moment she asks (`surface: iphone_call`): it is offered to no app and not told to her body. An ordinary message of hers is never rung with.
 
 Whoever speaks first holds the message's **claim**: one row whose primary key is the message, so two devices asking at the same instant cannot both get it, and it survives a restart.
 
