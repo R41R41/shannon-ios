@@ -38,6 +38,14 @@ export interface CognitiveEvaluationInput {
   scopeKey?: string;
   initialState?: unknown;
   events?: readonly CompanionStateEvent[];
+  /**
+   * One text turn with the owner alone, resolved and committed as the server does it. `decided` is the
+   * feeling the chat model chose for its reply (kind and one of 0.25 / 0.60 / 0.90); absent, the
+   * reply's own cue words decide, as before the field existed.
+   */
+  replyFeeling?: CognitiveReplyFeelingInput;
+  /** A later instant: another turn and events applied there, and the turn clock of a state prompt. */
+  later?: { now: string; replyFeeling?: CognitiveReplyFeelingInput; events?: readonly CompanionStateEvent[] };
   affect?: { message: string };
   recall?: { query: ShannonMemoryQuery; candidates: readonly RecallCandidate[]; maximum?: number };
   memorySearch?: { query: string; documents: readonly MemorySearchDocument[]; limit?: number };
@@ -61,6 +69,12 @@ export interface CognitiveEvaluationInput {
     | { kind: 'state'; snapshot?: CompanionStateSnapshot; maximumCharacters?: number }
     | { kind: 'intent'; frame: ShannonCognitiveFrame; maximumCharacters?: number }
     | { kind: 'turn'; situation: ShannonSituationSnapshot; memoryIDs?: readonly string[]; maximumCharacters?: number };
+}
+
+export interface CognitiveReplyFeelingInput {
+  userMessage: string;
+  reply: string;
+  decided?: { primary: string; intensity: number };
 }
 
 export interface CognitiveEvaluationScenario {

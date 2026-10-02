@@ -17,6 +17,8 @@ import {
 import { emotionTiming } from './emotionTiming.js';
 
 export { emotionTiming };
+/** A text reply's decided feeling enters through the same resolver call as a voice turn's (`chatReplyFeeling.ts`). */
+export { decidedReplyFeeling, replyFeelingOffer } from './chatReplyFeeling.js';
 
 const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 const SHARED_TIME_LOOKBACK_MILLISECONDS = 31 * 24 * 60 * 60_000;

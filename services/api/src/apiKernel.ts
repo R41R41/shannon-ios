@@ -6,7 +6,7 @@ import {
   type CompanionStateStore,
 } from '@shannon/cognition';
 import { agentTaskPromptProjection } from './apiPromptProjection.js';
-import { commitReplyEmotionLater, presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
+import { commitReplyEmotionLater, decidedReplyFeeling, presentCompanionState, replyFeelingOffer, resolveReplyEmotion } from './companionPresence.js';
 import { emotionTiming } from './emotionTiming.js';
 export { agentTaskPromptProjection } from './apiPromptProjection.js';
 import { dispatchAgentRequest } from './apiAgentRoutes.js';
@@ -425,14 +425,14 @@ export class ShannonApiKernel {
           .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
-        ...(attachments.length ? { attachments } : {}), ...roomLook.request,
+        ...(attachments.length ? { attachments } : {}), ...roomLook.request, ...replyFeelingOffer(audience.alone),
         ...(body.webSearch === true || placeSkill ? { useWebSearch: true } : {}),
         generateThreadTitle: this.conversationStore.needsAutomaticThreadTitle(body.scopeKey, threadId),
       });
       const reply = placeSkillReply(withCapabilitySources(completion, capability), placeSkill);
       const suppressAgentTaskProposal = !audience.alone || isExplicitVoyagerUpdateRequest(message);
       // Her feeling for this reply, from state already in hand; it is stored after the response.
-      const { messageEmotion, expressiveEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt });
+      const { messageEmotion, expressiveEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage: message, reply, now: occurredAt, ...decidedReplyFeeling(completion, audience.alone) });
       const response: ChatResponse = {
         mode: completion.mode, model: completion.model, reply, threadId, audience: audience.audience,
         snapshotVersion: captured.version, messageEmotion, systemPrompt,

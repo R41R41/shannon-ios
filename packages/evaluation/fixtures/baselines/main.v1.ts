@@ -22,6 +22,12 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * `affect-returns-with-awake-time` (two instants ten minutes apart) and
  * `affect-stands-still-while-dormant` (weeks apart count as the idle cap). The
  * scenario-set fingerprint and the total changed with them.
+ *
+ * 2026-10-03 (text feeling strength): no existing fingerprint changed. Six scenarios
+ * were added by hand (`feeling-text-*`): a text turn whose feeling the chat model
+ * decided is resolved and committed as the server does it (the new `replyFeeling`
+ * and `later` inputs of the runner), and the state prompt of the next morning is read.
+ * The scenario-set fingerprint and the total changed with them.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '858b6d1a',
@@ -52,6 +58,12 @@ const resultFingerprints = {
   'affect-baseline-drift': '005850b0',
   'affect-returns-with-awake-time': '955c460e',
   'affect-stands-still-while-dormant': 'b9e9fbaf',
+  'feeling-text-strong-lingers-into-next-day': '20590f5e',
+  'feeling-text-subtle-does-not-linger': 'b5c2b163',
+  'feeling-text-undecided-is-as-before': 'ede5151d',
+  'feeling-text-strong-eased-by-apology': 'bf8d27bd',
+  'feeling-text-strong-again-renews-nothing': 'bb38b534',
+  'feeling-text-strong-sadness-is-not-kept': '74a8a052',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',
   'prompt-plan-is-not-proof': '7cec918d',
@@ -62,7 +74,7 @@ const resultFingerprints = {
 export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze({
   schemaVersion: 1,
   implementationRevision: 'ac7397cacd0f914bcda356f8bead2f5feedd9f4a',
-  scenarioSetFingerprint: '559a326b',
+  scenarioSetFingerprint: '3f6f66bb',
   status: 'passed',
   generatedAt: '2026-09-26T00:00:00.000Z',
   results: Object.freeze(Object.entries(resultFingerprints).map(([scenarioId, fingerprint]) => Object.freeze({
@@ -72,5 +84,5 @@ export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze(
     fingerprint,
     durationMilliseconds: 0,
   }))),
-  totals: Object.freeze({ passed: 33, failed: 0, invalid: 0 }),
+  totals: Object.freeze({ passed: 39, failed: 0, invalid: 0 }),
 });

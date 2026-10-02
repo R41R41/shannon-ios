@@ -5,6 +5,7 @@ import {
   createInitialCompanionState,
   projectEmotionReaction,
   reduceCompanionState,
+  resolveReplyEmotion,
   buildShannonKnowledgePrompt,
   knowledgeExcerpt,
   mergeSemanticMemories,
@@ -15,11 +16,13 @@ import {
   searchMemoryDocuments,
   selectContextualMemories,
   selectPrimaryIntent,
+  type CompanionStateSnapshot,
 } from '@shannon/cognition';
 import { evaluateExpectation, type CognitiveAssertionResult } from './assertions.js';
 import {
   isCognitiveEvaluationScenario,
   type CognitiveEvaluationOutput,
+  type CognitiveReplyFeelingInput,
   type CognitiveEvaluationScenario,
 } from './scenario.js';
 import {
@@ -85,6 +88,11 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
     ? createInitialCompanionState(scopeKey, input.now)
     : restoreCompanionState(scopeKey, input.initialState, input.now);
   for (const event of input.events ?? []) state = reduceCompanionState(state, event, input.now);
+  if (input.replyFeeling) state = committedReply(state, input.replyFeeling, input.now);
+  if (input.later) {
+    if (input.later.replyFeeling) state = committedReply(state, input.later.replyFeeling, input.later.now);
+    for (const event of input.later.events ?? []) state = reduceCompanionState(state, event, input.later.now);
+  }
   const output: CognitiveEvaluationOutput = { state };
   if (input.affect) output.emotion = projectEmotionReaction(state, input.affect.message);
   if (input.recall) output.selectedMemoryIDs = selectContextualMemories(
@@ -114,7 +122,7 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
   )?.id ?? null;
   if (input.prompt?.kind === 'state') output.text = buildCompanionStatePrompt(
     input.prompt.snapshot ?? state,
-    { maximumCharacters: input.prompt.maximumCharacters },
+    { maximumCharacters: input.prompt.maximumCharacters, ...(input.later ? { now: input.later.now } : {}) },
   );
   if (input.prompt?.kind === 'intent') output.text = buildIntentPrompt(
     input.prompt.frame, input.prompt.maximumCharacters,
@@ -132,6 +140,15 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
     );
   }
   return output;
+}
+
+/** One owner turn as the server commits it: the reply's feeling, or only her awake clock when the reply is neutral. */
+function committedReply(state: CompanionStateSnapshot, turn: CognitiveReplyFeelingInput, now: string): CompanionStateSnapshot {
+  const { expressiveEmotion } = resolveReplyEmotion({
+    snapshot: state, userMessage: turn.userMessage, reply: turn.reply, now, ...(turn.decided ? { decided: turn.decided } : {}),
+  });
+  return reduceCompanionState(state, expressiveEmotion.primary === 'neutral'
+    ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion: expressiveEmotion }, now);
 }
 
 function repeatedScenarioIDs(candidates: readonly unknown[]): ReadonlySet<string> {

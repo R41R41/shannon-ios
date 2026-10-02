@@ -7,6 +7,10 @@ import type { CognitiveEvaluationScenario } from '../../src/scenario.js';
 
 const now = '2026-09-26T00:00:00.000Z';
 const old = '2026-08-01T00:00:00.000Z';
+/** 23:00 in the owner's zone, and the next morning. */
+const night = '2026-09-25T14:00:00.000Z';
+const morning = '2026-09-25T23:00:00.000Z';
+const quarrel = { userMessage: 'もういい、君とはもう話したくない', reply: '……そうですか。' };
 
 function scenario(
   id: string,
@@ -206,6 +210,68 @@ export const coreScenarios: readonly CognitiveEvaluationScenario[] = [
   }, [
     { type: 'state-equals', path: 'state.emotionClock.awakeMs', value: 720_000 },
     { type: 'number-in-range', path: 'state.emotion.valence', minimum: 0.73, maximum: 0.76 },
+  ]),
+
+  // Owner decision 2026-10-03: a text conversation may leave a feeling that lingers for days. The chat model decides the
+  // feeling of its reply and its strength (0.25 / 0.60 / 0.90); the resolver and the reducer do the rest, as for a voice turn.
+  scenario('feeling-text-strong-lingers-into-next-day', 'prompt-projection', {
+    now: night,
+    replyFeeling: { ...quarrel, decided: { primary: 'hurt', intensity: 0.9 } },
+    later: { now: morning, events: [{ type: 'awake-observed' }] },
+    prompt: { kind: 'state' },
+  }, [
+    { type: 'state-equals', path: 'state.lingering.0.span', value: 'lingering' },
+    { type: 'state-equals', path: 'state.lingering.0.startedAt', value: night },
+    { type: 'text-includes', value: 'まだ残っている気持ち: 9時間前にライ氏との会話で傷ついたことを、まだ引きずっている（hurt / 強さ 0.88）。' },
+  ]),
+  scenario('feeling-text-subtle-does-not-linger', 'prompt-projection', {
+    now: night,
+    replyFeeling: { ...quarrel, decided: { primary: 'hurt', intensity: 0.25 } },
+    later: { now: morning, events: [{ type: 'awake-observed' }] },
+    prompt: { kind: 'state' },
+  }, [
+    { type: 'collection-limit', path: 'state.lingering', maximum: 0 },
+    { type: 'text-excludes', value: 'まだ残っている気持ち' },
+  ]),
+  // Without the field the reply's own words decide, at the cue's 0.52 or not at all: here nothing is felt and nothing stays.
+  scenario('feeling-text-undecided-is-as-before', 'prompt-projection', {
+    now: night,
+    replyFeeling: quarrel,
+    later: { now: morning, events: [{ type: 'awake-observed' }] },
+    prompt: { kind: 'state' },
+  }, [
+    { type: 'collection-limit', path: 'state.lingering', maximum: 0 },
+    { type: 'text-excludes', value: 'まだ残っている気持ち' },
+  ]),
+  scenario('feeling-text-strong-eased-by-apology', 'prompt-projection', {
+    now: night,
+    replyFeeling: { ...quarrel, decided: { primary: 'hurt', intensity: 0.9 } },
+    later: { now: morning, events: [{ type: 'feeling-eased', by: 'apology' }] },
+    prompt: { kind: 'state' },
+  }, [
+    { type: 'number-in-range', path: 'state.lingering.0.strength', minimum: 0.34, maximum: 0.37 },
+    { type: 'state-equals', path: 'state.lingering.0.peak', value: 0.9 },
+    { type: 'text-includes', value: 'まだ少し引きずっている（hurt / 強さ 0.35）' },
+  ]),
+  // The same strong feeling decided again the next morning renews nothing: what is underneath is the entry from the night,
+  // fading from where it was, and its four wall-clock days still count from that night.
+  scenario('feeling-text-strong-again-renews-nothing', 'state-transition', {
+    now: night,
+    replyFeeling: { ...quarrel, decided: { primary: 'hurt', intensity: 0.9 } },
+    later: { now: morning, replyFeeling: { userMessage: 'おはよう', reply: '……おはようございます。', decided: { primary: 'hurt', intensity: 0.9 } } },
+  }, [
+    { type: 'collection-limit', path: 'state.lingering', maximum: 1 },
+    { type: 'state-equals', path: 'state.lingering.0.strength', value: 0.9 },
+    { type: 'state-equals', path: 'state.lingering.0.awakeAt', value: 0 },
+    { type: 'state-equals', path: 'state.lingering.0.startedAt', value: night },
+  ]),
+  // Sadness is her answer to his bad news, not a mood of her own: however strongly decided, nothing is kept underneath.
+  scenario('feeling-text-strong-sadness-is-not-kept', 'state-transition', {
+    now: night,
+    replyFeeling: { userMessage: '今日は仕事でひどい失敗をした', reply: 'それは、こたえますね。', decided: { primary: 'sad', intensity: 0.9 } },
+  }, [
+    { type: 'state-equals', path: 'state.expressiveEmotion.primary', value: 'sad' },
+    { type: 'collection-limit', path: 'state.lingering', maximum: 0 },
   ]),
 
   scenario('intent-current-thread-priority', 'intent-selection', {

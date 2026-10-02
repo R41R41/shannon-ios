@@ -54,6 +54,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/stateRestore.ts',
     'services/api/src/companionPresence.ts',
     'services/api/src/voiceEmotionPlan.ts',
+    // The strength of a text reply's feeling, decided by the chat model and handed to the one resolver.
+    'services/api/src/chatReplyFeeling.ts',
     // A touch as an input to the one emotion state: the touch → feeling table, and the one entrance that applies it.
     'packages/cognition/src/touchEmotion.ts',
     'services/api/src/bodyTouch.ts',

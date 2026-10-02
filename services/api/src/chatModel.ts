@@ -1,4 +1,5 @@
 import type { PlaceSearchContext, ShannonPlace } from './placeDiscovery.js';
+import type { ChatReplyFeeling } from './chatReplyFeeling.js';
 import {
   estimatedOpenAICostUsd,
   responseUsage,
@@ -42,6 +43,8 @@ export interface ShannonChatModelRequest {
   placeSearch?: PlaceSearchContext;
   /** The structured reply gets a `roomLook` field: she may choose one look at the room (`bodyLook.ts`). */
   offerRoomLook?: boolean;
+  /** The structured reply gets a `feeling` field: she says what she feels in this reply and how strongly (`chatReplyFeeling.ts`). */
+  offerReplyFeeling?: boolean;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -74,6 +77,8 @@ export interface ShannonChatModelResult {
   webSources?: ShannonWebSource[];
   places?: ShannonPlace[];
   roomLook?: 'asked' | 'curious';
+  /** The feeling she decided for this reply, only in a turn that offered the field. */
+  replyFeeling?: ChatReplyFeeling;
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;
