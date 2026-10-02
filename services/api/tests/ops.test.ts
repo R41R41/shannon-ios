@@ -13,7 +13,7 @@ const DEVICE_TOKEN = 'device-token-of-the-desktop';
 const START = '2026-10-02T03:00:00.000Z';
 const SECOND = 1000;
 // Stage 2 is off unless the owner switches it on: the stage 1 answer gains `allowed`, with nothing in it.
-const NOTHING_ALLOWED = { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false };
+const NOTHING_ALLOWED = { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false };
 
 const servers: Array<ReturnType<typeof createServer>> = [];
 const directories: string[] = [];

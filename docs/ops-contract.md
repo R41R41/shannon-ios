@@ -183,13 +183,14 @@ Switched off, the record is kept and not shown; a command still waiting expires 
 
 | `type` | `target` | Accepted when |
 | --- | --- | --- |
-| `service.start` | a `services[].id` | the id is one of `discord`, `twitter`, `youtube`, `youtube:live_chat`, `notion`, `minecraft`, and the latest snapshot names it |
+| `service.start` | a `services[].id` | the id is one of `discord`, `twitter`, `youtube`, `youtube:live_chat`, `notion`, `minecraft`, `minebot`, and the latest snapshot names it |
+| `minebot.start` | a server | the latest snapshot has a service `minecraft:<server>` and a service `minebot:bot` |
 | `service.stop` | a `services[].id` | the id is one of `twitter`, `youtube`, `youtube:live_chat`, `notion`, `minebot`, `minebot:bot`, `minecraft`, and the latest snapshot names it |
 | `minecraft.start`, `minecraft.stop` | a server | the latest snapshot has a service `minecraft:<server>` |
 | `schedule.run` | a `schedules[].name` | the latest snapshot has a schedule with exactly this name |
 
 - **`discord` can be started and cannot be stopped from here.** Stopping it takes Shannon offline on Discord and stops the Discord side of the bridge. `service.stop` with `discord` answers `403 TARGET_NOT_ALLOWED`.
-- **`minebot` and `minebot:bot` can be stopped and cannot be started from here.** Starting the production Minebot body begins using a paid planner API outside its budget controls; opening this needs a separate decision of the owner (`OPS_SERVICE_START_WITHHELD`). `service.start` answers `403 TARGET_NOT_ALLOWED`.
+- **Minebot (owner decision 2026-10-02).** The manager `minebot` is an ordinary `service.start` / `service.stop` target, and `minebot:bot` can be stopped with `service.stop`. The body is started with **`minebot.start`** and the Minecraft server it should join as target (`minecraft:<server>` or `<server>`, a server of the latest snapshot; the snapshot must also report `minebot:bot`). Starting the body begins using a paid planner API that the console's budget controls do not cover, so the console must confirm it in those words. `service.start` with `minebot:bot` answers `403 TARGET_NOT_ALLOWED`.
 - **Lab servers are not manageable at all.** A target that begins with `progressive-lab-` or `minecraft:progressive-lab-` answers `403 TARGET_NOT_ALLOWED` for every type, whether or not a snapshot names it. (The runtime does not report them.)
 - `minecraft` is the server manager, an ordinary service: it is started and stopped with `service.*`. A server is commanded with `minecraft.*` only; `minecraft:<server>` as a `service.*` target answers `403 TARGET_NOT_ALLOWED`.
 - **A Minecraft target is accepted as `minecraft:<server>` or as `<server>`.** The server records, lists and hands out the form with the prefix (`minecraft:main`). The runtime strips `minecraft:` to get the server name.
@@ -290,6 +291,7 @@ How the runtime maps a command to its own surface:
 | --- | --- |
 | `service.start` / `service.stop` | `dispatchServiceCommand(target, 'start' \| 'stop')` |
 | `minecraft.start` / `minecraft.stop` | `dispatchServiceCommand(<target>, 'start' \| 'stop')` — each managed server is its own registered service `minecraft:<server>` (verified against the legacy runtime, 2026-10-02). A start is refused with `lab_running` while a paid lab run is in progress. |
+| `minebot.start` | `dispatchServiceCommand('minebot:bot', 'start', <target without "minecraft:">)` — the body joins that server. Refused with `already_stopped` when that server is not running, `already_running` when the body already runs, and `lab_running` while a paid lab run is in progress. |
 | `schedule.run` | `getSchedulerPort().callSchedule({ type: 'call_schedule', name: target })` |
 
 The runtime **re-checks its own allowlist** before acting (the same lists as above, and never a `progressive-lab-*` server) and reports `refused` with `not_allowed` for anything else: the server's check is not the only one.
@@ -340,7 +342,7 @@ Answer, `200`: `{ "id": "…", "status": "done", "code": "already_running", "dup
   "commandsSupported": true,
   "commands": [ { "id": "…", "type": "service.stop", "target": "twitter", "status": "done", "createdAt": "…", "expiresAt": "…",
     "claimedAt": "…", "finishedAt": "…", "code": "already_stopped", "requestedByDeviceId": "…" } ],
-  "allowed": { "serviceStart": ["discord", "twitter"], "serviceStop": ["twitter", "minebot"], "minecraft": true, "scheduleRun": true }
+  "allowed": { "serviceStart": ["discord", "twitter"], "serviceStop": ["twitter", "minebot"], "minecraft": true, "scheduleRun": true, "minebotStart": true }
 }
 ```
 

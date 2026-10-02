@@ -99,7 +99,7 @@ describe('SHANNON_PLATFORM_OPS_COMMANDS', () => {
     expect(await send('service.stop', 'twitter')).toMatchObject({ status: 403, body: { error: 'OPS_COMMANDS_DISABLED' } });
     expect(await claim()).toEqual({ status: 200, body: { command: null, pollAfterSeconds: 60 } });
     expect(await read()).toMatchObject({
-      commandsSupported: false, commands: [], allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false },
+      commandsSupported: false, commands: [], allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false },
     });
     expect(store.commands.count()).toBe(0);
     // Authentication still comes first.
@@ -247,10 +247,10 @@ describe('POST /v1/ops/commands: fields', () => {
 
 describe('POST /v1/ops/commands: the allowlist', () => {
   it('is these constants', () => {
-    expect(OPS_COMMAND_TYPES).toEqual(['service.start', 'service.stop', 'schedule.run', 'minecraft.start', 'minecraft.stop']);
-    expect(OPS_SERVICE_START_ALLOWED).toEqual(['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minecraft']);
+    expect(OPS_COMMAND_TYPES).toEqual(['service.start', 'service.stop', 'schedule.run', 'minecraft.start', 'minecraft.stop', 'minebot.start']);
+    expect(OPS_SERVICE_START_ALLOWED).toEqual(['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minecraft', 'minebot']);
     expect(OPS_SERVICE_STOP_ALLOWED).toEqual(['twitter', 'youtube', 'youtube:live_chat', 'notion', 'minebot', 'minebot:bot', 'minecraft']);
-    expect(OPS_SERVICE_START_WITHHELD).toEqual(['minebot', 'minebot:bot']);
+    expect(OPS_SERVICE_START_WITHHELD).toEqual(['minebot:bot']);
     expect(OPS_FORBIDDEN_TARGET_PREFIXES).toEqual(['progressive-lab-', 'minecraft:progressive-lab-']);
   });
 
@@ -276,17 +276,19 @@ describe('POST /v1/ops/commands: the allowlist', () => {
     expect((await send('service.start', 'discord')).status).toBe(201);
   });
 
-  it('stops Minebot and refuses to start it', async () => {
+  it('starts the Minebot manager, and the body only with the server it joins (owner decision 2026-10-02)', async () => {
     const { report, send, store } = await harness();
     await report();
-    for (const target of ['minebot', 'minebot:bot']) {
-      const refused = await send('service.start', target);
-      expect(refused).toMatchObject({ status: 403, body: { error: 'TARGET_NOT_ALLOWED' } });
-      expect(refused.body.message).toContain('paid planner API');
-    }
+    // The body is not a plain service: it needs a server.
+    const refused = await send('service.start', 'minebot:bot');
+    expect(refused).toMatchObject({ status: 403, body: { error: 'TARGET_NOT_ALLOWED' } });
+    expect(refused.body.message).toContain('minebot.start');
     expect(store.commands.count()).toBe(0);
+    expect((await send('service.start', 'minebot')).status).toBe(201);
     expect((await send('service.stop', 'minebot')).status).toBe(201);
     expect((await send('service.stop', 'minebot:bot')).status).toBe(201);
+    expect(await send('minebot.start', 'minecraft:progressive-lab-1')).toMatchObject({ status: 403, body: { error: 'TARGET_NOT_ALLOWED' } });
+    expect(await send('minebot.start', 'minecraft:not-reported')).toMatchObject({ status: 422, body: { error: 'TARGET_UNKNOWN' } });
   });
 
   it('refuses a lab target for every type, even when the snapshot names it', async () => {
@@ -622,16 +624,16 @@ describe('GET /v1/ops with commands on', () => {
     const { report, read } = await harness();
     expect(await read()).toEqual({
       schemaVersion: 1, snapshot: null, receivedAt: null, stale: true, staleAfterSeconds: 180,
-      commands: [], commandsSupported: true, allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false },
+      commands: [], commandsSupported: true, allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false },
     });
     await report();
     const body = await read();
     expect(Object.keys(body).sort()).toEqual(['allowed', 'commands', 'commandsSupported', 'receivedAt', 'schemaVersion', 'snapshot', 'stale', 'staleAfterSeconds']);
     expect(body).toMatchObject({ stale: false, commandsSupported: true, commands: [] });
     expect(body.allowed).toEqual({
-      serviceStart: ['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minecraft'],
+      serviceStart: ['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minebot', 'minecraft'],
       serviceStop: ['twitter', 'youtube', 'youtube:live_chat', 'notion', 'minebot', 'minebot:bot', 'minecraft'],
-      minecraft: true, scheduleRun: true,
+      minecraft: true, scheduleRun: true, minebotStart: true,
     });
   });
 
@@ -641,9 +643,9 @@ describe('GET /v1/ops with commands on', () => {
     body.services = [service('twitter'), service('discord'), service('minecraft:progressive-lab-7'), service('reporter')];
     body.schedules = [];
     await report(body);
-    expect((await read()).allowed).toEqual({ serviceStart: ['twitter', 'discord'], serviceStop: ['twitter'], minecraft: false, scheduleRun: false });
+    expect((await read()).allowed).toEqual({ serviceStart: ['twitter', 'discord'], serviceStop: ['twitter'], minecraft: false, scheduleRun: false, minebotStart: false });
     advance((OPS_LIMITS.staleAfterSeconds + 1) * SECOND);
-    expect(await read()).toMatchObject({ stale: true, commandsSupported: true, allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false } });
+    expect(await read()).toMatchObject({ stale: true, commandsSupported: true, allowed: { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false } });
   });
 
   it('accepts every command that `allowed` offers', async () => {
@@ -652,7 +654,7 @@ describe('GET /v1/ops with commands on', () => {
     const request = (type: string, target: string) => validatedOpsCommandRequest({ scopeKey: 'owner', idempotencyKey: 'key-000001', type, target });
     for (const target of allowed.serviceStart) expect(request('service.start', target)).toMatchObject({ target });
     for (const target of allowed.serviceStop) expect(request('service.stop', target)).toMatchObject({ target });
-    expect(opsCommandsAllowed(null)).toEqual({ serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false });
+    expect(opsCommandsAllowed(null)).toEqual({ serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false });
   });
 
   it('lists the last twenty commands, newest first', async () => {

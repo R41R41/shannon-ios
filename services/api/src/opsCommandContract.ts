@@ -5,7 +5,7 @@ import { OPS_LIMITS, opsIdentifier, opsLabel, type OpsSnapshot } from './opsCont
  * the legacy runtime to do. A command is a closed type and one target that the latest
  * snapshot names. It has no arguments and no text, and no model reads or writes one.
  */
-export const OPS_COMMAND_TYPES = ['service.start', 'service.stop', 'schedule.run', 'minecraft.start', 'minecraft.stop'] as const;
+export const OPS_COMMAND_TYPES = ['service.start', 'service.stop', 'schedule.run', 'minecraft.start', 'minecraft.stop', 'minebot.start'] as const;
 export type OpsCommandType = typeof OPS_COMMAND_TYPES[number];
 
 export const OPS_COMMAND_STATUSES = ['pending', 'claimed', 'done', 'failed', 'refused', 'expired'] as const;
@@ -47,18 +47,20 @@ export const OPS_COMMAND_LIMITS = {
  * commanded: `minecraft:<server>` as a `service.*` target (use `minecraft.*`), and anything new.
  * `minecraft` is the server manager, not a server.
  */
-export const OPS_SERVICE_START_ALLOWED: readonly string[] = ['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minecraft'];
+export const OPS_SERVICE_START_ALLOWED: readonly string[] = ['discord', 'twitter', 'youtube', 'youtube:live_chat', 'notion', 'minecraft', 'minebot'];
 /**
  * `discord` is absent on purpose. Stopping it takes Shannon offline on Discord and stops
  * the Discord side of the platform bridge. It can be started from here, and stopped on the VM.
  */
 export const OPS_SERVICE_STOP_ALLOWED: readonly string[] = ['twitter', 'youtube', 'youtube:live_chat', 'notion', 'minebot', 'minebot:bot', 'minecraft'];
 /**
- * Can be stopped, cannot be started: starting the production Minebot body begins using a
- * paid planner API outside its budget controls. Opening this needs a separate owner
- * decision; then move these ids into `OPS_SERVICE_START_ALLOWED`.
+ * The Minebot body (`minebot:bot`) joins a Minecraft server, so it is started with
+ * `minebot.start` and a server target, not as a plain service. Starting it begins using a
+ * paid planner API; the owner opened this on 2026-10-02 and the console confirms it first.
  */
-export const OPS_SERVICE_START_WITHHELD: readonly string[] = ['minebot', 'minebot:bot'];
+export const OPS_SERVICE_START_WITHHELD: readonly string[] = ['minebot:bot'];
+/** The service the snapshot must report before `minebot.start` is offered. */
+export const OPS_MINEBOT_BODY = 'minebot:bot';
 /** Lab servers are never manageable, whatever the type. */
 export const OPS_FORBIDDEN_TARGET_PREFIXES: readonly string[] = ['progressive-lab-', 'minecraft:progressive-lab-'];
 export const OPS_MINECRAFT_PREFIX = 'minecraft:';
@@ -86,6 +88,8 @@ export interface OpsCommandAllowed {
   serviceStop: string[];
   minecraft: boolean;
   scheduleRun: boolean;
+  /** `minebot.start` with a server of the snapshot: the body joins that server. */
+  minebotStart: boolean;
 }
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,79}$/u;
@@ -124,7 +128,7 @@ export function validatedOpsCommandRequest(value: unknown): OpsCommandRequest | 
   }
   const id = opsIdentifier(body.target);
   if (id === null) return invalid('target must match [A-Za-z0-9][A-Za-z0-9_.:-]* and be at most 80 characters');
-  if (type === 'minecraft.start' || type === 'minecraft.stop') {
+  if (type === 'minecraft.start' || type === 'minecraft.stop' || type === 'minebot.start') {
     const target = id.startsWith(OPS_MINECRAFT_PREFIX) ? id : `${OPS_MINECRAFT_PREFIX}${id}`;
     if (target.length > OPS_LIMITS.id || opsIdentifier(target.slice(OPS_MINECRAFT_PREFIX.length)) === null) {
       return invalid('target must be a Minecraft server id of the snapshot');
@@ -136,7 +140,7 @@ export function validatedOpsCommandRequest(value: unknown): OpsCommandRequest | 
     return notAllowed('Discord cannot be stopped from here: it would take Shannon offline on Discord and stop the Discord side of the bridge.');
   }
   if (type === 'service.start' && OPS_SERVICE_START_WITHHELD.includes(id)) {
-    return notAllowed('Minebot cannot be started from here: it would begin using a paid planner API outside its budget controls.');
+    return notAllowed('The Minebot body is started with minebot.start and the Minecraft server it should join.');
   }
   const allowlist = type === 'service.start' ? OPS_SERVICE_START_ALLOWED : OPS_SERVICE_STOP_ALLOWED;
   if (!allowlist.includes(id)) return notAllowed('This service is not on the list the operations console may start or stop.');
@@ -146,18 +150,21 @@ export function validatedOpsCommandRequest(value: unknown): OpsCommandRequest | 
 /** Whether the latest snapshot names the target. A command for something the runtime did not report is refused. */
 export function opsCommandTargetKnown(request: Pick<OpsCommandRequest, 'type' | 'target'>, snapshot: OpsSnapshot): boolean {
   if (request.type === 'schedule.run') return snapshot.schedules.some(schedule => schedule.name === request.target);
+  // The body joins a server the runtime reports, and the runtime must report the body itself.
+  if (request.type === 'minebot.start' && !snapshot.services.some(service => service.id === OPS_MINEBOT_BODY)) return false;
   return snapshot.services.some(service => service.id === request.target);
 }
 
 /** What the desktop may offer: the allowlist intersected with what a current snapshot reports. Null: nothing. */
 export function opsCommandsAllowed(snapshot: OpsSnapshot | null): OpsCommandAllowed {
-  if (!snapshot) return { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false };
+  if (!snapshot) return { serviceStart: [], serviceStop: [], minecraft: false, scheduleRun: false, minebotStart: false };
   const ids = snapshot.services.map(service => service.id).filter(id => !opsTargetForbidden(id));
   return {
     serviceStart: ids.filter(id => OPS_SERVICE_START_ALLOWED.includes(id)),
     serviceStop: ids.filter(id => OPS_SERVICE_STOP_ALLOWED.includes(id)),
     minecraft: ids.some(manageableMinecraftService),
     scheduleRun: snapshot.schedules.some(schedule => !opsTargetForbidden(schedule.name)),
+    minebotStart: ids.includes(OPS_MINEBOT_BODY) && ids.some(manageableMinecraftService),
   };
 }
 
