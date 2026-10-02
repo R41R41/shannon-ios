@@ -32,6 +32,16 @@ export interface ThreadSummaryLineage {
   messages: readonly StoredConversationMessage[];
 }
 
+/** What was said in a thread before its replay window (`conversationReplaySummary.ts`); not the navigation summary. */
+export interface ReplaySummaryRecord {
+  summary: string;
+  /** The newest message the summary accounts for. */
+  coveredThroughMessageId: string;
+  /** When it was last built from visible messages only, without a previous summary. */
+  chainStartedAt: string;
+  updatedAt: string;
+}
+
 export const MAXIMUM_RECALLED_MEMORY_IDS = 40;
 
 export function boundedRecalledMemoryIds(value: unknown): readonly string[] | undefined {
@@ -147,6 +157,12 @@ export interface ConversationStore {
   threadSummaryLineage?(scopeKey: string, threadId: string): ThreadSummaryLineage;
   /** Completed turns by ID, including ones older than the recent candidate window. */
   experiencesById?(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[];
+  /** The newest `limit` messages of a thread, oldest first. Absent: the displayed history is used. */
+  recentMessages?(scopeKey: string, threadId: string, limit: number): readonly StoredConversationMessage[];
+  replaySummary?(scopeKey: string, threadId: string): ReplaySummaryRecord | undefined;
+  saveReplaySummary?(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void;
+  /** The thread a completed turn was stored in. */
+  threadOfTurn?(scopeKey: string, experienceId: string): string | undefined;
 }
 
 export class InMemoryConversationStore implements ConversationStore {
@@ -161,6 +177,7 @@ export class InMemoryConversationStore implements ConversationStore {
   private readonly defaultThreadCache = new Map<string, string>();
   private readonly captures = new Map<string, Map<string, TurnCaptureRecord>>();
   private readonly summaryChains = new Map<string, string>();
+  private readonly replaySummaries = new Map<string, ReplaySummaryRecord>();
 
   constructor(
     private readonly maximumConversationItems = 200,
@@ -388,6 +405,15 @@ export class InMemoryConversationStore implements ConversationStore {
   experiencesById(scopeKey: string, experienceIds: readonly string[]): readonly ShannonExperience[] {
     const wanted = new Set(experienceIds);
     return Object.freeze((this.experiences.get(scopeKey) ?? []).filter(item => wanted.has(item.id)));
+  }
+
+  replaySummary(scopeKey: string, threadId: string): ReplaySummaryRecord | undefined { return this.replaySummaries.get(`${scopeKey}\u0000${threadId}`); }
+  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord): void {
+    this.replaySummaries.set(`${scopeKey}\u0000${threadId}`, Object.freeze({ ...record }));
+  }
+
+  threadOfTurn(scopeKey: string, experienceId: string): string | undefined {
+    return [...this.conversations.get(scopeKey) ?? []].find(([, messages]) => messages.some(item => item.sourceExperienceId === experienceId))?.[0];
   }
 
   recordTurnCaptures(scopeKey: string, captures: readonly TurnCaptureRecord[]): void {

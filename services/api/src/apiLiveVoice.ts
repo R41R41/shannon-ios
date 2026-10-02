@@ -27,6 +27,7 @@ import { LocalVoiceDecisionGateway, type VoiceDecisionGateway, type VoiceTurnDec
 import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
 import { withMemorySearchLatency, type TurnMemoryRecall } from './turnMemoryRecall.js';
 import { visibleConversationHistory } from './memoryVisibility.js';
+import { conversationReplay } from './conversationWindow.js';
 import { executeConversationCommand, type ConversationCommandDependencies } from './conversationCommands.js';
 import { extractExplicitUserIntent, type CognitiveIntentStore } from './cognitiveIntent.js';
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
@@ -341,10 +342,10 @@ async function completeLiveVoiceDelegation(
     backendInstructions,
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
-  const fullHistory = temporaryGuest ? guestHistory
-    : visibleConversationHistory(captured, dependencies.conversationStore, scopeKey, threadId, present);
-  const historyLimit = temporaryGuest ? GUEST_CALL_MODEL_TURNS
-    : selectedSkills.has('conversation_memory') || decision.conversationClass === 'skill_complex' ? 8 : 4;
+  // The owner's thread is replayed by character budget, with the replay summary for what fell out of it;
+  // a 「友人も一緒」 call keeps its own in-call turns and never sees the owner's thread.
+  const replay = temporaryGuest ? null
+    : conversationReplay('voice', captured, dependencies.conversationStore, scopeKey, threadId, present);
   const placeSkill = selectedSkills.has('place_discovery') || wantsPlaceDiscovery(transcript)
     ? await runPlaceDiscoverySkill(dependencies.chatModel, { scopeKey, message: transcript, context: {
       ...(wantsNearbyPlaces(transcript) && deviceContext?.location ? {
@@ -352,10 +353,10 @@ async function completeLiveVoiceDelegation(
       } : {}), spoken: true,
     } }) : null;
   observer?.signal?.throwIfAborted();
+  const turnPrompt = placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt;
   const modelRequest = {
     scopeKey,
-    systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
-    history: boundedVoiceHistory(fullHistory, historyLimit),
+    ...(replay?.request(turnPrompt) ?? { systemPrompt: turnPrompt, history: boundedVoiceHistory(guestHistory, GUEST_CALL_MODEL_TURNS) }),
     message: transcript,
     useWebSearch: selectedSkills.has('current_web') || !!placeSkill,
     conversationClass: decision.conversationClass === 'no_response' ? 'direct' as const : decision.conversationClass,

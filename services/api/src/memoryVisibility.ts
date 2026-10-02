@@ -1,5 +1,6 @@
 import {
   isMemoryEvidenceVisible,
+  isOwnerOnly,
   memoryControlFor,
   memoryWithholdingRules,
   ruleWithholdsText,
@@ -152,6 +153,24 @@ export class MemoryWithholding {
     return tainted;
   }
 
+  /**
+   * The replay summary, judged like the rolling summary: by its own text, and by the thread's
+   * turns for every item that stopped being usable after its chain started. The worker then
+   * rebuilds it from visible messages only and starts a new chain.
+   */
+  withholdsReplaySummary(threadId: string, summary: { summary: string; chainStartedAt: string; updatedAt: string }): boolean {
+    if (this.inactive) return false;
+    const lineage = this.store?.threadSummaryLineage?.(this.scopeKey, threadId);
+    if (!lineage) return true;
+    if (this.rules.some(rule => !rule.wide && ruleWithholdsText(rule, summary.summary, summary.updatedAt))) return true;
+    const relevant = new Set(this.rules.filter(rule => rule.boundary >= summary.chainStartedAt).map(rule => rule.memoryId));
+    if (!relevant.size) return false;
+    const scoped = relevant.size === this.rules.length ? this : new MemoryWithholding(
+      { ...this.state, memoryControls: this.state.memoryControls.filter(control => relevant.has(control.memoryId)) },
+      this.store, this.scopeKey, this.candidates ??= this.store?.experienceCandidates(this.scopeKey));
+    return lineage.messages.some(message => scoped.withholdsMessage(message));
+  }
+
   /** The stored rolling summary of a thread when it may be given to a model. */
   usableThreadSummary(threadId: string): string | undefined {
     if (!this.store || this.withholdsThreadSummary(threadId)) return undefined;
@@ -177,9 +196,26 @@ export function conversationStoreOf(value: unknown): ConversationStore | null {
     && typeof candidate.threadSummary === 'function' ? candidate as ConversationStore : null;
 }
 
+/** A stored message that may be replayed, and the form the model receives it in. */
+export interface VisibleMessage { message: StoredConversationMessage; item: ShannonConversationItem }
+
+function visibleMessages(
+  state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string,
+  stored: readonly StoredConversationMessage[], present: MemoryAudience, candidates: readonly ShannonExperience[] = [],
+): VisibleMessage[] {
+  const withholding = new MemoryWithholding(state, store, scopeKey);
+  const gate = new DisclosureGate(present, state, store, scopeKey, candidates);
+  return stored
+    .filter(message => gate.allowsMessage(message) && !withholding.withholdsMessage(message))
+    // A protected turn is replayed with its marker so she can check before repeating it aloud.
+    .map(message => ({ message, item: { role: message.role, content: message.role === 'user' ? `${gate.markerForMessage(message)}${message.content}` : message.content } }));
+}
+
 /**
  * Keep the durable transcript intact, but don't re-feed forgotten evidence, and with
- * anyone else present re-feed only the turns they may hear.
+ * anyone else present re-feed only the turns they may hear. This is the small window
+ * (the store's model window, 20 messages) for helpers that decide or route; the reply
+ * model's history comes from `conversationReplay`.
  */
 export function visibleConversationHistory(
   state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadID: string,
@@ -187,12 +223,25 @@ export function visibleConversationHistory(
 ): readonly ShannonConversationItem[] {
   const count = store.history(scopeKey, threadID).length;
   if (!count) return [];
-  const withholding = new MemoryWithholding(state, store, scopeKey);
-  const gate = new DisclosureGate(present, state, store, scopeKey);
-  return store.conversationHistory(scopeKey, threadID).slice(-count)
-    .filter(message => gate.allowsMessage(message) && !withholding.withholdsMessage(message))
-    // A protected turn is replayed with its marker so she can check before repeating it aloud.
-    .map(message => ({ role: message.role, content: message.role === 'user' ? `${gate.markerForMessage(message)}${message.content}` : message.content }));
+  return visibleMessages(state, store, scopeKey, store.conversationHistory(scopeKey, threadID).slice(-count), present).map(entry => entry.item);
+}
+
+/**
+ * The newest `limit` stored messages of a thread under the same filtering, oldest first.
+ * `reachedLimit` says that older stored messages may exist beyond them.
+ */
+export function visibleReplayMessages(
+  state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadID: string,
+  present: MemoryAudience, limit: number,
+): { messages: readonly VisibleMessage[]; reachedLimit: boolean } {
+  const stored = store.recentMessages?.(scopeKey, threadID, limit) ?? store.conversationHistory(scopeKey, threadID).slice(-limit);
+  // With others present every message is judged as its turn: load the turns once, not one by one.
+  const turnIds = isOwnerOnly(present) ? [] : [...new Set(stored.flatMap(message => message.sourceExperienceId ?? []))];
+  const candidates: ShannonExperience[] = [];
+  for (let index = 0; index < turnIds.length && store.experiencesById; index += 200) {
+    candidates.push(...store.experiencesById(scopeKey, turnIds.slice(index, index + 200)));
+  }
+  return { messages: visibleMessages(state, store, scopeKey, stored, present, candidates), reachedLimit: stored.length >= limit };
 }
 
 /**
@@ -208,6 +257,23 @@ export function usableThreadSummary(
   if (!gate.allowsThreadSummary(threadId)) return undefined;
   const summary = new MemoryWithholding(state, store, scopeKey).usableThreadSummary(threadId);
   return summary && gate.unlabelledMarker ? `${gate.unlabelledMarker}${summary}` : summary;
+}
+
+/**
+ * The replay summary of a thread under the same rules as `usableThreadSummary`: nothing when
+ * it was built from a turn that is now withheld or restates a withheld item; with anyone else
+ * present nothing when the thread holds a turn they must not hear, and otherwise marked.
+ */
+export function usableReplaySummary(
+  state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string, threadId: string,
+  present: MemoryAudience,
+): string | undefined {
+  const stored = store.replaySummary?.(scopeKey, threadId);
+  if (!stored?.summary) return undefined;
+  const gate = new DisclosureGate(present, state, store, scopeKey);
+  if (!gate.allowsThreadSummary(threadId)) return undefined;
+  if (new MemoryWithholding(state, store, scopeKey).withholdsReplaySummary(threadId, stored)) return undefined;
+  return gate.unlabelledMarker ? `${gate.unlabelledMarker}${stored.summary}` : stored.summary;
 }
 
 export function isForgottenCommitmentEvidence(state: CompanionStateSnapshot, evidence: string): boolean {

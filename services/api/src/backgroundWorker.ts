@@ -19,6 +19,8 @@ export interface BackgroundWorkerOptions {
   minimumSleepMessages?: number;
   /** Shannon knowledge building piggybacks on each completed sleep batch; its failure never fails the batch. */
   knowledgeConsolidator?: { consolidate(scopeKey: string, startAt: string, endAt: string): Promise<unknown> };
+  /** The replay summary of the turn's thread is refreshed after its refinement; its failure never fails the job. */
+  replaySummarizer?: { refreshForTurn(scopeKey: string, experienceId: string): Promise<unknown> };
 }
 
 export class ShannonBackgroundWorker {
@@ -31,6 +33,7 @@ export class ShannonBackgroundWorker {
   private readonly reportError: (code: string) => void;
   private readonly minimumSleepMessages: number;
   private readonly knowledgeConsolidator: BackgroundWorkerOptions['knowledgeConsolidator'];
+  private readonly replaySummarizer: BackgroundWorkerOptions['replaySummarizer'];
   private readonly localSleepAnalyzer = new LocalRuleSleepMemoryAnalyzer();
   private nextMaintenanceAt = 0;
 
@@ -50,6 +53,7 @@ export class ShannonBackgroundWorker {
     this.reportError = options.reportError ?? (code => console.error('Shannon worker job failed', code));
     this.minimumSleepMessages = Math.max(1, Math.trunc(options.minimumSleepMessages ?? 3));
     this.knowledgeConsolidator = options.knowledgeConsolidator;
+    this.replaySummarizer = options.replaySummarizer;
   }
 
   async runOnce(): Promise<'processed' | 'idle' | 'failed'> {
@@ -86,6 +90,11 @@ export class ShannonBackgroundWorker {
           [], payload.timeZone,
         );
       });
+      try {
+        await this.replaySummarizer?.refreshForTurn(job.scopeKey, payload.experienceId);
+      } catch (error) {
+        this.reportError(`REPLAY_SUMMARY_${safeErrorCode(error)}`);
+      }
       return;
     }
     const messages = this.jobStore.dailyUserMessages(job.scopeKey, job.payload.startAt, job.payload.endAt);

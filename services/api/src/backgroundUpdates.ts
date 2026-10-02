@@ -179,6 +179,8 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
     private readonly stateStore: CompanionStateStore,
     private readonly conversationStore: ConversationStore,
     private readonly reportError: (error: unknown) => void = error => console.error('Shannon background update failed', error),
+    /** Runs after a turn's refinement, still off the response path (the replay summary). */
+    private readonly afterTurn?: (turn: CompletedTurn, recordedExperienceId?: string) => Promise<unknown>,
   ) {
     this.processor = new TurnRefinementProcessor(stateStore, conversationStore);
   }
@@ -207,6 +209,7 @@ export class BackgroundUpdateCoordinator implements TurnBackgroundService {
           }
         });
       }))
+      .then(() => this.afterTurn?.(turn, recordedExperienceId)).then(() => undefined)
       .catch(this.reportError);
     this.queues.set(turn.scopeKey, next);
     void next.finally(() => {

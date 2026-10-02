@@ -59,7 +59,8 @@ import type { TurnMemoryRecall } from './turnMemoryRecall.js';
 import { NO_CAPABILITY_CONTEXT, conversationCapabilityContext, withCapabilitySources, type NotionTurnReader } from './conversationCapabilities.js';
 import { prepareConversationOrganize } from './conversationOrganize.js';
 import { executeConversationCommand } from './conversationCommands.js';
-import { visibleConversationHistory, usableThreadSummary } from './memoryVisibility.js';
+import { usableThreadSummary } from './memoryVisibility.js';
+import { conversationReplay } from './conversationWindow.js';
 import { WAITING_TESTFLIGHT_DASHBOARD, type TestFlightDeliveryReader } from './testflightDeliveryStore.js';
 import { dispatchPeopleMemoryRequest } from './apiPeopleMemoryRoutes.js';
 import { PeopleMemory } from './peopleMemory.js';
@@ -419,9 +420,9 @@ export class ShannonApiKernel {
       const priorThreadSummary = usableThreadSummary(captured, this.conversationStore, body.scopeKey, threadId, audience.present);
       const placeSkill = placeOptions.placeSearch ? await optionalPlaceDiscoverySkill(this.chatModel, body.scopeKey, message, placeOptions.placeSearch) : null;
       const completion = await generateChatTurn(this.chatModel, request.chatSentences, { body, threadId, audience, capability, placeSearch: placeSkill !== null }, {
-        scopeKey: body.scopeKey,
-        systemPrompt: placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt,
-        history: visibleConversationHistory(captured, this.conversationStore, body.scopeKey, threadId, audience.present),
+        scopeKey: body.scopeKey, // The history is a character budget; what fell out of it is covered by the replay summary.
+        ...conversationReplay('text', captured, this.conversationStore, body.scopeKey, threadId, audience.present)
+          .request(placeSkill ? `${systemPrompt}\n\n${placeSkill.prompt}` : systemPrompt),
         ...(priorThreadSummary ? { priorThreadSummary } : {}),
         message,
         ...(attachments.length ? { attachments } : {}), ...roomLook.request,

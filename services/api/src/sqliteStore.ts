@@ -31,6 +31,8 @@ import { SQLiteShannonKnowledgeStore, type ShannonKnowledgeStore } from './sqlit
 import type { KnowledgeDraft } from '@shannon/cognition';
 import { SQLiteMemoryEmbeddingIndex, type MemoryEmbeddingIndex, type PendingEmbeddingSource } from './sqliteMemoryEmbeddings.js';
 import { ensureTurnCaptureSchema, type TurnCaptureRecord } from './turnCaptures.js';
+import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from './sqliteReplaySummary.js';
+import type { ReplaySummaryRecord } from './conversationStore.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
@@ -54,6 +56,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
+    ensureReplaySummarySchema(this.context.database);
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
@@ -113,6 +116,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   turnCaptures(scopeKey: string, turnIds: readonly string[]) { return this.conversations.turnCaptures(scopeKey, turnIds); }
   threadSummaryLineage(scopeKey: string, threadId: string) { return this.conversations.threadSummaryLineage(scopeKey, threadId); }
   experiencesById(scopeKey: string, experienceIds: readonly string[]) { return this.conversations.experiencesById(scopeKey, experienceIds); }
+  recentMessages(scopeKey: string, threadId: string, limit: number) { return selectRecentMessages(this.context.database, scopeKey, this.conversations.threadId(scopeKey, threadId), limit); }
+  replaySummary(scopeKey: string, threadId: string) { return selectReplaySummary(this.context.database, scopeKey, threadId); }
+  saveReplaySummary(scopeKey: string, threadId: string, record: ReplaySummaryRecord) { this.context.transaction(() => upsertReplaySummary(this.context.database, scopeKey, threadId, record)); }
+  threadOfTurn(scopeKey: string, experienceId: string) { return selectThreadOfTurn(this.context.database, scopeKey, experienceId); }
   events(scopeKey: string): readonly PersistedExperienceEvent[] { return this.conversations.events(scopeKey); }
   activityTimeline(scopeKey: string): readonly ActivityItem[] { return this.conversations.activityTimeline(scopeKey); }
 
