@@ -63,6 +63,8 @@ public struct ShannonBodyView: View {
                     face: ShannonFace(expression: expression, feeling: feeling), activity: activity,
                     isShowing: showsLive2D
                 )
+                // The square cuts her at the waist and may cut long hair at the sides: the edges fade instead of ending in a line.
+                .mask(ShannonFigureFade())
             }
         }
         .frame(width: size, height: size)
@@ -171,5 +173,22 @@ struct ShannonBodyLineBubble: View {
             AccessibilityNotification.Announcement("シャノン：\(line.text)").post()
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// Opaque in the middle, fading out towards the bottom and a little towards the sides.
+private struct ShannonFigureFade: View {
+    var body: some View {
+        LinearGradient(
+            stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.84), .init(color: .clear, location: 1)],
+            startPoint: .top, endPoint: .bottom
+        )
+        .mask(LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0), .init(color: .black, location: 0.07),
+                .init(color: .black, location: 0.93), .init(color: .clear, location: 1),
+            ],
+            startPoint: .leading, endPoint: .trailing
+        ))
     }
 }
