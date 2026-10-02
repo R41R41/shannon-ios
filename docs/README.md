@@ -7,6 +7,7 @@
 - Product policy and canonical index: [`../README.md`](../README.md)
 - Architecture: [`architecture.md`](architecture.md)
 - Design and evidence: [`DESIGN.md`](DESIGN.md)
+- One product spec for iOS, macOS and Windows (feature matrix, design tokens, shared copy, proposed screen map): [`product/README.md`](product/README.md)
 - Current implementation plan and acceptance progress: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 - Release and recovery: [`self-improvement-runbook.md`](self-improvement-runbook.md)
 - Branch and worktree lifecycle: [`BRANCHING.md`](BRANCHING.md)
