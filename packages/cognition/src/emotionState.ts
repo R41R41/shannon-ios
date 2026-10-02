@@ -141,10 +141,7 @@ export interface ResolveShannonEmotionInput {
   target?: string;
   /** The caller already decided by `holdsShannonFeeling` that this stimulus replaces the present feeling (a touch). */
   replaces?: boolean;
-  /**
-   * The provisional feeling was decided by the writer of the reply itself (a text turn): a cue word of another kind does not
-   * rename it and stays beside it. Absent (a voice turn, decided before the reply existed), the cue names the kind as before.
-   */
+  /** Decided by the writer of the reply itself (a text turn): a cue word of another kind does not rename it and stays beside it. Absent (voice), the cue names the kind. */
   decidedKindWins?: boolean;
 }
 
@@ -297,10 +294,16 @@ export function resolveShannonEmotionState(
       || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
       return continuedShannonEmotion(previous, primary, input.now);
     } else if (!input.replaces && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)) {
-      // The same bar when another feeling is on top and gives way: an unpleasant mood that is alive underneath is not
-      // stored anew at a strength it already had. It is that mood going on, and the reply shows it at what is left of it.
-      // (An override never arrives here: no override names an unpleasant mood.)
-      return resurfacedShannonEmotion(previous, primary, previous.strengths?.[primary] ?? 0, input.now);
+      // The same bar when another feeling is on top and gives way: an unpleasant mood alive underneath is not stored anew at
+      // a strength it already had. It goes on, and the reply shows it at what is left of it, unless what is on top is owed
+      // to the owner (an override, her concern or apology) or too little is left to show. (No override names such a mood.)
+      const left = previous.strengths?.[primary] ?? 0;
+      const owed = previous.overrideReason !== undefined || (SUPPORT.has(previous.primary) && previous.intensity >= 0.3);
+      return owed || left < 0.3 ? continuedShannonEmotion(previous, primary, input.now) : resurfacedShannonEmotion(previous, primary, left, input.now);
+    } else if (!input.replaces && isKeptUnpleasant(primary) && previous.heights?.[primary] === undefined
+      && intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && intensity <= (previous.placeAbove ?? -1)) {
+      // Every place underneath is held by an unpleasant mood at least this strong: a further one is not a new mood of hers.
+      return continuedShannonEmotion(previous, primary, input.now);
     }
   }
 
@@ -371,7 +374,7 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, strengths: _strengths, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, strengths: _strengths, placeAbove: _placeAbove, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;
@@ -381,15 +384,12 @@ export function continuedShannonEmotion(
   });
 }
 
-/**
- * A mood she carries underneath comes up again for this reply, at what is left of it, in place of another feeling that
- * was on top. It is that mood going on (`continued`), so committing it stores nothing; the feeling it replaces stays beside it.
- */
+/** A mood underneath comes up for this reply at what is left of it; it goes on (`continued`), so nothing is stored; the feeling it replaces stays beside it. */
 function resurfacedShannonEmotion(previous: ShannonExpressiveEmotion, kind: ShannonEmotionKind, strength: number, now: string): ShannonExpressiveEmotion {
   const intensity = clamp(strength, 0, 1);
   const secondary = previous.primary !== 'neutral' && previous.primary !== kind && !unsafeCombination(kind, previous.primary) ? [previous.primary] : [];
   return Object.freeze({
-    primary: kind, secondary: Object.freeze(secondary), intensity, target: previous.target, cause: CARRIED_CAUSE,
+    primary: kind, secondary: Object.freeze(secondary), intensity, target: 'ライ氏', cause: CARRIED_CAUSE,
     ...emotionProfile(kind, intensity), visibility: visibilityFor(intensity), startedAt: validTimestamp(now),
     decay: decayFor(kind), carryover: intensity, updatedAt: validTimestamp(now),
     ...(previous.awakeAt !== undefined ? { awakeAt: previous.awakeAt } : {}),

@@ -104,7 +104,8 @@ export function presentShannonFeeling(
       heights[kind] = Math.max(heights[kind] ?? 0, stored);
       strengths[kind] = Math.max(strengths[kind] ?? 0, left);
     }
-    return { heights: Object.freeze(heights), strengths: Object.freeze(strengths) };
+    const bar = placeBar(living.map(item => item.feeling), awakeMs, timing);
+    return { heights: Object.freeze(heights), strengths: Object.freeze(strengths), ...(bar >= 0 ? { placeAbove: bar } : {}) };
   };
   let surface: ShannonExpressiveEmotion | undefined;
   // The wall-clock bound holds for the reaction as well: a strong one leaves a faint rest when she goes dormant, and that must not stay for weeks.
@@ -236,14 +237,32 @@ export function noteShannonFeeling(
       list = [noted, ...list.filter(item => item !== existing)];
     }
   }
-  return alive(list, awakeMs, now, timing).slice(0, RULE.maximumLingering).map(item => item.feeling);
+  const living = alive(list, awakeMs, now, timing).map(item => item.feeling);
+  if (living.length <= RULE.maximumLingering) return living;
+  // One too many. An unpleasant mood takes the place of the weakest entry that gives way to it (see `hasPlaceUnderneath`),
+  // never of an unpleasant mood stored at least as strongly; anything else pushes out the weakest, as before.
+  const newcomer = living.find(item => item.kind === feeling.primary && item.awakeAt === awakeMs);
+  const yielding = newcomer && isKeptUnpleasant(newcomer.kind)
+    ? [...living].reverse().find(item => item !== newcomer && !(isKeptUnpleasant(item.kind) && heldHeight(item, awakeMs, timing) >= newcomer.strength)) : undefined;
+  return (yielding ? living.filter(item => item !== yielding) : living).slice(0, RULE.maximumLingering);
+}
+
+/** The height an entry holds: what it was stored at, and while an easing holds, what it was before the easing. */
+function heldHeight(feeling: ShannonLingeringFeeling, awakeMs: number, timing: ShannonEmotionTiming): number {
+  return inEasedHold(feeling, awakeMs, timing) ? Math.max(feeling.strength, feeling.peak ?? 0) : feeling.strength;
+}
+
+/** When every place is held by an unpleasant mood toward the owner: the lowest height among them. Otherwise -1 (a place gives way). */
+function placeBar(living: readonly ShannonLingeringFeeling[], awakeMs: number, timing: ShannonEmotionTiming): number {
+  if (living.length < RULE.maximumLingering || living.some(item => !isKeptUnpleasant(item.kind))) return -1;
+  return Math.min(...living.map(item => heldHeight(item, awakeMs, timing)));
 }
 
 /**
- * Whether a feeling may take a place underneath. It may not when every place is taken, it has none of its own, and the
- * entry that would give way (the weakest alive) is an unpleasant mood toward the owner stored at least as strongly as
- * this unpleasant mood: otherwise rotating through five such moods would push each one out, forget the height it had,
- * and let every one be stored anew at full strength turn after turn. A pleasant entry, and a weaker one, give way as before.
+ * Whether a feeling may take a place underneath. It may not when every place is held by an unpleasant mood toward the
+ * owner at a height this unpleasant mood does not exceed, and it has no place of its own: otherwise rotating through five
+ * such moods would push each one out, forget the height it had, and let every one be stored anew at full strength turn
+ * after turn. A pleasant entry, and one held lower than the newcomer is strong, give way.
  */
 export function hasPlaceUnderneath(
   lingering: readonly ShannonLingeringFeeling[],
@@ -253,10 +272,9 @@ export function hasPlaceUnderneath(
   timing: ShannonEmotionTiming,
 ): boolean {
   if (!isKeptUnpleasant(feeling.primary)) return true;
-  const living = alive(lingering, awakeMs, now, timing);
-  if (living.length < RULE.maximumLingering || living.some(item => item.feeling.kind === feeling.primary && item.feeling.target === feeling.target)) return true;
-  const weakest = living[living.length - 1]!.feeling;
-  return !(isKeptUnpleasant(weakest.kind) && weakest.strength >= feeling.intensity);
+  const living = alive(lingering, awakeMs, now, timing).map(item => item.feeling);
+  if (living.some(item => item.kind === feeling.primary && item.target === feeling.target)) return true;
+  return feeling.intensity > placeBar(living, awakeMs, timing);
 }
 
 function eased(feeling: ShannonLingeringFeeling, share: number, awakeMs: number, timing: ShannonEmotionTiming): ShannonLingeringFeeling {

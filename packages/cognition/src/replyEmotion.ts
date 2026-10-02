@@ -1,6 +1,6 @@
 import { projectEmotionReaction } from './affect.js';
 import { presentShannonFeeling } from './emotionContinuity.js';
-import { SHANNON_EMOTION_CUE_STRENGTH, isShannonEmotionKind, isSupportEmotion, resolveShannonEmotionState } from './emotionState.js';
+import { SHANNON_EMOTION_CUE_STRENGTH, isShannonEmotionKind, resolveShannonEmotionState } from './emotionState.js';
 import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { createShannonMessageEmotion, deriveShannonFace, type ShannonFace, type ShannonMessageEmotion } from './expression.js';
 import type { CompanionStateSnapshot, ShannonExpressiveEmotion } from './types.js';
@@ -63,10 +63,12 @@ export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
  * - When another feeling she already has simply goes on, nothing of the decided one would be stored: the turn is the one
  *   without a decided feeling, so her concern or apology in her own words still shows over a mood. When it is the decided
  *   feeling itself that goes on, it stands: a cue word does not rename it. Only her concern or apology in her own words
- *   comes before a mood that merely goes on, as it comes before any mood of hers.
+ *   (not her sadness or worry, which may be the mood itself) comes before a mood that merely goes on.
  * - When an override took the reply (grief, an emergency, accuracy), or her words named another kind, likewise.
  * Without a usable `decided` it is `resolveReplyEmotion`.
  */
+const CONCERN = new Set<string>(['caring', 'protective', 'reassurance', 'apologetic']);
+
 export function resolveWrittenReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
   const { decided: given, decidedKindWins: _wins, ...plain } = input;
   const decided = given && isShannonEmotionKind(given.primary) && given.primary !== 'neutral' ? given : undefined;
@@ -76,7 +78,7 @@ export function resolveWrittenReplyEmotion(input: ReplyEmotionInput): ReplyEmoti
   if (feeling.primary !== decided.primary || feeling.overrideReason) return resolveReplyEmotion(plain);
   if (feeling.continued !== true) return resolved;
   const voiced = resolveReplyEmotion(plain);
-  return voiced.expressiveEmotion.continued !== true && isSupportEmotion(voiced.expressiveEmotion.primary) ? voiced : resolved;
+  return voiced.expressiveEmotion.continued !== true && CONCERN.has(voiced.expressiveEmotion.primary) ? voiced : resolved;
 }
 
 export interface ShannonPresentMood extends ShannonFace {

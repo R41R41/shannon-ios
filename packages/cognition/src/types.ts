@@ -75,6 +75,8 @@ export interface ShannonExpressiveEmotion {
   heights?: Partial<Record<ShannonEmotionKind, number>>;
   /** Only on a reading, never stored: for the same kinds, what is left of each at this instant. An unpleasant mood expressed again up to its height shows at this strength. */
   strengths?: Partial<Record<ShannonEmotionKind, number>>;
+  /** Only on a reading, never stored: when every place underneath is held by an unpleasant mood, the strength a further unpleasant mood must exceed to take one. */
+  placeAbove?: number;
   /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
   decided?: boolean;
 }

@@ -20,6 +20,7 @@ import {
 } from './emotionContinuity.js';
 import { holdsShannonFeeling, isKeptUnpleasant } from './emotionState.js';
 import { SHANNON_EMOTION_CONTINUITY, SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
+import { SHANNON_OWNER_NAME } from './persona.js';
 import { calibrateTemperament, mergeSharedDays, sameTemperament } from './temperament.js';
 import { feelTouch, isTouchFeeling } from './touchEmotion.js';
 import { normalizeDisclosure, sameDisclosure, widenAudience } from './disclosure.js';
@@ -243,7 +244,7 @@ function committedFeeling(
   // An unpleasant mood toward the owner is stored anew only above the height its kind was stored at, not above what it has
   // faded to since, whichever feeling is on top now. Overrides and touches keep their exceptions. (No resolver result is
   // an unpleasant mood held by an override; an event built elsewhere could be, so the guard stays.)
-  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming)) {
+  if (isKeptUnpleasant(incoming.primary) && !incoming.overrideReason && !isTouchFeeling(incoming) && incoming.target === SHANNON_OWNER_NAME) {
     if (incoming.intensity <= (present.heights?.[incoming.primary] ?? -1)) return null;
     // Nor is it stored when it is strong enough to be her mood and every place underneath is held by an unpleasant mood
     // that does not give way to it: a fifth such mood in rotation would otherwise be stored anew every time.
