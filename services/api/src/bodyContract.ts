@@ -44,6 +44,11 @@ export const BODY_LIMITS = Object.freeze({
   flags: 16,
   capabilityIdCharacters: 40,
   presencePollSeconds: 10,
+  /** `audience` on a presence read says who can see or hear the body for this long; it is stored at most this often. */
+  audienceFreshMilliseconds: 90_000,
+  audienceWriteMilliseconds: 30_000,
+  /** Without such a report, the audience of the newest event this recent stands in. */
+  audienceEventWindowMilliseconds: 30 * 60_000,
   nudgeLifetimeMilliseconds: 30 * 60_000,
   /** Limits the body must respect when it shows a nudge. */
   nudgeQuietAfterConversationMinutes: 15,

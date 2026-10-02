@@ -5,6 +5,7 @@ import { reminderCapabilityBoundary } from './reminderCapability.js';
 import type { ShannonWebSource } from './chatModel.js';
 import { asksAboutNotion, notionTurnProjection } from './notionConversation.js';
 import type { NotionSource } from './notionSource.js';
+import type { OwnerUpcoming } from './ownerUpcoming.js';
 
 export type NotionTurnReader = NotionSource;
 
@@ -13,6 +14,8 @@ export interface ConversationReadCapabilities {
   voyagerCatalog?: VoyagerCatalog | null;
   /** Read-only Notion reader. Used only when the owner is alone and names Notion or the story. */
   notion?: NotionTurnReader | null;
+  /** What is coming up for the owner: calendar, promises with a due time, dated tasks. Read only when the turn asks about the schedule. */
+  upcoming?: Pick<OwnerUpcoming, 'promptFor'> | null;
 }
 
 export interface ConversationCapabilitySelection {
@@ -20,6 +23,8 @@ export interface ConversationCapabilitySelection {
   voyagerTasks?: boolean;
   /** False whenever anyone other than the owner may hear or read the reply. */
   notion?: boolean;
+  /** `guarded`: someone else can see or hear the reply, so each line is marked as owner-private. `false` reads nothing. */
+  upcoming?: boolean | 'guarded';
 }
 
 export interface ConversationCapabilityContext {
@@ -91,6 +96,10 @@ export function conversationCapabilityPrompt(
       if (notes) sections.push(notes);
       else if (asksAboutNotes(message)) sections.push('[Notes] No matching explicitly shared note projection. Do not claim to have read unshared notes.');
     } catch { sections.push('[Notes] Projection unavailable. Do not invent note content.'); }
+  }
+  if (selection.upcoming !== false) {
+    const upcoming = dependencies.upcoming?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
+    if (upcoming) sections.push(upcoming);
   }
   if (selection.voyagerTasks !== false && asksAboutTasks(message) && !asksOnlyProductRole(message)) {
     return readTaskContext(message, dependencies, sections);

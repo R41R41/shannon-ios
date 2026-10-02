@@ -60,6 +60,13 @@ export class SQLiteBodyStore {
         updated_at TEXT NOT NULL,
         PRIMARY KEY (scope_key, device_id)
       );
+      CREATE TABLE IF NOT EXISTS body_audience (
+        scope_key TEXT NOT NULL,
+        device_id TEXT NOT NULL,
+        audience TEXT NOT NULL CHECK (audience IN ('owner', 'others')),
+        reported_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, device_id)
+      );
     `);
     secureDatabaseFiles(path);
   }
@@ -115,6 +122,30 @@ export class SQLiteBodyStore {
       ...(row.strength !== null ? { strength: Number(row.strength) } : {}),
       ...(row.minutes_away !== null ? { minutesAway: Number(row.minutes_away) } : {}),
     }));
+  }
+
+  /** Who can see or hear the body, as it said on a presence read. One row per device. */
+  noteAudience(scopeKey: string, deviceId: string, audience: BodyAudience, at: string): void {
+    this.database.prepare(`
+      INSERT INTO body_audience (scope_key, device_id, audience, reported_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (scope_key, device_id) DO UPDATE SET audience = excluded.audience, reported_at = excluded.reported_at
+    `).run(scopeKey, deviceId, audience, at);
+  }
+
+  /**
+   * True while someone other than the owner can see or hear the body, as far as it told the server:
+   * a presence read in the last `freshMilliseconds` said so, or, when no body reported lately,
+   * the newest event of the last `eventWindowMilliseconds` carried `others`.
+   */
+  othersPresent(scopeKey: string, at: string, freshMilliseconds: number, eventWindowMilliseconds: number): boolean {
+    const time = Date.parse(at);
+    const reports = this.database.prepare('SELECT audience FROM body_audience WHERE scope_key = ? AND reported_at >= ? AND reported_at <= ?')
+      .all(scopeKey, new Date(time - freshMilliseconds).toISOString(), at) as unknown as Array<{ audience: string }>;
+    if (reports.length) return reports.some(report => report.audience === 'others');
+    const latest = this.database.prepare(`
+      SELECT audience FROM body_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ? ORDER BY occurred_at DESC, received_at DESC LIMIT 1
+    `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at) as unknown as { audience: string } | undefined;
+    return latest?.audience === 'others';
   }
 
   /** Drops events received before the retention boundary. */

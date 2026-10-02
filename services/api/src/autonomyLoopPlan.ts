@@ -1,7 +1,7 @@
 import type { ShannonPursuit, ShannonPursuitStatus } from '@shannon/cognition';
 import { copyableStudyPiece } from './autonomyHostFolderPath.js';
 import type { AutonomyPlannedStep } from './autonomyLoopState.js';
-import type { PromptNote, ThinkingMaterials } from './autonomyLoopPrompts.js';
+import { REACH_OUT_REASONS, type PromptNote, type PromptUpcoming, type ReachOutReason, type ThinkingMaterials } from './autonomyLoopPrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import { STUDY_REACTION_LABEL, STUDY_STATUS_LABEL, type StudyPiece } from './studyStore.js';
 
@@ -45,6 +45,8 @@ export function thinkingMaterials(
   input: {
     at: string; localTime: string; remainingYen: number; remainingReads: number; maximumSteps: number;
     readingSeeds: readonly { title: string; url: string }[]; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean;
+    /** How many more times she may speak up today, while she may at all; the owner's upcoming items come only with it. */
+    reachOut?: { remaining: number; upcoming: readonly PromptUpcoming[] } | null;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
@@ -69,6 +71,7 @@ export function thinkingMaterials(
     notionAvailable: input.notionAvailable,
     ...(input.folderAvailable ? { folderAvailable: true } : {}),
     ...(input.lookAvailable ? { lookAvailable: true } : {}),
+    ...(input.reachOut && input.reachOut.remaining > 0 ? { reachOut: { remaining: input.reachOut.remaining }, upcoming: input.reachOut.upcoming } : {}),
   };
 }
 
@@ -76,7 +79,7 @@ export function thinkingMaterials(
 export function planFromThought(
   reply: Record<string, unknown>,
   known: { pursuits: readonly ShannonPursuit[]; pieces: readonly StudyPiece[]; unnotedReadingIds: readonly string[]; placeUrls?: readonly string[] },
-  bounds: { maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean },
+  bounds: { maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean; reachOut?: { upcoming: boolean } | null },
 ): Thought {
   const pursuitIds = new Set(known.pursuits.map(item => item.id));
   const stories = new Map(known.pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away').map(piece => [piece.id, piece]));
@@ -124,6 +127,11 @@ export function planFromThought(
     } else if (action === 'look' && bounds.lookAvailable && !steps.some(step => step.kind === 'look')) {
       // One look in a plan at most; the step checks again that the body is there when it runs.
       steps.push({ kind: 'look' });
+    } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
+      // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
+      const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;
+      if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.reachOut.upcoming)) continue;
+      steps.push({ kind: 'reach_out', reason });
     }
   }
   const pursuits: ThoughtPursuitChange[] = [];

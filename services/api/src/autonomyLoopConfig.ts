@@ -16,6 +16,8 @@ export interface AutonomyLoopConfig {
   maximumReadsPerCycle: number;
   /** A cycle does not start while the owner has written or spoken this recently. */
   ownerActiveMilliseconds: number;
+  /** Shortest time between two messages she starts on her own. */
+  reachOutSpacingMilliseconds: number;
   /** How long a runner owns the loop without renewing. Longer than any single step. */
   leaseMilliseconds: number;
   /** What she asks for when the day's cap blocks a step she cares about. */
@@ -39,6 +41,7 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     maximumStepsPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_STEPS, 1, 12, 6),
     maximumReadsPerCycle: integer(environment.SHANNON_AUTONOMY_CYCLE_MAX_READS, 0, 6, 2),
     ownerActiveMilliseconds: integer(environment.SHANNON_AUTONOMY_OWNER_ACTIVE_MINUTES, 0, 240, 10) * 60_000,
+    reachOutSpacingMilliseconds: integer(environment.SHANNON_AUTONOMY_REACH_OUT_SPACING_MINUTES, 0, 24 * 60, 60) * 60_000,
     leaseMilliseconds: integer(environment.SHANNON_AUTONOMY_LEASE_SECONDS, 240, 3_600, 600) * 1_000,
     budgetRequestYen: integer(environment.SHANNON_AUTONOMY_BUDGET_REQUEST_YEN, 1, 100_000, 300),
     readingSeeds: readingSeeds(environment.SHANNON_AUTONOMY_READING_SEEDS_JSON),

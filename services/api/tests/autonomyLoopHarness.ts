@@ -1,7 +1,8 @@
-import { configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
+import { autonomyDayKey, configuredAutonomy, type AutonomyConfig } from '../src/autonomyBudget.js';
 import { ShannonAutonomyLoop, type AutonomyLoopTick } from '../src/autonomyLoop.js';
 import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
+import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
 import { ShannonAutonomyService, type AutonomyServiceDependencies } from '../src/autonomyService.js';
@@ -12,12 +13,13 @@ import type { AutonomyTextModel, AutonomyTextRequest, AutonomyTextResult } from 
 /** Deterministic stand-ins for the activity loop: no network, no real model, a clock the test moves. */
 export const scope = 'owner';
 
-export type ModelCallKind = 'think' | 'note' | 'draft' | 'revise';
+export type ModelCallKind = 'think' | 'note' | 'draft' | 'revise' | 'reach_out';
 
 export function callKind(request: Pick<AutonomyTextRequest, 'system'>): ModelCallKind {
   if (request.system.includes('[ひとりの時間]')) return 'think';
   if (request.system.includes('[読んだものをメモにする]')) return 'note';
   if (request.system.includes('[短い物語を書く]')) return 'draft';
+  if (request.system.includes('[自分から話しかける]')) return 'reach_out';
   return 'revise';
 }
 
@@ -54,6 +56,7 @@ const DEFAULT_REPLIES: Record<Exclude<ModelCallKind, 'think'>, unknown> = {
   note: { title: '夕方の駅が懐かしい理由', body: '光の色と人の少なさが、懐かしさを作っているのだと思いました。物語では音を先に書くと効きそうです。', question: '', questionWhy: '' },
   draft: { title: '傘のある駅', body: STORY_BODY, note: '誰もいない場所に、誰かがいた気配だけを書こうとしました。' },
   revise: { title: '傘のある駅', body: `${STORY_BODY}最後に、傘はもうなかった。`, change: '終わりに傘がなくなる一文を足しました。余韻を残したかったからです。' },
+  reach_out: { message: 'ライ氏、いま何をしていますか。ボクは少し気になりました。' },
 };
 
 export class FakeReader implements AutonomyPublicReader {
@@ -99,6 +102,9 @@ export interface LoopHarnessOptions {
   /** Looking at the room in her own time: the desk the loop asks, and the counts its service hands the gate. */
   looks?: AutonomyRoomLooks;
   roomLooks?: AutonomyServiceDependencies['roomLooks'];
+  /** Speaking up on her own: the way her message leaves, and the owner's upcoming items. */
+  reachOuts?: AutonomyReachOuts;
+  upcoming?: AutonomyUpcoming;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -110,13 +116,18 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   });
   const loopConfig: AutonomyLoopConfig = { ...configuredAutonomyLoop({}), ...options.loop };
   const now = () => clock.at;
-  const service = new ShannonAutonomyService({ store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}) });
+  const reachOuts = options.reachOuts;
+  const service = new ShannonAutonomyService({
+    store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}),
+    ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
+  });
   const model = options.model ?? new FakeModel();
   const reader = options.reader ?? new FakeReader();
   const showing = options.showing ?? new FakeShowing();
   const newLoop = (workerId: string) => new ShannonAutonomyLoop({
     store, service, config, loop: loopConfig, model, reader, showing, now, workerId,
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
+    ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);
