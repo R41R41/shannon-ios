@@ -42,6 +42,8 @@ export interface ShannonChatModelRequest {
   placeSearch?: PlaceSearchContext;
   /** The structured reply gets a `roomLook` field: she may choose one look at the room (`bodyLook.ts`). */
   offerRoomLook?: boolean;
+  /** The structured reply gets an `appLook` field: she may choose one look through the camera of the owner's app (`appLook.ts`). */
+  offerAppLook?: boolean;
 }
 
 export interface ShannonVoiceModelRequest {
@@ -74,6 +76,8 @@ export interface ShannonChatModelResult {
   webSources?: ShannonWebSource[];
   places?: ShannonPlace[];
   roomLook?: 'asked' | 'curious';
+  /** What she chose for the app's camera, as the structured reply carried it (`appLookContract.ts`). */
+  appLook?: string;
   artifacts?: ShannonGeneratedArtifact[];
   taskProposal?: ShannonTaskProposal;
   taskDecision?: ShannonTaskDecision;

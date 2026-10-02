@@ -96,6 +96,8 @@ public struct ShannonDesktopRootView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .shannonOpensStudyPieces(with: memory.autonomy.study)
+        // 「いま見ました」 when she looks through this Mac's camera in a conversation.
+        .shannonAppLook(conversation)
         .inspector(isPresented: $showsInspector) {
             auxiliaryInspector
                 .inspectorColumnWidth(min: 230, ideal: 286, max: 390)

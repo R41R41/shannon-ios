@@ -45,6 +45,8 @@ export const SHANNON_CAPABILITIES = Object.freeze([
     text: '写真: iPhoneで選んだ1枚の内容を見る。' },
   { id: 'room_look', audience: 'owner',
     text: `部屋を見る: 体のカメラが許されている時、二人だけの会話で部屋を一度見て、見えたことを次の発言で話す。自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
+  { id: 'app_look', audience: 'owner',
+    text: 'アプリのカメラで見る: アプリを画面に出して話している時、見てと言われたら（「これ見れる？」）、または自分が見たくなったら、一度だけ見て次の発言で話す。写した1枚は残さない。画面に出ていない・許可がない・設定で切ってある時は見られないと伝える。' },
   { id: 'body_touch', audience: 'owner',
     text: '体: PCの体に触れられると感じて、ひとこと返すことがある。' },
   { id: 'text_attachments', audience: 'owner',

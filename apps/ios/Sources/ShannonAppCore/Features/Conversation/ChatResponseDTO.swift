@@ -13,6 +13,8 @@ public struct ChatResponseDTO: Codable, Equatable, Sendable {
     public let artifacts: [ShannonGeneratedArtifactDTO]?
     /// Absent on servers that do not record per-turn captures.
     public let turnId: String?
+    /// She looks through this app's camera now: capture one frame and answer it.
+    public var appLook: ShannonAppLookAskDTO? = nil
 
     public init(
         mode: String,

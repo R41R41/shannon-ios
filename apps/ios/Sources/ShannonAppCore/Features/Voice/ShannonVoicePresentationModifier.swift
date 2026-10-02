@@ -37,6 +37,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
             content
         }
         .background { ShannonPalette.resolve(colorScheme).canvas.ignoresSafeArea() }
+        .shannonAppLook(conversationModel)
         .sheet(isPresented: $isPresented, onDismiss: {
             // Minimizing while the microphone explanation waits must not strand the call.
             if geminiVoiceModel.microphonePrimerPhase == .explain { endCall() }
@@ -58,6 +59,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
                 openTask: { id in taskToOpen = id; isPresented = false },
                 minimize: { isPresented = false }, end: endCall
             )
+            .shannonAppLook(conversationModel)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }

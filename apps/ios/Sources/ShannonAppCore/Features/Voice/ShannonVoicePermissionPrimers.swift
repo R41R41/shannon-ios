@@ -28,7 +28,8 @@ extension ShannonPermissionPrimerContent {
         title: "写真を見せるために、カメラを使います",
         message: "このあと表示されるiPhoneの確認で「許可」を選ぶと、撮影画面が開きます。",
         benefits: [
-            .init(symbol: "hand.tap", text: "撮るのは、あなたがシャッターを押した1枚だけです。"),
+            .init(symbol: "hand.tap", text: "撮影画面で撮るのは、あなたがシャッターを押した1枚だけです。"),
+            .init(symbol: "eye", text: "許可すると、会話中に見てと言われた時や気になった時に、シャノンがカメラで1枚見ることもあります。見た時は表示し、設定でいつでも止められます。"),
             .init(symbol: "eye", text: "撮った写真は、共有する前に確認して撮り直せます。"),
             .init(symbol: "xmark.circle", text: "やめたいときは、撮影画面の「キャンセル」で閉じられます。"),
         ],

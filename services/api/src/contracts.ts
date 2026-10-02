@@ -48,6 +48,8 @@ export interface ChatRequest {
   audience?: 'owner' | 'others';
   /** Absent: one JSON document, as before the field existed. `sentences`: NDJSON lines (docs/chat-stream-contract.md). */
   stream?: 'sentences';
+  /** What the app says about its camera in this turn (`appLookContract.ts`): `{ state, cameras, platform }`. Absent: the turn has no app camera. */
+  appLook?: unknown;
 }
 
 export interface ChatThread {
@@ -79,6 +81,8 @@ export interface ChatResponse {
   systemPrompt: string;
   state: CompanionStateSnapshot;
   artifacts?: ShannonGeneratedArtifact[];
+  /** She looks through the app's camera now: the app captures one frame and answers `POST /v1/app/looks/{id}` before `expiresAt`. */
+  appLook?: { id: string; camera: 'back' | 'front'; expiresAt: string; lifetimeSeconds: number };
   uiBlocks?: Array<{
     type: 'agent_task_proposal';
     proposalId: string;

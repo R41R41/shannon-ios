@@ -43,6 +43,8 @@ public final class ShannonConversationModel {
 
     let scopeKey: String
     let client: any ShannonAPIClientProtocol
+    /// Her eyes in this app for a turn: the camera state each turn reports, and the one frame of a look.
+    public var appLook = ShannonAppLookCoordinator()
     let cache: ShannonConversationCache?
     let agentTaskStore: ShannonAgentTaskStore?
     var cachedHistories: [String: [ShannonConversationCache.CachedMessage]]

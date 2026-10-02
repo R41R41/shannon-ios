@@ -48,6 +48,8 @@ extension ShannonDesktopRootView {
 
             ShannonCalendarSharingSettingsSection()
 
+            ShannonAppLookSettingsSection()
+
             ShannonPrivateListeningSettingsSection()
 
             ShannonAutonomySettingsSection(model: memory.autonomy)
