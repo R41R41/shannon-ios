@@ -116,6 +116,8 @@ export {
   SHANNON_TOUCH_MOOD_STEP,
   feelTouch,
   isShannonTouchKind,
+  isTouchFeeling,
+  keepsFeelingThroughTouch,
   touchCause,
   touchFeeling,
   touchTarget,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SHANNON_EMOTION_CARRY_THRESHOLD, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, SHANNON_TOUCH_MOOD_STEP,
   carriedShannonEmotion, createInitialCompanionState, currentShannonEmotion, faceForEmotionKind, feelTouch, isShannonEmotionKind,
-  isShannonTouchKind, presentShannonMood, reduceCompanionState, touchCause, touchFeeling,
+  isShannonTouchKind, isTouchFeeling, keepsFeelingThroughTouch, presentShannonMood, reduceCompanionState, touchCause, touchFeeling,
   type CompanionStateSnapshot, type ShannonTouch, type ShannonTouchKind,
 } from '../src/index.js';
 
@@ -145,6 +145,29 @@ describe('body-touched in the one emotion state', () => {
     const settled = later(120);
     expect(carriedShannonEmotion(protective.expressiveEmotion!, settled).carryover).toBeLessThan(SHANNON_EMOTION_CARRY_THRESHOLD);
     expect(touched(protective, touch('tickle'), settled).expressiveEmotion!.primary).toBe('giggle');
+  });
+
+  it('keeps a feeling from conversation that is stronger than the touch, and lets a touch replace a weaker one or another touch', () => {
+    const feeling = (primary: 'sad' | 'curiosity', intensity: number) => reduceCompanionState(fresh(), { type: 'expressive-emotion-updated', emotion: {
+      primary, secondary: [], intensity, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.5,
+      visibility: 'expressed', startedAt: START, decay: 0.24, carryover: 0.6, updatedAt: START,
+    } }, START);
+    // She is sad at 0.8: one pat does not make her happy. The mood still lifts a little.
+    const sad = feeling('sad', 0.8);
+    const patted = touched(sad, touch('pet'), later(1));
+    expect(patted.expressiveEmotion).toEqual(sad.expressiveEmotion);
+    expect(patted.emotion.valence).toBeGreaterThan(sad.emotion.valence);
+    expect(keepsFeelingThroughTouch(sad.expressiveEmotion, 0.5, later(1))).toBe(true);
+    // A faint feeling gives way to the touch and stays as the secondary one.
+    const curious = feeling('curiosity', 0.35);
+    expect(touched(curious, touch('pet'), later(1)).expressiveEmotion).toMatchObject({ primary: 'happy', secondary: ['curiosity'] });
+    // A feeling that came from a touch always gives way to the next touch, however strong it was.
+    const fond = [1, 2, 3, 4, 5, 6].reduce((state, count) => touched(state, touch('pet', count, { strength: 1 })), fresh());
+    expect(fond.expressiveEmotion!.primary).toBe('affectionate');
+    expect(isTouchFeeling(fond.expressiveEmotion)).toBe(true);
+    expect(isTouchFeeling(sad.expressiveEmotion)).toBe(false);
+    expect(touched(fond, touch('poke'), later(1)).expressiveEmotion!.primary).toBe('surprised');
+    expect(keepsFeelingThroughTouch(undefined, 0.5, START)).toBe(false);
   });
 
   it('is pure: the same touch on the same state gives the same result, and the input is not changed', () => {

@@ -14,8 +14,8 @@ import type { StoredTouchBurst } from './bodyReactionStore.js';
  * It is stored where every experience is (`experience_events`, type `turn.completed`) with the
  * source label `body.touch`, so the deterministic recall, the full-text index, the embedding
  * worker, the Memory screen and forgetting treat it like any other experience. It has no
- * conversation message and no user side: the owner said nothing, so nothing is learned about
- * him from it (`speaker: unknown`), and it is in no Talk.
+ * conversation message, and its user side is a token, not words: the owner said nothing, so
+ * nothing is learned about him from it (`speaker: unknown`), and it is in no Talk.
  */
 export interface TouchExperience {
   id: string;
@@ -53,10 +53,21 @@ export function touchExperienceSummary(burst: StoredTouchBurst): string {
   ].filter(Boolean).join('、');
   const said = burst.said.length ? `${SHANNON_FIRST_PERSON}は${burst.said.map(line => `「${line}」`).join('')}と言った。` : `${SHANNON_FIRST_PERSON}は何も言わなかった。`;
   return [
-    `体の記憶: ${touchWhen(burst.startedAt)}、${SHANNON_OWNER_NAME}に${done}${amount ? `（${amount}）` : ''}。`,
+    // As for the cause of the feeling: with someone else around, it is not said who touched her.
+    `体の記憶: ${touchWhen(burst.startedAt)}、${burst.others ? '' : `${SHANNON_OWNER_NAME}に`}${done}${amount ? `（${amount}）` : ''}。`,
     burst.others ? 'ほかの人も見ている時だった。' : '',
     said,
   ].filter(Boolean).join('');
+}
+
+/**
+ * What stands where a turn has the owner's words: one token, unique to the burst and found in no reply.
+ * Forgetting reads a memory's evidence to decide which earlier replies restated it; with none it would
+ * withhold every earlier reply. With this, forgetting a touch hides the touch and the replies that recalled it.
+ */
+export function touchEvidence(burstId: string): string {
+  const letters = Array.from(burstId.toLowerCase().replace(/[^0-9a-f]/gu, ''), digit => String.fromCharCode(97 + Number.parseInt(digit, 16))).join('');
+  return `body-touch-${letters || 'unknown'}`;
 }
 
 export function touchExperience(burst: StoredTouchBurst): TouchExperience {
@@ -87,7 +98,7 @@ export class SQLiteTouchExperiences implements TouchExperienceWriter {
     // The experience table belongs to the conversation store.
     if (!this.has('table', 'experience_events')) return false;
     const payload = JSON.stringify({
-      userMessage: '', shannonReply: experience.shannonReply, summary: experience.summary, disclosure: experience.disclosure,
+      userMessage: touchEvidence(experience.id), shannonReply: experience.shannonReply, summary: experience.summary, disclosure: experience.disclosure,
       source: BODY_TOUCH_SOURCE, touch: experience.touch,
     });
     this.database.exec('BEGIN IMMEDIATE');

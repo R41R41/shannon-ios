@@ -244,9 +244,27 @@ describe('others present', () => {
     expect(prompt).toContain('- この場: ほかの人もいる');
     expect(prompt).toContain(BODY_REACTION_OTHERS_RULE);
     for (const secret of ['[いまの会話]', '診察', '内緒']) expect(prompt).not.toContain(secret);
-    // Her feeling moves all the same; its cause does not claim it was the owner.
-    expect(prompt).toContain('理由 くすぐられた');
-    expect(state().expressiveEmotion).toMatchObject({ target: '触れた人' });
+    // Her feeling moves all the same; its cause does not claim it was the owner, and no cause is told in front of others.
+    expect(prompt).toContain('- いまの気持ち: giggle / 強度 ');
+    expect(prompt).not.toContain('理由');
+    expect(state().expressiveEmotion).toMatchObject({ target: '触れた人', cause: 'くすぐられた' });
+  });
+
+  it('repeats to the model in front of others only lines she said in front of others', async () => {
+    const { said, speaker, advance } = await reactionHarness();
+    speaker.script = call => ({ say: true, text: ['二人だけの時のひとこと。', 'みんなの前でのひとこと。', 'もうひとこと。'][call - 1]!, feeling: 'happy' as const });
+    await said();
+    advance(30 * SECOND);
+    await said({}, { audience: 'others' });
+    advance(30 * SECOND);
+    await said({}, { audience: 'others' });
+    expect(speaker.prompts[1]).toContain('- 直前にボクが言ったこと: なし');
+    expect(speaker.prompts[2]).toContain('- 直前にボクが言ったこと: 「みんなの前でのひとこと。」');
+    expect(speaker.prompts[2]).not.toContain('二人だけの時のひとこと');
+    // Alone again she is told all of them.
+    advance(30 * SECOND);
+    await said();
+    expect(speaker.prompts[3]).toContain('「二人だけの時のひとこと。」「みんなの前でのひとこと。」「もうひとこと。」');
   });
 
   it('returns nothing of a cause: the answer carries a face only', async () => {
@@ -295,6 +313,20 @@ describe('her feeling', () => {
     // A borrowed face carries its feeling name.
     speaker.decision = { say: true, text: 'わわっ、お、落ちます！', feeling: 'flustered' };
     expect((await said({ type: 'carry', durationMs: 4_000, ongoing: false })).message).toMatchObject({ expression: 'embarrassed', feeling: 'flustered' });
+  });
+
+  it('leaves a stronger feeling from the conversation in place, for the touch and for her line about it', async () => {
+    const { said, stateStore, state, now } = await reactionHarness();
+    stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'sad', secondary: [], intensity: 0.85, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.6,
+      visibility: 'expressed', startedAt: now(), decay: 0.24, carryover: 0.7, updatedAt: now(),
+    } });
+    const answer = await said();
+    expect(answer.status).toBe('said');
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'sad', cause: '生成した応答の内容と会話文脈' });
+    expect(answer.mood).toEqual({ expression: 'sad' });
+    // Her line still has the face of its own words.
+    expect(answer.message).toMatchObject({ expression: 'bashful' });
   });
 
   it('settles by itself afterwards', async () => {
@@ -350,6 +382,15 @@ describe('idempotency', () => {
     const [ok, conflict] = await Promise.all([send('POST', '/v1/body/reactions', other), send('POST', '/v1/body/reactions', { ...other, audience: 'others' })]);
     expect(ok.status).toBe(200);
     expect(conflict.status).toBe(409);
+  });
+
+  it('keeps the stored answer when something fails after it was stored', async () => {
+    const { send, reactionStore, activity } = await reactionHarness();
+    reactionStore.addSaid = () => { throw new Error('SQLITE_BUSY'); };
+    const first = await send('POST', '/v1/body/reactions', valid);
+    expect(first.body).toMatchObject({ status: 'said', message: { text: HEHE } });
+    expect((await send('POST', '/v1/body/reactions', valid)).body).toEqual(first.body);
+    expect(activity()).toHaveLength(1);
   });
 
   it('answers quietly for an id a stopped process left unanswered, without feeling the touch twice', async () => {
@@ -408,12 +449,20 @@ describe('the deadline', () => {
     expect(speaker.calls).toHaveLength(0);
     expect(reactionStore.burstOfTouch(scope, 'touch-1')).toMatchObject({ count: 1 });
     expect(state().expressiveEmotion?.primary).toBe('happy');
-    // Far in the past: remembered, and no feeling now.
+    // Hours ago: remembered, and no feeling now.
     const longAgo = new Date(Date.parse(clock.at) - 3 * 60 * MINUTE).toISOString();
     const before = state().version;
     expect(await said({ type: 'poke' }, { occurredAt: longAgo })).toMatchObject({ status: 'quiet' });
     expect(state().version).toBe(before);
     expect(reactionStore.burstOfTouch(scope, 'touch-2')).toMatchObject({ type: 'poke', count: 1 });
+    // Outside the bounds of a body event (more than a day old, or more than five minutes ahead): not taken in at all.
+    const dayOld = new Date(Date.parse(clock.at) - 25 * 60 * MINUTE).toISOString();
+    const ahead = new Date(Date.parse(clock.at) + 6 * MINUTE).toISOString();
+    for (const occurredAt of [dayOld, ahead]) expect(await said({ type: 'carry' }, { occurredAt })).toMatchObject({ status: 'quiet', message: null });
+    expect(state().version).toBe(before);
+    expect(reactionStore.burstOfTouch(scope, 'touch-3')).toBeNull();
+    expect(reactionStore.burstOfTouch(scope, 'touch-4')).toBeNull();
+    expect(speaker.calls).toHaveLength(0);
   });
 });
 

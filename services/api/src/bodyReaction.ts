@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, currentShannonEmotion, presentShannonMood, resolveReplyEmotion, touchCause, touchTarget,
+  OWNER_AUDIENCE, currentShannonEmotion, keepsFeelingThroughTouch, presentShannonMood, resolveReplyEmotion, touchCause, touchFeeling, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
 import { BODY_LIMITS } from './bodyContract.js';
@@ -20,8 +20,9 @@ import { visibleReplayMessages } from './memoryVisibility.js';
  *
  * - Feeling and memory: every accepted request is one touch through `BodyTouches`, whether
  *   or not she speaks, exactly as a plain body event is.
- * - Deciding and speaking: one small model call. She may stay silent. The answer is given
- *   by the deadline whatever the model does; a model that answers later changes nothing.
+ * - Deciding and speaking: one small model call. She may stay silent. The deadline runs from
+ *   the moment the request is taken up: when it passes, the model is given up and she is
+ *   quiet, and a model that answers later changes nothing.
  * - Conversation only if he answers: her line waits outside the conversation history. A
  *   voice turn that names the reaction receives it as the preceding message; without one
  *   it is dropped and remains only in the memory of the touch.
@@ -114,27 +115,35 @@ export class BodyReactions {
 
   private async answer(scopeKey: string, request: BodyReactionRequest, at: string): Promise<BodyReactionAnswer> {
     const { store, touches, stateStore, config } = this.dependencies;
+    const startedAt = performance.now();
     let felt: FeltTouch | null = null;
     try {
+      const age = Date.parse(at) - Date.parse(request.occurredAt);
+      // The bounds of a body event: a touch stamped a day ago, or ahead of the server's clock, is not taken in at all.
+      const acceptable = age <= BODY_LIMITS.eventMaximumAgeMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds;
       // The touch itself: felt and remembered whether or not she says anything.
-      felt = touches.observe(scopeKey, {
+      felt = acceptable ? touches.observe(scopeKey, {
         id: request.id, type: request.touch.type, audience: request.audience, occurredAt: request.occurredAt,
         durationMs: request.touch.durationMs, ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
-      });
-      const age = Date.parse(at) - Date.parse(request.occurredAt);
-      const timely = age <= BODY_REACTION_LIMITS.requestMaximumAgeMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds;
-      const decision = felt && timely ? await this.decide(scopeKey, request, felt, at) : null;
+      }) : null;
+      const timely = age <= BODY_REACTION_LIMITS.requestMaximumAgeMilliseconds;
+      const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt) : null;
       if (!felt || !decision?.say) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at), at, null);
 
       const saidAt = this.dependencies.now();
       const before = stateStore.snapshot(scopeKey);
-      const touched = { kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner' };
+      const touched = {
+        kind: request.touch.type, countInWindow: felt.burst.count, ownerAlone: request.audience === 'owner', durationMs: request.touch.durationMs,
+        ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
+      };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({
         snapshot: before, userMessage: '', reply: decision.text, now: saidAt,
-        decided: { primary: decision.feeling, intensity: Math.max(0.45, currentShannonEmotion(before.expressiveEmotion, saidAt).intensity) },
+        // As strongly as the touch is felt (the one table), not as strongly as whatever she felt before it.
+        decided: { primary: decision.feeling, intensity: touchFeeling(touched).intensity },
       });
-      const held = before.expressiveEmotion?.overrideReason !== undefined && currentShannonEmotion(before.expressiveEmotion, saidAt).primary !== 'neutral';
+      // A feeling from conversation that the touch did not replace is not replaced by her line about the touch either.
+      const held = keepsFeelingThroughTouch(before.expressiveEmotion, resolved.expressiveEmotion.intensity, saidAt);
       const after = resolved.expressiveEmotion.primary === 'neutral' || held ? before : stateStore.apply(scopeKey, {
         type: 'expressive-emotion-updated',
         emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
@@ -151,7 +160,8 @@ export class BodyReactions {
       const listenUntil = new Date(Date.parse(saidAt) + config.listenSeconds * 1_000 + BODY_REACTION_LIMITS.linkMarginMilliseconds).toISOString();
       const stored = this.finished(scopeKey, answer, saidAt, listenUntil);
       if (stored === answer) {
-        touches.said(scopeKey, felt.burst.id, decision.text);
+        // The answer is stored: nothing after it may change what the body is told.
+        try { touches.said(scopeKey, felt.burst.id, decision.text, request.audience === 'others'); } catch { /* the line is then not in the memory of the touch */ }
         try {
           this.dependencies.record(scopeKey, { summary: `体に触れられて（${BODY_TOUCH_PHRASES[request.touch.type].done}）、ひとこと返しました。`, outcome: 'done' });
         } catch { /* the answer stands without its record line */ }
@@ -159,6 +169,11 @@ export class BodyReactions {
       return stored;
     } catch (error) {
       console.error('Shannon body reaction failed', error instanceof Error ? error.message : 'unknown');
+      // An answer that was already stored for the id is the answer.
+      try {
+        const existing = store.reaction(scopeKey, request.id)?.answer;
+        if (existing) return existing;
+      } catch { /* answered below */ }
       let snapshot: CompanionStateSnapshot | null = null;
       try { snapshot = stateStore.snapshot(scopeKey); } catch { /* answered below */ }
       const answer: BodyReactionAnswer = snapshot ? this.quiet(request.id, snapshot, at)
@@ -169,17 +184,19 @@ export class BodyReactions {
   }
 
   /** The one model call, raced against the deadline. Null when she has no words in time: the caller stays quiet. */
-  private async decide(scopeKey: string, request: BodyReactionRequest, felt: FeltTouch, at: string): Promise<BodyReactionDecision | null> {
+  private async decide(scopeKey: string, request: BodyReactionRequest, felt: FeltTouch, at: string, startedAt: number): Promise<BodyReactionDecision | null> {
     const { speaker, touches, config } = this.dependencies;
     if (!speaker) return null;
     const sitting = touches.sitting(scopeKey, felt.snapshot, at);
     const prompt = bodyReactionPrompt({
       touch: request.touch, audience: request.audience, feeling: currentShannonEmotion(felt.snapshot.expressiveEmotion, at),
-      burst: felt.burst, sitting: sitting.bursts, said: sitting.said, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at,
+      burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at,
     });
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<typeof LATE>(resolve => { timer = setTimeout(() => resolve(LATE), config.deadlineMilliseconds); });
+    // What is left of the deadline after the touch was taken in and the prompt was built.
+    const remaining = Math.max(0, config.deadlineMilliseconds - (performance.now() - startedAt));
+    const deadline = new Promise<typeof LATE>(resolve => { timer = setTimeout(() => resolve(LATE), remaining); });
     try {
       const decision = await Promise.race([speaker.decide({ scopeKey, prompt, signal: abort.signal }).catch(() => null), deadline]);
       if (decision !== LATE) {

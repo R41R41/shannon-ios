@@ -2,9 +2,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ownerSpoke } from '@shannon/cognition';
+import { memoryWithholdingRules, ownerSpoke } from '@shannon/cognition';
 import { BODY_REACTION_LIMITS } from '../src/bodyReactionContract.js';
-import { SQLiteTouchExperiences, touchExperienceSummary, touchWhen } from '../src/bodyTouchMemory.js';
+import { SQLiteTouchExperiences, touchEvidence, touchExperienceSummary, touchWhen } from '../src/bodyTouchMemory.js';
+import { ShannonMemoryService } from '../src/memoryService.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { HEHE, MINUTE, SECOND, START, reactionHarness, scope } from './bodyReactionHarness.js';
 
@@ -183,7 +184,11 @@ describe('one touch, two messages', () => {
     expect(bodyStore.recent(scope, 'owner', '2026-10-02T00:00:00.000Z', 10).map(event => event.id)).toEqual(['pat-1']);
     // A retry of the event changes nothing; a shorter duration never shrinks the memory.
     await events({ id: 'pat-1', type: 'pet', audience: 'owner', occurredAt: START, durationMs: 5_200, strength: 0.4 });
-    expect(reactionStore.burstOfTouch(scope, 'pat-1')).toMatchObject({ count: 1, totalDurationMs: 5_200 });
+    expect(reactionStore.burstOfTouch(scope, 'pat-1')).toMatchObject({ count: 1, totalDurationMs: 5_200, others: false });
+    // The finished touch of another reaction says others were there by then: the memory says so, and it is still one touch.
+    await said({ type: 'tickle', durationMs: 1_200 }, { id: 'tickle-1' });
+    await events({ id: 'tickle-1', type: 'tickle', audience: 'others', occurredAt: START, durationMs: 3_000 });
+    expect(reactionStore.burstOfTouch(scope, 'tickle-1')).toMatchObject({ count: 1, totalDurationMs: 3_000, others: true });
   });
 
   it('counts once in the other order too: the event first, then a reaction request with its id', async () => {
@@ -247,7 +252,7 @@ describe('a touch that arrives only as an event', () => {
 
 describe('remembering a touch', () => {
   it('words the memory from the kind, the numbers and what she said', () => {
-    const burst = { id: 'b', type: 'pet' as const, startedAt: START, lastAt: START, count: 1, totalDurationMs: 0, others: false, said: [] };
+    const burst = { id: 'b', type: 'pet' as const, startedAt: START, lastAt: START, count: 1, totalDurationMs: 0, others: false, said: [] as string[], saidOpen: [] as string[] };
     expect(touchWhen(START)).toBe('10月2日の午後');
     expect(touchWhen('2026-10-01T23:30:00.000Z')).toBe('10月2日の朝');
     expect(touchWhen('2026-10-02T15:30:00.000Z')).toBe('10月3日の深夜');
@@ -255,7 +260,10 @@ describe('remembering a touch', () => {
     expect(touchExperienceSummary({ ...burst, count: 7, totalDurationMs: 21_400, said: [HEHE, 'また？'] }))
       .toBe(`体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（たくさん、7回、合わせて21秒ほど）。ボクは「${HEHE}」「また？」と言った。`);
     expect(touchExperienceSummary({ ...burst, type: 'poke', count: 2, others: true }))
-      .toBe('体の記憶: 10月2日の午後、ライ氏につつかれた（2回）。ほかの人も見ている時だった。ボクは何も言わなかった。');
+      .toBe('体の記憶: 10月2日の午後、つつかれた（2回）。ほかの人も見ている時だった。ボクは何も言わなかった。');
+    // Where a turn has the owner's words, a touch has one token that no reply contains.
+    expect(touchEvidence('0b6c1f0e-5a47-4d0c-9d1c-7a2f6f1f0a11')).toMatch(/^body-touch-[a-p]{32}$/u);
+    expect(touchEvidence('0b6c1f0e-5a47-4d0c-9d1c-7a2f6f1f0a11')).not.toBe(touchEvidence('0b6c1f0e-5a47-4d0c-9d1c-7a2f6f1f0a12'));
   });
 
   it('coalesces a burst into one experience that is rewritten, and starts another for another kind or after a pause', async () => {
@@ -264,7 +272,7 @@ describe('remembering a touch', () => {
     expect(touchMemories()).toHaveLength(1);
     const id = touchMemories()[0]!.id;
     expect(touchMemories()[0]).toMatchObject({
-      userMessage: '', shannonReply: HEHE, observedAt: START,
+      userMessage: touchEvidence(id), shannonReply: HEHE, observedAt: START,
       summary: `体の記憶: 10月2日の午後、ライ氏に頭をなでてもらった（合わせて2秒ほど）。ボクは「${HEHE}」と言った。`,
       disclosure: { audience: { kind: 'owner' }, sensitivity: 'ordinary', speaker: 'unknown' },
     });
@@ -336,6 +344,28 @@ describe('remembering a touch', () => {
     expect(touchMemories()).toHaveLength(2);
     expect(touchMemories()[0]).toMatchObject({ id: memory.id, summary: memory.summary });
     expect(touchMemories()[1]!.summary).not.toContain('回');
+  });
+
+  it('forgetting a touch from Memory hides that touch only: earlier conversation is still replayed and recalled', async () => {
+    const { said, advance, chat, store, touchMemories, chatModel, clock } = await sqliteHarness();
+    const earlier = await chat('来月、金沢へ旅行に行くんだ');
+    advance(5 * MINUTE);
+    await said();
+    advance(5 * MINUTE);
+    const memory = touchMemories()[0]!;
+    new ShannonMemoryService(store, store, () => clock.at).mutate(scope, { memoryId: memory.id, action: 'forget' });
+    // The rule that forgetting creates is narrow: one term that no reply contains, never "everything before now".
+    const rule = memoryWithholdingRules(store.snapshot(scope)).find(item => item.memoryId === memory.id)!;
+    expect(rule.wide).toBe(false);
+    expect(rule.terms).toEqual([[touchEvidence(memory.id)]]);
+    advance(MINUTE);
+    const turn = await chat('金沢の旅行、覚えてる？');
+    expect(turn.threadId).toBe(earlier.threadId);
+    // The earlier turn is still in the replayed history and still recalled; the touch is gone.
+    expect(chatModel.requests.at(-1)!.history.map(item => item.content)).toEqual(['来月、金沢へ旅行に行くんだ', 'はい、ライ氏。']);
+    expect(turn.systemPrompt).toContain('金沢へ旅行');
+    expect(turn.systemPrompt).not.toContain('体の記憶');
+    expect((await chat('頭をなでたの覚えてる？')).systemPrompt).not.toContain('体の記憶');
   });
 
   it('holds nothing from a microphone: only kinds, numbers, identifiers and her own words are stored', async () => {

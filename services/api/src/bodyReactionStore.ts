@@ -36,6 +36,8 @@ export interface StoredTouchBurst {
   others: boolean;
   /** What she said during it, oldest first. */
   said: readonly string[];
+  /** Of those, the lines said while other people could hear. */
+  saidOpen: readonly string[];
 }
 
 export interface TouchReceipt {
@@ -77,11 +79,19 @@ interface ReactionRow {
   thread_id: string | null; audience: string; created_at: string; said_at: string | null; listen_until: string | null; link_state: string; linked_until: string | null;
 }
 
-const burstOf = (row: BurstRow): StoredTouchBurst => ({
-  id: row.burst_id, type: row.touch_type as ShannonTouchKind, startedAt: row.started_at, lastAt: row.last_at,
-  count: Number(row.touch_count), totalDurationMs: Number(row.total_duration_ms), others: Number(row.others) === 1,
-  said: JSON.parse(row.said_json) as string[],
-});
+/** A line she said and whether other people could hear it. */
+type SaidLine = [text: string, others: 0 | 1];
+const saidLines = (json: string): SaidLine[] => (JSON.parse(json) as unknown[])
+  .flatMap((item): SaidLine[] => Array.isArray(item) && typeof item[0] === 'string' ? [[item[0], item[1] === 1 ? 1 : 0]] : []);
+
+const burstOf = (row: BurstRow): StoredTouchBurst => {
+  const lines = saidLines(row.said_json);
+  return {
+    id: row.burst_id, type: row.touch_type as ShannonTouchKind, startedAt: row.started_at, lastAt: row.last_at,
+    count: Number(row.touch_count), totalDurationMs: Number(row.total_duration_ms), others: Number(row.others) === 1,
+    said: lines.map(line => line[0]), saidOpen: lines.filter(line => line[1] === 1).map(line => line[0]),
+  };
+};
 
 export class SQLiteBodyReactionStore {
   private readonly database: DatabaseSync;
@@ -161,16 +171,19 @@ export class SQLiteBodyReactionStore {
       const known = this.database.prepare('SELECT duration_ms, burst_id FROM body_touches WHERE scope_key = ? AND touch_id = ?')
         .get(scopeKey, touch.id) as unknown as { duration_ms: number; burst_id: string } | undefined;
       const duration = touch.durationMs ?? 0;
-      if (known) {
+      const knownBurst = known ? this.burst(scopeKey, known.burst_id) : null;
+      // A touch whose burst is gone (pruned) is counted anew.
+      if (known && !knownBurst) this.database.prepare('DELETE FROM body_touches WHERE scope_key = ? AND touch_id = ?').run(scopeKey, touch.id);
+      if (known && knownBurst) {
         const longer = Math.max(0, duration - Number(known.duration_ms));
         if (longer > 0 || touch.strength !== undefined) {
           this.database.prepare(`
             UPDATE body_touches SET duration_ms = MAX(duration_ms, ?), strength = COALESCE(?, strength) WHERE scope_key = ? AND touch_id = ?
           `).run(duration, touch.strength ?? null, scopeKey, touch.id);
         }
-        if (longer > 0) {
-          this.database.prepare('UPDATE body_touch_bursts SET total_duration_ms = total_duration_ms + ? WHERE scope_key = ? AND burst_id = ?')
-            .run(longer, scopeKey, known.burst_id);
+        if (longer > 0 || touch.audience === 'others') {
+          this.database.prepare('UPDATE body_touch_bursts SET total_duration_ms = total_duration_ms + ?, others = MAX(others, ?) WHERE scope_key = ? AND burst_id = ?')
+            .run(longer, touch.audience === 'others' ? 1 : 0, scopeKey, known.burst_id);
         }
         return { fresh: false, burst: this.burst(scopeKey, known.burst_id)! };
       }
@@ -221,13 +234,13 @@ export class SQLiteBodyReactionStore {
   }
 
   /** Adds a line she said to the memory of the burst, keeping the newest few. */
-  addSaid(scopeKey: string, burstId: string, text: string): StoredTouchBurst | null {
+  addSaid(scopeKey: string, burstId: string, text: string, others: boolean): StoredTouchBurst | null {
     return this.transaction(() => {
-      const burst = this.burst(scopeKey, burstId);
-      if (!burst) return null;
-      const said = [...burst.said, text].slice(-BODY_REACTION_LIMITS.memorySaidLines);
+      const row = this.database.prepare('SELECT said_json FROM body_touch_bursts WHERE scope_key = ? AND burst_id = ?').get(scopeKey, burstId) as unknown as { said_json: string } | undefined;
+      if (!row) return null;
+      const said: SaidLine[] = [...saidLines(row.said_json), [text, others ? 1 : 0] as SaidLine].slice(-BODY_REACTION_LIMITS.memorySaidLines);
       this.database.prepare('UPDATE body_touch_bursts SET said_json = ? WHERE scope_key = ? AND burst_id = ?').run(JSON.stringify(said), scopeKey, burstId);
-      return { ...burst, said };
+      return this.burst(scopeKey, burstId);
     });
   }
 
@@ -304,8 +317,11 @@ export class SQLiteBodyReactionStore {
     this.database.prepare('DELETE FROM body_reactions WHERE scope_key = ? AND created_at < ?')
       .run(scopeKey, new Date(time - BODY_REACTION_LIMITS.answerRetentionMilliseconds).toISOString());
     const old = new Date(time - BODY_REACTION_LIMITS.touchRetentionDays * 24 * 60 * 60_000).toISOString();
-    this.database.prepare('DELETE FROM body_touches WHERE scope_key = ? AND received_at < ?').run(scopeKey, old);
+    // A burst goes with its last touch, and a touch never outlives its burst.
     this.database.prepare('DELETE FROM body_touch_bursts WHERE scope_key = ? AND last_at < ?').run(scopeKey, old);
+    this.database.prepare(`
+      DELETE FROM body_touches WHERE scope_key = ? AND (received_at < ? OR burst_id NOT IN (SELECT burst_id FROM body_touch_bursts WHERE scope_key = ?))
+    `).run(scopeKey, old, scopeKey);
   }
 
   close(): void {

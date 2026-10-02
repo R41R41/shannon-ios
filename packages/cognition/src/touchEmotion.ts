@@ -1,4 +1,4 @@
-import { SHANNON_EMOTION_CARRY_THRESHOLD, carriedShannonEmotion, resolveShannonEmotionState } from './emotionState.js';
+import { currentShannonEmotion, resolveShannonEmotionState } from './emotionState.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 import {
   SHANNON_TOUCH_KINDS,
@@ -92,10 +92,28 @@ export function touchTarget(touch: Pick<ShannonTouch, 'ownerAlone'>): string {
   return touch.ownerAlone === false ? '触れた人' : SHANNON_OWNER_NAME;
 }
 
+/** Whether a stored feeling came from a touch (its cause is one of the table's own wordings). */
+export function isTouchFeeling(emotion: Pick<ShannonExpressiveEmotion, 'cause'> | undefined): boolean {
+  return emotion !== undefined && SHANNON_TOUCH_KINDS.some(kind => emotion.cause.includes(SHANNON_TOUCH_FEELINGS[kind].done));
+}
+
+/**
+ * Whether the feeling she has now stays when she is touched. A feeling from conversation that still
+ * carries is kept when an override holds it (safety, grief, emergency, accuracy) or when it is
+ * presently stronger than `intensity`; a feeling that itself came from a touch always gives way.
+ */
+export function keepsFeelingThroughTouch(previous: ShannonExpressiveEmotion | undefined, intensity: number, now: string): boolean {
+  if (!previous || isTouchFeeling(previous)) return false;
+  const present = currentShannonEmotion(previous, now);
+  if (present.primary === 'neutral') return false;
+  return previous.overrideReason !== undefined || present.intensity > intensity;
+}
+
 /**
  * The emotion state after one touch. Pure. The mood moves by at most `SHANNON_TOUCH_MOOD_STEP`
- * per value and never past the row's mood, so any number of touches stays bounded. A feeling
- * held for the owner's safety or grief is not replaced by a touch; only the mood moves then.
+ * per value and never past the row's mood, so any number of touches stays bounded. A feeling from
+ * conversation that is held by an override or is stronger than the touch's is not replaced; only
+ * the mood moves then.
  */
 export function feelTouch(
   state: Pick<CompanionStateSnapshot, 'emotion' | 'expressiveEmotion'>,
@@ -111,9 +129,7 @@ export function feelTouch(
     openness: clamp(state.emotion.openness + toward(state.emotion.openness, felt.step.mood.openness), 0, 1),
   };
   const previous = state.expressiveEmotion;
-  const held = previous?.overrideReason !== undefined
-    && carriedShannonEmotion(previous, now).carryover >= SHANNON_EMOTION_CARRY_THRESHOLD;
-  if (previous && held) return { emotion, expressiveEmotion: previous };
+  if (previous && keepsFeelingThroughTouch(previous, felt.intensity, now)) return { emotion, expressiveEmotion: previous };
   const resolved = resolveShannonEmotionState({
     ...(previous ? { previous } : {}),
     provisionalPrimary: felt.step.primary, provisionalIntensity: felt.intensity,

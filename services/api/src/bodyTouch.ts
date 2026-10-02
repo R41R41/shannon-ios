@@ -1,4 +1,5 @@
-import { visibleMemoryText, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
+import { memoryControlFor, type CompanionStateSnapshot, type CompanionStateStore } from '@shannon/cognition';
+import { BODY_LIMITS } from './bodyContract.js';
 import { BODY_REACTION_LIMITS } from './bodyReactionContract.js';
 import type { SQLiteBodyReactionStore, StoredTouchBurst, TouchRecord } from './bodyReactionStore.js';
 import { touchExperience, type TouchExperienceWriter } from './bodyTouchMemory.js';
@@ -39,6 +40,8 @@ export interface SittingTouches {
   bursts: readonly StoredTouchBurst[];
   /** What she said because of touches lately, oldest first. */
   said: readonly string[];
+  /** Of those, the lines she said while other people could hear: the only ones repeated to the model in front of others. */
+  saidOpen: readonly string[];
 }
 
 export class BodyTouches {
@@ -60,7 +63,7 @@ export class BodyTouches {
     const receipt = store.recordTouch(scopeKey, touch, at, burstId => this.remembered(before, burstId));
     let snapshot = before;
     const age = Date.parse(at) - Date.parse(touch.occurredAt);
-    if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds) {
+    if (receipt.fresh && age <= BODY_REACTION_LIMITS.feelingFreshMilliseconds && age >= -BODY_LIMITS.eventFutureSkewMilliseconds) {
       snapshot = stateStore.apply(scopeKey, { type: 'body-touched', touch: {
         kind: touch.type, countInWindow: receipt.burst.count, ownerAlone: touch.audience === 'owner',
         ...(touch.durationMs !== undefined ? { durationMs: touch.durationMs } : {}),
@@ -72,8 +75,8 @@ export class BodyTouches {
   }
 
   /** She said a line because of this burst: it becomes part of the memory. */
-  said(scopeKey: string, burstId: string, text: string): void {
-    const burst = this.dependencies.store.addSaid(scopeKey, burstId, text);
+  said(scopeKey: string, burstId: string, text: string, others: boolean): void {
+    const burst = this.dependencies.store.addSaid(scopeKey, burstId, text, others);
     if (burst) this.remember(scopeKey, burst);
   }
 
@@ -84,12 +87,14 @@ export class BodyTouches {
     return {
       bursts: bursts.slice(0, BODY_REACTION_LIMITS.sittingKinds),
       said: [...bursts].reverse().flatMap(burst => burst.said).slice(-BODY_REACTION_LIMITS.saidLines),
+      saidOpen: [...bursts].reverse().flatMap(burst => burst.saidOpen).slice(-BODY_REACTION_LIMITS.saidLines),
     };
   }
 
   /** A memory the owner had her forget is neither continued nor told to the reaction model. */
   private remembered(snapshot: CompanionStateSnapshot, burstId: string): boolean {
-    return visibleMemoryText(snapshot, burstId, 'touch') !== null;
+    const control = memoryControlFor(snapshot, burstId);
+    return !control || control.status === 'active';
   }
 
   /** A failure here loses the memory of one touch, never the answer or the feeling. */

@@ -27,7 +27,7 @@ export interface BodyReactionPromptInput {
   /** The burst this touch belongs to, and the other bursts of this sitting. */
   burst: StoredTouchBurst;
   sitting: readonly StoredTouchBurst[];
-  /** What she said because of touches lately, oldest first. */
+  /** What she said because of touches lately, oldest first. With others present: only lines said in front of others. */
   said: readonly string[];
   /** The last lines of the conversation in progress, oldest first. Empty when none is, or when others are present. */
   conversation: readonly { role: 'user' | 'assistant'; content: string }[];
@@ -75,9 +75,10 @@ export const BODY_REACTION_OTHERS_RULE = `この場はほかの人も見聞き�
 
 /** The whole instruction of one reaction. */
 export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
+  // With other people present the cause is left out: a feeling carried over from a conversation names what that was about.
   const feeling = input.feeling.primary === 'neutral'
     ? 'いまの気持ち: 落ち着いている'
-    : `いまの気持ち: ${input.feeling.primary} / 強度 ${input.feeling.intensity.toFixed(2)} / 理由 ${input.feeling.cause}`;
+    : `いまの気持ち: ${input.feeling.primary} / 強度 ${input.feeling.intensity.toFixed(2)}${input.audience === 'owner' ? ` / 理由 ${input.feeling.cause}` : ''}`;
   const others = input.sitting.filter(burst => burst.id !== input.burst.id);
   const conversation = input.audience === 'owner' ? input.conversation.slice(-BODY_REACTION_LIMITS.contextMessages) : [];
   return [
