@@ -16,6 +16,7 @@ struct ShannonApp: App {
     @State private var memoryModel: ShannonMemoryModel
     @State private var testFlightDeliveryModel: ShannonTestFlightDeliveryModel
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
+    @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var pendingPushToken: String?
     @Environment(\.scenePhase) private var scenePhase
 
@@ -44,8 +45,15 @@ struct ShannonApp: App {
             initialConversationModel = ShannonConversationModel(client: client)
         }
         _conversationModel = State(initialValue: initialConversationModel)
+        let previewCalendar = ShannonCalendarSharingStatus.designPreview(
+            named: UserDefaults.standard.string(forKey: "ShannonPreviewCalendar")
+        )
+        _calendarSharingModel = State(initialValue: usesDesignPreview
+            ? .designPreview(previewCalendar ?? .off)
+            : ShannonCalendarSharingModel(client: client))
 #else
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        _calendarSharingModel = State(initialValue: ShannonCalendarSharingModel(client: client))
 #endif
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _testFlightDeliveryModel = State(initialValue: ShannonTestFlightDeliveryModel(client: client))
@@ -67,6 +75,7 @@ struct ShannonApp: App {
                 testFlightDeliveryModel: testFlightDeliveryModel,
                 worldSubscriptionModel: worldSubscriptionModel
             )
+                .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: true)
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }
@@ -102,6 +111,9 @@ struct ShannonApp: App {
                 }
                 .task {
                     guard !conversationModel.isDesignPreview else { return }
+                    connectionModel.beforeDisconnect = { [calendarSharingModel] in
+                        await calendarSharingModel.removeBeforeUnpairing()
+                    }
                     if let url = ShannonAppDelegate.takePendingConnectionURL() {
                         await connectionModel.connect(using: url)
                     } else if let code = ShannonRuntimeConfiguration.launchPairingCode {

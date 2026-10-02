@@ -11,6 +11,7 @@ struct ShannonDeskApp: App {
     @State private var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State private var releaseModel: ShannonTestFlightDeliveryModel
     @State private var appIconModel: ShannonAppIconModel
+    @State private var calendarSharingModel: ShannonCalendarSharingModel
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -32,14 +33,27 @@ struct ShannonDeskApp: App {
         _conversationModel = State(initialValue: usesDesignPreview
             ? ShannonConversationModel.designPreview()
             : ShannonConversationModel(client: client))
+        let previewCalendar = ShannonCalendarSharingStatus.designPreview(
+            named: UserDefaults.standard.string(forKey: "ShannonPreviewCalendar")
+        )
+        let calendarSharing: ShannonCalendarSharingModel = usesDesignPreview
+            ? .designPreview(previewCalendar ?? .off)
+            : ShannonCalendarSharingModel(client: client, periodicInterval: ShannonCalendarSyncGate.macInterval)
 #else
         _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        let calendarSharing = ShannonCalendarSharingModel(
+            client: client,
+            periodicInterval: ShannonCalendarSyncGate.macInterval
+        )
 #endif
-        _connectionModel = State(initialValue: ShannonConnectionModel(
+        _calendarSharingModel = State(initialValue: calendarSharing)
+        let connection = ShannonConnectionModel(
             baseURL: ShannonDeskRuntimeConfiguration.apiBaseURL,
             store: connectionStore,
             deviceName: { Host.current().localizedName ?? "Mac" }
-        ))
+        )
+        connection.beforeDisconnect = { await calendarSharing.removeBeforeUnpairing() }
+        _connectionModel = State(initialValue: connection)
         _memoryModel = State(initialValue: ShannonMemoryModel(client: client))
         _voiceIdentityModel = State(initialValue: ShannonVoiceIdentityModel(client: client))
         _worldSubscriptionModel = State(initialValue: ShannonWorldSubscriptionModel(client: client))
@@ -61,6 +75,7 @@ struct ShannonDeskApp: App {
                 appIcon: appIconModel
             )
             .preferredColorScheme(preferredColorScheme)
+            .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: false)
             .onOpenURL { url in
                 Task {
                     if await connectionModel.connect(using: url) {
@@ -84,6 +99,7 @@ struct ShannonDeskApp: App {
                 worldSubscriptions: worldSubscriptionModel,
                 appIcon: appIconModel
             )
+            .environment(calendarSharingModel)
         }
     }
 
@@ -205,6 +221,7 @@ private struct ShannonDesktopSettingsScene: View {
             Button("アプリアイコン（\(appIcon.activeTitle)）") {
                 showsAppIconSettings = true
             }
+            ShannonCalendarSharingSettingsSection()
             if connection.isConnected {
                 Button("接続を確認") {
                     Task { await connection.verifyConnection() }

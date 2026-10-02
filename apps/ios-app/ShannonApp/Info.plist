@@ -10,6 +10,8 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>現在地に関する質問をしたときだけ、近くの場所や交通を調べるために位置情報を使用します。</string>
     <key>CFBundleDevelopmentRegion</key>
