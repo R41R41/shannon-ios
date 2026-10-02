@@ -4,10 +4,10 @@ import {
   type AppLookAsk, type AppLookCamera, type AppLookClient, type AppLookCode, type AppLookConfig, type AppLookResult,
 } from './appLookContract.js';
 import {
-  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcesCameraLook, appLookNotSeenLine, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
+  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, announcedLook, appLookNotSeenLine, lookAnnouncement, appLookNotSeenSummary, appLookUnavailablePrompt, type AppLookUnavailable,
 } from './appLookLines.js';
 import { SQLiteAppLookStore, type AppLookOutcome, type StoredAppLook } from './appLookStore.js';
-import type { BodyLookMessage, BodyLookSpeaker } from './bodyLook.js';
+import { asksToLook, type BodyLookMessage, type BodyLookSpeaker } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE } from './bodyLookLines.js';
 import { VoiceTurnWaits, type TurnWait } from './bodyLookTurnWait.js';
@@ -77,8 +77,6 @@ const VOICE_TURN_WAIT_MILLISECONDS = 8_000;
 /** A look the model is seeing is given up this long after its expiry (the process stopped mid-call). */
 const SEEING_GRACE_MILLISECONDS = 90_000;
 const RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
-/** She wrote that she would look: 「見てみますね」「のぞいてみますね」, not 「意見」「見つけ」. */
-const ANNOUNCES_LOOK = /見て(?:み|き)ま|見てみる|見ますね|みてみま|のぞいてみ|カメラで/u;
 const CLOSED: Pick<AppLookTurn, 'request' | 'decide' | 'open' | 'cutOff' | 'announcedWithoutLook'> = Object.freeze({
   request: Object.freeze({}), decide: () => null, open: () => null, cutOff: () => undefined, announcedWithoutLook: () => undefined,
 });
@@ -136,7 +134,7 @@ export class AppLooks {
       };
       if (unavailable) {
         // The reason is a fact of the turn, told whether or not he asks: she must not think she can look, or has.
-        return { ...CLOSED, unavailable, prompt: message !== undefined ? appLookUnavailablePrompt(unavailable, client.platform) : '',
+        return { ...CLOSED, unavailable, prompt: message !== undefined ? appLookUnavailablePrompt(unavailable, client.platform, audience.guarded) : '',
           announcedWithoutLook: audience.guest ? CLOSED.announcedWithoutLook : announcedWithoutLook(UNLOOKED_CODE[unavailable]) };
       }
       let opened = false;
@@ -150,13 +148,15 @@ export class AppLooks {
         decide: (choice, threadId, reply) => {
           try {
             // Her own words 「カメラで見てみますね」 are a choice too: a look she announced is taken, not left as a promise.
-            const chosen = appLookChoice(choice) ?? (announcesCameraLook(reply) ? { choice: 'curious' as const, camera: voiceLookCamera(message ?? '', undefined) } : null);
+            // So is saying that she will look right after he asked her to, in whatever words.
+            const said = announcedLook(reply, asksToLook(message ?? ''));
+            const chosen = appLookChoice(choice) ?? (said ? { choice: 'curious' as const, camera: voiceLookCamera(message ?? '', undefined) } : null);
             if (!chosen) return null;
             // Her text about the look follows this turn, which is stored before this runs: nothing is waited for.
-            const announced = chosen.choice === 'asked' || ANNOUNCES_LOOK.test(reply);
+            const announced = chosen.choice === 'asked' || lookAnnouncement(reply) !== null;
             const ask = open(threadId, chosen.camera, announced, [{ role: 'user', content: message ?? '' }, { role: 'assistant', content: reply }], null);
             // Another look was opened while she was writing: if she said she would look, one honest line follows.
-            if (!ask && ANNOUNCES_LOOK.test(reply)) this.unopened(scopeKey, threadId, null, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
+            if (!ask && lookAnnouncement(reply) !== null) this.unopened(scopeKey, threadId, null, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
             return ask;
           } catch { return null; }
         },

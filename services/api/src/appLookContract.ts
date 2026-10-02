@@ -178,6 +178,7 @@ export function lookSelfAnswer(value: unknown): { lookSelfProbability?: number }
  */
 export function voiceLookCamera(transcript: string, lookSelfProbability: number | undefined): AppLookCamera {
   if (lookSelfProbability !== undefined) return lookSelfProbability >= 0.5 ? 'front' : 'back';
-  return /(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:のこと|の顔|の姿|の様子|の服|の髪|が見|を見)|この(?:服|髪|髪型|メガネ|眼鏡|帽子|格好)|似合/u.test(transcript.normalize('NFKC'))
+  const ME = '(?:僕|ぼく|ボク|俺|おれ|私|わたし)';
+  return new RegExp(`${ME}(?:のこと|の顔|の姿|の様子|の服|の髪|の格好|の見た目|が見|を見)|${ME}は[^。]{0,12}(?:着て|似合|どう見え)|(?:着て|似合|どう見え)[^。]{0,12}${ME}は|この(?:服|髪|髪型|メガネ|眼鏡|帽子|格好)|何色の服|似合`, 'u').test(transcript.normalize('NFKC'))
     ? 'front' : 'back';
 }

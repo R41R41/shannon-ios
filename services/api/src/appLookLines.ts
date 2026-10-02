@@ -75,31 +75,71 @@ const CAMERA_WORDS: Readonly<Record<AppLookCamera, string>> = Object.freeze({
   back: `外側のカメラ（${SHANNON_OWNER_NAME}が向けている先）`, front: `内側のカメラ（${SHANNON_OWNER_NAME}自身）`,
 });
 const AFTERWARDS = '見えたものはこの返事のあとで届く。この返事では「カメラで見てみますね」と短く伝えるだけにして、まだ見ていないものを語らない';
-/** The fact every turn without a look carries: nothing has been seen unless the Talk holds what she saw. */
-const NOTHING_SEEN = '会話の履歴に見た結果の発言がない限り、カメラではまだ何も見ていない。人や物の見た目・色・様子を、見えたものとして語らない';
+/**
+ * The fact a turn without a look carries when the owner is alone: nothing has been seen in this conversation unless
+ * the Talk holds what she saw. A photo he shared himself, and the description that came with it, is another matter.
+ */
+const NOTHING_SEEN = `この会話では、履歴に見た結果の発言がない限り、カメラでまだ何も見ていない。人や物の見た目・色・様子を、いま見えているものとして語らない。${SHANNON_OWNER_NAME}が共有した写真と、その内容として届いた説明は別で、それについては話してよい`;
+
+/** Her reply without what it quotes: 「「カメラで見てみますね」と言えば見られます」 announces nothing. */
+const unquoted = (reply: string) => reply.normalize('NFKC').replace(/「[^」]*」|『[^』]*』|"[^"]*"/gu, '');
+/** Not a question, a negation or a report of the words: 「見てみますか？」「見てみますね、とは言えません」. */
+const AFFIRMED = '(?![ねよ]?[、,]?\\s*(?:か|とは|と言|って言))';
+/** Non-past and affirmative: 見てみます／見てきます／見てみる／見ます／のぞいてみます, never 見ました／見ません／見ましょうか. */
+const STRICT_LOOK = new RegExp(`カメラで[^。！？!?\\n]{0,12}(?:見てみます|見てきます|見てみる|見ます|のぞいてみます)${AFFIRMED}`, 'u');
+const LOOKING = `(?:見てみます|見てきます|見てみる|見ますね|のぞいてみます|確認します|確認して[^。！？!?\\n]{0,24}(?:伝え|言い|話し|答え|見てみ)ます)${AFFIRMED}`;
+const BROAD_LOOK = new RegExp(LOOKING, 'u');
+/** The same in other words, with the camera named as the means: 「カメラ、見てみますね」「カメラを使って見てみますね」「カメラで確認しますね」. */
+const CAMERA_LOOK = new RegExp(`カメラ(?:で|、|,|を使って|から|越しに)[^。！？!?\\n]{0,12}${LOOKING}`, 'u');
 
 /**
- * Her reply says that she looks through the camera now. The turn's look line tells her to use these words when, and only
- * when, she looks: a reply about reading a note or checking a schedule (「見てみますね」) is not one.
+ * Her reply says, in the words her look line gives her, that she looks through the camera now: non-past, affirmative,
+ * and not inside a quotation. A reply about reading a note or checking a schedule (「見てみますね」) is not one.
  */
 export function announcesCameraLook(reply: string): boolean {
-  return /カメラで[^。！？!?\n]{0,12}(?:見て(?:み|き)ま|見てみる|見ま|のぞ)/u.test(reply.normalize('NFKC'));
+  return STRICT_LOOK.test(unquoted(reply));
+}
+
+/**
+ * Whether her reply announces a look. `camera`: it names the camera as the means, in the given words or others.
+ * `looking`: it says that she will look or check without naming the camera (「見てみますね」「いま確認して、感想を伝えますね」),
+ * which is about the camera only when his words asked her to look. null: no announcement.
+ */
+export function lookAnnouncement(reply: string): 'camera' | 'looking' | null {
+  const text = unquoted(reply);
+  if (STRICT_LOOK.test(text) || CAMERA_LOOK.test(text)) return 'camera';
+  return BROAD_LOOK.test(text) ? 'looking' : null;
+}
+
+/** She announced a look through the camera in this turn: in so many words, or by saying she will look after he asked her to. */
+export function announcedLook(reply: string, heAsked: boolean): boolean {
+  const kind = lookAnnouncement(reply);
+  return kind === 'camera' || (kind === 'looking' && heAsked);
 }
 
 /**
  * A turn in which no camera is offered at all (no app camera in the turn, her body not offering one): she knows from
- * her capabilities that she can look, so she is told as a fact that she has not, and that this reply does not.
+ * her capabilities that she can look, so she is told as a fact that this reply does not, and that she has not.
  */
-export const LOOK_NOT_SEEN_GUARD = `[カメラ]（この返事ではカメラで何も見ない。${NOTHING_SEEN}。「見てみます」「見えています」と言わない。見てほしいと言われたら、いまは見られないと正直に伝える）`;
+export const LOOK_NOT_SEEN_GUARD = `[カメラ]（この返事ではカメラで見ていない。${NOTHING_SEEN}。「見てみます」「見えています」と言わない。見てほしいと言われても、この返事では見ない。見たふりをしない）`;
+/**
+ * The same where other people can hear: what she saw earlier is not replayed to such a turn, so nothing is said about
+ * whether she has seen anything, only that this reply does not look.
+ */
+export const LOOK_NOT_NOW_GUARD = '[カメラ]（この返事ではカメラで見ていない。「見てみます」と言わない。いま見えているかのように語らない。見てほしいと言われても、この返事では見ない。見たふりをしない）';
 
 /**
  * A voice turn from an app that can look, in which nothing decided a look beforehand: she may choose it herself by
- * saying so. Only the words 「カメラで見てみますね」 open the look, after the reply.
+ * saying so. `uncertain`: a model tier did not trust the spoken transcript, so a request in it is not taken as certain.
  */
-export const VOICE_APP_LOOK_OFFER_PROMPT = `[アプリのカメラで見る]（いまは${SHANNON_OWNER_NAME}が使っているアプリのカメラで一度だけ見られる。${NOTHING_SEEN}。`
-  + `${SHANNON_OWNER_NAME}に見てと言われた時（「これ見れる？」「見える？」「見て」「カメラ見て」）は必ず見る。いまいる場所、目の前のもの、${SHANNON_OWNER_NAME}の服や見た目の話で自分が見たくなった時も見てよい。`
+export const voiceAppLookOfferPrompt = (uncertain: boolean) => `[アプリのカメラで見る]（いまは${SHANNON_OWNER_NAME}が使っているアプリのカメラで一度だけ見られる。この返事ではまだ見ていない。${NOTHING_SEEN}。`
+  + (uncertain
+    ? `聞き取りが確かでないので、${SHANNON_OWNER_NAME}に見てと言われたように聞こえた時（「これ見れる？」「見て」）は見てよい。`
+    : `${SHANNON_OWNER_NAME}に見てと言われた時（「これ見れる？」「見える？」「見て」「カメラ見て」）は必ず見る。`)
+  + `いまいる場所、目の前のもの、${SHANNON_OWNER_NAME}の服や見た目の話で自分が見たくなった時も見てよい。`
   + '見る時は、この返事で必ず「カメラで見てみますね」と短く言う。そう言った時だけ、返事のあとで実際に一度見て、見えたものは次の発言で届く。'
   + '見ない時は、見るとも見えたとも言わない。カメラの許可や接続の不具合など、起きていないことを言わない）';
+export const VOICE_APP_LOOK_OFFER_PROMPT = voiceAppLookOfferPrompt(false);
 
 /** A text turn in which she may choose the look in the structured reply (`appLook`). */
 export const APP_LOOK_OFFER_PROMPT = `[アプリのカメラで見る]（いまは${SHANNON_OWNER_NAME}が使っているアプリのカメラで一度だけ見られる。返答のappLookで選ぶ。`
@@ -108,9 +148,10 @@ export const APP_LOOK_OFFER_PROMPT = `[アプリのカメラで見る]（いま�
   + `${SHANNON_OWNER_NAME}自身や服・髪・表情の話なら内側のカメラ、それ以外は外側のカメラを選ぶ。${AFTERWARDS}。`
   + `appLookでnoneを選ぶ返事では、見るとも見えたとも言わない。${NOTHING_SEEN}）`;
 
-export const appLookUnavailablePrompt = (reason: AppLookUnavailable, platform: AppLookClient['platform']) =>
-  `[アプリのカメラで見る]（いまはカメラで見られない。本当の理由: ${appLookUnavailableReason(reason, platform)}。この返事では見ない。「見てみます」と言わない。`
-  + `${NOTHING_SEEN}。見てほしいと言われたら、この理由だけを短く正直に伝える。見たふりをしない。ここに書かれていない原因を作って言わない）`;
+/** `guarded`: other people can hear; nothing is then said about what she has or has not seen before. */
+export const appLookUnavailablePrompt = (reason: AppLookUnavailable, platform: AppLookClient['platform'], guarded = false) =>
+  `[アプリのカメラで見る]（いまはアプリのカメラで見られない。本当の理由: ${appLookUnavailableReason(reason, platform)}。この返事では見ない。「見てみます」と言わない。`
+  + `${guarded ? 'いま見えているかのように語らない' : NOTHING_SEEN}。見てほしいと言われたら、この理由だけを短く正直に伝える。見たふりをしない。ここに書かれていない原因を作って言わない）`;
 
 /** The reply of a voice turn in which the look is taken. */
 export const voiceAppLookPrompt = (asked: boolean, camera: AppLookCamera) => `[アプリのカメラで見る]（${asked

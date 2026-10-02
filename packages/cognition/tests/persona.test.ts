@@ -53,7 +53,7 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_993); // +125 on 2026-10-02: the look through the app (owner decision).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_993); // +125 on 2026-10-02: the look through the app (owner decision); +74 on 2026-10-03: it does not announce a look by itself.
     expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_923);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
