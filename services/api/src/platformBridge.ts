@@ -3,11 +3,11 @@ import {
   OWNER_AUDIENCE,
   buildCompanionStatePrompt,
   groupAudience,
-  resolveReplyEmotion,
   type CompanionClock,
   type CompanionStateStore,
   type MemoryAudience,
 } from '@shannon/cognition';
+import { resolveReplyEmotion } from './companionPresence.js';
 import { DisclosureGate, sharedProfilePrompt } from './memoryDisclosure.js';
 import {
   platformConversationLabel, platformPeopleEnabled,

@@ -1,4 +1,4 @@
-import { deriveShannonFace, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
+import { deriveShannonFace, normalizeShannonExpressiveEmotion, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
@@ -34,7 +34,7 @@ export function voicePlanResponse(
     affect: emotion?.primary ?? decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
-    ...(emotion ? { emotion, ...deriveShannonFace(mood, emotion) } : {}),
+    ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion) } : {}),
     selectedSkills: decision.selectedSkills,
     skillScores: decision.skillScores,
     waitingPhrase,
@@ -45,6 +45,15 @@ export function voicePlanResponse(
     // The trace of an unanswered turn: which category decided it. Absent on a turn she answers.
     ...(decision.silence && !decision.shouldRespond ? { silenceCategory: decision.silence } : {}),
   };
+}
+
+/**
+ * The feeling as the plan may carry it to a device. No client reads its cause, and the device may be heard by
+ * others: the cause, her clock stamp and the resolver's notes to the reducer stay on the server.
+ */
+function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak'> {
+  const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
+  return shown;
 }
 
 function waitingPerformanceFor(

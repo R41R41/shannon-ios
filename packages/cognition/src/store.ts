@@ -1,3 +1,4 @@
+import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { createInitialCompanionState, reduceCompanionState } from './state.js';
 import type { CompanionStateEvent, CompanionStateSnapshot, CompanionStateStore } from './types.js';
 
@@ -7,7 +8,7 @@ export type CompanionClock = () => string;
 export class InMemoryCompanionStateStore implements CompanionStateStore {
   private readonly states = new Map<string, CompanionStateSnapshot>();
 
-  constructor(private readonly now: CompanionClock) {}
+  constructor(private readonly now: CompanionClock, private readonly timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME) {}
 
   snapshot(scopeKey: string): CompanionStateSnapshot {
     const existing = this.states.get(scopeKey);
@@ -18,7 +19,7 @@ export class InMemoryCompanionStateStore implements CompanionStateStore {
   }
 
   apply(scopeKey: string, event: CompanionStateEvent): CompanionStateSnapshot {
-    const next = reduceCompanionState(this.snapshot(scopeKey), event, this.now());
+    const next = reduceCompanionState(this.snapshot(scopeKey), event, this.now(), this.timing);
     this.states.set(scopeKey, next);
     return next;
   }

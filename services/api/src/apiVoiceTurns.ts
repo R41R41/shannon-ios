@@ -1,5 +1,5 @@
-import { UNKNOWN_GUEST_PRESENCE, resolveReplyEmotion, type CompanionStateStore } from '@shannon/cognition';
-import { presentCompanionState } from './companionPresence.js';
+import { UNKNOWN_GUEST_PRESENCE, type CompanionStateStore } from '@shannon/cognition';
+import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';

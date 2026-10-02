@@ -135,7 +135,9 @@ describe('Shannon local API kernel', () => {
     expect(result).toMatchObject({ status: 200, body: { reply: '最初の文です。次の文です。' } });
     expect(plans).toHaveLength(2);
     expect(plans[0]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
-    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { cause: '生成した応答の内容と会話文脈' } });
+    // The reconciled plan follows; a plan goes to a device and carries the feeling without its cause.
+    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
+    expect(plans[1]).not.toHaveProperty('emotion.cause');
     expect(deltas).toEqual(['最初の文です。', '次の文です。']);
     expect(model.streamingVoiceRequests).toHaveLength(1);
     expect(model.streamingVoiceRequests[0]?.systemPrompt).toContain('Current expressive emotion');
@@ -622,7 +624,7 @@ describe('Shannon local API kernel', () => {
 
   it('captures one immutable state version for a chat turn', async () => {
     let tick = 0;
-    const api = createLocalApiKernel(() => `2026-08-31T00:00:0${tick++}.000Z`);
+    const api = createLocalApiKernel(() => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`);
     const first = await api.dispatch({
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: 'こんにちは' },
     });
@@ -646,7 +648,7 @@ describe('Shannon local API kernel', () => {
     let tick = 0;
     const model = new RecordingChatModel();
     const api = createLocalApiKernel(
-      () => `2026-08-31T00:00:0${tick++}.000Z`,
+      () => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`,
       { chatModel: model },
     );
     await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '最初' } });
@@ -1055,7 +1057,7 @@ describe('Shannon local API kernel', () => {
 
   it('updates emotion and recalled memories only behind the response lane', async () => {
     let tick = 0;
-    const api = createLocalApiKernel(() => `2026-08-31T00:00:0${tick++}.000Z`);
+    const api = createLocalApiKernel(() => `2026-08-31T00:00:${String(tick++).padStart(2, '0')}.000Z`);
     const first = await api.dispatch({
       method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner-a', message: '創作を進められて嬉しい！' },
     });

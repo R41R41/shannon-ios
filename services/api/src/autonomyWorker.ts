@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
+import { configuredAwakeClock } from './autonomyAwakeClock.js';
 import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
@@ -75,6 +76,8 @@ const loopConfig = configuredAutonomyLoop(process.env);
 // conversation's memory entry points. SHANNON_AUTONOMY_OWNER_CONTEXT=off opens none of it and every prompt is what it was.
 const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
+// A step of her own is time she is awake: her emotional clock runs through it, and through nothing else of the loop.
+const awakeClock = configuredAwakeClock(databasePath, { now });
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
@@ -105,6 +108,7 @@ try {
     } catch (error) {
       tick = `failed:${error instanceof Error ? error.message.replace(/[^A-Z0-9_:-]/giu, '_').slice(0, 80) : 'UNKNOWN'}`;
     }
+    if (tick === 'stepped' || tick === 'cycle-ended') awakeClock.observe(loopConfig.scopeKey);
     // Content-free: only the state of the loop is logged, and only when it changes.
     if (tick !== last && tick !== 'stepped') console.log(`Shannon autonomy loop: ${tick}`);
     last = tick;
@@ -117,6 +121,7 @@ try {
   } while (!stopping);
 } finally {
   try { loop.release(); } catch { /* the lease runs out by itself */ }
+  awakeClock.close();
   ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();

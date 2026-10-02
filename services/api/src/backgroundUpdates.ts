@@ -1,5 +1,6 @@
 import {
   deriveEmotionDelta,
+  soothingIn,
   deriveResonantInterest,
   selectActiveMemories,
   visibleMemoryText,
@@ -21,6 +22,7 @@ import { extractExplicitUserIntent } from './cognitiveIntent.js';
 import { intentCaptureKey, ownerFacingStatement, turnCaptureId, type TurnCaptureRecord } from './turnCaptures.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
 import { sharedTimeEvent } from './companionPresence.js';
+import { emotionTiming } from './emotionTiming.js';
 
 export interface CompletedTurn {
   timeZone?: string;
@@ -103,8 +105,12 @@ export class TurnRefinementProcessor {
 
     this.stateStore.apply(scopeKey, {
       type: 'emotion-adjusted',
-      delta: deriveEmotionDelta(current, userMessage),
+      delta: deriveEmotionDelta(current, userMessage, emotionTiming()),
     });
+    // His apology or kind word eases what she still holds against him. Only a turn of the owner's own reaches this line.
+    // Unlike the lines above this fails closed: without the recorded turn there is no proof the words were his, and nothing is eased.
+    const soothing = emotionTiming().clock === 'awake' && source && ownerSpoke(source.disclosure) ? soothingIn(userMessage) : null;
+    if (soothing) this.stateStore.apply(scopeKey, { type: 'feeling-eased', by: soothing });
 
     const immediate = captureImmediateExplicitMemory(
       userMessage,

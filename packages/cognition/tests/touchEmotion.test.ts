@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SHANNON_EMOTION_CARRY_THRESHOLD, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, SHANNON_TOUCH_MOOD_STEP,
+  SHANNON_EMOTION_CARRY_THRESHOLD, SHANNON_EMOTION_TIME, SHANNON_TOUCH_FEELINGS, SHANNON_TOUCH_KINDS, SHANNON_TOUCH_MOOD_STEP,
   carriedShannonEmotion, createInitialCompanionState, currentShannonEmotion, faceForEmotionKind, feelTouch, isShannonEmotionKind,
   isShannonTouchKind, isTouchFeeling, keepsFeelingThroughTouch, presentShannonMood, reduceCompanionState, touchCause, touchFeeling,
   type CompanionStateSnapshot, type ShannonTouch, type ShannonTouchKind,
@@ -141,10 +141,16 @@ describe('body-touched in the one emotion state', () => {
     const after = touched(protective, touch('tickle'), later(1));
     expect(after.expressiveEmotion).toEqual(protective.expressiveEmotion);
     expect(after.emotion.arousal).toBeGreaterThan(protective.emotion.arousal);
-    // Once that feeling has settled, a touch is felt again.
+    // Once that feeling has settled with time she was awake, a touch is felt again.
     const settled = later(120);
-    expect(carriedShannonEmotion(protective.expressiveEmotion!, settled).carryover).toBeLessThan(SHANNON_EMOTION_CARRY_THRESHOLD);
-    expect(touched(protective, touch('tickle'), settled).expressiveEmotion!.primary).toBe('giggle');
+    let awake = protective;
+    for (let minutes = 10; minutes <= 110; minutes += 10) awake = reduceCompanionState(awake, { type: 'awake-observed' }, later(minutes));
+    expect(touched(awake, touch('tickle'), settled).expressiveEmotion!.primary).toBe('giggle');
+    // On the wall clock (the kill switch) the two hours alone settle it, as before.
+    const wall = { ...SHANNON_EMOTION_TIME, clock: 'wall' as const };
+    const stored = reduceCompanionState(base, { type: 'expressive-emotion-updated', emotion: protective.expressiveEmotion! }, START, wall);
+    expect(carriedShannonEmotion(stored.expressiveEmotion!, settled).carryover).toBeLessThan(SHANNON_EMOTION_CARRY_THRESHOLD);
+    expect(reduceCompanionState(stored, { type: 'body-touched', touch: touch('tickle') }, settled, wall).expressiveEmotion!.primary).toBe('giggle');
   });
 
   it('keeps a feeling from conversation that is stronger than the touch, and lets a touch replace a weaker one or another touch', () => {
