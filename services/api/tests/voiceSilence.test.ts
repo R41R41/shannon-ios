@@ -166,6 +166,18 @@ describe('the facts of the moment', () => {
     // ...but a short reply or a backchannel that happens to be in her line is his answer.
     const yes = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？なんでしょう、ライ氏。' });
     for (const reply of ['はい', 'うん', 'ライ氏', 'なんでしょう?']) expect(ownerTurnVerdict(reply, yes)?.respond, reply).toBe(true);
+    // A greeting or thanks that is half of her line is his own, not her echo.
+    for (const [hers, his] of [['おはよう、ライ氏。', 'おはよう'], ['お疲れさまです。', 'お疲れさま'], ['ありがとう、ライ氏。', 'ありがとう']] as const) {
+      const touched = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: hers });
+      expect(ownerTurnVerdict(his, touched)?.respond, his).toBe(true);
+    }
+    // Her whole short line coming back is an echo; a backchannel word is not.
+    const what = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'なに？' });
+    expect(ownerTurnVerdict('なに？', what)).toEqual({ respond: false, category: 'echo' });
+    const hai = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'はい？' });
+    expect(ownerTurnVerdict('はい', hai)).toEqual({ respond: true, reason: 'answers_her_question' });
+    // A small part of her line is his own short reply.
+    expect(ownerTurnVerdict('ライ氏ったら', long)?.respond).toBe(true);
   });
 
   it('finds her question anywhere in her line', () => {

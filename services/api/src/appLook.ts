@@ -59,9 +59,9 @@ export interface AppLookTurn {
   /** A text turn: opens the look the model chose in the structured reply. `reply` is what she wrote. */
   decide(choice: unknown, threadId: string, reply: string): AppLookAsk | null;
   /** A voice turn: opens the look once the reply is written. `spoken` is the turn as it was said. */
-  open(threadId: string, camera: AppLookCamera, spoken: readonly RoomLookContextLine[]): AppLookAsk | null;
+  open(threadId: string, camera: AppLookCamera, spoken: readonly RoomLookContextLine[], turnId?: string): AppLookAsk | null;
   /** A voice turn cut off after she had begun to say she would look: no look, and one honest line once the turn is stored. */
-  cutOff(threadId: string, said: string): void;
+  cutOff(threadId: string, said: string, turnId?: string): void;
 }
 
 export type AppLookAnswer =
@@ -101,8 +101,8 @@ export class AppLooks {
   }
 
   /** The client stored a voice turn of this Talk with these words of his: her message about that turn's look may follow now. */
-  turnStored(scopeKey: string, threadId: string, said: string): void {
-    this.turns.turnStored(scopeKey, threadId, said);
+  turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void {
+    this.turns.turnStored(scopeKey, threadId, said, turnId);
   }
 
   /**
@@ -140,21 +140,21 @@ export class AppLooks {
             return ask;
           } catch { return null; }
         },
-        open: (threadId, camera, spoken) => {
+        open: (threadId, camera, spoken, turnId) => {
           try {
             if (opened) return null;
-            const wait = this.turns.await(scopeKey, threadId, spoken[0]?.content ?? '', since);
+            const wait = this.turns.await(scopeKey, threadId, spoken[0]?.content ?? '', since, turnId);
             // She says aloud that she will look, so a look that then does not happen always gets her one honest line.
             const ask = open(threadId, camera, true, spoken, wait);
             if (!ask) this.unopened(scopeKey, threadId, wait, 'too_soon', appLookNotSeenLine('too_soon', client.platform));
             return ask;
           } catch { return null; }
         },
-        cutOff: (threadId, said) => {
+        cutOff: (threadId, said, turnId) => {
           try {
             if (opened) return;
             opened = true;
-            this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since), 'failed', BODY_LOOK_CUT_OFF_LINE);
+            this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), 'failed', BODY_LOOK_CUT_OFF_LINE);
           } catch { /* nothing more to do */ }
         },
       };

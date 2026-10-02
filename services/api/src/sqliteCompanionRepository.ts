@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   assembleShannonSystemPrompt,
   createInitialCompanionState,
+  normalizeShannonExpressiveEmotion,
   reduceCompanionState,
   visibleMemoryText,
   isOwnerMemoryEvidence,
@@ -64,15 +65,21 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       // API and sleep worker share this database. Read only after obtaining
       // the write lock so a later writer cannot overwrite a fresh correction.
       const current = this.snapshot(scopeKey);
-      const next = reduceCompanionState(current, event, this.context.now());
+      const next = reduceCompanionState(current, event, this.context.now(), this.context.emotionTiming());
       if (next === current) return current;
+      if (next.version === current.version) {
+        // Her clock alone moved (and what fades with it): no event row, no version, no prompt projection.
+        this.context.database.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify(next), scopeKey);
+        return next;
+      }
       this.context.database.prepare(`
         UPDATE companion_states
         SET version = ?, updated_at = ?, snapshot_json = ?
         WHERE scope_key = ?
       `).run(next.version, next.updatedAt, JSON.stringify(next), scopeKey);
       this.context.insertEvent(scopeKey, `state.${event.type}`, next.updatedAt, {
-        event,
+        // The feeling as stored: the resolver's notes to the reducer are not kept in the log either.
+        event: event.type === 'expressive-emotion-updated' ? { ...event, emotion: normalizeShannonExpressiveEmotion(event.emotion) } : event,
         fromVersion: current.version,
         toVersion: next.version,
       });

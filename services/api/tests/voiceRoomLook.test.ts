@@ -6,6 +6,7 @@ import { createInMemoryAutonomyService } from '../src/autonomyService.js';
 import { ROOM_LOOK_UNAVAILABLE_REASON } from '../src/bodyLook.js';
 import { configuredBodyLook, type BodyLookConfig } from '../src/bodyLookContract.js';
 import { BODY_LOOK_CUT_OFF_LINE, UNOPENED_LINE, bodyLookNotSeenLine } from '../src/bodyLookLines.js';
+import { VoiceTurnWaits } from '../src/bodyLookTurnWait.js';
 import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
@@ -242,6 +243,7 @@ describe('the owner asks her to look, aloud', () => {
       '明日の撮影は、カメラ使っていいから。', 'その番組、僕が見れるの。', '犬がね、私を見てくれるの。', '先生は、私を見てくれるよ。',
       // A long clause before it is part of the utterance, and his own question is not leave.
       '田中さんが来週うちに来て配信の機材を全部セットしてくれることになったんだけどその時は、カメラ使っていいよ', 'カメラ使っていい？', 'カメラ使っていい',
+      'カメラ使っていいです', 'カメラ使っていいね',
     ]) expect(lookRequest(transcript), transcript).not.toBe('plain');
     expect(['カメラ使っていいよ', 'カメラ使っていいですよ', 'カメラ使っていいから', 'うん、カメラ使って大丈夫だよ'].map(lookRequest)).toEqual(Array(4).fill('plain'));
     for (const transcript of [
@@ -285,28 +287,39 @@ describe('the owner asks her to look, aloud', () => {
   });
 
   it('a bare 「見て」 opens the look as the answer to her own offer, or when the gateway is fairly sure', async () => {
+    // "She offered" is a fact the server keeps: the turn before was told that she could look (the READY line).
+    const offer = 'カメラでちゃんと映るようになったかな。';
     for (const transcript of ['見てみて', 'じゃあ見て', '見てよ', 'うん、見て。']) {
       const offered = harness();
       await offered.ready();
-      await offered.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '今日の服どうかな', shannonTranscript: '見てみましょうか？' });
+      expect((await offered.say(offer)).prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+      offered.advance(20 * SECOND);
+      await offered.presence();
       expect((await offered.say(transcript)).prompt, transcript).toContain(voiceRoomLookPrompt(true));
       expect(offered.lookStore.waiting(scope), transcript).toHaveLength(1);
-      // Without her offer the same words are not a request to use the camera.
+      // Without that turn the same words are not a request to use the camera.
       const cold = harness();
       await cold.ready();
       await cold.say(transcript);
       expect(cold.lookStore.waiting(scope), transcript).toEqual([]);
     }
-    // Her line was about something else, or her offer is old: a bare 「見て」 is not about the camera.
-    for (const [hers, wait] of [['その資料、ボクが見てみましょうか？', 0], ['メモを見てみますね。', 0], ['カメラの設定は終わりましたか？', 0], ['見てみましょうか？', 120],
-      ['Voyagerのタスク、見てみましょうか？', 0], ['届いたメール、ちょっと見てみましょうか？', 0]] as const) {
+    // What she said is not read at all: lines of hers that speak of looking at something else set nothing.
+    for (const hers of ['その資料、ボクが見てみましょうか？', 'Voyagerのタスクが3件ありますね。見てみましょうか？', '田中さんにこの資料を見てと言われたんですね。', '見られますか？', '見てみましょうか？']) {
       const other = harness();
       await other.ready();
       await other.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'ねえ', shannonTranscript: hers });
-      other.advance(wait * SECOND);
-      await other.presence();
       await other.say('うん、見て。');
       expect(other.lookStore.waiting(scope), hers).toEqual([]);
+    }
+    // The offer lapses after a minute, belongs to its Talk, and is answered only by a bare request that is the whole utterance.
+    for (const [transcript, wait, extra] of [['うん、見て。', 61, {}], ['うん、見て。', 5, { threadId: 'another-thread' }], ['このメール、見て', 5, {}], ['うん、それとこのメールも見て', 5, {}]] as const) {
+      const lapsed = harness();
+      await lapsed.ready();
+      await lapsed.say(offer);
+      lapsed.advance(wait * SECOND);
+      await lapsed.presence();
+      await lapsed.say(transcript, extra);
+      expect(lapsed.lookStore.waiting(scope), `${transcript} after ${wait}s`).toEqual([]);
     }
     const sure = harness({ voiceDecision: gateway({ roomLookProbability: 0.6, transcriptReliabilityProbability: 0.95 }) });
     await sure.ready();
@@ -468,6 +481,8 @@ describe('what she saw reaches the voice conversation', () => {
     await h.say('僕のこと見れる?');
     const look = await h.openLook();
     let answered = false;
+    // An answer from another device is refused at once and does not end the wait of the right one.
+    expect((await h.send('POST', `/v1/body/looks/${look!.id}`, seen, 'other-device')).status).toBe(403);
     const answer = h.answer(look!.id).then(response => { answered = true; return response; });
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(answered).toBe(false);
@@ -604,6 +619,63 @@ describe('switches and the gateway question', () => {
     };
     for (const said of ['見てみ', 'ちょっと見ますね', 'みてみますね', 'のぞいてみますね', 'カメラで確認しますね']) expect(cut(said), said).toBe(1);
     for (const said of ['', 'そうなんですね、', 'ご意見ありがとうございます', '見つけました']) expect(cut(said), said).toBe(0);
+    // Once cut off, nothing is opened, whatever reaches `open` afterwards.
+    const state = { unavailable: null, open: vi.fn(() => true), cutOff: vi.fn() };
+    const turn = voiceRoomLookTurn({ voiceTurn: () => state }, { scopeKey: scope, transcript: '僕のこと見れる?', at: START, audience: 'owner', uncertain: false,
+      decision: { shouldRespond: true } as never });
+    turn.cutOff('thread', '見てみ');
+    expect(turn.open('thread', '見てみますね。')).toBe(false);
+    expect(state.open).not.toHaveBeenCalled();
+  });
+
+  it('knows the awaited turn by the client\'s utterance id when both requests carry one, and otherwise by his words', async () => {
+    const context = (id: string, text: string) => ({ userUtterance: { id, text, source: 'speech', rawText: text } });
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    await h.say('僕のこと見れる?', {}, context('utt-7', '僕のこと見れる?'));
+    let answered = false;
+    const answer = h.answer((await h.openLook())!.id).then(response => { answered = true; return response; });
+    // The same words under another id are another turn; the id decides.
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと見れる?', shannonTranscript: 'はい。', utteranceId: 'utt-6' });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(answered).toBe(false);
+    await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'ぼくのことみれる', shannonTranscript: '見てみますね。', utteranceId: 'utt-7' });
+    expect((await answer).body).toMatchObject({ status: 'seen' });
+    expect((await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'あ', shannonTranscript: 'い', utteranceId: 7 })).status).toBe(400);
+    expect((await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'あ', shannonTranscript: 'い', utteranceId: 'x'.repeat(121) })).status).toBe(400);
+
+    // By words: equal, or one inside the other when it is long enough and most of it; empty words are no turn.
+    let now = 0;
+    const waits = new VoiceTurnWaits(5_000, () => now);
+    const released = (awaited: string, stored: string) => {
+      const wait = waits.await('s', 't', awaited, waits.mark);
+      if (!wait) return 'no wait';
+      let done = false;
+      void wait.stored.then(() => { done = true; });
+      waits.turnStored('s', 't', stored);
+      const result = !(waits as unknown as { unstored: Set<unknown> }).unstored.has(wait);
+      wait.done();
+      return result && !done ? true : result;
+    };
+    expect(released('僕のこと見れる?', '僕のこと 見れる？')).toBe(true);
+    expect(released('えっと、僕のこと見れる?', '僕のこと見れる')).toBe(true);
+    expect(released('今日は朝から会議が三つもあって大変だったんだけど、部屋を見て', '部屋を見て')).toBe(false);
+    expect(released('うん、見て', '見て')).toBe(false);
+    expect(released('。', '。')).toBe('no wait');
+    // A stored turn is remembered for a minute: after that it no longer counts as "already stored".
+    const mark = waits.mark;
+    waits.turnStored('s', 't', '僕のこと見れる?');
+    expect(waits.await('s', 't', '僕のこと見れる?', mark)).toBeNull();
+    now += 61_000;
+    const later = waits.await('s', 't', '僕のこと見れる?', mark);
+    expect(later).not.toBeNull();
+    later!.done();
+    expect((waits as unknown as { storedTurns: unknown[] }).storedTurns).toEqual([]);
+    // With the wait switched off nothing is kept at all.
+    const off = new VoiceTurnWaits(0);
+    off.turnStored('s', 't', '僕のこと見れる?');
+    expect((off as unknown as { storedTurns: unknown[] }).storedTurns).toEqual([]);
+    expect(off.await('s', 't', '僕のこと見れる?', 0)).toBeNull();
   });
 
   it('a turn she does not answer opens nothing', () => {

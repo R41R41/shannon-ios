@@ -72,9 +72,9 @@ export class ConversationLooks implements VoiceLooks {
   }
 
   /** The client stored a voice turn: her message about that turn's look, whichever camera took it, may follow now. */
-  turnStored(scopeKey: string, threadId: string, said: string): void {
-    this.body.turnStored(scopeKey, threadId, said);
-    this.app.turnStored(scopeKey, threadId, said);
+  turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void {
+    this.body.turnStored(scopeKey, threadId, said, turnId);
+    this.app.turnStored(scopeKey, threadId, said, turnId);
   }
 
   of(request: { deviceId?: string; body?: unknown }): VoiceLooks {

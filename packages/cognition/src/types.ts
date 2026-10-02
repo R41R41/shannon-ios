@@ -53,6 +53,51 @@ export interface ShannonExpressiveEmotion {
   /** When this feeling was last expressed; carry-over decays from here. Absent in older snapshots. */
   updatedAt?: string;
   overrideReason?: ShannonEmotionOverrideReason;
+  /** Her awake clock (ms) when this feeling was last expressed; it fades from here. Stamped by the reducer; absent in older snapshots. */
+  awakeAt?: number;
+  /** Only on a reading by `presentShannonFeeling`: the feeling as it stands at this instant on her awake clock. Never stored. */
+  presentAt?: string;
+  /**
+   * Only on a resolver result, never stored. `true`: the present feeling goes on and nothing new was felt, so committing it
+   * stores nothing. `false`: the same kind of feeling again from a stimulus that is itself stronger than what she felt.
+   * Absent on a feeling of the same kind as the present one, the reducer stores nothing: raising a feeling needs the explicit `false`.
+   */
+  continued?: boolean;
+  /** Only on a reading whose feeling is what she owes the owner (concern, apology, an override): the strongest feeling it is covering. Never stored. */
+  underneath?: { primary: ShannonEmotionKind; intensity: number };
+  /** Only on a reading of a feeling the owner eased a moment ago: the height it had before. A stimulus of the same kind that is not above it is that feeling going on. Never stored. */
+  easedPeak?: number;
+  /** Only on a resolver result, never stored: the strength was decided for this reply (a voice turn, a touch), not read from a cue in her own words. Only such a feeling renews one that is already underneath. */
+  decided?: boolean;
+}
+
+/** Her awake time: it advances while she is in a conversation or an activity session of her own, and stands still otherwise. */
+export interface ShannonEmotionClock {
+  /** Accumulated awake milliseconds. */
+  awakeMs: number;
+  /** The wall-clock instant of the last event that advanced it. */
+  at: string;
+}
+
+/** `mood`: lasts a few awake hours. `lingering`: one to two awake days. */
+export type ShannonLingeringSpan = 'mood' | 'lingering';
+
+/** A feeling toward the owner that stays underneath the reaction of the moment (`emotionContinuity.ts`). */
+export interface ShannonLingeringFeeling {
+  kind: ShannonEmotionKind;
+  target: string;
+  /** Why, in the words of the feeling that left it. Never conversation text. */
+  cause: string;
+  span: ShannonLingeringSpan;
+  /** Its strength at `awakeAt`; the present strength fades from there by the span's half-life. */
+  strength: number;
+  awakeAt: number;
+  /** When it began, on her awake clock and on the wall clock (the latter is a fact for wording, never used for fading). */
+  startedAwakeAt: number;
+  startedAt: string;
+  /** Set when it was eased (his apology, a kind word, a strong opposite feeling): the height it had before, and her awake clock then. */
+  peak?: number;
+  easedAwakeAt?: number;
 }
 
 /** Who was present when something was said to Shannon. The owner is always part of it. */
@@ -192,6 +237,10 @@ export interface CompanionStateSnapshot {
    * for the last 30 days. Evidence for the slow traits; absent in older snapshots.
    */
   sharedDays?: readonly string[];
+  /** Her awake clock. Absent until the first event after the awake clock was introduced. */
+  emotionClock?: ShannonEmotionClock;
+  /** What she still feels underneath, strongest first. Absent in older snapshots. */
+  lingering?: readonly ShannonLingeringFeeling[];
 }
 
 export type CompanionStateEvent =
@@ -200,6 +249,10 @@ export type CompanionStateEvent =
   | { type: 'expressive-emotion-updated'; emotion: ShannonExpressiveEmotion }
   /** Her body was touched: moves the continuous mood and the conversational feeling by the one table in `touchEmotion.ts`. */
   | { type: 'body-touched'; touch: ShannonTouch }
+  /** She was awake at this moment and nothing else happened: advances her awake clock. Carries no content. */
+  | { type: 'awake-observed' }
+  /** The owner apologised or said something kind: what she holds against him underneath eases. */
+  | { type: 'feeling-eased'; by: 'apology' | 'kindness' }
   /** An owner turn was recorded on these owner-local days; `today` anchors the 30-day window. */
   | { type: 'shared-time-observed'; days: readonly string[]; today: string }
   | { type: 'interest-observed'; interest: string; source?: MemoryLearningSource }

@@ -353,6 +353,26 @@ export function reachOutPrompt(input: {
   };
 }
 
+/**
+ * What can be saved of a thinking reply that was cut off: the thought and the steps that were written out in full.
+ * The text is closed after its last complete object, trying earlier ones while that does not parse. Null when nothing can.
+ */
+export function salvagedModelObject(text: string): Record<string, unknown> | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let end = text.lastIndexOf('}');
+  for (let attempt = 0; attempt < 24 && end > start; attempt += 1) {
+    for (const closing of [']}', '}']) {
+      try {
+        const value: unknown = JSON.parse(`${text.slice(start, end + 1)}${closing}`);
+        if (value && typeof value === 'object' && !Array.isArray(value) && Array.isArray((value as { steps?: unknown }).steps)) return value as Record<string, unknown>;
+      } catch { /* try an earlier end */ }
+    }
+    end = text.lastIndexOf('}', end - 1);
+  }
+  return null;
+}
+
 /** The first JSON object in a model reply, or null. Models sometimes wrap it in a code fence. */
 export function parsedModelObject(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{');

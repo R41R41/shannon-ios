@@ -103,9 +103,9 @@ export interface BodyLookVoiceTurn {
    * Opens the look once the reply is written; the conditions are checked again. `spoken` is this turn as it was said,
    * for the model that sees the frame: the client stores a voice turn in a request of its own, which may come later.
    */
-  open(threadId: string, choice: RoomLookChoice, spoken?: readonly RoomLookContextLine[]): boolean;
-  /** The call was cut off after she had begun to say she would look: no look, and one honest line once the turn (`said`: his words) is stored. */
-  cutOff(threadId: string, said: string): void;
+  open(threadId: string, choice: RoomLookChoice, spoken?: readonly RoomLookContextLine[], turnId?: string): boolean;
+  /** The call was cut off after she had begun to say she would look: no look, and one honest line once the turn (`said`: his words; `turnId`: the client's utterance id) is stored. */
+  cutOff(threadId: string, said: string, turnId?: string): void;
 }
 
 export type BodyLookAnswer =
@@ -208,10 +208,13 @@ export class BodyLooks {
     } catch { return NO_TURN; }
   }
 
-  /** The client stored a voice turn of this Talk (`POST /v1/voice/…/turns`): her message about its look may follow now. */
-  /** The client stored a voice turn of this Talk (`POST /v1/voice/…/turns`) with these words of his: her message about that turn's look may follow now. */
-  turnStored(scopeKey: string, threadId: string, said: string): void {
-    this.turns.turnStored(scopeKey, threadId, said);
+  /**
+   * The client stored a voice turn of this Talk with the owner alone (`POST /v1/voice/…/turns`), with these words of his
+   * and its utterance id when the client sent one: her message about that turn's look may follow now. With looks switched
+   * off nothing is noted.
+   */
+  turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void {
+    if (this.enabled) this.turns.turnStored(scopeKey, threadId, said, turnId);
   }
 
   /**
@@ -229,10 +232,10 @@ export class BodyLooks {
       const since = this.turns.mark;
       return {
         unavailable: null,
-        open: (threadId, choice, spoken) => {
+        open: (threadId, choice, spoken, turnId) => {
           try {
             if (!alone()) return false;
-            const wait = this.turns.await(scopeKey, threadId, spoken?.[0]?.content ?? '', since);
+            const wait = this.turns.await(scopeKey, threadId, spoken?.[0]?.content ?? '', since, turnId);
             const id = this.open(scopeKey, threadId, choice, spoken);
             if (id) {
               if (wait) this.lookWaits.set(id, wait);
@@ -245,9 +248,9 @@ export class BodyLooks {
           } catch { /* the reply is already spoken */ }
           return false;
         },
-        cutOff: (threadId, said) => {
+        cutOff: (threadId, said, turnId) => {
           try {
-            if (alone()) this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since), alone, 'failed', BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
+            if (alone()) this.unopened(scopeKey, threadId, this.turns.await(scopeKey, threadId, said, since, turnId), alone, 'failed', BODY_LOOK_CUT_OFF_LINE, '話が途中で切れた');
           } catch { /* nothing more to do */ }
         },
       };
@@ -290,11 +293,11 @@ export class BodyLooks {
     // until the client has stored the turn (bounded by `voiceTurnWaitMilliseconds`). The checks below run afterwards.
     const asked = this.store.get(scopeKey, id);
     if (asked?.outcome === 'pending' && asked.deviceId === deviceId) await this.lookWaits.get(id)?.stored;
-    this.lookWaits.delete(id);
     const at = this.dependencies.now();
     const look = this.store.get(scopeKey, id);
     if (!look) return { kind: 'not_found' };
     if (look.deviceId !== deviceId) return { kind: 'wrong_device' };
+    this.lookWaits.delete(id);
     if (look.outcome !== 'pending') return { kind: look.outcome === 'expired' ? 'expired' : 'answered' };
     if (Date.parse(at) >= Date.parse(look.expiresAt)) {
       this.sweep(scopeKey, at);

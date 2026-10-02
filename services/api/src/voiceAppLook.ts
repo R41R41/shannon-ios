@@ -48,8 +48,8 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     // The app as the camera of `voiceRoomLookTurn`. Its reason for not looking is worded below, so any value stands in here.
     const state: BodyLookVoiceTurn = {
       unavailable: app.unavailable ? 'switched_off' : null,
-      open: (threadId, _choice, spoken) => (ask = app.open(threadId, camera, spoken ?? [])) !== null,
-      cutOff: (threadId, said) => app.cutOff(threadId, said),
+      open: (threadId, _choice, spoken, turnId) => (ask = app.open(threadId, camera, spoken ?? [], turnId)) !== null,
+      cutOff: (threadId, said, turnId) => app.cutOff(threadId, said, turnId),
     };
     const guarded = turn.audience !== 'owner';
     const score = turn.decision.roomLookProbability;
@@ -60,7 +60,8 @@ export function voiceLookTurn(looks: VoiceLooks | undefined, turn: Turn, environ
     const plain = !guarded && score === undefined && PLAIN_APP_ASK.test(turn.transcript.normalize('NFKC').replace(/[\s、。，,.!！?？…]/gu, ''));
     const decided = plain ? { ...turn, decision: { ...turn.decision, roomLookProbability: 1 } }
       : guarded && score !== undefined ? { ...turn, decision: { ...turn.decision, roomLookProbability: Math.min(score, 0.99) } } : turn;
-    const chosen = voiceRoomLookTurn({ voiceTurn: () => state }, decided,
+    // The app's camera is aimed by the owner himself: for it, a turn other people hear is judged like one of his alone.
+    const chosen = voiceRoomLookTurn({ voiceTurn: () => state }, { ...decided, audience: 'owner' },
       { ...environment, SHANNON_VOICE_ROOM_LOOK: 'on', ...(guarded ? { SHANNON_VOICE_ROOM_LOOK_THRESHOLD: '1' } : {}) });
     if (app.unavailable) {
       // The app cannot look now. Her body may, under its own rules; when neither can, the app's reason is the true one for this turn.

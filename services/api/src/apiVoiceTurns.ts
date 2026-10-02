@@ -1,5 +1,5 @@
-import { UNKNOWN_GUEST_PRESENCE, resolveReplyEmotion, type CompanionStateStore } from '@shannon/cognition';
-import { presentCompanionState } from './companionPresence.js';
+import { UNKNOWN_GUEST_PRESENCE, type CompanionStateStore } from '@shannon/cognition';
+import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
@@ -13,7 +13,7 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   background: TurnBackgroundService; now: () => string; chatModel?: ShannonChatModel;
   /** Her line from a touch (`bodyReaction.ts`): the first voice turn that answers it stores it before his words. */
   reactions?: { claim(scopeKey: string, reactionId: unknown): { text: string; threadId: string | null; audience: 'owner' | 'others'; saidAt: string } | null };
-  looks?: { turnStored(scopeKey: string, threadId: string, said: string): void };
+  looks?: { turnStored(scopeKey: string, threadId: string, said: string, turnId?: string): void };
 }): ApiResponse | Promise<ApiResponse> | null {
   const summary = dispatchVoiceCallSummary(request, dependencies);
   if (summary) return summary;
@@ -33,6 +33,9 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   } catch { return badRequest('timeZone is invalid'); }
   if (request.body.reactionId !== undefined && typeof request.body.reactionId !== 'string') return badRequest('reactionId is invalid');
   if (request.body.companionPresent !== undefined && typeof request.body.companionPresent !== 'boolean') return badRequest('companionPresent is invalid');
+  // Optional: the `userUtterance.id` the client sent with the delegation of this turn, so the two requests are known as one turn.
+  if (request.body.utteranceId !== undefined && !validBoundedString(request.body.utteranceId, 120)) return badRequest('utteranceId is invalid');
+  const utteranceId = typeof request.body.utteranceId === 'string' ? request.body.utteranceId : undefined;
   const userMessage = userTranscript.trim();
   const shannonReply = shannonTranscript.trim();
   // Taken once, after the request is known to be valid: an unknown or expired reaction leaves an ordinary turn.
@@ -57,8 +60,11 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   const turn = { scopeKey, threadId, capturedState: captured, userMessage, shannonReply,
     messageEmotion, completedAt, timeZone, ...companion };
   const experience = dependencies.background.recordTurn(turn);
-  // Her message about a look opened in this turn was waiting for the turn to be in the Talk (bodyLook.ts).
-  try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage); } catch { /* the turn is stored either way */ }
+  // Her message about a look opened in this turn was waiting for the turn to be in the Talk (bodyLook.ts). Only a turn
+  // with the owner alone can have a look, so a turn someone else heard is not noted there.
+  if (!('audience' in companion)) {
+    try { dependencies.looks?.turnStored(scopeKey, threadId, userMessage, utteranceId); } catch { /* the turn is stored either way */ }
+  }
   dependencies.background.schedule(turn, experience.id);
   return { status: 201, body: { threadId, turnId: experience.id, messageEmotion, state: presentCompanionState(captured, completedAt) } };
 }

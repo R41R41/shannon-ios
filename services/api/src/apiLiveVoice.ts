@@ -58,6 +58,7 @@ import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CAL
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
+import { emotionTiming, feelingBeforeTurn, stillFeltLine } from './companionPresence.js';
 import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
@@ -179,7 +180,7 @@ async function completeLiveVoiceDelegation(
   if (address) decision = applyGuestAddressing(decision, address);
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
-  const roomLook = voiceLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), facts: turnFacts, guest: temporaryGuest,
+  const roomLook = voiceLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), threadId, turnId: deviceContext?.userUtterance?.id, guest: temporaryGuest,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
@@ -223,8 +224,8 @@ async function completeLiveVoiceDelegation(
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
   const emotionState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const previousExpressiveEmotion = emotionState?.expressiveEmotion;
-  const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript) : undefined;
+  const previousExpressiveEmotion = emotionState ? feelingBeforeTurn(emotionState, occurredAt) : undefined;
+  const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript, emotionTiming()) : undefined;
   const provisionalExpressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,
@@ -344,7 +345,8 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
-    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : 'owner'),
+    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
+    alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     confirmedImplementationRequest

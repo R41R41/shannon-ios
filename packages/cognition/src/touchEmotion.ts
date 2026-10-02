@@ -1,4 +1,6 @@
-import { currentShannonEmotion, resolveShannonEmotionState } from './emotionState.js';
+import { presentShannonFeeling, type ShannonFeelingState } from './emotionContinuity.js';
+import { currentShannonEmotion, holdsShannonFeeling, resolveShannonEmotionState } from './emotionState.js';
+import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from './emotionTime.js';
 import { SHANNON_OWNER_NAME } from './persona.js';
 import {
   SHANNON_TOUCH_KINDS,
@@ -110,15 +112,35 @@ export function keepsFeelingThroughTouch(previous: ShannonExpressiveEmotion | un
 }
 
 /**
+ * The same question on her awake clock, through the one rule every writer shares
+ * (`holdsShannonFeeling`): what she feels now, from the reaction of the moment or from underneath,
+ * stays when it is held for the owner's sake or is stronger than the touch. Under `clock: 'wall'`
+ * it is `keepsFeelingThroughTouch` as it was.
+ */
+export function holdsFeelingThroughTouch(
+  state: ShannonFeelingState,
+  feeling: { primary: ShannonEmotionKind; intensity: number },
+  now: string,
+  timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
+): boolean {
+  if (timing.clock !== 'awake') return keepsFeelingThroughTouch(state.expressiveEmotion, feeling.intensity, now);
+  const present = presentShannonFeeling(state, now, timing);
+  return holdsShannonFeeling(present, feeling, { presentFromTouch: isTouchFeeling(present) })
+    // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker touch.
+    || (present.underneath !== undefined && holdsShannonFeeling(present.underneath, feeling, { presentFromTouch: false }));
+}
+
+/**
  * The emotion state after one touch. Pure. The mood moves by at most `SHANNON_TOUCH_MOOD_STEP`
  * per value and never past the row's mood, so any number of touches stays bounded. A feeling from
  * conversation that is held by an override or is stronger than the touch's is not replaced; only
  * the mood moves then.
  */
 export function feelTouch(
-  state: Pick<CompanionStateSnapshot, 'emotion' | 'expressiveEmotion'>,
+  state: Pick<CompanionStateSnapshot, 'emotion' | 'expressiveEmotion' | 'emotionClock' | 'lingering'>,
   touch: ShannonTouch,
   now: string,
+  timing: ShannonEmotionTiming = SHANNON_EMOTION_TIME,
 ): { emotion: ShannonEmotion; expressiveEmotion: ShannonExpressiveEmotion } {
   const felt = touchFeeling(touch);
   const toward = (current: number, target: number) =>
@@ -129,9 +151,12 @@ export function feelTouch(
     openness: clamp(state.emotion.openness + toward(state.emotion.openness, felt.step.mood.openness), 0, 1),
   };
   const previous = state.expressiveEmotion;
-  if (previous && keepsFeelingThroughTouch(previous, felt.intensity, now)) return { emotion, expressiveEmotion: previous };
+  if (previous && holdsFeelingThroughTouch(state, { primary: felt.step.primary, intensity: felt.intensity }, now, timing)) {
+    return { emotion, expressiveEmotion: previous };
+  }
   const resolved = resolveShannonEmotionState({
-    ...(previous ? { previous } : {}),
+    // On the awake clock the touch meets what she feels now; the decision above already let it through.
+    ...(timing.clock === 'awake' ? { previous: presentShannonFeeling(state, now, timing), replaces: true } : previous ? { previous } : {}),
     provisionalPrimary: felt.step.primary, provisionalIntensity: felt.intensity,
     transcript: '', now, target: touchTarget(touch),
   });
