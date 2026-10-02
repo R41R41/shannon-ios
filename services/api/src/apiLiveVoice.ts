@@ -62,7 +62,7 @@ import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
 import { voiceRoomLookTurn } from './voiceRoomLook.js';
-import { ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
+import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
   /** Looking at the room through her body's camera (`voiceRoomLook.ts`); absent, a voice turn never looks. */
@@ -179,7 +179,7 @@ async function completeLiveVoiceDelegation(
   if (address) decision = applyGuestAddressing(decision, address);
   // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
   // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
-  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), offered: turnFacts?.followsShannon ? turnFacts.shannonLastLine : undefined,
+  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), facts: turnFacts,
     audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
@@ -189,15 +189,15 @@ async function completeLiveVoiceDelegation(
   // Notion is the owner's private material: read only when he is alone, by a fixed rule on his words.
   const notionTurn = alone && !temporaryGuest && decision.shouldRespond && asksAboutNotion(transcript);
   if (notionTurn && dependencies.notion?.connected) decision = withMemorySearchLatency(decision);
-  // A turn the silence rules left unanswered (overheard, an echo, a fragment) writes no orchestration state and runs no command.
-  let orchestrationState = !alone || uncertainTranscript || decision.silence ? null : observeConversationTurn({
+  // A turn that was not his words to her (overheard, an echo, a fragment) writes no orchestration state and runs no command.
+  let orchestrationState = !alone || uncertainTranscript || notHisWordsToHer(decision) ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone.
-  const command = alone && !uncertainTranscript && !decision.silence && deviceContext?.userUtterance
+  const command = alone && !uncertainTranscript && !notHisWordsToHer(decision) && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })

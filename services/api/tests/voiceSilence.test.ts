@@ -9,7 +9,7 @@ import {
 } from '../src/voiceDecision.js';
 import type { VoiceTurnFacts } from '../src/voiceDecisionContract.js';
 import {
-  VOICE_REPLY_DECISION_LINES, ownerTurnVerdict, ownerVoiceTurnFacts, settleOwnerVoiceTurn, voiceSilenceRules,
+  VOICE_REPLY_DECISION_LINES, notHisWordsToHer, ownerTurnVerdict, ownerVoiceTurnFacts, settleOwnerVoiceTurn, voiceSilenceRules,
 } from '../src/voiceSilence.js';
 
 const START = '2026-10-02T09:00:00.000Z';
@@ -131,6 +131,7 @@ describe('the local rules, one category at a time', () => {
     // Her open question is answered by a short reply only right after she asked.
     const stale = { ...withOthers, sheAsked: true, followsShannon: true, secondsSinceShannon: 100 };
     expect(quiet('醤油ある', stale)).toBe('not_addressed');
+    expect(quiet('醤油とって', stale)).toBe('not_addressed');
     expect(quiet('うん。', stale)).toBe('backchannel');
     expect(quiet('醤油ある', { ...stale, secondsSinceShannon: 10 })).toBe('answer:answers_her_question');
     // A short remark right after her utterance continues the exchange with her; a long one, or a late one, is the people talking.
@@ -159,6 +160,8 @@ describe('the facts of the moment', () => {
     const long = ownerVoiceTurnFacts({ history: [], at, othersPresent: false, source: 'speech', answersHer: 'わっ、くすぐったいです。もう、ライ氏ったら。' });
     expect(ownerTurnVerdict('くすぐったいです。もう、ライ氏ったら', long)).toEqual({ respond: false, category: 'echo' });
     expect(ownerTurnVerdict('ごめんごめん', long)).toEqual({ respond: true, reason: 'answers_her_question' });
+    // Her whole line is an echo however short it is.
+    expect(ownerTurnVerdict('わっ、くすぐったいです', facts)).toEqual({ respond: false, category: 'echo' });
   });
 
   it('finds her question anywhere in her line', () => {
@@ -393,6 +396,10 @@ describe('an owner call, end to end', () => {
     expect(h.organize.list('owner', 'call')).toEqual([]);
     expect(JSON.stringify(orchestration.read('owner', 'call'))).toBe(before);
     expect(h.model.voiceRequests).toEqual([]);
+    // 「待って」 and a silence only the router chose are still his words: commands such as pausing work run as before.
+    const decision = { shouldRespond: false } as VoiceTurnDecision;
+    expect(['echo', 'not_addressed', 'unfinished'].map(silence => notHisWordsToHer({ ...decision, silence: silence as never }))).toEqual([true, true, true]);
+    expect(['hold', 'model', 'backchannel', undefined].map(silence => notHisWordsToHer({ ...decision, silence: silence as never }))).toEqual([false, false, false, false]);
   });
 
   it('leaves unanswered what she answered on 2026-10-02, without a model call and without storing anything', async () => {

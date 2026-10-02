@@ -236,6 +236,11 @@ describe('the owner asks her to look, aloud', () => {
     ]) expect(asksForLookAloud(transcript), transcript).toBe(false);
     expect(['僕のこと見れる?', '僕が見える?', 'カメラ使っていいよ', 'カメラ使ってもいいよ'].map(lookRequest)).toEqual(['plain', 'plain', 'plain', 'plain']);
     expect(['部屋を見て', 'こっち見て', 'カメラで見てみて', '何が見える?', '机の上見てくれる'].map(lookRequest)).toEqual(Array(5).fill('ambiguous'));
+    // Plain requests open the camera without a model, so one clause among others, someone else's doing, or "I can watch" is never plain.
+    for (const transcript of [
+      'あの子、僕を見てくれない。', '息子に、カメラ使っていいよ、って言ったんだ。', '田中さんなら、カメラ使っていいよ。', '録画、私が見れるよ。', '向こうからは、私が見える？',
+      '明日の撮影は、カメラ使っていいから。', 'その番組、僕が見れるの。', '犬がね、私を見てくれるの。', '先生は、私を見てくれるよ。',
+    ]) expect(lookRequest(transcript), transcript).not.toBe('plain');
     for (const transcript of [
       ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', '僕が見える?', '僕のこと見えてる?', 'カメラで見てみて', 'カメラ使ってもいいよ', '何が見える?', '机の上見てくれる',
       '部屋を見てほしいんだけど',
@@ -289,6 +294,16 @@ describe('the owner asks her to look, aloud', () => {
       await cold.say(transcript);
       expect(cold.lookStore.waiting(scope), transcript).toEqual([]);
     }
+    // Her line was about something else, or her offer is old: a bare 「見て」 is not about the camera.
+    for (const [hers, wait] of [['その資料、ボクが見てみましょうか？', 0], ['メモを見てみますね。', 0], ['カメラの設定は終わりましたか？', 0], ['見てみましょうか？', 120]] as const) {
+      const other = harness();
+      await other.ready();
+      await other.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: 'ねえ', shannonTranscript: hers });
+      other.advance(wait * SECOND);
+      await other.presence();
+      await other.say('うん、見て。');
+      expect(other.lookStore.waiting(scope), hers).toEqual([]);
+    }
     const sure = harness({ voiceDecision: gateway({ roomLookProbability: 0.6, transcriptReliabilityProbability: 0.95 }) });
     await sure.ready();
     expect((await sure.say('これ見てよ')).prompt).toContain(voiceRoomLookPrompt(true));
@@ -339,6 +354,15 @@ describe('the owner asks her to look, aloud', () => {
     expect(h.lookStore.waiting(scope)).toEqual([]);
     expect(h.messages().map(message => [message.role, message.content])).toEqual([['assistant', BODY_LOOK_CUT_OFF_LINE]]);
     expect(BODY_LOOK_CUT_OFF_LINE).toBe('話が途中になったので、いまは見ないでおきました。');
+    // Cut off before she had said anything about looking: nothing was promised, nothing is said.
+    const early = harness({ voiceDecision: gateway({ roomLookProbability: 0.95, transcriptReliabilityProbability: 0.95 }) });
+    await early.ready();
+    const cut = new AbortController();
+    early.model.generateVoiceStreaming = async (_request, onDelta) => { await onDelta('そうなんですね、'); cut.abort(); throw new Error('aborted'); };
+    await expect(early.api.streamLiveVoiceDelegation({ method: 'POST', path: delegations, deviceId: 'body-pc',
+      body: { scopeKey: scope, threadId: 'voice-thread', transcript: 'じゃーん、髪を切ってきたんだ。' } },
+    { signal: cut.signal, onPlan: () => undefined, onTextDelta: () => undefined })).rejects.toThrow();
+    expect(early.messages()).toEqual([]);
   });
 
   it('opens nothing when the call is cut off before her reply is written', async () => {
@@ -451,6 +475,21 @@ describe('what she saw reaches the voice conversation', () => {
     const stored = h.messages();
     expect(stored.map(message => [message.role, message.content])).toEqual([['user', '僕のこと見れる?'], ['assistant', '見てみますね。'], ['assistant', SEEN_TEXT]]);
     expect(Date.parse(stored[2]!.observedAt)).toBeGreaterThanOrEqual(Date.parse(stored[1]!.observedAt));
+  });
+
+  it('does not wait when the client stored the turn before her reply was written, and never holds a text look', async () => {
+    const h = harness({ turnWait: 5_000 });
+    await h.ready();
+    const speak = h.model.generateVoice.bind(h.model);
+    h.model.generateVoice = async request => {
+      await h.send('POST', '/v1/voice/realtime/turns', { threadId: 'voice-thread', userTranscript: '僕のこと見れる?', shannonTranscript: '見てみますね。' });
+      return speak(request);
+    };
+    await h.say('僕のこと見れる?');
+    const started = performance.now();
+    expect((await h.answer((await h.openLook())!.id)).body).toMatchObject({ status: 'seen' });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(h.messages().map(message => message.content)).toEqual(['僕のこと見れる?', '見てみますね。', SEEN_TEXT]);
   });
 
   it('does not wait for ever: after the bound her message is stored whatever the client did', async () => {

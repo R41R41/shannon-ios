@@ -157,6 +157,8 @@ export function ownerTurnVerdict(
   if (!bare) return silent('echo');
   if (!marked && (!facts.sheAsked || facts.answersHerLine) && facts.followsShannon && facts.secondsSinceShannon !== undefined && facts.secondsSinceShannon <= ECHO_SECONDS
     && length >= ECHO_CHARACTERS && bareText(facts.shannonLastLine ?? '').includes(bare)) return silent('echo');
+  // Her whole line to a touch, however short, heard by the microphone that opened for his answer.
+  if (facts.answersHerLine && bare === bareText(facts.shannonLastLine ?? '')) return silent('echo');
   const follows = facts.followsShannon && recent(FOLLOWS_SECONDS);
   // Her question is open for a short reply. With someone else there, only right after she asked: 「醤油ある」 a minute later is for the friend.
   const answering = facts.sheAsked && (!facts.othersPresent || follows);
@@ -235,6 +237,14 @@ export function ownerVoiceTurnFacts(input: {
     ...(input.source ? { source: input.source } : {}),
   };
 }
+
+/**
+ * The turn was left unanswered because the words were not his to her: overheard, her own echo, or a fragment.
+ * Such a turn runs no command. 「待って」 (hold) and a silence only the router chose are still his words:
+ * 「待って」「ストップ」「キャンセル」 pause or stop work exactly as before.
+ */
+export const notHisWordsToHer = (decision: VoiceTurnDecision): boolean =>
+  decision.silence === 'echo' || decision.silence === 'not_addressed' || decision.silence === 'unfinished';
 
 function silenced(decision: VoiceTurnDecision, category: VoiceSilenceCategory): VoiceTurnDecision {
   const { waitingDirection: _waiting, ...rest } = decision;
