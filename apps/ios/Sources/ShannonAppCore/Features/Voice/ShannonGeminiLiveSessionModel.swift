@@ -303,9 +303,11 @@ public final class ShannonGeminiLiveSessionModel {
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
         case .speechStarted:
+            backgroundSilence.ownerSpeechStarted(at: Date())
             echoWindow.speechStarted(isSpeaking: responseTask != nil, now: ProcessInfo.processInfo.systemUptime)
             duckForSpeech()
         case .speechStopped:
+            backgroundSilence.ownerSpeechStopped(at: Date())
             if responseTask != nil { scheduleDuckRelease() }
         case let .inputTranscript(text):
             if discardsAsEcho(text) { return }
@@ -314,7 +316,7 @@ public final class ShannonGeminiLiveSessionModel {
                     shannonTurnEndedAt: echoWindow.playbackEndedAt, isSpeaking: responseTask != nil,
                     now: ProcessInfo.processInfo.systemUptime)
             }
-            backgroundSilence.speech(at: Date())
+            backgroundSilence.ownerSpoke(at: Date())
             turnAssembler.appendFinal(text)
             userTranscript = previewInput(turnAssembler.finalText)
             // Only a completed transcript that is not Shannon's own voice interrupts her reply.
