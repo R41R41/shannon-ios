@@ -683,6 +683,14 @@ describe('the frame is never kept', () => {
     for (const name of ['bodyLookStore.ts', 'bodyLookDelivery.ts', 'bodyLookLines.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest/u);
     }
+    // One place starts a look: the text chat turn. Voice, the platform bridge and the activity loop have no path to it,
+    // and the gate's policy does not know the look.
+    const sourceDirectory = new URL('../src/', import.meta.url);
+    const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.looks\.turn\(|offerRoomLook: true/u.test(source(name)));
+    expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts']);
+    for (const name of readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))) {
+      expect(source(name), name).not.toMatch(/bodyLook|roomLook|RoomLook/u);
+    }
     // The answer of a look is not passed to the speaker, the store, or the activity record.
     const service = source('bodyLook.ts');
     expect(service.match(/result\.image/gu)).toHaveLength(1);
