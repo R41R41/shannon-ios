@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { autonomyDayKey } from './autonomyBudget.js';
-import { observeStep } from './autonomyLoopObserve.js';
+import { observeStep, sentBeforeStop } from './autonomyLoopObserve.js';
+import { REACH_OUT_REASON_LABEL } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyLoopReadiness, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { adaptersFor, prepareStep, type PreparedStep, type StepCommit, type StepDependencies, type StepResult } from './autonomyLoopSteps.js';
 import type { RecordedDecision } from './autonomyService.js';
@@ -37,9 +38,20 @@ export class ShannonAutonomyLoop {
   readonly workerId: string;
   private readonly scopeKey: string;
 
-  constructor(private readonly dependencies: AutonomyLoopDependencies) {
+  private readonly dependencies: AutonomyLoopDependencies;
+
+  constructor(dependencies: AutonomyLoopDependencies) {
     this.workerId = dependencies.workerId ?? `autonomy-${randomUUID()}`;
     this.scopeKey = dependencies.loop.scopeKey;
+    // A step that waits keeps this runner's lease and heartbeat alive.
+    this.dependencies = { ...dependencies, renew: () => this.renew() };
+  }
+
+  /** Renews the lease from inside a waiting step. False when another runner has it. */
+  private renew(): boolean {
+    const { store, loop, now } = this.dependencies;
+    const at = now();
+    return store.loop.acquireLease(this.workerId, at, new Date(Date.parse(at) + loop.leaseMilliseconds).toISOString(), this.readiness());
   }
 
   /** Off unless the server switch is on and a dedicated credential can serve both thinking and prose. */
@@ -234,6 +246,17 @@ export class ShannonAutonomyLoop {
         store.transaction(() => {
           if (!store.loop.finishStep(step.id, 'abandoned', at)) return;
           if (step.status !== 'authorized' || !step.decisionId) return;
+          // Her message was already written when the process stopped: it was sent, and only what followed is unknown.
+          const sent = sentBeforeStop(this.dependencies, this.scopeKey, step);
+          if (sent) {
+            const label = sent.reason === 'follow_up' ? null : REACH_OUT_REASON_LABEL[sent.reason];
+            service.recordAction(this.scopeKey, {
+              decisionId: step.decisionId, outcome: 'done', reasonCode: 'unwatched', ...(step.estimate ? { usage: step.estimate } : {}),
+              summary: `${label ? `持ち主に話しかけました（理由: ${label}）。` : '返事がなかったので、持ち主にもう一度だけ声をかけました。'}そのあとを見届ける前に止まったので、返事があったかは分かりません。費用は見積もりの上限で数えました。`,
+            });
+            store.loop.observations.add(this.scopeKey, { cycleId: step.cycleId, ordinal: step.ordinal, step: 'reach_out', outcome: 'done', code: 'unwatched', reachOut: sent }, at);
+            return;
+          }
           service.recordAction(this.scopeKey, {
             decisionId: step.decisionId, outcome: 'failed',
             summary: step.estimate ? '途中で止まった一歩を、やり直さずに閉じました。費用は見積もりの上限で数えました。' : '途中で止まった一歩を、やり直さずに閉じました。',

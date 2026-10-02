@@ -18,10 +18,7 @@ export interface AutonomyLoopConfig {
   ownerActiveMilliseconds: number;
   /** Shortest time between two messages she starts on her own. */
   reachOutSpacingMilliseconds: number;
-  /**
-   * After a message of hers, how long the step stays open to see whether he answers. 0 observes at once.
-   * Never longer than the lease allows (`reachOutWait`).
-   */
+  /** After a message of hers, how long the step stays open to see whether he answers. 0 observes at once. The lease is renewed while it waits. */
   reachOutWaitMilliseconds: number;
   /** Thinking steps a cycle may add after the first, when a step's outcome is worth thinking about again. */
   maximumRethinksPerCycle: number;
@@ -57,9 +54,13 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
   });
 }
 
-/** The wait after a message of hers, kept two minutes inside the lease so the model call that follows still fits in it. */
-export function reachOutWait(loop: Pick<AutonomyLoopConfig, 'reachOutWaitMilliseconds' | 'leaseMilliseconds'>): number {
-  return Math.max(0, Math.min(loop.reachOutWaitMilliseconds, loop.leaseMilliseconds - 120_000));
+/**
+ * The wait after a message of hers. It may be longer than the lease: the step renews the lease and the heartbeat at every
+ * look, five seconds apart, and the wait begins only after the step's one model call, whose timeout is shorter than the
+ * shortest lease.
+ */
+export function reachOutWait(loop: Pick<AutonomyLoopConfig, 'reachOutWaitMilliseconds'>): number {
+  return Math.max(0, loop.reachOutWaitMilliseconds);
 }
 
 /** `[{"title":"…","url":"https://…"}]`; anything unreadable falls back to the defaults. */

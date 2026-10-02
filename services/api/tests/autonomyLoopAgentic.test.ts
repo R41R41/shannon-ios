@@ -8,6 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { autonomyDayLog, autonomyDayPhrases } from '../src/autonomyDayLog.js';
 import { configuredAutonomyLoop, reachOutWait } from '../src/autonomyLoopConfig.js';
+import { ShannonAutonomyService } from '../src/autonomyService.js';
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import { reachOutChain } from '../src/autonomyLoopObserve.js';
 import { followUpPrompt, reachOutMemories, reachOutMemoryLine, rethinkExtras } from '../src/autonomyLoopObservePrompts.js';
@@ -144,7 +145,10 @@ describe('after a message of hers: observe, then think again', () => {
     expect(prompt).toContain('- 3分前（10:02）にライ氏へ話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが、返事はまだない。');
     expect(prompt).toContain('- 体からの知らせ: 画面に出して、声でも読み上げた。');
     expect(prompt).toContain('決まった言い回しではなく、いまのボクの言葉で。');
-    expect(prompt).not.toContain('少し気になりました');
+    // Her own first message is in front of her, in her words (ADR-0003); nothing the owner said is.
+    expect(prompt).toContain('[さっきボクが言ったこと]\n- 「ライ氏、いま何をしていますか。ボクは少し気になりました。」');
+    expect(prompt).not.toContain('さっき自分が何と言ったか');
+    expect(w.speaker.text(scope, 'no-such-message')).toBeNull();
     expect(w.messages().map(message => message.content)).toEqual(['ライ氏、いま何をしていますか。ボクは少し気になりました。', 'あれ、ライ氏、返事がないですね。席を外していますか。']);
     expect(JSON.parse(w.messages()[1]!.metadata_json)).toMatchObject({ reachOut: { reason: 'follow_up' } });
     // It reaches the body and the phone the way the first one did.
@@ -222,7 +226,8 @@ describe('after a message of hers: observe, then think again', () => {
     const silent = world();
     await silent.cycle([WONDER, REST]);
     const second = silent.model.prompts('think')[1]!;
-    expect(second).toContain('- 体からの知らせ: 届いていない。iPhoneへの通知は出ているが、見たかどうかは分からない。');
+    expect(second).toContain('- 体からの知らせ: なかった。体が動いていないか、つながっていないか、ボクのウィンドウを出していないのかもしれない。ライ氏が見たかどうかは分からない。');
+    expect(second).not.toContain('iPhone');
     expect(second).toContain('- 体のまわり: ボクのウィンドウが表示されているかは分からない。');
     expect(silent.observations().find(item => item.reachOut)!.reachOut).toMatchObject({ delivery: 'unknown', windowVisible: false, owner: 'unknown', others: false });
   });
@@ -479,11 +484,115 @@ describe('the gate, the switches and the budget', () => {
     expect(poor.raw<{ end_reason: string }>('SELECT end_reason FROM autonomy_loop_cycles')).toEqual([{ end_reason: 'budget' }]);
   });
 
+  it('keeps its lease and its heartbeat while it waits, also when the wait is longer than the lease', async () => {
+    // The shortest lease, the longest wait, and a model call that takes three minutes before the message is written.
+    const w = world({ loop: { leaseMilliseconds: 240_000, reachOutWaitMilliseconds: 300_000 } });
+    w.model.during = kind => { if (kind === 'reach_out') w.advance(180_000); };
+    const rival = w.newLoop('runner-b');
+    const seen: string[] = [];
+    w.during.every = async at => {
+      seen.push(`${w.store.loop.holdsLease('runner-a', at)}:${await rival.tick()}:${w.service.overview(scope).loop.state}`);
+    };
+    await w.cycle([WONDER, REST]);
+    expect(w.waits).toHaveLength(60);
+    expect(new Set(seen)).toEqual(new Set(['true:not-leader:running']));
+    // The message carries the time it was written, and the wait is measured from then.
+    const facts = w.observations().find(item => item.reachOut)!.reachOut!;
+    expect(facts).toMatchObject({ sentAt: '2026-10-02T01:05:00.000Z', waitedSeconds: 300, replied: false });
+    expect(w.model.kinds()).toEqual(['think', 'reach_out', 'think']);
+    // A runner that lost its lease stops waiting.
+    const lost = world();
+    lost.during.wait = at => { lost.store.loop.acquireLease('runner-z', new Date(Date.parse(at) + 601_000).toISOString(), new Date(Date.parse(at) + 1_200_000).toISOString(), 'ready'); };
+    lost.advance(2 * MINUTE);
+    lost.model.plans = [WONDER];
+    await lost.loop.tick();
+    await lost.loop.tick();
+    expect(lost.waits).toHaveLength(1);
+  });
+
+  it('stamps her message when it is written: a turn of his during the writing is not an answer, and she does not speak over it', async () => {
+    // He writes while the model is wording her message: nothing is sent, and the call that was made is charged.
+    const over = world();
+    over.model.during = kind => { if (kind === 'reach_out') { over.advance(20_000); over.showing.repliedAt = over.clock.at; } };
+    await over.cycle([WONDER, FOLLOW_UP]);
+    expect(over.messages()).toEqual([]);
+    expect(over.speaker.sentOn(scope, '2026-10-02')).toBe(0);
+    expect(over.waits).toEqual([]);
+    expect(over.actions().at(-1)).toMatchObject({ tool: 'owner.reach_out', outcome: 'failed', reasonCode: 'conversation_in_progress', summary: '話している最中なので、話しかけませんでした（理由: いま何をしているか気になった）。' });
+    expect(over.actions().at(-1)!.costYen).toBeGreaterThan(0);
+    expect(over.model.kinds()).toEqual(['think', 'reach_out']);
+
+    // The model takes twenty seconds and nobody writes: the message is stamped then, and the wait and the answer are counted from then.
+    const after = world();
+    after.model.during = kind => { if (kind === 'reach_out') after.advance(20_000); };
+    after.during.wait = at => { after.showing.repliedAt = new Date(Date.parse(at) + 25_000).toISOString(); };
+    await after.cycle([WONDER]);
+    expect(after.raw<{ created_at: string }>('SELECT created_at FROM initiative_messages')).toEqual([{ created_at: '2026-10-02T01:02:20.000Z' }]);
+    expect(after.observations().find(item => item.reachOut)!.reachOut).toMatchObject({ sentAt: '2026-10-02T01:02:20.000Z', replied: true, repliedAfterSeconds: 30 });
+
+    // The same for the second call: a turn during its writing stops it, as a conversation in progress or as an answer.
+    const second = world();
+    second.model.during = kind => { if (kind === 'follow_up') { second.advance(10_000); second.showing.repliedAt = second.clock.at; } };
+    await second.cycle([WONDER, FOLLOW_UP]);
+    expect(second.messages()).toHaveLength(1);
+    expect(second.actions().at(-1)).toMatchObject({ tool: 'owner.reach_out_follow_up', outcome: 'failed', reasonCode: 'replied' });
+    expect(second.actions().at(-1)!.costYen).toBeGreaterThan(0);
+    const talking = world();
+    const audience = talking.speaker.audience.bind(talking.speaker);
+    let asked = 0;
+    // Quiet until the second call is being prepared; talking (in a way that is not a new turn) when it is carried out.
+    talking.speaker.audience = (scopeKey, at) => { asked += 1; if (asked === 2) talking.showing.ownerActive = true; return audience(scopeKey, at); };
+    await talking.cycle([WONDER, FOLLOW_UP]);
+    expect(talking.messages()).toHaveLength(1);
+    expect(talking.actions().at(-1)).toMatchObject({ tool: 'owner.reach_out_follow_up', outcome: 'failed', reasonCode: 'conversation_in_progress', summary: '話している最中なので、もう一度は声をかけませんでした。', costYen: 0 });
+  });
+
+  it('does not call a sent message failed when the process dies while she waits', async () => {
+    const w = world();
+    // The process dies inside the wait: the pause never returns.
+    w.during.wait = () => new Promise<void>(() => undefined);
+    w.advance(2 * MINUTE);
+    w.model.plans = [WONDER, FOLLOW_UP];
+    await w.loop.tick();
+    void w.loop.tick();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(w.messages()).toHaveLength(1);
+    w.during.wait = undefined;
+    w.advance(w.loopConfig.leaseMilliseconds + 1_000);
+    await runUntilIdle(w.newLoop('runner-after-restart'));
+    const closed = w.actions().filter(entry => entry.tool === 'owner.reach_out');
+    expect(closed).toEqual([expect.objectContaining({
+      outcome: 'done', reasonCode: 'unwatched',
+      summary: '持ち主に話しかけました（理由: いま何をしているか気になった）。そのあとを見届ける前に止まったので、返事があったかは分かりません。費用は見積もりの上限で数えました。',
+    })]);
+    expect(closed[0]!.costYen).toBeGreaterThan(0);
+    expect(w.observations().map(item => [item.step, item.outcome, item.code, item.reachOut?.unwatched, item.reachOut?.replied])).toEqual([['reach_out', 'done', 'unwatched', true, false]]);
+    // No second thought and no second call come of it; the day still counts the message, once.
+    expect(w.model.kinds()).toEqual(['think', 'reach_out']);
+    expect(w.messages()).toHaveLength(1);
+    expect(w.speaker.sentOn(scope, '2026-10-02')).toBe(1);
+    expect(autonomyDayLog(w.entries())).toBe('次にすることを考え、自分から1回話しかけました。');
+    expect(w.service.pursuitPrompt(scope)).toContain('10:02に話しかけた（きっかけ: いま何をしているか気になった）。そのあとを見届けられなかったので、返事があったかは分からない。');
+    expect(w.store.loop.unfinishedSteps(scope)).toHaveLength(0);
+    // With the mechanism off the same crash is closed as it always was.
+    const off = world({ agentic: false });
+    off.model.during = kind => (kind === 'reach_out' ? new Promise<void>(() => undefined) : undefined);
+    off.advance(2 * MINUTE);
+    off.model.plans = [WONDER];
+    await off.loop.tick();
+    void off.loop.tick();
+    await new Promise(resolve => setTimeout(resolve, 30));
+    off.model.during = undefined;
+    off.advance(off.loopConfig.leaseMilliseconds + 1_000);
+    await runUntilIdle(off.newLoop('runner-after-restart'));
+    expect(off.actions().at(-1)).toMatchObject({ outcome: 'failed', summary: '途中で止まった一歩を、やり直さずに閉じました。費用は見積もりの上限で数えました。' });
+  });
+
   it('keeps the wait inside the lease, and 0 seconds observes at once', async () => {
     expect(configuredAutonomyLoop({}).reachOutWaitMilliseconds).toBe(180_000);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS: '60' }).reachOutWaitMilliseconds).toBe(60_000);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS: '900' }).reachOutWaitMilliseconds).toBe(180_000);
-    expect(reachOutWait({ reachOutWaitMilliseconds: 300_000, leaseMilliseconds: 240_000 })).toBe(120_000);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_REACH_OUT_WAIT_SECONDS: '300' }).reachOutWaitMilliseconds).toBe(300_000);
     expect(reachOutWait(configuredAutonomyLoop({}))).toBe(180_000);
     const w = world({ loop: { reachOutWaitMilliseconds: 0 } });
     await w.cycle([WONDER, REST]);
@@ -538,6 +647,41 @@ describe('the kill switch', () => {
     expect(sameDatabase.service.pursuitPrompt(scope)).not.toContain('話しかけた時のこと');
     expect(later.service.pursuitPrompt(scope)).toContain('話しかけた時のこと');
   });
+
+  it('leaves nothing of the mechanism running once it is switched off: a waiting second thought, a note of hers, the body\'s reports', async () => {
+    // Switched off between her message and the second thought it put in the plan: that thought is dropped, not run as a first one.
+    const w = world();
+    w.advance(2 * MINUTE);
+    w.model.plans = [{ thought: '話しかけて、書きます。', steps: [{ action: 'reach_out', reason: 'wonder' }] }, { thought: '書き留めます。', steps: [{ action: 'jot', text: 'SENTINEL-JOT 返事がなくて少しさみしい。' }] }];
+    await w.loop.tick();
+    await w.loop.tick();
+    expect(w.store.loop.openCycle(scope)!.plan).toEqual([{ kind: 'think', again: true }]);
+    w.loop.release();
+    const off = loopHarness({ path: w.path, clock: w.clock, model: w.model, showing: w.showing, reachOuts: w.speaker, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 60 * MINUTE } });
+    expect((await runUntilIdle(off.newLoop('runner-off'))).at(-1)).toBe('cycle-ended');
+    expect(w.model.kinds()).toEqual(['think', 'reach_out']);
+    // Switched on again she writes her note; switched off, that note is not among the notes her thinking is given.
+    const noted = world();
+    await noted.cycle([WONDER, { thought: '書き留めます。', steps: [{ action: 'jot', text: 'SENTINEL-JOT 返事がなくて少しさみしい。' }] }]);
+    expect(noted.store.study.list(scope).map(piece => piece.origin)).toEqual(['reach_out']);
+    const notedOff = loopHarness({ path: noted.path, clock: noted.clock, model: noted.model, showing: noted.showing, reachOuts: noted.speaker, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 60 * MINUTE } });
+    for (const [harness, expected] of [[notedOff, false], [noted, true]] as const) {
+      harness.advance(61 * MINUTE);
+      noted.model.plans = [REST];
+      await runUntilIdle(harness === noted ? noted.loop : notedOff.newLoop('runner-off'));
+      expect(noted.model.prompts('think').at(-1)!.includes('SENTINEL-JOT')).toBe(expected);
+    }
+
+    // The API process: presence reads write nothing for the loop, and a delivery report is refused with its own code.
+    const api = createLocalApiKernel(() => w.clock.at, { autonomy: w.service, body: { store: w.body, reachOutReports: w.reports, reachOutReportsEnabled: false } });
+    await api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', body: { scopeKey: scope, expressions: [], gestures: [] }, deviceId: BODY });
+    expect((await api.dispatch({ method: 'GET', path: '/v1/body/presence', query: new URLSearchParams({ scopeKey: scope }), deviceId: BODY })).status).toBe(200);
+    expect(w.raw('SELECT * FROM reach_out_body_presence')).toEqual([]);
+    const id = w.speaker.latest(scope)!.id;
+    expect(await api.dispatch({ method: 'POST', path: `/v1/body/reach-outs/${id}/delivery`, body: { scopeKey: scope, outcome: 'shown' }, deviceId: BODY }))
+      .toMatchObject({ status: 403, body: { error: 'REACH_OUT_REPORTS_DISABLED' } });
+    expect(w.raw('SELECT * FROM reach_out_deliveries')).toEqual([]);
+  });
 });
 
 describe('what she later knows', () => {
@@ -581,6 +725,23 @@ describe('what she later knows', () => {
     await w.cycle([REST], 0);
     expect(w.model.prompts('think')[0]).not.toContain('話しかけたあとのこと');
     expect(w.service.pursuitPrompt(scope)).not.toContain('話しかけた時のこと');
+  });
+
+  it('tells a conversation that he answered later, when he did, and does not count the conversation itself', async () => {
+    const w = world();
+    await w.cycle([WONDER, REST]);
+    let first: string | null = null;
+    const service = new ShannonAutonomyService({ store: w.store, config: w.config, now: () => w.clock.at, ownerFirstActiveAfter: (_scopeKey, after) => (first && first > after ? first : null) });
+    const line = '10:02に話しかけた（きっかけ: いま何をしているか気になった）。3分待ったが返事はなかった。';
+    w.advance(30 * MINUTE);
+    expect(service.pursuitPrompt(scope)).toContain(`${line}\n`.trim());
+    expect(service.pursuitPrompt(scope)).not.toContain('書くか話すかしている');
+    // His only turn since is this very conversation, a moment ago: that is not "he answered later".
+    first = new Date(Date.parse(w.clock.at) - 30_000).toISOString();
+    expect(service.pursuitPrompt(scope)).not.toContain('書くか話すかしている');
+    // He wrote twenty minutes ago, after her wait had ended.
+    first = new Date(Date.parse(w.clock.at) - 20 * MINUTE).toISOString();
+    expect(service.pursuitPrompt(scope)).toContain(`${line}そのあと、ライ氏は書くか話すかしている。`);
   });
 
   it('remembers an answer as an answer', async () => {
@@ -684,6 +845,9 @@ describe('the body says what it did with her message', () => {
     w.advance(MINUTE);
     w.body.record(scope, BODY, { id: 'r1', type: 'ownerReturned', audience: 'others', occurredAt: w.clock.at, minutesAway: 1 }, w.clock.at, '2026-10-02');
     expect(facts(w.clock.at)).toMatchObject({ owner: 'returned', others: true });
+    // Many other events since do not push that fact out.
+    for (let index = 0; index < 80; index += 1) w.body.record(scope, BODY, { id: `p${index}`, type: 'pet', audience: 'owner', occurredAt: w.clock.at }, w.clock.at, '2026-10-02');
+    expect(facts(w.clock.at).owner).toBe('returned');
     w.advance(61 * MINUTE);
     expect(facts(w.clock.at).owner).toBe('unknown');
   });

@@ -65,7 +65,12 @@ export class SQLiteReachOutReports {
     const inserted = this.database.prepare(`
       INSERT OR IGNORE INTO reach_out_deliveries (scope_key, initiative_id, device_id, outcome, reported_at) VALUES (?, ?, ?, ?, ?)
     `).run(scopeKey, initiativeId, deviceId, outcome, at);
-    return Number(inserted.changes) > 0 ? 'stored' : 'duplicate';
+    if (Number(inserted.changes) > 0) return 'stored';
+    // Another request of the same device won the row meanwhile: the answer follows what is stored.
+    const stored = this.database.prepare(`
+      SELECT outcome FROM reach_out_deliveries WHERE scope_key = ? AND initiative_id = ? AND device_id = ?
+    `).get(scopeKey, initiativeId, deviceId) as unknown as { outcome: string } | undefined;
+    return stored?.outcome === outcome ? 'duplicate' : 'conflict';
   }
 
   /** What her body did with the message, or null while no body has reported. */
@@ -101,9 +106,9 @@ export class SQLiteReachOutReports {
   }
 }
 
-/** The body store, as far as this module reads it: the newest events of each audience, and who is around. */
+/** The body store, as far as this module reads it: the newest away or returned event, and who is around. */
 export interface ReachOutBodyReader {
-  recent(scopeKey: string, audience: 'owner' | 'others', sinceOccurredAt: string, limit: number): readonly { type: string; occurredAt: string }[];
+  latestOfTypes(scopeKey: string, types: readonly string[], since: string, until: string): { type: string; occurredAt: string } | null;
   othersPresent(scopeKey: string, at: string, freshMilliseconds: number, eventWindowMilliseconds: number): boolean;
 }
 
@@ -116,9 +121,7 @@ export function reachOutBodyFacts(
   audience: { freshMilliseconds: number; eventWindowMilliseconds: number },
 ): Pick<ReachOutFacts, 'windowVisible' | 'owner' | 'others'> {
   const since = new Date(Date.parse(at) - REACH_OUT_OWNER_EVENT_WINDOW_MILLISECONDS).toISOString();
-  const newest = (['owner', 'others'] as const).flatMap(who => body.recent(scopeKey, who, since, 50))
-    .filter(event => (event.type === 'ownerAway' || event.type === 'ownerReturned') && event.occurredAt <= at)
-    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];
+  const newest = body.latestOfTypes(scopeKey, ['ownerAway', 'ownerReturned'], since, at);
   return {
     windowVisible: reports.windowVisible(scopeKey, at),
     owner: newest?.type === 'ownerAway' ? 'away' : newest?.type === 'ownerReturned' ? 'returned' : 'unknown',

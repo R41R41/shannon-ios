@@ -218,6 +218,8 @@ describe('what reaches the prompts of her own activity', () => {
     expect(model.calls.length).toBe(6);
     for (const prompt of model.prompts()) {
       for (const sentinel of [SECRET, LATE, 'SENTINEL-REPLY-5520', '会議中', '買いました']) expect(prompt, sentinel).not.toContain(sentinel);
+      // Her own message reaches only the second call that follows it, and none was made here.
+      expect(prompt).not.toContain('さっきボクが言ったこと');
       for (const block of ['[ユーザーについて', '[現在の状態', '[Recent conversation]', '[続けている目的', '[覚えている人', '[想起']) expect(prompt, block).not.toContain(block);
     }
     // What a conversation with him is told about it is the same facts, from the same observations.
@@ -293,7 +295,10 @@ describe('what reaches the prompts of her own activity', () => {
     expect(worker).not.toMatch(/Voyager(?:Catalog|Destination)|SQLiteShannonStore|createConfiguredChatModel|peopleMemory/u);
     // Her message leaves through a module that writes it and reads none: no stored conversation text comes back.
     const delivery = readFileSync(join(sourceDirectory, 'reachOutDelivery.ts'), 'utf8');
-    expect(delivery).not.toMatch(/SELECT\s+(?:content|\*)|FROM conversation_messages|companion_states/u);
+    expect(delivery).not.toMatch(/SELECT\s+\*|FROM conversation_messages|companion_states/u);
+    // The one text it reads back is her own message from her own initiative, for the second call (owner decision 2026-10-02, ADR-0003).
+    expect([...delivery.matchAll(/SELECT content[^`]*?FROM ([a-z_]+) WHERE ([^`]*?)\n/gu)].map(match => `${match[1]}:${match[2]!.trim()}`))
+      .toEqual(['initiative_messages:scope_key = ? AND initiative_id = ? AND source_item_id LIKE ?']);
     const step = readFileSync(join(sourceDirectory, 'autonomyLoopReachOutStep.ts'), 'utf8');
     expect(step).not.toMatch(/DatabaseSync|SELECT |reachOutDelivery|ownerUpcoming|upcomingStore|calendarContract/u);
     // Watching for an answer, calling again and thinking again open no store either: an answer is a timestamp from the showing desk,
@@ -308,7 +313,7 @@ describe('what reaches the prompts of her own activity', () => {
     // What her body reports about a message is a closed outcome: the report table and the reader hold no text, and read no conversation.
     const reports = readFileSync(join(sourceDirectory, 'reachOutReports.ts'), 'utf8');
     expect(reports).not.toMatch(/conversation_messages|companion_states|SELECT\s+(?:content|\*)/u);
-    expect([...reports.matchAll(/FROM ([a-z_]+)/gu)].map(match => match[1]).sort()).toEqual(['initiative_messages', 'reach_out_body_presence', 'reach_out_deliveries', 'reach_out_deliveries', 'sqlite_master']);
+    expect([...reports.matchAll(/FROM ([a-z_]+)/gu)].map(match => match[1]).sort()).toEqual(['initiative_messages', 'reach_out_body_presence', 'reach_out_deliveries', 'reach_out_deliveries', 'reach_out_deliveries', 'sqlite_master']);
     expect([...reports.matchAll(/SELECT ([^`]*?) FROM initiative_messages/gu)].map(match => match[1]!.trim())).toEqual(['created_at']);
     // The only module of the loop that opens the conversation tables answers with an outcome, never with content.
     const showing = readFileSync(join(sourceDirectory, 'autonomyShowing.ts'), 'utf8');

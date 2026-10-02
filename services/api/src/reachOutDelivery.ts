@@ -92,12 +92,25 @@ export class SQLiteReachOutSpeaker {
   }
 
 /** The newest message she started on her own: its initiative id and when it was written. Identifiers only. */
-  latest(scopeKey: string): { id: string; at: string } | null {
+  latest(scopeKey: string): { id: string; at: string; reason?: string } | null {
     if (!this.tableExists('initiative_messages')) return null;
     const row = this.database.prepare(`
-      SELECT initiative_id, created_at FROM initiative_messages WHERE scope_key = ? AND source_item_id LIKE ? ORDER BY created_at DESC, rowid DESC LIMIT 1
-    `).get(scopeKey, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as { initiative_id: string; created_at: string } | undefined;
-    return row ? { id: row.initiative_id, at: row.created_at } : null;
+      SELECT initiative_id, created_at, source_item_id FROM initiative_messages WHERE scope_key = ? AND source_item_id LIKE ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+    `).get(scopeKey, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as { initiative_id: string; created_at: string; source_item_id: string } | undefined;
+    const reason = reachOutOfSource(row?.source_item_id)?.reason;
+    return row ? { id: row.initiative_id, at: row.created_at, ...(reason ? { reason } : {}) } : null;
+  }
+
+  /**
+   * The words of one of her own messages, for the second call that follows it (owner decision 2026-10-02, ADR-0003).
+   * Read from her initiative, never from the conversation; null for anything that is not a message she started.
+   */
+  text(scopeKey: string, initiativeId: string): string | null {
+    if (!this.tableExists('initiative_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT content AS said FROM initiative_messages WHERE scope_key = ? AND initiative_id = ? AND source_item_id LIKE ?
+    `).get(scopeKey, initiativeId, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as { said: string } | undefined;
+    return row?.said ?? null;
   }
 
   /** Second calls she made on the owner-local day. */

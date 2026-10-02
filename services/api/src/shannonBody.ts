@@ -34,6 +34,8 @@ export interface ShannonBodyOptions {
   reachOuts?: (scopeKey: string) => { pending: number; latestId?: string };
   /** What the body did with a message of hers, and when it last read presence (`reachOutReports.ts`); absent, the report route answers 404. */
   reachOutReports?: Pick<SQLiteReachOutReports, 'report' | 'markPresence'>;
+  /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero. Off, no report is taken and no presence read is noted for the loop. Unset means on. */
+  reachOutReportsEnabled?: boolean;
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -253,9 +255,10 @@ export class ShannonBody {
    * What this device did with one of her own messages. Only a device that registered as her body may report,
    * each device once per message; nothing is said in return, and no model is called.
    */
-  reportReachOut(scopeKey: string, deviceId: string, initiativeId: string, outcome: BodyReachOutDeliveryOutcome): ReachOutReportResult | 'disabled' | 'unavailable' | 'not_a_body' {
+  reportReachOut(scopeKey: string, deviceId: string, initiativeId: string, outcome: BodyReachOutDeliveryOutcome): ReachOutReportResult | 'disabled' | 'reports_disabled' | 'unavailable' | 'not_a_body' {
     const reports = this.dependencies.reachOutReports;
     if (!reports) return 'unavailable';
+    if (this.dependencies.reachOutReportsEnabled === false) return 'reports_disabled';
     if (!this.ingestEnabled) return 'disabled';
     if (!this.store.capabilities(scopeKey, deviceId)) return 'not_a_body';
     return reports.report(scopeKey, deviceId, initiativeId, outcome, this.dependencies.now());
@@ -264,15 +267,16 @@ export class ShannonBody {
   /** When a registered body last read presence, for her activity loop (another process). Written at most every ten seconds per device. */
   private notePresence(scopeKey: string, deviceId: string, at: string): void {
     const reports = this.dependencies.reachOutReports;
-    if (!reports) return;
+    if (!reports || this.dependencies.reachOutReportsEnabled === false) return;
     const key = `${scopeKey}\u0000${deviceId}`;
     const time = Date.parse(at);
     const last = this.presenceMarks.get(key);
     if (last !== undefined && time - last >= 0 && time - last < BODY_LIMITS.presencePollSeconds * 1_000) return;
+    // Marked before the registration is looked up, so a device that is not her body costs one lookup every ten seconds at most.
+    if (this.presenceMarks.size >= 256) this.presenceMarks.clear();
+    this.presenceMarks.set(key, time);
     try {
       if (!this.store.capabilities(scopeKey, deviceId)) return;
-      if (this.presenceMarks.size >= 256) this.presenceMarks.clear();
-      this.presenceMarks.set(key, time);
       reports.markPresence(scopeKey, deviceId, at);
     } catch { /* presence is still answered */ }
   }

@@ -58,6 +58,8 @@ export interface AutonomyLoopStep {
   decisionId?: string;
   /** The tokens the gate was asked to make room for; charged if the step is abandoned after it was allowed. */
   estimate?: { inputTokens: number; outputTokens: number };
+  /** When the step was journalled. */
+  createdAt?: string;
 }
 
 export interface AutonomyReading {
@@ -351,6 +353,7 @@ interface CycleRow {
 }
 interface StepRow {
   step_id: string; cycle_id: string; ordinal: number; step_json: string; status: string; decision_id: string | null; estimate_json: string | null;
+  created_at?: string;
 }
 interface ReadingRow {
   reading_id: string; url: string; title: string; text: string; links_json: string; pursuit_id: string | null; fetched_at: string; noted_at: string | null;
@@ -370,6 +373,7 @@ function step(row: StepRow): AutonomyLoopStep {
     id: row.step_id, cycleId: row.cycle_id, ordinal: Number(row.ordinal),
     step: parsed<AutonomyPlannedStep>(row.step_json, { kind: 'think' }), status: row.status as AutonomyStepStatus,
     ...(row.decision_id ? { decisionId: row.decision_id } : {}), ...(estimate ? { estimate } : {}),
+    ...(row.created_at ? { createdAt: row.created_at } : {}),
   });
 }
 

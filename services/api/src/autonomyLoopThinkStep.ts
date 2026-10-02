@@ -81,7 +81,9 @@ function remembered(dependencies: StepDependencies, scopeKey: string, at: string
 export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store, service, config, loop } = dependencies;
   const agentic = agenticLoop(dependencies);
-  const again = agentic && step.again === true;
+  // A second thought left in a plan from before the mechanism was switched off is dropped, not run as a first one.
+  if (step.again && !agentic) return null;
+  const again = step.again === true;
   const overview = service.overview(cycle.scopeKey);
   const readsToday = store.activity.countForDay(cycle.scopeKey, overview.budget.dayKey, 'public_read', 'allowed');
   const maximumSteps = Math.max(0, loop.maximumStepsPerCycle - cycle.stepsTaken - 1);
@@ -98,7 +100,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
     folderAvailable: service.folder.available(cycle.scopeKey, at),
-    lookAvailable: lookNow && !rethink.looked,
+    lookAvailable: lookNow && !rethink.looked, ownNotes: agentic,
     reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });
   const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, rethink.extras ?? memory), OUTPUT_TOKENS);

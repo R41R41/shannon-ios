@@ -49,6 +49,8 @@ export function thinkingMaterials(
     readingSeeds: readonly { title: string; url: string }[]; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean;
     /** How many more times she may speak up today, while she may at all; the owner's upcoming items come only with it. */
     reachOut?: { remaining: number; upcoming: readonly PromptUpcoming[] } | null;
+    /** What she wrote down after an unanswered message is among her notes; only while that mechanism is on. */
+    ownNotes?: boolean;
   },
 ): ThinkingMaterials {
   const pieces = store.study.list(scopeKey);
@@ -63,7 +65,7 @@ export function thinkingMaterials(
       id: piece.id, title: piece.title, statusLabel: STUDY_STATUS_LABEL[piece.status], version: piece.version,
       characters: piece.body.length, lastChange: store.study.versions(scopeKey, piece.id).at(-1)?.changeNote ?? '',
     })),
-    notes: storyNotes(store, scopeKey, undefined, 6, true),
+    notes: storyNotes(store, scopeKey, undefined, 6, input.ownNotes === true),
     unnotedReadings: store.loop.unnotedReadings(scopeKey).map(reading => ({ id: reading.id, title: reading.title, url: reading.url })),
     feedback: stories.flatMap(piece => store.study.pendingFeedback(scopeKey, piece.id).map(feedback => ({
       pieceId: piece.id, pieceTitle: piece.title, version: feedback.version,
