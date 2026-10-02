@@ -132,9 +132,23 @@ export class DisclosureGate {
     if (id.startsWith('knowledge:')) return true;
     // A person memory cannot be resolved here and may be from an unnamed guest's call.
     if (id.startsWith('person:')) return false;
+    if (id.startsWith('impression:')) return this.allowsImpression(id);
     const item = this.labelled(id);
     return item ? this.allows(id, item.disclosure) : this.allows(id, this.experience(id)?.disclosure);
   }
+
+  /**
+   * An impression that was in front of her: the owner's own by its label and the labels of the turns it was
+   * built from; one of another person is treated like a person memory. A row that no longer exists is unlabelled.
+   */
+  private allowsImpression(id: string): boolean {
+    this.impressionRows ??= this.store?.impressionStore?.().impressions(this.scopeKey) ?? [];
+    const row = this.impressionRows.find(item => `impression:${item.id}` === id);
+    if (!row) return this.allows(id, undefined);
+    if (row.personKey !== 'owner' || !this.allows(id, row.disclosure)) return false;
+    return row.evidence.every(item => this.allows(item.id, this.experience(item.id)?.disclosure));
+  }
+  private impressionRows?: readonly import('./impressions.js').PersonImpression[];
 
   /** A stored thread message: it is judged as the turn it belongs to. */
   allowsMessage(message: Pick<StoredConversationMessage, 'sourceExperienceId' | 'bodyLook'>): boolean {

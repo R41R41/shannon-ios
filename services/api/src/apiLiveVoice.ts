@@ -314,7 +314,7 @@ async function completeLiveVoiceDelegation(
   const includeCognitiveContext = temporaryGuest ? !legacyGuest : selectedSkills.has('conversation_memory');
   const systemPrompt = [
     basePrompt,
-    includeCognitiveContext ? cognitiveContext.prompt : complexTurn ? recalled?.knowledgePrompt : '',
+    includeCognitiveContext ? cognitiveContext.prompt : [complexTurn ? recalled?.knowledgePrompt : '', legacyGuest ? '' : cognitiveContext.impressionPrompt].filter(Boolean).join('\n\n'),
     // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
     guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
     dailyMindPrompt,

@@ -93,6 +93,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/apiPeopleMemoryRoutes.ts',
     'services/api/src/platformPeople.ts',
     'services/api/src/platformPeopleSummaries.ts',
+    // Her impressions of people: what is kept, what reaches a reply, and how the owner forgets them.
+    'services/api/src/impressions.ts',
+    'services/api/src/sqliteImpressions.ts',
+    'services/api/src/impressionRecall.ts',
+    'services/api/src/impressionUpdater.ts',
+    'services/api/src/impressionViews.ts',
     'services/api/src/platformBridge.ts',
     'services/api/src/voiceCompanionPresence.ts',
     'services/api/src/memoryForgetCommand.ts',
