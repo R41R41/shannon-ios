@@ -11,7 +11,7 @@ import {
 } from '../src/appLookContract.js';
 import { SQLiteAppLookSpeaker } from '../src/appLookDelivery.js';
 import {
-  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, VOICE_APP_LOOK_READY_PROMPT, appLookNotSeenLine, appLookNotSeenSummary,
+  APP_LOOK_OFFER_PROMPT, APP_LOOK_SEEN_SUMMARY, VOICE_APP_LOOK_OFFER_PROMPT, LOOK_NOT_SEEN_GUARD, announcesCameraLook, appLookNotSeenLine, appLookNotSeenSummary,
   appLookUnavailablePrompt, appLookUnavailableReason, voiceAppLookPrompt,
 } from '../src/appLookLines.js';
 import { SQLiteAppLookStore } from '../src/appLookStore.js';
@@ -234,7 +234,8 @@ describe('a text turn from the app', () => {
       h.model.appLook = 'asked_back';
       const quiet = await h.chat('おはよう', { state, cameras: ['back', 'front'], platform: 'ios' });
       expect(quiet.request.offerAppLook, state).toBeUndefined();
-      expect(quiet.body.systemPrompt, state).not.toContain('[アプリのカメラで見る]');
+      // The reason is a fact of the turn whether or not he asks: she must not think that she can look, or has.
+      expect(quiet.body.systemPrompt, state).toContain(appLookUnavailablePrompt(state, 'ios'));
       const asked = await h.chat('これ見える？', { state, cameras: ['back', 'front'], platform: 'ios' });
       expect(asked.body.systemPrompt, state).toContain(appLookUnavailablePrompt(state, 'ios'));
       expect(asked.body.appLook, state).toBeUndefined();
@@ -578,13 +579,14 @@ describe('a voice turn from the app', () => {
     const unsure = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.6 }) });
     const quiet = await unsure.say('今、ラーメン屋さんにいるんだ。');
     expect(quiet.body.appLook).toBeUndefined();
-    expect(quiet.prompt).not.toContain('[アプリのカメラで見る]');
+    // Not decided beforehand: the choice is left to her, and she did not announce a look.
+    expect(quiet.prompt).toContain(VOICE_APP_LOOK_OFFER_PROMPT);
   });
 
   it('tells her she could look, without looking, when the camera is mentioned and nobody chose a look', async () => {
     const h = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.3 }) });
     const turn = await h.say('これ見える？');
-    expect(turn.prompt).toContain(VOICE_APP_LOOK_READY_PROMPT);
+    expect(turn.prompt).toContain(VOICE_APP_LOOK_OFFER_PROMPT);
     expect(turn.body.appLook).toBeUndefined();
   });
 
@@ -723,6 +725,126 @@ describe('a voice turn from the app', () => {
     }, { signal: controller.signal, onPlan: () => undefined, onTextDelta: () => undefined })).rejects.toBeTruthy();
     expect(h.store.waiting(scope)).toEqual([]);
     expect(h.messages('voice-thread').at(-1)?.content).toBe(BODY_LOOK_CUT_OFF_LINE);
+  });
+});
+
+describe('the voice call of 2026-10-02 (Build 131): she announced a look, none was opened, and she described what she had not seen', () => {
+  /** What he said, in order. */
+  const SAID = ['シャノン、この服装どう?', 'あれ、カメラ今使えないんだっけ?', 'シャノン、これ見れる? 僕の服装。', 'どうですか？', '何色の服を着てる? 僕は', 'このカメラ見て。'];
+  /** One utterance exactly as the 131 app sends it: the camera state inside deviceContext, no top-level appLook, no location key. */
+  const payload = (transcript: string, index: number, appLook: Record<string, unknown> | null) => ({
+    scopeKey: scope, threadId: 'voice-thread', transcript, participantMode: 'owner',
+    deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false,
+      userUtterance: { id: `00000000-0000-4000-8000-00000000000${index}`, text: transcript, source: 'speech', rawText: transcript },
+      ...(appLook ? { appLook } : {}) },
+  });
+  /** The stream route, as `serverLiveVoiceStreamRoute.ts` calls the kernel. The model looks when her look line lets her and he asked. */
+  const call = async (h: ReturnType<typeof harness>, appLook: Record<string, unknown> | null, replies: (prompt: string, said: string) => string) => {
+    const turnsOut: { said: string; prompt: string; reply: string; appLook?: { id: string; camera: string } }[] = [];
+    for (const [index, said] of SAID.entries()) {
+      h.model.generateVoiceStreaming = async (request, onDelta) => {
+        h.model.voiceRequests.push(request);
+        const reply = replies(request.systemPrompt, said);
+        await onDelta(reply);
+        return { mode: 'openai', model: 'fake', reply };
+      };
+      const response = await h.api.streamLiveVoiceDelegation(
+        { method: 'POST', path: delegations, body: payload(said, index, appLook), deviceId: 'iphone' },
+        { onPlan: () => undefined, onTextDelta: () => undefined });
+      expect(response.status).toBe(200);
+      const body = response.body as { reply: string; appLook?: { id: string; camera: string } };
+      turnsOut.push({ said, prompt: h.model.voiceRequests.at(-1)!.systemPrompt, reply: body.reply, ...(body.appLook ? { appLook: body.appLook } : {}) });
+      // The app stores the turn, answers a look if one was asked, and time passes before he speaks again.
+      await h.send('POST', turns, { threadId: 'voice-thread', userTranscript: said, shannonTranscript: body.reply });
+      if (body.appLook) expect((await h.answer(body.appLook.id, seen(body.appLook.camera))).status).toBe(200);
+      h.advance(20 * SECOND);
+    }
+    return turnsOut;
+  };
+  /** A model that follows her look line: it says the opening words when he asks to be looked at and the line allows it. */
+  const obedient = (prompt: string, said: string) =>
+    prompt.includes(VOICE_APP_LOOK_OFFER_PROMPT) && /見れる|見て/u.test(said) ? 'はい、カメラで見てみますね。' : 'そうですね。';
+  /** The production failure: the router gave no usable judgement (no score at all, or a spoken transcript it did not trust). */
+  const ROUTERS: [string, () => VoiceDecisionGateway][] = [
+    ['no model tier answered', () => new LocalVoiceDecisionGateway()],
+    ['a transcript the router did not trust', () => gateway({ transcriptReliabilityProbability: 0.5, roomLookProbability: 0.9 })],
+    ['a router that scored no look', () => gateway({ transcriptReliabilityProbability: 0.95, roomLookProbability: 0.3 })],
+  ];
+
+  it('opens a look for 「これ見れる? 僕の服装。」 and 「このカメラ見て。」 whatever the router gave, with the camera state the app sent', async () => {
+    for (const [name, router] of ROUTERS) {
+      for (const state of ['ready', 'undetermined']) {
+        const h = harness({ voiceDecision: router() });
+        const out = await call(h, { state, cameras: ['back', 'front'], platform: 'ios' }, obedient);
+        expect(out[2]!.appLook, `${name}/${state}: turn 3`).toMatchObject({ camera: 'front' });
+        expect(out[5]!.appLook, `${name}/${state}: turn 6`).toBeTruthy();
+        // What she saw is in the Talk, after the turn that asked for it.
+        expect(h.messages('voice-thread').filter(message => message.content === SEEN_TEXT), name).toHaveLength(2);
+        expect(h.viewer.calls, name).toHaveLength(2);
+        // In the turns between, she is told as a fact that she has not seen anything unless the Talk says so.
+        for (const index of [0, 1, 3, 4]) {
+          expect(out[index]!.prompt, `${name}: turn ${index + 1}`).toContain('会話の履歴に見た結果の発言がない限り、カメラではまだ何も見ていない');
+          expect(out[index]!.prompt, `${name}: turn ${index + 1}`).toContain('見えたものとして語らない');
+          expect(out[index]!.appLook, `${name}: turn ${index + 1}`).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it('opens nothing when she does not say the opening words, and never from her words about something else', async () => {
+    const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    // What she said in production: an announcement in other words. It opens nothing; the line told her not to say it.
+    const out = await call(h, READY, () => '見られますよ、ライ氏。いま一度だけ確認して、服装の感想を伝えますね。');
+    expect(out.every(turn => turn.appLook === undefined)).toBe(true);
+    expect(out.every(turn => turn.prompt.includes('見ない時は、見るとも見えたとも言わない'))).toBe(true);
+    expect(announcesCameraLook('はい、カメラで見てみますね。')).toBe(true);
+    expect(announcesCameraLook('カメラでちょっと見てきますね')).toBe(true);
+    for (const other of ['そのノート、見てみますね。', '予定をいま確認しますね。', 'カメラの設定を開いてください。', 'カメラで見られないんです。']) expect(announcesCameraLook(other), other).toBe(false);
+    expect(h.store.waiting(scope)).toEqual([]);
+  });
+
+  it('tells her in every turn that she cannot look and has seen nothing when the app cannot look, and leaves one honest line if she announces a look anyway', async () => {
+    for (const state of ['background', 'denied', 'switched_off'] as const) {
+      const h = harness({ voiceDecision: new LocalVoiceDecisionGateway(), turnWait: 5_000 });
+      const out = await call(h, { state, cameras: ['back', 'front'], platform: 'ios' }, (_prompt, said) => said === SAID[2] ? 'カメラで見てみますね。' : 'そうですね。');
+      for (const turn of out) {
+        expect(turn.prompt, `${state}: ${turn.said}`).toContain(appLookUnavailablePrompt(state, 'ios'));
+        expect(turn.prompt, `${state}: ${turn.said}`).toContain('カメラではまだ何も見ていない');
+        expect(turn.appLook, `${state}: ${turn.said}`).toBeUndefined();
+      }
+      expect(h.store.waiting(scope), state).toEqual([]);
+      // She said she would look in a turn that could not: the true reason, as her fixed line, follows that turn in the Talk.
+      const talk = h.messages('voice-thread').map(message => message.content);
+      expect(talk.filter(line => line === appLookNotSeenLine(state, 'ios')), state).toHaveLength(1);
+      expect(talk.indexOf(appLookNotSeenLine(state, 'ios')), state).toBe(talk.indexOf('カメラで見てみますね。') + 1);
+    }
+  });
+
+  it('tells her the same in a turn that names no camera at all (an older app, or her body not offering a look)', async () => {
+    const h = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    const out = await call(h, null, () => 'そうですね。');
+    for (const turn of out.filter(item => !item.prompt.includes('[部屋を見る]'))) expect(turn.prompt, turn.said).toContain(LOOK_NOT_SEEN_GUARD);
+    expect(out.some(turn => turn.prompt.includes(LOOK_NOT_SEEN_GUARD))).toBe(true);
+    expect(LOOK_NOT_SEEN_GUARD).toContain('「見てみます」「見えています」と言わない');
+    const text = await h.chat('この服どう？', null);
+    expect(text.body.systemPrompt).toContain(LOOK_NOT_SEEN_GUARD);
+    // A 「友人も一緒」 turn is told of no camera, and so of no guard either.
+    h.model.generateVoiceStreaming = undefined;
+    const guest = await h.say('シャノン、これ見れる？', null, { participantMode: 'guest' });
+    expect(guest.prompt).not.toContain('[カメラ]');
+  });
+
+  it('takes the look she announces in a text reply although the structured field said none, and says so honestly when the app cannot', async () => {
+    const h = harness();
+    h.model.reply = 'いいですね、カメラで見てみますね。';
+    const turn = await h.chat('この服どう？');
+    expect(turn.body.appLook).toMatchObject({ camera: 'front' });
+    expect(turn.body.systemPrompt).toContain('appLookでnoneを選ぶ返事では、見るとも見えたとも言わない');
+    const away = harness();
+    away.model.reply = 'カメラで見てみますね。';
+    const refused = await away.chat('この服どう？', { state: 'denied', cameras: ['back', 'front'], platform: 'ios' });
+    expect(refused.body.appLook).toBeUndefined();
+    expect(away.messages(refused.body.threadId).at(-1)!.content).toBe(appLookNotSeenLine('denied', 'ios'));
   });
 });
 
