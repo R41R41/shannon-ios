@@ -49,6 +49,8 @@ export interface AutonomyLoopConfig {
   sessionNoPlanRestMilliseconds: number;
   /** The output ceiling of a thinking step in a session. The model's own reasoning counts against it, so it is wider than a cycle's 1,500. */
   sessionThinkOutputTokens: number;
+  /** `low`: a thinking step asks the provider to spend little of its output ceiling on reasoning. `default`: the field is not sent. */
+  planReasoning: 'low' | 'default';
   /** Her thinking may draw on the owner's context through the conversation's memory entry points (owner decision 2026-10-02). */
   ownerContext: boolean;
   /** Characters of that context in a thinking prompt; a message of hers gets half. */
@@ -82,7 +84,8 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     maximumStepsPerSession: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_STEPS, 2, 200, 40),
     sessionsPerDay: integer(environment.SHANNON_AUTONOMY_SESSIONS_PER_DAY, 1, 48, 12),
     ...restBounds(environment),
-    sessionThinkOutputTokens: integer(environment.SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS, 1_500, 8_000, 4_000),
+    sessionThinkOutputTokens: clamped(environment.SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS, 1_500, 8_000, 4_000),
+    planReasoning: environment.SHANNON_AUTONOMY_PLAN_REASONING?.trim() === 'default' ? 'default' as const : 'low' as const,
     ownerContext: environment.SHANNON_AUTONOMY_OWNER_CONTEXT?.trim() !== 'off',
     ownerContextCharacters: integer(environment.SHANNON_AUTONOMY_OWNER_CONTEXT_CHARACTERS, 400, 8_000, 2_400),
   });
@@ -99,7 +102,8 @@ function restBounds(environment: Readonly<Record<string, string | undefined>>): 
   const minimum = integer(environment.SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES, 1, 720, 10);
   const maximum = Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_MAX_REST_MINUTES, 1, 24 * 60, 720));
   const fallback = Math.min(maximum, Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES, 1, 24 * 60, 150)));
-  const noPlan = Math.min(maximum, Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES, 1, 24 * 60, 30)));
+  // Never longer than the default rest: it is the shorter of the two.
+  const noPlan = Math.min(fallback, Math.max(minimum, integer(environment.SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES, 1, 24 * 60, 30)));
   return { sessionMinimumRestMilliseconds: minimum * 60_000, sessionMaximumRestMilliseconds: maximum * 60_000, sessionDefaultRestMilliseconds: fallback * 60_000, sessionNoPlanRestMilliseconds: noPlan * 60_000 };
 }
 
@@ -131,6 +135,12 @@ function readingSeeds(raw: string | undefined): readonly { title: string; url: s
   } catch {
     return DEFAULT_READING_SEEDS;
   }
+}
+
+/** A whole number held inside the range; anything that is not a whole number is the fallback. */
+function clamped(value: string | undefined, minimum: number, maximum: number, fallback: number): number {
+  const parsed = value?.trim() ? Number(value) : Number.NaN;
+  return Number.isInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
 }
 
 function integer(value: string | undefined, minimum: number, maximum: number, fallback: number): number {

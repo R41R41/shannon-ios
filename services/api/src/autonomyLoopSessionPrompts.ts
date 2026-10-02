@@ -29,7 +29,7 @@ export const UNPLANNED_HEADER = '[さっき考えた時のこと]（次の一歩
 
 const UNPLANNED_ACTION: Readonly<Record<string, string>> = Object.freeze({
   read: 'read', notion: 'notion', note: 'note', draft: 'draft', revise: 'revise', ready: 'ready', put_away: 'put_away', copy: 'copy', look: 'look',
-  follow_up: 'follow_up', jot: 'jot', reach_out: 'reach_out', other: '知らない action',
+  follow_up: 'follow_up', jot: 'jot', reach_out: 'reach_out', show: 'ready', other: '知らない action',
 });
 const UNPLANNED_WHY: Readonly<Record<string, string>> = Object.freeze({
   unknown_piece: 'pieceId の物語が書斎に見つからなかった。「書斎: 物語」の ( ) の中の id をそのまま書く',
@@ -37,6 +37,8 @@ const UNPLANNED_WHY: Readonly<Record<string, string>> = Object.freeze({
   not_copyable: 'その pieceId のものは、写しを置けるものではなかった',
   not_listed: '「読めそうな場所」にない住所だった。そこにある住所をそのまま書く',
   bad_address: '住所が読める形ではなかった',
+  study_full: '書斎の物語がいっぱいで、新しく書けなかった。先にどれかを ready にするか put_away でしまう',
+  already_read: 'もう読んだページだった。ほかのページを選ぶ',
   limit: '読める回数を使い切っていた', nothing_read: 'メモにする読み物がなかった。先に read する', secret: '内緒のことが入っていたので、使えなかった',
   incomplete: '必要な項目が足りなかった', unavailable: 'できない一歩だった',
 });
@@ -81,6 +83,8 @@ export interface SessionFacts {
   /** What a new story draft usually costs, for saying what the remainder is worth. */
   draftYen?: number;
   remainingReads: number;
+  /** What the gate makes room for before a thinking step begins: its upper estimate, more than a thought usually costs. */
+  thinkReserveYen?: number;
   /** Her study holds as many open stories as it may: a new draft has no room until one is shown or put away. */
   studyFull?: number;
   /** How the session before this one ended. */
@@ -93,6 +97,7 @@ const STOPPED: Readonly<Record<Exclude<SessionEndCode, 'rest'>, string>> = Objec
   session_steps: '一度にできる歩数の上限に届いて止まった（自分で休んだのではない）',
   budget: 'その日の予算に収まらない一歩があって、そこで止まった',
   no_plan: '次の一歩が決まらなかったので、そこで終わった',
+  idle: '考えたが次の一歩が決まらず、何もしないまま終わった',
 });
 
 export function yen(value: number): string {
@@ -123,6 +128,7 @@ export function sessionFactsSection(facts: SessionFacts): string {
     ...(facts.session.heldMinutes >= 1 ? [`- この時間の途中で、手を止めていた（約${duration(facts.session.heldMinutes)}）。${SHANNON_OWNER_NAME}が話していたか、止められていたあいだのこと。計画はそのまま残っていた。`] : []),
     `- 動いた回数: この日はこれで${Math.max(1, facts.sessionsToday)}回目（1日${facts.sessionsPerDay}回まで）。`,
     ...(facts.typical.length ? [`- 一歩にかかるお金のめやす: ${facts.typical.map(item => `${item.label} ${about(item.yen)}`).join('、')}。公開ページを読むこと自体は0円。`] : []),
+    ...(facts.thinkReserveYen !== undefined ? [`- 考える一歩を始めるには、約${Math.ceil(facts.thinkReserveYen).toLocaleString('en-US')}円の空きが要る（使うのは、ふつうそれより少ない）。`] : []),
     `- 読める回数: 今日あと${Math.max(0, facts.remainingReads)}回`,
     ...(facts.studyFull ? [`- 書斎の物語: 開いているものが${facts.studyFull}個で、いっぱい。新しく draft するには、先にどれかを ready にするか put_away でしまう。`] : []),
     ...(previous ? [`- 前の時間: ${previous.endedClock}に、${previous.code === 'rest'
@@ -136,7 +142,7 @@ export function restSummary(input: { forced?: Exclude<SessionEndCode, 'rest'>; r
   if (!input.forced) return `ここで一区切りにしました。${next}${input.reason ? `「${input.reason}」` : ''}`;
   const why: Readonly<Record<Exclude<SessionEndCode, 'rest'>, string>> = {
     session_budget: '一度に使える金額の上限に届いたので', session_time: '一度に動ける時間の上限に届いたので',
-    session_steps: '一度にできる歩数の上限に届いたので', budget: '今日の予算に収まらなかったので', no_plan: '次の一歩が決まらなかったので',
+    session_steps: '一度にできる歩数の上限に届いたので', budget: '今日の予算に収まらなかったので', no_plan: '次の一歩が決まらなかったので', idle: '次の一歩が決まらなかったので',
   };
   return `${why[input.forced]}、ここで一区切りにしました。${next}`;
 }
@@ -144,5 +150,5 @@ export function restSummary(input: { forced?: Exclude<SessionEndCode, 'rest'>; r
 /** Neutral status text for the owner's screens. */
 export const SESSION_END_LABEL: Readonly<Record<SessionEndCode, string>> = Object.freeze({
   rest: '自分で一区切りにしました', session_budget: '一度に使える金額の上限で止まりました', session_time: '一度に動ける時間の上限で止まりました',
-  session_steps: '一度にできる歩数の上限で止まりました', budget: '今日の予算に収まらず止まりました', no_plan: '次の一歩が決まらず終わりました',
+  session_steps: '一度にできる歩数の上限で止まりました', budget: '今日の予算に収まらず止まりました', no_plan: '次の一歩が決まらず終わりました', idle: '次の一歩が決まらず、何もせず終わりました',
 });

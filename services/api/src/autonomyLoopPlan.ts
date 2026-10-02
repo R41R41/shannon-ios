@@ -134,9 +134,11 @@ export function reasonedPlan(
     const pursuitId = string(item?.pursuitId, 80);
     const pursuit = pursuitId && pursuitIds.has(pursuitId) ? { pursuitId } : {};
     const named = string(item?.pieceId, 80);
-    // In a session, revising or showing "the story" needs no id while her study holds exactly one: she means that one.
-    // An id she did name is never replaced, also when it is wrong.
-    const pieceId = named ?? (bounds.session && stories.size === 1 && (action === 'revise' || action === 'ready') ? [...stories.keys()][0]! : null);
+    // In a session, revising "the story" needs no id while her study holds exactly one draft: she means that one.
+    // An id she did write is never replaced, also when it is wrong or not a string: only a missing `pieceId` is filled in,
+    // only for `revise`, and only while her one story is a draft.
+    const only = stories.size === 1 ? [...stories.values()][0]! : null;
+    const pieceId = named ?? (bounds.session && action === 'revise' && only?.status === 'draft' && item !== null && !('pieceId' in item) ? only.id : null);
     if (action === 'read' || (action === 'notion' && bounds.notionAvailable)) {
       if (reads >= bounds.maximumReads) return 'limit';
       if (action === 'read') {

@@ -10,7 +10,8 @@ import { createOwnerContext } from '../src/autonomyOwnerContext.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
 import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/autonomyTextModel.js';
-import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
+import { planFromThought } from '../src/autonomyLoopPlan.js';
+import { FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**
  * She paces her own day (owner decision 2026-10-02, Syzygy ADR-0003): a session runs until she rests, she says when
@@ -92,11 +93,41 @@ describe('a session: she runs until she decides to rest', () => {
     // One thought, two more inside the re-think limit, then the closing step.
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think', 'think', 'think']);
-    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'no_plan' });
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
     // Nothing was done, so she comes back after the short rest, not the long default.
     expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
     expect(entries().find(entry => entry.tool === 'study.rest' && entry.kind === 'action')?.summary).toBe('次の一歩が決まらなかったので、ここで一区切りにしました。次は10:30ごろに考えます。');
     expect(entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action').map(entry => [entry.outcome, entry.reasonCode])).toEqual([['done', 'empty_plan'], ['done', 'empty_plan'], ['done', 'empty_plan']]);
+  });
+
+  it('does not let sessions that did nothing use up the day, and does not come back every half hour when the cause stays', async () => {
+    const { loop, model, store, advance, clock, service } = sessions({ loop: { sessionsPerDay: 2, maximumRethinksPerCycle: 0 } });
+    const idle = async () => { model.plans = [{ thought: 'うーん。', steps: [] }]; return runUntilIdle(loop); };
+    const started = clock.at;
+    // The first idle session: a short rest. The next one is idle too: the long default, so a cause that stays is met rarely.
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
+    advance(30 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+    advance(150 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+    // Three sessions were begun and none of them counts: the day's two sessions are still hers.
+    expect(model.kinds()).toHaveLength(3);
+    expect(store.loop.sessions.startedOn(scope, '2026-10-02')).toBe(0);
+    expect(service.overview(scope).session).toMatchObject({ state: 'resting', endCode: 'idle', endLabel: '次の一歩が決まらず、何もせず終わりました' });
+    advance(150 * MINUTE);
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, rest(10)] }];
+    expect((await runUntilIdle(loop)).at(-1)).toBe('cycle-ended');
+    expect(store.loop.sessions.startedOn(scope, '2026-10-02')).toBe(1);
+    // After a session that did something, an idle one is again followed by the short rest.
+    advance(10 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
+    // In the worst case of a whole day of idle sessions she thinks about ten times, not thirty-six.
+    expect((24 * 60 - 30) / 150).toBeLessThan(10);
+    expect(Date.parse(clock.at)).toBeGreaterThan(Date.parse(started));
   });
 
   it('thinks again when a step fails, with what happened in front of her, and her new plan replaces the old one', async () => {
@@ -115,7 +146,7 @@ describe('a session: she runs until she decides to rest', () => {
     model.plans = ['これはJSONではありません'];
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think']);
-    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'no_plan' });
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
   });
 });
 
@@ -165,20 +196,70 @@ describe('a session: a thought that leads to no step', () => {
     expect(model.calls[0]!.maximumOutputTokens).toBe(4_000);
   });
 
-  it('charges and names a reply whose whole ceiling went to the model\'s own reasoning, and thinks once more', async () => {
-    const { loop, model, entries, service } = sessions();
-    let first = true;
-    model.during = kind => {
-      if (kind === 'think' && first) { first = false; throw new AutonomyModelError('AUTONOMY_MODEL_TRUNCATED', { inputTokens: 4_600, outputTokens: 4_000 }); }
-    };
-    model.plans = [{ thought: '休みます。', steps: [rest(60)] }];
-    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
-    expect(thinks(entries)).toEqual([['failed', 'truncated'], ['done', undefined]]);
-    // (4,600 + 4,000) tokens at 10 USD a million and 160 yen: 13.76 yen for the reply that never came, counted once,
-    // beside the 2.24 yen of the thought that followed.
+  it('charges and names a reply whose whole ceiling went to the model\'s own reasoning, and does not ask again at the same ceiling', async () => {
+    const { loop, model, entries, service, store } = sessions();
+    model.during = kind => { if (kind === 'think') throw new AutonomyModelError('AUTONOMY_MODEL_TRUNCATED', { inputTokens: 4_600, outputTokens: 4_000 }); };
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    // No hint of hers can make the model reason less: one call, named, charged once, and the session ends.
+    expect(model.kinds()).toEqual(['think']);
+    expect(thinks(entries)).toEqual([['failed', 'truncated']]);
+    // (4,600 + 4,000) tokens at 10 USD a million and 160 yen: 13.76 yen for the reply that never came.
     expect(entries().find(entry => entry.reasonCode === 'truncated')!.costYen).toBe(13.76);
-    expect(service.overview(scope).budget.spentYen).toBe(16);
-    expect(model.prompts('think')[1]).toContain('- 返事が途中で切れた。');
+    expect(service.overview(scope).budget.spentYen).toBe(13.76);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+  });
+
+  it('asks the provider for little reasoning in a thinking step, and in no other step', async () => {
+    const low = sessions();
+    low.model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, rest(60)] }];
+    await runUntilIdle(low.loop);
+    expect(low.model.calls.map(call => [callKind(call), call.reasoning])).toEqual([['think', 'low'], ['draft', undefined]]);
+    // The fixed cycles send the same field: nothing else of the request changes.
+    const cycles = loopHarness();
+    await runUntilIdle(cycles.loop);
+    expect(cycles.model.calls.map(call => [call.reasoning, call.maximumOutputTokens])).toEqual([['low', 1_500]]);
+    const plain = sessions({ loopEnvironment: { SHANNON_AUTONOMY_PLAN_REASONING: 'default' } });
+    await runUntilIdle(plain.loop);
+    expect('reasoning' in plain.model.calls[0]!).toBe(false);
+  });
+
+  it('thinks once more, told why, when the steps she planned could not be carried out when their turn came', async () => {
+    const lines: string[] = [];
+    const { loop, model, store, entries } = sessions({ log: line => lines.push(line) });
+    for (let index = 0; index < 12; index += 1) store.study.create(scope, { kind: 'story', title: `話${index}`, body: '本文。'.repeat(60), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    store.loop.addReading(scope, { url: 'https://www.aozora.gr.jp/', title: '青空文庫', text: '', links: [] }, '2026-10-01T00:00:00.000Z');
+    store.loop.markReadingNoted(scope, store.loop.unnotedReadings(scope)[0]!.id, '2026-10-01T00:00:00.000Z');
+    model.plans = [
+      // A draft with her study full, and a page she has read already: both are planned and neither can be done.
+      { thought: '書いて、読みます。', pursuits: [{ op: 'add', kind: 'question', title: '傘は誰のものか', why: '気になるからです。' }], steps: [{ action: 'draft', idea: '傘の話' }, { action: 'read', url: 'https://www.aozora.gr.jp/' }] },
+      { thought: '休みます。', steps: [rest(60)] },
+    ];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'think']);
+    expect(model.prompts('think')[1]).toContain([
+      '[さっき考えた時のこと]（次の一歩が決まらなかった理由。事実だけ）',
+      '- draft は、書斎の物語がいっぱいで、新しく書けなかった。先にどれかを ready にするか put_away でしまう。',
+      '- read は、もう読んだページだった。ほかのページを選ぶ。',
+      '- できる一歩を選び直す。',
+    ].join('\n'));
+    expect(lines).toEqual(['plan unprepared:draft.study_full,read.already_read']);
+    expect(store.loop.steps(store.loop.sessions.latestClosed(scope)!.cycleId)[1]!.step).toEqual({ kind: 'think', again: true, dropped: ['draft.study_full', 'read.already_read'] });
+    // That first thought did plan steps, so what it wrote in her ledger stands.
+    expect(store.pursuits.list(scope, '2026-10-02T02:00:00.000Z').map(item => item.title)).toContain('傘は誰のものか');
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest' });
+    expect(entries().filter(entry => entry.kind === 'action' && entry.tool === 'study.draft')).toEqual([]);
+  });
+
+  it('writes nothing in her ledger from a thought that is about to be thought again', async () => {
+    const { loop, model, store } = sessions();
+    model.plans = [
+      { thought: 'うーん。', pursuits: [{ op: 'add', kind: 'question', title: '捨てられる問い', why: '気になるからです。' }], steps: [] },
+      { thought: '休みます。', pursuits: [{ op: 'add', kind: 'question', title: '残る問い', why: '気になるからです。' }], steps: [rest(60)] },
+    ];
+    await runUntilIdle(loop);
+    const titles = store.pursuits.list(scope, '2026-10-02T02:00:00.000Z').map(item => item.title);
+    expect(titles).toContain('残る問い');
+    expect(titles).not.toContain('捨てられる問い');
   });
 
   it('says which steps could not be done and why, when every step she named is dropped', async () => {
@@ -233,17 +314,22 @@ describe('a session: a thought that leads to no step', () => {
     store.close(); persistent.close();
   });
 
-  it('never replaces an id she named, and takes her only story for put_away only when she names it', async () => {
+  it('takes her only story for a revise that names none, and for nothing else: not for another action, a wrong or malformed id, or a story that is no draft', async () => {
     const { loop, model, store, entries } = sessions();
     const draft = store.study.create(scope, { kind: 'story', title: '傘のある駅', body: '本文。'.repeat(80), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
     if (typeof draft === 'string') throw new Error(draft);
     model.plans = [
-      { thought: 'しまいます。', steps: [{ action: 'put_away' }, { action: 'ready', pieceId: 'some-other-id' }, { action: 'revise', pieceId: 'some-other-id', aim: '終わり' }] },
+      { thought: 'しまいます。', steps: [{ action: 'put_away' }, { action: 'ready' }, { action: 'ready', pieceId: 'some-other-id' }, { action: 'revise', pieceId: 'some-other-id', aim: '終わり' }, { action: 'revise', pieceId: '', aim: '終わり' }, { action: 'revise', pieceId: 12, aim: '終わり' }] },
       { thought: '休みます。', steps: [rest(60)] },
     ];
     await runUntilIdle(loop);
     expect(store.study.get(scope, draft.id)).toMatchObject({ status: 'draft', version: 1 });
     expect(thinks(entries)[0]).toEqual(['done', 'all_steps_filtered:put_away.unknown_piece,ready.unknown_piece,revise.unknown_piece']);
+    // Once she has called it ready it is no longer a draft she means by "the story".
+    const known = { pursuits: [], pieces: [{ ...store.study.get(scope, draft.id)!, status: 'ready' as const }], unnotedReadingIds: [] };
+    const bounds = { maximumSteps: 5, maximumReads: 2, notionAvailable: false, session: true };
+    expect(planFromThought({ steps: [{ action: 'revise', aim: '終わり' }] }, known, bounds).steps).toEqual([]);
+    expect(planFromThought({ steps: [{ action: 'revise', aim: '終わり' }] }, { ...known, pieces: [store.study.get(scope, draft.id)!] }, bounds).steps).toEqual([{ kind: 'revise', pieceId: draft.id, intent: '終わり' }]);
   });
 
   it('does not ask a provider that did not answer again at once', async () => {
@@ -252,7 +338,7 @@ describe('a session: a thought that leads to no step', () => {
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think']);
     expect(thinks(entries)).toEqual([['failed', 'model_failed']]);
-    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'no_plan' });
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
   });
 
   it('takes the short rest only after a session that did nothing but think', async () => {
@@ -578,10 +664,13 @@ describe('a session: restart and a second runner', () => {
 
 describe('a session: she sees her budget as facts', () => {
   it('ends every thinking prompt with the day\'s budget, this session\'s use, what a step costs, the time, and when the day starts again', async () => {
-    const { loop, model, service, clock } = sessions({ clock: { at: '2026-10-02T05:05:00.000Z' } });
+    const { loop, model, service, clock, store } = sessions({ clock: { at: '2026-10-02T05:05:00.000Z' } });
     model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }, { thought: '読みます。', steps: [read('a')] }, { thought: '休みます。', steps: [rest(120)] }];
     expect(await loop.tick()).toBe('stepped');
     const first = model.calls[0]!;
+    const reserve = Number(/約(\d+)円の空きが要る/u.exec(first.prompt)![1]);
+    const step = store.loop.steps(store.loop.openCycle(scope)!.id)[0]!;
+    const asked = (step.estimate!.inputTokens + step.estimate!.outputTokens) * 0.0016;
     // Nothing has been spent: the estimates come from the price list.
     expect(facts(first.prompt)).toBe([
       '[いまのこと・お金のこと]（サーバーが数えた事実）',
@@ -591,8 +680,12 @@ describe('a session: she sees her budget as facts', () => {
       '- この時間: 14:05に始めて、ここまで0歩、0円使った。この時間のうちに使えるのはあと400円、あと39歩、あと約40分。',
       '- 動いた回数: この日はこれで1回目（1日12回まで）。',
       '- 一歩にかかるお金のめやす: 考える 約12円、読んだもののメモ 約9円、物語を書く 約10円、物語を直す 約13円。公開ページを読むこと自体は0円。',
+      `- 考える一歩を始めるには、約${reserve}円の空きが要る（使うのは、ふつうそれより少ない）。`,
       '- 読める回数: 今日あと200回',
     ].join('\n'));
+    // The amount she is shown is what the gate was asked to make room for, within a yen: the estimate of this very prompt.
+    expect(reserve).toBeGreaterThan(12);
+    expect(Math.abs(reserve - asked)).toBeLessThanOrEqual(1);
     // The facts are the last thing in the prompt, and the two lines that used to open it are gone.
     expect(first.prompt.endsWith(facts(first.prompt))).toBe(true);
     expect(first.prompt).not.toMatch(/\[いま\] |\[今日の残り\]/u);
@@ -626,14 +719,14 @@ describe('a session: she sees her budget as facts', () => {
   it('never shows more for the session than the day has left, and says when her study has no room for another story', async () => {
     const { loop, model, store } = sessions({ environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '90' } });
     for (let index = 0; index < 12; index += 1) store.study.create(scope, { kind: 'story', title: `話${index}`, body: '本文。'.repeat(60), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
-    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }];
-    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }, { thought: '休みます。', steps: [rest(60)] }];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
     const told = facts(model.calls[0]!.prompt);
     expect(told).toContain('- 今日の予算: 90円。ここまでに0円使って、あと90円（物語の下書き約8回分）。');
     expect(told).toContain('この時間のうちに使えるのはあと90円、');
     expect(told).toContain('- 書斎の物語: 開いているものが12個で、いっぱい。新しく draft するには、先にどれかを ready にするか put_away でしまう。');
-    // The draft that could not be kept was not asked for and not paid for.
-    expect(model.kinds()).toEqual(['think']);
+    // The draft that could not be kept was not asked for and not paid for; she thought again instead.
+    expect(model.kinds()).toEqual(['think', 'think']);
   });
 
   it('words the facts in meaning: what the remainder is worth, how the last session ended, and small amounts', () => {
@@ -754,6 +847,12 @@ describe('a session: what a day can cost', () => {
     for (const value of ['Cycles', 'cycle', 'off', 'anything']) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: value }).pacing, value).toBe('cycles');
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: ' sessions ' }).pacing).toBe('sessions');
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_OWNER_CONTEXT: 'off' }).ownerContext).toBe(false);
+    // An output ceiling outside its range is held to the range; the no-plan rest is never longer than the default rest.
+    expect(loop).toMatchObject({ sessionThinkOutputTokens: 4_000, sessionNoPlanRestMilliseconds: 30 * MINUTE, planReasoning: 'low' });
+    for (const [value, tokens] of [['1000', 1_500], ['9000', 8_000], ['2500', 2_500], ['many', 4_000]] as const) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS: value }).sessionThinkOutputTokens, value).toBe(tokens);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600' }).sessionNoPlanRestMilliseconds).toBe(150 * MINUTE);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '60' }).sessionNoPlanRestMilliseconds).toBe(60 * MINUTE);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: 'default' }).planReasoning).toBe('default');
     // A default rest outside the bounds is held inside them.
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES: '30', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '5' }).sessionDefaultRestMilliseconds).toBe(30 * MINUTE);
   });

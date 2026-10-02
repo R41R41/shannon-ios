@@ -8,8 +8,11 @@ import type { DatabaseSync } from 'node:sqlite';
  * gave in her own words. What a session spent is not kept here: it is the sum of the spend rows of
  * the steps it journalled, so a restart cannot count a step twice or lose one.
  */
-export const SESSION_END_CODES = ['rest', 'session_budget', 'session_time', 'session_steps', 'budget', 'no_plan'] as const;
-/** `rest`: she chose to. Every other code is a bound that stopped her. */
+export const SESSION_END_CODES = ['rest', 'session_budget', 'session_time', 'session_steps', 'budget', 'no_plan', 'idle'] as const;
+/**
+ * `rest`: she chose to. Every other code is a bound that stopped her. `idle` is a `no_plan` end of a session that did
+ * nothing but think: it is not counted among the sessions of its day, and a second one in a row is followed by the long rest.
+ */
 export type SessionEndCode = typeof SESSION_END_CODES[number];
 export const AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS = 120;
 
@@ -100,10 +103,10 @@ export class AutonomyLoopSessions {
     return row ? session(row) : null;
   }
 
-  /** Sessions begun on the owner-local day. */
+  /** Sessions begun on the owner-local day, not counting those that ended without doing anything but think. */
   startedOn(scopeKey: string, dayKey: string): number {
     const row = this.database.prepare(`
-      SELECT COUNT(*) AS count FROM autonomy_loop_sessions WHERE scope_key = ? AND day_key = ?
+      SELECT COUNT(*) AS count FROM autonomy_loop_sessions WHERE scope_key = ? AND day_key = ? AND COALESCE(end_code, '') <> 'idle'
     `).get(scopeKey, dayKey) as unknown as { count: number };
     return Number(row.count);
   }

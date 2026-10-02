@@ -5,7 +5,7 @@ import type { ObservedStepKind } from './autonomyLoopObservations.js';
 import { agenticLoop, followUpsRemaining, ownerRepliedAt, reachOutChain, thinkingSteps } from './autonomyLoopObserve.js';
 import { reachOutMemories, reachOutMemoryExtras, rethinkExtras } from './autonomyLoopObservePrompts.js';
 import type { OwnerContextBlock } from './autonomyLoopOwnerContext.js';
-import { sessionFacts, sessionOf } from './autonomyLoopPacing.js';
+import { mayRetryThought, sessionFacts, sessionOf } from './autonomyLoopPacing.js';
 import { SESSION_RULES, restAction, sessionFactsSection, unplannedSection } from './autonomyLoopSessionPrompts.js';
 import { reasonedPlan, thinkingMaterials, type ReasonedThought } from './autonomyLoopPlan.js';
 import { salvagedModelObject, thinkingPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
@@ -119,33 +119,36 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
   const base = rethink.extras ?? memory;
   // The thought before this one led to no step: she is told why, as fixed sentences.
   const unplanned = session && again && step.dropped?.length ? unplannedSection(step.dropped) : null;
+  const facts = (thinkReserveYen?: number) => sessionFacts(dependencies, cycle, session!, at, {
+    budget: overview.budget, remainingReads: materials.remainingReads,
+    openStories: materials.stories.filter(story => story.statusLabel !== STUDY_STATUS_LABEL.shown).length, maximumOpenStories: STUDY_LIMITS.openStories,
+    offered: { look: materials.lookAvailable === true, reachOut: Boolean(materials.reachOut) }, ...(thinkReserveYen !== undefined ? { thinkReserveYen } : {}),
+  });
   // Without a session and without the owner's context the extras are what they were, and so is the prompt.
-  const extras: ThinkingExtras | null = session || owned ? {
+  const extrasWith = (reserveYen?: number): ThinkingExtras | null => session || owned ? {
     actions: base?.actions ?? '', examples: base?.examples ?? '', sections: [...(base?.sections ?? []), ...(unplanned ? [unplanned] : [])],
     rules: [...(base?.rules ?? []), ...(session ? SESSION_RULES : [])],
     ...(session ? {
       rest: restAction({ minimumMinutes: Math.round(loop.sessionMinimumRestMilliseconds / 60_000), maximumMinutes: Math.round(loop.sessionMaximumRestMilliseconds / 60_000) }),
-      closing: [sessionFactsSection(sessionFacts(dependencies, cycle, session, at, {
-        budget: overview.budget, remainingReads: materials.remainingReads,
-        openStories: materials.stories.filter(story => story.statusLabel !== STUDY_STATUS_LABEL.shown).length, maximumOpenStories: STUDY_LIMITS.openStories,
-        offered: { look: materials.lookAvailable === true, reachOut: Boolean(materials.reachOut) },
-      }))],
+      closing: [sessionFactsSection(facts(reserveYen))],
     } : {}),
     ...(owned ? { ownerContext: owned.section } : {}),
   } : base;
-  const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, extras), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
-  if (!call) return null;
+  const priced = (reserveYen?: number) => paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials, extrasWith(reserveYen)), session ? loop.sessionThinkOutputTokens : OUTPUT_TOKENS);
+  // In a session she is told what the gate reserves for a thought: the estimate of this very prompt, priced once without that line.
+  const first = priced();
+  const estimated = first && session ? priced(first.estimatedCostYen) : first;
+  if (!estimated) return null;
+  // A planning reply must fit the ceiling: the provider is asked to spend little of it on its own reasoning.
+  const call = loop.planReasoning === 'low' ? { ...estimated, reasoning: 'low' as const } : estimated;
   /**
    * In a session a thought that led to no step is not the end: she thinks once more, told why, as long as the thoughts in a
    * row stay inside the re-think limit. After that the plan stays empty and the session rests.
    */
   const thinkAgain = (codes: readonly string[]): AutonomyPlannedStep[] | null => {
-    if (!session) return null;
-    const taken = store.loop.steps(cycle.id);
-    let row = 0;
-    for (let index = taken.length - 1; index >= 0 && taken[index]!.step.kind === 'think'; index -= 1) row += 1;
-    // This thought is journalled but not yet counted in `cycle`: after it there must be room for the next thought and one step of it.
-    return codes.length && row <= loop.maximumRethinksPerCycle && loop.maximumStepsPerSession - cycle.stepsTaken >= 3 ? [{ kind: 'think', again: true, dropped: [...new Set(codes)].slice(0, 8) }] : null;
+    if (!session || !codes.length) return null;
+    // This thought is journalled but not yet counted in `cycle`.
+    return mayRetryThought(dependencies, cycle, cycle.stepsTaken + 1) ? [{ kind: 'think', again: true, dropped: [...new Set(codes)].slice(0, 8) }] : null;
   };
   const noted = (code: string) => { try { dependencies.log?.(`think ${code}`); } catch { /* the log is optional */ } return code; };
   return {
@@ -168,8 +171,9 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
           // Under the fixed cycles the two sentences are the ones they were.
           summary: session && called.truncated ? '考えましたが、返事が途中で切れて、次の一歩にまとまりませんでした。' : failure ? '考えようとしましたが、モデルから返事をもらえませんでした。' : '考えましたが、次の一歩にまとまりませんでした。',
           commit: remaining => {
-            // A reply she can do better is asked for once more. A provider that did not answer is not asked again at once: that would only spend.
-            const retry = remaining.length || code === 'model_failed' ? null : thinkAgain([`reply.${code}`]);
+            // A reply she can do better is asked for once more. A provider that did not answer, or that spent the whole ceiling
+            // on its own reasoning and wrote nothing, is not asked again at once: no hint of hers can change that.
+            const retry = remaining.length || code === 'model_failed' || (code === 'truncated' && !called.text) ? null : thinkAgain([`reply.${code}`]);
             return retry ? { plan: retry } : undefined;
           },
         };
@@ -192,12 +196,13 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
         outcome: 'done', usage, ...(code ? { reasonCode: noted(code) } : {}),
         summary: thought.text ? `${words}「${thought.text}」` : words,
         commit: (_remaining, commitAt) => {
-          for (const change of thought.pursuits) {
+          const retry = unplannable && maximumSteps > 0 ? thinkAgain(salvaged ? ['reply.truncated'] : thought.asked === 0 ? ['reply.empty'] : thought.dropped) : null;
+          // A thought that is about to be thought again changes nothing in her ledger: the next one decides.
+          for (const change of retry ? [] : thought.pursuits) {
             if (change.op === 'add') service.addPursuit(cycle.scopeKey, { kind: change.kind!, title: change.title!, why: change.why!, origin: 'self' });
             else service.updatePursuit(cycle.scopeKey, change.id!, { ...(change.status ? { status: change.status } : {}), ...(change.why ? { why: change.why } : {}) });
           }
           if ((agentic || session) && !again) store.loop.observations.prune(cycle.scopeKey, new Date(Date.parse(commitAt) - OBSERVATION_RETENTION_MILLISECONDS).toISOString());
-          const retry = unplannable && maximumSteps > 0 ? thinkAgain(salvaged ? ['reply.truncated'] : thought.asked === 0 ? ['reply.empty'] : thought.dropped) : null;
           return { plan: retry ?? thought.steps };
         },
       };

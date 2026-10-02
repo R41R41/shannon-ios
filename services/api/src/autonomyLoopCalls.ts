@@ -8,7 +8,7 @@ import { AutonomyModelError, resolveAutonomyModel, type AutonomyTextModel } from
  * One paid model call of a step: which model, what the gate is asked to make room for, and the call itself.
  * Shared by the step kinds so each prices and charges a call the same way.
  */
-export interface PaidCall { model: string; estimate: { inputTokens: number; outputTokens: number }; estimatedCostYen: number; prompt: AutonomyPrompt; maximumOutputTokens: number }
+export interface PaidCall { model: string; estimate: { inputTokens: number; outputTokens: number }; estimatedCostYen: number; prompt: AutonomyPrompt; maximumOutputTokens: number; /** A planning call asks the provider for little reasoning. */ reasoning?: 'low' }
 
 /** Null when no usable model serves the purpose or its price is unknown. */
 export function paidCall(dependencies: StepDependencies, scopeKey: string, purpose: AutonomyModelPurpose, prompt: AutonomyPrompt, maximumOutputTokens: number): PaidCall | null {
@@ -26,7 +26,7 @@ export async function callModel(adapters: { model?: AutonomyTextModel }, call: P
   if (!adapters.model) return { reply: null, failure: 'AUTONOMY_STEP_NOT_BOUND' };
   try {
     const result = await adapters.model.generate({
-      model: call.model, system: call.prompt.system, prompt: call.prompt.prompt, maximumOutputTokens: call.maximumOutputTokens, signal,
+      model: call.model, system: call.prompt.system, prompt: call.prompt.prompt, maximumOutputTokens: call.maximumOutputTokens, ...(call.reasoning ? { reasoning: call.reasoning } : {}), signal,
     });
     const reply = parsedModelObject(result.text);
     return { reply, usage: result.usage, ...(result.truncated ? { truncated: true } : {}), ...(reply ? {} : { text: result.text }) };

@@ -76,7 +76,7 @@ const loopConfig = configuredAutonomyLoop(process.env);
 const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
 const loop = new ShannonAutonomyLoop({
-  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env),
+  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
