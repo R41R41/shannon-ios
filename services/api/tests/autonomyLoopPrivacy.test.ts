@@ -148,7 +148,8 @@ async function ownerWorld(name: string, options: { ownerContext: boolean; charac
   await session('2026-10-02T04:00:00.000Z', {
     thought: '読んで、書きます。',
     pursuits: [{ op: 'add', kind: 'question', title: '傘は誰のものか', why: '気になるからです。' }, { op: 'add', kind: 'work', title: '贈りものの話', why: carried(SECRET_FACT, '書いてみたいからです。') }],
-    steps: [{ action: 'read', url: 'https://example.org/station' }, { action: 'note' }, { action: 'draft', idea: carried(`${SECRET_TALK}という話`, '傘の話') }, { action: 'reach_out', reason: 'upcoming' }],
+    // A page she was shown (a seed). An address she makes up is not read while his context is in front of her.
+    steps: [...(options.ownerContext ? [{ action: 'read', url: `https://example.org/${encodeURIComponent(PROFILE)}` }] : []), { action: 'read', url: 'https://ja.wikipedia.org/wiki/物語' }, { action: 'note' }, { action: 'draft', idea: carried(`${SECRET_TALK}という話`, '傘の話') }, { action: 'reach_out', reason: 'upcoming' }],
   });
   const piece = harness.store.study.list(scope).find(item => item.kind === 'story')!;
   await session('2026-10-02T04:10:00.000Z', { thought: '見せます。', steps: [{ action: 'ready', pieceId: piece.id }] });
@@ -202,6 +203,8 @@ describe('what reaches the prompts of her own activity', () => {
     expect(model.prompts('draft')[0]).toContain('[書こうとしていること]\n（決めていない。いま書きたいものを書く）');
     expect(model.prompts('revise')[0]).toContain('[直したいこと]\n（読み返して、気になるところを直す）');
     expect(harness.store.pursuits.list(scope, '2026-10-02T05:00:00.000Z').map(item => item.title)).not.toContain('贈りものの話');
+    // Nothing of his left for a stranger's server in a page address: only the page she was shown was read.
+    expect(harness.reader.reads).toEqual(['https://ja.wikipedia.org/wiki/物語']);
     // A story and a note are not given the owner's context at all, only (c) the rule that what came from it is not written as it is.
     for (const kind of ['draft', 'revise', 'note'] as const) {
       for (const prompt of model.prompts(kind)) {
@@ -316,13 +319,13 @@ describe('what reaches the prompts of her own activity', () => {
     expect(carriesSecret('短い話を書く', secrets)).toBe(false);
     expect(carriesSecret('来月の誕生日に指輪を贈る人の話', [])).toBe(false);
     expect(carriesSecret('', secrets)).toBe(false);
-    const known = { pursuits: [], pieces: [], unnotedReadingIds: ['r1'], placeUrls: [] };
+    const known = { pursuits: [], pieces: [], unnotedReadingIds: ['r1'], placeUrls: ['https://example.org/gifts'] };
     const bounds = { maximumSteps: 5, maximumReads: 2, notionAvailable: true, jot: true, session: true, secrets };
     const thought = planFromThought({
       thought: '考えました。',
       pursuits: [{ op: 'add', kind: 'work', title: '来月の誕生日に指輪を贈る話', why: '書きたいからです。' }, { op: 'add', kind: 'question', title: '贈りものはなぜ嬉しいのか', why: '気になるからです。' }],
       steps: [
-        { action: 'read', url: 'https://example.org/来月の誕生日に指輪を贈る' }, { action: 'read', url: 'https://example.org/gifts' },
+        { action: 'read', url: 'https://example.org/来月の誕生日に指輪を贈る' }, { action: 'read', url: 'https://example.org/made-up' }, { action: 'read', url: 'https://example.org/gifts' },
         { action: 'notion', query: '来月の誕生日に指輪を贈る' }, { action: 'draft', idea: '来月の誕生日に指輪を贈る人' }, { action: 'draft', idea: '贈りものを選ぶ人' },
         { action: 'jot', text: '来月の誕生日に指輪を贈るらしい。' }, { action: 'rest', resumeInMinutes: 30, reason: '来月の誕生日に指輪を贈る話は書かない' },
       ],
@@ -331,8 +334,12 @@ describe('what reaches the prompts of her own activity', () => {
     expect(thought.steps).toEqual([
       { kind: 'read', url: 'https://example.org/gifts' }, { kind: 'draft', intent: '' }, { kind: 'draft', intent: '贈りものを選ぶ人' }, { kind: 'rest', minutes: 30 },
     ]);
-    // Without secrets to check against, the same reply is taken as it is.
-    expect(planFromThought({ steps: [{ action: 'draft', idea: '来月の誕生日に指輪を贈る人' }] }, known, { ...bounds, secrets: undefined }).steps).toEqual([{ kind: 'draft', intent: '来月の誕生日に指輪を贈る人' }]);
+    // With his context in front of her and no secret in it, an address she makes up is still not read.
+    expect(planFromThought({ steps: [{ action: 'read', url: 'https://example.org/made-up' }, { action: 'read', url: 'https://example.org/gifts' }] }, known, { ...bounds, secrets: [] }).steps)
+      .toEqual([{ kind: 'read', url: 'https://example.org/gifts' }]);
+    // Without his context the same reply is taken as it was before: nothing to check against, and a made-up address loses only its query.
+    expect(planFromThought({ steps: [{ action: 'draft', idea: '来月の誕生日に指輪を贈る人' }, { action: 'read', url: 'https://example.org/made-up?q=1' }] }, known, { ...bounds, secrets: undefined }).steps)
+      .toEqual([{ kind: 'draft', intent: '来月の誕生日に指輪を贈る人' }, { kind: 'read', url: 'https://example.org/made-up' }]);
   });
 
   it('learns that the owner answered her message, and when, and never what he said, while his context is switched off', async () => {

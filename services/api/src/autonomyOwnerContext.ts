@@ -45,8 +45,13 @@ const LINE_CHARACTERS = 200;
 const MESSAGE_CHARACTERS = 190;
 const RECENT_THREADS = 2;
 const MARKER = /【機微:[^】]*】/gu;
+/** How many texts her free text is checked against, and how much of each. What she was just shown comes first. */
+const SECRETS_MAXIMUM = 2_000;
+const SECRET_CHARACTERS = 2_000;
 
 type Mode = 'thinking' | 'message' | 'message_others';
+/** The gate of a message, and the words of what her thinking was shown that this gate withholds. */
+interface Unspeakable { gate: DisclosureGate; words: string[] }
 
 export function createOwnerContext(sources: OwnerContextSources, options: { characters: number; timeZone: string }): AutonomyOwnerContext {
   const build = (scopeKey: string, at: string, topic: string, mode: Mode): OwnerContextBlock | null => {
@@ -57,17 +62,24 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
     const present: MemoryAudience = alone ? OWNER_AUDIENCE : UNKNOWN_GUEST_PRESENCE;
     const budget = Math.max(0, alone ? options.characters : Math.floor(options.characters / 2));
     const gate = new DisclosureGate(present, state, sources.conversations, scopeKey);
+    // What her thinking is shown that a message could never carry: collected while the block is built, for the check of her own free text.
+    const unspeakable: Unspeakable | null = alone ? { gate: new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, sources.conversations, scopeKey), words: [] } : null;
     // A marker tells her to check before she speaks; without anyone else present there is nothing to check.
     const shown = (text: string) => (marked ? text : text.replace(MARKER, ''));
     const parts = [
       part('〈覚えていること〉', guarded(() => about(sources, gate, state, scopeKey, alone, marked)), budget * SHARE.about),
-      part('〈最近のふたりの会話（古い順）〉', guarded(() => talk(sources, state, scopeKey, present, marked, budget * SHARE.talk, options.timeZone)), budget * SHARE.talk, 'newest'),
-      part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone).map(shown)), budget * SHARE.recalled),
+      part('〈最近のふたりの会話（古い順）〉', guarded(() => talk(sources, state, scopeKey, present, marked, budget * SHARE.talk, options.timeZone, unspeakable)), budget * SHARE.talk, 'newest'),
+      part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone, unspeakable).map(shown)), budget * SHARE.recalled),
       ...(alone ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic)), budget * SHARE.people)] : []),
       part('〈今日の関心〉', guarded(() => focus(sources, gate, scopeKey, at, options.timeZone, marked)), budget * SHARE.focus),
     ].filter(Boolean);
     if (!parts.length) return null;
-    return { section: [OWNER_CONTEXT_HEADER, ...parts].join('\n'), secrets: alone ? guarded(() => secrets(sources, state, scopeKey)) : [] };
+    const section = [OWNER_CONTEXT_HEADER, ...parts].join('\n');
+    if (!unspeakable) return { section, secrets: [] };
+    // Without the list of what must reach nobody else her free text could not be checked: then she is given no block at all.
+    try {
+      return { section, secrets: secrets(sources, state, scopeKey, unspeakable) };
+    } catch { return null; }
   };
   return {
     forThinking: (scopeKey, at, topic) => build(scopeKey, at, topic, 'thinking'),
@@ -132,12 +144,13 @@ function projectionAnswers(projection: string): { question: string; answer: stri
 }
 
 /** The newest messages of the most recent Talks, through the replay the reply model gets: forgetting and disclosure first, a character budget second. */
-function talk(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience, marked: boolean, characters: number, timeZone: string): string[] {
+function talk(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, present: MemoryAudience, marked: boolean, characters: number, timeZone: string, unspeakable: Unspeakable | null): string[] {
   const lines: string[] = [];
   let left = Math.floor(characters);
   for (const thread of sources.conversations.listThreads(scopeKey).slice(0, RECENT_THREADS)) {
     if (left < 40) break;
     const visible = visibleReplayMessages(state, sources.conversations, scopeKey, thread.threadId, present, 60).messages;
+    for (const entry of unspeakable ? visible : []) if (!unspeakable!.gate.allowsMessage(entry.message)) unspeakable!.words.push(entry.message.content);
     // With someone else present the user side carries the marker the gate gave it; otherwise the stored words as they are.
     const items: ShannonConversationItem[] = visible.map(entry => ({ role: entry.message.role, content: marked ? entry.item.content : entry.message.content }));
     const window = replayWindow(items, {
@@ -154,13 +167,14 @@ function talk(sources: OwnerContextSources, state: CompanionStateSnapshot, scope
 }
 
 /** Memories that fit what she is pursuing, by the deterministic recall of a turn: no model, the same gates. */
-function recalled(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, at: string, topic: string, present: MemoryAudience, timeZone: string): string[] {
+function recalled(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, at: string, topic: string, present: MemoryAudience, timeZone: string, unspeakable: Unspeakable | null): string[] {
   if (!topic.trim()) return [];
   const peopleRecall = sources.people?.recall(scopeKey, state, topic, present);
   const context = prepareTurnCognitiveContext(state, sources.conversations, {
     scopeKey, message: topic, occurredAt: at, channel: 'text', present, timeZone, locationLabels: [],
     ...(peopleRecall ? { additionalCandidates: peopleRecall.candidates } : {}),
   });
+  for (const memory of unspeakable ? context.memories : []) if (!unspeakable!.gate.allowsRecallId(memory.id)) unspeakable!.words.push(memory.summary);
   return context.memories.map(memory => `- (${memory.observedAt.slice(0, 10)}) ${memory.summary}`);
 }
 
@@ -186,20 +200,23 @@ function focus(sources: OwnerContextSources, gate: DisclosureGate, scopeKey: str
 
 /**
  * The words of everything that must reach nobody but the owner, by the rule a conversation with an unnamed guest
- * applies: items and turns that rule withholds. They are returned for checking her own free text and nothing else.
+ * applies: what her thinking was just shown that this rule withholds, then every stored item, recent turn and person
+ * memory it withholds. They are returned for checking her own free text and nothing else.
  */
-function secrets(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string): string[] {
-  const gate = new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, sources.conversations, scopeKey);
+function secrets(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, unspeakable: Unspeakable): string[] {
+  const { gate } = unspeakable;
   const items = [
     ...state.userFacts.filter(item => !gate.allows(item.id, item.disclosure)).flatMap(item => [item.statement, item.evidence ?? '']),
     ...state.relationships.filter(item => !gate.allows(item.id, item.disclosure)).flatMap(item => [item.statement, item.evidence ?? '']),
     ...state.prospectiveMemories.filter(item => !gate.allows(item.id, item.disclosure)).map(item => item.summary),
   ];
-  const turns = sources.conversations.experienceCandidates(scopeKey).filter(turn => !gate.allows(turn.id, turn.disclosure))
+  // A turn is withheld with its own label, and also when a secret was in front of her when she answered it.
+  const turns = sources.conversations.experienceCandidates(scopeKey).filter(turn => !gate.allowsTurn(turn))
     .flatMap(turn => [turn.userMessage, turn.shannonReply]);
   const told = sources.people ? sources.people.recall(scopeKey, state, '', OWNER_AUDIENCE).items
     .filter(item => !gate.allows(item.recallId, item.disclosure)).map(item => item.text) : [];
-  return [...items, ...turns, ...told].map(text => text.trim()).filter(Boolean).slice(0, 200).map(text => text.slice(0, 600));
+  return [...new Set([...unspeakable.words, ...items, ...turns, ...told].map(text => text.trim()).filter(Boolean))]
+    .slice(0, SECRETS_MAXIMUM).map(text => text.slice(0, SECRET_CHARACTERS));
 }
 
 function clip(value: string, maximum: number): string {

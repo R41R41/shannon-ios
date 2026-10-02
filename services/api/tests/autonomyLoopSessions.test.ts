@@ -467,10 +467,12 @@ describe('a session: with the owner\'s context', () => {
     persistent.appendTurn(scope, persistent.threadId(scope), '今日は夕方の駅で写真を撮ってきました。', 'いいですね、ライ氏。どんな光でしたか。', '2026-10-02T00:30:00.000Z');
     persistent.apply(scope, { type: 'user-fact-upserted', source: 'sleep', fact: { id: 'photo', statement: 'ユーザーは写真を撮るのが好き', confidence: 0.9, observedAt: clock.at, evidence: '写真' } });
     const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
-    const { loop, model, store } = sessions({ path, clock, ownerContext });
-    model.plans = [{ thought: '読んで、書きます。', steps: [read('station'), { action: 'draft', idea: '駅で写真を撮る人' }] }, { thought: '休みます。', steps: [rest(120, 'つづきは夕方に')] }];
+    const { loop, model, store, reader } = sessions({ path, clock, ownerContext });
+    // With his context in front of her she reads only pages she was shown: a seed here, never an address she makes up.
+    model.plans = [{ thought: '読んで、書きます。', steps: [read('made-up'), { action: 'read', url: 'https://www.aozora.gr.jp/' }, { action: 'draft', idea: '駅で写真を撮る人' }] }, { thought: '休みます。', steps: [rest(120, 'つづきは夕方に')] }];
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'stepped', 'stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think', 'note', 'draft', 'think']);
+    expect(reader.reads).toEqual(['https://www.aozora.gr.jp/']);
     const [first, , draft, again] = model.calls;
     for (const call of [first!, again!]) {
       expect(call.prompt).toContain(`${OWNER_CONTEXT_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き\n〈最近のふたりの会話（古い順）〉\n（最後のやりとり: 10/2 9:30）\nライ氏: 今日は夕方の駅で写真を撮ってきました。\nボク: いいですね、ライ氏。どんな光でしたか。`);

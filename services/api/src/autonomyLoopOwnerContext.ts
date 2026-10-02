@@ -13,7 +13,9 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * What stays protected is what leaves her head. `ownerPrivateRule` is the one place that says so: whenever
  * owner-private material is in a prompt, or may have shaped what a prompt is given, the prompt carries its line.
  * Things the owner asked to keep secret reach her thinking only; `carriesSecret` keeps them out of every free
- * text of hers that a later prompt, a page address or a search would carry on.
+ * text of hers that a later prompt or a search would carry on. A page address she makes up is text sent to a
+ * stranger's server, so a thought made with the block in front of her reads only pages she was shown
+ * (`planFromThought`).
  */
 export interface OwnerContextBlock {
   /** The block as one prompt section, header included; within the configured size. */
@@ -49,14 +51,14 @@ export const OWNER_CONTEXT_MESSAGE_MATERIALS = `下の「${OWNER_CONTEXT_TITLE}�
  * have shaped what this prompt is given (an idea or a pursuit she wrote with it in front of her). Null when not:
  * the prompt is then what it was.
  *
- * - `thinking`: she may think with it; it does not go into anything she writes down for a work.
+ * - `thinking`: she may think with it; it does not go into anything she writes down for a work, and she reads only pages she was shown.
  * - `story`: a draft or a revision. Inspiration, never the thing itself, never recognisable.
  * - `message`: a message to the owner. She may touch on it, lightly, one thing at most.
  */
 export function ownerPrivateRule(kind: 'thinking' | 'story' | 'message', present: boolean): string | null {
   if (!present) return null;
   if (kind === 'thinking') {
-    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}がボクにだけ見せてくれていること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語の着想にしてもよいが、idea・aim・pursuits・text・query には、そのまま書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる形にしない。「内緒」「秘密」と言われたことは、考える時にだけ使い、どこにも書かない。`;
+    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}がボクにだけ見せてくれていること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語の着想にしてもよいが、idea・aim・pursuits・text・query には、そのまま書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる形にしない。「内緒」「秘密」と言われたことは、考える時にだけ使い、どこにも書かない。ページの住所（url）も外に出る言葉なので、read で読むのは下の「読めそうな場所」にあるページだけ。`;
   }
   if (kind === 'story') {
     return `- 「書こうとしていること」「直したいこと」や台帳には、${SHANNON_OWNER_NAME}と二人の時に知ったことから思いついたものがあるかもしれない。着想にしてよいが、そのまま物語に書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる名前や描写を入れない。`;

@@ -97,7 +97,9 @@ export function planFromThought(
     session?: boolean;
     /**
      * Words that must reach nobody but the owner, when her thinking was given his context. Free text of hers that repeats
-     * a run of them is dropped: an idea, an aim, a note, a search, a made-up address, a pursuit, her reason for resting.
+     * a run of them is dropped: an idea, an aim, a note, a search, a pursuit, her reason for resting. Present (also when
+     * empty) it means the thought was made with his context in front of her: then she reads only pages she was shown
+     * (a seed, a link she found), because an address she makes up is text sent to a stranger's server.
      */
     secrets?: readonly string[];
   },
@@ -129,7 +131,7 @@ export function planFromThought(
     if (action === 'read' || (action === 'notion' && bounds.notionAvailable)) {
       if (reads >= bounds.maximumReads) continue;
       if (action === 'read') {
-        const url = publicUrl(string(item?.url, 2_000), known.placeUrls ?? []);
+        const url = publicUrl(string(item?.url, 2_000), known.placeUrls ?? [], bounds.secrets !== undefined);
         if (!url || carriesSecret(readable(url), bounds.secrets)) continue;
         steps.push({ kind: 'read', url, ...pursuit });
       } else {
@@ -198,15 +200,17 @@ export function withNoteAfterReading(remaining: readonly AutonomyPlannedStep[], 
 
 /**
  * A page address the model asked for. One it was shown (a link she found, a seed) is taken as it is.
- * Any other loses its query string and must be short, so an address she makes up cannot carry text out.
+ * Any other loses its query string and must be short, so an address she makes up cannot carry text out;
+ * `shownOnly`: no address she makes up is taken at all.
  */
-function publicUrl(value: string | null, shown: readonly string[]): string | null {
+function publicUrl(value: string | null, shown: readonly string[], shownOnly = false): string | null {
   if (!value) return null;
   if (shown.includes(value)) return value;
   try {
     const url = new URL(value);
     if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) return null;
     if (shown.includes(url.href)) return url.href;
+    if (shownOnly) return null;
     url.search = '';
     url.hash = '';
     return url.href.length <= 300 ? url.href : null;
