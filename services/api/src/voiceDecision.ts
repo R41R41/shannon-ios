@@ -12,6 +12,8 @@ import {
   directChoiceValue, noulValue, optionalPositiveInteger, optionalProbability,
   normalizedConversationClass, probabilityValue, selectedSkills, shouldRespondToTurn,
 } from './voiceDecisionValues.js';
+import { roomLookAnswer, roomLookRouterQuestions, roomLookRouterSchema } from './voiceRoomLook.js';
+import { localTurnSilence, openAIReplyInstruction, replyRequiredQuestion, routerTurnState } from './voiceSilence.js';
 import { fallbackWaitingDirection, jevWaitingQuestions } from './voiceWaitingCue.js';
 
 export {
@@ -64,6 +66,7 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
 
   async decide(input: VoiceDecisionInput): Promise<VoiceTurnDecision> {
     const startedAt = this.nowMilliseconds();
+    const roomLook = roomLookRouterSchema(input);
     try {
       const response = await this.fetcher(this.endpoint, {
         method: 'POST',
@@ -76,10 +79,10 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
           instructions: [
             'You are Shannon\'s low-latency voice turn router. Return only the requested structured decision.',
             'Score every capability independently from 0 to 1. A score means the capability is materially required for an accurate and useful reply, not merely related.',
-            'Use no_response only for noise, abandoned fragments, or acknowledgements where silence is clearly natural. Choose the cheapest sufficient conversation class and a natural spoken affect and delivery.',
+            openAIReplyInstruction(input),
             'Estimate whether the speaker wants a concrete solution, and how long a useful spoken answer will take to begin.',
             'transcriptReliabilityProbability is semantic confidence that the literal transcript is coherent and trustworthy in the supplied recent context, NOT an acoustic confidence. Homophones, missing words, contradictions, uncertain names/numbers/negations lower it. Do not infer authorization from context.',
-            ...VOICE_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`),
+            ...VOICE_SKILLS.map(skill => `${skill}: ${skillInstructions[skill]}`), ...roomLook.instructions,
           ].join('\n'),
           input: JSON.stringify({
             utterance: input.transcript.slice(0, 8_000),
@@ -87,7 +90,7 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
             requested_location: input.requestedLocation,
             has_fresh_location: input.hasFreshLocation,
             recent_context: input.context ?? [],
-            raw_transcript: input.rawTranscript ?? input.transcript,
+            raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
           }),
           reasoning: { effort: 'none' },
           text: {
@@ -122,10 +125,11 @@ export class OpenAIVoiceDecisionGateway implements VoiceDecisionGateway {
                     }])),
                     required: [...VOICE_SKILLS],
                   },
+                  ...roomLook.properties,
                 },
                 required: [
                   'replyRequiredProbability', 'solutionWantedProbability', 'transcriptReliabilityProbability', 'conversationClass',
-                  'latencyClass', 'affect', 'affectIntensity', 'delivery', 'skillScores',
+                  'latencyClass', 'affect', 'affectIntensity', 'delivery', 'skillScores', ...roomLook.required,
                 ],
               },
             },
@@ -207,14 +211,8 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
             false: 'The reply can be accurate and useful without this capability.',
           },
         }]),
-        ['reply_required', {
-          type: 'noul',
-          instructions: 'Should Shannon produce a spoken reply to this utterance? False only for noise, a discarded fragment, or a conversational acknowledgement that naturally needs no response.',
-          criteria: {
-            true: 'A spoken response is expected or useful.',
-            false: 'Silence is the most natural response.',
-          },
-        }],
+        ...roomLookRouterQuestions(input),
+        ['reply_required', replyRequiredQuestion(input)],
         ['solution_wanted', {
           type: 'noul',
           instructions: 'Does the speaker primarily want a concrete answer, recommendation, plan, action, or problem solution rather than emotional presence or casual companionship?',
@@ -284,7 +282,7 @@ export class JevVoiceDecisionGateway implements VoiceDecisionGateway {
             requested_location: input.requestedLocation,
             has_fresh_location: input.hasFreshLocation,
             recent_context: input.context ?? [],
-            raw_transcript: input.rawTranscript ?? input.transcript,
+            raw_transcript: input.rawTranscript ?? input.transcript, ...routerTurnState(input),
           },
           questions,
         }),
@@ -370,7 +368,7 @@ function parsedOpenAIDecision(
     ...(value.transcriptReliabilityProbability === undefined ? {} : {
       transcriptReliabilityProbability: probabilityValue(value.transcriptReliabilityProbability),
     }),
-    shouldRespond: shouldRespondToTurn(conversationClass),
+    shouldRespond: shouldRespondToTurn(conversationClass), ...roomLookAnswer(value.roomLookProbability),
     replyRequiredProbability, solutionWantedProbability, conversationClass, latencyClass,
     affect, affectIntensity, delivery,
     waitingDirection: fallbackWaitingDirection(input, selected, affect, affectIntensity, delivery),
@@ -435,7 +433,7 @@ function parsedJevDecision(
       transcriptReliabilityProbability: noulValue(answerMap.transcript_reliable),
     }),
     conversationClass, latencyClass, affect, affectIntensity, delivery, waitingDirection,
-    selectedSkills: selected,
+    selectedSkills: selected, ...roomLookAnswer(answerMap.room_look),
     skillScores, elapsedMilliseconds: Math.max(0, Math.round(elapsedMilliseconds)),
   };
 }
@@ -448,7 +446,8 @@ function localDecision(
   const text = input.transcript.trim();
   const skillScores = emptySkillScores();
   applyMandatorySkillFloors(skillScores, input);
-  const acknowledgementOnly = /^(?:うん|はい|へえ|なるほど|そうなんだ|ふーん)[。！!…]*$/u.test(text);
+  // The local rules of silence (`voiceSilence.ts`); without turn facts, a bare acknowledgement as before.
+  const { quiet: acknowledgementOnly, silence } = localTurnSilence(input);
   const greeting = /^(?:おはよう|こんにちは|こんばんは|ただいま|おやすみ|またね|ありがとう|ありがと)[。！!…]*$/u.test(text);
   const selected = selectedSkills(skillScores, skillThreshold, input.participantMode);
   const complex = selected.length > 2 || text.length > 140
@@ -471,7 +470,7 @@ function localDecision(
       : conversationClass === 'skill_simple' ? 'under_10s' : 'over_10s';
   const affectIntensity = affect === 'neutral' ? 0.2 : affect === 'excited' ? 0.85 : 0.55;
   return {
-    source: 'fallback', shouldRespond: !acknowledgementOnly,
+    source: 'fallback', shouldRespond: !acknowledgementOnly, ...(silence ? { silence } : {}),
     replyRequiredProbability: acknowledgementOnly ? 0.1 : 0.9,
     solutionWantedProbability: solutionWanted ? 0.9 : 0.25,
     conversationClass, latencyClass, affect, affectIntensity, delivery,

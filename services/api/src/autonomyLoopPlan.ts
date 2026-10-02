@@ -31,6 +31,17 @@ export interface Thought {
   steps: readonly AutonomyPlannedStep[];
 }
 
+/** A thought with what became of the steps it named. */
+export interface ReasonedThought extends Thought {
+  /** Steps of the reply that were not taken, each as `<action>.<why>` from closed sets: never a word of the reply. */
+  dropped: readonly string[];
+  /** How many steps the reply named. */
+  asked: number;
+}
+
+/** The actions a thinking reply may name. */
+export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out'] as const;
+
 export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
   // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
   const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && (own || piece.origin !== 'reach_out'));
@@ -82,7 +93,13 @@ export function thinkingMaterials(
 }
 
 /** The reply of the thinking model as bounded, known steps. Unknown actions and unknown ids are dropped. */
-export function planFromThought(
+export function planFromThought(reply: Record<string, unknown>, known: Parameters<typeof reasonedPlan>[1], bounds: Parameters<typeof reasonedPlan>[2]): Thought {
+  const { text, pursuits, steps } = reasonedPlan(reply, known, bounds);
+  return { text, pursuits, steps };
+}
+
+/** The same, with a closed code for each step of the reply that was not taken. */
+export function reasonedPlan(
   reply: Record<string, unknown>,
   known: { pursuits: readonly ShannonPursuit[]; pieces: readonly StudyPiece[]; unnotedReadingIds: readonly string[]; placeUrls?: readonly string[] },
   bounds: {
@@ -103,46 +120,42 @@ export function planFromThought(
      */
     secrets?: readonly string[];
   },
-): Thought {
+): ReasonedThought {
   const own = (value: string | null): string | null => (value && carriesSecret(value, bounds.secrets) ? null : value);
   const pursuitIds = new Set(known.pursuits.map(item => item.id));
   const stories = new Map(known.pieces.filter(piece => piece.kind === 'story' && piece.status !== 'put_away').map(piece => [piece.id, piece]));
   const steps: AutonomyPlannedStep[] = [];
   let reads = 0;
   let pendingReading = known.unnotedReadingIds.length;
-  for (const raw of array(reply.steps)) {
-    const full = steps.length >= bounds.maximumSteps;
-    if (full && !bounds.session) break;
-    const item = object(raw);
-    const action = string(item?.action, 20);
+  const dropped: string[] = [];
+  const stepsAsked = array(reply.steps);
+  /** Takes one step of the reply into the plan, or says by a closed code why it cannot be done now. */
+  const take = (item: Record<string, unknown> | null, action: string | null): string | null => {
     const pursuitId = string(item?.pursuitId, 80);
     const pursuit = pursuitId && pursuitIds.has(pursuitId) ? { pursuitId } : {};
-    const pieceId = string(item?.pieceId, 80);
-    if (action === 'rest') {
-      // In a session her rest is the last step of the plan; whatever she wrote after it is dropped.
-      if (bounds.session) {
-        const minutes = Number(item?.resumeInMinutes);
-        const reason = own(string(item?.reason, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS));
-        steps.push({ kind: 'rest', ...(item?.resumeInMinutes != null && Number.isFinite(minutes) ? { minutes: Math.round(minutes) } : {}), ...(reason ? { intent: reason } : {}) });
-      }
-      break;
-    }
-    if (full) continue;
+    const named = string(item?.pieceId, 80);
+    // In a session, revising "the story" needs no id while her study holds exactly one draft: she means that one.
+    // An id she did write is never replaced, also when it is wrong or not a string: only a missing `pieceId` is filled in,
+    // only for `revise`, and only while her one story is a draft.
+    const only = stories.size === 1 ? [...stories.values()][0]! : null;
+    const pieceId = named ?? (bounds.session && action === 'revise' && only?.status === 'draft' && item !== null && !('pieceId' in item) ? only.id : null);
     if (action === 'read' || (action === 'notion' && bounds.notionAvailable)) {
-      if (reads >= bounds.maximumReads) continue;
+      if (reads >= bounds.maximumReads) return 'limit';
       if (action === 'read') {
         const url = publicUrl(string(item?.url, 2_000), known.placeUrls ?? [], bounds.secrets !== undefined);
-        if (!url || carriesSecret(readable(url), bounds.secrets)) continue;
+        if (!url) return bounds.secrets !== undefined ? 'not_listed' : 'bad_address';
+        if (carriesSecret(readable(url), bounds.secrets)) return 'secret';
         steps.push({ kind: 'read', url, ...pursuit });
       } else {
-        const query = own(string(item?.query, 200));
-        if (!query) continue;
+        const asked = string(item?.query, 200);
+        const query = own(asked);
+        if (!query) return asked ? 'secret' : 'incomplete';
         steps.push({ kind: 'notion', query, ...pursuit });
       }
       reads += 1;
       pendingReading += 1;
     } else if (action === 'note') {
-      if (pendingReading < 1) continue;
+      if (pendingReading < 1) return 'nothing_read';
       const readingId = string(item?.readingId, 80);
       steps.push({ kind: 'note', ...(readingId && known.unnotedReadingIds.includes(readingId) ? { readingId } : {}) });
       pendingReading -= 1;
@@ -156,8 +169,8 @@ export function planFromThought(
       steps.push({ kind: 'put_away', pieceId });
     } else if (action === 'copy' && bounds.folderAvailable) {
       // A named piece must be one she may show; without a name the step takes her newest such piece when it runs.
-      if (pieceId && !known.pieces.some(piece => piece.id === pieceId && copyableStudyPiece(piece))) continue;
-      steps.push({ kind: 'copy', ...(pieceId ? { pieceId } : {}) });
+      if (named && !known.pieces.some(piece => piece.id === named && copyableStudyPiece(piece))) return 'not_copyable';
+      steps.push({ kind: 'copy', ...(named ? { pieceId: named } : {}) });
     } else if (action === 'look' && bounds.lookAvailable && !steps.some(step => step.kind === 'look')) {
       // One look in a plan at most; the step checks again that the body is there when it runs.
       steps.push({ kind: 'look', ...(bounds.chainLook ? { chain: true as const } : {}) });
@@ -165,14 +178,39 @@ export function planFromThought(
       // The one second call after the message that got no answer: nothing of the reply but the action survives.
       steps.push({ kind: 'reach_out', reason: 'follow_up', originId: bounds.followUp.originId });
     } else if (action === 'jot' && bounds.jot && !steps.some(step => step.kind === 'jot')) {
-      const text = own(string(item?.text, AUTONOMY_JOT_MAXIMUM_CHARACTERS));
-      if (text) steps.push({ kind: 'jot', intent: text });
+      const asked = string(item?.text, AUTONOMY_JOT_MAXIMUM_CHARACTERS);
+      const text = own(asked);
+      if (!text) return asked ? 'secret' : 'incomplete';
+      steps.push({ kind: 'jot', intent: text });
     } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
       // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
       const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;
-      if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.reachOut.upcoming)) continue;
+      if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.reachOut.upcoming)) return 'incomplete';
       steps.push({ kind: 'reach_out', reason });
+    } else {
+      if (action === 'ready' && pieceId && stories.has(pieceId)) return 'not_draft';
+      return action === 'revise' || action === 'ready' || action === 'put_away' ? 'unknown_piece' : 'unavailable';
     }
+    return null;
+  };
+  for (const raw of stepsAsked) {
+    const full = steps.length >= bounds.maximumSteps;
+    if (full && !bounds.session) break;
+    const item = object(raw);
+    const action = string(item?.action, 20);
+    if (action === 'rest') {
+      // In a session her rest is the last step of the plan; whatever she wrote after it is dropped.
+      if (bounds.session) {
+        const minutes = Number(item?.resumeInMinutes);
+        const reason = own(string(item?.reason, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS));
+        steps.push({ kind: 'rest', ...(item?.resumeInMinutes != null && Number.isFinite(minutes) ? { minutes: Math.round(minutes) } : {}), ...(reason ? { intent: reason } : {}) });
+      }
+      break;
+    }
+    if (full) continue;
+    const why = take(item, action);
+    // The action is named only when it is one of hers: anything else the model wrote is not kept.
+    if (why && dropped.length < 8) dropped.push(`${PLANNABLE_ACTIONS.find(name => name === action) ?? 'other'}.${why}`);
   }
   const pursuits: ThoughtPursuitChange[] = [];
   for (const raw of array(reply.pursuits)) {
@@ -189,7 +227,7 @@ export function planFromThought(
     }
   }
   // What she thought goes into her record: with a secret in it, the record says only that she thought.
-  return { text: own(string(reply.thought, 240)) ?? '', pursuits, steps };
+  return { text: own(string(reply.thought, 240)) ?? '', pursuits, steps, dropped, asked: stepsAsked.length };
 }
 
 /** A read is always followed by its note, whatever the plan said. */

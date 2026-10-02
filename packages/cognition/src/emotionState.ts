@@ -4,6 +4,7 @@ import {
   type ShannonExpressiveEmotion,
 } from './types.js';
 import { accuracyOverrideApplies, supportOverrideFor } from './emotionOverrides.js';
+import { SHANNON_EMOTION_CONTINUITY } from './emotionTime.js';
 
 const EMOTION_SET = new Set<string>(SHANNON_EMOTION_KINDS);
 const PLAYFUL = new Set<ShannonEmotionKind>([
@@ -26,6 +27,48 @@ const NEGATIVE = new Set<ShannonEmotionKind>([
   'leftOut', 'lonely', 'sad', 'disappointed', 'hurt', 'anxious', 'regret', 'helpless',
   'lamenting', 'panic', 'blocked', 'tired', 'apologetic',
 ]);
+const POSITIVE = new Set<ShannonEmotionKind>([
+  'bright', 'playful', 'happy', 'fun', 'excited', 'ecstatic', 'relief', 'pride', 'gratitude', 'hope', 'affectionate',
+  'giggle', 'smug', 'bashful', 'hidingHappiness', 'triumphant', 'gentle', 'relaxed', 'content', 'quietCompanion', 'tender',
+]);
+/** The moment's reaction: startle-like kinds that are gone within minutes. */
+const REACTION = new Set<ShannonEmotionKind>([
+  'surprised', 'shocked', 'stunned', 'speechless', 'panic', 'scream', 'flustered', 'giggle',
+]);
+/**
+ * Kinds that are a state of hers with a cause between her and the owner, rather than a reaction or
+ * a tone of voice: expressed strongly toward the owner they stay underneath as her mood. Two groups
+ * are left out on purpose. Sadness, worry and regret are mostly her answer to the owner's bad news,
+ * and that must stay concern for him, not a low mood of her own. Bright, gentle, relaxed and the
+ * like are how a reply is delivered (a greeting is bright), and a tone must not cover a mood.
+ */
+const MOOD_LIKE = new Set<ShannonEmotionKind>([
+  'happy', 'excited', 'ecstatic', 'pride', 'gratitude', 'affectionate', 'tender',
+  'seriousAnger', 'annoyed', 'indignant', 'frustrated', 'jealous', 'sulky', 'leftOut', 'lonely', 'lightPossessive', 'hurt',
+]);
+
+/**
+ * Her answer to the owner rather than a feeling of her own: concern, protection, reassurance,
+ * apology, sympathy. A mood she is in, however strong, never keeps these from showing.
+ */
+const SUPPORT = new Set<ShannonEmotionKind>(['caring', 'protective', 'reassurance', 'apologetic', 'sad', 'anxious', 'regret']);
+
+export function isSupportEmotion(kind: ShannonEmotionKind): boolean {
+  return SUPPORT.has(kind);
+}
+
+/** -1 for an unpleasant feeling, 1 for a pleasant one, 0 for one that is neither. */
+export function shannonEmotionSign(kind: ShannonEmotionKind): -1 | 0 | 1 {
+  return NEGATIVE.has(kind) ? -1 : POSITIVE.has(kind) ? 1 : 0;
+}
+
+export function isReactionEmotion(kind: ShannonEmotionKind): boolean {
+  return REACTION.has(kind);
+}
+
+export function isMoodLikeEmotion(kind: ShannonEmotionKind): boolean {
+  return MOOD_LIKE.has(kind);
+}
 
 /**
  * Cues in Shannon's own completed reply. They describe how she just spoke, so
@@ -64,7 +107,12 @@ const FINAL_CUES: readonly { emotion: ShannonEmotionKind; pattern: RegExp }[] = 
 
 /** Below this carry-over a previous feeling no longer continues into a new turn. */
 export const SHANNON_EMOTION_CARRY_THRESHOLD = 0.28;
-const SETTLED_CAUSE = '前の気持ちは時間とともに落ち着いた';
+export const SHANNON_SETTLED_CAUSE = '前の気持ちは時間とともに落ち着いた';
+const REPLY_CAUSE = '生成した応答の内容と会話文脈';
+const PROVISIONAL_CAUSE = 'Jevの暫定判断と会話文脈';
+const CARRIED_CAUSE = '直前の感情が自然に続いている';
+/** The resolver's own wordings for a feeling that came from conversation; anything else names what happened (a touch). */
+export const SHANNON_CONVERSATION_CAUSES: readonly string[] = Object.freeze([REPLY_CAUSE, PROVISIONAL_CAUSE, CARRIED_CAUSE]);
 
 export const INITIAL_SHANNON_EXPRESSIVE_EMOTION: Readonly<ShannonExpressiveEmotion> = Object.freeze({
   primary: 'neutral', secondary: Object.freeze([]), intensity: 0.15,
@@ -73,6 +121,10 @@ export const INITIAL_SHANNON_EXPRESSIVE_EMOTION: Readonly<ShannonExpressiveEmoti
 });
 
 export interface ResolveShannonEmotionInput {
+  /**
+   * The stored feeling, carried to `now` here by the wall-clock rule; or a reading by
+   * `presentShannonFeeling` (it has `presentAt`), used as it stands and held against a weaker stimulus.
+   */
   previous?: ShannonExpressiveEmotion;
   provisionalPrimary: ShannonEmotionKind | string;
   provisionalIntensity: number;
@@ -80,6 +132,8 @@ export interface ResolveShannonEmotionInput {
   reply?: string;
   now: string;
   target?: string;
+  /** The caller already decided by `holdsShannonFeeling` that this stimulus replaces the present feeling (a touch). */
+  replaces?: boolean;
 }
 
 export function isShannonEmotionKind(value: string): value is ShannonEmotionKind {
@@ -104,6 +158,7 @@ export function normalizeShannonExpressiveEmotion(
     decay: clamp(emotion.decay, 0, 1), carryover: clamp(emotion.carryover, 0, 1),
     ...(emotion.updatedAt && Number.isFinite(Date.parse(emotion.updatedAt)) ? { updatedAt: emotion.updatedAt } : {}),
     ...(overrideReason ? { overrideReason } : {}),
+    ...(typeof emotion.awakeAt === 'number' && Number.isFinite(emotion.awakeAt) && emotion.awakeAt >= 0 ? { awakeAt: emotion.awakeAt } : {}),
   });
 }
 
@@ -138,6 +193,7 @@ export function restoreShannonExpressiveEmotion(
     ...(typeof row.updatedAt === 'string' ? { updatedAt: row.updatedAt } : {}),
     ...(typeof row.overrideReason === 'string'
       ? { overrideReason: row.overrideReason as ShannonExpressiveEmotion['overrideReason'] } : {}),
+    ...(typeof row.awakeAt === 'number' ? { awakeAt: row.awakeAt } : {}),
   });
 }
 
@@ -147,11 +203,15 @@ export function resolveShannonEmotionState(
   const transcript = compact(input.transcript, 2_000);
   const reply = compact(input.reply ?? '', 2_000);
   const combined = `${transcript}\n${reply}`;
-  const previous = input.previous ? carriedShannonEmotion(input.previous, input.now) : undefined;
+  // A reading is already the feeling at `now` on her awake clock; a stored feeling is carried by the wall-clock rule.
+  const reading = input.previous?.presentAt !== undefined;
+  const previous = input.previous ? (reading ? input.previous : carriedShannonEmotion(input.previous, input.now)) : undefined;
   let primary = isShannonEmotionKind(input.provisionalPrimary) ? input.provisionalPrimary : 'neutral';
   let intensity = clamp(input.provisionalIntensity, 0, 1);
+  const provisional = { primary, intensity };
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
-  let cause = reply ? '生成した応答の内容と会話文脈' : 'Jevの暫定判断と会話文脈';
+  let cause = reply ? REPLY_CAUSE : PROVISIONAL_CAUSE;
+  let fromCue = false;
 
   const support = supportOverrideFor(transcript);
   if (support === 'emergency') {
@@ -169,11 +229,14 @@ export function resolveShannonEmotionState(
     if (finalCue) {
       primary = finalCue.emotion;
       intensity = Math.max(intensity, 0.52);
-    } else if (primary === 'neutral' && previous && previous.primary !== 'neutral'
+      // Her own words name the feeling. Its strength was decided for this reply only when the same kind was decided at
+      // least as strongly as the cue's floor; a strength that comes from the floor alone is the cue's.
+      fromCue = provisional.primary !== primary || provisional.intensity < intensity;
+    } else if (!reading && primary === 'neutral' && previous && previous.primary !== 'neutral'
       && previous.carryover >= SHANNON_EMOTION_CARRY_THRESHOLD) {
       primary = previous.primary;
       intensity = Math.max(intensity, previous.intensity * previous.carryover);
-      cause = '直前の感情が自然に続いている';
+      cause = CARRIED_CAUSE;
     }
   }
 
@@ -184,7 +247,39 @@ export function resolveShannonEmotionState(
     cause = '事実・安全・記憶・進捗では遊びより正確さを優先する';
   }
 
-  const secondary = previous && previous.primary !== primary && previous.carryover >= 0.24
+  let strongerAgain = false;
+  if (reading && previous && previous.primary !== 'neutral') {
+    // The same feeling again, from a stimulus that is not stronger than what she feels, is that feeling going on:
+    // nothing is stored, so it can neither grow nor be raised back to this reading later. Only a stimulus that is
+    // itself stronger is a new feeling, at its own strength. A weaker stimulus of another kind does not replace it.
+    if (previous.primary === primary && !overrideReason) {
+      // A touch the caller already let through is felt as that touch, each time, at the touch's own strength.
+      if (!input.replaces) {
+        // What was decided for this reply, before the cue's floor: only that can be stronger than what she feels.
+        const decidedStrength = provisional.primary === primary ? provisional.intensity : 0;
+        // An unpleasant feeling toward the owner (what his apology eases) that her own words name, also to deny it, is
+        // that feeling going on whatever the cue's strength. Her concern, her apology and a pleasant feeling voiced
+        // again are felt anew for that reply, at the cue's strength.
+        const easable = shannonEmotionSign(primary) < 0 && !SUPPORT.has(primary);
+        // He eased it a moment ago: nothing short of its earlier height brings it back up.
+        const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
+        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable)) {
+          return continuedShannonEmotion(previous, primary, input.now);
+        }
+      }
+      strongerAgain = true;
+    } else if (previous.primary === primary) {
+      // The same override again (he is still in danger) is felt anew, at full strength.
+      strongerAgain = true;
+    } else if (!input.replaces && (holdsShannonFeeling(previous, { primary, intensity, overrideReason })
+      // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
+      || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
+      return continuedShannonEmotion(previous, primary, input.now);
+    }
+  }
+
+  const secondary = previous && previous.primary !== primary
+    && (reading ? previous.primary !== 'neutral' : previous.carryover >= 0.24)
     && !unsafeCombination(primary, previous.primary)
     ? [previous.primary]
     : [];
@@ -207,11 +302,59 @@ export function resolveShannonEmotionState(
     carryover,
     updatedAt: validTimestamp(input.now),
     ...(overrideReason ? { overrideReason } : {}),
+    ...(strongerAgain ? { continued: false } : {}),
+    ...(fromCue ? {} : { decided: true }),
   });
 }
 
 /**
- * The one carry-over rule shared by text and voice. A stored feeling loses
+ * Whether the feeling she has now stays when a new stimulus arrives. This is the one rule every
+ * writer of the feeling goes through (a reply in text or voice, a touch, her line about a touch):
+ * a feeling is not replaced by a weaker stimulus, which is kept as the secondary feeling instead.
+ * It gives way to a stimulus that is at least as strong, to one of the opposite sign that is
+ * strong in its own right, and to what she owes the owner: always to the overrides (emergency,
+ * grief, accuracy), and to her concern, reassurance, apology and sympathy for him when they are
+ * strong enough to show (0.30) and the present feeling is not itself held by an override.
+ * A touch additionally never displaces a feeling held for the owner's sake, and a feeling that
+ * itself came from a touch always gives way to the next touch.
+ */
+export function holdsShannonFeeling(
+  present: Pick<ShannonExpressiveEmotion, 'primary' | 'intensity' | 'overrideReason'> | undefined,
+  incoming: { primary: ShannonEmotionKind; intensity: number; overrideReason?: ShannonExpressiveEmotion['overrideReason'] | undefined },
+  touch?: { presentFromTouch: boolean },
+): boolean {
+  if (!present || present.primary === 'neutral' || present.intensity < SHANNON_EMOTION_CONTINUITY.settledBelow) return false;
+  if (incoming.overrideReason) return false;
+  if (SUPPORT.has(incoming.primary) && incoming.intensity >= 0.3 && !present.overrideReason) return false;
+  if (touch) {
+    if (touch.presentFromTouch) return false;
+    if (present.overrideReason) return true;
+  }
+  if (shannonEmotionSign(present.primary) * shannonEmotionSign(incoming.primary) < 0
+    && incoming.intensity >= SHANNON_EMOTION_CONTINUITY.contraryFrom) return false;
+  return present.intensity > incoming.intensity;
+}
+
+/** The present feeling goes on; the weaker stimulus is kept beside it as the feeling of the moment. */
+export function continuedShannonEmotion(
+  previous: ShannonExpressiveEmotion,
+  incoming: ShannonEmotionKind,
+  now: string,
+): ShannonExpressiveEmotion {
+  const { presentAt: _presentAt, ...kept } = previous;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, ...rest } = kept;
+  const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
+    ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
+    : previous.secondary;
+  return Object.freeze({
+    ...rest, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
+    continued: true,
+  });
+}
+
+/**
+ * The wall-clock carry-over rule, as it was before the awake clock: used for a stored feeling that
+ * has no awake stamp yet and under `clock: 'wall'`. A stored feeling loses
  * `decay` of carry-over per 30 minutes since it was last expressed (at most
  * 0.85), measured from `updatedAt` (older snapshots: `startedAt`).
  */
@@ -239,7 +382,7 @@ export function currentShannonEmotion(
   if (!carried || carried.primary === 'neutral' || carried.carryover < SHANNON_EMOTION_CARRY_THRESHOLD) {
     return Object.freeze({
       ...INITIAL_SHANNON_EXPRESSIVE_EMOTION,
-      cause: carried && carried.primary !== 'neutral' ? SETTLED_CAUSE : INITIAL_SHANNON_EXPRESSIVE_EMOTION.cause,
+      cause: carried && carried.primary !== 'neutral' ? SHANNON_SETTLED_CAUSE : INITIAL_SHANNON_EXPRESSIVE_EMOTION.cause,
       startedAt: validTimestamp(now),
     });
   }
@@ -249,27 +392,32 @@ export function currentShannonEmotion(
   return Object.freeze({ ...carried, intensity, visibility: visibilityFor(intensity) });
 }
 
-function visibilityFor(intensity: number): ShannonExpressiveEmotion['visibility'] {
+export function visibilityFor(intensity: number): ShannonExpressiveEmotion['visibility'] {
   return intensity < 0.3 ? 'hidden' : intensity < 0.62 ? 'subtle' : 'expressed';
 }
 
+/**
+ * `others`: the owner's own call while someone else can hear. A feeling she carries may have a cause
+ * that is his alone (what was said or done between the two of them), so the feeling may show and its
+ * cause is neither given to the model nor said.
+ */
 export function buildExpressiveEmotionPrompt(
   emotion: ShannonExpressiveEmotion,
-  audience: 'owner' | 'guest' = 'owner',
+  audience: 'owner' | 'guest' | 'others' = 'owner',
 ): string {
   return [
     '[Current expressive emotion — guidance, never a reason to fake facts]',
     `primary=${emotion.primary}; secondary=${emotion.secondary.join(',') || 'none'}; intensity=${emotion.intensity.toFixed(2)}; visibility=${emotion.visibility}`,
-    `target=${emotion.target}; cause=${emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
-    audience === 'owner'
-      ? 'Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.'
-      : 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.',
+    `target=${emotion.target}; cause=${audience === 'others' ? 'withheld while others can hear' : emotion.cause}; carryover=${emotion.carryover.toFixed(2)}; decay=${emotion.decay.toFixed(2)}`,
+    audience === 'guest'
+      ? 'Keep first person as ボク. This is a temporary guest session: do not assume the speaker is ライ氏 and do not address them as ライ氏. Let emotion shape wording and rhythm without naming the label.'
+      : `Keep first person as ボク and address the owner as ライ氏 when natural. Let emotion shape wording and rhythm without naming the label.${audience === 'others' ? ' Do not say why you feel this way while others can hear.' : ''}`,
     'Do not force advice when companionship is wanted. Jealousy, sulking, anger, and teasing must stay light, non-controlling, and never induce guilt.',
     'A harmless falsehood is allowed only as an obvious joke with immediate reveal; never use it for facts, people, memory, progress, safety, health, or money.',
   ].join('\n');
 }
 
-function emotionProfile(primary: ShannonEmotionKind, intensity: number): { valence: number; arousal: number } {
+export function emotionProfile(primary: ShannonEmotionKind, intensity: number): { valence: number; arousal: number } {
   const valence = NEGATIVE.has(primary) ? -0.25 - intensity * 0.55
     : primary === 'neutral' || primary === 'focused' || primary === 'cautious' ? 0
       : 0.18 + intensity * 0.62;
@@ -279,13 +427,13 @@ function emotionProfile(primary: ShannonEmotionKind, intensity: number): { valen
   return { valence: clamp(valence, -1, 1), arousal: clamp(arousal, 0, 1) };
 }
 
-function decayFor(primary: ShannonEmotionKind): number {
+export function decayFor(primary: ShannonEmotionKind): number {
   if (['panic', 'scream', 'shocked', 'surprised', 'giggle'].includes(primary)) return 0.82;
   if (['hurt', 'sad', 'lonely', 'affectionate', 'tender', 'quietCompanion'].includes(primary)) return 0.24;
   return 0.48;
 }
 
-function unsafeCombination(primary: ShannonEmotionKind, secondary: ShannonEmotionKind): boolean {
+export function unsafeCombination(primary: ShannonEmotionKind, secondary: ShannonEmotionKind): boolean {
   return (primary === 'protective' || primary === 'caring')
     && (PLAYFUL.has(secondary) || ATTACHMENT.has(secondary));
 }

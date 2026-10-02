@@ -99,13 +99,35 @@ export {
   type ShannonPresentMood,
 } from './replyEmotion.js';
 export { supportOverrideFor } from './emotionOverrides.js';
-export { deriveEmotionDelta, projectEmotionReaction } from './affect.js';
+export { SHANNON_MOOD_BASELINE, deriveEmotionDelta, projectEmotionReaction, soothingIn } from './affect.js';
+export {
+  SHANNON_EMOTION_CONTINUITY,
+  SHANNON_EMOTION_TIME,
+  advanceEmotionClock,
+  awakeTimeAt,
+  remainingShare,
+  type ShannonEmotionClockMode,
+  type ShannonEmotionTiming,
+} from './emotionTime.js';
+export {
+  lingeringFeelingLine,
+  lingeringMeaning,
+  lingeringStrength,
+  livingLingering,
+  moodBaseline,
+  presentShannonFeeling,
+  type ShannonFeelingState,
+} from './emotionContinuity.js';
 export {
   INITIAL_SHANNON_EXPRESSIVE_EMOTION,
   SHANNON_EMOTION_CARRY_THRESHOLD,
   buildExpressiveEmotionPrompt,
   carriedShannonEmotion,
   currentShannonEmotion,
+  holdsShannonFeeling,
+  normalizeShannonExpressiveEmotion,
+  isMoodLikeEmotion,
+  isReactionEmotion,
   isShannonEmotionKind,
   resolveShannonEmotionState,
   type ResolveShannonEmotionInput,
@@ -115,6 +137,7 @@ export {
   SHANNON_TOUCH_MOOD_RATE,
   SHANNON_TOUCH_MOOD_STEP,
   feelTouch,
+  holdsFeelingThroughTouch,
   isShannonTouchKind,
   isTouchFeeling,
   keepsFeelingThroughTouch,
@@ -202,6 +225,7 @@ export type {
 } from './types.js';
 export { SHANNON_EMOTION_KINDS, SHANNON_TOUCH_KINDS } from './types.js';
 export type { ShannonTouch, ShannonTouchKind } from './types.js';
+export type { ShannonEmotionClock, ShannonLingeringFeeling, ShannonLingeringSpan } from './types.js';
 export {
   OWNER_AUDIENCE,
   SENSITIVITY_CATEGORY_LABELS,

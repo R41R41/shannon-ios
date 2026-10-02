@@ -25,6 +25,11 @@ export interface AutonomyTextRequest {
   system: string;
   prompt: string;
   maximumOutputTokens: number;
+  /**
+   * `low`: ask the provider to spend little of the output ceiling on its own reasoning (a planning call, whose reply
+   * must fit). The field is sent per provider; one that refuses it is asked again without it, once, and not sent it again.
+   */
+  reasoning?: 'low';
   signal?: AbortSignal;
 }
 
@@ -32,6 +37,8 @@ export interface AutonomyTextResult {
   text: string;
   /** What the provider reported for this call. Output includes the model's own reasoning tokens. */
   usage: { inputTokens: number; outputTokens: number };
+  /** The provider stopped at the output ceiling: the text is cut off. Reasoning tokens count against that ceiling. */
+  truncated?: true;
 }
 
 export interface AutonomyTextModel {
@@ -48,6 +55,8 @@ export class AutonomyModelError extends Error {
 }
 
 interface ProviderOptions {
+  /** A fixed line for the service log; never anything of a request or a reply. */
+  log?: (line: string) => void;
   apiKey: string;
   endpoint?: string;
   fetcher?: typeof fetch;
@@ -56,7 +65,33 @@ interface ProviderOptions {
 
 const MODEL_ID = /^[A-Za-z0-9._-]{1,100}$/u;
 
+/**
+ * Sends a request with the reasoning field when asked to, and once more without it when the provider refuses the
+ * request as malformed (400 or 422): that field is the only thing the second request lacks. When the second request is
+ * accepted the model is remembered for the life of the process, so the refused request is made once. A refused request
+ * generates nothing and costs nothing.
+ */
+async function sendWithReasoning(
+  refused: Set<string>, request: AutonomyTextRequest, provider: string, log: ProviderOptions['log'], send: (reasoning: boolean) => Promise<Response>,
+): Promise<Response> {
+  const reasoning = request.reasoning === 'low' && !refused.has(request.model);
+  const response = await send(reasoning);
+  const malformed = (status: number) => status === 400 || status === 422;
+  if (!reasoning || !malformed(response.status)) return response;
+  // The refusal is not read: it may quote the request.
+  try { await response.body?.cancel(); } catch { /* nothing to release */ }
+  const second = await send(false);
+  // Only when the same request is accepted without the field was the field the cause. A request that is refused either
+  // way (too long, say) leaves the field in use.
+  if (!malformed(second.status)) {
+    refused.add(request.model);
+    try { log?.(`Shannon autonomy model: ${provider} ${request.model} refused the reasoning field; sending without it from now on`); } catch { /* the log is optional */ }
+  }
+  return second;
+}
+
 export class GeminiAutonomyTextModel {
+  private readonly reasoningRefused = new Set<string>();
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMilliseconds: number;
@@ -69,16 +104,20 @@ export class GeminiAutonomyTextModel {
 
   async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
     if (!MODEL_ID.test(request.model)) throw new AutonomyModelError('AUTONOMY_MODEL_INVALID');
-    const response = await this.fetcher(`${this.endpoint}/${request.model}:generateContent`, {
+    const response = await sendWithReasoning(this.reasoningRefused, request, 'google', this.options.log, reasoning => this.fetcher(`${this.endpoint}/${request.model}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': this.options.apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: request.system }] },
         contents: [{ role: 'user', parts: [{ text: request.prompt }] }],
-        generationConfig: { maxOutputTokens: request.maximumOutputTokens, responseMimeType: 'application/json' },
+        generationConfig: {
+          maxOutputTokens: request.maximumOutputTokens, responseMimeType: 'application/json',
+          // Reasoning tokens count against maxOutputTokens: a planning call asks for little of it.
+          ...(reasoning ? { thinkingConfig: { thinkingLevel: 'low' } } : {}),
+        },
       }),
       signal: signalFor(request.signal, this.timeoutMilliseconds),
-    });
+    }));
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const metadata = object(object(json)?.usageMetadata);
@@ -92,12 +131,15 @@ export class GeminiAutonomyTextModel {
     const text = Array.isArray(parts)
       ? parts.map(part => (object(part)?.thought === true ? '' : object(part)?.text)).filter((value): value is string => typeof value === 'string').join('')
       : '';
-    if (!text.trim()) throw new AutonomyModelError('AUTONOMY_MODEL_EMPTY', usage);
-    return { text, usage };
+    const truncated = Array.isArray(candidates) && object(candidates[0])?.finishReason === 'MAX_TOKENS';
+    // The whole ceiling went to reasoning: nothing was written, and the call is still charged.
+    if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
+    return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
 }
 
 export class OpenAIAutonomyTextModel {
+  private readonly reasoningRefused = new Set<string>();
   private readonly endpoint: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMilliseconds: number;
@@ -110,7 +152,7 @@ export class OpenAIAutonomyTextModel {
 
   async generate(request: AutonomyTextRequest): Promise<AutonomyTextResult> {
     if (!MODEL_ID.test(request.model)) throw new AutonomyModelError('AUTONOMY_MODEL_INVALID');
-    const response = await this.fetcher(this.endpoint, {
+    const response = await sendWithReasoning(this.reasoningRefused, request, 'openai', this.options.log, reasoning => this.fetcher(this.endpoint, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.options.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -119,17 +161,20 @@ export class OpenAIAutonomyTextModel {
         input: request.prompt,
         text: { format: { type: 'json_object' } },
         max_output_tokens: request.maximumOutputTokens,
+        // As the conversation's own calls to these models set it (`chatModel.ts`).
+        ...(reasoning ? { reasoning: { effort: 'low' } } : {}),
         store: false,
       }),
       signal: signalFor(request.signal, this.timeoutMilliseconds),
-    });
+    }));
     const json = await jsonBody(response);
     if (!response.ok) throw new AutonomyModelError(`AUTONOMY_MODEL_HTTP_${response.status}`);
     const reported = responseUsage(json);
     const usage = { inputTokens: reported.inputTokens, outputTokens: reported.outputTokens };
     const text = openAIOutputText(json);
-    if (!text.trim()) throw new AutonomyModelError('AUTONOMY_MODEL_EMPTY', usage);
-    return { text, usage };
+    const truncated = object(json)?.status === 'incomplete' && object(object(json)?.incomplete_details)?.reason === 'max_output_tokens';
+    if (!text.trim()) throw new AutonomyModelError(truncated ? 'AUTONOMY_MODEL_TRUNCATED' : 'AUTONOMY_MODEL_EMPTY', usage);
+    return { text, usage, ...(truncated ? { truncated: true as const } : {}) };
   }
 }
 
@@ -168,13 +213,14 @@ export function dedicatedAutonomyCredential(
 export function configuredAutonomyTextModel(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   fetcher?: typeof fetch,
+  log?: (line: string) => void,
 ): AutonomyModelRouter {
   const google = dedicatedAutonomyCredential('google', environment);
   const openai = dedicatedAutonomyCredential('openai', environment);
   const timeoutMilliseconds = boundedInteger(environment.SHANNON_AUTONOMY_MODEL_TIMEOUT_MS, 5_000, 180_000, 90_000);
   return new AutonomyModelRouter({
-    ...(google ? { google: new GeminiAutonomyTextModel({ apiKey: google, endpoint: environment.SHANNON_AUTONOMY_GEMINI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds }) } : {}),
-    ...(openai ? { openai: new OpenAIAutonomyTextModel({ apiKey: openai, endpoint: environment.SHANNON_AUTONOMY_OPENAI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds }) } : {}),
+    ...(google ? { google: new GeminiAutonomyTextModel({ apiKey: google, endpoint: environment.SHANNON_AUTONOMY_GEMINI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds, log }) } : {}),
+    ...(openai ? { openai: new OpenAIAutonomyTextModel({ apiKey: openai, endpoint: environment.SHANNON_AUTONOMY_OPENAI_ENDPOINT?.trim() || undefined, fetcher, timeoutMilliseconds, log }) } : {}),
   });
 }
 

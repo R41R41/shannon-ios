@@ -590,7 +590,8 @@ describe('voice', () => {
     expect(impressionBlock(alone)).toBe([IMPRESSION_HEADER,
       `- ライ氏は、${CUTE}（これまでに2回・最初は2日前・前回は昨日）／ボクの気持ち: ${PLEASED} ←いまの発言に重なっていそう`, IMPRESSION_INSTRUCTION].join('\n'));
     expect(alone).not.toContain('[Recalled memories');
-    const listening = await h.ownerVoice('今日も可愛いね', true);
+    // With someone listening she answers only when addressed (voiceSilence.ts), so he says her name.
+    const listening = await h.ownerVoice('シャノン、今日も可愛いね', true);
     expect(impressionBlock(listening)).toContain(`- 【機微:未分類・ライ氏だけが知っている】ライ氏は、${CUTE}`);
     await h.close();
   });

@@ -36,6 +36,8 @@ export interface AutonomyPlannedStep {
   again?: true;
   /** For `look`: chosen after a message of hers got no answer; she thinks once more with what she saw. */
   chain?: true;
+  /** For `think` with `again` in a session: why the thought before it led to no step, as closed codes (`autonomyLoopSessionPrompts.ts`). Never words of a reply. */
+  dropped?: readonly string[];
   /** For `rest`: in how many minutes she means to come back. The step holds it inside the bounds; `intent` is her reason. */
   minutes?: number;
   /** For `rest`: the bound that ended the session, when it was not her own decision. */

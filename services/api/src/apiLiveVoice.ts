@@ -58,11 +58,16 @@ import { applyGuestAddressing, guestAddressDecision, guestCallHistory, GUEST_CAL
 export { realtimeVoiceSessionProjection, type VoiceParticipantMode } from './voiceSessionProjection.js';
 import type { VoiceParticipantMode } from './voiceSessionProjection.js';
 import { companionPresentInstructions, ownerSaysCompanionPresent, speakTimePrivacyCheck } from './voiceCompanionPresence.js';
+import { emotionTiming, feelingBeforeTurn, stillFeltLine } from './companionPresence.js';
 import type { PeopleMemory } from './peopleMemory.js';
 import { DisclosureGate, sharedDailyFocus } from './memoryDisclosure.js';
 import { guestPeoplePrompt } from './peopleMemoryPrompts.js';
+import { voiceRoomLookTurn } from './voiceRoomLook.js';
+import { notHisWordsToHer, ownerVoiceTurnFacts, settleOwnerVoiceTurn } from './voiceSilence.js';
 
 interface LiveVoiceDependencies extends ConversationReadCapabilities, ConversationCommandDependencies {
+  /** Looking at the room through her body's camera (`voiceRoomLook.ts`); absent, a voice turn never looks. */
+  looks?: Parameters<typeof voiceRoomLookTurn>[0];
   personIdentities?: PersonIdentityStore;
   chatModel: ShannonChatModel;
   voiceDecision: VoiceDecisionGateway;
@@ -155,10 +160,14 @@ async function completeLiveVoiceDelegation(
   const address = temporaryGuest
     ? guestAddressDecision(transcript, guestCall, deviceContext?.userUtterance?.source) : null;
   const router = address && !address.respond ? new LocalVoiceDecisionGateway() : dependencies.voiceDecision;
+  // Owner call: what the moment looks like, for deciding whether she should speak at all (voiceSilence.ts).
+  // The turn in which he says that someone is with him is said to her; from the next one on she must be addressed.
+  const turnFacts = temporaryGuest ? undefined : ownerVoiceTurnFacts({ history: routingHistory, at: occurredAt, othersPresent: !alone && !ownerSaysCompanionPresent(transcript),
+    newest: dependencies.conversationStore.conversationHistory(scopeKey, threadId).at(-1), source: deviceContext?.userUtterance?.source, answersHer: reactionLine });
   let decision = await router.decide({
     // In a remembered 「友人も一緒」 call the same capabilities may be chosen as with the owner; what is said is checked at speak time.
     scopeKey, transcript, rawTranscript, participantMode: legacyGuest ? 'guest' : 'owner',
-    context: boundedVoiceHistory(routingHistory, 4),
+    context: boundedVoiceHistory(routingHistory, 4), ...(turnFacts ? { turn: turnFacts } : {}),
     requestedLocation: deviceContext?.requestedLocation ?? false,
     hasFreshLocation: deviceContext?.location !== null && deviceContext?.location !== undefined,
   });
@@ -167,10 +176,12 @@ async function completeLiveVoiceDelegation(
   const confirmedImplementationRequest = !alone || uncertainTranscript ? null
     : confirmedVoiceImplementationRequest(transcript, routingHistory,
       dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2), occurredAt);
-  if (uncertainTranscript && !decision.shouldRespond) {
-    decision = { ...decision, shouldRespond: true, conversationClass: 'direct' };
-  }
+  decision = settleOwnerVoiceTurn(decision, { transcript, facts: turnFacts, uncertain: uncertainTranscript });
   if (address) decision = applyGuestAddressing(decision, address);
+  // One look at the room: the same conditions as a text turn, chosen by the gateway or asked for in so many words (voiceRoomLook.ts).
+  // Judged at this instant, not at the turn's start: the body may have read presence while the router decided.
+  const roomLook = voiceRoomLookTurn(dependencies.looks, { scopeKey, transcript, at: dependencies.now(), threadId, turnId: deviceContext?.userUtterance?.id,
+    audience: alone && !temporaryGuest ? 'owner' : 'others', decision, uncertain: uncertainTranscript });
   // A turn that will search memory with a model is at least a >3 s turn, so the existing waiting phrase plays first.
   const semanticMemoryTurn = !legacyGuest && decision.shouldRespond && dependencies.memoryRecall?.willSearch({
     message: transcript, memoryTurn: decision.selectedSkills.includes('conversation_memory') }) === true;
@@ -179,14 +190,15 @@ async function completeLiveVoiceDelegation(
   // Notion is the owner's private material: read only when he is alone, by a fixed rule on his words.
   const notionTurn = alone && !temporaryGuest && decision.shouldRespond && asksAboutNotion(transcript);
   if (notionTurn && dependencies.notion?.connected) decision = withMemorySearchLatency(decision);
-  let orchestrationState = !alone || uncertainTranscript ? null : observeConversationTurn({
+  // A turn that was not his words to her (overheard, an echo, a fragment) writes no orchestration state and runs no command.
+  let orchestrationState = !alone || uncertainTranscript || notHisWordsToHer(decision) ? null : observeConversationTurn({
     previous: dependencies.conversationOrchestration.read(scopeKey, threadId),
     scopeKey, threadId, message: transcript, occurredAt, participantMode,
     tasks: dependencies.agentTasks.list(scopeKey),
   });
   if (orchestrationState) orchestrationState = dependencies.conversationOrchestration.save(orchestrationState);
   // Commands that act (tasks, notes, remember, forget, promises) run only for the owner alone.
-  const command = alone && !uncertainTranscript && deviceContext?.userUtterance
+  const command = alone && !uncertainTranscript && !notHisWordsToHer(decision) && deviceContext?.userUtterance
     ? executeConversationCommand(scopeKey, threadId, deviceContext.userUtterance, occurredAt, {
       ...dependencies, agentTasks: dependencies.agentTasks,
     })
@@ -212,8 +224,8 @@ async function completeLiveVoiceDelegation(
       ...(command.organizeSession ? { organizeSession: command.organizeSession } : {}) } };
   }
   const emotionState = temporaryGuest ? null : dependencies.stateStore.snapshot(scopeKey);
-  const previousExpressiveEmotion = emotionState?.expressiveEmotion;
-  const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript) : undefined;
+  const previousExpressiveEmotion = emotionState ? feelingBeforeTurn(emotionState, occurredAt) : undefined;
+  const voiceMood = emotionState ? projectEmotionReaction(emotionState, transcript, emotionTiming()) : undefined;
   const provisionalExpressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,
@@ -233,7 +245,7 @@ async function completeLiveVoiceDelegation(
         threadId,
         model: dependencies.chatModel.model,
         reply: '',
-        webSources: [],
+        webSources: [], ...(!temporaryGuest && !alone ? { companionPresent: true } : {}),
         voicePlan,
       },
     };
@@ -333,13 +345,14 @@ async function completeLiveVoiceDelegation(
         ? 'Prioritize emotional presence or natural companionship; do not force a problem-solving frame or checklist.'
         : 'Lead with the useful answer or next concrete step while keeping the spoken reply natural.',
     ].join('\n'),
-    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : 'owner'),
+    buildExpressiveEmotionPrompt(provisionalExpressiveEmotion, temporaryGuest ? 'guest' : alone ? 'owner' : 'others'),
+    alone && emotionState && !includeCognitiveContext ? stillFeltLine(emotionState, occurredAt) : '',
     temporaryGuest ? guestSpeakerReminder : '',
     buildConversationOrchestrationPrompt(orchestrationState, dependencies.agentTasks.list(scopeKey)),
     confirmedImplementationRequest
       ? `[Confirmed implementation clarification]\nThe owner's immediately preceding request was: ${confirmedImplementationRequest}\nYour previous reply explicitly asked whether to show an implementation proposal; the owner has now confirmed. Return a concrete taskProposal for that request. The visible proposal card is the start boundary; do not claim code work has begun.`
       : '',
-    backendInstructions,
+    backendInstructions, roomLook.prompt,
     voiceTranscriptInterpretationPrompt(uncertainTranscript, rawTranscript),
   ].filter(Boolean).join('\n\n');
   // The owner's thread is replayed by character budget, with the replay summary for what fell out of it;
@@ -367,6 +380,7 @@ async function completeLiveVoiceDelegation(
   const contextMilliseconds = Math.max(0, Math.round(modelStartedAt - contextStartedAt));
   let firstModelTokenMilliseconds: number | undefined;
   let streamedReplyPrefix = '';
+  observer?.signal?.addEventListener('abort', () => roomLook.cutOff(threadId, streamedReplyPrefix), { once: true });
   let streamedEmotionUpdated = false;
   const requiresStructuredTaskDecision = orchestrationState?.pendingAction?.kind === 'implement'
     && (orchestrationState.pendingAction.status === 'pending'
@@ -410,6 +424,8 @@ async function completeLiveVoiceDelegation(
   const reply = confirmedImplementationRequest
     ? 'よし、ライ氏。実装提案を画面に出しました。内容を確認して開始すると、作業が始まります。'
     : placeSkill ? spokenPlaceReply(completion.reply) : completion.reply;
+  // Opens the look only if this turn chose one, she said so herself, and its conditions still hold.
+  if (!confirmedImplementationRequest) roomLook.open(threadId, reply);
   expressiveEmotion = resolveShannonEmotionState({
     previous: previousExpressiveEmotion,
     provisionalPrimary: decision.affect,

@@ -141,7 +141,8 @@ describe('offering a look', () => {
       ['no body registered a camera', {}, async h => { await h.presence(); }],
       ['the camera flag is false', {}, async h => { await h.camera(false); await h.presence(); }],
       ['the body never read presence', {}, async h => { await h.camera(); }],
-      ['the presence read is older than 30 seconds', {}, async h => { await h.camera(); await h.presence(); h.advance(31 * SECOND); }],
+      ['the presence read is older than 75 seconds', {}, async h => { await h.camera(); await h.presence(); h.advance(76 * SECOND); }],
+      ['the presence read is older than the configured window', { config: { presenceFreshMilliseconds: 20 * SECOND } }, async h => { await h.camera(); await h.presence(); h.advance(21 * SECOND); }],
       ['only a device without a camera is present', {}, async h => { await h.camera(); await h.presence('other-device'); }],
       ['SHANNON_BODY_LOOK is off', { config: { enabled: false } }, async h => { await h.camera(); await h.presence(); }],
       ['SHANNON_BODY_INGEST is off', { ingestEnabled: false }, async h => { await h.camera(); await h.presence(); }],
@@ -182,10 +183,12 @@ describe('offering a look', () => {
     const h = harness();
     expect((await h.chat('おはよう')).body.systemPrompt).not.toContain('[部屋を見る]');
     const asked = (await h.chat('ねえ、部屋を見てみて')).body.systemPrompt;
-    expect(asked).toContain('[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: 体のカメラが入っていない。');
+    expect(asked).toContain('[部屋を見る]（体のカメラで部屋を見てほしいという頼みなら、いまは見られない: 体（PCのアプリ）がつながっていない。');
     expect(asked).toContain('見たふりをせず');
+    await h.camera(false);
+    expect((await h.chat('部屋を見て')).body.systemPrompt).toContain('いまは見られない: 体のカメラが入っていない。');
     await h.camera();
-    expect((await h.chat('こっち見て')).body.systemPrompt).toContain('体の窓が出ていない');
+    expect((await h.chat('こっち見て')).body.systemPrompt).toContain('いまは見られない: 体からの知らせがしばらく届いていない（体の窓が隠れているか、体が動いていない）。');
     expect((await harness({ config: { enabled: false } }).chat('カメラで見て')).body.systemPrompt).toContain('この機能は止めてある');
     const shared = await harness().chat('部屋見える？', { audience: 'others' });
     expect(shared.request.offerRoomLook).toBeUndefined();
@@ -466,12 +469,15 @@ describe('limits', () => {
   });
 
   it('reads the switch and the limits from the environment, with the owner\'s defaults', () => {
-    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 3 });
+    expect(configuredBodyLook({})).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 3, presenceFreshMilliseconds: 75_000 });
     for (const off of ['off', 'OFF', 'false', '0', 'disabled']) expect(configuredBodyLook({ SHANNON_BODY_LOOK: off }).enabled).toBe(false);
     expect(configuredBodyLook({ SHANNON_BODY_LOOK: 'on', SHANNON_BODY_LOOK_PER_HOUR: '2', SHANNON_BODY_LOOK_PER_DAY: '5' }))
-      .toEqual({ enabled: true, perHour: 2, perDay: 5, activityPerDay: 3 });
+      .toEqual({ enabled: true, perHour: 2, perDay: 5, activityPerDay: 3, presenceFreshMilliseconds: 75_000 });
     // Stage 2 has its own count; 0 switches it off without touching looks in conversation.
-    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' })).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 0 });
+    expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '0' })).toEqual({ enabled: true, perHour: 6, perDay: 30, activityPerDay: 0, presenceFreshMilliseconds: 75_000 });
+    // How recent the body's presence read must be for a look in conversation: 75 seconds, 10–300 by the environment.
+    expect(configuredBodyLook({ SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS: '90' }).presenceFreshMilliseconds).toBe(90_000);
+    for (const invalid of ['5', '301', 'soon', '']) expect(configuredBodyLook({ SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS: invalid }).presenceFreshMilliseconds).toBe(75_000);
     expect(configuredBodyLook({ SHANNON_AUTONOMY_MAX_ROOM_LOOKS: '31' }).activityPerDay).toBe(3);
     expect(configuredBodyLook({ SHANNON_BODY_LOOK_PER_HOUR: 'many', SHANNON_BODY_LOOK_PER_DAY: '-1' })).toMatchObject({ perHour: 6, perDay: 30 });
   });
@@ -676,7 +682,10 @@ describe('the frame is never kept', () => {
     // Modules a frame passes through: what they import, and that none of them opens a file, a database, or a log.
     const imports = (name: string) => [...source(name).matchAll(/from '([^']+)'/gu)].map(match => match[1]!);
     expect(imports('bodyLookContract.ts')).toEqual([]);
-    expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
+    expect(imports('bodyLook.ts').sort()).toEqual(['./bodyLookContract.js', './bodyLookLines.js', './bodyLookStore.js', './bodyLookTurnWait.js', './bodyLookVision.js', '@shannon/cognition', 'node:crypto']);
+    // The wait for a voice turn to be stored knows a Talk and his words, and imports nothing.
+    expect(imports('bodyLookTurnWait.ts')).toEqual([]);
+    expect(source('bodyLookTurnWait.ts')).not.toMatch(/node:fs|node:sqlite|console\.|writeFile|appendFile|DatabaseSync|BodyLookImage|base64/u);
     expect(imports('bodyLookVision.ts').sort()).toEqual(['./bodyLookContract.js', './chatModelSupport.js', './llmUsage.js', '@shannon/cognition']);
     expect(imports('apiBodyRoutes.ts').sort()).toEqual(['./apiValidation.js', './bodyContract.js', './bodyLook.js', './bodyLookContract.js', './bodyReaction.js', './bodyReactionContract.js', './contracts.js', './shannonBody.js']);
     for (const name of ['bodyLookContract.ts', 'bodyLook.ts', 'bodyLookVision.ts', 'apiBodyRoutes.ts']) {
@@ -686,16 +695,24 @@ describe('the frame is never kept', () => {
     for (const name of ['bodyLookStore.ts', 'bodyLookDelivery.ts', 'bodyLookLines.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest/u);
     }
-    // Two places start a look. In a conversation: the text chat turn. In her own time (stage 2): one gated step of the
-    // activity loop, which the gate knows as the domain `room_look`. Voice and the platform bridge have no path to it.
+    // Three places start a look. In a conversation: the text chat turn, and (owner decision 2026-10-02) the owner's voice turn,
+    // through the one module `voiceRoomLook.ts`. In her own time (stage 2): one gated step of the activity loop, which the gate
+    // knows as the domain `room_look`. The other voice routes and the platform bridge have no path to it.
     const sourceDirectory = new URL('../src/', import.meta.url);
     const callers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.looks\.turn\(|offerRoomLook: true/u.test(source(name)));
     expect(callers.sort()).toEqual(['apiKernel.ts', 'bodyLook.ts']);
+    const voiceCallers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /\.voiceTurn\(/u.test(source(name)));
+    expect(voiceCallers.sort()).toEqual(['voiceRoomLook.ts']);
     const openers = readdirSync(sourceDirectory).filter(name => name.endsWith('.ts') && /looks\.open\(|store\.open\(/u.test(source(name)));
     expect(openers.sort()).toEqual(['bodyLook.ts', 'bodyLookActivity.ts']);
     const aware = readdirSync(sourceDirectory).filter(file => /^(?:autonomyLoop|autonomyPolicy|autonomyWorker|apiVoice|apiLiveVoice|platformBridge|voice)/u.test(file))
       .filter(name => /bodyLook|roomLook|RoomLook/u.test(source(name)));
-    expect(aware.sort()).toEqual(['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts']);
+    expect(aware.sort()).toEqual(['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts',
+      'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']);
+    // The voice side handles words and a probability: it has no room for a frame either.
+    for (const name of ['apiLiveVoice.ts', 'apiVoiceTurns.ts', 'voiceDecision.ts', 'voiceDecisionContract.ts', 'voiceRoomLook.ts']) {
+      expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);
+    }
     // The loop's side of a look, and the table the two processes share, have no room for a frame: text and token counts only.
     for (const name of ['autonomyLoopLookStep.ts', 'autonomyLoopPrompts.ts', 'autonomyLoopSteps.ts', 'autonomyLoopThinkStep.ts', 'autonomyPolicy.ts', 'autonomyWorker.ts', 'bodyLookActivity.ts', 'bodyLookActivityStore.ts']) {
       expect(source(name), name).not.toMatch(/BodyLookImage|BodyLookResult|base64|RoomLookViewRequest|inlineData|\.image\b/u);

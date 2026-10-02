@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import {
-  OWNER_AUDIENCE, currentShannonEmotion, keepsFeelingThroughTouch, presentShannonMood, resolveReplyEmotion, touchCause, touchFeeling, touchTarget,
+  OWNER_AUDIENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchTarget,
   type CompanionStateSnapshot, type CompanionStateStore,
 } from '@shannon/cognition';
+import { emotionTiming, resolveReplyEmotion } from './companionPresence.js';
 import { BODY_LIMITS } from './bodyContract.js';
 import {
   BODY_REACTION_LIMITS, bodyReactionContentHash, validBodyReactionId,
@@ -138,12 +139,12 @@ export class BodyReactions {
       };
       // The feeling of her line is resolved as the feeling of any reply is: from her own words and the stored state.
       const resolved = resolveReplyEmotion({
-        snapshot: before, userMessage: '', reply: decision.text, now: saidAt,
+        snapshot: before, userMessage: '', reply: decision.text, now: saidAt, replaces: true,
         // As strongly as the touch is felt (the one table), not as strongly as whatever she felt before it.
         decided: { primary: decision.feeling, intensity: touchFeeling(touched).intensity },
       });
       // A feeling from conversation that the touch did not replace is not replaced by her line about the touch either.
-      const held = keepsFeelingThroughTouch(before.expressiveEmotion, resolved.expressiveEmotion.intensity, saidAt);
+      const held = holdsFeelingThroughTouch(before, resolved.expressiveEmotion, saidAt, emotionTiming());
       const after = resolved.expressiveEmotion.primary === 'neutral' || held ? before : stateStore.apply(scopeKey, {
         type: 'expressive-emotion-updated',
         emotion: { ...resolved.expressiveEmotion, cause: touchCause(touched), target: touchTarget(touched) },
@@ -189,7 +190,7 @@ export class BodyReactions {
     if (!speaker) return null;
     const sitting = touches.sitting(scopeKey, felt.snapshot, at);
     const prompt = bodyReactionPrompt({
-      touch: request.touch, audience: request.audience, feeling: currentShannonEmotion(felt.snapshot.expressiveEmotion, at),
+      touch: request.touch, audience: request.audience, feeling: presentShannonFeeling(felt.snapshot, at, emotionTiming()),
       burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at,
     });
     const abort = new AbortController();
@@ -236,7 +237,7 @@ export class BodyReactions {
 
   /** Her face now, without its cause: the body may be on a stream. */
   private mood(snapshot: CompanionStateSnapshot, at: string): BodyReactionAnswer['mood'] {
-    const mood = presentShannonMood(snapshot, at);
+    const mood = presentShannonMood(snapshot, at, emotionTiming());
     return { expression: mood.expression, ...(mood.feeling ? { feeling: mood.feeling } : {}) };
   }
 

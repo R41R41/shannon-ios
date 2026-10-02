@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { ShannonEmotionTiming } from '@shannon/cognition';
+import { emotionTiming } from './emotionTiming.js';
 import type { SQLiteShannonStoreOptions } from './sqliteStore.js';
 
 export class SQLiteStoreContext {
@@ -22,6 +24,9 @@ export class SQLiteStoreContext {
   }
 
   now(): string { return this.options.now(); }
+
+  /** The timing every emotion event of this store is reduced with. */
+  emotionTiming(): ShannonEmotionTiming { return this.options.emotionTiming ?? emotionTiming(); }
 
   insertEvent(scopeKey: string, type: string, observedAt: string, payload: unknown, eventId = randomUUID()): void {
     this.database.prepare(`

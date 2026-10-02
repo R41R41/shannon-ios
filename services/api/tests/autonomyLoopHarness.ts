@@ -35,6 +35,8 @@ export class FakeModel implements AutonomyTextModel {
   plans: unknown[] = [];
   replies: Partial<Record<Exclude<ModelCallKind, 'think'>, unknown>> = {};
   usage = { inputTokens: 1_000, outputTokens: 400 };
+  /** Calls, by their place in `calls`, whose reply the provider cut off at the output ceiling. */
+  truncatedCalls = new Set<number>();
   /** Runs inside the call, before the reply: lets a test pause, crash, or move the clock mid-step. */
   during?: (kind: ModelCallKind, request: AutonomyTextRequest) => void | Promise<void>;
 
@@ -46,7 +48,7 @@ export class FakeModel implements AutonomyTextModel {
     await this.during?.(kind, request);
     const reply = kind === 'think' ? this.plans.shift() ?? { thought: '今日はここまでにします。', pursuits: [], steps: [{ action: 'rest' }] }
       : this.replies[kind] ?? DEFAULT_REPLIES[kind];
-    return { text: typeof reply === 'string' ? reply : JSON.stringify(reply), usage: { ...this.usage } };
+    return { text: typeof reply === 'string' ? reply : JSON.stringify(reply), usage: { ...this.usage }, ...(this.truncatedCalls.has(this.calls.length - 1) ? { truncated: true as const } : {}) };
   }
 
   kinds(): ModelCallKind[] { return this.calls.map(callKind); }
@@ -127,6 +129,8 @@ export interface LoopHarnessOptions {
   sessions?: boolean;
   /** The owner's context for her thinking and her messages; absent, as with `SHANNON_AUTONOMY_OWNER_CONTEXT=off`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  /** Receives the content-free lines the loop writes to the service log. */
+  log?: (line: string) => void;
   /** Environment of the loop's own configuration (`configuredAutonomyLoop`). */
   loopEnvironment?: Record<string, string>;
 }
@@ -164,7 +168,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     ...(options.observer ? { observer: options.observer } : {}),
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
     ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}),
-    ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}),
+    ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
   });
   const loop = newLoop('runner-a');
   const entries = () => service.activityDays(scope, 30).flatMap(day => day.entries);

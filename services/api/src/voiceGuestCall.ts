@@ -84,14 +84,25 @@ export interface GuestAddressDecision {
 }
 
 const NAME = /シャノン|しゃのん|shannon/iu;
-const QUESTION = new RegExp([
+const QUESTION_WORDS = [
   '[?？]',
   '(?:何|なに)(?![かも])', 'なん(?:で|の)', 'なぜ', 'どんな', 'どっち',
   'どう(?![もかせぞ])', '(?:どこ|どれ|誰|だれ)(?![かも])', 'いつ(?![もか])', 'いく(?:つ|ら)',
+];
+const QUESTION = new RegExp([
+  ...QUESTION_WORDS,
   '(?:か|かな|かい|っけ|でしょ|でしょう|だろ|だろう|よね|の)[。.!！…]*$',
 ].join('|'), 'u');
 const REQUEST = /(?:ください|下さい|くれる|くれない|もらえる|ちょうだい|お願い|教えて|見せて|聞かせて|話して|歌って|言って|やってみて|してみて|してよ|答えて)[よねな]?[。.!！…]*$/u;
 const SOCIAL = /^(?:はじめまして|初めまして|こんにちは|こんばんは|おはよう|よろしく|ありがとう|またね|また話そう|また後で|またあとで|じゃあね|バイバイ|おやすみ|すごい|可愛い|かわいい)/u;
+
+/**
+ * The same evidence, for the owner's own call (`voiceSilence.ts`): her name, a question mark or a question
+ * word (a sentence-final particle alone is not enough there), a request, a greeting.
+ */
+export const ADDRESS_EVIDENCE = Object.freeze({
+  name: NAME, questionWord: new RegExp(QUESTION_WORDS.join('|'), 'u'), request: REQUEST, social: SOCIAL,
+});
 
 /**
  * Whether Shannon should answer an utterance heard at a shared table. Conservative on purpose:

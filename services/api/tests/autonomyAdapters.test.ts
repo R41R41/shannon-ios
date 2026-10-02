@@ -169,6 +169,90 @@ describe('model adapters for her own activity', () => {
     });
   });
 
+  it('says when the provider cut the reply off at the output ceiling, also when reasoning used all of it', async () => {
+    // Gemini: reasoning tokens count against maxOutputTokens, so 1,500 can be reached with half a JSON object written.
+    const cut = fakeFetch(() => Response.json({
+      candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"thought":"直します。","steps":[{"action":"rev' }] } }],
+      usageMetadata: { promptTokenCount: 4_600, candidatesTokenCount: 420, thoughtsTokenCount: 1_080 },
+    }));
+    expect(await configuredAutonomyTextModel(environment, cut.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 1_500 }))
+      .toEqual({ text: '{"thought":"直します。","steps":[{"action":"rev', usage: { inputTokens: 4_600, outputTokens: 1_500 }, truncated: true });
+    const nothing = fakeFetch(() => Response.json({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }], usageMetadata: { promptTokenCount: 4_600, thoughtsTokenCount: 1_500 } }));
+    const error = await configuredAutonomyTextModel(environment, nothing.fetcher)
+      .generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 1_500 }).catch(caught => caught as AutonomyModelError);
+    // Nothing was written, and the call is still charged what the provider counted.
+    expect(error).toMatchObject({ code: 'AUTONOMY_MODEL_TRUNCATED', usage: { inputTokens: 4_600, outputTokens: 1_500 } });
+    const whole = fakeFetch(() => Response.json({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{"steps":[]}' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }));
+    expect(await configuredAutonomyTextModel(environment, whole.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 100 }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 10, outputTokens: 5 } });
+    const incomplete = fakeFetch(() => Response.json({
+      status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' },
+      output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[{"act' }] }], usage: { input_tokens: 800, output_tokens: 500 },
+    }));
+    expect(await configuredAutonomyTextModel(environment, incomplete.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .toMatchObject({ truncated: true, usage: { inputTokens: 800, outputTokens: 500 } });
+    const reasoned = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [], usage: { input_tokens: 800, output_tokens: 500 } }));
+    await expect(configuredAutonomyTextModel(environment, reasoned.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_TRUNCATED', usage: { inputTokens: 800, outputTokens: 500 } });
+    const filtered = fakeFetch(() => Response.json({ status: 'incomplete', incomplete_details: { reason: 'content_filter' }, output: [], usage: { input_tokens: 800, output_tokens: 0 } }));
+    await expect(configuredAutonomyTextModel(environment, filtered.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 500 }))
+      .rejects.toMatchObject({ code: 'AUTONOMY_MODEL_EMPTY' });
+  });
+
+  it('asks for little reasoning only when told to, and stops asking a provider that refuses the field', async () => {
+    const ok = () => Response.json({ candidates: [{ content: { parts: [{ text: '{"steps":[]}' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } });
+    const lines: string[] = [];
+    // Gemini accepts it: one request, with the field.
+    const accepted = fakeFetch(ok);
+    await configuredAutonomyTextModel(environment, accepted.fetcher).generate({ model: 'gemini-3.8-flash', system: '規則', prompt: '材料', maximumOutputTokens: 900, reasoning: 'low' });
+    expect(accepted.calls).toHaveLength(1);
+    expect(JSON.parse(accepted.calls[0]!.init.body as string).generationConfig).toEqual({ maxOutputTokens: 900, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } });
+    // Gemini refuses it as malformed: asked once more without it, and from then on never sent for that model.
+    let count = 0;
+    const refusing = fakeFetch((_url, init) => {
+      count += 1;
+      return JSON.parse(init.body as string).generationConfig.thinkingConfig ? new Response('{"error":{"message":"Unknown name thinkingLevel 材料"}}', { status: 400 }) : ok();
+    });
+    const model = configuredAutonomyTextModel(environment, refusing.fetcher, line => lines.push(line));
+    const result = await model.generate({ model: 'gemini-3.8-flash', system: '規則', prompt: '材料', maximumOutputTokens: 900, reasoning: 'low' });
+    // Only the call that was answered is counted.
+    expect(result).toEqual({ text: '{"steps":[]}', usage: { inputTokens: 10, outputTokens: 5 } });
+    expect(count).toBe(2);
+    await model.generate({ model: 'gemini-3.8-flash', system: '規則', prompt: '材料', maximumOutputTokens: 900, reasoning: 'low' });
+    expect(count).toBe(3);
+    expect(refusing.calls.map(call => 'thinkingConfig' in JSON.parse(call.init.body as string).generationConfig)).toEqual([true, false, false]);
+    // One fixed line, with nothing of the request or the provider's answer.
+    expect(lines).toEqual(['Shannon autonomy model: google gemini-3.8-flash refused the reasoning field; sending without it from now on']);
+    // A failure that is not about the shape of the request is not asked again.
+    const limited = fakeFetch(() => new Response('{}', { status: 429 }));
+    await expect(configuredAutonomyTextModel(environment, limited.fetcher).generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' })).rejects.toThrow('AUTONOMY_MODEL_HTTP_429');
+    expect(limited.calls).toHaveLength(1);
+    // A request refused both with and without the field (too long, say) fails as before, and the field stays in use:
+    // nothing is remembered and nothing is logged, because the field was not the cause.
+    let oversized = true;
+    const broken = fakeFetch(() => (oversized ? new Response('{}', { status: 400 }) : ok()));
+    const brokenLines: string[] = [];
+    const again = configuredAutonomyTextModel(environment, broken.fetcher, line => brokenLines.push(line));
+    await expect(again.generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' })).rejects.toThrow('AUTONOMY_MODEL_HTTP_400');
+    expect(broken.calls).toHaveLength(2);
+    oversized = false;
+    await again.generate({ model: 'gemini-3.8-flash', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' });
+    expect('thinkingConfig' in JSON.parse(broken.calls[2]!.init.body as string).generationConfig).toBe(true);
+    expect(brokenLines).toEqual([]);
+    // 422 is the same refusal, and OpenAI falls back the same way.
+    const unprocessable = fakeFetch((_url, init) => (JSON.parse(init.body as string).reasoning ? new Response('{}', { status: 422 })
+      : Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } })));
+    expect(await configuredAutonomyTextModel(environment, unprocessable.fetcher).generate({ model: 'gpt-5.6-luna', system: 's', prompt: 'p', maximumOutputTokens: 10, reasoning: 'low' }))
+      .toEqual({ text: '{"steps":[]}', usage: { inputTokens: 8, outputTokens: 2 } });
+    expect(unprocessable.calls).toHaveLength(2);
+    // OpenAI: the field the conversation's own calls use.
+    const openai = fakeFetch(() => Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text: '{"steps":[]}' }] }], usage: { input_tokens: 8, output_tokens: 2 } }));
+    await configuredAutonomyTextModel(environment, openai.fetcher).generate({ model: 'gpt-5.6-luna', system: '規則', prompt: '材料', maximumOutputTokens: 500, reasoning: 'low' });
+    expect(JSON.parse(openai.calls[0]!.init.body as string)).toEqual({
+      model: 'gpt-5.6-luna', instructions: '規則', input: '材料', text: { format: { type: 'json_object' } }, max_output_tokens: 500, reasoning: { effort: 'low' }, store: false,
+    });
+  });
+
   it('fails with a code that carries neither the request nor the credential', async () => {
     const refused = fakeFetch(() => new Response('{"error":{"message":"key dedicated-gemini-credential is invalid"}}', { status: 401 }));
     const model = configuredAutonomyTextModel(environment, refused.fetcher);

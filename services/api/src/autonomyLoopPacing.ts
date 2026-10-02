@@ -19,6 +19,8 @@ import { resolveAutonomyModel } from './autonomyTextModel.js';
  * With `SHANNON_AUTONOMY_PACING=cycles` no function here is reached and the loop is what it was.
  */
 export const REST_TOOL = 'study.rest';
+/** The rest after a second idle session in a row, at least: about ten idle sessions fit in a day. */
+export const IDLE_AGAIN_REST_MILLISECONDS = 150 * 60_000;
 const DAY_MILLISECONDS = 24 * 60 * 60_000;
 
 /** The session a cycle is, or null: under `cycles`, for a show cycle, and for a cycle begun before sessions were switched on. */
@@ -69,9 +71,36 @@ export function fitsSession(dependencies: Pick<StepDependencies, 'store' | 'loop
 }
 
 /** The rest she takes: what she asked for held inside the bounds, or the default. */
-export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number): number {
+export function restMilliseconds(loop: StepDependencies['loop'], minutes?: number, idle: boolean | 'again' = false): number {
+  // A session in which nothing was done is followed by a short rest, not the long default; a second one in a row by a long
+  // rest whatever the default is set to, so idle sessions, which are not counted, stay few in a day.
+  if (idle === 'again') return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionDefaultRestMilliseconds, IDLE_AGAIN_REST_MILLISECONDS));
+  if (idle) return Math.min(loop.sessionNoPlanRestMilliseconds, loop.sessionDefaultRestMilliseconds);
   if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return loop.sessionDefaultRestMilliseconds;
   return Math.min(loop.sessionMaximumRestMilliseconds, Math.max(loop.sessionMinimumRestMilliseconds, Math.round(minutes) * 60_000));
+}
+
+/** Whether a session did nothing but think: no step of hers was carried out, so a `no_plan` end is followed by the short rest. */
+export function nothingDone(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'id'>): boolean {
+  return dependencies.store.loop.steps(cycle.id).every(step => step.step.kind === 'think' || step.step.kind === 'rest');
+}
+
+/**
+ * Whether one more thought may follow thoughts that led to no step: the thoughts in a row stay inside the re-think limit,
+ * and after `stepsTaken` steps the session has room for that thought and one step of it. A thought the gate refused (a
+ * pause that landed in between) was never had and is not counted.
+ */
+export function mayRetryThought(dependencies: Pick<StepDependencies, 'store' | 'loop'>, cycle: Pick<AutonomyLoopCycle, 'id'>, stepsTaken: number): boolean {
+  const { store, loop } = dependencies;
+  const taken = store.loop.steps(cycle.id);
+  let row = 0;
+  for (let index = taken.length - 1; index >= 0 && taken[index]!.step.kind === 'think'; index -= 1) if (taken[index]!.status !== 'refused') row += 1;
+  return row <= loop.maximumRethinksPerCycle && loop.maximumStepsPerSession - stepsTaken >= 2;
+}
+
+/** Whether the session that closed last did nothing but think: a cause that persists is then not met every half hour. */
+export function idleBefore(dependencies: Pick<StepDependencies, 'store'>, scopeKey: string): boolean {
+  return dependencies.store.loop.sessions.latestClosed(scopeKey)?.endCode === 'idle';
 }
 
 /** Ends the session and its cycle and sets when the next may begin, together. */
@@ -98,7 +127,9 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
   const { config, loop } = dependencies;
   const forced = step.forced;
   const reason = forced ? undefined : step.intent?.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REST_REASON_MAXIMUM_CHARACTERS) || undefined;
-  const rest = restMilliseconds(loop, forced ? undefined : step.minutes);
+  // A session that did nothing but think ends as `idle`: a short rest the first time, the long default when the one before was idle too.
+  const idle = forced === 'no_plan' && nothingDone(dependencies, cycle);
+  const rest = restMilliseconds(loop, forced ? undefined : step.minutes, idle ? (idleBefore(dependencies, cycle.scopeKey) ? 'again' : true) : false);
   return {
     request: { domain: 'thinking', tool: REST_TOOL, summary: forced ? '上限に届いたので、ここで一区切りにします。' : 'ここで一区切りにして、休みます。' },
     async perform(_adapters, performAt) {
@@ -107,7 +138,7 @@ export function prepareRest(dependencies: StepDependencies, cycle: AutonomyLoopC
         outcome: 'done', reasonCode: forced ?? 'rest',
         summary: restSummary({ ...(forced ? { forced } : {}), resumeClock: clock(resumeAt, config.timeZone), ...(reason ? { reason } : {}) }),
         commit: (_remaining, commitAt) => {
-          closeSession(dependencies, cycle, forced ?? 'rest', commitAt, resumeAt, reason);
+          closeSession(dependencies, cycle, idle ? 'idle' : forced ?? 'rest', commitAt, resumeAt, reason);
           return { plan: [] };
         },
       };
@@ -148,7 +179,7 @@ export function typicalCosts(dependencies: StepDependencies, scopeKey: string, a
 /** The facts of the day and of this session that a thinking step is shown. Every number is the server's. */
 export function sessionFacts(
   dependencies: StepDependencies, cycle: AutonomyLoopCycle, session: AutonomySession, at: string,
-  input: { budget: AutonomyBudgetStatus; remainingReads: number; openStories: number; maximumOpenStories: number; offered: { look: boolean; reachOut: boolean } },
+  input: { budget: AutonomyBudgetStatus; remainingReads: number; openStories: number; maximumOpenStories: number; offered: { look: boolean; reachOut: boolean }; thinkReserveYen?: number },
 ): SessionFacts {
   const { store, config, loop } = dependencies;
   const spent = store.loop.sessions.spentYen(cycle.id);
@@ -172,6 +203,7 @@ export function sessionFacts(
     typical: typical.map(item => ({ label: item.label, yen: item.yen })),
     ...(typical.find(item => item.tool === 'study.draft') ? { draftYen: typical.find(item => item.tool === 'study.draft')!.yen } : {}),
     remainingReads: input.remainingReads,
+    ...(input.thinkReserveYen !== undefined ? { thinkReserveYen: input.thinkReserveYen } : {}),
     ...(input.openStories >= input.maximumOpenStories ? { studyFull: input.openStories } : {}),
     previous: previous?.endedAt && previous.endCode
       ? { endedClock: clock(previous.endedAt, config.timeZone), code: previous.endCode, ...(previous.restReason ? { reason: previous.restReason } : {}) } : null,
