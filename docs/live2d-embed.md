@@ -11,9 +11,9 @@ one shared `WKWebView`.
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
 | `version` | `0.1.0` |
-| `builtAt` | `2026-10-02T19:43:22.517Z` |
-| `modelUpdatedAt` | `2026-10-02T19:15:02.996Z` |
-| Size | about 18.3 MB (`assets.js` holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 13.6 MB zipped |
+| `builtAt` | `2026-10-02T21:25:15.797Z` |
+| `modelUpdatedAt` | `2026-10-02T21:10:28.760Z` |
+| Size | about 18.9 MB (`assets.js` holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.1 MB zipped |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
