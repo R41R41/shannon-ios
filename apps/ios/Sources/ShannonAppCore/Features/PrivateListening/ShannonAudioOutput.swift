@@ -63,17 +63,24 @@ public struct ShannonRegisteredEarphones: Codable, Equatable, Identifiable, Send
 /// Yes only when every current output is wired headphones or a device he registered. An empty route,
 /// a speaker, or one unregistered output among several is no. The identity decides, never the name:
 /// two devices that share a name are two devices.
+///
+/// The system reports a headphone jack as headphones whatever is plugged into it. Someone who keeps
+/// speakers on the jack switches `wiredCountsAsPrivate` off; a wired output is then never private.
 public enum ShannonPrivateListeningJudge {
-    public static func isPrivate(_ output: ShannonAudioOutput, registered: [ShannonRegisteredEarphones]) -> Bool {
+    public static func isPrivate(
+        _ output: ShannonAudioOutput, registered: [ShannonRegisteredEarphones], wiredCountsAsPrivate: Bool = true
+    ) -> Bool {
         switch output.kind {
-        case .wiredHeadphones: true
+        case .wiredHeadphones: wiredCountsAsPrivate
         case .bluetooth, .usb: !output.id.isEmpty && registered.contains { $0.id == output.id }
         case .builtInSpeaker, .other: false
         }
     }
 
-    public static func isPrivate(route: [ShannonAudioOutput], registered: [ShannonRegisteredEarphones]) -> Bool {
-        !route.isEmpty && route.allSatisfy { isPrivate($0, registered: registered) }
+    public static func isPrivate(
+        route: [ShannonAudioOutput], registered: [ShannonRegisteredEarphones], wiredCountsAsPrivate: Bool = true
+    ) -> Bool {
+        !route.isEmpty && route.allSatisfy { isPrivate($0, registered: registered, wiredCountsAsPrivate: wiredCountsAsPrivate) }
     }
 }
 

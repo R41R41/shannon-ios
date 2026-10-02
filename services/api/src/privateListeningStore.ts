@@ -17,9 +17,11 @@ export interface PrivateListener {
   since: string;
   seenAt: string;
   ownerActiveAt: string | null;
+  /** The app would say a message of hers aloud now. */
+  speaks: boolean;
 }
 
-interface Row { device_id: string; kind: string; since: string; seen_at: string; owner_active_at: string | null }
+interface Row { device_id: string; kind: string; since: string; seen_at: string; owner_active_at: string | null; speaks: number | null }
 
 export class SQLitePrivateListeningStore {
   protected readonly database: DatabaseSync;
@@ -38,6 +40,13 @@ export class SQLitePrivateListeningStore {
         PRIMARY KEY (scope_key, device_id)
       );
     `);
+    // Added after the table first shipped. Two processes may start at once: the loser of the race finds the column there.
+    const columns = this.database.prepare(`PRAGMA table_info('private_listening')`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'speaks')) {
+      try { this.database.exec('ALTER TABLE private_listening ADD COLUMN speaks INTEGER NOT NULL DEFAULT 0'); } catch (error) {
+        if (!(error instanceof Error && /duplicate column/iu.test(error.message))) throw error;
+      }
+    }
     secureDatabaseFiles(path);
   }
 
@@ -45,7 +54,7 @@ export class SQLitePrivateListeningStore {
    * One report that the device is privately listening. `since` is kept while the reports follow each other
    * without a gap and the kind is the same; otherwise the run starts now.
    */
-  report(scopeKey: string, deviceId: string, input: { kind: PrivateListeningKind; ownerActiveAt?: string }, at: string): PrivateListener {
+  report(scopeKey: string, deviceId: string, input: { kind: PrivateListeningKind; speaks?: boolean; ownerActiveAt?: string }, at: string): PrivateListener {
     const time = Date.parse(at);
     const known = this.row(scopeKey, deviceId);
     const continues = known && known.kind === input.kind && fresh(known.seen_at, time);
@@ -54,13 +63,15 @@ export class SQLitePrivateListeningStore {
     const reported = input.ownerActiveAt ? new Date(Math.min(Date.parse(input.ownerActiveAt), time)).toISOString() : null;
     const earlier = continues ? known.owner_active_at : null;
     const ownerActiveAt = reported && earlier ? (reported > earlier ? reported : earlier) : reported ?? earlier;
+    const speaks = input.speaks === true;
     this.database.prepare(`
-      INSERT INTO private_listening (scope_key, device_id, kind, since, seen_at, owner_active_at) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT (scope_key, device_id) DO UPDATE SET kind = excluded.kind, since = excluded.since, seen_at = excluded.seen_at, owner_active_at = excluded.owner_active_at
-    `).run(scopeKey, deviceId, input.kind, since, at, ownerActiveAt);
+      INSERT INTO private_listening (scope_key, device_id, kind, since, seen_at, owner_active_at, speaks) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (scope_key, device_id) DO UPDATE SET kind = excluded.kind, since = excluded.since, seen_at = excluded.seen_at,
+        owner_active_at = excluded.owner_active_at, speaks = excluded.speaks
+    `).run(scopeKey, deviceId, input.kind, since, at, ownerActiveAt, speaks ? 1 : 0);
     this.database.prepare('DELETE FROM private_listening WHERE seen_at < ?')
       .run(new Date(time - PRIVATE_LISTENING_LIMITS.retentionMilliseconds).toISOString());
-    return { deviceId, kind: input.kind, since, seenAt: at, ownerActiveAt };
+    return { deviceId, kind: input.kind, since, seenAt: at, ownerActiveAt, speaks };
   }
 
   /** The device says it is no longer privately listening (the route changed, the app is closing, the owner switched it off). */
@@ -72,11 +83,11 @@ export class SQLitePrivateListeningStore {
   listeners(scopeKey: string, at: string): readonly PrivateListener[] {
     const time = Date.parse(at);
     const rows = this.database.prepare(`
-      SELECT device_id, kind, since, seen_at, owner_active_at FROM private_listening WHERE scope_key = ? AND seen_at >= ? AND seen_at <= ?
+      SELECT device_id, kind, since, seen_at, owner_active_at, speaks FROM private_listening WHERE scope_key = ? AND seen_at >= ? AND seen_at <= ?
     `).all(scopeKey, new Date(time - PRIVATE_LISTENING_LIMITS.freshMilliseconds).toISOString(), at) as unknown as Row[];
     return rows.flatMap(row => {
       const kind = PRIVATE_LISTENING_KINDS.find(value => value === row.kind);
-      return kind ? [{ deviceId: row.device_id, kind, since: row.since, seenAt: row.seen_at, ownerActiveAt: row.owner_active_at }] : [];
+      return kind ? [{ deviceId: row.device_id, kind, since: row.since, seenAt: row.seen_at, ownerActiveAt: row.owner_active_at, speaks: Number(row.speaks) === 1 }] : [];
     });
   }
 
@@ -86,7 +97,7 @@ export class SQLitePrivateListeningStore {
 
   private row(scopeKey: string, deviceId: string): Row | undefined {
     return this.database.prepare(`
-      SELECT device_id, kind, since, seen_at, owner_active_at FROM private_listening WHERE scope_key = ? AND device_id = ?
+      SELECT device_id, kind, since, seen_at, owner_active_at, speaks FROM private_listening WHERE scope_key = ? AND device_id = ?
     `).get(scopeKey, deviceId) as unknown as Row | undefined;
   }
 }

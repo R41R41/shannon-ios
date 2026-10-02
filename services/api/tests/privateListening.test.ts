@@ -32,7 +32,7 @@ describe('POST /v1/private-listening', () => {
     clock.at = at(15_000);
     // The run goes on: `since` stays, the report is renewed.
     expect((post({ kind: 'mac', listening: true }).body as { since: string; expiresAt: string })).toMatchObject({ since: START, expiresAt: at(60_000) });
-    expect(store.listeners(scope, clock.at)).toEqual([{ deviceId: 'mac-1', kind: 'mac', since: START, seenAt: at(15_000), ownerActiveAt: null }]);
+    expect(store.listeners(scope, clock.at)).toEqual([{ deviceId: 'mac-1', kind: 'mac', since: START, seenAt: at(15_000), ownerActiveAt: null, speaks: false }]);
   });
 
   it('lapses by itself when the reports stop, and a later report starts a new run', () => {

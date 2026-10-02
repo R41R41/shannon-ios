@@ -38,16 +38,53 @@ public final class ShannonPrivateListeningModel {
         didSet { if othersPresent != oldValue { evaluate() } }
     }
 
-    /// Whether the app runs now. An iPhone app in the background without a reason to run is suspended and
+    /// Whether the app is in front. An iPhone app in the background is suspended unless it stands by, and
     /// cannot keep its report fresh, so it withdraws it when it leaves the foreground.
-    public var isAppRunning = true {
-        didSet { if isAppRunning != oldValue { evaluate() } }
+    public var isInForeground = true {
+        didSet { if isInForeground != oldValue { evaluate() } }
     }
+
+    /// iPhone: the app keeps an audio session alive in the background so that it can speak (`ShannonStandbyAudio`).
+    public var isStandingBy = false {
+        didSet { if isStandingBy != oldValue { evaluate() } }
+    }
+
+    /// The owner's switch: while only he can hear, Shannon may say a message she started on her own aloud.
+    /// Off until he turns it on.
+    public private(set) var speaksEnabled = false
+
+    /// iPhone: the owner's switch for standing by in the background. Off until he turns it on.
+    public private(set) var standbyEnabled = false
+
+    /// iPhone: Low Power Mode is on. The app then does not stand by: the owner asked the phone to save battery.
+    public var isLowPowerMode = false {
+        didSet { if isLowPowerMode != oldValue { evaluate() } }
+    }
+
+    /// The server did not take the last report (not paired, no such route, refused). Until a report goes through,
+    /// standing by would only use battery. Cleared by the next report that is accepted.
+    public private(set) var serverRefuses = false
+
+    /// The server has messages said through earphones, as far as its last answer to a report with `speaks` said.
+    /// False for an older server and while that is switched off there: standing by would only use battery.
+    public private(set) var serverDelivers = false
+
+    /// Whether a wired output counts as headphones only the owner hears. The system cannot tell what is plugged
+    /// into a headphone jack; someone who keeps speakers on it switches this off. On unless he does.
+    public private(set) var wiredCountsAsPrivate = true
+
+    /// iPhone: what the standby is doing, for the settings row. Set by the app.
+    public var standbyState: ShannonStandbyState = .off
+
+    /// Says a message she started on her own through the earphones, once the server offers it to this app.
+    @ObservationIgnored public let reachOuts: ShannonPrivateReachOutCoordinator
 
     @ObservationIgnored private let client: (any ShannonPrivateListeningServing)?
     @ObservationIgnored private let monitor: any ShannonAudioRouteMonitoring
     @ObservationIgnored private let registry: ShannonEarphoneRegistry
     @ObservationIgnored private let kind: ShannonPrivateListeningKind
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let runsInBackground: Bool
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let ownerActivity: @MainActor () -> Date?
     @ObservationIgnored private let sleep: @Sendable (TimeInterval) async -> Void
@@ -55,9 +92,20 @@ public final class ShannonPrivateListeningModel {
     @ObservationIgnored private var isReporting = false
     @ObservationIgnored private var needsAnotherReport = false
     @ObservationIgnored private var pollInterval = ShannonPrivateListeningModel.defaultPollInterval
+    @ObservationIgnored private var lastAttemptAt: Date?
+    @ObservationIgnored private var failures = 0
     @ObservationIgnored private var isPreview = false
     @ObservationIgnored private var runTask: Task<Void, Never>?
+    /// Called whenever the route, a switch or who is present was looked at again (the iPhone's standby follows it).
+    @ObservationIgnored public var stateEvaluated: (@MainActor () -> Void)?
+    /// The platform's speaking and listening, kept alive for as long as the app runs.
+    @ObservationIgnored var platformController: AnyObject?
 
+    public static let speaksDefaultsKey = "shannon.privateListening.speaks"
+    public static let standbyDefaultsKey = "shannon.privateListening.standby"
+    public static let wiredDefaultsKey = "shannon.privateListening.wiredCountsAsPrivate"
+    /// While reports fail (no network) they are tried less often, up to this interval.
+    public static let failingPollInterval: TimeInterval = 60
     public static let defaultPollInterval: TimeInterval = 15
     /// A server that refuses or does not know the route is asked again this seldom.
     public static let refusedPollInterval: TimeInterval = 10 * 60
@@ -65,19 +113,31 @@ public final class ShannonPrivateListeningModel {
     public init(
         client: (any ShannonPrivateListeningServing)?,
         monitor: any ShannonAudioRouteMonitoring,
-        registry: ShannonEarphoneRegistry = ShannonEarphoneRegistry(),
+        defaults: UserDefaults = .standard,
         kind: ShannonPrivateListeningKind = .current,
+        runsInBackground: Bool = ShannonPrivateListeningKind.current == .mac,
         now: @escaping @Sendable () -> Date = { Date() },
         ownerActivity: @escaping @MainActor () -> Date? = { ShannonOwnerActivity.lastInput() },
         sleep: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) }
     ) {
         self.client = client
         self.monitor = monitor
-        self.registry = registry
+        self.registry = ShannonEarphoneRegistry(defaults: defaults)
+        self.defaults = defaults
         self.kind = kind
+        self.runsInBackground = runsInBackground
         self.now = now
         self.ownerActivity = ownerActivity
         self.sleep = sleep
+        reachOuts = ShannonPrivateReachOutCoordinator(client: client, defaults: defaults)
+        speaksEnabled = defaults.bool(forKey: Self.speaksDefaultsKey)
+        standbyEnabled = defaults.bool(forKey: Self.standbyDefaultsKey)
+        wiredCountsAsPrivate = defaults.object(forKey: Self.wiredDefaultsKey) as? Bool ?? true
+        reachOuts.stillPrivate = { [weak self] in
+            // Read from the system at that moment, not from what was last reported.
+            guard let self, self.speaksEnabled else { return false }
+            return self.refreshRoute()
+        }
         registered = registry.load()
         outputs = monitor.currentOutputs()
         status = localStatus
@@ -88,7 +148,7 @@ public final class ShannonPrivateListeningModel {
         outputs: [ShannonAudioOutput], registered: [ShannonRegisteredEarphones], status: ShannonPrivateListeningStatus
     ) -> ShannonPrivateListeningModel {
         let model = ShannonPrivateListeningModel(client: nil, monitor: ShannonNoAudioRoute(),
-            registry: ShannonEarphoneRegistry(defaults: UserDefaults(suiteName: "shannon.private-listening.preview") ?? .standard))
+            defaults: UserDefaults(suiteName: "shannon.private-listening.preview") ?? .standard)
         model.isPreview = true
         model.outputs = outputs
         model.registered = registered
@@ -100,12 +160,27 @@ public final class ShannonPrivateListeningModel {
 
     /// Every current output is wired headphones or registered earphones.
     public var isRoutePrivate: Bool {
-        ShannonPrivateListeningJudge.isPrivate(route: outputs, registered: registered)
+        ShannonPrivateListeningJudge.isPrivate(route: outputs, registered: registered, wiredCountsAsPrivate: wiredCountsAsPrivate)
     }
+
+    /// The Mac app runs whether or not it is in front; the iPhone app only in front, or while it stands by.
+    public var isAppRunning: Bool { runsInBackground || isInForeground || isStandingBy }
 
     /// Only the owner can hear this app now, as far as the app can tell.
     public var isPrivatelyListening: Bool {
         isRoutePrivate && !othersPresent && isAppRunning
+    }
+
+    /// The app would say a message of hers aloud now.
+    public var speaksNow: Bool { speaksEnabled && isPrivatelyListening }
+
+    /// A message could actually reach this app now: it would speak, and the server takes its reports and has the feature on.
+    public var canBeOffered: Bool { speaksNow && serverDelivers && !serverRefuses }
+
+    /// iPhone: the app should stand by now: both switches on, registered earphones connected, nobody else present,
+    /// not saving battery, and a server that takes its reports and has something to say through them.
+    public var wantsStandby: Bool {
+        speaksEnabled && standbyEnabled && isRoutePrivate && !othersPresent && !isLowPowerMode && !serverRefuses && serverDelivers
     }
 
     /// The current output the owner could register: Bluetooth or USB, and not registered yet.
@@ -119,7 +194,11 @@ public final class ShannonPrivateListeningModel {
     @discardableResult
     public func refreshRoute() -> Bool {
         guard !isPreview else { return isPrivatelyListening }
-        outputs = monitor.currentOutputs()
+        let current = monitor.currentOutputs()
+        if current != outputs {
+            outputs = current
+            stateEvaluated?()
+        }
         return isPrivatelyListening
     }
 
@@ -134,6 +213,29 @@ public final class ShannonPrivateListeningModel {
     public func removeRegistration(id: String) {
         guard !isPreview else { return }
         registered = registry.remove(id: id)
+        evaluate()
+    }
+
+    public func setSpeaksEnabled(_ enabled: Bool) {
+        guard !isPreview, enabled != speaksEnabled else { return }
+        speaksEnabled = enabled
+        defaults.set(enabled, forKey: Self.speaksDefaultsKey)
+        if !enabled { reachOuts.stopSpeaking() }
+        evaluate()
+    }
+
+    public func setWiredCountsAsPrivate(_ counts: Bool) {
+        guard !isPreview, counts != wiredCountsAsPrivate else { return }
+        wiredCountsAsPrivate = counts
+        defaults.set(counts, forKey: Self.wiredDefaultsKey)
+        if !counts { reachOuts.stopSpeaking() }
+        evaluate()
+    }
+
+    public func setStandbyEnabled(_ enabled: Bool) {
+        guard !isPreview, enabled != standbyEnabled else { return }
+        standbyEnabled = enabled
+        defaults.set(enabled, forKey: Self.standbyDefaultsKey)
         evaluate()
     }
 
@@ -156,9 +258,12 @@ public final class ShannonPrivateListeningModel {
         defer { observer.cancel() }
         evaluate()
         while !Task.isCancelled {
-            await sleep(pollInterval)
+            // The loop wakes at the short interval whatever the report interval is, so a longer one (after a refusal,
+            // or while reports fail) ends as soon as a report goes through again.
+            await sleep(min(pollInterval, Self.defaultPollInterval))
             if Task.isCancelled { break }
             refreshRoute()
+            if let lastAttemptAt, now().timeIntervalSince(lastAttemptAt) < pollInterval - 1 { continue }
             await report()
         }
     }
@@ -167,6 +272,7 @@ public final class ShannonPrivateListeningModel {
     public func evaluate() {
         guard !isPreview else { return }
         outputs = monitor.currentOutputs()
+        stateEvaluated?()
         if !isPrivatelyListening, !toldListening {
             status = localStatus
             return
@@ -204,26 +310,50 @@ public final class ShannonPrivateListeningModel {
         guard let client, let scopeKey = client.privateListeningScopeKey() else {
             toldListening = false
             status = listening ? .notPaired : localStatus
+            if listening { refused() }
             return
         }
+        let speaks = listening && speaksEnabled
         let report = ShannonPrivateListeningReportDTO(
-            scopeKey: scopeKey, kind: kind, listening: listening, ownerActiveAt: listening ? ownerActivity() : nil
+            scopeKey: scopeKey, kind: kind, listening: listening, speaks: speaks,
+            ownerActiveAt: listening ? ownerActivity() : nil
         )
+        lastAttemptAt = now()
         do {
             let response = try await client.reportPrivateListening(report)
             toldListening = response.listening
+            failures = 0
+            // Only an answer to a report that said it speaks tells whether the server has anything to say through it.
+            let delivers = speaks ? response.speaks == true : serverDelivers
+            if serverRefuses || delivers != serverDelivers {
+                serverRefuses = false
+                serverDelivers = delivers
+                stateEvaluated?()
+            }
             pollInterval = response.pollAfterSeconds.map { max(5, TimeInterval($0)) } ?? Self.defaultPollInterval
             // The route may have changed while the request was in flight.
-            if isPrivatelyListening != listening { needsAnotherReport = true }
+            if isPrivatelyListening != listening || speaksNow != speaks { needsAnotherReport = true }
             status = isPrivatelyListening ? (response.listening ? .reported : .waiting) : localStatus
+            // Offered only to an app that said it speaks; whether it is still private is asked again before any sound.
+            if let offer = response.reachOut, speaksNow {
+                Task { [reachOuts] in await reachOuts.handle(offer) }
+            }
+            // A report of what was done with a message that did not arrive earlier goes out with every heartbeat.
+            Task { [reachOuts] in await reachOuts.flushReports() }
         } catch let error as ShannonAPIError where error == .rejected(status: 404) {
             settleRefusal(.unsupported, listening: listening)
         } catch let error as ShannonAPIError where error == .rejected(status: 403) {
             settleRefusal(.refused, listening: listening)
+        } catch let error as ShannonAPIError where error == .rejected(status: 401) {
+            // The device's connection was revoked: as good as not paired.
+            settleRefusal(.notPaired, listening: listening)
         } catch {
             // An unsent "no longer" needs no retry: the server drops a report that is not renewed.
             if !listening { toldListening = false }
             status = isPrivatelyListening ? .failed : localStatus
+            // Without a network the report is tried less often: 15, 30, then 60 seconds.
+            failures += 1
+            pollInterval = min(Self.failingPollInterval, Self.defaultPollInterval * pow(2, Double(min(failures, 6) - 1)))
         }
     }
 
@@ -231,6 +361,13 @@ public final class ShannonPrivateListeningModel {
         toldListening = false
         pollInterval = Self.refusedPollInterval
         status = isPrivatelyListening ? refusal : localStatus
+        refused()
+    }
+
+    private func refused() {
+        guard !serverRefuses else { return }
+        serverRefuses = true
+        stateEvaluated?()
     }
 
     /// What the row says before the server is involved.

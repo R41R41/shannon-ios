@@ -111,6 +111,10 @@ public struct ShannonConversationView: View {
         .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
             privateListening?.othersPresent = geminiLiveVoiceModel.othersMayBeListening
         }
+        // Shannon's own messages, said through registered earphones (Settings › イヤホン; off until switched on).
+        .modifier(ShannonPhoneEarphoneSpeaking(
+            conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel, workspace: voiceWorkspace, dictation: voiceModel
+        ))
 #endif
 #if DEBUG
         .onAppear { applyDesignPreviewLaunchState() }

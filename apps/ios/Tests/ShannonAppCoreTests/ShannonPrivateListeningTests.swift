@@ -25,10 +25,10 @@ final class ShannonPrivateListeningTests: XCTestCase {
     }
 
     private func makeModel(
-        client: FakeListeningClient?, monitor: FakeRouteMonitor, activity: Date? = nil
+        client: FakeListeningClient?, monitor: FakeRouteMonitor, activity: Date? = nil, runsInBackground: Bool = true
     ) -> ShannonPrivateListeningModel {
         ShannonPrivateListeningModel(
-            client: client, monitor: monitor, registry: ShannonEarphoneRegistry(defaults: defaults), kind: .mac,
+            client: client, monitor: monitor, defaults: defaults, kind: .mac, runsInBackground: runsInBackground,
             now: { [start] in start }, ownerActivity: { activity }, sleep: { _ in }
         )
     }
@@ -63,6 +63,25 @@ final class ShannonPrivateListeningTests: XCTestCase {
 
     func testOneOutputThatIsNotPrivateMakesTheWholeRouteNotPrivate() {
         XCTAssertFalse(ShannonPrivateListeningJudge.isPrivate(route: [wired, builtIn], registered: []))
+    }
+
+    func testAWiredOutputIsNotPrivateOnceTheOwnerSaysHisJackHasSpeakersOnIt() async {
+        XCTAssertFalse(ShannonPrivateListeningJudge.isPrivate(route: [wired], registered: [], wiredCountsAsPrivate: false))
+        let client = FakeListeningClient()
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        XCTAssertTrue(model.wiredCountsAsPrivate)
+        await model.report()
+        XCTAssertEqual(client.transitions, [true])
+        model.setWiredCountsAsPrivate(false)
+        XCTAssertFalse(model.isPrivatelyListening)
+        await model.report()
+        XCTAssertEqual(client.transitions, [true, false])
+        // Remembered on the device.
+        XCTAssertFalse(makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired])).wiredCountsAsPrivate)
+        XCTAssertEqual(
+            ShannonPrivateListeningCopy.outputDescription(wired, registered: [], wiredCountsAsPrivate: false),
+            "有線の出口・ヘッドホンとして扱いません"
+        )
     }
 
     func testTheSameEarphonesAreRecognisedUnderEitherBluetoothProfile() {
@@ -173,14 +192,184 @@ final class ShannonPrivateListeningTests: XCTestCase {
         XCTAssertEqual(client.reports.last?.listening, false)
     }
 
-    func testAnAppThatStopsRunningWithdrawsItsReport() async {
+    func testAnIPhoneAppThatLeavesTheForegroundWithdrawsItsReportUnlessItStandsBy() async {
         let client = FakeListeningClient()
-        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]), runsInBackground: false)
         await model.report()
-        model.isAppRunning = false
+        model.isInForeground = false
         await model.report()
         XCTAssertEqual(client.reports.map(\.listening).last, false)
         XCTAssertEqual(model.status, .notListening)
+        // Standing by, it runs in the background and goes on reporting.
+        model.isStandingBy = true
+        await model.report()
+        XCTAssertEqual(client.reports.map(\.listening).last, true)
+        model.isStandingBy = false
+        await model.report()
+        XCTAssertEqual(client.reports.map(\.listening).last, false)
+    }
+
+    func testTheMacAppReportsWhetherOrNotItIsInFront() async {
+        let client = FakeListeningClient()
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        model.isInForeground = false
+        await model.report()
+        XCTAssertEqual(client.reports.map(\.listening).last, true)
+    }
+
+    // MARK: Speaking
+
+    func testSpeakingIsOffUntilTheOwnerSwitchesItOnAndIsRemembered() async {
+        let client = FakeListeningClient()
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        XCTAssertFalse(model.speaksEnabled)
+        await model.report()
+        XCTAssertEqual(client.reports.last?.speaks, false)
+        model.setSpeaksEnabled(true)
+        await model.report()
+        XCTAssertEqual(client.reports.last?.speaks, true)
+        XCTAssertTrue(makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired])).speaksEnabled)
+    }
+
+    func testStandbyIsWantedOnlyWithBothSwitchesRegisteredEarphonesAndNobodyElse() async {
+        let monitor = FakeRouteMonitor(outputs: [airPods])
+        let model = makeModel(client: FakeListeningClient(), monitor: monitor, runsInBackground: false)
+        XCTAssertFalse(model.standbyEnabled)
+        model.registerCurrentOutput()
+        XCTAssertFalse(model.wantsStandby)
+        model.setSpeaksEnabled(true)
+        XCTAssertFalse(model.wantsStandby)
+        model.setStandbyEnabled(true)
+        // Not before the server said it has messages said through earphones.
+        XCTAssertFalse(model.wantsStandby)
+        await model.report()
+        XCTAssertTrue(model.serverDelivers)
+        XCTAssertTrue(model.wantsStandby)
+        model.othersPresent = true
+        XCTAssertFalse(model.wantsStandby)
+        model.othersPresent = false
+        // The earphones disconnect: the sound would come out of the speaker.
+        monitor.outputs = [builtIn]
+        model.evaluate()
+        XCTAssertFalse(model.wantsStandby)
+        monitor.outputs = [speaker]
+        model.evaluate()
+        XCTAssertFalse(model.wantsStandby)
+    }
+
+    func testStandbyIsNotWantedInLowPowerModeOrWhileTheServerRefusesReports() async {
+        let client = FakeListeningClient()
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]), runsInBackground: false)
+        model.setSpeaksEnabled(true)
+        model.setStandbyEnabled(true)
+        await model.report()
+        XCTAssertTrue(model.wantsStandby)
+        model.isLowPowerMode = true
+        XCTAssertFalse(model.wantsStandby)
+        model.isLowPowerMode = false
+        XCTAssertEqual(ShannonPrivateListeningCopy.standbyStatus(.off, enabled: true, lowPowerMode: true), "省電力モード中は待機しません")
+
+        // A server that refuses: standing by would only use battery. It must not start again by itself
+        // (standing by makes the app report, which is refused again).
+        client.failure = ShannonAPIError.rejected(status: 403)
+        await model.report()
+        XCTAssertTrue(model.serverRefuses)
+        XCTAssertFalse(model.wantsStandby)
+        model.isInForeground = false
+        await model.report()
+        XCTAssertFalse(model.wantsStandby)
+        // Back in front with a server that answers: standby is wanted again.
+        client.failure = nil
+        model.isInForeground = true
+        await model.report()
+        XCTAssertFalse(model.serverRefuses)
+        XCTAssertTrue(model.wantsStandby)
+    }
+
+    func testStandbyIsNotWantedWhileTheServerHasNothingToSayThroughEarphones() async {
+        let client = FakeListeningClient()
+        client.delivers = false
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]), runsInBackground: false)
+        model.setSpeaksEnabled(true)
+        model.setStandbyEnabled(true)
+        await model.report()
+        // An older server, or the feature switched off there: the report is taken, nothing would ever be offered.
+        XCTAssertEqual(model.status, .reported)
+        XCTAssertFalse(model.serverDelivers)
+        XCTAssertFalse(model.wantsStandby)
+        XCTAssertEqual(
+            ShannonPrivateListeningCopy.speaksStatus(enabled: true, speaksNow: true, serverDelivers: false),
+            "サーバー側で声での話しかけが止められています"
+        )
+        client.delivers = true
+        await model.report()
+        XCTAssertTrue(model.wantsStandby)
+    }
+
+    func testARevokedConnectionCountsAsNotPairedAndStopsStandby() async {
+        let client = FakeListeningClient()
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]), runsInBackground: false)
+        model.setSpeaksEnabled(true)
+        model.setStandbyEnabled(true)
+        await model.report()
+        XCTAssertTrue(model.wantsStandby)
+        XCTAssertTrue(model.canBeOffered)
+        client.failure = ShannonAPIError.rejected(status: 401)
+        await model.report()
+        XCTAssertEqual(model.status, .notPaired)
+        XCTAssertFalse(model.wantsStandby)
+        XCTAssertFalse(model.canBeOffered)
+    }
+
+    func testAReportOfWhatWasDoneThatDidNotArriveGoesOutWithALaterHeartbeat() async {
+        let client = FakeListeningClient()
+        client.offer = ShannonPrivateReachOutOfferDTO(id: "r1", createdAt: "2026-10-02T03:00:00.000Z")
+        client.deliveryFailure = URLError(.timedOut)
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        let speaker = FakeSpeaker()
+        model.reachOuts.speaker = speaker
+        model.setSpeaksEnabled(true)
+        await model.report()
+        for _ in 0..<50 where model.reachOuts.unacknowledged.isEmpty { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(speaker.spoken.count, 1)
+        XCTAssertEqual(model.reachOuts.unacknowledged, ["r1"])
+        XCTAssertEqual(client.deliveries, [])
+        // The network is back; the server no longer offers the message (it is past being spoken).
+        client.deliveryFailure = nil
+        client.offer = nil
+        await model.report()
+        for _ in 0..<50 where !model.reachOuts.unacknowledged.isEmpty { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(client.deliveries, [.spoken])
+        XCTAssertEqual(model.reachOuts.unacknowledged, [])
+        XCTAssertEqual(speaker.spoken.count, 1)
+    }
+
+    func testTheStandbyIsToldAtOnceWhenTheRouteChanges() {
+        let monitor = FakeRouteMonitor(outputs: [wired])
+        let model = makeModel(client: nil, monitor: monitor)
+        var evaluations = 0
+        model.stateEvaluated = { evaluations += 1 }
+        model.refreshRoute()
+        XCTAssertEqual(evaluations, 0)
+        monitor.outputs = [builtIn]
+        XCTAssertFalse(model.refreshRoute())
+        XCTAssertEqual(evaluations, 1)
+    }
+
+    func testAnOfferIsHandedToTheCoordinatorOnlyWhileTheAppSpeaks() async {
+        let client = FakeListeningClient()
+        client.offer = ShannonPrivateReachOutOfferDTO(id: "r1", createdAt: "2026-10-02T03:00:00.000Z")
+        let model = makeModel(client: client, monitor: FakeRouteMonitor(outputs: [wired]))
+        let speaker = FakeSpeaker()
+        model.reachOuts.speaker = speaker
+        await model.report()
+        await Task.yield()
+        XCTAssertEqual(client.claims, [])
+        model.setSpeaksEnabled(true)
+        await model.report()
+        for _ in 0..<20 where speaker.spoken.isEmpty { try? await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(client.claims.first, "r1")
+        XCTAssertEqual(speaker.spoken, ["ライ氏、いま何をしていますか。"])
     }
 
     func testAnUnpairedDeviceSendsNothing() async {
@@ -220,7 +409,7 @@ final class ShannonPrivateListeningTests: XCTestCase {
     func testAReportNeverCarriesADeviceNameOrIdentifier() throws {
         let report = ShannonPrivateListeningReportDTO(scopeKey: "owner-a", kind: .iphone, listening: true, ownerActiveAt: start)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(report)) as? [String: Any])
-        XCTAssertEqual(Set(json.keys), ["scopeKey", "kind", "listening", "ownerActiveAt"])
+        XCTAssertEqual(Set(json.keys), ["scopeKey", "kind", "listening", "speaks", "ownerActiveAt"])
         let off = ShannonPrivateListeningReportDTO(scopeKey: "owner-a", kind: .iphone, listening: false, ownerActiveAt: start)
         let offJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(off)) as? [String: Any])
         XCTAssertEqual(Set(offJSON.keys), ["scopeKey", "kind", "listening"])
@@ -258,11 +447,73 @@ final class FakeListeningClient: ShannonPrivateListeningServing, @unchecked Send
         }
     }
 
+    /// What the server offers to an app that says it speaks.
+    var offer: ShannonPrivateReachOutOfferDTO?
+    /// Whether the server has messages said through earphones (false: an older server, or switched off there).
+    var delivers = true
+    var claimFailure: Error?
+    /// A delivery report that does not reach the server.
+    var deliveryFailure: Error?
+    var claim = ShannonPrivateReachOutClaimDTO(
+        status: "claimed", spoken: false, listenSeconds: 8,
+        message: .init(id: "r1", threadId: "t1", content: "ライ氏、いま何をしていますか。", reason: "wonder", createdAt: "2026-10-02T03:00:00.000Z")
+    )
+    private var claimed: [String] = []
+    private var outcomes: [ShannonPrivateReachOutOutcome] = []
+    var claims: [String] { lock.withLock { claimed } }
+    var deliveries: [ShannonPrivateReachOutOutcome] { lock.withLock { outcomes } }
+
     func privateListeningScopeKey() -> String? { scopeKey }
 
     func reportPrivateListening(_ report: ShannonPrivateListeningReportDTO) async throws -> ShannonPrivateListeningResponseDTO {
         lock.withLock { stored.append(report) }
         if let failure { throw failure }
-        return ShannonPrivateListeningResponseDTO(listening: report.listening, since: nil, expiresAt: nil, pollAfterSeconds: 15)
+        return ShannonPrivateListeningResponseDTO(
+            listening: report.listening, since: nil, expiresAt: nil, pollAfterSeconds: 15,
+            speaks: delivers && report.listening ? report.speaks : nil,
+            reachOut: delivers && report.speaks == true ? offer : nil
+        )
+    }
+
+    func claimPrivateReachOut(id: String) async throws -> ShannonPrivateReachOutClaimDTO {
+        lock.withLock { claimed.append(id) }
+        if let claimFailure { throw claimFailure }
+        return claim
+    }
+
+    func reportPrivateReachOut(id: String, outcome: ShannonPrivateReachOutOutcome) async throws {
+        if let deliveryFailure { throw deliveryFailure }
+        lock.withLock { outcomes.append(outcome) }
+    }
+}
+
+@MainActor
+final class FakeSpeaker: ShannonReachOutSpeaking {
+    var outcome = ShannonReachOutSpeechOutcome.spoken
+    /// Runs while "speaking", before the outcome is returned: the place to change the route under it.
+    var whileSpeaking: (@MainActor () -> Void)?
+    private(set) var spoken: [String] = []
+    private(set) var askedPrivate: [Bool] = []
+    private(set) var stops = 0
+
+    func speak(_ text: String, stillPrivate: @escaping @MainActor () -> Bool) async -> ShannonReachOutSpeechOutcome {
+        askedPrivate.append(stillPrivate())
+        guard askedPrivate.last == true else { return .notStarted }
+        spoken.append(text)
+        whileSpeaking?()
+        return stillPrivate() ? outcome : .cutShort
+    }
+
+    func stop() { stops += 1 }
+}
+
+@MainActor
+final class FakeListener: ShannonReachOutListening {
+    private(set) var windows: [Int] = []
+    private(set) var threads: [String] = []
+
+    func listen(for seconds: Int, after message: ShannonPrivateReachOutMessageDTO) async {
+        windows.append(seconds)
+        threads.append(message.threadId)
     }
 }

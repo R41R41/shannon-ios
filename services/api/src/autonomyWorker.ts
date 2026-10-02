@@ -55,7 +55,10 @@ const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => body
 // showing it and what the server knows of the body are read here as closed facts. SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0 switches all of it off.
 const reachOutReports = new SQLiteReachOutReports(databasePath);
 const observer = {
-  delivery: (scopeKey: string, initiativeId: string) => (bodyIngestEnabled(process.env) ? reachOutReports.delivery(scopeKey, initiativeId) : null),
+  // A report of one of the owner's apps (her message said through his earphones) is read whatever the body switch says.
+  delivery: (scopeKey: string, initiativeId: string) => (bodyIngestEnabled(process.env) || reachOutReports.deliverySurface(scopeKey, initiativeId)
+    ? reachOutReports.delivery(scopeKey, initiativeId) : null),
+  surface: (scopeKey: string, initiativeId: string) => reachOutReports.deliverySurface(scopeKey, initiativeId),
   body: (scopeKey: string, at: string) => (bodyIngestEnabled(process.env)
     ? reachOutBodyFacts(reachOutReports, bodyStore, scopeKey, at, { freshMilliseconds: BODY_LIMITS.audienceFreshMilliseconds, eventWindowMilliseconds: BODY_LIMITS.audienceEventWindowMilliseconds })
     : { windowVisible: false, owner: 'unknown' as const, others: false }),

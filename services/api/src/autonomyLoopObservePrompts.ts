@@ -1,5 +1,5 @@
 import { SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES } from '@shannon/cognition';
-import type { ObservedReachOutReason, ObservedStepKind, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
+import type { ObservedReachOutReason, ObservedStepKind, ReachOutAppSurface, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
 import { AUTONOMY_QUOTED, REACH_OUT_REASON_LABEL, autonomySystem, type AutonomyPrompt, type ThinkingExtras } from './autonomyLoopPrompts.js';
 
 /**
@@ -46,6 +46,12 @@ const DELIVERY_MEMORY: Readonly<Record<ReachOutDeliveryOutcome, string>> = Objec
   away: `体は、${SHANNON_OWNER_NAME}がPCの前にいないようだと伝えてきた。`,
   hidden: '体は、ボクのウィンドウが隠れていたと伝えてきた。',
   muted: '体は、「話しかける」が切ってあったと伝えてきた。',
+});
+
+/** Her message was said through the owner's earphones by one of his apps, where only he hears it. A closed fact, like the body's. */
+const EARPHONE_LINE: Readonly<Record<ReachOutAppSurface, string>> = Object.freeze({
+  mac: `Macのイヤホンで、${SHANNON_OWNER_NAME}にだけ聞こえる声で伝えた。`,
+  iphone: `iPhoneのイヤホンで、${SHANNON_OWNER_NAME}にだけ聞こえる声で伝えた。`,
 });
 
 const STEP_PLAN_LABEL: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
@@ -113,7 +119,7 @@ export function reachOutHappenedLines(facts: ReachOutFacts, input: { at: string;
   ];
   return [
     `- ${when}に${SHANNON_OWNER_NAME}へ話しかけた（きっかけ: ${reasonLabel(facts.reason)}）。${answer}`,
-    `- 体からの知らせ: ${DELIVERY_LINE[facts.delivery]}`,
+    facts.surface ? `- イヤホンからの知らせ: ${EARPHONE_LINE[facts.surface]}` : `- 体からの知らせ: ${DELIVERY_LINE[facts.delivery]}`,
     `- 体のまわり: ${around.join('。')}。`,
   ];
 }
@@ -202,7 +208,7 @@ export function reachOutMemoryLine(memory: ReachOutMemory, timeZone: string): st
     `${clock(facts.sentAt, timeZone)}に話しかけた（きっかけ: ${reasonLabel(facts.reason)}）。`,
     facts.replied ? `${span(facts.repliedAfterSeconds ?? 0)}後に返事があった。`
       : facts.waitedSeconds > 0 ? `${span(facts.waitedSeconds)}待ったが返事はなかった。` : 'その時は返事がなかった。',
-    ...(facts.replied || facts.delivery === 'unknown' ? [] : [DELIVERY_MEMORY[facts.delivery]]),
+    ...(facts.replied || facts.delivery === 'unknown' ? [] : [facts.surface ? EARPHONE_LINE[facts.surface] : DELIVERY_MEMORY[facts.delivery]]),
     ...memory.after.map(item => (item.step === 'look' ? (item.done ? 'そのあと部屋を一度見た（見たことはメモにある）。' : 'そのあと部屋を見ようとしたが、見られなかった。')
       : item.step === 'follow_up' ? (item.done ? 'もう一度だけ声をかけた。' : 'もう一度声をかけようとして、やめた。') : '思ったことを書斎に書き留めた。')),
     ...(!facts.replied && memory.repliedSince ? [`そのあと、${SHANNON_OWNER_NAME}は書くか話すかしている。`] : []),

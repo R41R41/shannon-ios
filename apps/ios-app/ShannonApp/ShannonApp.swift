@@ -82,8 +82,8 @@ struct ShannonApp: App {
                 worldSubscriptionModel: worldSubscriptionModel
             )
                 .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: true)
-                // An iPhone app in the background is suspended: it withdraws its report when it leaves the foreground.
-                .shannonPrivateListening(privateListeningModel, runsInBackground: false)
+                // An iPhone app in the background is suspended unless it stands by: it withdraws its report when it leaves the foreground.
+                .shannonPrivateListening(privateListeningModel)
                 .onOpenURL { url in
                     Task { await connectionModel.connect(using: url) }
                 }

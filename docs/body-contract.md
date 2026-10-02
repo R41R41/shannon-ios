@@ -186,6 +186,7 @@ What the body must do:
 - A message older than a few minutes when the body first sees it (the PC was asleep) is better shown silently or skipped; `createdAt` says how old it is.
 - `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
 - After showing a message, or deciding not to, report what happened once: see [What the body did with her message](#what-the-body-did-with-her-message).
+- Added 2026-10-02, and nothing for the body to do: while one of the owner's apps is privately listening (his sound comes out of registered earphones or wired headphones), that app says her message through his earphones instead, and the message is then absent from `presence.reachOut` and from the `/v1/initiatives` answer the body receives. Exactly one surface says a message. A body that reports `away`, `hidden` or `muted` gives the message back so that such an app may still say it. See `docs/private-listening-contract.md`.
 
 ### A second call (`follow_up`)
 

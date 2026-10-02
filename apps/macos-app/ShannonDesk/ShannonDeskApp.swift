@@ -85,8 +85,9 @@ struct ShannonDeskApp: App {
             )
             .preferredColorScheme(preferredColorScheme)
             .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: false)
-            // The Mac app runs whether or not its window is in front, so its report stays fresh.
-            .shannonPrivateListening(privateListeningModel, runsInBackground: true)
+            // The Mac app runs whether or not its window is in front, so its report stays fresh and she can speak.
+            .shannonEarphoneSpeaking(conversation: conversationModel)
+            .shannonPrivateListening(privateListeningModel)
             .onOpenURL { url in
                 Task {
                     if await connectionModel.connect(using: url) {

@@ -26,6 +26,8 @@
 	<string>public.app-category.productivity</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>設定で「イヤホンのときは声で話しかける」をオンにしている間、シャノンがイヤホンで話しかけたあとの数秒だけ、返事を聞き取るためにマイクを使用します。</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>設定で「カレンダーの予定をシャノンに伝える」をオンにしている間、これから14日ぶんの予定の題名・時刻・場所・カレンダー名を読み取り、シャノンが予定を知って声をかけたり答えたりできるようにサーバーへ送ります。</string>
 	<key>ShannonAPIBaseURL</key>
