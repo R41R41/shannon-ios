@@ -87,7 +87,8 @@ public enum ShannonAnswerWait {
         let connectDeadline = now().addingTimeInterval(connectTimeout)
         var observation = observe()
         while observation.call == .starting {
-            guard now() < connectDeadline, await sleep(pollInterval) else { return .unavailable }
+            // He left, or the sound stopped being only his, while the call was still connecting: the microphone never goes live.
+            guard observation.isPrivate, now() < connectDeadline, await sleep(pollInterval) else { return .unavailable }
             observation = observe()
         }
         var window = ShannonAnswerWindow(opensAt: now(), seconds: TimeInterval(seconds))

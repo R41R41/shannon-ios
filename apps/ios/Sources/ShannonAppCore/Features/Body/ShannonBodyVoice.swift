@@ -109,8 +109,12 @@ public final class ShannonBodyVoice {
 
     /// Speaks the line, then listens for `listenSeconds`. A line said with other people around is never spoken
     /// and never listened for: the call that would hear his answer is an owner-alone conversation.
-    public func say(_ line: ShannonBodyTouchCoordinator.Line) async {
-        guard line.audience == .owner, canSpeakNow else { return }
+    /// `heard` is told, as soon as it is known, whether any of the line was said aloud.
+    public func say(_ line: ShannonBodyTouchCoordinator.Line, heard: @MainActor (Bool) -> Void = { _ in }) async {
+        guard line.audience == .owner, canSpeakNow else {
+            heard(false)
+            return
+        }
         arbiter.touchLineIsActive = true
         defer { arbiter.touchLineIsActive = false }
         // Asked before the first sound, after the wait for the voice, and for every piece of sound.
@@ -119,6 +123,7 @@ public final class ShannonBodyVoice {
             return !self.isTakenByOthers && self.mayAnswerInVoice()
         }
         ShannonSpeechLevelPublisher.shared.end()
+        heard(outcome == .spoken || outcome == .cutShort)
         // Only a line that was said to its end is answered aloud; everything is asked once more before the microphone opens.
         guard outcome == .spoken, line.listenSeconds > 0, let listen, !isTakenByOthers, mayAnswerInVoice() else { return }
         await listen(line, line.listenSeconds)

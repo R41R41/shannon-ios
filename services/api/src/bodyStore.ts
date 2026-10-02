@@ -92,7 +92,6 @@ export class SQLiteBodyStore {
     secureDatabaseFiles(path);
   }
 
-
   transaction<T>(operation: () => T): T {
     this.database.exec('BEGIN IMMEDIATE');
     try {

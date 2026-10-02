@@ -51,15 +51,27 @@ public final class ShannonBodyReactionLink: @unchecked Sendable {
         return reactionID
     }
 
-    /// For the stored turn of that delegation, once. With someone else listening, or too late for the server, it is stored without it.
-    public func forTurn(companionPresent: Bool, now: Date = Date()) -> String? {
+    /// For the stored turn of that utterance, once. Another utterance's turn, one with someone else listening,
+    /// or one too late for the server is stored without it.
+    public func forTurn(companionPresent: Bool, utterance words: String, now: Date = Date()) -> String? {
         lock.lock()
         defer { lock.unlock() }
-        guard let delegatedAt, let reactionID else { return nil }
+        guard let delegatedAt, let reactionID, Self.same(utterance, words) else { return nil }
         self.reactionID = nil
         utterance = nil
         self.delegatedAt = nil
         return companionPresent || now.timeIntervalSince(delegatedAt) > Self.turnSeconds ? nil : reactionID
+    }
+}
+
+extension ShannonBodyReactionLink {
+    /// The delegation carries the tidied words and the stored turn the raw ones: spacing and punctuation do not tell them apart.
+    static func same(_ left: String?, _ right: String) -> Bool {
+        guard let left else { return false }
+        let plain: (String) -> String = { text in
+            String(text.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) && !CharacterSet.punctuationCharacters.contains($0) })
+        }
+        return plain(left) == plain(right)
     }
 }
 
@@ -75,7 +87,7 @@ extension ShannonLiveVoiceDelegationRequestDTO {
 extension ShannonRealtimeVoiceTurnRequestDTO {
     func linkedToReaction(_ link: ShannonBodyReactionLink = .shared) -> Self {
         var linked = self
-        linked.reactionId = link.forTurn(companionPresent: companionPresent == true)
+        linked.reactionId = link.forTurn(companionPresent: companionPresent == true, utterance: userTranscript)
         return linked
     }
 }

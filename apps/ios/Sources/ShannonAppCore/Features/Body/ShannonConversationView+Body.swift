@@ -22,7 +22,7 @@ extension ShannonConversationView {
                 mode: .owner, speechProvider: provider, threadID: line.threadID,
                 conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel
             )
-            // After `beginCall`, which ends whatever call there was and with it any earlier line's id.
+            // After `beginCall`, which drops any id an earlier line left behind: this call, and no other, carries this one.
             ShannonBodyReactionLink.shared.arm(reactionID: line.reactionID, listenSeconds: seconds)
             let request = voiceWorkspace.connectionRequestID
             await starting.value

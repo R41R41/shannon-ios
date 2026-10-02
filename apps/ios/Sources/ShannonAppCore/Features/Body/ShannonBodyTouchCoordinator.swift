@@ -19,7 +19,8 @@ public final class ShannonBodyTouchCoordinator {
         public var listenSeconds = 0
         /// Who was around when she was touched. A line said with others around is never spoken or listened for.
         public var audience = ShannonBodyAudience.owner
-        /// True when her voice says it: the bubble is then not also announced to VoiceOver.
+        /// True while her voice says it, or is about to: the bubble is then not also announced to VoiceOver.
+        /// Set back to false when the line was not said aloud after all, so that it is announced then.
         public var isSpoken = false
     }
 
@@ -39,7 +40,8 @@ public final class ShannonBodyTouchCoordinator {
         /// Whether her line is spoken (the body screen's 声で返す); otherwise it is the bubble only.
         public var repliesInVoice: @MainActor @Sendable () -> Bool = { false }
         /// Says the line and listens for his answer. Nil where nothing can speak.
-        public var speak: (@MainActor @Sendable (Line) async -> Void)?
+        /// `heard` is called once with whether any of it was said aloud.
+        public var speak: (@MainActor @Sendable (Line, _ heard: @escaping @MainActor (Bool) -> Void) async -> Void)?
         /// Stops a line that is being spoken or listened for.
         public var stopSpeaking: (@MainActor @Sendable () -> Void)?
 
@@ -231,7 +233,11 @@ public final class ShannonBodyTouchCoordinator {
         if speaks, let speak = environment.speak {
             isSpeaking = true
             Task { [weak self] in
-                await speak(shown)
+                await speak(shown) { [weak self] heard in
+                    // Not said aloud after all (her voice came too late, or the sound was taken): VoiceOver reads the bubble.
+                    guard let self, !heard, self.line == shown else { return }
+                    self.line?.isSpoken = false
+                }
                 self?.isSpeaking = false
             }
         }

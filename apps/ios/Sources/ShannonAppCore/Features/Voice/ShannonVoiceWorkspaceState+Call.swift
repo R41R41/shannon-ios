@@ -14,6 +14,9 @@ extension ShannonVoiceWorkspaceState {
         conversationModel: ShannonConversationModel,
         geminiVoiceModel: ShannonGeminiLiveSessionModel
     ) -> Task<Void, Never> {
+        // A touch line's id belongs to the one call that listens for its answer, armed after this by that call alone:
+        // every other way a call begins (the call screen, a call from her) starts without it.
+        ShannonBodyReactionLink.shared.disarm()
         // A call from Shannon that still rings gives way to a conversation the owner starts himself.
         ShannonVoiceCallHost.shared.calls?.appConversationWillBegin()
         // A call that failed without being ended may still hold a period; it is remembered like any other.

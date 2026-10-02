@@ -446,10 +446,14 @@ final class ShannonBodyTests: XCTestCase {
             message: .init(id: "m1", text: "えへへ、なんですかライ氏？", expression: "bashful", feeling: nil, threadId: "thread-9", listenSeconds: 6),
             mood: nil))
         let spoken = LineBox()
+        let outcomeHeard = FlagBox(true)
         let voiceMode = FlagBox(false)
         var environment = ShannonBodyTouchCoordinator.Environment(reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in })
         environment.repliesInVoice = { voiceMode.value }
-        environment.speak = { line in spoken.values.append(line) }
+        environment.speak = { line, heard in
+            spoken.values.append(line)
+            heard(outcomeHeard.value)
+        }
         let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: environment)
         // Text mode: the bubble only.
         await coordinator.handle(.askReaction(Self.touch("t1")))?.value
@@ -473,13 +477,15 @@ final class ShannonBodyTests: XCTestCase {
         link.arm(reactionID: "t1", listenSeconds: 6, now: now)
         // A turn other people can hear never carries it.
         XCTAssertNil(link.forDelegation(ownerMode: false, utterance: "なに？", now: now))
-        XCTAssertNil(link.forTurn(companionPresent: false, now: now))
+        XCTAssertNil(link.forTurn(companionPresent: false, utterance: "なに？", now: now))
         XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(60)), "t1")
         // A retry or a fallback of the same utterance keeps it; the next utterance does not get it.
         XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(200)), "t1")
         XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "それでね", now: now.addingTimeInterval(61)))
-        XCTAssertEqual(link.forTurn(companionPresent: false, now: now.addingTimeInterval(120)), "t1")
-        XCTAssertNil(link.forTurn(companionPresent: false, now: now.addingTimeInterval(121)))
+        // The stored turn of another utterance does not take it; the raw words of the same one do.
+        XCTAssertNil(link.forTurn(companionPresent: false, utterance: "それでね", now: now.addingTimeInterval(100)))
+        XCTAssertEqual(link.forTurn(companionPresent: false, utterance: "なに ？", now: now.addingTimeInterval(120)), "t1")
+        XCTAssertNil(link.forTurn(companionPresent: false, utterance: "なに？", now: now.addingTimeInterval(121)))
         XCTAssertNil(link.forDelegation(ownerMode: true, utterance: "なに？", now: now.addingTimeInterval(122)))
         // Too late for the server's window: an ordinary turn.
         link.arm(reactionID: "t2", listenSeconds: 6, now: now)
@@ -487,11 +493,11 @@ final class ShannonBodyTests: XCTestCase {
         // A companion turned up between the delegation and the stored turn: the turn is stored without it.
         link.arm(reactionID: "t3", listenSeconds: 6, now: now)
         XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now), "t3")
-        XCTAssertNil(link.forTurn(companionPresent: true, now: now))
+        XCTAssertNil(link.forTurn(companionPresent: true, utterance: "なに？", now: now))
         // The stored turn comes later than the server keeps the link: stored without it.
         link.arm(reactionID: "t4", listenSeconds: 6, now: now)
         XCTAssertEqual(link.forDelegation(ownerMode: true, utterance: "なに？", now: now), "t4")
-        XCTAssertNil(link.forTurn(companionPresent: false, now: now.addingTimeInterval(601)))
+        XCTAssertNil(link.forTurn(companionPresent: false, utterance: "なに？", now: now.addingTimeInterval(601)))
         // The call ended before he said anything: a later call never gets the id.
         link.arm(reactionID: "t5", listenSeconds: 6, now: now)
         link.disarm()
@@ -577,8 +583,45 @@ final class ShannonBodyTests: XCTestCase {
         await voice.say(line())
         XCTAssertEqual(heard.values.count, 1)
         XCTAssertEqual(ShannonBodyVoice.firstSoundSeconds, 6)
+        // The caller is told whether anything was said aloud: yes for a whole or a cut line, no otherwise.
+        let heardAloud = LevelBox()
+        func aloud(_ outcome: ShannonReachOutSpeechOutcome) async -> Double? {
+            heardAloud.values = []
+            speaker.outcome = outcome
+            await voice.say(line(listen: 0)) { heardAloud.values.append($0 ? 1 : 0) }
+            return heardAloud.values.first
+        }
+        var results: [Double?] = []
+        for outcome in [ShannonReachOutSpeechOutcome.spoken, .cutShort, .notStarted, .failed] { results.append(await aloud(outcome)) }
+        XCTAssertEqual(results, [1, 1, 0, 0])
+        session.value = true
+        let refused = await aloud(.spoken)
+        XCTAssertEqual(refused, 0)
         voice.stop()
         XCTAssertEqual(speaker.stops, 1)
+
+        // The call that listens: leaving while it still connects never lets the microphone go live.
+        let observations = ObservationBox([
+            .init(call: .starting, hasOwnerInput: false, hearsSound: false, isPrivate: true),
+            .init(call: .starting, hasOwnerInput: false, hearsSound: false, isPrivate: false),
+            .init(call: .live, hasOwnerInput: true, hearsSound: true, isPrivate: true),
+        ])
+        let left = await ShannonAnswerWait.run(seconds: 6, observe: { observations.next() }, sleep: { _ in true })
+        XCTAssertEqual(left, .unavailable)
+        XCTAssertEqual(observations.taken, 2)
+
+        // Any call that begins starts without a touch line's id (the call screen, a call from her).
+        ShannonBodyReactionLink.shared.arm(reactionID: "stale", listenSeconds: 6)
+#if os(iOS)
+        let workspace = ShannonVoiceWorkspaceState()
+        _ = workspace.beginCall(
+            mode: .owner, speechProvider: .gemini, threadID: nil,
+            conversationModel: ShannonConversationModel.designPreview(), geminiVoiceModel: ShannonGeminiLiveSessionModel())
+        workspace.connectionRequestID = nil
+#else
+        ShannonBodyReactionLink.shared.disarm()
+#endif
+        XCTAssertNil(ShannonBodyReactionLink.shared.forDelegation(ownerMode: true, utterance: "もしもし"))
     }
 
     func testALineSaidWithOthersAroundIsNeverSpokenAndASpokenLineIsMarked() async {
@@ -587,11 +630,15 @@ final class ShannonBodyTests: XCTestCase {
             id: "t1", status: "said",
             message: .init(id: "m1", text: "えへへ", expression: "bashful", feeling: nil, threadId: nil, listenSeconds: 6), mood: nil))
         let spoken = LineBox()
+        let outcomeHeard = FlagBox(true)
         let audience = AudienceBox()
         var environment = ShannonBodyTouchCoordinator.Environment(
             reportsTouch: { true }, audience: { audience.value }, capabilities: { ([], []) }, express: { _, _ in })
         environment.repliesInVoice = { true }
-        environment.speak = { line in spoken.values.append(line) }
+        environment.speak = { line, heard in
+            spoken.values.append(line)
+            heard(outcomeHeard.value)
+        }
         let stopped = FlagBox(false)
         environment.stopSpeaking = { stopped.value = true }
         let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: environment)
@@ -605,6 +652,11 @@ final class ShannonBodyTests: XCTestCase {
         for _ in 0..<50 where coordinator.isSpeaking { try? await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(coordinator.line?.isSpoken, true)
         XCTAssertEqual(spoken.values.map(\.audience), [.owner])
+        // Her voice came too late, or the sound was taken: the line was not said aloud after all, and VoiceOver reads the bubble.
+        outcomeHeard.value = false
+        await coordinator.handle(.askReaction(Self.touch("t1")))?.value
+        for _ in 0..<50 where coordinator.isSpeaking { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(coordinator.line?.isSpoken, false)
         // Switching the reporting off stops her voice.
         coordinator.environment.reportsTouch = { false }
         coordinator.reportingChanged()
@@ -657,6 +709,15 @@ final class ShannonBodyTests: XCTestCase {
 }
 
 @MainActor private final class LevelBox: Sendable { var values: [Double] = [] }
+@MainActor private final class ObservationBox: Sendable {
+    private var values: [ShannonAnswerObservation]
+    private(set) var taken = 0
+    init(_ values: [ShannonAnswerObservation]) { self.values = values }
+    func next() -> ShannonAnswerObservation {
+        taken += 1
+        return values.count > 1 ? values.removeFirst() : values[0]
+    }
+}
 
 @MainActor
 private final class FakeLineSpeaker: ShannonReachOutSpeaking {

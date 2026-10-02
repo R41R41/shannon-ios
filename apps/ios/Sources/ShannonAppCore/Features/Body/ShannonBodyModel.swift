@@ -62,7 +62,10 @@ public final class ShannonBodyModel {
             voice.mayAnswerInVoice = { [weak self] in self?.answersInVoice ?? false }
             // Only where the surface answers in voice, and only while nothing else holds the sound.
             touch.environment.repliesInVoice = { [weak voice] in voice?.canSpeakNow ?? false }
-            touch.environment.speak = { [weak voice] line in await voice?.say(line) }
+            touch.environment.speak = { [weak voice] line, heard in
+                guard let voice else { return heard(false) }
+                await voice.say(line, heard: heard)
+            }
             touch.environment.stopSpeaking = { [weak voice] in voice?.stop() }
         }
         ShannonLive2DStage.shared.onTouchMessage = { [weak self] message in
@@ -245,6 +248,8 @@ struct ShannonBodyAttachment: ViewModifier {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(30))
             clock = Date()
+            // While someone is listening the stored hold is pushed on, so that an app killed mid-call still holds.
+            holdAudience()
         }
     }
 
@@ -254,8 +259,14 @@ struct ShannonBodyAttachment: ViewModifier {
             && replyModeRawValue == ShannonBodyReplyMode.voice.rawValue && reportsTouch && usesLive2D
     }
 
+    private func holdAudience() {
+        bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date())
+    }
+
     private func sceneChanged() {
         bodyModel.sceneIsActive = scenePhase == .active
+        // Going to the background is the last sure moment before the app may be ended.
+        holdAudience()
         guard scenePhase != .active else { return }
         bodyModel.stopVoice()
         ShannonSpeechLevelPublisher.shared.end()
