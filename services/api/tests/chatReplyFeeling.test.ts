@@ -483,10 +483,20 @@ describe('every existing rule applies to it unchanged', () => {
     expect(fond.chosen.state.lingering!.find(item => item.kind === 'happy')).toMatchObject({ strength: 0.9 });
     expect(fond.chosen.state.lingering!.find(item => item.kind === 'happy')).not.toHaveProperty('peak');
     expect(fond.chosen.state.expressiveEmotion!.primary).toBe('affectionate');
-    // A subtle feeling she chose stays subtle: the cue's 0.52 is not given to it, and nothing is kept.
-    const faint = await both(HARSH, 'ボク、ちょっとすねちゃいます。', subtle('hurt'));
-    expect(faint.chosen.state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.25, secondary: ['sulky'] });
-    expect(faint.chosen.state.lingering ?? []).toEqual([]);
+    // A feeling chosen only faintly does not hide what she plainly voiced: the cue names the kind, as without the field.
+    for (const [message, reply, kind] of [[HARSH, 'ボク、ちょっとすねちゃいます。', 'happy'], ['いい天気だね', 'ふふ、いいですね。', 'playful'],
+      ['遅かったね', 'ごめんなさい、遅くなりました。', 'curiosity']] as const) {
+      const faint = await both(message, reply, subtle(kind));
+      expect(faint.chosen, reply).toEqual(faint.plain);
+    }
+    // No mood of hers, and no weaker kind she chose, keeps her concern or apology from showing.
+    const worried = await both('今日はしんどい', '大丈夫ですか？無理しないでくださいね。', moderate('gentle'), [HARSH, QUIET, strong('hurt')]);
+    expect(worried.chosen).toEqual(worried.plain);
+    expect(worried.chosen.state.expressiveEmotion!.primary).toBe('caring');
+    const regretful = await both('さっきはひどいこと言ったね', 'ごめんなさい、ボクも言いすぎました。', subtle('gentle'), [HARSH, QUIET, strong('hurt')]);
+    expect(regretful.chosen).toEqual(regretful.plain);
+    expect(regretful.chosen.state.expressiveEmotion!.primary).toBe('apologetic');
+    expect(regretful.chosen.state.lingering).toMatchObject([{ kind: 'hurt' }]);
     // The cue of the chosen kind is the chosen feeling: its strength stands.
     const sulk = await both(HARSH, 'ボク、ちょっとすねちゃいます。', strong('sulky'));
     expect(sulk.chosen.state.lingering).toMatchObject([{ kind: 'sulky', span: 'lingering', strength: 0.9 }]);

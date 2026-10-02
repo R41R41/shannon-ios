@@ -125,9 +125,16 @@ export function resolveTextReplyEmotion(
   const { decided } = decidedReplyFeeling(completion, alone);
   if (!decided) return resolveReplyEmotion(input);
   // The chat model wrote the reply and chose its feeling: a cue word of another kind does not rename it (owner decision 2026-10-03).
-  const resolved = resolveReplyEmotion({ ...input, decided, decidedKindWins: true });
+  // That holds for a feeling chosen at least as strongly as a cue is (0.52): a faint one does not hide what she plainly voiced.
+  const resolved = resolveReplyEmotion({ ...input, decided, ...(decided.intensity > CUE_STRENGTH ? { decidedKindWins: true } : {}) });
+  // The feeling she has went on and nothing of the chosen one is stored: the turn is the one without the field, so her concern
+  // or apology in her own words still shows over a mood, as it always did.
+  if (resolved.expressiveEmotion.continued === true) return resolveReplyEmotion(input);
   return usesDecidedFeeling(decided, resolved.expressiveEmotion) ? resolved : resolveReplyEmotion(input);
 }
+
+/** The strength a cue word in her reply has (the resolver's floor). */
+const CUE_STRENGTH = 0.52;
 
 /**
  * Stores the feeling of a text reply on a later tick, after the response has
