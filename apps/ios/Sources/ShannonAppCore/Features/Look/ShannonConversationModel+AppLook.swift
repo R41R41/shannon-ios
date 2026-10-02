@@ -29,15 +29,31 @@ extension ShannonConversationModel {
     /// also in the Talk. The frame goes from the camera to this one request and is kept nowhere.
     @discardableResult
     public func performAppLook(_ ask: ShannonAppLookAskDTO) async -> String? {
-        guard let server = client as? any ShannonAppLookServing, let outcome = await appLook.look(ask) else { return nil }
+        guard let server = client as? any ShannonAppLookServing else { return nil }
+        let threadAtAsk = selectedThreadId
+        guard let outcome = await appLook.look(ask) else {
+            // The ask closed first: her line about it, if she had announced the look, is in the Talk on the server.
+            await reloadAfterUnansweredLook(threadAtAsk)
+            return nil
+        }
         let answer: ShannonAppLookAnswerDTO = switch outcome {
         case let .seen(camera, frame): .seen(scopeKey: scopeKey, camera: camera, frame: frame)
         case let .refused(code): .refused(scopeKey: scopeKey, code: code)
         }
-        // A look that expired or failed on the way leaves nothing here; her line, if any, is in the Talk on the server.
-        guard let message = try? await server.answerAppLook(id: ask.id, answer: answer).message else { return nil }
-        appendAppLookMessage(message)
-        return message.text
+        do {
+            guard let message = try await server.answerAppLook(id: ask.id, answer: answer).message else { return nil }
+            appendAppLookMessage(message)
+            return message.text
+        } catch {
+            await reloadAfterUnansweredLook(threadAtAsk)
+            return nil
+        }
+    }
+
+    /// Shows what the server stored about a look this app could not answer, when that Talk is still open and idle.
+    private func reloadAfterUnansweredLook(_ threadId: String?) async {
+        guard let threadId, selectedThreadId == threadId, !isSending else { return }
+        await reloadConversation(threadId: threadId)
     }
 
     private func appendAppLookMessage(_ message: ShannonAppLookAnswerResponseDTO.Message) {

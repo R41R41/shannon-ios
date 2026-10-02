@@ -114,7 +114,7 @@ extension ShannonGeminiLiveSessionModel {
                 if response.voicePlan?.shouldRespond != false {
                     failureStage = "synthesis_stream"
                     // What she saw is her next utterance, spoken behind this reply and known to the echo guard.
-                    if let seen = await look?.value { await onSegment(seen, response.voicePlan) }
+                    if let seen = await ShannonAppLookSpeech.spoken(look) { await onSegment(seen, response.voicePlan) }
                     try await coordinator.finish()
                     try requireCurrentResponse(generation)
                     failureStage = "playback"

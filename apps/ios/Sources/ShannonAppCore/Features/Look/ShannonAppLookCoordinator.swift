@@ -36,7 +36,9 @@ public struct ShannonAppLookEnvironment: Sendable {
 #if os(iOS)
                 UIApplication.shared.applicationState == .active
 #elseif os(macOS)
+                // In front, with a window on screen to show the sign in.
                 NSApplication.shared.isActive
+                    && NSApplication.shared.windows.contains { $0.isVisible && !$0.isMiniaturized && $0.canBecomeMain }
 #else
                 false
 #endif
@@ -98,14 +100,18 @@ public final class ShannonAppLookCoordinator {
         guard !isLooking else { return .refused(.busy) }
         isLooking = true
         defer { isLooking = false }
+        guard let deadline = ask.deadline(receivedAt: Date()), Date() < deadline else { return nil }
         let state = clientState()
         if let refusal = ShannonAppLookAvailability.refusal(state.state) { return .refused(refusal) }
         if state.state == .undetermined {
-            if let refusal = await authorize() { return .refused(refusal) }
+            let refusal = await authorize(until: deadline)
+            // An explanation nobody answered in time is not a refusal: the ask has simply closed.
+            guard Date() < deadline else { return nil }
+            if let refusal { return .refused(refusal) }
             await settleAfterSystemPrompt()
         }
         // The explanation and the system prompt take time, and the app may have left the screen meanwhile.
-        guard ask.isOpen() else { return nil }
+        guard Date() < deadline else { return nil }
         if let refusal = ShannonAppLookAvailability.refusal(clientState().state) { return .refused(refusal) }
         let camera = state.cameras.contains(ask.camera) ? ask.camera : state.cameras.first ?? ask.camera
         do {
@@ -114,9 +120,11 @@ public final class ShannonAppLookCoordinator {
             guard environment.isForeground(), environment.isEnabled() else {
                 return .refused(environment.isEnabled() ? .background : .switchedOff)
             }
-            guard ask.isOpen() else { return nil }
-            guard let frame = ShannonAppLookEncoder.frame(from: image) else { return .refused(.failed) }
-            if let thumbnail = ShannonAppLookEncoder.thumbnail(from: image) { show(thumbnail) }
+            guard Date() < deadline else { return nil }
+            // No frame leaves the app without its sign: the thumbnail is part of a look.
+            guard let frame = ShannonAppLookEncoder.frame(from: image),
+                  let thumbnail = ShannonAppLookEncoder.thumbnail(from: image) else { return .refused(.failed) }
+            show(thumbnail)
             return .seen(camera: camera, frame: frame)
         } catch ShannonAppLookCaptureError.noCamera {
             return .refused(.noCamera)
@@ -130,11 +138,17 @@ public final class ShannonAppLookCoordinator {
     // MARK: The camera permission, asked on the first look
 
     /// nil once the camera is allowed. On iPhone the explanation comes first and the system prompt runs on the owner's tap.
-    private func authorize() async -> ShannonAppLookRefusal? {
+    private func authorize(until deadline: Date) async -> ShannonAppLookRefusal? {
 #if os(iOS)
         if !presenters.isEmpty {
             primerPhase = .explain
+            // The explanation does not wait for ever: when the ask closes it is put away as 「今はしない」.
+            let expiry = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+                if !Task.isCancelled { self?.closePrimer() }
+            }
             let allowed = await withCheckedContinuation { primerChoice = $0 }
+            expiry.cancel()
             guard allowed else {
                 primerPhase = nil
                 return .declined

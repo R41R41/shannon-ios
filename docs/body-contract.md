@@ -357,7 +357,7 @@ Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言っ�
    | `switched_off` | The owner's switch is off. |
 
    `cameras` is a subset of `back`, `front` (a Mac reports its camera as `front`); `platform` is `ios` or `macos` and only chooses which fixed line says where to allow the camera. A voice turn may carry it inside `deviceContext` instead (`deviceContext.appLook`), which is where the apps put it. An absent or malformed field means "no app camera": the turn is exactly what it was. A 「友人も一緒」 turn (`participantMode: guest`) should not send it, and never opens a look if it does.
-2. When she looks, the response of that turn carries `appLook: { "id": "…", "camera": "back" | "front", "expiresAt": "…" }` (text: the JSON response; voice: the final response, also in the `completed` event of the stream). `expiresAt` is 30 seconds after the ask. Her reply only says that she will look.
+2. When she looks, the response of that turn carries `appLook: { "id": "…", "camera": "back" | "front", "expiresAt": "…", "lifetimeSeconds": 30 }` (text: the JSON response; voice: the final response, also in the `completed` event of the stream). `expiresAt` is 30 seconds after the ask, or 90 when the turn reported `undetermined` (the owner reads an explanation and answers the system's prompt first); `lifetimeSeconds` says the same relative to the ask, so the app counts from when the response arrived instead of trusting its clock against the server's. Her reply only says that she will look.
 3. The app captures **one** frame with that camera without a tap, shows 「いま見ました」 with a small thumbnail, and answers, keeping no copy:
 
    ```json
@@ -366,7 +366,7 @@ Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言っ�
    { "scopeKey": "owner", "outcome": "refused", "code": "background" }
    ```
 
-   The frame has the bounds of a body frame (JPEG, at most 960 wide, 1,920 high, 400,000 bytes; the request at most 535,384 bytes). `camera` is the camera that actually took it. Refusal codes: `background`, `denied`, `declined` (the system prompt was not yet answered and the owner chose not now), `no_camera`, `switched_off`, `busy` (the camera is in use), `failed`. No other field is accepted; there is no text field.
+   The frame has the bounds of a body frame (JPEG, at most 960 wide, 1,920 high, 400,000 bytes; the request at most 535,384 bytes). `camera` is the camera that actually took it. Refusal codes: `background`, `denied`, `declined` (the system prompt was not yet answered and the owner chose not now), `no_camera`, `switched_off`, `busy` (the camera is in use by something else), `failed`. No other field is accepted; there is no text field.
 4. The answer is `200` with `{ schemaVersion, id, status: "seen" | "refused" | "failed", message: { id, threadId, text } | null }`. `message.text` is her next message, already stored in the Talk (`message.id` is the conversation message). A text client appends it; a voice client speaks it behind the reply it is speaking and registers it with its echo guard. It is not an initiative and no push is sent. For a voice look the answer is held until the client has stored the turn (`POST /v1/voice/…/turns`), for at most 8 seconds.
 
 | Status | `error` | Meaning |
@@ -376,16 +376,16 @@ Added 2026-10-02 (owner: 「アプリからも、これ見れる？って言っ�
 | 403 | `APP_LOOK_DISABLED` | `SHANNON_APP_LOOK=off`. |
 | 404 | `LOOK_NOT_FOUND` | Unknown id. |
 | 409 | `LOOK_ALREADY_ANSWERED` | Answered before. |
-| 410 | `LOOK_EXPIRED` | `expiresAt` has passed; she has then said her one line about it, if she had announced the look. |
+| 410 | `LOOK_EXPIRED` | The answer arrived after `expiresAt`; she has then said her one line about it, if she had announced the look. |
 
 Rules of the server:
 
 - **Which camera looks.** The surface the turn came from: an app that reports `ready` or `undetermined` is asked, and her body is not, even when it could look. An app that cannot capture leaves the turn to her body under the body's unchanged rules. When neither can and he asked, she says the app's reason.
-- **When.** Asked (「これ見れる？」「見える？」) she always looks. For a remark about where he is or what is in front of him she looks if she is curious: the conversation model's choice in a text turn, the decision gateway's judgement in a voice turn.
-- **Other people.** A look through the app is allowed with other people around (he aims the camera himself), but then only when he asks; the model that sees the frame is then given the turn itself and no other line of his Talk. A guest never opens one. Her body keeps its rule: the owner alone.
+- **When.** Asked (「これ見れる？」「見える？」) she looks: in a text turn the conversation model is told to choose the look whenever she is asked; in a voice turn his words count as a request when the decision gateway agrees, and 「これ見れる？」 said as the whole utterance counts even when no model tier answered. A request the gateway scores as not one is not taken. For a remark about where he is or what is in front of him she looks if she is curious: the conversation model's choice in a text turn, the decision gateway's judgement in a voice turn.
+- **Other people.** A look through the app is allowed with other people around (he aims the camera himself), but then only when he asks and, in a voice turn, only when a model tier agrees that a look is asked for (in an owner call the speakers are not told apart, so a companion who addresses her and asks can open one); the model that sees the frame is then given the turn itself and no other line of his Talk. A guest never opens one. Her body keeps its rule: the owner alone.
 - **Count.** No hourly or daily limit. One look per turn, one open look per scope, and 5 seconds between two looks (`SHANNON_APP_LOOK_MIN_INTERVAL_SECONDS`, 0–600).
 - **The frame.** Sent to the conversation model once with `store: false`, with the camera named; for the outer camera a person in view is not taken to be the owner. It is written to no table, file, or log. `app_looks` holds identifiers, timestamps, the camera, an outcome and a code. Her message carries the same `bodyLook` mark as a body look: it is display history (no fact, promise, or person memory is made from it) and is not replayed in a turn other people can see.
-- **Not looking.** Her fixed lines (`appLookLines.ts`), one per reason: not on screen, no permission (with where to allow it), not now, no camera, switched off, camera in use, could not capture, not answered in time, the model could not see. A look she chose herself that fails says nothing unless her reply had said she would look.
+- **Not looking.** Her fixed lines (`appLookLines.ts`), one per reason: not on screen, no permission (with where to allow it), not now, no camera, switched off, camera in use, could not capture, not answered in time, the model could not see, and (server only, `too_soon`) another look was just taken or still open when she had already said she would look. A look she chose herself that fails says nothing unless her reply had said she would look.
 - **Record.** One entry in the activity record per look (tool `app.look`), without what she saw.
 - **Switch.** `SHANNON_APP_LOOK=off` (also `false`, `0`, `disabled`): never offered, the voice gateway is not asked, and the answer route replies `403`. Unset means on.
 

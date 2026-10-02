@@ -44,6 +44,7 @@ struct ShannonAppLookPresenter: ViewModifier {
 
     @State private var id = UUID()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
         let frontmost = coordinator.isFrontmost(presenter: id)
@@ -60,6 +61,8 @@ struct ShannonAppLookPresenter: ViewModifier {
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: coordinator.cue?.id)
             .onAppear { coordinator.register(presenter: id) }
+            // The thumbnail is not kept past the screen it was shown on (nor into the app switcher's snapshot).
+            .onChange(of: scenePhase) { if scenePhase != .active { coordinator.dismissCue() } }
             .onDisappear { coordinator.unregister(presenter: id) }
 #if os(iOS)
             .sheet(isPresented: Binding(

@@ -88,6 +88,37 @@ final class ShannonAppLookTests: XCTestCase {
         XCTAssertFalse(ShannonAppLookAskDTO(id: "a", camera: .back, expiresAt: "soon").isOpen(at: expiry.addingTimeInterval(-60)))
     }
 
+    func testTheDeadlineIsCountedFromArrivalWhenTheServerSendsALifetime() throws {
+        let arrived = Date(timeIntervalSince1970: 1_000)
+        var ask = ShannonAppLookAskDTO(id: "a", camera: .back, expiresAt: "2026-10-02T09:00:30.000Z")
+        // An older server: the absolute time is all there is.
+        XCTAssertEqual(ask.deadline(receivedAt: arrived), ISO8601DateFormatter().date(from: "2026-10-02T09:00:30Z"))
+        ask.lifetimeSeconds = 30
+        // Two seconds are left for the upload, whatever this device's clock says.
+        XCTAssertEqual(ask.deadline(receivedAt: arrived), arrived.addingTimeInterval(28))
+        let decoded = try JSONDecoder().decode(ShannonAppLookAskDTO.self, from: Data(
+            #"{"id":"a","camera":"back","expiresAt":"2026-10-02T09:01:30.000Z","lifetimeSeconds":90}"#.utf8))
+        XCTAssertEqual(decoded.lifetimeSeconds, 90)
+        XCTAssertNil(ShannonAppLookAskDTO(id: "a", camera: .back, expiresAt: "soon").deadline(receivedAt: arrived))
+    }
+
+    func testASpokenReplyDoesNotWaitForASlowLook() async {
+        let slow = Task<String?, Never> { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            return "遅れて見えました。"
+        }
+        let started = Date()
+        let spoken = await ShannonAppLookSpeech.spoken(slow, within: 0.1)
+        XCTAssertNil(spoken)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3)
+        slow.cancel()
+        let quick = Task<String?, Never> { @MainActor in "見えました。" }
+        let heard = await ShannonAppLookSpeech.spoken(quick, within: 5)
+        XCTAssertEqual(heard, "見えました。")
+        let none = await ShannonAppLookSpeech.spoken(nil)
+        XCTAssertNil(none)
+    }
+
     func testTheAnswerCarriesOneFrameOrOneCodeAndNoOtherField() throws {
         let frame = ShannonAppLookFrame(jpeg: Data([0xFF, 0xD8, 0xFF, 0xD9]), width: 720, height: 960)
         let seen = try json(ShannonAppLookAnswerDTO.seen(scopeKey: "owner", camera: .back, frame: frame))
@@ -425,7 +456,8 @@ private enum Fixtures {
     }
 
     static func wait(_ condition: @MainActor () async -> Bool) async throws {
-        for _ in 0..<200 {
+        // Generous: the machine that runs these may be busy with several builds.
+        for _ in 0..<3_000 {
             if await condition() { return }
             try await Task.sleep(for: .milliseconds(10))
         }

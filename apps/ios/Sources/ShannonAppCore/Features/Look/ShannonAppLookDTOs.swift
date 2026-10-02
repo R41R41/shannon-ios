@@ -34,11 +34,20 @@ public struct ShannonAppLookAskDTO: Codable, Equatable, Sendable {
     public let id: String
     public let camera: ShannonAppLookCamera
     public let expiresAt: String
+    /// Seconds the ask stays open from the moment it was made; absent on a server that sends only `expiresAt`.
+    public var lifetimeSeconds: Double? = nil
 
     public init(id: String, camera: ShannonAppLookCamera, expiresAt: String) {
         self.id = id
         self.camera = camera
         self.expiresAt = expiresAt
+    }
+
+    /// When this device stops answering the ask. Counted from when the ask arrived here, so that a device clock
+    /// that differs from the server's neither loses a look nor sends a frame the server would drop.
+    public func deadline(receivedAt: Date) -> Date? {
+        if let lifetimeSeconds { return receivedAt.addingTimeInterval(max(0, lifetimeSeconds - 2)) }
+        return ShannonAppLookAskDTO.date(expiresAt)
     }
 
     /// False once the server has closed the ask: nothing is captured for it then.
@@ -154,6 +163,37 @@ enum ShannonAppLookSpeech {
         return Task { @MainActor in
             let text = await perform(ask)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return text?.isEmpty == false ? text : nil
+        }
+    }
+
+    /// How long a spoken reply waits for what she saw before the turn ends without it.
+    static let spokenWaitSeconds = 15.0
+
+    /// What she says about the look, if it arrives in time to be spoken behind the reply. A look that takes
+    /// longer (a permission prompt, a slow network) is not waited for: her message is then in the Talk only.
+    @MainActor
+    static func spoken(_ look: Task<String?, Never>?, within seconds: Double = spokenWaitSeconds) async -> String? {
+        guard let look else { return nil }
+        // Whichever comes first answers; the look itself is not cancelled and still reaches the Talk.
+        let once = Once()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            Task { @MainActor in
+                let text = await look.value
+                if once.take() { continuation.resume(returning: text) }
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                if once.take() { continuation.resume(returning: nil) }
+            }
+        }
+    }
+
+    @MainActor
+    private final class Once {
+        private var taken = false
+        func take() -> Bool {
+            defer { taken = true }
+            return !taken
         }
     }
 }
