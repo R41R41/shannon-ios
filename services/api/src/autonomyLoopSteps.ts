@@ -133,9 +133,9 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'think': return prepareThinking(dependencies, cycle, step, at);
     case 'read': return prepareReading(dependencies, cycle, step);
     case 'notion': return prepareNotion(dependencies, cycle, step);
-    case 'note': return prepareNote(dependencies, cycle, step);
-    case 'draft': return prepareDraft(dependencies, cycle, step);
-    case 'revise': return prepareRevision(dependencies, cycle, step);
+    case 'note': return prepareNote(dependencies, cycle, step, at);
+    case 'draft': return prepareDraft(dependencies, cycle, step, at);
+    case 'revise': return prepareRevision(dependencies, cycle, step, at);
     case 'show': return prepareShowing(dependencies, cycle, step);
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
@@ -204,12 +204,12 @@ function prepareNotion(dependencies: StepDependencies, cycle: AutonomyLoopCycle,
   };
 }
 
-function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
+function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store, service } = dependencies;
   const reading = (step.readingId ? store.loop.reading(cycle.scopeKey, step.readingId) : null) ?? store.loop.unnotedReadings(cycle.scopeKey)[0] ?? null;
   if (!reading || reading.notedAt || !reading.text) return null;
   const pursuit = reading.pursuitId ? store.pursuits.get(cycle.scopeKey, reading.pursuitId) : null;
-  const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading, ...ownerInformed(dependencies) }), OUTPUT_TOKENS.note);
+  const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading, ...ownerWriting(dependencies, cycle.scopeKey, at, `${pursuit?.title ?? ''} ${reading.title}`) }), OUTPUT_TOKENS.note);
   if (!call) return null;
   return {
     request: { domain: 'aether_study', summary: '読んだものについて、書斎にメモを書きます。', tool: 'study.note', paid: { model: call.model, estimatedCostYen: call.estimatedCostYen } },
@@ -240,13 +240,13 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
   };
 }
 
-function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
+function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store } = dependencies;
   // In a session she is told when her study has no room for another story, and a draft that could not be kept is not paid for.
   if (sessionOf(dependencies, cycle) && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return null;
   const pursuit = step.pursuitId ? store.pursuits.get(cycle.scopeKey, step.pursuitId) : null;
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', draftPrompt({
-    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5), ...ownerInformed(dependencies),
+    idea: step.intent ?? '', pursuit, notes: storyNotes(store, cycle.scopeKey, step.pursuitId, 5), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${pursuit?.title ?? ''}`),
   }), OUTPUT_TOKENS.draft);
   if (!call) return null;
   return {
@@ -273,7 +273,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
   };
 }
 
-function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep): PreparedStep | null {
+function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycle, step: AutonomyPlannedStep, at: string): PreparedStep | null {
   const { store } = dependencies;
   const piece = step.pieceId ? store.study.get(cycle.scopeKey, step.pieceId) : null;
   if (!piece || piece.kind !== 'story' || piece.status === 'put_away') return null;
@@ -282,7 +282,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({
     aim: step.intent ?? '', piece: { title: piece.title, body: piece.body, version: piece.version },
     feedback: feedback.map(item => ({ reactionLabel: STUDY_REACTION_LABEL[item.reaction], comment: item.comment, version: item.version })),
-    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3), ...ownerInformed(dependencies),
+    notes: storyNotes(store, cycle.scopeKey, piece.pursuitId, 3), ...ownerWriting(dependencies, cycle.scopeKey, at, `${step.intent ?? ''} ${piece.title}`),
   }), OUTPUT_TOKENS.revise);
   if (!call) return null;
   const seen = piece.readableVersion !== null;
@@ -348,9 +348,15 @@ function preparePutAway(dependencies: StepDependencies, cycle: AutonomyLoopCycle
   };
 }
 
-/** While her thinking is given the owner's context, an idea, an aim or a pursuit may come from it: the story prompts then carry the output rule. */
-function ownerInformed(dependencies: StepDependencies): { ownerInformed?: true } {
-  return dependencies.loop.ownerContext && dependencies.ownerContext ? { ownerInformed: true } : {};
+/**
+ * While the owner's context is switched on, what she writes in her study may draw on it (owner decision 2026-10-02): the prompt
+ * carries the rule that says so and the block built for her writing, without anything that must reach nobody but the owner.
+ */
+function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: string, topic: string): { ownerInformed?: true; ownerContext?: string } {
+  if (!dependencies.loop.ownerContext || !dependencies.ownerContext) return {};
+  let block: string | null = null;
+  try { block = dependencies.ownerContext.forWriting(scopeKey, at, topic)?.section ?? null; } catch { block = null; }
+  return { ownerInformed: true, ...(block ? { ownerContext: block } : {}) };
 }
 
 /** Stories that are open in her study: drafts and those she called 「見せてもいい」. */

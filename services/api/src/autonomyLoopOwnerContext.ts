@@ -10,8 +10,9 @@ import { SHANNON_OWNER_NAME } from '@shannon/cognition';
  * (`autonomyOwnerContext.ts`) through the conversation's own memory entry points, so forgetting and the owner's
  * secrecy choices apply here exactly as there, and nothing is copied into a store of the loop.
  *
- * What stays protected is what leaves her head. `ownerPrivateRule` is the one place that says so: whenever
- * owner-private material is in a prompt, or may have shaped what a prompt is given, the prompt carries its line.
+ * What stays protected is what leaves her head towards others. `ownerPrivateRule` is the one place that says what she
+ * may do with owner-private material: whenever it is in a prompt, or may have shaped what a prompt is given, the
+ * prompt carries its line.
  * Things the owner asked to keep secret reach her thinking only; `carriesSecret` keeps them out of every free
  * text of hers that a later prompt or a search would carry on. A page address she makes up is text sent to a
  * stranger's server, so a thought made with the block in front of her reads only pages she was shown
@@ -31,6 +32,11 @@ export interface AutonomyOwnerContext {
   /** For her thinking: what a conversation with the owner alone may use. Null when there is nothing. */
   forThinking(scopeKey: string, at: string, topic: string): OwnerContextBlock | null;
   /**
+   * For what she writes in her study (a story, a note; owner decision 2026-10-02: she may write about him and the people he
+   * knows): the same without anything that must reach nobody else, unmarked. Null when there is nothing.
+   */
+  forWriting(scopeKey: string, at: string, topic: string): OwnerContextBlock | null;
+  /**
    * For a message she writes to the owner: the same, without anything that must never reach anyone else, because her words
    * may be seen or heard beyond him. `others`: someone else is present now, and each protected line carries the marker a
    * conversation with other people present uses.
@@ -42,7 +48,14 @@ export const OWNER_CONTEXT_TITLE = `${SHANNON_OWNER_NAME}のこと・最近の�
 export const OWNER_CONTEXT_HEADER = `[${OWNER_CONTEXT_TITLE}]（${SHANNON_OWNER_NAME}と二人で話す時にボクが思い出せること。ほかの人には見せない）`;
 
 /** Replaces the line of the thinking rules that says nothing of the owner's is given, while the block is. */
-export const OWNER_CONTEXT_MATERIALS_LINE = `- 使ってよい材料は、下に渡されるものだけ。自分の台帳、自分のメモと下書き、公開されている読み物、読者の反応、そして「${OWNER_CONTEXT_TITLE}」。そこにないことを、思い出したふりをして書かない。作品やメモに実在の個人のことを入れない。`;
+export const OWNER_CONTEXT_MATERIALS_LINE = `- 使ってよい材料は、下に渡されるものだけ。自分の台帳、自分のメモと下書き、公開されている読み物、読者の反応、そして「${OWNER_CONTEXT_TITLE}」。そこにないことを、思い出したふりをして書かない。`;
+/** Replace the lines of the story and note rules that say nothing of the owner's is given or used, while her writing may draw on it. */
+export const OWNER_CONTEXT_DRAFT_MATERIALS = `- 材料は下に渡されたものだけ。自分の台帳、自分のメモ、そして「${OWNER_CONTEXT_TITLE}」。そこにないことを、思い出したふりをして書かない。`;
+export const OWNER_CONTEXT_REVISE_MATERIALS = '- 材料は下に渡されたものだけ。そこにないことを、思い出したふりをして書かない。';
+export const OWNER_CONTEXT_NOTE_PEOPLE = '- 読んだページに出てくる、知らない人の噂や個人情報は書かない。';
+/** What she saw of the room, while she may write about the owner: she may write it; other people and text on screens stay out, as when she speaks of a look. */
+export const OWNER_CONTEXT_SEEN_THINKING_RULE = '- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。次に何をするか考える材料にしてよいし、物語やメモに書いてもよい。';
+export const OWNER_CONTEXT_SEEN_STORY_RULE = '- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。見たとおりに物語に書いてよい。写っていたほかの人のことと、画面や書類の文字は書かない。';
 /** Replaces the line of the message rules that says no conversation is given, while the block is. */
 export const OWNER_CONTEXT_MESSAGE_MATERIALS = `下の「${OWNER_CONTEXT_TITLE}」にないことを、思い出したふりをしない。`;
 
@@ -51,21 +64,24 @@ export const OWNER_CONTEXT_MESSAGE_MATERIALS = `下の「${OWNER_CONTEXT_TITLE}�
  * have shaped what this prompt is given (an idea or a pursuit she wrote with it in front of her). Null when not:
  * the prompt is then what it was.
  *
- * - `thinking`: she may think with it; it does not go into anything she writes down for a work, and she reads only pages she was shown.
- * - `story`: a draft or a revision. Inspiration, never the thing itself, never recognisable.
- * - `note`: a note about a page she read, for a pursuit she may have written with it in front of her. Nothing of his in it.
+ * By the owner's decision of 2026-10-02 (「ボクのことを物語やメモに書いていい。友達のことも」) the rule for her own writing is a
+ * permission: she may write about him and the people he knows, by name, as they are. What stays: secrets go nowhere, what
+ * she writes is read by the owner, and showing it to anyone else needs his approval (ADR-0002, unchanged).
+ * - `thinking`: she may think with it and write about it; secrets nowhere; she reads only pages she was shown.
+ * - `story`: a draft or a revision. She may write about him and his people; secrets not.
+ * - `note`: the same for a note.
  * - `message`: a message to the owner. She may touch on it, lightly, one thing at most.
  */
 export function ownerPrivateRule(kind: 'thinking' | 'story' | 'note' | 'message', present: boolean): string | null {
   if (!present) return null;
   if (kind === 'thinking') {
-    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}と二人の時にボクが思い出せること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語の着想にしてもよいが、idea・aim・pursuits・text・query には、そのまま書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる形にしない。「内緒」「秘密」と言われたことは、考える時にだけ使い、thought にも reason にも、どこにも書かない。ページの住所（url）も外に出る言葉なので、read で読むのは下の「読めそうな場所」にあるページだけ。`;
+    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}と二人の時にボクが思い出せること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語やメモには、${SHANNON_OWNER_NAME}のことも、${SHANNON_OWNER_NAME}の友だちや周りの人のことも、名前を出してそのまま書いてよい（idea・aim・pursuits・text にも書いてよい）。ただし「内緒」「秘密」と言われたことは、考える時にだけ使い、thought にも reason にも query にも、どこにも書かない。ページの住所（url）も外に出る言葉なので、read で読むのは下の「読めそうな場所」にあるページだけ。`;
   }
   if (kind === 'note') {
-    return `- 「いま追っていること」には、${SHANNON_OWNER_NAME}と二人の時に知ったことから思いついたものがあるかもしれない。メモには、${SHANNON_OWNER_NAME}やその周りの人、場所、出来事のことを書かない。`;
+    return `- メモには、${SHANNON_OWNER_NAME}のことも、${SHANNON_OWNER_NAME}の友だちや周りの人のことも、名前を出してそのまま書いてよい。メモを読むのは${SHANNON_OWNER_NAME}。「内緒」「秘密」と言われたことは書かない。`;
   }
   if (kind === 'story') {
-    return `- 「書こうとしていること」「直したいこと」や台帳には、${SHANNON_OWNER_NAME}と二人の時に知ったことから思いついたものがあるかもしれない。着想にしてよいが、そのまま物語に書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる名前や描写を入れない。`;
+    return `- 物語には、${SHANNON_OWNER_NAME}のことも、${SHANNON_OWNER_NAME}の友だちや周りの人のことも、名前を出してそのまま書いてよい。書いたものを読むのは${SHANNON_OWNER_NAME}。ほかの人に見せるのは、${SHANNON_OWNER_NAME}がいいと言ってから。「内緒」「秘密」と言われたことは書かない。`;
   }
   return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}と二人の時に知ったこと。話しかけるきっかけや中身にしてよい。並べ立てない。触れるなら一つだけ、さりげなく。`;
 }

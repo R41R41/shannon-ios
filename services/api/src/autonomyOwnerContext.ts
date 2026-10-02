@@ -23,8 +23,9 @@ import { prepareTurnCognitiveContext } from './turnCognitiveContext.js';
  *
  * Two audiences, because her thinking stays in her head and her words do not:
  * - her thinking is the owner alone (`OWNER_AUDIENCE`): what a one-to-one conversation with him may use;
- * - a message of hers is judged as if someone whose name is not known could read it (`UNKNOWN_GUEST_PRESENCE`),
- *   because a push banner or her body may show it to anyone: what the owner asked to keep secret, what he marked
+ * - what she writes in her study (a story, a note) and a message of hers are judged as if someone whose name is not
+ *   known could read it (`UNKNOWN_GUEST_PRESENCE`): a story is meant to be shown one day, and
+ *   a push banner or her body may show a message to anyone: what the owner asked to keep secret, what he marked
  *   機微 by hand, and what was said with an unnamed guest present never reach that prompt. While someone else is
  *   present every protected line also carries the marker a conversation with other people present uses.
  */
@@ -49,7 +50,7 @@ const MARKER = /【機微:[^】]*】/gu;
 const SECRETS_MAXIMUM = 4_000;
 const SECRET_CHARACTERS = 2_000;
 
-type Mode = 'thinking' | 'message' | 'message_others';
+type Mode = 'thinking' | 'writing' | 'message' | 'message_others';
 /** The gate of a message, and the words of what her thinking was shown that this gate withholds. */
 interface Unspeakable { gate: DisclosureGate; words: string[] }
 
@@ -70,7 +71,8 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
       part('〈覚えていること〉', guarded(() => about(sources, gate, state, scopeKey, alone, marked)), budget * SHARE.about),
       part('〈最近のふたりの会話（古い順）〉', guarded(() => talk(sources, state, scopeKey, present, marked, budget * SHARE.talk, options.timeZone, unspeakable)), budget * SHARE.talk, 'newest'),
       part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone, unspeakable).map(shown)), budget * SHARE.recalled),
-      ...(alone ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic)), budget * SHARE.people)] : []),
+      // The people she remembers: for her thinking, and for her writing without what the gate of a message withholds. A message is not given them.
+      ...(alone || mode === 'writing' ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic, alone ? null : gate)), budget * SHARE.people)] : []),
       part('〈今日の関心〉', guarded(() => focus(sources, gate, scopeKey, at, options.timeZone, marked, unspeakable)), budget * SHARE.focus),
     ].filter(Boolean);
     if (!parts.length) return null;
@@ -83,6 +85,7 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
   };
   return {
     forThinking: (scopeKey, at, topic) => build(scopeKey, at, topic, 'thinking'),
+    forWriting: (scopeKey, at, topic) => build(scopeKey, at, topic, 'writing'),
     forMessage: (scopeKey, at, topic, others) => build(scopeKey, at, topic, others ? 'message_others' : 'message'),
   };
 }
@@ -181,11 +184,12 @@ function recalled(sources: OwnerContextSources, state: CompanionStateSnapshot, s
   return context.memories.map(memory => `- (${memory.observedAt.slice(0, 10)}) ${memory.summary}`);
 }
 
-/** Who she remembers, and what was last talked about with them. For her thinking only: these carry no label a message could be judged by. */
-function people(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, topic: string): string[] {
+/** Who she remembers, and what was last talked about with them; with a gate, only what that gate lets through. */
+function people(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, topic: string, gate: DisclosureGate | null): string[] {
   if (!sources.people) return [];
   const known = sources.people.listPeople(scopeKey).filter(person => !person.forgottenAt).slice(0, 8);
   const items = [...sources.people.recall(scopeKey, state, topic, OWNER_AUDIENCE).items].filter(item => item.kind !== 'turn')
+    .filter(item => !gate || gate.allows(item.recallId, item.disclosure))
     .sort((left, right) => right.observedAt.localeCompare(left.observedAt)).slice(0, 4);
   return [
     ...(known.length ? [`- ${known.map(person => `${person.displayName}さん${person.howKnown ? `（${person.howKnown}）` : ''}`).join('、')}`] : []),

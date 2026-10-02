@@ -26,8 +26,9 @@ import { FakeModel, loopHarness, runUntilIdle, scope, type FakeShowing } from '.
  * 「基本的に全部見ていい」). The contract:
  * (a) what the owner asked her to forget, and what is withheld from a conversation, never reaches a prompt of the loop;
  * (b) what he asked to keep secret, or marked 機微 by hand, reaches her thinking only: never a draft, a revision, a note
- *     or a message, also when her own thought tries to carry it there;
- * (c) wherever owner-private material is, or may have shaped what a prompt is given, the output rule is in the prompt;
+ *     or a message, also when her own thought tries to carry it there; everything else of his, and of the people he knows,
+ *     may reach her writing (owner decision 2026-10-02: 「ボクのことを物語やメモに書いていい。友達のことも」);
+ * (c) wherever owner-private material is, or may have shaped what a prompt is given, the rule for it is in the prompt;
  * (d) with `SHANNON_AUTONOMY_OWNER_CONTEXT=off` the loop is given nothing of it and every prompt is what it was
  *     (byte for byte: `autonomyLoopKillSwitch.test.ts`).
  */
@@ -205,14 +206,20 @@ describe('what reaches the prompts of her own activity', () => {
     expect(harness.store.pursuits.list(scope, '2026-10-02T05:00:00.000Z').map(item => item.title)).not.toContain('贈りものの話');
     // Nothing of his left for a stranger's server in a page address: only the page she was shown was read.
     expect(harness.reader.reads).toEqual(['https://ja.wikipedia.org/wiki/物語']);
-    // A story and a note are not given the owner's context at all, only (c) the rule that what came from it is not written as it is.
+    // A story and a note may be about him and the people he knows (owner decision 2026-10-02): they are given his context
+    // without what must reach nobody else, unmarked, and (c) the rule that says she may write about them and not about secrets.
     for (const kind of ['draft', 'revise', 'note'] as const) {
       for (const prompt of model.prompts(kind)) {
-        expect(prompt, kind).not.toContain(OWNER_CONTEXT_HEADER);
-        for (const sentinel of OWNER_ALONE) expect(prompt, `${kind} ${sentinel}`).not.toContain(sentinel);
+        expect(prompt, kind).toContain(OWNER_CONTEXT_HEADER);
+        for (const sentinel of OWNER_ALONE) expect(prompt, `${kind} ${sentinel}`).toContain(sentinel);
+        expect(prompt, kind).toContain(`- ${PERSON}さん（友人）`);
+        expect(prompt, kind).not.toContain('【機微:');
         expect(prompt, kind).toContain(ownerPrivateRule(kind === 'note' ? 'note' : 'story', true)!);
-        // His upcoming items stay where they were: the thinking step and the message about them.
-        expect(prompt, kind).not.toMatch(/UPCOMING-|ライ氏のこれから/u);
+        expect(prompt, kind).not.toMatch(/実在の個人の事情|実在の個人をモデルにしない|実在の個人についての噂/u);
+        expect(prompt.slice(prompt.indexOf(OWNER_CONTEXT_HEADER)).length, kind).toBeLessThanOrEqual(1_200 + 200);
+        // The list of his upcoming items stays where it was: the thinking step and the message about them. A promise she
+        // remembers is part of his context like any other memory; a calendar event is not.
+        expect(prompt, kind).not.toMatch(/UPCOMING-EVENT|ライ氏のこれから/u);
       }
     }
     // A message to the owner: his context without what must reach nobody else, and (c) its rule.
@@ -234,14 +241,14 @@ describe('what reaches the prompts of her own activity', () => {
     expect(messages[3]).toMatch(/- 【機微:[^】]*】約束: SENTINEL-UNDATED-PROMISE-3318を調べる/u);
     // A turn the rule judged ordinary is replayed as it is, as in a conversation with someone else present.
     expect(messages[3]).toContain('ライ氏: 合言葉はSENTINEL-TALK-7731です。覚えておいて');
-    // The people she remembers have no label a message could be judged by: they are for her thinking only.
-    for (const prompt of messages) expect(prompt).not.toContain(PERSON);
-    // What she wrote for others to read later holds no secret and nothing of his as it is: the fake model wrote the fixed story.
+    // The list of people she remembers is for her thinking and her writing; a message is not given it.
+    for (const prompt of messages) expect(prompt).not.toContain(`${PERSON}さん（友人）`);
+    // Nothing she stored holds a secret or a forgotten thing.
     expect(speaker.sentOn(scope, '2026-10-02')).toBe(4);
     const raw = new DatabaseSync(path);
     const written = JSON.stringify([raw.prepare('SELECT title, body FROM study_pieces').all(), raw.prepare('SELECT * FROM autonomy_activity').all(), raw.prepare('SELECT * FROM autonomy_loop_observations').all()]);
     raw.close();
-    for (const sentinel of [...SECRETS, ...FORGOTTEN, 'SENTINEL-PROFILE-4402', 'SENTINEL-TALK-7731']) expect(written, sentinel).not.toContain(sentinel);
+    for (const sentinel of [...SECRETS, ...FORGOTTEN]) expect(written, sentinel).not.toContain(sentinel);
     // The thought that repeated a secret left only the plain sentence in her record.
     expect(harness.entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action').map(entry => entry.summary)).toContain('次に何をするか考えました。');
     close();
@@ -340,8 +347,8 @@ describe('what reaches the prompts of her own activity', () => {
     for (const idea of ['退職を考えている人の話', '万年筆を贈る人の話', '転職活動中の人', '会社を辞めるつもりの人']) expect(carriesSecret(idea, thinking.secrets), idea).toBe(true);
     expect(carriesSecret('傘を忘れた人の話', thinking.secrets)).toBe(false);
     // A message is given none of them, and not the forgotten promise either.
-    for (const others of [false, true]) {
-      const message = context.forMessage(scope, clock.at, '物語', others)?.section ?? '';
+    for (const others of [false, true, 'writing'] as const) {
+      const message = (others === 'writing' ? context.forWriting(scope, clock.at, '物語') : context.forMessage(scope, clock.at, '物語', others))?.section ?? '';
       for (const hidden of ['退職', '万年筆', '時計を贈る', '転職活動中', '会社を辞める', '登山靴', '山へ行く']) expect(message, `${others} ${hidden}`).not.toContain(hidden);
     }
     persistent.close();

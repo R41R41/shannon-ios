@@ -492,9 +492,10 @@ describe('a session: with the owner\'s context', () => {
     const order = [OWNER_CONTEXT_HEADER, '[さっき起きたこと]', SESSION_FACTS_HEADER].map(header => again!.prompt.indexOf(header));
     expect(order.every(index => index > 0)).toBe(true);
     expect(order).toEqual([...order].sort((left, right) => left - right));
-    // The story step is not given his context, only the rule that what came from it is not written as it is.
-    expect(draft!.prompt).not.toContain(OWNER_CONTEXT_HEADER);
+    // The story step is given his context too, at the end of its materials, with the rule that she may write about him.
+    expect(draft!.prompt).toContain(`${OWNER_CONTEXT_HEADER}\n〈覚えていること〉\n- ユーザーは写真を撮るのが好き`);
     expect(draft!.system).toContain(ownerPrivateRule('story', true)!);
+    expect(draft!.system).not.toContain('実在の個人をモデルにしない');
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', restReason: 'つづきは夕方に' });
     store.close(); persistent.close();
   });

@@ -45,6 +45,7 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     const wired: AutonomyOwnerContext = {
       forThinking: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
       forMessage: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
+      forWriting: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
     };
     const off = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-off-'));
     const on = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-on-'));
@@ -90,13 +91,25 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     expect(thinking.prompt).toContain(block);
     expect(thinkingPrompt(bare).system).not.toContain('ライ氏のこと・最近のふたりのこと');
     expect(thinkingPrompt(bare).system).toContain('ここには渡されていない');
-    // A story: no block, and the rule whenever her thinking is given the owner's context.
-    for (const prompt of [draftPrompt({ idea: '傘', pursuit: null, notes: [], ownerInformed: true }), revisePrompt({ aim: '終わり', piece: { title: '傘', body: '本文', version: 1 }, feedback: [], notes: [], ownerInformed: true })]) {
+    // A story: the block when there is one, and the rule that she may write about him whenever the owner's context is switched on.
+    const seen = [{ title: '見たこと（10月2日 10時）', excerpt: '机に本が積んである。', seen: true as const }];
+    for (const prompt of [draftPrompt({ idea: '傘', pursuit: null, notes: seen, ownerInformed: true, ownerContext: block }), revisePrompt({ aim: '終わり', piece: { title: '傘', body: '本文', version: 1 }, feedback: [], notes: seen, ownerInformed: true, ownerContext: block })]) {
       expect(prompt.system).toContain(ownerPrivateRule('story', true)!);
       expect(prompt.system.indexOf(ownerPrivateRule('story', true)!)).toBeLessThan(prompt.system.lastIndexOf('JSONだけを返す'));
-      expect(prompt.prompt).not.toContain('ライ氏のこと・最近のふたりのこと');
+      expect(prompt.prompt.endsWith(block)).toBe(true);
+      // The lines that forbade it are gone, and what she saw of the room may be written as she saw it; other people and text on screens may not.
+      expect(prompt.system).not.toMatch(/実在の個人の事情|実在の個人をモデルにしない|見たままを物語に書かない|持ち主やその部屋だと分かる描写を入れない/u);
+      expect(prompt.system).toContain('見たとおりに物語に書いてよい。写っていたほかの人のことと、画面や書類の文字は書かない。');
     }
-    expect(draftPrompt({ idea: '傘', pursuit: null, notes: [] }).system).not.toContain('二人の時に知ったこと');
+    expect(draftPrompt({ idea: '傘', pursuit: null, notes: [], ownerInformed: true }).prompt).not.toContain('ライ氏のこと・最近のふたりのこと');
+    // With the switch off the story rules are the old ones, the look rule included, and a block handed in by mistake is not used.
+    const old = draftPrompt({ idea: '傘', pursuit: null, notes: seen, ownerContext: block });
+    expect(old.system).toContain('実在の個人をモデルにしない。');
+    expect(old.system).toContain('着想にしてよいが、見たままを物語に書かない。持ち主やその部屋だと分かる描写を入れない。');
+    expect(old.system).not.toContain('そのまま書いてよい');
+    expect(old.prompt).not.toContain(block);
+    expect(thinkingPrompt({ ...bare, notes: seen }, extras).system).toContain('物語やメモに書いてもよい。');
+    expect(thinkingPrompt({ ...bare, notes: seen }).system).toContain('物語には見たままを書かない。');
     // A message: the block and its rule, and no longer the line that says no conversation is given.
     const message = reachOutPrompt({ reason: 'wonder', localTime: 'x', ownerContext: block });
     expect(message.system).toContain(ownerPrivateRule('message', true)!);
