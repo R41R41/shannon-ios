@@ -77,7 +77,7 @@ public struct ShannonConversationView: View {
     public var body: some View {
         let activeColorScheme = resolvedColorScheme
         workspaceWithPresentations
-        .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel))
+        .modifier(ShannonBodyAttachment(bodyModel: bodyModel, conversation: model, memory: memoryModel, voice: geminiLiveVoiceModel, listen: bodyListen))
         .environment(\.colorScheme, activeColorScheme)
         .onAppear {
             syncAppIconBadge(with: model.totalBadgeCount)

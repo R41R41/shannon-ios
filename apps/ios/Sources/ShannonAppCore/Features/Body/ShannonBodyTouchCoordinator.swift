@@ -13,6 +13,10 @@ public final class ShannonBodyTouchCoordinator {
         public let id: String
         public let text: String
         public let face: ShannonFace?
+        /// The reaction this line answers, the Talk a spoken answer continues, and how long the microphone stays open for it.
+        public var reactionID = ""
+        public var threadID: String?
+        public var listenSeconds = 0
     }
 
     /// What the body screen may truthfully say about delivery.
@@ -28,6 +32,10 @@ public final class ShannonBodyTouchCoordinator {
         public var capabilities: @MainActor @Sendable () -> (expressions: [String], gestures: [String])
         public var express: @MainActor @Sendable (_ expression: String, _ feeling: String?) -> Void
         public var now: @Sendable () -> Date
+        /// Whether her line is spoken (the body screen's 声で返す); otherwise it is the bubble only.
+        public var repliesInVoice: @MainActor @Sendable () -> Bool = { false }
+        /// Says the line and listens for his answer. Nil where nothing can speak.
+        public var speak: (@MainActor @Sendable (Line) async -> Void)?
 
         public init(
             reportsTouch: @escaping @MainActor @Sendable () -> Bool = { ShannonBodyPreference.reportsTouch() },
@@ -56,6 +64,8 @@ public final class ShannonBodyTouchCoordinator {
 
     public private(set) var line: Line?
     public private(set) var delivery: Delivery = .fine
+    /// True while her line is being spoken: her figure is in the speaking phase.
+    public private(set) var isSpeaking = false
 
     @ObservationIgnored public var environment: Environment
     @ObservationIgnored private let scopeKey: String
@@ -203,8 +213,18 @@ public final class ShannonBodyTouchCoordinator {
         }
         guard let message, !message.text.isEmpty else { return }
         let face = message.expression.flatMap(ShannonExpressionDTO.init(rawValue:)).map { ShannonFace(expression: $0, feelingName: message.feeling) }
-        let shown = Line(id: message.id, text: String(message.text.prefix(120)), face: face)
+        let shown = Line(
+            id: message.id, text: String(message.text.prefix(120)), face: face,
+            reactionID: answer.id, threadID: message.threadId, listenSeconds: min(30, max(0, message.listenSeconds ?? 0)))
         line = shown
+        // Voice mode: the bubble and her voice, then a moment in which he may answer. Text mode: the bubble only.
+        if environment.repliesInVoice(), let speak = environment.speak, !isSpeaking {
+            isSpeaking = true
+            Task { [weak self] in
+                await speak(shown)
+                self?.isSpeaking = false
+            }
+        }
         lineTask?.cancel()
         lineTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.lineSeconds))

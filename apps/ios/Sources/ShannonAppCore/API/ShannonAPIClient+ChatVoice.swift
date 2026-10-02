@@ -291,7 +291,7 @@ extension ShannonAPIClient {
             transcript: transcript,
             participantMode: participantMode,
             deviceContext: deviceContext
-        ))
+        ).linkedToReaction())
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
@@ -463,7 +463,7 @@ extension ShannonAPIClient {
             shannonTranscript: shannonTranscript,
             emotion: emotion,
             companionPresent: companionPresent ? true : nil
-        ))
+        ).linkedToReaction())
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ShannonAPIError.rejected(status: http.statusCode) }

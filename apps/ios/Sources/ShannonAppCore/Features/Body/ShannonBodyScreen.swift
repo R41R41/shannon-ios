@@ -9,6 +9,7 @@ public struct ShannonBodyScreen: View {
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
     @AppStorage(Self.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
+    @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
     @State private var hostID = UUID()
     @State private var adjustment = ShannonLive2DLayout()
     @State private var waterlightReaction = 0
@@ -201,7 +202,7 @@ public struct ShannonBodyScreen: View {
             .opacity(usesLive2D ? 1 : 0.45)
 
             // Without the conversation's model (the Mac window) nothing could be sent, so the switch is not offered.
-            if bodyModel != nil {
+            if let bodyModel {
                 Toggle(isOn: $reportsTouch) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ShannonBodyCopy.reportsTouchTitle)
@@ -214,6 +215,19 @@ public struct ShannonBodyScreen: View {
                 .frame(minHeight: ShannonTouchTarget.minimum)
                 .accessibilityHint(ShannonBodyCopy.reportsTouchHint)
                 .accessibilityIdentifier("body-reports-touch")
+                // How she answers a touch here. Kept in place for both forms; it has a meaning only while touches reach her.
+                if bodyModel.voice != nil {
+                    Picker(ShannonBodyCopy.replyModeTitle, selection: $replyModeRawValue) {
+                        ForEach(ShannonBodyReplyMode.allCases) { mode in
+                            Text(mode.japaneseName).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(!reportsTouch || !usesLive2D)
+                    .opacity(reportsTouch && usesLive2D ? 1 : 0.45)
+                    .accessibilityHint(ShannonBodyCopy.replyModeHint)
+                    .accessibilityIdentifier("body-reply-mode")
+                }
             }
         }
         .padding(.horizontal, ShannonSpacing.large)

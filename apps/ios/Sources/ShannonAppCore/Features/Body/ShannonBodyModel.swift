@@ -19,6 +19,7 @@ public final class ShannonBodyModel {
     public var audience: ShannonBodyAudience { audienceRule.audience(at: Date()) }
     public internal(set) var touch: ShannonBodyTouchCoordinator
     @ObservationIgnored var isConnected = false
+    @ObservationIgnored var voice: ShannonBodyVoice?
 
     public init(touch: ShannonBodyTouchCoordinator = ShannonBodyTouchCoordinator()) {
         self.touch = touch
@@ -28,7 +29,8 @@ public final class ShannonBodyModel {
     func connect(
         scopeKey: String, client: (any ShannonBodyServing)?,
         isDesignPreview: @escaping @MainActor @Sendable () -> Bool,
-        othersMayBeListening: @escaping @MainActor @Sendable () -> Bool
+        othersMayBeListening: @escaping @MainActor @Sendable () -> Bool,
+        voice: ShannonBodyVoice? = nil
     ) {
         guard !isConnected else { return }
         isConnected = true
@@ -41,6 +43,15 @@ public final class ShannonBodyModel {
             },
             maySend: { !isDesignPreview() }
         ))
+        self.voice = voice
+        if let voice {
+            // Only where the surface answers in voice: the body screen with 声で返す chosen.
+            touch.environment.repliesInVoice = { [weak self] in
+                guard let self else { return false }
+                return (self.showsScreen || self.showsScreenFromSettings) && ShannonBodyReplyMode.current() == .voice
+            }
+            touch.environment.speak = { [weak voice] line in await voice?.say(line) }
+        }
         ShannonLive2DStage.shared.onTouchMessage = { [weak self] message in
             self?.touch.handle(message)
         }
@@ -56,6 +67,8 @@ struct ShannonBodyAttachment: ViewModifier {
     let conversation: ShannonConversationModel
     let memory: ShannonMemoryModel
     let voice: ShannonGeminiLiveSessionModel
+    /// Opens the microphone for his answer after a spoken touch line (iPhone); nil where there is none.
+    var listen: ShannonBodyVoice.Listen?
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
@@ -94,7 +107,9 @@ struct ShannonBodyAttachment: ViewModifier {
     }
 
     private var phase: ShannonLive2DPhase {
-        ShannonBodySignals.phase(isSendingText: conversation.isSending, call: callActivity)
+        // Her spoken line for a touch is speech like any other: no gesture of her own, and no second question meanwhile.
+        bodyModel.touch.isSpeaking && callActivity == nil ? .speaking
+            : ShannonBodySignals.phase(isSendingText: conversation.isSending, call: callActivity)
     }
 
     private var loopState: String? { memory.autonomy.overview?.loop?.state }
@@ -165,11 +180,37 @@ struct ShannonBodyAttachment: ViewModifier {
         bodyModel.connect(
             scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonBodyServing,
             isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true },
-            othersMayBeListening: { [weak voice] in Self.othersMayBeListening(voice) }
+            othersMayBeListening: { [weak voice] in Self.othersMayBeListening(voice) },
+            voice: bodyVoice()
         )
         refreshDoing()
         refreshWords()
         pushAll()
+    }
+
+    /// Her voice for a touch line: the conversation's own speech stream, silent while a call runs.
+    private func bodyVoice() -> ShannonBodyVoice? {
+        guard !conversation.isDesignPreview else { return nil }
+        let conversation = conversation
+        let call = voice
+        let speaker = ShannonBodyVoice(
+            streamSpeech: { [weak conversation] text, style, provider in
+                guard let conversation else { throw CancellationError() }
+                return try await conversation.streamSpeech(text, style: style, provider: provider)
+            },
+            callIsActive: { [weak call] in Self.callIsActive(call) }
+        )
+        speaker.listen = listen
+        return speaker
+    }
+
+    private static func callIsActive(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {
+#if os(iOS)
+        guard let voice else { return false }
+        return voice.phase != .idle && voice.phase != .failed
+#else
+        false
+#endif
     }
 
     private static func othersMayBeListening(_ voice: ShannonGeminiLiveSessionModel?) -> Bool {

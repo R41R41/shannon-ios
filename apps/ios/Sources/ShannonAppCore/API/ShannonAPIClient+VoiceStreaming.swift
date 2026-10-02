@@ -21,7 +21,7 @@ extension ShannonAPIClient {
             transcript: transcript,
             participantMode: participantMode,
             deviceContext: deviceContext
-        ))
+        ).linkedToReaction())
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }
         if http.statusCode == 404 || http.statusCode == 405 {

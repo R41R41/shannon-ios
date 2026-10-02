@@ -46,6 +46,8 @@ public enum ShannonBodyCopy {
     public static let reportsTouchHint = "オンにすると、Live2Dの姿に触れたことがシャノンに届きます"
     public static let settingsExplanation = "Live2Dの姿は指で触れられます（頭をなでる、つつく、くすぐる、手をつなぐ）。「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
     public static let macExplanation = "Live2Dの姿は「からだを開く」で見られます。このMacからは、触れたことをシャノンに伝えません。"
+    public static let replyModeTitle = "触れたときの返事"
+    public static let replyModeHint = "声で返すを選ぶと、触れたときのひとことをシャノンが声で言い、そのあと少しの間マイクを開いて返事を聞きます"
     public static let layoutTitle = "映し方"
     public static let layoutFull = "全身"
     public static let layoutBust = "上半身"

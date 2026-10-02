@@ -122,6 +122,8 @@ public struct ShannonLiveVoiceDelegationRequestDTO: Codable, Equatable, Sendable
     public let transcript: String
     public let participantMode: ShannonVoiceParticipantMode
     public let deviceContext: ShannonVoiceDeviceContextDTO?
+    /// The touch reaction this first turn answers (`docs/body-contract.md`, "If he answers").
+    public var reactionId: String? = nil
 
     public init(
         scopeKey: String,
@@ -440,6 +442,7 @@ public struct ShannonRealtimeVoiceTurnRequestDTO: Codable, Equatable, Sendable {
     public var emotion: ShannonVoiceTurnEmotionDTO? = nil
     /// Someone else may have been listening: the turn is kept but teaches nothing about the owner.
     public var companionPresent: Bool? = nil
+    public var reactionId: String? = nil
 }
 
 public struct ShannonVoiceTurnEmotionDTO: Codable, Equatable, Sendable {

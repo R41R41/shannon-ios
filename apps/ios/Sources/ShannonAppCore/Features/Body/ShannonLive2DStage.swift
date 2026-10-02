@@ -32,7 +32,7 @@ public final class ShannonLive2DStage {
     public private(set) var modelUpdatedAt: String?
     public private(set) var expressions: [String] = []
     public private(set) var gestures: [String] = []
-    public private(set) var framesPerSecond: Int?
+    public internal(set) var framesPerSecond: Int?
     /// How far the page is with loading, 0–1, while `status` is `loading`.
     public private(set) var loadProgress = 0.0
     /// True when the page itself can calm its idle movement (`setIdle`); otherwise an idle figure is paused to rest.
@@ -56,18 +56,18 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var bridge: ShannonLive2DBridge?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var appActive = true
-    @ObservationIgnored private var sentPaused: Bool?
+    @ObservationIgnored var sentPaused: Bool?
     @ObservationIgnored private var lastReloadAt: Date?
     @ObservationIgnored private(set) var loadStartedAt: Date?
-    @ObservationIgnored private var lastActivityAt = Date()
+    @ObservationIgnored var lastActivityAt = Date()
     @ObservationIgnored private var restTask: Task<Void, Never>?
     @ObservationIgnored private var releaseTask: Task<Void, Never>?
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
-    @ObservationIgnored private var mood: (valence: Double, arousal: Double, openness: Double)?
-    @ObservationIgnored private var presence: ShannonLive2DPresence?
-    @ObservationIgnored private var phase: ShannonLive2DPhase = .idle
-    @ObservationIgnored private var lastMouthLevel = 0.0
-    @ObservationIgnored private var frameStats = false
+    @ObservationIgnored var mood: (valence: Double, arousal: Double, openness: Double)?
+    @ObservationIgnored var presence: ShannonLive2DPresence?
+    @ObservationIgnored var phase: ShannonLive2DPhase = .idle
+    @ObservationIgnored var lastMouthLevel = 0.0
+    @ObservationIgnored var frameStats = false
     @ObservationIgnored private var observing = false
     @ObservationIgnored private var failuresWithoutReady = 0
     @ObservationIgnored private var fingerDown = false
@@ -165,61 +165,7 @@ public final class ShannonLive2DStage {
         send(.setTouchEnabled(host.touchEnabled))
     }
 
-    // MARK: Driving
-
-    public func express(_ expression: String, feeling: String? = nil, seconds: Double? = nil) {
-        noteActivity()
-        send(.express(expression: expression, feeling: feeling, seconds: seconds))
-    }
-
-    public func expressEmotion(_ name: String, intensity: Double) {
-        noteActivity()
-        send(.expressEmotion(name: name, intensity: intensity))
-    }
-
-    public func setMood(valence: Double, arousal: Double, openness: Double) {
-        mood = (valence, arousal, openness)
-        send(.setMood(valence: valence, arousal: arousal, openness: openness))
-    }
-
-    public func setPresence(_ value: ShannonLive2DPresence) {
-        guard presence != value else { return }
-        // More stories waiting makes her fidget: that is worth waking a resting figure for.
-        if value.awaitingReaction > (presence?.awaitingReaction ?? 0) { noteActivity() }
-        presence = value
-        send(.setPresence(value))
-    }
-
-    public func setPhase(_ value: ShannonLive2DPhase) {
-        guard phase != value else { return }
-        phase = value
-        noteActivity()
-        send(.setPhase(value))
-        if value != .speaking { lastMouthLevel = 0 }
-    }
-
-    /// The level of the audio being played, 0–1. Zero when speech ends.
-    public func setMouthLevel(_ level: Double) {
-        let clamped = min(1, max(0, level.isFinite ? level : 0))
-        guard status == .ready, sentPaused == false || clamped <= 0,
-              ShannonLive2DStagePolicy.sendsMouthLevel(clamped, last: lastMouthLevel) else { return }
-        lastMouthLevel = clamped
-        if clamped > 0 { lastActivityAt = Date() }
-        send(.setMouthLevel(clamped))
-    }
-
-    public func play(_ gesture: String) {
-        guard gestures.contains(gesture) else { return }
-        noteActivity()
-        send(.play(gesture))
-    }
-
-    /// Frames per second, reported every five seconds while a diagnostics view asks for it.
-    public func setFrameStats(_ enabled: Bool) {
-        frameStats = enabled
-        if !enabled { framesPerSecond = nil }
-        send(.setFrameStats(enabled))
-    }
+    // MARK: Driving (the calls into the page are in `ShannonLive2DStage+Driving.swift`)
 
     /// The owner asked for another try after a failure.
     public func retry() {
@@ -245,7 +191,7 @@ public final class ShannonLive2DStage {
         scheduleRest()
     }
 
-    private func send(_ command: ShannonLive2DCommand) {
+    func send(_ command: ShannonLive2DCommand) {
         guard status == .ready, let webView else { return }
         webView.evaluateJavaScript(command.javaScript, completionHandler: nil)
     }
@@ -490,41 +436,18 @@ public final class ShannonLive2DStage {
     private func observeSystem() {
         guard !observing else { return }
         observing = true
-        let center = NotificationCenter.default
-        lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
-        center.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.calmChanged(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled) }
+        let system = ShannonLive2DSystem.current
+        reduceMotion = system.reduceMotion
+        lowPower = system.lowPower
+        appActive = system.appActive
+        ShannonLive2DSystem.observe { [weak self] change in
+            switch change {
+            case let .reduceMotion(value): self?.calmChanged(reduceMotion: value)
+            case let .lowPower(value): self?.calmChanged(lowPower: value)
+            case let .active(value): self?.activeChanged(value)
+            case .memoryWarning: self?.memoryWarning()
+            }
         }
-#if canImport(UIKit)
-        reduceMotion = UIAccessibility.isReduceMotionEnabled
-        appActive = UIApplication.shared.applicationState == .active
-        center.addObserver(forName: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.calmChanged(reduceMotion: UIAccessibility.isReduceMotionEnabled) }
-        }
-        center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.activeChanged(false) }
-        }
-        center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.activeChanged(true) }
-        }
-        center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.memoryWarning() }
-        }
-#elseif canImport(AppKit)
-        reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        appActive = !NSApplication.shared.isHidden
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.calmChanged(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) }
-        }
-        center.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.activeChanged(false) }
-        }
-        center.addObserver(forName: NSApplication.didUnhideNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.activeChanged(true) }
-        }
-#endif
     }
 
     private func calmChanged(reduceMotion: Bool? = nil, lowPower: Bool? = nil) {

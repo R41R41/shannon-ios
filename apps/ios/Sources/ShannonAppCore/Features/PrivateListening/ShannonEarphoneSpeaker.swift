@@ -165,6 +165,7 @@ public final class ShannonEarphoneSpeaker: ShannonReachOutSpeaking {
         engine.attach(player)
         engine.attach(pitch)
         engine.connect(player, to: pitch, format: format)
+        ShannonSpeechLevelPublisher.shared.observe(player) // her mouth, for whoever draws her
         engine.connect(pitch, to: engine.mainMixerNode, format: format)
         engine.prepare()
         try engine.start()

@@ -415,6 +415,76 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertNil(second.line)
     }
 
+    // MARK: Her voice for a touch
+
+    func testAReactionIsTextUnlessTheSurfaceAnswersInVoice() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-body-voice-\(UUID().uuidString)"))
+        XCTAssertEqual(ShannonBodyReplyMode.current(defaults: defaults), .text)
+        defaults.set("voice", forKey: ShannonBodyReplyMode.storageKey)
+        XCTAssertEqual(ShannonBodyReplyMode.current(defaults: defaults), .voice)
+        XCTAssertEqual(ShannonBodyReplyMode.allCases.map(\.japaneseName), ["文字で返す", "声で返す"])
+
+        let client = FakeBodyClient()
+        await client.setAnswer(.init(
+            id: "t1", status: "said",
+            message: .init(id: "m1", text: "えへへ、なんですかライ氏？", expression: "bashful", feeling: nil, threadId: "thread-9", listenSeconds: 6),
+            mood: nil))
+        let spoken = LineBox()
+        let voiceMode = FlagBox(false)
+        var environment = ShannonBodyTouchCoordinator.Environment(reportsTouch: { true }, capabilities: { ([], []) }, express: { _, _ in })
+        environment.repliesInVoice = { voiceMode.value }
+        environment.speak = { line in spoken.values.append(line) }
+        let coordinator = ShannonBodyTouchCoordinator(scopeKey: "owner", client: client, environment: environment)
+        // Text mode: the bubble only.
+        await coordinator.handle(.askReaction(Self.touch("t1")))?.value
+        XCTAssertEqual(coordinator.line?.text, "えへへ、なんですかライ氏？")
+        XCTAssertEqual(spoken.values.count, 0)
+        XCTAssertFalse(coordinator.isSpeaking)
+        // Voice mode: the bubble, and the line handed to her voice with what the answer needs.
+        voiceMode.value = true
+        await coordinator.handle(.askReaction(Self.touch("t1")))?.value
+        for _ in 0..<50 where coordinator.isSpeaking { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(spoken.values.map(\.reactionID), ["t1"])
+        XCTAssertEqual(spoken.values.first?.threadID, "thread-9")
+        XCTAssertEqual(spoken.values.first?.listenSeconds, 6)
+        XCTAssertFalse(coordinator.isSpeaking)
+    }
+
+    func testTheFirstVoiceTurnAfterASpokenLineNamesTheReactionOnce() throws {
+        let link = ShannonBodyReactionLink()
+        let now = Date(timeIntervalSince1970: 10_000)
+        XCTAssertNil(link.forDelegation(ownerMode: true, now: now))
+        link.arm(reactionID: "t1", listenSeconds: 6, now: now)
+        // A turn other people can hear never carries it.
+        XCTAssertNil(link.forDelegation(ownerMode: false, now: now))
+        XCTAssertNil(link.forTurn(companionPresent: false))
+        XCTAssertEqual(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(60)), "t1")
+        XCTAssertNil(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(61)))
+        XCTAssertEqual(link.forTurn(companionPresent: false), "t1")
+        XCTAssertNil(link.forTurn(companionPresent: false))
+        // Too late for the server's window: an ordinary turn.
+        link.arm(reactionID: "t2", listenSeconds: 6, now: now)
+        XCTAssertNil(link.forDelegation(ownerMode: true, now: now.addingTimeInterval(67)))
+        // A companion turned up between the delegation and the stored turn: the turn is stored without it.
+        link.arm(reactionID: "t3", listenSeconds: 6, now: now)
+        XCTAssertEqual(link.forDelegation(ownerMode: true, now: now), "t3")
+        XCTAssertNil(link.forTurn(companionPresent: true))
+        link.arm(reactionID: "t4", listenSeconds: 6, now: now)
+        link.disarm()
+        XCTAssertNil(link.forDelegation(ownerMode: true, now: now))
+
+        // On the wire: present only on the turn it belongs to.
+        link.arm(reactionID: "t5", listenSeconds: 6)
+        let request = ShannonLiveVoiceDelegationRequestDTO(scopeKey: "owner", threadId: "th", transcript: "なに？", participantMode: .owner)
+        let first = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.linkedToReaction(link))) as? [String: Any]
+        let second = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.linkedToReaction(link))) as? [String: Any]
+        XCTAssertEqual(first?["reactionId"] as? String, "t5")
+        XCTAssertNil(second?["reactionId"])
+        let turn = ShannonRealtimeVoiceTurnRequestDTO(scopeKey: "owner", threadId: "th", userTranscript: "なに？", shannonTranscript: "えへへ")
+        let stored = try JSONSerialization.jsonObject(with: JSONEncoder().encode(turn.linkedToReaction(link))) as? [String: Any]
+        XCTAssertEqual(stored?["reactionId"] as? String, "t5")
+    }
+
     func testAnOlderServerIsSaidToBeUnsupported() async {
         let client = FakeBodyClient()
         await client.failNextEvents(ShannonBodyRefusal(status: 403, code: "BODY_INGEST_DISABLED"))
@@ -461,6 +531,7 @@ final class ShannonBodyTests: XCTestCase {
 }
 
 @MainActor private final class LevelBox: Sendable { var values: [Double] = [] }
+@MainActor private final class LineBox: Sendable { var values: [ShannonBodyTouchCoordinator.Line] = [] }
 @MainActor private final class ExpressionBox: Sendable { var values: [String] = [] }
 @MainActor private final class AudienceBox: Sendable { var value = ShannonBodyAudience.owner }
 @MainActor private final class FlagBox: Sendable {
