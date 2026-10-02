@@ -1112,6 +1112,32 @@ describe('what a strong feeling decided again and again cannot do (voice and tex
     expect(turn(faint, HARSH, QUIET, at(late, MINUTE), { primary: 'hurt', intensity: 0.9 }).feeling).toMatchObject({ primary: 'happy', continued: true });
   });
 
+  it('counts an eased mood at the height it had before, inside the hold, also when another feeling is on top', () => {
+    const sorry = reduceCompanionState(hurt(), { type: 'feeling-eased', by: 'apology' }, at(NIGHT, MINUTE));
+    const sulkyOnTop = turn(sorry, 'ふーん', QUIET, at(NIGHT, 2 * MINUTE), { primary: 'sulky', intensity: 0.6 }).state;
+    expect(sulkyOnTop.expressiveEmotion!.primary).toBe('sulky');
+    expect(presentShannonFeeling(sulkyOnTop, at(NIGHT, 3 * MINUTE))).toMatchObject({ heights: { hurt: 0.9 } });
+    const again = turn(sulkyOnTop, HARSH, QUIET, at(NIGHT, 3 * MINUTE), { primary: 'hurt', intensity: 0.9 });
+    // What is left of it after his apology shows; it is not an expressed 0.90 again, and nothing is stored.
+    expect(again.feeling).toMatchObject({ primary: 'hurt', continued: true });
+    expect(again.feeling.intensity).toBeCloseTo(0.36, 2);
+    expect(again.state.expressiveEmotion).toEqual(sulkyOnTop.expressiveEmotion);
+    // After the hold the height is the eased strength, and a strong hurt is a new one.
+    const later = at(NIGHT, 40 * MINUTE);
+    expect(turn(awakeFor(sulkyOnTop, at(NIGHT, 2 * MINUTE), 38, 1), HARSH, QUIET, later, { primary: 'hurt', intensity: 0.9 }).state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+  });
+
+  it('gives the place of the weakest entry that yields, and keeps a pleasant entry that is not the weakest', () => {
+    // An old weak-held unpleasant mood, a strong joy and two strong unpleasant moods: a new strong one evicts the weak one.
+    let state = turn(fresh(), HARSH, QUIET, NIGHT, { primary: 'annoyed', intensity: 0.6 }).state;
+    state = turn(state, '読んで泣いたよ', QUIET, at(NIGHT, MINUTE), { primary: 'happy', intensity: 0.9 }).state;
+    state = turn(state, HARSH, QUIET, at(NIGHT, 40 * MINUTE), { primary: 'hurt', intensity: 0.9 }).state;
+    state = turn(state, 'ふーん', QUIET, at(NIGHT, 41 * MINUTE), { primary: 'sulky', intensity: 0.9 }).state;
+    expect(state.lingering).toHaveLength(4);
+    state = turn(state, 'ふーん', QUIET, at(NIGHT, 42 * MINUTE), { primary: 'jealous', intensity: 0.9 }).state;
+    expect(state.lingering!.map(item => item.kind).sort()).toEqual(['happy', 'hurt', 'jealous', 'sulky']);
+  });
+
   it('does not read her own mood words as concern when the mood she decided goes on', () => {
     const ask = (state: CompanionStateSnapshot, reply: string, primary: string, now: string) =>
       resolveWrittenReplyEmotion({ snapshot: state, userMessage: 'ふーん', reply, now, timing: AWAKE, decided: { primary, intensity: 0.9 } }).expressiveEmotion;

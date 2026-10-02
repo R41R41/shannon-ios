@@ -97,7 +97,8 @@ export function presentShannonFeeling(
     const heights: Partial<Record<ShannonEmotionKind, number>> = {};
     const strengths: Partial<Record<ShannonEmotionKind, number>> = {};
     for (const { feeling, strength } of living) {
-      heights[feeling.kind] = Math.max(heights[feeling.kind] ?? 0, feeling.strength);
+      // Inside an eased hold an entry counts at the height it had before, as it does for a place underneath.
+      heights[feeling.kind] = Math.max(heights[feeling.kind] ?? 0, heldHeight(feeling, awakeMs, timing));
       strengths[feeling.kind] = Math.max(strengths[feeling.kind] ?? 0, strength);
     }
     if (kind) {

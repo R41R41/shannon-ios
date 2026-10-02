@@ -1,5 +1,6 @@
 import {
   calibrateTemperament,
+  deriveShannonFace,
   explainTemperament,
   lingeringFeelingLine,
   presentShannonFeeling,
@@ -73,9 +74,9 @@ export type PresentedCompanionState = CompanionStateSnapshot & { presence: Compa
  * an absence is visible without waiting for the next turn, and the mood is the
  * decayed conversational feeling rather than a stored one. Nothing is written.
  * A reply passes the feeling it just resolved, which is stored only afterwards,
- * so the state returned with that reply already agrees with its face. One case differs on purpose: a mood decided
- * again that comes up for one reply from underneath a stronger feeling is the face of that reply only; her standing
- * mood, here and on the next read, is still the stronger feeling until it has faded.
+ * so the state returned with that reply already agrees with its face. That includes a mood decided again that comes
+ * up for one reply from underneath a stronger feeling: it goes on (nothing is stored), and the mood returned with that
+ * reply is that mood; on the next read her standing mood is the stronger feeling again until it has faded.
  */
 export function presentCompanionState(
   snapshot: CompanionStateSnapshot,
@@ -89,10 +90,16 @@ export function presentCompanionState(
     ...snapshot,
     temperament: snapshot.sharedDays ? calibrateTemperament(snapshot, today) : snapshot.temperament,
     presence: {
-      mood: presentShannonMood(feeling ? { ...snapshot, expressiveEmotion: feeling } : snapshot, now, timing),
+      mood: feeling?.continued === true ? goingOnMood(snapshot, feeling) : presentShannonMood(feeling ? { ...snapshot, expressiveEmotion: feeling } : snapshot, now, timing),
       temperamentReasons: explainTemperament(snapshot, today),
     },
   };
+}
+
+/** The mood of a reply whose feeling is one she already has, going on: read from that feeling as it stands, since it is not stored again. */
+function goingOnMood(snapshot: CompanionStateSnapshot, feeling: ShannonExpressiveEmotion): ShannonPresentMood {
+  const fromConversation = feeling.primary !== 'neutral' && feeling.visibility !== 'hidden';
+  return Object.freeze({ ...deriveShannonFace(snapshot.emotion, feeling), cause: fromConversation ? feeling.cause : '特に強い気持ちは続いていない', fromConversation });
 }
 
 /**

@@ -18,6 +18,7 @@ import { ChatReplyStreamDecoder } from '../src/chatReplyStreamDecoder.js';
 import type { ChatStreamLine } from '../src/contracts.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import { emotionTiming } from '../src/emotionTiming.js';
+import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 
@@ -506,6 +507,52 @@ describe('every existing rule applies to it unchanged', () => {
     }
 
   });
+});
+
+describe('a mood decided again under another feeling: the reply, its returned state and the stored voice face agree', () => {
+  /** A hurt from the night, eight awake hours of plain talk, then a moderate joy on top. */
+  const joyOverHurt = async () => {
+    const h = harness();
+    await h.chat(HARSH, QUIET, strong('hurt'));
+    for (let index = 0; index < 48; index += 1) { h.advance(10 * MINUTE); await h.chat('次の手順を教えて', PLAIN); }
+    await h.chat('昨日の物語、よかったよ', QUIET, moderate('happy'));
+    expect(h.state().expressiveEmotion).toMatchObject({ primary: 'happy', intensity: 0.6 });
+    h.advance(MINUTE);
+    return h;
+  };
+
+  it('returns the hurt as the face of the reply and as the mood of that response, and stores nothing', async () => {
+    const h = await joyOverHurt();
+    const stored = h.state().expressiveEmotion;
+    const response = await h.chat(HARSH, QUIET, strong('hurt'));
+    expect(response.messageEmotion.expression).toBe('sad');
+    expect(response.state.presence.mood).toMatchObject({ expression: 'sad', fromConversation: true });
+    expect(h.state().expressiveEmotion).toEqual(stored);
+    expect(h.state().lingering!.find(item => item.kind === 'hurt')).toMatchObject({ strength: 0.9, awakeAt: 0 });
+  }, 30_000);
+
+  it('stores a voice turn with the face the plan acted with', async () => {
+    const h = await joyOverHurt();
+    const turn = async (emotion?: { primary: string; intensity: number }) => {
+      const response = await h.api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/turns', deviceId: 'iphone',
+        body: { scopeKey: scope, userTranscript: HARSH, shannonTranscript: QUIET, ...(emotion ? { emotion } : {}) } });
+      await h.settle();
+      expect(response.status).toBe(201);
+      return response.body as { messageEmotion: { expression: string } };
+    };
+    const faceOf = (body: Awaited<ReturnType<typeof turn>>) => body.messageEmotion.expression;
+    // The plan showed the hurt at what is left of it; the stored face is that hurt, not the joy on top.
+    expect(faceOf(await turn({ primary: 'hurt', intensity: 0.45 }))).toBe('sad');
+    // Without an emotion from the client, and with one too faint to show, the turn is stored as before.
+    expect(faceOf(await turn())).toBe('joyful');
+    expect(faceOf(await turn({ primary: 'hurt', intensity: 0.2 }))).toBe('joyful');
+    const resolved = { messageEmotion: { valence: 0.1, arousal: 0.3, openness: 0.35, expression: 'joyful' }, expressiveEmotion: { primary: 'happy', continued: true } } as never;
+    expect(storedVoiceFace(resolved, { primary: 'hurt', intensity: 0.45 })).toMatchObject({ expression: 'sad', valence: 0.1 });
+    expect(storedVoiceFace(resolved, { primary: 'happy', intensity: 0.6 })).toMatchObject({ expression: 'joyful' });
+    expect(storedVoiceFace(resolved, { primary: 'not-a-kind', intensity: 0.9 })).toMatchObject({ expression: 'joyful' });
+    expect(storedVoiceFace({ messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'tender' }, expressiveEmotion: { primary: 'caring', continued: true, overrideReason: 'grief' } } as never,
+      { primary: 'hurt', intensity: 0.9 })).toMatchObject({ expression: 'tender' });
+  }, 30_000);
 });
 
 describe('guests and other people present never move her feeling toward the owner', () => {

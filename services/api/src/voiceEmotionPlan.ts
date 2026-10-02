@@ -1,4 +1,7 @@
-import { deriveShannonFace, normalizeShannonExpressiveEmotion, type ShannonEmotion, type ShannonExpressiveEmotion } from '@shannon/cognition';
+import {
+  deriveShannonFace, faceForEmotionKind, isShannonEmotionKind, normalizeShannonExpressiveEmotion,
+  type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
+} from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
 import { waitingDirectionFor, waitingPhraseFor } from './voiceWaitingCue.js';
 
@@ -51,7 +54,7 @@ export function voicePlanResponse(
  * The feeling as the plan may carry it to a device. No client reads its cause, and the device may be heard by
  * others: the cause, her clock stamp and the resolver's notes to the reducer stay on the server.
  */
-function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak' | 'heights' | 'strengths'> {
+function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided' | 'underneath' | 'easedPeak' | 'heights' | 'strengths' | 'placeAbove'> {
   const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
   return shown;
 }
@@ -84,4 +87,18 @@ function deliveryForEmotion(
     return 'focused';
   }
   return fallback;
+}
+
+/**
+ * The face a voice turn is stored with. The turn route resolves the reply again with the emotion the plan carried; when
+ * that only says "what she feels goes on" under another kind (the plan showed a mood that came up from underneath for
+ * this reply), the stored face is the one the voice acted with, so the Talk and the call cannot disagree. Nothing is stored
+ * in her state from here.
+ */
+export function storedVoiceFace(resolved: ReplyEmotion, voiced: { primary: string; intensity: number } | undefined): ShannonMessageEmotion {
+  const feeling = resolved.expressiveEmotion;
+  if (!voiced || !isShannonEmotionKind(voiced.primary) || voiced.primary === 'neutral' || voiced.intensity < 0.3
+    || feeling.continued !== true || feeling.primary === voiced.primary || feeling.overrideReason) return resolved.messageEmotion;
+  const { valence, arousal, openness } = resolved.messageEmotion;
+  return Object.freeze({ valence, arousal, openness, ...faceForEmotionKind(voiced.primary) });
 }
