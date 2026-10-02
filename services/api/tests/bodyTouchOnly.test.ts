@@ -77,6 +77,24 @@ describe('a body that only feels touch', () => {
     expect(h.store.devicesWithFlag(scope, 'camera')).toEqual([PC]);
   });
 
+  it('reports touches and nothing else', async () => {
+    const h = harness();
+    await h.register(PHONE, { touchOnly: true });
+    const receipt = await h.send('POST', '/v1/body/events', { events: [
+      { id: 'p-1', type: 'ownerReturned', audience: 'owner', occurredAt: START, minutesAway: 30 },
+      { id: 'p-2', type: 'windowShown', audience: 'owner', occurredAt: START },
+      { id: 'p-3', type: 'pet', audience: 'owner', occurredAt: START, durationMs: 800 },
+    ] }, PHONE);
+    expect(receipt).toMatchObject({ status: 200, body: { stored: 1, results: [
+      { id: 'p-1', status: 'ignored', reason: 'touch_only' }, { id: 'p-2', status: 'ignored', reason: 'touch_only' }, { id: 'p-3', status: 'stored' },
+    ] } });
+    // Her activity loop reads "he is back" from the newest such event, whoever sent it: the phone cannot write one.
+    expect(h.store.latestOfTypes(scope, ['ownerAway', 'ownerReturned'], '2026-10-01T00:00:00.000Z', '2026-10-04T00:00:00.000Z')).toBeNull();
+    // The desktop body reports them as before.
+    expect(await h.send('POST', '/v1/body/events', { events: [{ id: 'd-1', type: 'ownerReturned', audience: 'owner', occurredAt: START }] }, PC))
+      .toMatchObject({ body: { stored: 1 } });
+  });
+
   it('does not say who can see or hear her body', async () => {
     const h = harness();
     await h.register(PHONE, { touchOnly: true });

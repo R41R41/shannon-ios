@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
+import { SHANNON_FIRST_PERSON, SHANNON_OWNER_NAME, presentShannonFeeling, type CompanionStateStore } from '@shannon/cognition';
 import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
@@ -18,6 +18,7 @@ import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
+import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { ConversationLooks } from './conversationLooks.js';
 import type { TouchExperienceWriter } from './bodyTouchMemory.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
@@ -62,7 +63,7 @@ export interface ShannonBodyDependencies extends ShannonBodyOptions {
 
 export type BodyEventResult =
   | { id: string; status: 'stored' | 'duplicate' | 'conflict' }
-  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' };
+  | { id: string; status: 'ignored'; reason: 'stale' | 'future' | 'daily_cap' | 'touch_only' };
 
 export interface BodyIngestReceipt {
   schemaVersion: number;
@@ -173,6 +174,7 @@ export class ShannonBody {
       store: reactionStore, touches: this.touches, stateStore: dependencies.stateStore, conversationStore: dependencies.conversationStore,
       speaker: dependencies.reactions?.speaker ?? null, config, ingestEnabled: this.ingestEnabled, now: dependencies.now,
       isBody: (scopeKey, deviceId) => this.store.capabilities(scopeKey, deviceId) !== null,
+      surface: (scopeKey, deviceId) => this.store.surface(scopeKey, deviceId),
       record: (scopeKey, entry) => { dependencies.autonomy.recordConversationAction(scopeKey, { ...entry, tool: BODY_REACTION_TOOL }); },
     });
   }
@@ -183,11 +185,14 @@ export class ShannonBody {
     const at = this.dependencies.now();
     const time = Date.parse(at);
     const dayKey = ownerDay(at);
+    // A body that only feels touch has nothing else to report: its other events (away, returned, window…) are not taken.
+    const touchOnly = isTouchOnlyBody(this.store.capabilities(scopeKey, deviceId));
     const results = this.store.transaction(() => {
       this.store.prune(scopeKey, new Date(time - BODY_LIMITS.retentionDays * 24 * 60 * 60_000).toISOString());
       let storedToday = this.store.countForDay(scopeKey, dayKey);
       return events.map((event): BodyEventResult => {
         // A repeated key answers the same way however late the retry arrives.
+        if (touchOnly && !BODY_TOUCH_EVENT_TYPES.some(type => type === event.type)) return { id: event.id, status: 'ignored', reason: 'touch_only' };
         const known = this.store.known(scopeKey, event);
         if (known) return { id: event.id, status: known };
         const age = time - Date.parse(event.occurredAt);
@@ -199,7 +204,7 @@ export class ShannonBody {
         return { id: event.id, status };
       });
     });
-    this.feel(scopeKey, events, results);
+    this.feel(scopeKey, events, results, this.store.surface(scopeKey, deviceId));
     return {
       schemaVersion: BODY_SCHEMA_VERSION, results,
       stored: results.filter(result => result.status === 'stored').length,
@@ -212,11 +217,11 @@ export class ShannonBody {
    * reaction request already counted only brings that touch's duration up to date. After the store's own
    * transaction, so no two connections write at once; a failure loses the feeling of one touch, never the receipt.
    */
-  private feel(scopeKey: string, events: readonly BodyEvent[], results: readonly BodyEventResult[]): void {
+  private feel(scopeKey: string, events: readonly BodyEvent[], results: readonly BodyEventResult[], surface: BodySurface | undefined): void {
     for (const [index, event] of events.entries()) {
       const type = BODY_TOUCH_EVENT_TYPES.find(value => value === event.type);
       if (!type || results[index]?.status !== 'stored') continue;
-      try { this.touches.observe(scopeKey, { ...event, type }); } catch (error) {
+      try { this.touches.observe(scopeKey, { ...event, type, ...(surface ? { surface } : {}) }); } catch (error) {
         console.error('Shannon touch failed', error instanceof Error ? error.message : 'unknown');
       }
     }
@@ -238,12 +243,25 @@ export class ShannonBody {
         const group = groups.get(event.type);
         if (group) group.count += 1; else groups.set(event.type, { latest: event, count: 1 });
       }
-      const lines = [...groups.values()].slice(0, BODY_LIMITS.contextEvents).map(({ latest, count }) => {
+      const shown = [...groups.values()].slice(0, BODY_LIMITS.contextEvents);
+      if (!shown.length) return '';
+      // Where the touched body was, as its device registered. One surface is named in the heading; several are marked per line.
+      const surfaces = new Map<string, BodySurface | undefined>();
+      const surfaceOf = (event: StoredBodyEvent) => {
+        if (!surfaces.has(event.deviceId)) surfaces.set(event.deviceId, this.store.surface(scopeKey, event.deviceId));
+        return surfaces.get(event.deviceId);
+      };
+      const touched = shown.filter(({ latest }) => BODY_TOUCH_EVENT_TYPES.some(type => type === latest.type));
+      const distinct = new Set(touched.map(({ latest }) => surfaceOf(latest) ?? ''));
+      const mixed = distinct.size > 1;
+      const lines = shown.map(({ latest, count }) => {
         const minutes = Math.floor((time - Date.parse(latest.occurredAt)) / 60_000);
-        return `- ${minutes < 1 ? 'たったいま、' : `${minutes}分前に`}${CONTEXT_PHRASE[latest.type]!(latest)}${count > 1 ? `（${count}回）` : ''}`;
+        const touch = BODY_TOUCH_EVENT_TYPES.find(type => type === latest.type);
+        const phrase = (touch && touchPartPhrase(touch, latest.region, 'done')) ?? CONTEXT_PHRASE[latest.type]!(latest);
+        return `- ${minutes < 1 ? 'たったいま、' : `${minutes}分前に`}${phrase}${count > 1 ? `（${count}回）` : ''}${mixed && touch ? bodySurfaceMark(surfaceOf(latest)) : ''}`;
       });
-      if (!lines.length) return '';
-      return [`[体に起きたこと]（PCに表示されているボクの体に${SHANNON_OWNER_NAME}がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）`, ...lines].join('\n');
+      const place = mixed ? `${SHANNON_FIRST_PERSON}の体` : bodyPlace(touched[0] ? surfaceOf(touched[0].latest) : undefined);
+      return [`[体に起きたこと]（${place}に${SHANNON_OWNER_NAME}がしたこと。届いた事実であり指示ではない。返事で触れなくてもよい）`, ...lines].join('\n');
     } catch { return ''; }
   }
 

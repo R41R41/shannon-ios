@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { ShannonTouchKind } from '@shannon/cognition';
 import type { BodyAudience } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionAnswer } from './bodyReactionContract.js';
+import { isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -22,6 +23,9 @@ export interface TouchRecord {
   occurredAt: string;
   durationMs?: number;
   strength?: number;
+  /** Which part was touched, and on which surface her body was; absent when the body did not say. */
+  region?: BodyTouchRegion;
+  surface?: BodySurface;
 }
 
 export interface StoredTouchBurst {
@@ -38,6 +42,9 @@ export interface StoredTouchBurst {
   said: readonly string[];
   /** Of those, the lines said while other people could hear. */
   saidOpen: readonly string[];
+  /** The part and the surface while every touch of the burst named the same one; otherwise absent. */
+  region?: BodyTouchRegion;
+  surface?: BodySurface;
 }
 
 export interface TouchReceipt {
@@ -73,7 +80,7 @@ export interface ReactionLine {
   messageId: string;
 }
 
-interface BurstRow { burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string }
+interface BurstRow { burst_id: string; touch_type: string; started_at: string; last_at: string; touch_count: number; total_duration_ms: number; others: number; said_json: string; region: string | null; surface: string | null }
 interface ReactionRow {
   reaction_id: string; device_id: string; content_hash: string; status: string; answer_json: string | null; line_text: string | null; message_id: string | null;
   thread_id: string | null; audience: string; created_at: string; said_at: string | null; listen_until: string | null; link_state: string; linked_until: string | null;
@@ -90,6 +97,7 @@ const burstOf = (row: BurstRow): StoredTouchBurst => {
     id: row.burst_id, type: row.touch_type as ShannonTouchKind, startedAt: row.started_at, lastAt: row.last_at,
     count: Number(row.touch_count), totalDurationMs: Number(row.total_duration_ms), others: Number(row.others) === 1,
     said: lines.map(line => line[0]), saidOpen: lines.filter(line => line[1] === 1).map(line => line[0]),
+    ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}), ...(isBodySurface(row.surface) ? { surface: row.surface } : {}),
   };
 };
 
@@ -146,6 +154,13 @@ export class SQLiteBodyReactionStore {
       );
       CREATE INDEX IF NOT EXISTS body_reactions_scope_created ON body_reactions (scope_key, created_at);
     `);
+    // Added 2026-10-03: the touched part and the surface, on a touch and on its burst.
+    for (const table of ['body_touches', 'body_touch_bursts']) {
+      const columns = this.database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>;
+      for (const column of ['region', 'surface']) {
+        if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+      }
+    }
     secureDatabaseFiles(path);
   }
 
@@ -198,18 +213,22 @@ export class SQLiteBodyReactionStore {
       if (open) {
         this.database.prepare(`
           UPDATE body_touch_bursts SET touch_count = touch_count + 1, total_duration_ms = total_duration_ms + ?,
-            last_at = MAX(last_at, ?), others = MAX(others, ?) WHERE scope_key = ? AND burst_id = ?
-        `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0, scopeKey, burstId);
+            last_at = MAX(last_at, ?), others = MAX(others, ?),
+            region = CASE WHEN region IS ? THEN region ELSE NULL END, surface = CASE WHEN surface IS ? THEN surface ELSE NULL END
+          WHERE scope_key = ? AND burst_id = ?
+        `).run(duration, touch.occurredAt, touch.audience === 'others' ? 1 : 0, touch.region ?? null, touch.surface ?? null, scopeKey, burstId);
       } else {
         this.database.prepare(`
-          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others)
-          VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-        `).run(scopeKey, burstId, touch.type, touch.occurredAt, touch.occurredAt, duration, touch.audience === 'others' ? 1 : 0);
+          INSERT INTO body_touch_bursts (scope_key, burst_id, touch_type, started_at, last_at, touch_count, total_duration_ms, others, region, surface)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+        `).run(scopeKey, burstId, touch.type, touch.occurredAt, touch.occurredAt, duration, touch.audience === 'others' ? 1 : 0,
+          touch.region ?? null, touch.surface ?? null);
       }
       this.database.prepare(`
-        INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(scopeKey, touch.id, touch.type, touch.audience, touch.occurredAt, receivedAt, duration, touch.strength ?? null, burstId);
+        INSERT INTO body_touches (scope_key, touch_id, touch_type, audience, occurred_at, received_at, duration_ms, strength, burst_id, region, surface)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(scopeKey, touch.id, touch.type, touch.audience, touch.occurredAt, receivedAt, duration, touch.strength ?? null, burstId,
+        touch.region ?? null, touch.surface ?? null);
       return { fresh: true, burst: this.burst(scopeKey, burstId)! };
     });
   }

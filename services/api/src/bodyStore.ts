@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { BodyAudience, BodyCapabilities, BodyEvent, BodyEventType } from './bodyContract.js';
 import { BODY_TOUCH_ONLY_FLAG } from './bodyTouchOnly.js';
+import { isBodySurface, isBodyTouchRegion, type BodySurface } from './bodyTouchWords.js';
 import { secureDatabaseFiles } from './sqliteStoreContext.js';
 
 /**
@@ -21,11 +22,13 @@ export type BodyEventOutcome = 'stored' | 'duplicate' | 'conflict';
 
 interface EventRow {
   event_key: string; device_id: string; event_type: string; audience: string; occurred_at: string; received_at: string;
-  duration_ms: number | null; strength: number | null; minutes_away: number | null; content_hash: string;
+  duration_ms: number | null; strength: number | null; minutes_away: number | null; content_hash: string; region: string | null;
 }
 
+// The part is in the hash only when it was sent, so an event stored before parts existed still answers `duplicate`.
 const contentHash = (event: BodyEvent) => createHash('sha256').update(JSON.stringify([
   event.type, event.audience, event.occurredAt, event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null,
+  ...(event.region !== undefined ? [event.region] : []),
 ])).digest('hex').slice(0, 32);
 
 export class SQLiteBodyStore {
@@ -69,7 +72,15 @@ export class SQLiteBodyStore {
         PRIMARY KEY (scope_key, device_id)
       );
     `);
+    // Added 2026-10-03: the touched part of an event, and where a registered body is.
+    this.addColumn('body_events', 'region', 'TEXT');
+    this.addColumn('body_capabilities', 'surface', 'TEXT');
     secureDatabaseFiles(path);
+  }
+
+  private addColumn(table: string, column: string, type: string): void {
+    const columns = this.database.prepare(`PRAGMA table_info('${table}')`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(item => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
   }
 
   transaction<T>(operation: () => T): T {
@@ -90,10 +101,10 @@ export class SQLiteBodyStore {
     const result = this.database.prepare(`
       INSERT OR IGNORE INTO body_events (
         scope_key, event_key, device_id, event_type, audience, occurred_at, received_at, day_key,
-        duration_ms, strength, minutes_away, content_hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        duration_ms, strength, minutes_away, content_hash, region
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(scopeKey, event.id, deviceId, event.type, event.audience, event.occurredAt, receivedAt, dayKey,
-      event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null, hash);
+      event.durationMs ?? null, event.strength ?? null, event.minutesAway ?? null, hash, event.region ?? null);
     return Number(result.changes) > 0 ? 'stored' : this.known(scopeKey, event) ?? 'conflict';
   }
 
@@ -122,6 +133,7 @@ export class SQLiteBodyStore {
       ...(row.duration_ms !== null ? { durationMs: Number(row.duration_ms) } : {}),
       ...(row.strength !== null ? { strength: Number(row.strength) } : {}),
       ...(row.minutes_away !== null ? { minutesAway: Number(row.minutes_away) } : {}),
+      ...(isBodyTouchRegion(row.region) ? { region: row.region } : {}),
     }));
   }
 
@@ -171,24 +183,32 @@ export class SQLiteBodyStore {
 
   saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities, at: string): StoredBodyCapabilities {
     this.database.prepare(`
-      INSERT INTO body_capabilities (scope_key, device_id, expressions_json, gestures_json, flags_json, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO body_capabilities (scope_key, device_id, expressions_json, gestures_json, flags_json, updated_at, surface)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (scope_key, device_id) DO UPDATE SET
         expressions_json = excluded.expressions_json, gestures_json = excluded.gestures_json,
-        flags_json = excluded.flags_json, updated_at = excluded.updated_at
-    `).run(scopeKey, deviceId, JSON.stringify(capabilities.expressions), JSON.stringify(capabilities.gestures), JSON.stringify(capabilities.flags), at);
+        flags_json = excluded.flags_json, updated_at = excluded.updated_at, surface = excluded.surface
+    `).run(scopeKey, deviceId, JSON.stringify(capabilities.expressions), JSON.stringify(capabilities.gestures), JSON.stringify(capabilities.flags), at,
+      capabilities.surface ?? null);
     return { ...capabilities, updatedAt: at };
   }
 
   capabilities(scopeKey: string, deviceId: string): StoredBodyCapabilities | null {
     const row = this.database.prepare(`
-      SELECT expressions_json, gestures_json, flags_json, updated_at FROM body_capabilities WHERE scope_key = ? AND device_id = ?
-    `).get(scopeKey, deviceId) as unknown as { expressions_json: string; gestures_json: string; flags_json: string; updated_at: string } | undefined;
+      SELECT expressions_json, gestures_json, flags_json, updated_at, surface FROM body_capabilities WHERE scope_key = ? AND device_id = ?
+    `).get(scopeKey, deviceId) as unknown as { expressions_json: string; gestures_json: string; flags_json: string; updated_at: string; surface: string | null } | undefined;
     if (!row) return null;
     return {
       expressions: JSON.parse(row.expressions_json) as string[], gestures: JSON.parse(row.gestures_json) as string[],
-      flags: JSON.parse(row.flags_json) as Record<string, boolean>, updatedAt: row.updated_at,
+      flags: JSON.parse(row.flags_json) as Record<string, boolean>, ...(isBodySurface(row.surface) ? { surface: row.surface } : {}), updatedAt: row.updated_at,
     };
+  }
+
+  /** Where a registered body is, as it said; undefined for a device that did not say or did not register. */
+  surface(scopeKey: string, deviceId: string): BodySurface | undefined {
+    const row = this.database.prepare('SELECT surface FROM body_capabilities WHERE scope_key = ? AND device_id = ?')
+      .get(scopeKey, deviceId) as unknown as { surface: string | null } | undefined;
+    return isBodySurface(row?.surface) ? row.surface : undefined;
   }
 
   /** Devices of the scope whose registration has the flag set to true, such as `camera`. */

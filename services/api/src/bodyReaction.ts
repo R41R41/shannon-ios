@@ -1,3 +1,4 @@
+import type { BodySurface } from './bodyTouchWords.js';
 import { randomUUID } from 'node:crypto';
 import {
   OWNER_AUDIENCE, holdsFeelingThroughTouch, presentShannonFeeling, presentShannonMood, touchCause, touchFeeling, touchTarget,
@@ -43,6 +44,8 @@ export interface BodyReactionDependencies {
   ingestEnabled: boolean;
   /** Whether the device registered its capabilities as her body. */
   isBody: (scopeKey: string, deviceId: string) => boolean;
+  /** Where that body is (`windows`, `mac`, `iphone`), when it said. */
+  surface?: (scopeKey: string, deviceId: string) => BodySurface | undefined;
   /** One entry in the activity record for a line she said. */
   record: (scopeKey: string, entry: { summary: string; outcome: 'done' }) => void;
   now: () => string;
@@ -93,7 +96,7 @@ export class BodyReactions {
       return begun.existing.contentHash !== hash ? { kind: 'conflict' }
         : { kind: 'done', answer: begun.existing.answer ?? this.quiet(request.id, this.dependencies.stateStore.snapshot(scopeKey), at) };
     }
-    const answer = this.answer(scopeKey, request, at);
+    const answer = this.answer(scopeKey, request, at, this.surfaceOf(scopeKey, deviceId));
     this.inflight.set(key, { hash, answer });
     try {
       return { kind: 'done', answer: await answer };
@@ -114,7 +117,11 @@ export class BodyReactions {
     try { return this.dependencies.store.claim(scopeKey, reactionId, this.dependencies.now()); } catch { return null; }
   }
 
-  private async answer(scopeKey: string, request: BodyReactionRequest, at: string): Promise<BodyReactionAnswer> {
+  private surfaceOf(scopeKey: string, deviceId: string): BodySurface | undefined {
+    try { return this.dependencies.surface?.(scopeKey, deviceId); } catch { return undefined; }
+  }
+
+  private async answer(scopeKey: string, request: BodyReactionRequest, at: string, surface: BodySurface | undefined): Promise<BodyReactionAnswer> {
     const { store, touches, stateStore, config } = this.dependencies;
     const startedAt = performance.now();
     let felt: FeltTouch | null = null;
@@ -126,9 +133,10 @@ export class BodyReactions {
       felt = acceptable ? touches.observe(scopeKey, {
         id: request.id, type: request.touch.type, audience: request.audience, occurredAt: request.occurredAt,
         durationMs: request.touch.durationMs, ...(request.touch.strength !== undefined ? { strength: request.touch.strength } : {}),
+        ...(request.touch.region !== undefined ? { region: request.touch.region } : {}), ...(surface ? { surface } : {}),
       }) : null;
       const timely = age <= BODY_REACTION_LIMITS.requestMaximumAgeMilliseconds;
-      const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt) : null;
+      const decision = felt && timely ? await this.decide(scopeKey, request, felt, at, startedAt, surface) : null;
       if (!felt || !decision?.say) return this.finished(scopeKey, this.quiet(request.id, stateStore.snapshot(scopeKey), at), at, null);
 
       const saidAt = this.dependencies.now();
@@ -185,13 +193,13 @@ export class BodyReactions {
   }
 
   /** The one model call, raced against the deadline. Null when she has no words in time: the caller stays quiet. */
-  private async decide(scopeKey: string, request: BodyReactionRequest, felt: FeltTouch, at: string, startedAt: number): Promise<BodyReactionDecision | null> {
+  private async decide(scopeKey: string, request: BodyReactionRequest, felt: FeltTouch, at: string, startedAt: number, surface?: BodySurface): Promise<BodyReactionDecision | null> {
     const { speaker, touches, config } = this.dependencies;
     if (!speaker) return null;
     const sitting = touches.sitting(scopeKey, felt.snapshot, at);
     const prompt = bodyReactionPrompt({
       touch: request.touch, audience: request.audience, feeling: presentShannonFeeling(felt.snapshot, at, emotionTiming()),
-      burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at,
+      burst: felt.burst, sitting: sitting.bursts, said: request.audience === 'owner' ? sitting.said : sitting.saidOpen, conversation: this.conversation(scopeKey, request, felt.snapshot, at), at, ...(surface ? { surface } : {}),
     });
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;

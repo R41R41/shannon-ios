@@ -1,4 +1,5 @@
 import type { ShannonEmotionKind, ShannonExpression, ShannonFeeling } from '@shannon/cognition';
+import { isBodySurface, isBodyTouchRegion, type BodySurface, type BodyTouchRegion } from './bodyTouchWords.js';
 
 /**
  * The wire contract between Shannon's mind (this server) and her body (the Live2D
@@ -89,12 +90,16 @@ export interface BodyEvent {
   durationMs?: number;
   strength?: number;
   minutesAway?: number;
+  /** Touch types only: which part of her was touched. */
+  region?: BodyTouchRegion;
 }
 
 export interface BodyCapabilities {
   expressions: readonly string[];
   gestures: readonly string[];
   flags: Readonly<Record<string, boolean>>;
+  /** Where this body is: the Windows desktop, the Mac desktop, or the iPhone app. */
+  surface?: BodySurface;
 }
 
 export interface BodyNudge {
@@ -118,7 +123,7 @@ const includes = <T extends string>(list: readonly T[], value: unknown): value i
 const integerWithin = (value: unknown, maximum: number): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= maximum;
 
 function allowedEventFields(type: BodyEventType): readonly string[] {
-  if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength'];
+  if (includes(BODY_TOUCH_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'durationMs', 'strength', 'region'];
   if (includes(BODY_PRESENCE_EVENT_TYPES, type)) return [...COMMON_EVENT_FIELDS, 'minutesAway'];
   return COMMON_EVENT_FIELDS;
 }
@@ -148,6 +153,8 @@ export function validatedBodyEvents(value: unknown): readonly BodyEvent[] | stri
       ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
       ...(item.strength !== undefined ? { strength: Math.round(item.strength * 100) / 100 } : {}),
       ...(item.minutesAway !== undefined ? { minutesAway: item.minutesAway } : {}),
+      // A part outside the vocabulary (a newer body) is left out, not refused: the touch itself still counts.
+      ...(isBodyTouchRegion(item.region) ? { region: item.region } : {}),
     });
   }
   return events;
@@ -164,7 +171,7 @@ function identifierList(value: unknown, maximum: number, name: string): readonly
 
 /** What the body says it can express: identifiers and booleans only. */
 export function validatedBodyCapabilities(value: Record<string, unknown>): BodyCapabilities | string {
-  const unknown = Object.keys(value).find(key => !['scopeKey', 'expressions', 'gestures', 'flags'].includes(key));
+  const unknown = Object.keys(value).find(key => !['scopeKey', 'expressions', 'gestures', 'flags', 'surface'].includes(key));
   if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
   const expressions = identifierList(value.expressions, BODY_LIMITS.expressions, 'expressions');
   if (typeof expressions === 'string') return expressions;
@@ -175,7 +182,11 @@ export function validatedBodyCapabilities(value: Record<string, unknown>): BodyC
   for (const [key, flag] of Object.entries(flags)) {
     if (key.length > BODY_LIMITS.capabilityIdCharacters || !CAPABILITY_ID.test(key) || typeof flag !== 'boolean') return 'flags contains an invalid entry';
   }
-  return { expressions, gestures, flags: Object.fromEntries(Object.entries(flags).sort(([left], [right]) => left.localeCompare(right))) as Record<string, boolean> };
+  return {
+    expressions, gestures, flags: Object.fromEntries(Object.entries(flags).sort(([left], [right]) => left.localeCompare(right))) as Record<string, boolean>,
+    // A surface outside the vocabulary is left out, not refused.
+    ...(isBodySurface(value.surface) ? { surface: value.surface } : {}),
+  };
 }
 
 /** Stopping body-event ingestion needs only this variable and a restart, not a deployment. */

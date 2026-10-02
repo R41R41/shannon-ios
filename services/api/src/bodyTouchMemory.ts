@@ -5,6 +5,7 @@ import {
 } from '@shannon/cognition';
 import { BODY_TOUCH_SOURCE } from './bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
+import { bodyWhere, touchPartPhrase } from './bodyTouchWords.js';
 
 /**
  * A touch as something she remembers. Touches of one kind that follow each other are one
@@ -46,7 +47,7 @@ const seconds = (milliseconds: number) => milliseconds >= 60_000 ? `${Math.round
 
 /** The memory in her own words. Fixed wording from the kind and the numbers, plus what she said. */
 export function touchExperienceSummary(burst: StoredTouchBurst): string {
-  const done = SHANNON_TOUCH_FEELINGS[burst.type].done;
+  const done = touchPartPhrase(burst.type, burst.region, 'memory') ?? SHANNON_TOUCH_FEELINGS[burst.type].done;
   const amount = [
     burst.count >= 5 ? `たくさん、${burst.count}回` : burst.count > 1 ? `${burst.count}回` : '',
     burst.totalDurationMs >= 1_000 ? `合わせて${seconds(burst.totalDurationMs)}` : '',
@@ -54,7 +55,7 @@ export function touchExperienceSummary(burst: StoredTouchBurst): string {
   const said = burst.said.length ? `${SHANNON_FIRST_PERSON}は${burst.said.map(line => `「${line}」`).join('')}と言った。` : `${SHANNON_FIRST_PERSON}は何も言わなかった。`;
   return [
     // As for the cause of the feeling: with someone else around, it is not said who touched her.
-    `体の記憶: ${touchWhen(burst.startedAt)}、${burst.others ? '' : `${SHANNON_OWNER_NAME}に`}${done}${amount ? `（${amount}）` : ''}。`,
+    `体の記憶: ${touchWhen(burst.startedAt)}、${bodyWhere(burst.surface)}${burst.others ? '' : `${SHANNON_OWNER_NAME}に`}${done}${amount ? `（${amount}）` : ''}。`,
     burst.others ? 'ほかの人も見ている時だった。' : '',
     said,
   ].filter(Boolean).join('');

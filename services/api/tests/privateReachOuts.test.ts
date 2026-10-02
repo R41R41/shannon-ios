@@ -8,6 +8,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { AutonomyLoopObservations } from '../src/autonomyLoopObservations.js';
 import { EARPHONE_GIVEN_UP_MEMORY, EARPHONE_GIVEN_UP_RULE, EARPHONE_NO_ANSWER_LINE, EARPHONE_NO_ANSWER_RULE, reachOutHappenedLines, reachOutMemoryLine, rethinkExtras } from '../src/autonomyLoopObservePrompts.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
+import { isFullBody } from '../src/bodyTouchOnly.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { PRIVATE_REACH_OUT_LIMITS, privateReachOutListenSeconds, privateReachOutsEnabled } from '../src/privateListeningContract.js';
 import { dispatchPrivateListeningRequest } from '../src/privateListeningRoutes.js';
@@ -44,7 +45,7 @@ function world(options: { enabled?: boolean; reportsEnabled?: boolean; path?: st
   const listening = new SQLitePrivateListeningStore(path);
   const claims = new SQLiteReachOutClaims(path);
   const reachOuts = new PrivateReachOuts({
-    listening, claims, reports, isBody: (scopeKey, deviceId) => body.capabilities(scopeKey, deviceId) !== null,
+    listening, claims, reports, isBody: (scopeKey, deviceId) => isFullBody(body.capabilities(scopeKey, deviceId)),
     enabled: options.enabled ?? true, reportsEnabled: options.reportsEnabled ?? true, listenSeconds: 8, now,
   });
   const dependencies = { store: listening, enabled: true, ownerScopeKey: scope, reachOuts, now };
@@ -347,6 +348,27 @@ describe('her body and the apps', () => {
     const inbox = await w.api.dispatch({ method: 'GET', path: '/v1/initiatives', query: new URLSearchParams({ scopeKey: scope }), deviceId: PHONE });
     expect((w.reachOuts.bodyInitiatives(scope, PHONE, inbox.body) as { unreadCount: number }).unreadCount).toBe(1);
     w.close();
+  });
+
+  it('a body that only feels touch (the phone showing her figure) is an ordinary app for her messages', async () => {
+    const w = world();
+    await w.api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', body: { scopeKey: scope, expressions: [], gestures: [], flags: { touchOnly: true }, surface: 'iphone' }, deviceId: PHONE });
+    const id = w.say();
+    // Its read of the inbox is not "her body's own read": nothing is claimed for a body, and nothing is withheld from it.
+    expect((await w.bodyInitiatives(PHONE)).messages.map(message => message.id)).toEqual([id]);
+    await w.bodyPresence(PHONE);
+    expect(w.claims.holder(scope, id)).toBeNull();
+    // A presence read by it does not say that her window is showing.
+    expect(w.reports.windowVisible(scope, w.clock.at)).toBe(false);
+    // It may not report what a body did with her message.
+    const report = await w.api.dispatch({ method: 'POST', path: `/v1/body/reach-outs/${id}/delivery`, body: { scopeKey: scope, outcome: 'shown' }, deviceId: PHONE });
+    expect(report).toMatchObject({ status: 403, body: { error: 'REACH_OUT_NOT_A_BODY' } });
+    // An app that listens privately takes the message as if no body existed.
+    expect(offerOf(w.beat(MAC, 'mac'))).toMatchObject({ id });
+    // The desktop body next to it is unchanged.
+    await w.bodyOnline();
+    await w.bodyPresence();
+    expect(w.reports.windowVisible(scope, w.clock.at)).toBe(true);
   });
 
   it('her body speaks when no app is privately listening, and an app that starts listening a moment later does not say it again', async () => {

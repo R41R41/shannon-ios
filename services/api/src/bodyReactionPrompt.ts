@@ -5,6 +5,7 @@ import {
 import type { BodyAudience } from './bodyContract.js';
 import { BODY_REACTION_LIMITS, type BodyReactionTouch } from './bodyReactionContract.js';
 import type { StoredTouchBurst } from './bodyReactionStore.js';
+import { bodyPlace, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 
 /**
  * The words of a reaction: what the fast model is told when she is touched, and how its
@@ -33,6 +34,8 @@ export interface BodyReactionPromptInput {
   conversation: readonly { role: 'user' | 'assistant'; content: string }[];
   /** The instant of the request, for "how long ago". */
   at: string;
+  /** Where the touched body is, as its device registered; absent, the wording is what it was. */
+  surface?: BodySurface;
 }
 
 /** A touch while it is going on, and once it is over. */
@@ -55,11 +58,13 @@ const clip = (text: string, maximum: number) => {
 export function bodyTouchLine(touch: BodyReactionTouch, audience: BodyAudience): string {
   const who = audience === 'owner' ? `${SHANNON_OWNER_NAME}に` : `${SHANNON_OWNER_NAME}か、そばにいる誰かに`;
   const detail = [duration(touch.durationMs), strength(touch.strength)].filter(Boolean).join('、');
-  return `${who}${BODY_TOUCH_PHRASES[touch.type][touch.ongoing ? 'ongoing' : 'done']}（${detail}）`;
+  // The way of touching and the part as one phrase (頬をつつかれた); without a part, the gesture's own wording.
+  const form = touch.ongoing ? 'ongoing' : 'done';
+  return `${who}${touchPartPhrase(touch.type, touch.region, form) ?? BODY_TOUCH_PHRASES[touch.type][form]}（${detail}）`;
 }
 
 function sittingLine(burst: StoredTouchBurst, current: boolean, at: string): string {
-  const phrase = BODY_TOUCH_PHRASES[burst.type].done;
+  const phrase = touchPartPhrase(burst.type, burst.region, 'done') ?? BODY_TOUCH_PHRASES[burst.type].done;
   if (current) return `- ${phrase}: ${burst.count > 1 ? `この数分で${burst.count}回目` : 'いまのが1回目'}`;
   const minutes = Math.max(1, Math.round((Date.parse(at) - Date.parse(burst.lastAt)) / 60_000));
   return `- ${phrase}: ${minutes}分前までに${burst.count}回`;
@@ -85,7 +90,7 @@ export function bodyReactionPrompt(input: BodyReactionPromptInput): string {
     SHANNON_ONE_LINE_VOICE,
     [
       '[体に触れられた]',
-      `PCに表示されている${SHANNON_FIRST_PERSON}の体に、いま触れられた。`,
+      `${bodyPlace(input.surface)}に、いま触れられた。`,
       `- いま: ${bodyTouchLine(input.touch, input.audience)}`,
       `- ${feeling}`,
       `- この場: ${input.audience === 'owner' ? `${SHANNON_OWNER_NAME}と二人だけ` : 'ほかの人もいる'}`,

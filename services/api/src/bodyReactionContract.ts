@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ShannonExpression, ShannonFeeling, ShannonTouchKind } from '@shannon/cognition';
 import { BODY_LIMITS, BODY_TOUCH_EVENT_TYPES, type BodyAudience } from './bodyContract.js';
+import { isBodyTouchRegion, type BodyTouchRegion } from './bodyTouchWords.js';
 
 /**
  * When she is touched (`docs/body-contract.md`): the wire contract of `POST /v1/body/reactions`
@@ -55,6 +56,8 @@ export interface BodyReactionTouch {
   strength?: number;
   /** True while the touch is still going on (the body asks about 1.5 seconds into it). */
   ongoing: boolean;
+  /** Which part of her is touched; absent from a body that does not say. */
+  region?: BodyTouchRegion;
 }
 
 export interface BodyReactionRequest {
@@ -111,7 +114,7 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   if (!validBodyReactionId(body.id)) return 'id is invalid';
   if (!isRecord(body.touch)) return 'touch must be an object';
   const touch = body.touch;
-  const unknownTouch = only(touch, ['type', 'durationMs', 'strength', 'ongoing']);
+  const unknownTouch = only(touch, ['type', 'durationMs', 'strength', 'ongoing', 'region']);
   if (unknownTouch) return `touch.${unknownTouch.slice(0, 40)} is not allowed`;
   const type = BODY_TOUCH_EVENT_TYPES.find(value => value === touch.type);
   if (!type) return `touch.type must be one of ${BODY_TOUCH_EVENT_TYPES.join(', ')}`;
@@ -125,7 +128,11 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
   if (!Number.isFinite(time)) return 'occurredAt must be an ISO 8601 timestamp';
   return {
     id: body.id, audience: body.audience, occurredAt: new Date(time).toISOString(),
-    touch: { type, durationMs: touch.durationMs, ongoing: touch.ongoing, ...(touch.strength !== undefined ? { strength: Math.round(touch.strength * 100) / 100 } : {}) },
+    touch: {
+      type, durationMs: touch.durationMs, ongoing: touch.ongoing, ...(touch.strength !== undefined ? { strength: Math.round(touch.strength * 100) / 100 } : {}),
+      // A part outside the vocabulary (a newer body) is left out, not refused.
+      ...(isBodyTouchRegion(touch.region) ? { region: touch.region } : {}),
+    },
   };
 }
 
@@ -133,6 +140,7 @@ export function validatedBodyReactionRequest(body: Record<string, unknown>): Bod
 export function bodyReactionContentHash(request: BodyReactionRequest): string {
   return createHash('sha256').update(JSON.stringify([
     request.touch.type, request.touch.durationMs, request.touch.strength ?? null, request.touch.ongoing, request.audience, request.occurredAt,
+    ...(request.touch.region !== undefined ? [request.touch.region] : []),
   ])).digest('hex').slice(0, 32);
 }
 
