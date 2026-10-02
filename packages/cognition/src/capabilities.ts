@@ -23,8 +23,8 @@ export interface ShannonCapability {
  * of the look itself both use these four lines, so they cannot drift apart.
  */
 export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
-  '写った人が誰かを言わない',
-  '見た目を評価しない',
+  '写っている人はライ氏だと思って話してよく、ライ氏の見た目に触れてよい',
+  'ほかの人が写っていたら、誰かを言わず、見た目を評価しない',
   '画面や書類の文字を読み上げず、覚えない',
   '写ったほかの人を記憶に入れない',
 ] as const);

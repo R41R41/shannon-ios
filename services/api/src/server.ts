@@ -51,7 +51,7 @@ import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
-import { bodyLookRequestBytes, configuredBodyLookOptions } from './bodyLookWiring.js';
+import { bodyLookRequestBytes, closeBodyLookStores, configuredBodyLookOptions } from './bodyLookWiring.js';
 import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
@@ -323,6 +323,7 @@ function shutdown(): void {
     peopleMemoryStore.close();
     autonomyAnnouncer.close();
     bodyStore.close();
+    closeBodyLookStores();
     opsStore.close();
     autonomyStore.close();
     persistentStore.close();

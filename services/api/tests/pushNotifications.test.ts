@@ -51,6 +51,19 @@ describe('push notification delivery', () => {
     push.close();
   });
 
+  it('keeps what she saw in the room out of the banner', () => {
+    const path = createInitiative();
+    const database = new DatabaseSync(path);
+    const before = String((database.prepare('SELECT content FROM initiative_messages').get() as { content: string }).content);
+    database.prepare("UPDATE initiative_messages SET source_item_id = 'body-look:look-1', content = '机の上にマグカップが見えます。'").run();
+    database.close();
+    const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
+    push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ab'.repeat(32), 'sandbox');
+    const [notification] = push.pending();
+    expect(notification?.content).toBe('ライ氏、部屋のことでひとことあります。');
+    expect(notification?.content).not.toBe(before);
+  });
+
   it('leases a notification before sending so overlapping workers do not duplicate it', async () => {
     const path = createInitiative();
     const firstStore = new SQLitePushNotificationStore(path);

@@ -35,6 +35,9 @@ export interface PushNotificationSender {
 
 const DEVICE_TOKEN_PATTERN = /^[a-f0-9]{64,200}$/iu;
 const MAXIMUM_PUSH_AGE_MILLISECONDS = 12 * 60 * 60_000;
+/** Mirrors `BODY_LOOK_SOURCE_PREFIX` (`bodyLookDelivery.ts`); kept here so the push store imports nothing of the body. */
+const ROOM_LOOK_PUSH_SOURCE_PREFIX = 'body-look:';
+const ROOM_LOOK_PUSH_LINE = 'ライ氏、部屋のことでひとことあります。';
 const MAXIMUM_ATTEMPTS = 3;
 const DELIVERY_LEASE_MILLISECONDS = 5 * 60_000;
 const DELIVERY_STATE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60_000;
@@ -126,7 +129,7 @@ export class SQLitePushNotificationStore {
     const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
     const initiativeRows = !this.tableExists('initiative_messages') ? [] : this.database.prepare(`
       SELECT
-        im.initiative_id, im.thread_id, im.content, im.expression, im.created_at,
+        im.initiative_id, im.thread_id, im.content, im.expression, im.created_at, im.source_item_id,
         pr.device_id, pr.device_token, pr.environment,
         (SELECT COUNT(*) FROM initiative_messages unread
           WHERE unread.scope_key = im.scope_key AND unread.read_at IS NULL) AS badge_count
@@ -153,7 +156,8 @@ export class SQLitePushNotificationStore {
       deviceToken: String(row.device_token),
       environment: String(row.environment) as APNsEnvironment,
       threadId: String(row.thread_id),
-      content: String(row.content),
+      // What she saw in the room stays in the Talk; a lock screen shows only that she has something to say.
+      content: String(row.source_item_id ?? '').startsWith(ROOM_LOOK_PUSH_SOURCE_PREFIX) ? ROOM_LOOK_PUSH_LINE : String(row.content),
       expression: String(row.expression),
       createdAt: String(row.created_at),
       badgeCount: Math.max(1, Math.min(99, Number(row.badge_count))),
