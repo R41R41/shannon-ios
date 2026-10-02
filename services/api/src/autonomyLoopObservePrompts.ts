@@ -54,6 +54,16 @@ const EARPHONE_LINE: Readonly<Record<ReachOutAppSurface, string>> = Object.freez
   iphone: `iPhoneのイヤホンで、${SHANNON_OWNER_NAME}にだけ聞こえる声で伝えた。`,
 });
 
+/**
+ * After an app said her message into the owner's ears and nothing came back (owner decision 2026-10-03): the same
+ * conclusion as for her body. She may call once more; if that too stays unanswered she takes it that he is not there
+ * and lets that message go. Fixed sentences, chosen by closed facts.
+ */
+export const EARPHONE_NO_ANSWER_LINE = `- イヤホンで伝えたあと、待っているあいだに${SHANNON_OWNER_NAME}の声も文字も届かなかった。`;
+export const EARPHONE_NO_ANSWER_RULE = `- イヤホンで伝えたので、声は${SHANNON_OWNER_NAME}の耳に届いているはず。それでも返事がないなら、もう一度だけ声をかけてもよい。それにも返事がなければ、${SHANNON_OWNER_NAME}はいまそこにいないのだと受け取って、この話しかけはそこまでにする。`;
+export const EARPHONE_GIVEN_UP_RULE = `- イヤホンでもう一度声をかけても返事がなかった。${SHANNON_OWNER_NAME}はいまそこにいないのだと受け取って、この話しかけはここまでにする。これ以上は声をかけない。`;
+export const EARPHONE_GIVEN_UP_MEMORY = `それでも返事がなかったので、${SHANNON_OWNER_NAME}はそこにいないのだと受け取って、そこまでにした。`;
+
 const STEP_PLAN_LABEL: Readonly<Record<ObservedStepKind, string>> = Object.freeze({
   think: '考える', read: '公開ページを読む', notion: 'Notionのページを読む', note: '読んだもののメモを書く', draft: '物語を書く', revise: '物語を直す',
   show: '物語を見せる', put_away: '下書きをしまう', copy: '写しをフォルダに置く', look: '部屋を見る', reach_out: '話しかける', jot: '思ったことを書き留める',
@@ -120,6 +130,7 @@ export function reachOutHappenedLines(facts: ReachOutFacts, input: { at: string;
   return [
     `- ${when}に${SHANNON_OWNER_NAME}へ話しかけた（きっかけ: ${reasonLabel(facts.reason)}）。${answer}`,
     facts.surface ? `- イヤホンからの知らせ: ${EARPHONE_LINE[facts.surface]}` : `- 体からの知らせ: ${DELIVERY_LINE[facts.delivery]}`,
+    ...(facts.surface && !facts.replied && !input.repliedSince ? [EARPHONE_NO_ANSWER_LINE] : []),
     `- 体のまわり: ${around.join('。')}。`,
   ];
 }
@@ -150,6 +161,11 @@ export interface RethinkInput {
 export function rethinkExtras(input: RethinkInput): ThinkingExtras {
   const lines = input.happened.slice(-AUTONOMY_HAPPENED_MAXIMUM_LINES).flatMap(observation => happenedLines(observation, input));
   const pending = input.pending && !input.repliedSince ? input.pending : null;
+  // The newest message of this cycle that an app said through his earphones and that got no answer, and whether she already called again after it.
+  const earphone = input.repliedSince ? undefined : [...input.happened].reverse().find(item => item.step === 'reach_out' && item.outcome === 'done'
+    && item.reachOut?.surface && item.reachOut.reason !== 'follow_up' && !item.reachOut.replied);
+  const calledAgain = earphone !== undefined && input.happened.some(item => item.ordinal > earphone.ordinal && item.step === 'reach_out'
+    && item.outcome === 'done' && item.code !== 'held' && item.reachOut?.reason === 'follow_up');
   const choices = pending ? [
     ...(pending.followUp ? ['follow_up でもう一度だけ声をかけても'] : []),
     ...(pending.look ? [`look で部屋を見て確かめても${pending.thinkAfterLook ? '（見たあとに、もう一度考える）' : ''}`] : []),
@@ -164,6 +180,7 @@ export function rethinkExtras(input: RethinkInput): ThinkingExtras {
     rules: [
       RETHINK_RULE,
       ...(pending ? [`- 返事がないことは、悪いことではない。席を外している、手が離せない、気づいていない、どれもありうる。どうするかはボクが決める。${choices.join('、')}。責めたり、返事を急がせたりしない。`] : []),
+      ...(earphone && calledAgain ? [EARPHONE_GIVEN_UP_RULE] : earphone && pending?.followUp ? [EARPHONE_NO_ANSWER_RULE] : []),
     ],
     sections: [
       [HAPPENED_HEADER, ...(lines.length ? lines : ['（なし）'])].join('\n'),
@@ -211,6 +228,7 @@ export function reachOutMemoryLine(memory: ReachOutMemory, timeZone: string): st
     ...(facts.replied || facts.delivery === 'unknown' ? [] : [facts.surface ? EARPHONE_LINE[facts.surface] : DELIVERY_MEMORY[facts.delivery]]),
     ...memory.after.map(item => (item.step === 'look' ? (item.done ? 'そのあと部屋を一度見た（見たことはメモにある）。' : 'そのあと部屋を見ようとしたが、見られなかった。')
       : item.step === 'follow_up' ? (item.done ? 'もう一度だけ声をかけた。' : 'もう一度声をかけようとして、やめた。') : '思ったことを書斎に書き留めた。')),
+    ...(facts.surface && !facts.replied && !memory.repliedSince && memory.after.some(item => item.step === 'follow_up' && item.done) ? [EARPHONE_GIVEN_UP_MEMORY] : []),
     ...(!facts.replied && memory.repliedSince ? [`そのあと、${SHANNON_OWNER_NAME}は書くか話すかしている。`] : []),
   ].join('');
 }
