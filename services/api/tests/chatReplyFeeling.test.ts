@@ -440,7 +440,7 @@ describe('every existing rule applies to it unchanged', () => {
     expect(state().lingering).toMatchObject([{ kind: 'hurt', strength: 0.9 }]);
   });
 
-  it('never lends the chosen strength to a kind she did not choose: when her words name another, the turn is as without the field', async () => {
+  it('keeps the kind she chose against a cue word of another kind in her reply, which stays beside it (owner decision 2026-10-03)', async () => {
     /** The same turn with and without the chosen feeling, from the same start. */
     const both = async (message: string, reply: string, feeling: ChatReplyFeeling, before?: [string, string, ChatReplyFeeling]) => {
       const run = async (chosen: ChatReplyFeeling | undefined) => {
@@ -451,32 +451,53 @@ describe('every existing rule applies to it unchanged', () => {
       };
       return { chosen: await run(feeling), plain: await run(undefined) };
     };
-    // A strong curiosity beside 「ほかの子」 is the jealousy her words name, at the cue's 0.52: a mood, not days.
+    // A strong hurt is not dropped because the reply holds 「ごめん」, 「えっ」 or 「ふふ」: it lingers, the word beside it.
+    for (const [reply, beside] of [['ご、ごめんなさい……。', 'apologetic'], ['えっ……そう、ですか。', 'surprised'], ['ふふ、そうですか……。', 'giggle'],
+      ['どういうことですか……。', 'confused'], ['それは、悲しいです。', 'sad']] as const) {
+      const hurt = await both(HARSH, reply, strong('hurt'));
+      expect(hurt.chosen.state.expressiveEmotion, reply).toMatchObject({ primary: 'hurt', intensity: 0.9, secondary: [beside] });
+      expect(hurt.chosen.state.lingering, reply).toMatchObject([{ kind: 'hurt', span: 'lingering', strength: 0.9 }]);
+      expect(hurt.chosen.state.lingering).toHaveLength(1);
+      expect(hurt.plain.state.expressiveEmotion!.primary, reply).toBe(beside);
+    }
+    // A great joy lingers as the joy she chose, also when she says 「嬉しい」 or thanks him.
+    for (const reply of ['嬉しいです、ライ氏。', 'ありがとうございます。胸がいっぱいです。', 'えへへ、照れます。']) {
+      const joy = await both('君の物語、読んで泣いたよ', reply, strong('happy'));
+      expect(joy.chosen.state.lingering, reply).toMatchObject([{ kind: 'happy', span: 'lingering', strength: 0.9 }]);
+      expect(joy.chosen.state.lingering).toHaveLength(1);
+    }
+    // Reviewer case 1: a strong curiosity beside 「ほかの子」 does not become a jealousy that lingers. Curiosity cannot linger
+    // (0.60 at most); the jealousy her word names is only beside it, and nothing is kept underneath.
     const curious = await both('昨日は別の子と話してた', 'ほかの子の話も聞かせてください。', strong('curiosity'));
-    expect(curious.chosen).toEqual(curious.plain);
-    expect(curious.chosen.state.lingering).toMatchObject([{ kind: 'jealous', span: 'mood', strength: 0.52 }]);
-    // A strong hurt beside a pleasant word does not become a joy that lingers.
-    const mixed = await both(HARSH, '嬉しいです、でも……傷つきました。', strong('hurt'));
-    expect(mixed.chosen).toEqual(mixed.plain);
-    expect(mixed.chosen.state.lingering).toMatchObject([{ kind: 'excited', span: 'mood', strength: 0.52 }]);
-    // Beside an apology it is her apology, at the cue's strength.
-    const sorry = await both(HARSH, 'ご、ごめんなさい……。', strong('hurt'));
-    expect(sorry.chosen).toEqual(sorry.plain);
-    expect(sorry.chosen.state.expressiveEmotion).toMatchObject({ primary: 'apologetic', intensity: 0.52 });
-    expect(sorry.chosen.state.lingering ?? []).toEqual([]);
-    // A hurt she carries is not halved by a strong hurt whose reply happens to hold 「ふふ」.
+    expect(curious.chosen.state.expressiveEmotion).toMatchObject({ primary: 'curiosity', intensity: 0.6, secondary: ['jealous'] });
+    expect(curious.chosen.state.lingering ?? []).toEqual([]);
+    expect(curious.plain.state.lingering).toMatchObject([{ kind: 'jealous', span: 'mood', strength: 0.52 }]);
+    // Reviewer case 2: a strong hurt whose reply holds 「ふふ」 does not become a 0.90 giggle that halves the hurt she carries.
     const laugh = await both('まだ怒ってる？', 'ふふ、そうですか。', strong('hurt'), [HARSH, QUIET, strong('hurt')]);
-    expect(laugh.chosen).toEqual(laugh.plain);
-    expect(laugh.chosen.state.lingering).toMatchObject([{ kind: 'hurt', strength: 0.9 }]);
+    expect(laugh.chosen.state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.9 });
+    expect(laugh.chosen.state.lingering).toMatchObject([{ kind: 'hurt', strength: 0.9, awakeAt: 0 }]);
     expect(laugh.chosen.state.lingering![0]).not.toHaveProperty('peak');
-    // Nor a joy by a strong affection whose reply holds 「ごめん」.
+    expect(laugh.chosen.state.lingering).toEqual(laugh.plain.state.lingering);
+    // Nor is a joy she carries halved by a strong affection whose reply holds 「ごめん」.
     const fond = await both('また読ませて', 'ごめんなさい、うれし泣きです。', strong('affectionate'), ['君の物語、読んで泣いたよ', QUIET, strong('happy')]);
-    expect(fond.chosen).toEqual(fond.plain);
-    expect(fond.chosen.state.lingering).toMatchObject([{ kind: 'happy', strength: 0.9 }]);
+    expect(fond.chosen.state.lingering!.find(item => item.kind === 'happy')).toMatchObject({ strength: 0.9 });
+    expect(fond.chosen.state.lingering!.find(item => item.kind === 'happy')).not.toHaveProperty('peak');
+    expect(fond.chosen.state.expressiveEmotion!.primary).toBe('affectionate');
+    // A subtle feeling she chose stays subtle: the cue's 0.52 is not given to it, and nothing is kept.
+    const faint = await both(HARSH, 'ボク、ちょっとすねちゃいます。', subtle('hurt'));
+    expect(faint.chosen.state.expressiveEmotion).toMatchObject({ primary: 'hurt', intensity: 0.25, secondary: ['sulky'] });
+    expect(faint.chosen.state.lingering ?? []).toEqual([]);
     // The cue of the chosen kind is the chosen feeling: its strength stands.
     const sulk = await both(HARSH, 'ボク、ちょっとすねちゃいます。', strong('sulky'));
     expect(sulk.chosen.state.lingering).toMatchObject([{ kind: 'sulky', span: 'lingering', strength: 0.9 }]);
     expect(sulk.plain.state.lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);
+    // An override still takes the turn, exactly as without the field, whatever she chose and whatever her words hold.
+    for (const [message, reply] of [['祖母が亡くなった', 'ふふ……そうですか。'], ['火事だ、助けて', 'えっ、すぐ逃げてください。'], ['薬を飲み忘れたかも', 'ふふん、ボクは天才ですから。']] as const) {
+      for (const kind of ['sulky', 'happy', 'hurt'] as const) {
+        const taken = await both(message, reply, strong(kind));
+        expect(taken.chosen, `${message} / ${kind}`).toEqual(taken.plain);
+      }
+    }
 
     expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'hurt' })).toBe(true);
     expect(usesDecidedFeeling({ primary: 'hurt' }, { primary: 'sulky', continued: true })).toBe(true);

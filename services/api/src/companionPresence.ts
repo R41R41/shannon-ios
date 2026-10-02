@@ -124,7 +124,8 @@ export function resolveTextReplyEmotion(
 ): ReplyEmotion {
   const { decided } = decidedReplyFeeling(completion, alone);
   if (!decided) return resolveReplyEmotion(input);
-  const resolved = resolveReplyEmotion({ ...input, decided });
+  // The chat model wrote the reply and chose its feeling: a cue word of another kind does not rename it (owner decision 2026-10-03).
+  const resolved = resolveReplyEmotion({ ...input, decided, decidedKindWins: true });
   return usesDecidedFeeling(decided, resolved.expressiveEmotion) ? resolved : resolveReplyEmotion(input);
 }
 

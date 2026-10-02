@@ -872,6 +872,67 @@ describe('a text reply whose feeling was decided (owner decision 2026-10-03)', (
   });
 });
 
+describe('a decided kind that wins over a cue word (a text turn; owner decision 2026-10-03)', () => {
+  const HARSH = 'もういい、君とはもう話したくない';
+  /** One text turn as the server resolves and commits it: the chat model wrote the reply and chose its feeling. */
+  const written = (state: CompanionStateSnapshot, userMessage: string, reply: string, now: string, decided: { primary: string; intensity: number }) => {
+    const feeling = resolveReplyEmotion({ snapshot: state, userMessage, reply, now, timing: AWAKE, decided, decidedKindWins: true }).expressiveEmotion;
+    return { feeling, state: reduceCompanionState(state, { type: 'expressive-emotion-updated', emotion: feeling }, now, AWAKE) };
+  };
+
+  it('keeps kind and strength as decided and puts the cue word beside it', () => {
+    const sorry = written(fresh(), HARSH, 'ご、ごめんなさい……。', NIGHT, { primary: 'hurt', intensity: 0.9 });
+    expect(sorry.feeling).toMatchObject({ primary: 'hurt', intensity: 0.9, secondary: ['apologetic'], decided: true });
+    expect(sorry.state.lingering).toMatchObject([{ kind: 'hurt', span: 'lingering', strength: 0.9 }]);
+    // The cue's floor of 0.52 is not given to a feeling decided more weakly.
+    const faint = written(fresh(), HARSH, 'ボク、ちょっとすねちゃいます。', NIGHT, { primary: 'hurt', intensity: 0.25 });
+    expect(faint.feeling).toMatchObject({ primary: 'hurt', intensity: 0.25, secondary: ['sulky'], decided: true });
+    expect(faint.state.lingering ?? []).toEqual([]);
+    // A cue of the decided kind is read as before, and so is a reply for which nothing or neutral was decided.
+    expect(written(fresh(), HARSH, 'ボク、ちょっとすねちゃいます。', NIGHT, { primary: 'sulky', intensity: 0.25 }).feeling)
+      .toMatchObject({ primary: 'sulky', intensity: 0.52, secondary: [] });
+    expect(resolveReplyEmotion({ snapshot: fresh(), userMessage: HARSH, reply: 'ふふ、そうですか。', now: NIGHT, timing: AWAKE, decidedKindWins: true }).expressiveEmotion)
+      .toMatchObject({ primary: 'giggle', intensity: 0.52 });
+    expect(resolveReplyEmotion({ snapshot: fresh(), userMessage: HARSH, reply: 'ふふ、そうですか。', now: NIGHT, timing: AWAKE, decided: { primary: 'neutral', intensity: 0.9 }, decidedKindWins: true }).expressiveEmotion.primary)
+      .toBe('giggle');
+  });
+
+  it('does not turn a strong curiosity beside 「ほかの子」 into a jealousy that lingers', () => {
+    const curious = written(fresh(), '昨日は別の子と話してた', 'ほかの子の話も聞かせてください。', NIGHT, { primary: 'curiosity', intensity: 0.9 });
+    expect(curious.feeling).toMatchObject({ primary: 'curiosity', secondary: ['jealous'] });
+    expect(curious.state.lingering ?? []).toEqual([]);
+  });
+
+  it('does not turn a strong hurt beside 「ふふ」 into a 0.90 giggle that halves the hurt underneath', () => {
+    const hurt = written(fresh(), HARSH, '……そうですか。', NIGHT, { primary: 'hurt', intensity: 0.9 }).state;
+    const again = written(hurt, 'まだ怒ってる？', 'ふふ、そうですか。', at(NIGHT, 2 * MINUTE), { primary: 'hurt', intensity: 0.9 });
+    expect(again.feeling.primary).toBe('hurt');
+    expect(again.state.lingering).toEqual(hurt.lingering);
+    expect(again.state.lingering![0]).not.toHaveProperty('peak');
+  });
+
+  it('still gives the reply to the overrides, with the cue word not kept beside them', () => {
+    const grief = written(fresh(), '祖母が亡くなった', 'ふふ……そうですか。', NIGHT, { primary: 'sulky', intensity: 0.9 }).feeling;
+    expect(grief).toMatchObject({ primary: 'caring', overrideReason: 'grief', secondary: [] });
+    const danger = written(fresh(), '火事だ、助けて', 'えっ、すぐ逃げてください。', NIGHT, { primary: 'sulky', intensity: 0.9 }).feeling;
+    expect(danger).toMatchObject({ primary: 'protective', overrideReason: 'emergency', secondary: [] });
+    // Accuracy before play, also when the play is only in her words and the decided kind is not playful.
+    expect(written(fresh(), '薬を飲み忘れたかも', 'ふふん、ボクは天才ですから。', NIGHT, { primary: 'happy', intensity: 0.9 }).feeling)
+      .toMatchObject({ primary: 'focused', overrideReason: 'safety', secondary: [] });
+    expect(resolveReplyEmotion({ snapshot: fresh(), userMessage: '薬を飲み忘れたかも', reply: 'ふふん、ボクは天才ですから。', now: NIGHT, timing: AWAKE }).expressiveEmotion)
+      .toMatchObject({ primary: 'focused', overrideReason: 'safety' });
+    // Her concern is not shown with play beside it.
+    expect(written(fresh(), '最近眠れなくて', 'ふふ、そばにいますよ。', NIGHT, { primary: 'caring', intensity: 0.6 }).feeling)
+      .toMatchObject({ primary: 'caring', secondary: [] });
+  });
+
+  it('leaves a voice turn as it was: without the flag the cue in the completed reply names the kind', () => {
+    const voiced = turn(fresh(), HARSH, 'ご、ごめんなさい……。', NIGHT, { primary: 'hurt', intensity: 0.9 });
+    expect(voiced.feeling).toMatchObject({ primary: 'apologetic', intensity: 0.9, secondary: [] });
+    expect(voiced.feeling.decided).toBeUndefined();
+  });
+});
+
 describe('the wall clock as a fact', () => {
   it('says how long ago in whole hours, and in days from twenty-four hours', () => {
     const state = sulking();

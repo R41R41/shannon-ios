@@ -145,7 +145,7 @@ function executeScenario(scenario: CognitiveEvaluationScenario): CognitiveEvalua
 /** One owner turn as the server commits it: the reply's feeling, or only her awake clock when the reply is neutral. */
 function committedReply(state: CompanionStateSnapshot, turn: CognitiveReplyFeelingInput, now: string): CompanionStateSnapshot {
   const { expressiveEmotion } = resolveReplyEmotion({
-    snapshot: state, userMessage: turn.userMessage, reply: turn.reply, now, ...(turn.decided ? { decided: turn.decided } : {}),
+    snapshot: state, userMessage: turn.userMessage, reply: turn.reply, now, ...(turn.decided ? { decided: turn.decided, decidedKindWins: true } : {}),
   });
   return reduceCompanionState(state, expressiveEmotion.primary === 'neutral'
     ? { type: 'awake-observed' } : { type: 'expressive-emotion-updated', emotion: expressiveEmotion }, now);

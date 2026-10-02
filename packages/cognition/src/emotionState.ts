@@ -134,6 +134,12 @@ export interface ResolveShannonEmotionInput {
   target?: string;
   /** The caller already decided by `holdsShannonFeeling` that this stimulus replaces the present feeling (a touch). */
   replaces?: boolean;
+  /**
+   * The provisional feeling was decided by the writer of the reply itself (a text turn's chat model), so it is the feeling
+   * of that reply: a cue word of another kind in her words does not rename it and stays beside it as the secondary feeling.
+   * Absent (a voice turn, whose provisional affect was decided before the reply existed), the cue names the kind as before.
+   */
+  decidedKindWins?: boolean;
 }
 
 export function isShannonEmotionKind(value: string): value is ShannonEmotionKind {
@@ -212,6 +218,7 @@ export function resolveShannonEmotionState(
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
   let cause = reply ? REPLY_CAUSE : PROVISIONAL_CAUSE;
   let fromCue = false;
+  let cueBeside: ShannonEmotionKind | undefined;
 
   const support = supportOverrideFor(transcript);
   if (support === 'emergency') {
@@ -226,7 +233,10 @@ export function resolveShannonEmotionState(
     cause = '深い悲しみや喪失へ静かに寄り添う';
   } else {
     const finalCue = FINAL_CUES.find(rule => rule.pattern.test(reply));
-    if (finalCue) {
+    if (finalCue && input.decidedKindWins && primary !== 'neutral' && finalCue.emotion !== primary) {
+      // The writer of this reply decided its feeling: kind and strength stand, and the word is kept beside it.
+      cueBeside = finalCue.emotion;
+    } else if (finalCue) {
       primary = finalCue.emotion;
       intensity = Math.max(intensity, 0.52);
       // Her own words name the feeling. Its strength was decided for this reply only when the same kind was decided at
@@ -240,7 +250,9 @@ export function resolveShannonEmotionState(
     }
   }
 
-  if (accuracyOverrideApplies(combined, primary, PLAYFUL.has(primary) || ATTACHMENT.has(primary))) {
+  const playsWith = (kind: ShannonEmotionKind) => accuracyOverrideApplies(combined, kind, PLAYFUL.has(kind) || ATTACHMENT.has(kind));
+  // Play in her words is still play when the decided kind stands beside it: accuracy replaces it as before.
+  if (playsWith(primary) || (cueBeside !== undefined && playsWith(cueBeside))) {
     primary = /(?:ごめん|申し訳|失敗)/u.test(combined) ? 'apologetic' : 'focused';
     intensity = Math.min(0.72, Math.max(0.45, intensity));
     overrideReason = 'safety';
@@ -278,11 +290,14 @@ export function resolveShannonEmotionState(
     }
   }
 
-  const secondary = previous && previous.primary !== primary
+  const carried = previous && previous.primary !== primary
     && (reading ? previous.primary !== 'neutral' : previous.carryover >= 0.24)
     && !unsafeCombination(primary, previous.primary)
     ? [previous.primary]
     : [];
+  // No override took the reply: the cue word her decided feeling did not follow is the feeling beside it.
+  const secondary = cueBeside && !overrideReason && cueBeside !== primary && !unsafeCombination(primary, cueBeside)
+    ? [cueBeside, ...carried.filter(kind => kind !== cueBeside)] : carried;
   const profile = emotionProfile(primary, intensity);
   const sameEpisode = previous?.primary === primary && !overrideReason;
   const decay = decayFor(primary);

@@ -15,6 +15,8 @@ export interface ReplyEmotionInput {
    * emotion). Text has none and starts from neutral.
    */
   decided?: { primary: string; intensity: number };
+  /** `decided` came from the writer of the reply itself (a text turn): its kind stands against a cue word of another kind. */
+  decidedKindWins?: boolean;
   /** The server's emotion timing; the table's defaults when absent. */
   timing?: ShannonEmotionTiming;
   /** The reply is her line about a touch that already went through the shared rule: its feeling is not held back again. */
@@ -42,6 +44,7 @@ export function resolveReplyEmotion(input: ReplyEmotionInput): ReplyEmotion {
     ...(timing.clock === 'awake' ? { previous: presentShannonFeeling(input.snapshot, input.now, timing) }
       : input.snapshot.expressiveEmotion ? { previous: input.snapshot.expressiveEmotion } : {}),
     ...(input.replaces ? { replaces: true } : {}),
+    ...(decided && input.decidedKindWins ? { decidedKindWins: true } : {}),
     provisionalPrimary: decided?.primary ?? 'neutral',
     provisionalIntensity: decided?.intensity ?? 0.15,
     transcript: input.userMessage,
