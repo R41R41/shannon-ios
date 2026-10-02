@@ -16,6 +16,7 @@ export function localOwnerUpcoming(stateStore: CompanionStateStore, now: () => s
 /** A fixed-token (local) caller has no paired device. */
 const LOCAL_DEVICE = 'local';
 const DISABLED: ApiResponse = { status: 403, body: { error: 'CALENDAR_INGEST_DISABLED', message: 'Calendar sharing is switched off on the server.' } };
+const OWNER_ONLY: ApiResponse = { status: 403, body: { error: 'CALENDAR_OWNER_ONLY', message: 'Only the owner\'s own devices may share a calendar.' } };
 
 /**
  * `/v1/calendar/upcoming` (`docs/calendar-contract.md`): a device sends what is coming up in
@@ -23,7 +24,8 @@ const DISABLED: ApiResponse = { status: 403, body: { error: 'CALENDAR_INGEST_DIS
  * here calls a model, writes as Shannon, or changes a calendar.
  */
 export function dispatchCalendarRequest(request: ApiRequest, upcoming: OwnerUpcoming, now: () => string): ApiResponse {
-  if (request.path !== CALENDAR_UPCOMING_PATH) return { status: 404, body: { error: 'NOT_FOUND' } };
+  // This function answers only its own path, and never with 404: a client reads 404 as "this server has no such route yet".
+  if (request.path !== CALENDAR_UPCOMING_PATH) return { status: 405, body: { error: 'METHOD_NOT_ALLOWED' } };
   const deviceId = request.deviceId ?? LOCAL_DEVICE;
 
   if (request.method === 'GET') {
@@ -41,7 +43,8 @@ export function dispatchCalendarRequest(request: ApiRequest, upcoming: OwnerUpco
   }
 
   if (request.method === 'DELETE') {
-    // Taking a snapshot away is always allowed, also while ingestion is switched off. A body is optional.
+    // Taking a snapshot away is always allowed, also while ingestion is switched off. The client sends no body and no
+    // query; the HTTP layer puts the scope of the device token into the query.
     const scopeKey = request.query?.get('scopeKey') ?? (objectBody(request.body) ? request.body.scopeKey : undefined);
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
     return { status: 200, body: { schemaVersion: CALENDAR_SCHEMA_VERSION, removed: upcoming.store.removeCalendar(scopeKey, deviceId) } };
@@ -51,6 +54,7 @@ export function dispatchCalendarRequest(request: ApiRequest, upcoming: OwnerUpco
     if (!objectBody(request.body)) return badRequest('JSON object body is required');
     const scopeKey = request.body.scopeKey;
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
+    if (!upcoming.mayShareCalendar(scopeKey)) return OWNER_ONLY;
     if (!upcoming.calendarEnabled) return DISABLED;
     const snapshot = validatedCalendarSnapshot(request.body);
     if (typeof snapshot === 'string') return badRequest(snapshot);

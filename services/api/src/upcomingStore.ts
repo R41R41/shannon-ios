@@ -8,7 +8,13 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  *
  * A device's snapshot replaces its previous one whole, so an event the owner deleted on
  * that device is gone here after its next send. Reading merges the devices.
+ *
+ * A device that was unpaired, or whose pairing ran out, cannot take its snapshot away
+ * itself. Its snapshot is therefore not read from that moment on, and is deleted the next
+ * time this store is opened or written.
  */
+/** A fixed-token caller has no paired device and no pairing that could end. */
+const LOCAL_DEVICE = 'local';
 export interface UpcomingTask {
   id: string;
   title: string;
@@ -42,6 +48,7 @@ export class SQLiteUpcomingStore {
         PRIMARY KEY (scope_key, source)
       );
     `);
+    this.pruneUnpaired(Date.now());
     secureDatabaseFiles(path);
   }
 
@@ -56,6 +63,7 @@ export class SQLiteUpcomingStore {
         window_end = excluded.window_end, events_json = excluded.events_json, received_at = excluded.received_at
     `).run(scopeKey, deviceId, snapshot.generatedAt, snapshot.timeZone, snapshot.windowStart, snapshot.windowEnd,
       JSON.stringify(snapshot.events), receivedAt);
+    this.pruneUnpaired(Date.parse(receivedAt));
     return snapshot.events.length;
   }
 
@@ -66,7 +74,7 @@ export class SQLiteUpcomingStore {
 
   /** Devices whose snapshot is still fresh enough to be used. */
   sharingDevices(scopeKey: string, at: string): number {
-    const row = this.database.prepare('SELECT COUNT(*) AS count FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ?')
+    const row = this.database.prepare(`SELECT COUNT(*) AS count FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ? ${this.paired(at)}`)
       .get(scopeKey, this.freshSince(at)) as unknown as { count: number };
     return Number(row.count);
   }
@@ -77,7 +85,7 @@ export class SQLiteUpcomingStore {
    */
   calendarEvents(scopeKey: string, from: string, until: string): readonly (CalendarEvent & { timeZone: string })[] {
     const rows = this.database.prepare(`
-      SELECT time_zone, events_json FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ? ORDER BY received_at DESC, device_id ASC
+      SELECT time_zone, events_json FROM calendar_device_snapshots WHERE scope_key = ? AND received_at >= ? ${this.paired(from)} ORDER BY received_at DESC, device_id ASC
     `).all(scopeKey, this.freshSince(from)) as unknown as Array<{ time_zone: string; events_json: string }>;
     const seen = new Set<string>();
     const events: (CalendarEvent & { timeZone: string })[] = [];
@@ -112,6 +120,32 @@ export class SQLiteUpcomingStore {
 
   close(): void {
     if (this.database.isOpen) this.database.close();
+  }
+
+  /**
+   * Deletes the snapshots of devices that are no longer paired. Returns how many were deleted.
+   * Without the pairing table (a fixed-token or in-memory server) nothing is deleted.
+   */
+  pruneUnpaired(nowMilliseconds: number): number {
+    if (!this.hasPairingTable() || !Number.isFinite(nowMilliseconds)) return 0;
+    return Number(this.database.prepare(`
+      DELETE FROM calendar_device_snapshots WHERE device_id <> '${LOCAL_DEVICE}' AND NOT EXISTS (
+        SELECT 1 FROM device_tokens token WHERE token.device_id = calendar_device_snapshots.device_id
+          AND token.scope_key = calendar_device_snapshots.scope_key AND token.revoked_at IS NULL AND token.expires_at > ?)
+    `).run(Math.trunc(nowMilliseconds)).changes);
+  }
+
+  /** The condition that a snapshot's device is still paired at `at`; empty while there is no pairing table. */
+  private paired(at: string): string {
+    const time = Date.parse(at);
+    if (!this.hasPairingTable() || !Number.isFinite(time)) return '';
+    return `AND (device_id = '${LOCAL_DEVICE}' OR EXISTS (
+      SELECT 1 FROM device_tokens token WHERE token.device_id = calendar_device_snapshots.device_id
+        AND token.scope_key = calendar_device_snapshots.scope_key AND token.revoked_at IS NULL AND token.expires_at > ${Math.trunc(time)}))`;
+  }
+
+  private hasPairingTable(): boolean {
+    return Boolean(this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'device_tokens'`).get());
   }
 
   private freshSince(at: string): string {

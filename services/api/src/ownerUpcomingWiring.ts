@@ -24,14 +24,14 @@ export function configuredOwnerUpcoming(
   options: { snapshot: (scopeKey: string, at: string) => CompanionStateSnapshot | null; now: () => string; tasks?: UpcomingTaskCatalog | null },
 ): ConfiguredOwnerUpcoming {
   const store = new SQLiteUpcomingStore(databasePath);
+  const ownerScopeKey = environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner';
   const upcoming = new OwnerUpcoming({
-    store, snapshot: options.snapshot, now: options.now, calendarEnabled: calendarIngestEnabled(environment),
+    store, snapshot: options.snapshot, now: options.now, calendarEnabled: calendarIngestEnabled(environment), ownerScopeKey,
     timeZone: environment.SHANNON_AUTONOMY_TIMEZONE?.trim() || 'Asia/Tokyo',
   });
   let timer: ReturnType<typeof setInterval> | undefined;
   if (options.tasks?.upcomingTasks) {
-    const scopeKey = environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner';
-    const refresh = () => { void upcoming.refreshTasks(scopeKey, options.tasks); };
+    const refresh = () => { void upcoming.refreshTasks(ownerScopeKey, options.tasks); };
     refresh();
     timer = setInterval(refresh, TASK_REFRESH_MILLISECONDS);
     timer.unref();

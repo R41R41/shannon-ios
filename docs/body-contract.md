@@ -109,7 +109,9 @@ What the server returns to the body is safe to show to others unless marked:
 
 A read-only snapshot of what the body should show. Reading it writes nothing to the database; the server remembers in memory when each device last read it, which is how it knows her window is showing.
 
-`GET /v1/body/presence?scopeKey=owner`
+`GET /v1/body/presence?scopeKey=owner[&etag=…][&audience=owner|others]`
+
+`audience` is optional (added 2026-10-02): who can see or hear the body right now, decided as for events. The server keeps the latest value per device for 90 seconds and uses it for one thing: how guarded a message she starts on her own is. Send it on every read when you can tell; a body that does not send it is treated as before (the audience of its newest event of the last 30 minutes stands in). Any other value is answered `400`. It is not part of the snapshot and does not change the `etag`.
 
 ```json
 {
@@ -122,7 +124,8 @@ A read-only snapshot of what the body should show. Reading it writes nothing to 
   "autonomy": { "state": "active" },
   "study": { "awaitingReaction": 1 },
   "capabilities": { "expressions": ["smile"], "gestures": ["stretch"], "flags": { "tears": true }, "updatedAt": "2026-10-02T02:00:00.000Z" },
-  "look": null
+  "look": null,
+  "reachOut": { "pending": 1, "latestId": "0b6f…" }
 }
 ```
 
@@ -139,6 +142,7 @@ A read-only snapshot of what the body should show. Reading it writes nothing to 
 | `study.awaitingReaction` | integer | Number of study cards with `awaitingReaction: true` (`GET /v1/autonomy/study`). |
 | `capabilities` | what this device registered, or `null` | `PUT /v1/body/capabilities` |
 | `look` | `{ id, requestedAt, expiresAt }` \| `null`; absent while looks are switched off | A look this device is asked to take now. See [Looking at the room](#looking-at-the-room). |
+| `reachOut` | `{ pending, latestId? }`; absent on a server that does not deliver them | Unread messages she started on her own. See [A message she starts on her own](#a-message-she-starts-on-her-own). |
 
 `doing` is `idle` unless the loop is running (enabled, not paused, reporting in, budget left) and its latest step was recorded within the last 3 minutes. Then: thinking about what to do next → `thinking`; reading a public page or a shared Notion page → `reading`; writing a note → `noting`; writing a story draft → `drafting`; revising → `revising`; marking a story 「見せてもいい」 or telling the owner → `showing`. Putting a draft away is `idle`. The body should treat an unknown `doing` or `expression` as `idle` / `neutral`.
 
@@ -156,6 +160,30 @@ There is no stream and no push (see [Not built](#not-built)). Poll every `pollAf
 
   It is a `200` with `unchanged: true`, not an HTTP `304`, and the value travels in the query and the body, not in `ETag` / `If-None-Match` headers.
 - `changedAt` is when this server process first saw the snapshot with this `etag`. It restarts with the API process, so use it to order snapshots, not as a history.
+
+## A message she starts on her own
+
+Owner decision 2026-10-02 (話しかける): in her own time she may write the owner a short message, up to three times an owner-local day, for one of four reasons — `share` (something she read or wrote), `wonder` (what he is doing), `upcoming` (something near in his calendar, promises or tasks), `saw` (what she saw in a look she just took). She does not do it while a conversation is in progress (a turn in the last 10 minutes). There are no quiet hours.
+
+It reaches the body through what already exists:
+
+1. `presence.reachOut.pending` goes up and `latestId` changes, which changes the `etag`. The body sees it within one poll (10 seconds).
+2. `GET /v1/initiatives?scopeKey=…` returns the unread messages; a reach-out has `kind: "reach_out"` and `reason`:
+
+   ```json
+   { "unreadCount": 1, "messages": [ { "id": "0b6f…", "threadId": "…", "content": "ライ氏、いま何をしていますか。", "expression": "curious",
+     "sourceTitle": "シャノンから", "sourceURL": "", "createdAt": "2026-10-02T04:00:00.000Z", "kind": "reach_out", "reason": "wonder" } ] }
+   ```
+
+   `expression` is `excited` for `share`, `curious` for `wonder` and `saw`, `thinking` for `upcoming`. Other initiatives (a due promise, a story she shows, a look the owner asked for) have no `kind`.
+
+What the body must do:
+
+- When `latestId` is one it has not shown, read `/v1/initiatives`, and show a bubble and speak `content` for each `kind: "reach_out"` message it has not shown. Remember shown ids locally (the list keeps a message until the owner reads it in an app).
+- **Do not call `POST /v1/initiatives/read`.** Reading belongs to the apps; marking it there would clear the iPhone's badge for a message the owner may not have seen.
+- She speaks even while other people are present ("that situation is fun too"). The server has already worded the message for that when it knew: send `audience=others` on presence reads while a stream is live or 「友人も一緒」 is on. The body does not filter the text.
+- A message older than a few minutes when the body first sees it (the PC was asleep) is better shown silently or skipped; `createdAt` says how old it is.
+- `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
 
 ## `PUT /v1/body/capabilities`
 

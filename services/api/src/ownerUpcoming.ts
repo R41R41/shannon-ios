@@ -58,6 +58,8 @@ export interface OwnerUpcomingDependencies {
   timeZone?: string;
   /** `SHANNON_CALENDAR_INGEST`; off, stored snapshots are not read either. */
   calendarEnabled?: boolean;
+  /** The one scope whose devices may share a calendar. Absent (local runs, tests): any scope. */
+  ownerScopeKey?: string;
 }
 
 export type UpcomingPresence = 'owner' | 'others';
@@ -80,6 +82,11 @@ export class OwnerUpcoming {
   }
 
   get store(): SQLiteUpcomingStore { return this.dependencies.store; }
+
+  /** Only the owner's own devices share his calendar; a guest scope may not. */
+  mayShareCalendar(scopeKey: string): boolean {
+    return this.dependencies.ownerScopeKey === undefined || this.dependencies.ownerScopeKey === scopeKey;
+  }
 
   /** Everything that is under way or begins in `[now, now + horizon)`, earliest first, at most `limit` items. It never throws. */
   upcomingForOwner(scopeKey: string, now: string, horizonMilliseconds: number, options: { present?: UpcomingPresence; limit?: number } = {}): readonly UpcomingItem[] {

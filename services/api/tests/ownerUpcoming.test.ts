@@ -3,7 +3,7 @@ import { InMemoryCompanionStateStore, UNLABELLED_DISCLOSURE_MARKER, type Prospec
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
 import { conversationCapabilityPrompt } from '../src/conversationCapabilities.js';
-import { DisabledVoyagerCatalog, HttpVoyagerCatalog, createConfiguredVoyagerCatalog } from '../src/organize.js';
+import { DisabledVoyagerCatalog, HttpVoyagerCatalog, createConfiguredVoyagerCatalog, type VoyagerCatalog } from '../src/organize.js';
 import { OwnerUpcoming, UPCOMING_LIMITS, asksAboutSchedule, upcomingWhen } from '../src/ownerUpcoming.js';
 import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
 
@@ -112,7 +112,8 @@ describe('upcomingForOwner', () => {
 describe('Voyager tasks', () => {
   it('reads nothing while Voyager is not configured, which is production today', async () => {
     const { upcoming, store } = harness();
-    for (const catalog of [null, undefined, new DisabledVoyagerCatalog(), createConfiguredVoyagerCatalog({})]) {
+    const absent: (VoyagerCatalog | null | undefined)[] = [null, undefined, new DisabledVoyagerCatalog(), createConfiguredVoyagerCatalog({})];
+    for (const catalog of absent) {
       expect(await upcoming.refreshTasks(scope, catalog)).toBe(false);
     }
     // Configured for search and projects only: the search contract has no due date, so there is still nothing to read.
