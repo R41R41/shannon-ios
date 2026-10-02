@@ -126,14 +126,16 @@ const TYPICAL_STEPS: readonly { tool: string; label: string; purpose: AutonomyMo
 ]);
 const TYPICAL_COST_DAYS = 14;
 
-/** What a step usually costs her: the average of what she was charged in the last two weeks, or the price of a usual call. */
-export function typicalCosts(dependencies: StepDependencies, scopeKey: string, at: string): (TypicalCost & { tool: string })[] {
+/**
+ * What a step usually costs her: the average of what she was charged in the last two weeks, or the price of a usual call.
+ * `offered`: the steps she may plan right now that are not always there (a look, a message of her own).
+ */
+export function typicalCosts(dependencies: StepDependencies, scopeKey: string, at: string, offered: { look: boolean; reachOut: boolean }): (TypicalCost & { tool: string })[] {
   const { store, config, model } = dependencies;
   const measured = store.loop.sessions.typicalCosts(scopeKey, new Date(Date.parse(at) - TYPICAL_COST_DAYS * DAY_MILLISECONDS).toISOString());
   const preferences = store.modelPreferences(scopeKey);
   return TYPICAL_STEPS.flatMap(step => {
-    if (step.tool === 'study.look' && (!dependencies.looks || config.maximumRoomLooksPerDay < 1)) return [];
-    if (step.tool === 'owner.reach_out' && (!dependencies.reachOuts || config.maximumReachOutsPerDay < 1)) return [];
+    if ((step.tool === 'study.look' && !offered.look) || (step.tool === 'owner.reach_out' && !offered.reachOut)) return [];
     const actual = measured.get(step.tool);
     if (actual && actual.count > 0) return [{ tool: step.tool, label: step.label, yen: actual.yen }];
     const id = step.purpose === 'look' ? (model.canUse(AUTONOMY_ROOM_LOOK_MODEL) ? AUTONOMY_ROOM_LOOK_MODEL : null)
@@ -146,11 +148,11 @@ export function typicalCosts(dependencies: StepDependencies, scopeKey: string, a
 /** The facts of the day and of this session that a thinking step is shown. Every number is the server's. */
 export function sessionFacts(
   dependencies: StepDependencies, cycle: AutonomyLoopCycle, session: AutonomySession, at: string,
-  input: { budget: AutonomyBudgetStatus; remainingReads: number; openStories: number; maximumOpenStories: number },
+  input: { budget: AutonomyBudgetStatus; remainingReads: number; openStories: number; maximumOpenStories: number; offered: { look: boolean; reachOut: boolean } },
 ): SessionFacts {
   const { store, config, loop } = dependencies;
   const spent = store.loop.sessions.spentYen(cycle.id);
-  const typical = typicalCosts(dependencies, cycle.scopeKey, at);
+  const typical = typicalCosts(dependencies, cycle.scopeKey, at, input.offered);
   const previous = store.loop.sessions.latestClosed(cycle.scopeKey);
   const elapsed = sessionElapsedMilliseconds(session, at);
   return {

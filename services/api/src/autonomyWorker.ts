@@ -3,6 +3,7 @@ import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
+import { configuredOwnerContext } from './autonomyOwnerContextWiring.js';
 import { BoundedPublicReader } from './autonomyReader.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
@@ -27,6 +28,8 @@ import { configuredDatabasePath } from './sqliteStore.js';
  * chat and voice never wait for it. It does nothing but keep its lease while
  * `SHANNON_AUTONOMY_ENABLED` is not `true`, while the owner has paused her, or while
  * no dedicated model credential is configured.
+ *
+ * She paces her own day in sessions (`SHANNON_AUTONOMY_PACING`, default `sessions`; `cycles` restores the fixed cycles).
  */
 const databasePath = configuredDatabasePath();
 const now = () => new Date().toISOString();
@@ -67,14 +70,20 @@ const service = new ShannonAutonomyService({
 });
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
+const loopConfig = configuredAutonomyLoop(process.env);
+// What she may see of the owner's in her own time (owner decision 2026-10-02, ADR-0003): one bounded block, read through the
+// conversation's memory entry points. SHANNON_AUTONOMY_OWNER_CONTEXT=off opens none of it and every prompt is what it was.
+const ownerContext = loopConfig.ownerContext
+  ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
 const loop = new ShannonAutonomyLoop({
-  store, service, config, loop: configuredAutonomyLoop(process.env), model: configuredAutonomyTextModel(process.env),
+  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env),
   reader: new BoundedPublicReader({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
   }),
   showing, now, looks, ...(notion ? { notion } : {}),
   reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
+  ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');
@@ -106,6 +115,7 @@ try {
   } while (!stopping);
 } finally {
   try { loop.release(); } catch { /* the lease runs out by itself */ }
+  ownerContext?.close();
   ownerUpcoming.close();
   ownerState.close();
   reachOuts.close();

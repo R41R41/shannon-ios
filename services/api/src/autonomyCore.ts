@@ -84,6 +84,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/memoryProjectionSafety.ts',
     'services/api/src/memoryVisibility.ts',
     'services/api/src/memoryDisclosure.ts',
+    // What her own activity may see of the owner's, and the stores its process opens to read it.
+    'services/api/src/autonomyOwnerContext.ts',
+    'services/api/src/autonomyOwnerContextWiring.ts',
     'services/api/src/peopleMemory.ts',
     'services/api/src/peopleMemoryStore.ts',
     'services/api/src/peopleMemoryPrompts.ts',

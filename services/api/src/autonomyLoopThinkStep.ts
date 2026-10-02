@@ -126,6 +126,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
       closing: [sessionFactsSection(sessionFacts(dependencies, cycle, session, at, {
         budget: overview.budget, remainingReads: materials.remainingReads,
         openStories: materials.stories.filter(story => story.statusLabel !== STUDY_STATUS_LABEL.shown).length, maximumOpenStories: STUDY_LIMITS.openStories,
+        offered: { look: materials.lookAvailable === true, reachOut: Boolean(materials.reachOut) },
       }))],
     } : {}),
     ...(owned ? { ownerContext: owned.section } : {}),
