@@ -45,8 +45,15 @@ const PLAIN_DAY_AT_78C3493_WITH_2000_YEN = [
   ['think', 'f6d2e644587c294d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '820127755247f5a8'],
   ['reach_out', '2ca5da4023801847'],
 ];
+/**
+ * On 78c3493 a day held three messages of hers by default, and its thinking prompt said how many were left. Since the owner's
+ * decision of 2026-10-03 there is no count unless one is set; with that commit's count configured the prompts are that commit's.
+ */
+const COUNT_OF_78C3493 = { SHANNON_AUTONOMY_MAX_REACH_OUTS: '3' };
 /** The day's cap as it was by default on 78c3493: with it configured, every prompt is that commit's, unchanged. */
 const CAP_OF_78C3493 = { environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '1000' } };
+/** The plain day ran with the default count; the agentic day sets its own (six). */
+const PLAIN_OF_78C3493 = { environment: { ...CAP_OF_78C3493.environment, ...COUNT_OF_78C3493 } };
 const PLAIN_DAY_AT_78C3493 = [
   ['think', '60cf87edbe87f21d'], ['note', '2977210b0f7b5e1c'], ['draft', '3162903bd56a2e60'], ['reach_out', '74f4ae102cb062ba'], ['think', '95c8b348a7144662'],
   ['reach_out', '2ca5da4023801847'],
@@ -60,14 +67,14 @@ const BUILDERS_AT_78C3493 = {
 describe('with pacing and the owner\'s context switched off, the loop is what it was', () => {
   it('sends byte for byte the prompts of the commit before, through a whole day with every step kind, when the day\'s cap is that commit\'s', async () => {
     expect((await agenticDay(directory, CAP_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
-    expect((await plainDay(directory, CAP_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);
+    expect((await plainDay(directory, PLAIN_OF_78C3493)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);
   });
 
   it('differs from the commit before, with the default cap of 2,000 yen, only in the budget a thinking prompt prints', async () => {
     const other = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-default-'));
     try {
       const agentic = (await agenticDay(other)).map(call => [call.kind, call.digest]);
-      const plain = (await plainDay(other)).map(call => [call.kind, call.digest]);
+      const plain = (await plainDay(other, { environment: COUNT_OF_78C3493 })).map(call => [call.kind, call.digest]);
       expect(agentic).toEqual(AGENTIC_DAY_AT_78C3493_WITH_2000_YEN);
       expect(plain).toEqual(PLAIN_DAY_AT_78C3493_WITH_2000_YEN);
       // Every prompt that is not a thinking prompt is the unchanged commit's.

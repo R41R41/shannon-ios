@@ -113,13 +113,19 @@ final class ShannonPhoneEarphoneController {
                 listening?.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
             }
         }
+        // A call from her is not placed into dictation either; the call's side has no other way to know of it.
+        ShannonVoiceCallHost.shared.isDictating = { [weak dictation] in
+            dictation.map { Self.busyDictationPhases.contains($0.phase) } ?? false
+        }
         followSessionUse()
         updateStandby()
     }
 
     /// A voice conversation, dictation or the reply player holds the audio session. A call that failed holds nothing.
+    /// A call from Shannon holds it from its first ring: the system owns the session then, and standby steps aside.
     private var sessionInUse: Bool {
         (geminiVoiceModel.phase != .idle && geminiVoiceModel.phase != .failed) || Self.busyDictationPhases.contains(dictation.phase)
+            || ShannonVoiceCallHost.shared.systemCallIsActive
     }
 
     private static let busyDictationPhases: Set<ShannonVoicePhase> = [.requestingPermission, .listening, .ready, .transcribing, .speaking]

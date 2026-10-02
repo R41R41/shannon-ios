@@ -64,6 +64,7 @@ import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
 import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { SQLiteReachOutReports } from './reachOutReports.js';
 import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
+import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -101,6 +102,12 @@ const reachOutReports = new SQLiteReachOutReports(configuredDatabasePath());
 const privateListeningRoute = createPrivateListeningRoute(process.env, configuredDatabasePath(), now, {
   reports: reachOutReports, reportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0,
   isBody: (scopeKey, deviceId) => bodyStore.capabilities(scopeKey, deviceId) !== null,
+  calls: () => incomingCallRoute?.calls ?? null,
+});
+// A call from her (docs/incoming-call-contract.md): when she chooses to phone him from her own activity, this process rings the owner's iPhone.
+// SHANNON_INCOMING_CALLS=off, or no APNs key, and nothing is rung.
+const incomingCallRoute: IncomingCallRoute | null = createIncomingCallRoute(process.env, configuredDatabasePath(), now, {
+  isPaired: (scopeKey, deviceId) => deviceAuth?.listActiveDevicesForScope(scopeKey).some(device => device.deviceId === deviceId) ?? false,
 });
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
@@ -269,7 +276,7 @@ const server = createServer(async (request, response) => {
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {
-      handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore });
+      handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore, revoked: deviceId => incomingCallRoute?.invalidateDevice(deviceId) });
       return;
     }
     if (url.pathname === '/v1/push/register') {
@@ -277,6 +284,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (privateListeningRoute.handle(request, response, url, body, principal)) return;
+    if (incomingCallRoute?.handle(request, response, url, body, principal)) return;
     const isPairedChat = principal !== null && url.pathname === '/v1/chat';
     if (isPairedChat && !consumeDeviceAllowance(deviceUsage, principal.deviceId, 20)) {
       sendJson(response, 429, { error: 'RATE_LIMITED', message: '少し待ってからもう一度話しかけてください。' });
@@ -328,6 +336,7 @@ server.headersTimeout = 15_000;
 server.setTimeout(120_000);
 
 server.listen(port, host, () => {
+  incomingCallRoute?.start();
   console.log(`Shannon API listening on http://${host}:${port}`);
   console.log(`Shannon authentication: ${authMode}`);
   console.log('Shannon persistence ready: sqlite');
@@ -354,6 +363,7 @@ function shutdown(): void {
     reachOuts.close();
     reachOutReports.close();
     privateListeningRoute.close();
+    incomingCallRoute?.close();
     ownerTurns.close();
     ownerUpcoming.close();
     closeBodyLookStores(); closeBodyReactionStores();

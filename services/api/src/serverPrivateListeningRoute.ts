@@ -30,6 +30,8 @@ export interface PrivateListeningRouteOptions {
   /** `SHANNON_AUTONOMY_MAX_FOLLOW_UPS` above zero: whether deliveries are kept for her to observe. */
   reportsEnabled: boolean;
   isBody: (scopeKey: string, deviceId: string) => boolean;
+  /** A call from her that a device answered (`serverIncomingCallRoute.ts`); created after this route, so it is asked for when needed. */
+  calls?: PrivateListeningDependencies['calls'];
 }
 
 export function createPrivateListeningRoute(
@@ -43,6 +45,7 @@ export function createPrivateListeningRoute(
   });
   const dependencies: PrivateListeningDependencies = {
     store, enabled: privateListeningEnabled(environment), ownerScopeKey: environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner', reachOuts, now,
+    ...(options.calls ? { calls: options.calls } : {}),
   };
   const usage = new Map<string, { startedAt: number; count: number }>();
   return {

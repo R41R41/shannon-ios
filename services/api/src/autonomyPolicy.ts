@@ -90,12 +90,22 @@ export interface AutonomyPolicyContext {
    * answer today, and the limit. Absent means none are allowed. They are not counted as `reachOuts`.
    */
   reachOutFollowUps?: { today: number; maximumPerDay: number };
+  /**
+   * For `owner_call`: whether a call to the owner's iPhone may be placed now. He switched calls on, the server can
+   * send one, none is ringing, and the minimum interval since her last call is over. Absent means none is allowed.
+   * There is no count of calls a day: the budget bounds them.
+   */
+  calls?: { available: boolean };
 }
 
 /** The tool name of a message she starts on her own from her own activity (話しかける). */
 export const AUTONOMY_REACH_OUT_TOOL = 'owner.reach_out';
 /** The tool name of the one second call after such a message got no answer. */
 export const AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL = 'owner.reach_out_follow_up';
+
+/** The domain and the tool name of a call to the owner's iPhone she places from her own activity (電話をかける). */
+export const AUTONOMY_CALL_DOMAIN = 'owner_call';
+export const AUTONOMY_CALL_TOOL = 'owner.call';
 
 export interface AutonomyDecision {
   decision: AutonomyDecisionKind;
@@ -173,6 +183,10 @@ export function authorizeAutonomousAction(request: AutonomousActionRequest, cont
   if (domainId === 'owner_message' && request.tool === AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL
     && (!context.reachOutFollowUps || context.reachOutFollowUps.today + 1 > context.reachOutFollowUps.maximumPerDay)) {
     return refuse('forbidden', 'access_limit', domainId, '今日はもう十分に声をかけ直したため、実行しません。');
+  }
+  // A call to the owner's iPhone: only while he switched it on and one may be placed now. No daily count.
+  if (domainId === AUTONOMY_CALL_DOMAIN && !context.calls?.available) {
+    return refuse('forbidden', 'access_limit', domainId, 'いまは電話をかけられないため、実行しません。');
   }
   if (request.paid) {
     if (!context.isKnownModel(request.paid.model)) {

@@ -78,17 +78,19 @@ export class APNsNotificationSender implements PushNotificationSender {
   private providerToken(): string {
     const now = this.now();
     if (this.cachedToken && now - this.cachedToken.issuedAt < 45 * 60_000) return this.cachedToken.value;
-    const encodedHeader = base64URL(JSON.stringify({ alg: 'ES256', kid: this.options.keyId }));
-    const encodedClaims = base64URL(JSON.stringify({ iss: this.options.teamId, iat: Math.floor(now / 1_000) }));
-    const signingInput = `${encodedHeader}.${encodedClaims}`;
-    const signature = sign('sha256', Buffer.from(signingInput), {
-      key: this.key,
-      dsaEncoding: 'ieee-p1363',
-    });
-    const value = `${signingInput}.${signature.toString('base64url')}`;
+    const value = signAPNsProviderToken(this.key, this.options.keyId, this.options.teamId, now);
     this.cachedToken = { value, issuedAt: now };
     return value;
   }
+}
+
+/** The ES256 provider token of APNs token-based authentication. The VoIP sender (`voipPushSender.ts`) signs the same way. */
+export function signAPNsProviderToken(key: ReturnType<typeof createPrivateKey>, keyId: string, teamId: string, now: number): string {
+  const encodedHeader = base64URL(JSON.stringify({ alg: 'ES256', kid: keyId }));
+  const encodedClaims = base64URL(JSON.stringify({ iss: teamId, iat: Math.floor(now / 1_000) }));
+  const signingInput = `${encodedHeader}.${encodedClaims}`;
+  const signature = sign('sha256', Buffer.from(signingInput), { key, dsaEncoding: 'ieee-p1363' });
+  return `${signingInput}.${signature.toString('base64url')}`;
 }
 
 export class DisabledPushNotificationSender implements PushNotificationSender {

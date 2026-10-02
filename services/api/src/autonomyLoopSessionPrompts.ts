@@ -29,7 +29,7 @@ export const UNPLANNED_HEADER = '[さっき考えた時のこと]（次の一歩
 
 const UNPLANNED_ACTION: Readonly<Record<string, string>> = Object.freeze({
   read: 'read', notion: 'notion', note: 'note', draft: 'draft', revise: 'revise', ready: 'ready', put_away: 'put_away', copy: 'copy', look: 'look',
-  follow_up: 'follow_up', jot: 'jot', reach_out: 'reach_out', show: 'ready', other: '知らない action',
+  follow_up: 'follow_up', jot: 'jot', reach_out: 'reach_out', call: 'call', show: 'ready', other: '知らない action',
 });
 const UNPLANNED_WHY: Readonly<Record<string, string>> = Object.freeze({
   unknown_piece: 'pieceId の物語が書斎に見つからなかった。「書斎: 物語」の ( ) の中の id をそのまま書く',

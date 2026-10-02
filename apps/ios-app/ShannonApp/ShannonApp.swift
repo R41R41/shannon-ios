@@ -45,6 +45,7 @@ struct ShannonApp: App {
         } else {
             initialConversationModel = ShannonConversationModel(client: client)
         }
+        let initialModel = initialConversationModel
         _conversationModel = State(initialValue: initialConversationModel)
         let previewCalendar = ShannonCalendarSharingStatus.designPreview(
             named: UserDefaults.standard.string(forKey: "ShannonPreviewCalendar")
@@ -56,7 +57,8 @@ struct ShannonApp: App {
             ? .designPreview(outputs: [], registered: [], status: .notListening)
             : ShannonPrivateListeningModel(client: client, monitor: ShannonSystemAudioRouteMonitor()))
 #else
-        _conversationModel = State(initialValue: ShannonConversationModel(client: client))
+        let initialModel = ShannonConversationModel(client: client)
+        _conversationModel = State(initialValue: initialModel)
         _calendarSharingModel = State(initialValue: ShannonCalendarSharingModel(client: client))
         _privateListeningModel = State(initialValue: ShannonPrivateListeningModel(
             client: client, monitor: ShannonSystemAudioRouteMonitor()))
@@ -70,6 +72,15 @@ struct ShannonApp: App {
             deviceName: { deviceDisplayName }
         ))
         _pendingPushToken = State(initialValue: nil)
+#if os(iOS)
+        // Calls from Shannon: set up at every launch, also one the phone started for a call with no window.
+        if !initialModel.isDesignPreview {
+            _ = ShannonIncomingCalls.configure(
+                client: client, conversationModel: initialModel, environment: Self.pushEnvironment,
+                connectionStore: connectionStore
+            )
+        }
+#endif
     }
 
     var body: some Scene {
@@ -94,11 +105,19 @@ struct ShannonApp: App {
                         await refreshInitiativesAndBadge()
                         await configureRemoteNotifications()
                         await registerPendingPushToken()
+#if os(iOS)
+                        await ShannonIncomingCalls.settings?.synchronize()
+#endif
                     }
                 }
                 .onChange(of: connectionModel.status) {
                     guard connectionModel.isConnected else { return }
-                    Task { await registerPendingPushToken() }
+                    Task {
+                        await registerPendingPushToken()
+#if os(iOS)
+                        await ShannonIncomingCalls.settings?.synchronize()
+#endif
+                    }
                 }
                 .onChange(of: conversationModel.totalBadgeCount) {
                     updateApplicationBadge(conversationModel.totalBadgeCount)
@@ -178,7 +197,9 @@ struct ShannonApp: App {
         if registered, pendingPushToken == token { pendingPushToken = nil }
     }
 
-    private var pushEnvironment: ShannonPushEnvironmentDTO {
+    private var pushEnvironment: ShannonPushEnvironmentDTO { Self.pushEnvironment }
+
+    private static var pushEnvironment: ShannonPushEnvironmentDTO {
 #if DEBUG
         .sandbox
 #else
@@ -206,6 +227,8 @@ private final class ShannonAppDelegate: NSObject, UIApplicationDelegate, UNUserN
         Self.pendingAgentTaskID = Self.taskID(from: launchOptions?[.remoteNotification])
         Self.pendingTestFlightDeliveryOpen = Self.isTestFlightFailure(launchOptions?[.remoteNotification])
         UNUserNotificationCenter.current().delegate = self
+        // PushKit and CallKit, at every launch: a VoIP push that started the app is answered with a call at once.
+        ShannonIncomingCalls.activate()
         return true
     }
 

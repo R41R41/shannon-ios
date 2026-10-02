@@ -27,6 +27,7 @@ export const SHANNON_AUTONOMY_DOMAINS = Object.freeze([
   { id: 'room_look', rule: 'free', label: '体のカメラで部屋を見る' },
   { id: 'thinking', rule: 'free', label: '考える・書く' },
   { id: 'owner_message', rule: 'free', label: '持ち主に見せる' },
+  { id: 'owner_call', rule: 'free', label: '持ち主に電話をかける' },
   { id: 'core', rule: 'approval', label: '基幹部分' },
   { id: 'suite_app_code', rule: 'approval', label: 'Aether・Voyagerのコード' },
   { id: 'owner_content', rule: 'approval', label: '持ち主の文書とタスク' },

@@ -1,6 +1,6 @@
 import { autonomyDayKey } from './autonomyBudget.js';
 import { reachOutWait } from './autonomyLoopConfig.js';
-import type { ObservedReachOutReason, ReachOutAppSurface, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
+import type { ObservedReachOutReason, ReachOutAppSurface, ReachOutCallOutcome, ReachOutDeliveryOutcome, ReachOutFacts, StepObservation } from './autonomyLoopObservations.js';
 import { sessionOf } from './autonomyLoopPacing.js';
 import type { AutonomyLoopCycle, AutonomyLoopStep, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
@@ -30,6 +30,8 @@ export interface AutonomyReachOutObserver {
   delivery(scopeKey: string, initiativeId: string): ReachOutDeliveryOutcome | null;
   /** Which of the owner's apps reported that delivery, when one did: it spoke the message through his earphones. */
   surface?(scopeKey: string, initiativeId: string): ReachOutAppSurface | null;
+  /** What became of the call the server placed with this message, when it rang his iPhone; null when it did not, or it still rings. */
+  call?(scopeKey: string, initiativeId: string): ReachOutCallOutcome | null;
   /** What the server already knows of her body at this moment. */
   body(scopeKey: string, at: string): Pick<ReachOutFacts, 'windowVisible' | 'owner' | 'others'>;
 }
@@ -83,12 +85,14 @@ export async function observeReachOut(
   let surface: ReachOutAppSurface | null = null;
   try { delivery = observer?.delivery(scopeKey, sent.id) ?? null; } catch { delivery = null; }
   try { surface = delivery ? observer?.surface?.(scopeKey, sent.id) ?? null : null; } catch { surface = null; }
+  let call: ReachOutCallOutcome | null = null;
+  try { call = observer?.call?.(scopeKey, sent.id) ?? null; } catch { call = null; }
   try { body = observer?.body(scopeKey, at) ?? NO_BODY; } catch { body = NO_BODY; }
   const seconds = (until: string) => Math.max(0, Math.round((Date.parse(until) - Date.parse(sent.at)) / 1_000));
   return {
     id: sent.id, reason: sent.reason, sentAt: sent.at, waitedSeconds: seconds(repliedAt ?? at),
     replied: repliedAt !== null, ...(repliedAt ? { repliedAfterSeconds: seconds(repliedAt) } : {}),
-    delivery: delivery ?? 'unknown', ...(surface ? { surface } : {}), windowVisible: body.windowVisible, owner: body.owner, others: body.others,
+    delivery: delivery ?? 'unknown', ...(surface ? { surface } : {}), ...(call ? { call } : {}), windowVisible: body.windowVisible, owner: body.owner, others: body.others,
   };
 }
 
