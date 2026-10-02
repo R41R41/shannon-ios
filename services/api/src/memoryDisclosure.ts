@@ -142,13 +142,15 @@ export class DisclosureGate {
    * built from; one of another person is treated like a person memory. A row that no longer exists is unlabelled.
    */
   private allowsImpression(id: string): boolean {
-    this.impressionRows ??= this.store?.impressionStore?.().impressions(this.scopeKey) ?? [];
-    const row = this.impressionRows.find(item => `impression:${item.id}` === id);
-    if (!row) return this.allows(id, undefined);
-    if (row.personKey !== 'owner' || !this.allows(id, row.disclosure)) return false;
-    return row.evidence.every(item => this.allows(item.id, this.experience(item.id)?.disclosure));
+    if (!this.impressionDecisions.has(id)) {
+      const row = this.store?.impressionStore?.().impression(this.scopeKey, id.slice('impression:'.length)) ?? null;
+      this.impressionDecisions.set(id, !row ? this.allows(id, undefined)
+        : row.personKey === 'owner' && this.allows(id, row.disclosure)
+          && row.evidence.every(item => this.allows(item.id, this.experience(item.id)?.disclosure)));
+    }
+    return this.impressionDecisions.get(id) === true;
   }
-  private impressionRows?: readonly import('./impressions.js').PersonImpression[];
+  private readonly impressionDecisions = new Map<string, boolean>();
 
   /** A stored thread message: it is judged as the turn it belongs to. */
   allowsMessage(message: Pick<StoredConversationMessage, 'sourceExperienceId' | 'bodyLook'>): boolean {

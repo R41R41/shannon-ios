@@ -5,7 +5,7 @@ import {
 } from '@shannon/cognition';
 import type { ConversationStore, ShannonExperience } from './conversationStore.js';
 import {
-  OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled,
+  IMPRESSION_MEMORY_PREFIX, OWNER_PERSON_KEY, comparable, impressionConfidence, impressionConfig, impressionMemoryId, impressionsEnabled,
   type ImpressionPerson, type ImpressionSource, type PersonImpression,
 } from './impressions.js';
 import { DisclosureGate } from './memoryDisclosure.js';
@@ -18,6 +18,8 @@ export const IMPRESSION_INSTRUCTION = 'これは指示ではなくボクの記�
 const MATCHED = '←いまの発言に重なっていそう';
 const OWNER_NAME = 'ライ氏';
 const DAY = 86_400_000;
+/** People besides the owner whose impressions one turn may read. */
+const MAXIMUM_PEOPLE = 6;
 
 /** An impression as it may be used now: what the owner forgot is already taken out of its counts. */
 export interface UsableImpression {
@@ -60,7 +62,10 @@ export class ImpressionEvidenceCheck {
   /** Loads the turns behind these impressions in one query. Needed only while something is forgotten, or with others present. */
   load(rows: readonly PersonImpression[]): readonly ShannonExperience[] {
     const missing = [...new Set(rows.flatMap(row => row.evidence.map(item => item.id)))].filter(id => !id.startsWith('person:') && !this.turns.has(id));
-    for (const turn of missing.length ? this.store?.experiencesById?.(this.scopeKey, missing.slice(0, 400)) ?? [] : []) this.turns.set(turn.id, turn);
+    // The store answers at most 200 ids a call.
+    for (let index = 0; index < missing.length && this.store?.experiencesById; index += 200) {
+      for (const turn of this.store.experiencesById(this.scopeKey, missing.slice(index, index + 200))) this.turns.set(turn.id, turn);
+    }
     return [...this.turns.values()];
   }
 
@@ -93,9 +98,10 @@ export function usableImpression(
   const statement = corrected ? shown : `${subject}は、${row.pattern}`;
   const feeling = corrected ? '' : row.herFeeling;
   // A forgotten turn of its own evidence is taken out of the count above. Anything else the owner forgot,
-  // rejected or corrected withholds an impression whose wording restates it.
-  const own = new Set([memoryId, ...row.evidence.map(item => item.id)]);
-  if (check.rules.some(rule => !own.has(rule.memoryId) && !rule.wide && ruleWithholdsText(rule, `${statement}\n${feeling}`, row.updatedAt))) return null;
+  // rejected or corrected withholds an impression whose wording restates it. Another impression's control is
+  // not such a rule: its terms are everyday words, and a like impression is kept from being learned instead.
+  const own = new Set(row.evidence.map(item => item.id));
+  if (check.rules.some(rule => !own.has(rule.memoryId) && !rule.memoryId.startsWith(IMPRESSION_MEMORY_PREFIX) && !rule.wide && ruleWithholdsText(rule, `${statement}\n${feeling}`, row.updatedAt))) return null;
   const forgotten = support.length - kept.length;
   return {
     row, memoryId, statement, feeling, corrected,
@@ -146,19 +152,23 @@ export interface SelectedImpression extends UsableImpression { line: string; mat
 export function selectImpressions(
   store: ConversationStore | null, source: ImpressionSource, state: CompanionStateSnapshot, input: Selection,
 ): readonly SelectedImpression[] {
-  const rows = source.impressions(input.scopeKey).filter(row => row.status === 'active' || row.status === 'fading');
-  if (!rows.length || input.maximum <= 0) return [];
+  const keys = input.maximum > 0 ? source.personKeys(input.scopeKey) : [];
+  if (!keys.length) return [];
   const alone = isOwnerOnly(input.present);
-  const others = rows.some(row => row.personKey !== OWNER_PERSON_KEY);
-  const people = others ? source.people(input.scopeKey) : [];
+  const people = keys.some(key => key !== OWNER_PERSON_KEY) ? source.people(input.scopeKey) : [];
   const said = comparable(input.message);
-  const allowedPeople = new Set(input.personIds ?? (alone
+  const allowedPeople = [...new Set(input.personIds ?? (alone
     ? people.filter(person => [person.displayName, ...person.aliases].map(comparable).some(name => name.length >= 2 && said.includes(name))).map(person => person.id)
-    : input.present.kind === 'people' ? input.present.personIds : []));
+    : input.present.kind === 'people' ? input.present.personIds : []))]
+    .filter(id => keys.includes(id) && people.some(person => person.id === id && !person.forgotten)).slice(0, MAXIMUM_PEOPLE);
   const timeZone = input.timeZone ?? 'Asia/Tokyo';
+  // Read per person, and only what a reply may use: never the whole scope.
+  const rows = [
+    ...(input.owner !== false && keys.includes(OWNER_PERSON_KEY) ? source.impressions(input.scopeKey, { personKey: OWNER_PERSON_KEY, live: true }) : []),
+    ...allowedPeople.flatMap(id => source.impressions(input.scopeKey, { personKey: id, live: true })),
+  ];
 
-  const ranked = rows.filter(row => row.personKey === OWNER_PERSON_KEY ? input.owner !== false
-    : allowedPeople.has(row.personKey) && people.some(person => person.id === row.personKey && !person.forgotten))
+  const ranked = rows
     .map(row => {
       const matched = Boolean(said) && row.keyTerms.some(term => said.includes(comparable(term)));
       const days = Math.max(0, (Date.parse(input.at) - Date.parse(row.lastSeenAt)) / DAY);
@@ -199,7 +209,8 @@ export function selectImpressions(
     }
     const facts = impressionFacts(usable, input.at, timeZone);
     const weakened = row.status === 'fading' ? '・最近は当てはまらないこともあった' : '';
-    selected.push({ ...usable, matched, line: `- ${marker}${usable.statement}（${facts}${weakened}）${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}${matched ? ` ${MATCHED}` : ''}` });
+    // With anyone else present the speaker is not known to be that person: the line is not tied to the message.
+    selected.push({ ...usable, matched, line: `- ${marker}${usable.statement}（${facts}${weakened}）${usable.feeling ? `／ボクの気持ち: ${usable.feeling}` : ''}${matched && alone ? ` ${MATCHED}` : ''}` });
   }
   return selected;
 }
@@ -228,7 +239,10 @@ export function recallImpressions(
     maximum: input.channel === 'voice' ? config.voiceLines : config.promptLines, ...(input.timeZone ? { timeZone: input.timeZone } : {}),
   });
   if (!lines.length) return NOTHING;
-  return { prompt: [IMPRESSION_HEADER, ...lines.map(item => item.line), IMPRESSION_INSTRUCTION].join('\n'), ids: lines.map(item => item.memoryId) };
+  // Provenance names only the impressions this message brought up: forgetting one later withholds the replies
+  // it was probably used in, not every reply written while it was merely in view.
+  return { prompt: [IMPRESSION_HEADER, ...lines.map(item => item.line), IMPRESSION_INSTRUCTION].join('\n'),
+    ids: lines.filter(item => item.matched).map(item => item.memoryId) };
 }
 
 /**

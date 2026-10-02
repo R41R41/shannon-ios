@@ -64,7 +64,11 @@ export interface ImpressionPerson { id: string; displayName: string; aliases: re
 
 /** What a reply path may read. */
 export interface ImpressionSource {
-  impressions(scopeKey: string): readonly PersonImpression[];
+  /** One person's rows, or every row of the scope. `live`: only those a reply may use (active or fading). */
+  impressions(scopeKey: string, options?: { personKey?: string; live?: boolean }): readonly PersonImpression[];
+  impression(scopeKey: string, id: string): PersonImpression | null;
+  /** Whom she holds any impression of. */
+  personKeys(scopeKey: string): readonly string[];
   people(scopeKey: string): readonly ImpressionPerson[];
 }
 
@@ -160,6 +164,8 @@ export interface ObservationContext {
   audience: MemoryAudience;
   /** Impressions the owner asked her to forget: left alone, and nothing like them is learned again. */
   forgottenIds: ReadonlySet<string>;
+  /** Impressions the owner corrected, marked or pinned: never merged away, so his decision keeps its row. */
+  protectedIds?: ReadonlySet<string>;
   config: ImpressionConfig;
 }
 
@@ -167,12 +173,15 @@ export interface ObservationContext {
 const DIAGNOSIS = /障害|症候群|病気|病んで|うつ病|うつ状態|鬱|メンヘラ|依存症|ADHD|ASD|アスペ|人格|診断|サイコパス|ナルシスト/iu;
 /** Whatever else is personal is kept and marked like other owner-private memory; these are never kept. */
 const REFUSED_CATEGORIES = new Set(['secret', 'contact']);
+/** The sensitivity rule reports one category only; contact details are looked for on their own. */
+const CONTACT = /住所|番地|郵便番号|電話番号|メールアドレス|メアド|パスワード|暗証番号|マイナンバー|[\w.+-]+@[\w-]+\.[\w.]+|0\d{1,4}-?\d{1,4}-?\d{3,4}/iu;
 
 function heardTerms(values: readonly string[] | undefined, said: string): string[] {
   const heard = comparable(said);
   return [...new Set((values ?? []).map(value => clip(String(value), 16)).filter(term => {
     const key = comparable(term);
-    return key.length >= 2 && heard.includes(key);
+    // A short hiragana word (うん, そう) is in nearly every message and signals nothing.
+    return key.length >= 2 && !(key.length < 3 && /^[ぁ-ん]+$/u.test(key)) && heard.includes(key);
   }))].slice(0, 4);
 }
 
@@ -183,7 +192,7 @@ const feelingTag = (value: string | undefined): ShannonEmotionKind | '' =>
 export function acceptableImpressionText(pattern: string, feeling: string): boolean {
   const text = `${pattern}\n${feeling}`;
   const decision = classifySensitivity(text);
-  return !DIAGNOSIS.test(text) && !(decision.category && REFUSED_CATEGORIES.has(decision.category));
+  return !DIAGNOSIS.test(text) && !CONTACT.test(text.normalize('NFKC')) && !(decision.category && REFUSED_CATEGORIES.has(decision.category));
 }
 
 function bigrams(text: string): Set<string> {
@@ -352,10 +361,11 @@ export function applyImpressionAnalysis(
   }
 
   // Duplicates that already exist side by side (after a correction, or after two people were merged into one).
+  const mergeable = (row: PersonImpression) => !context.protectedIds?.has(row.id);
   const live = () => [...rows.values()].filter(row => !untouchable(row)).sort((left, right) => right.supportCount - left.supportCount || left.id.localeCompare(right.id));
   for (let changed = true; changed;) {
     changed = false;
-    const list = live();
+    const list = live().filter(mergeable);
     outer: for (const base of list) for (const other of list) {
       if (base === other || !similarImpressions(base, other)) continue;
       rows.set(base.id, merged(base, other, context));

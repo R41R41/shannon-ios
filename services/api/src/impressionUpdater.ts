@@ -92,7 +92,7 @@ export class ImpressionUpdater {
       ?? this.conversations.experienceCandidates(scopeKey).find(item => item.id === experienceId);
     if (!turn || !this.usableTurn(scopeKey, turn.id)) return 'skipped';
     return this.observe(scopeKey, {
-      personKey: OWNER_PERSON_KEY, person: 'ライ氏（持ち主）', sourceId: turn.id, at: turn.observedAt, said: turn.userMessage, audience: OWNER_AUDIENCE,
+      lane: 'owner', personKey: OWNER_PERSON_KEY, person: 'ライ氏（持ち主）', sourceId: turn.id, at: turn.observedAt, said: turn.userMessage, audience: OWNER_AUDIENCE,
       lines: [`ライ氏: ${clip(turn.userMessage, SAID_CHARACTERS)}`, `シャノン: ${clip(turn.shannonReply, REPLY_CHARACTERS)}`],
       // The owner's own impressions are his alone and protected, whatever their wording.
       label: (pattern, feeling) => {
@@ -142,7 +142,7 @@ export class ImpressionUpdater {
         const period = usable();
         if (!period) continue;
         const outcome = await this.observe(scopeKey, {
-          personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, at: call.updatedAt,
+          lane: 'platform', personKey: personId, person: `${period.person.displayName}さん`, sourceId: summaryId, at: call.updatedAt,
           said: period.turns.map(turn => turn.evidence ?? '').join('\n'), audience: period.audience,
           lines: period.turns.map(turn => clip(turn.text, PLATFORM_LINE_CHARACTERS)),
           label: () => ({ audience: period.audience, sensitivity: 'sensitive', category: 'third_party', reason: 'ほかの人についてのシャノンの印象', decidedBy: 'rule' }),
@@ -156,20 +156,22 @@ export class ImpressionUpdater {
   }
 
   private async observe(scopeKey: string, input: {
-    personKey: string; person: string; sourceId: string; at: string; said: string; audience: MemoryAudience; lines: readonly string[];
+    lane: 'owner' | 'platform'; personKey: string; person: string; sourceId: string; at: string; said: string; audience: MemoryAudience; lines: readonly string[];
     label: (pattern: string, feeling: string) => MemoryDisclosure; stillUsable: () => boolean;
   }): Promise<ImpressionOutcome> {
     const config = impressionConfig(this.environment);
     if (this.impressions.turnProcessed(scopeKey, input.sourceId, input.personKey)) return 'duplicate';
     const now = this.now();
-    const dayKey = localDayKey(now, this.timeZone);
+    // The nightly reading of platform people has its own daily cap, so it never uses up the owner's turns.
+    const dayKey = `${input.lane === 'platform' ? 'platform:' : ''}${localDayKey(now, this.timeZone)}`;
     if (this.impressions.modelCallsOn(scopeKey, dayKey) >= config.callsPerDay) return 'cap';
     const budget = this.options.backgroundBudgetUsd ?? configuredBackgroundBudgetUsd(this.environment);
     if (this.usage.backgroundLlmCostUsd(utcMonthKey(new Date(now))) >= budget * config.budgetFraction) return 'budget';
 
     const held = this.held(scopeKey, input.personKey, this.stateStore.snapshot(scopeKey), input.said, config);
     const keys = new Map(held.shown.map((item, index) => [`i${index + 1}`, item]));
-    // Written before the call: a retried job never pays for the same turn twice.
+    // Written before the call: a retried job never pays for the same turn twice, and a failing provider cannot
+    // be called without limit. The price is that a turn whose call failed is not looked at again.
     this.impressions.recordTurn(scopeKey, input.sourceId, input.personKey, dayKey, now);
     const output = await this.analyzer!.analyze(scopeKey, {
       person: input.person, localDate: localDayKey(input.at, this.timeZone), lines: input.lines, maximumNew: config.newPerTurn,
@@ -197,7 +199,7 @@ export class ImpressionUpdater {
     };
     const change = applyImpressionAnalysis(fresh.rows, analysis, {
       personKey: input.personKey, sourceId: input.sourceId, at: input.at, dayKey: localDayKey(input.at, this.timeZone),
-      said: input.said, audience: input.audience, forgottenIds: fresh.forgotten, config,
+      said: input.said, audience: input.audience, forgottenIds: fresh.forgotten, protectedIds: fresh.decided, config,
     }, input.label);
     this.impressions.saveImpressions(scopeKey, change.upserts, change.deleteIds);
     return change.upserts.length || change.deleteIds.length ? 'updated' : 'unchanged';
@@ -208,7 +210,7 @@ export class ImpressionUpdater {
    * model is shown (only what she may use now).
    */
   private held(scopeKey: string, personKey: string, state: CompanionStateSnapshot, said: string, config: ImpressionConfig) {
-    const rows = this.impressions.impressions(scopeKey).filter(row => row.personKey === personKey);
+    const rows = this.impressions.impressions(scopeKey, { personKey });
     const people = personKey === OWNER_PERSON_KEY ? [] : this.impressions.people(scopeKey);
     const check = new ImpressionEvidenceCheck(state, this.conversations, scopeKey);
     if (check.rules.length) check.load(rows);
@@ -220,7 +222,9 @@ export class ImpressionUpdater {
       rows,
       // Only an impression the owner himself asked her to forget blocks learning the like again. One that merely
       // lost its turns is not shown to the model, and comes back when the behaviour is seen anew.
-      forgotten: new Set(live.filter(row => (memoryControlFor(state, impressionMemoryId(row.id))?.status ?? 'active') !== 'active').map(row => row.id)),
+      forgotten: new Set(rows.filter(row => (memoryControlFor(state, impressionMemoryId(row.id))?.status ?? 'active') !== 'active').map(row => row.id)),
+      // Whatever the owner decided about a row (a correction, 機微／ふつう, a pin) stays attached to that row.
+      decided: new Set(rows.filter(row => memoryControlFor(state, impressionMemoryId(row.id))).map(row => row.id)),
       shown: [...usable].sort((left, right) => Number(matches(right.row)) - Number(matches(left.row)) || right.lastSeenAt.localeCompare(left.lastSeenAt))
         .slice(0, config.updateContext),
     };
@@ -270,7 +274,7 @@ export class OpenAIImpressionAnalyzer implements ImpressionAnalyzer {
         model: this.model, instructions: IMPRESSION_INSTRUCTIONS, input: JSON.stringify(input),
         reasoning: { effort: 'none' },
         text: { verbosity: 'low', format: { type: 'json_schema', name: 'shannon_person_impressions', strict: true, schema: IMPRESSION_SCHEMA } },
-        max_output_tokens: 500, store: false,
+        max_output_tokens: 800, store: false,
         prompt_cache_key: stableScopeIdentifier(scopeKey), safety_identifier: stableScopeIdentifier(scopeKey),
       }),
       signal: AbortSignal.timeout(60_000),

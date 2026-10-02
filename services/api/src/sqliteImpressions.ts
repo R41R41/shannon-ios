@@ -6,8 +6,9 @@ import {
 
 /** Receipts older than this are removed when a new one is written. */
 const RECEIPT_DAYS = 60;
-/** Rows read for one scope. The rules keep far fewer per person. */
-const MAXIMUM_ROWS = 600;
+/** Rows read for one person; the rules keep fewer. And for a whole scope, which only tests and tools read. */
+const MAXIMUM_PERSON_ROWS = 200;
+const MAXIMUM_ROWS = 2_000;
 
 /**
  * Additive and outside the numbered migrations, like the people tables: an older API binary
@@ -46,15 +47,25 @@ export class SQLiteImpressionStore implements ImpressionStore {
     ensureImpressionSchema(database);
   }
 
-  impressions(scopeKey: string): readonly PersonImpression[] {
-    const rows = this.database.prepare(`
-      SELECT person_key, data_json FROM person_impressions WHERE scope_key = ? ORDER BY last_seen_at DESC, impression_id LIMIT ${MAXIMUM_ROWS}
-    `).all(scopeKey) as unknown as Array<{ person_key: string; data_json: string }>;
-    // The column says whose impression it is: merging two people moves it there.
-    return Object.freeze(rows.flatMap(row => {
-      const value = parsed(row.data_json);
-      return value ? [Object.freeze({ ...value, personKey: row.person_key })] : [];
-    }));
+  impressions(scopeKey: string, options: { personKey?: string; live?: boolean } = {}): readonly PersonImpression[] {
+    const live = options.live ? ` AND status IN ('active','fading')` : '';
+    const rows = (options.personKey === undefined
+      ? this.database.prepare(`SELECT person_key, data_json FROM person_impressions WHERE scope_key = ?${live}
+          ORDER BY last_seen_at DESC, impression_id LIMIT ${MAXIMUM_ROWS}`).all(scopeKey)
+      : this.database.prepare(`SELECT person_key, data_json FROM person_impressions WHERE scope_key = ? AND person_key = ?${live}
+          ORDER BY last_seen_at DESC, impression_id LIMIT ${MAXIMUM_PERSON_ROWS}`).all(scopeKey, options.personKey)) as unknown as Row[];
+    return Object.freeze(rows.flatMap(row => restored(row) ?? []));
+  }
+
+  impression(scopeKey: string, id: string): PersonImpression | null {
+    const row = this.database.prepare('SELECT person_key, data_json FROM person_impressions WHERE scope_key = ? AND impression_id = ?')
+      .get(scopeKey, id) as unknown as Row | undefined;
+    return row ? restored(row) : null;
+  }
+
+  personKeys(scopeKey: string): readonly string[] {
+    return (this.database.prepare('SELECT DISTINCT person_key FROM person_impressions WHERE scope_key = ? LIMIT 500')
+      .all(scopeKey) as unknown as Array<{ person_key: string }>).map(row => row.person_key);
   }
 
   /** The `people` table belongs to the people store and the identity registry; absent, nobody is known. */
@@ -111,7 +122,12 @@ export class InMemoryImpressionStore implements ImpressionStore {
   private readonly rows = new Map<string, Map<string, PersonImpression>>();
   private readonly turns = new Map<string, string>();
   constructor(public known: readonly ImpressionPerson[] = []) {}
-  impressions(scopeKey: string) { return [...(this.rows.get(scopeKey)?.values() ?? [])].sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt)); }
+  impressions(scopeKey: string, options: { personKey?: string; live?: boolean } = {}) {
+    return [...(this.rows.get(scopeKey)?.values() ?? [])].filter(row => (options.personKey === undefined || row.personKey === options.personKey)
+      && (!options.live || row.status === 'active' || row.status === 'fading')).sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt));
+  }
+  impression(scopeKey: string, id: string) { return this.rows.get(scopeKey)?.get(id) ?? null; }
+  personKeys(scopeKey: string) { return [...new Set(this.impressions(scopeKey).map(row => row.personKey))]; }
   people() { return this.known; }
   saveImpressions(scopeKey: string, upserts: readonly PersonImpression[], deleteIds: readonly string[]) {
     const rows = this.rows.get(scopeKey) ?? new Map<string, PersonImpression>();
@@ -122,6 +138,14 @@ export class InMemoryImpressionStore implements ImpressionStore {
   turnProcessed(scopeKey: string, sourceId: string, personKey: string) { return this.turns.has(`${scopeKey}\u0000${sourceId}\u0000${personKey}`); }
   recordTurn(scopeKey: string, sourceId: string, personKey: string, dayKey: string) { this.turns.set(`${scopeKey}\u0000${sourceId}\u0000${personKey}`, `${scopeKey}\u0000${dayKey}`); }
   modelCallsOn(scopeKey: string, dayKey: string) { return [...this.turns.values()].filter(value => value === `${scopeKey}\u0000${dayKey}`).length; }
+}
+
+interface Row { person_key: string; data_json: string }
+
+/** The column says whose impression it is: merging two people moves it there. */
+function restored(row: Row): PersonImpression | null {
+  const value = parsed(row.data_json);
+  return value ? Object.freeze({ ...value, personKey: row.person_key }) : null;
 }
 
 function strings(raw: string | null): string[] {
