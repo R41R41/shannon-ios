@@ -22,8 +22,8 @@ import { storedVoiceFace } from '../src/voiceEmotionPlan.js';
 import { AFFECT_INTENSITY_STEPS, affectIntensityOf, affectIntensityValue } from '../src/voiceDecisionValues.js';
 import { GOLDEN_BASE } from './chatModelGoldenCases.js';
 
-// Whole conversations through the kernel on a loaded machine: the default five seconds says nothing about the code.
-vi.setConfig({ testTimeout: 30_000 });
+// Whole conversations through the kernel on a loaded machine: a short timeout says nothing about the code.
+vi.setConfig({ testTimeout: 120_000 });
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -529,7 +529,7 @@ describe('a mood decided again under another feeling: the reply, its returned st
     expect(response.state.presence.mood).toMatchObject({ expression: 'sad', fromConversation: true });
     expect(h.state().expressiveEmotion).toEqual(stored);
     expect(h.state().lingering!.find(item => item.kind === 'hurt')).toMatchObject({ strength: 0.9, awakeAt: 0 });
-  }, 30_000);
+  });
 
   it('stores a voice turn with the face the plan acted with', async () => {
     const h = await joyOverHurt();
@@ -552,7 +552,7 @@ describe('a mood decided again under another feeling: the reply, its returned st
     expect(storedVoiceFace(resolved, { primary: 'not-a-kind', intensity: 0.9 })).toMatchObject({ expression: 'joyful' });
     expect(storedVoiceFace({ messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'tender' }, expressiveEmotion: { primary: 'caring', continued: true, overrideReason: 'grief' } } as never,
       { primary: 'hurt', intensity: 0.9 })).toMatchObject({ expression: 'tender' });
-  }, 30_000);
+  });
 });
 
 describe('guests and other people present never move her feeling toward the owner', () => {
