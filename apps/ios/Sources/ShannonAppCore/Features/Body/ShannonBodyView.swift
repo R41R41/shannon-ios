@@ -15,6 +15,8 @@ public struct ShannonBodyView: View {
     public let allowsTouch: Bool
     /// Live2D only: whether her line for a touch is shown above this figure.
     public let showsLine: Bool
+    /// Live2D only: which screen shows the one figure when several are on screen.
+    public let priority: ShannonLive2DHostPriority
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @State private var hostID = UUID()
@@ -28,7 +30,8 @@ public struct ShannonBodyView: View {
         allowsTracking: Bool = true,
         feeling: ShannonFeelingDTO? = nil,
         allowsTouch: Bool = true,
-        showsLine: Bool = true
+        showsLine: Bool = true,
+        priority: ShannonLive2DHostPriority = .dialogue
     ) {
         self.expression = expression
         self.activity = activity
@@ -38,6 +41,7 @@ public struct ShannonBodyView: View {
         self.feeling = feeling
         self.allowsTouch = allowsTouch
         self.showsLine = showsLine
+        self.priority = priority
     }
 
     public var body: some View {
@@ -55,7 +59,7 @@ public struct ShannonBodyView: View {
             }
             if usesLive2D {
                 ShannonLive2DFigure(
-                    hostID: hostID, layout: Self.squareLayout, touchEnabled: allowsTouch,
+                    hostID: hostID, priority: priority, layout: Self.squareLayout, touchEnabled: allowsTouch,
                     face: ShannonFace(expression: expression, feeling: feeling), activity: activity,
                     isShowing: showsLive2D
                 )
@@ -71,30 +75,60 @@ public struct ShannonBodyView: View {
         }
     }
 
-    /// Head to waist, a little smaller than the page's own fit so that hair and shoulders stay inside the square.
-    static let squareLayout = ShannonLive2DLayout(mode: .bust, scale: 0.92)
+    /// Head to waist, fitted to the width too, so that hair and shoulders stay inside the square.
+    static let squareLayout = ShannonLive2DLayout(mode: .bust, contained: true)
 }
 
 /// The Live2D figure in one place. It is always in the hierarchy while the Live2D form is chosen
 /// (that is how the stage knows a screen wants her) and visible once the page is ready here.
 struct ShannonLive2DFigure: View {
     let hostID: UUID
+    let priority: ShannonLive2DHostPriority
     let layout: ShannonLive2DLayout
     let touchEnabled: Bool
     let face: ShannonFace
     let activity: ShannonDialogueActivity
     let isShowing: Bool
     var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
+    /// The body screen: with VoiceOver on, fingers on this element go straight to her, and she can be made larger or smaller.
+    var directTouch = false
+    var onAdjust: ((_ larger: Bool) -> Void)?
 
     var body: some View {
-        ShannonLive2DHostView(hostID: hostID, layout: layout, touchEnabled: touchEnabled, onLayoutChange: onLayoutChange)
+        let figure = ShannonLive2DHostView(hostID: hostID, priority: priority, layout: layout, touchEnabled: touchEnabled, onLayoutChange: onLayoutChange)
             .opacity(isShowing ? 1 : 0)
             .allowsHitTesting(isShowing && touchEnabled)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(face.accessibilityDescription)、\(activity.japaneseLabel)")
-            .accessibilityHint(touchEnabled ? ShannonBodyCopy.figureHint : "")
+            .accessibilityHint(touchEnabled ? (directTouch ? ShannonBodyCopy.figureDirectHint : ShannonBodyCopy.figureHint) : "")
             .accessibilityAddTraits(.isImage)
             .accessibilityHidden(!isShowing)
+        if let onAdjust {
+            figure
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: onAdjust(true)
+                    case .decrement: onAdjust(false)
+                    @unknown default: break
+                    }
+                }
+                .accessibilityValue(String(format: "%d%%", Int((layout.scale * 100).rounded())))
+                .modifier(ShannonDirectTouch(enabled: directTouch && touchEnabled))
+        } else {
+            figure
+        }
+    }
+}
+
+private struct ShannonDirectTouch: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+#if os(iOS)
+        content.accessibilityDirectTouch(enabled, options: [])
+#else
+        content
+#endif
     }
 }
 

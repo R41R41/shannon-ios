@@ -14668,6 +14668,7 @@
     }
     draw(frame, dt) {
       const { gl, canvas } = this;
+      if (gl.isContextLost()) return;
       for (const [id, value] of Object.entries(frame)) {
         const index = this.indices.get(id);
         if (index !== void 0) this._model.setParameterValueByIndex(index, value);
@@ -14689,7 +14690,7 @@
     }
     resize(height) {
       const next = Math.max(1, Math.round(height));
-      if (next === this.canvas.height) return;
+      if (next === this.canvas.height || this.gl.isContextLost()) return;
       this.canvas.height = next;
       this.canvas.width = Math.round(next * this.aspect * (1 + 2 * SIDE_MARGIN));
       this.getRenderer().setRenderTargetSize(this.canvas.width, this.canvas.height);

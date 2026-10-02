@@ -93,6 +93,19 @@ public final class ShannonAutonomyModel {
         }
     }
 
+    /// A background refresh for a screen that only shows what she is doing: a failure changes nothing,
+    /// and the message another screen is showing is neither cleared nor set.
+    public func refreshQuietly() async {
+        guard let client, !isLoading else { return }
+        if let fresh = try? await client.loadAutonomy(scopeKey: scopeKey) { overview = fresh }
+        if let activity = try? await client.loadAutonomyActivity(scopeKey: scopeKey, days: 2) {
+            let fresh = Dictionary(uniqueKeysWithValues: activity.days.map { ($0.dayKey, $0) })
+            let known = Set(days.map(\.dayKey))
+            days = (activity.days.filter { !known.contains($0.dayKey) } + days.map { fresh[$0.dayKey] ?? $0 })
+                .sorted { $0.dayKey > $1.dayKey }
+        }
+    }
+
     /// The stop switch. The displayed state changes only after the server stored it.
     public func setPaused(_ paused: Bool) async {
         guard let client, !isChangingPause, overview?.control.paused != paused else { return }

@@ -132,9 +132,15 @@ extension ShannonConversationView {
             }
         }
         .foregroundStyle(palette.textPrimary)
+#if os(iOS)
+        .fullScreenCover(isPresented: $bodyModel.showsScreenFromSettings) {
+            NavigationStack { ShannonBodyScreen(memory: memoryModel) }
+        }
+#else
         .sheet(isPresented: $bodyModel.showsScreenFromSettings) {
             NavigationStack { ShannonBodyScreen(memory: memoryModel) }
         }
+#endif
         .sheet(isPresented: $showsStateDetails) {
             ShannonStateSheet(state: model.state, face: model.presentFace)
         }

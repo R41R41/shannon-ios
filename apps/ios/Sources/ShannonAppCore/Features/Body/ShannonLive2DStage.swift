@@ -33,6 +33,10 @@ public final class ShannonLive2DStage {
     public private(set) var expressions: [String] = []
     public private(set) var gestures: [String] = []
     public private(set) var framesPerSecond: Int?
+    /// How far the page is with loading, 0–1, while `status` is `loading`.
+    public private(set) var loadProgress = 0.0
+    /// True when the page itself can calm its idle movement (`setIdle`); otherwise an idle figure is paused to rest.
+    public private(set) var calmsInPage = false
     /// Seconds from starting the page to its `ready`, for the body screen's diagnostics.
     public private(set) var lastLoadSeconds: Double?
 
@@ -42,6 +46,7 @@ public final class ShannonLive2DStage {
     private struct Host {
         let id: UUID
         weak var container: ShannonLive2DPlatformView?
+        let priority: ShannonLive2DHostPriority
         var layout: ShannonLive2DLayout
         var touchEnabled: Bool
     }
@@ -64,6 +69,9 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var lastMouthLevel = 0.0
     @ObservationIgnored private var frameStats = false
     @ObservationIgnored private var observing = false
+    @ObservationIgnored private var failuresWithoutReady = 0
+    @ObservationIgnored private var fingerDown = false
+    @ObservationIgnored private var lastHeardAt = Date()
 
     private init() {}
 
@@ -80,10 +88,14 @@ public final class ShannonLive2DStage {
 
     // MARK: Hosts
 
-    /// A screen that shows her figure came on. The last one to arrive shows the web view.
-    func attach(host id: UUID, container: ShannonLive2DPlatformView, layout: ShannonLive2DLayout, touchEnabled: Bool) {
+    /// A screen that shows her figure came on. The one with the highest priority shows the web view.
+    func attach(
+        host id: UUID, container: ShannonLive2DPlatformView, priority: ShannonLive2DHostPriority,
+        layout: ShannonLive2DLayout, touchEnabled: Bool
+    ) {
         hosts.removeAll { $0.id == id || $0.container == nil }
-        hosts.append(Host(id: id, container: container, layout: layout, touchEnabled: touchEnabled))
+        let index = ShannonLive2DStagePolicy.insertionIndex(for: priority, among: hosts.map(\.priority))
+        hosts.insert(Host(id: id, container: container, priority: priority, layout: layout, touchEnabled: touchEnabled), at: index)
         releaseTask?.cancel()
         releaseTask = nil
         observeSystem()
@@ -212,10 +224,17 @@ public final class ShannonLive2DStage {
     /// The owner asked for another try after a failure.
     public func retry() {
         lastReloadAt = nil
+        failuresWithoutReady = 0
         release()
         guard !hosts.isEmpty else { return }
         load()
         mount()
+    }
+
+    /// A finger is on her, or has just lifted. A held hand or a long pet is not idleness.
+    func setFingerDown(_ down: Bool) {
+        fingerDown = down
+        noteActivity()
     }
 
     /// Something happened that a resting figure should move for: a touch, a new face, a phase.
@@ -244,16 +263,41 @@ public final class ShannonLive2DStage {
         send(.setPaused(paused))
     }
 
+    /// Reduce Motion: no gestures of her own and no sway, while breathing, blinking, faces and touch go on.
+    /// Low Power Mode: half the frames. Sent again whenever either setting changes.
+    private func applyCalm() {
+        guard calmsInPage else { return }
+        send(.setIdle(gestures: !reduceMotion, sway: reduceMotion ? 0 : 1))
+        send(.setFrameRate(ShannonLive2DStagePolicy.frameRate(lowPower: lowPower)))
+    }
+
+    /// The page's version does not say which calls it has, so it is asked.
+    private func detectCalm(generation asked: Int) {
+        webView?.evaluateJavaScript("typeof window.shannonBody.setIdle==='function'&&typeof window.shannonBody.setFrameRate==='function'") { [weak self] result, _ in
+            let supported = (result as? Bool) == true
+            Task { @MainActor in
+                guard let self, self.generation == asked else { return }
+                self.calmsInPage = supported
+                if supported, self.isResting { self.isResting = false }
+                self.applyCalm()
+                self.refreshPaused()
+                self.scheduleRest()
+            }
+        }
+    }
+
     private func scheduleRest() {
         restTask?.cancel()
         restTask = nil
-        guard calm, status == .ready, activeHost != nil else { return }
+        // A page that calms itself is never paused to rest.
+        guard calm, !calmsInPage, status == .ready, activeHost != nil else { return }
         restTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
                 guard self.calm, self.status == .ready, self.activeHost != nil else { return }
-                if ShannonLive2DStagePolicy.rests(calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt)) {
+                if ShannonLive2DStagePolicy.rests(
+                    calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown) {
                     self.isResting = true
                     self.refreshPaused()
                     return
@@ -272,6 +316,8 @@ public final class ShannonLive2DStage {
         generation += 1
         let generation = generation
         status = .loading
+        loadProgress = 0
+        lastHeardAt = Date()
         sentPaused = nil
         lastMouthLevel = 0
         loadStartedAt = Date()
@@ -281,9 +327,6 @@ public final class ShannonLive2DStage {
         configuration.websiteDataStore = .nonPersistent()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.add(bridge, name: ShannonLive2DBridge.handlerName)
-        // The page does not handle a lost WebGL context itself; it is reported here as an error and the page reloads.
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: ShannonLive2DBridge.contextLossScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
 #if canImport(UIKit)
         configuration.allowsInlineMediaPlayback = false
 #endif
@@ -329,10 +372,20 @@ public final class ShannonLive2DStage {
         timeoutTask = Task { [weak self] in
             // Only time in the foreground counts: a page in a backgrounded app is suspended, not broken.
             var waited = 0.0
-            while waited < ShannonLive2DStagePolicy.loadTimeoutSeconds {
+            var silent = 0.0
+            var heardAt = Date.distantPast
+            while !ShannonLive2DStagePolicy.loadTimedOut(waited: waited, silent: silent) {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self, self.generation == generation, self.status == .loading else { return }
-                if self.appActive { waited += 1 }
+                // A page that keeps reporting its progress is alive, however long the model takes.
+                if self.lastHeardAt != heardAt {
+                    heardAt = self.lastHeardAt
+                    silent = 0
+                }
+                if self.appActive {
+                    waited += 1
+                    silent += 1
+                }
             }
             guard !Task.isCancelled, let self, self.generation == generation, self.status == .loading else { return }
             self.recover(generation: generation)
@@ -357,6 +410,8 @@ public final class ShannonLive2DStage {
         }
         webView = nil
         bridge = nil
+        calmsInPage = false
+        loadProgress = 0
         sentPaused = nil
         isResting = false
         framesPerSecond = nil
@@ -374,7 +429,9 @@ public final class ShannonLive2DStage {
     func recover(generation failed: Int) {
         guard failed == generation else { return }
         let now = Date()
-        let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: lastReloadAt, now: now)
+        // A page that was drawing and broke is given another start; one that never became ready is not reloaded for ever.
+        failuresWithoutReady = status == .ready ? 0 : failuresWithoutReady + 1
+        let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: lastReloadAt, now: now, failuresWithoutReady: failuresWithoutReady)
         release()
         guard mayReload, !hosts.isEmpty else {
             status = hosts.isEmpty ? .unloaded : .failed
@@ -399,7 +456,10 @@ public final class ShannonLive2DStage {
             self.expressions = expressions
             self.gestures = gestures
             lastLoadSeconds = loadStartedAt.map { Date().timeIntervalSince($0) }
+            failuresWithoutReady = 0
+            loadProgress = 1
             status = .ready
+            detectCalm(generation: received)
             if let mood { send(.setMood(valence: mood.valence, arousal: mood.arousal, openness: mood.openness)) }
             if let presence { send(.setPresence(presence)) }
             send(.setPhase(phase))
@@ -408,8 +468,15 @@ public final class ShannonLive2DStage {
             refreshPaused()
             lastActivityAt = Date()
             scheduleRest()
+        case let .loading(progress):
+            lastHeardAt = Date()
+            if status == .loading { loadProgress = max(loadProgress, progress) }
         case .error:
+            // Also `code: contextLost`: the page tried three times to make its drawing surface again and could not.
             recover(generation: received)
+        case .contextLost, .contextRestored:
+            // The page mends this itself and keeps the face, the mood and the layout; a reload would only lose them.
+            lastActivityAt = Date()
         case let .frameStats(fps):
             framesPerSecond = fps
         case .touch, .askReaction, .tap:
@@ -463,6 +530,7 @@ public final class ShannonLive2DStage {
     private func calmChanged(reduceMotion: Bool? = nil, lowPower: Bool? = nil) {
         if let reduceMotion { self.reduceMotion = reduceMotion }
         if let lowPower { self.lowPower = lowPower }
+        applyCalm()
         noteActivity()
     }
 
@@ -471,7 +539,6 @@ public final class ShannonLive2DStage {
         refreshPaused()
         guard active else { return }
         noteActivity()
-        checkDrawingContext()
     }
 
     /// With no screen showing her, the model is let go at once; a visible figure is left to the system,
@@ -479,15 +546,5 @@ public final class ShannonLive2DStage {
     private func memoryWarning() {
         guard hosts.isEmpty, status != .unloaded else { return }
         release()
-    }
-
-    /// After a return from the background the drawing context may be gone without an event having been seen.
-    private func checkDrawingContext() {
-        guard status == .ready, let webView else { return }
-        let generation = generation
-        webView.evaluateJavaScript(ShannonLive2DBridge.contextProbeScript) { [weak self] result, _ in
-            guard (result as? String) == "lost" else { return }
-            Task { @MainActor in self?.recover(generation: generation) }
-        }
     }
 }

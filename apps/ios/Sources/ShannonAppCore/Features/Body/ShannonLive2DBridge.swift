@@ -6,19 +6,6 @@ import WebKit
 @MainActor
 final class ShannonLive2DBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let handlerName = "shannonBody"
-    static let contextLossScript = """
-    document.addEventListener('webglcontextlost', function () {
-      try { window.webkit.messageHandlers.shannonBody.postMessage({ type: 'error', message: 'webglcontextlost' }); } catch (e) {}
-    }, true);
-    """
-    static let contextProbeScript = """
-    (function () {
-      var canvas = document.querySelector('#stage canvas');
-      if (!canvas) { return 'none'; }
-      var context = canvas.getContext('webgl2');
-      return context && !context.isContextLost() ? 'ok' : 'lost';
-    })();
-    """
     /// One rule per scheme: the content-blocker pattern language has no alternation.
     static let offlineRules = #"""
     [{"trigger":{"url-filter":"^https?:"},"action":{"type":"block"}},

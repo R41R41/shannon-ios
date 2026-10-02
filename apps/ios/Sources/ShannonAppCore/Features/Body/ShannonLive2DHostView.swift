@@ -1,6 +1,7 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 #elseif canImport(AppKit)
 import AppKit
 #endif
@@ -11,6 +12,7 @@ import AppKit
 /// reach the page as a layout.
 struct ShannonLive2DHostView {
     let hostID: UUID
+    let priority: ShannonLive2DHostPriority
     let layout: ShannonLive2DLayout
     let touchEnabled: Bool
     /// Non-nil where the owner may scale and move her (the body screen).
@@ -20,7 +22,7 @@ struct ShannonLive2DHostView {
 #if canImport(UIKit)
 extension ShannonLive2DHostView: UIViewRepresentable {
     func makeUIView(context: Context) -> ShannonLive2DContainerView {
-        let view = ShannonLive2DContainerView(hostID: hostID)
+        let view = ShannonLive2DContainerView(hostID: hostID, priority: priority)
         view.configure(layout: layout, touchEnabled: touchEnabled, onLayoutChange: onLayoutChange)
         return view
     }
@@ -36,6 +38,7 @@ extension ShannonLive2DHostView: UIViewRepresentable {
 
 final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
     let hostID: UUID
+    private let priority: ShannonLive2DHostPriority
     private var layout = ShannonLive2DLayout()
     private var touchEnabled = true
     private var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
@@ -48,8 +51,9 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         return recognizer
     }()
 
-    init(hostID: UUID) {
+    init(hostID: UUID, priority: ShannonLive2DHostPriority) {
         self.hostID = hostID
+        self.priority = priority
         super.init(frame: .zero)
         backgroundColor = .clear
         isOpaque = false
@@ -61,6 +65,9 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         pan.delegate = self
         addGestureRecognizer(pinch)
         addGestureRecognizer(pan)
+        let fingers = ShannonFingerObserver { ShannonLive2DStage.shared.setFingerDown($0) }
+        fingers.delegate = self
+        addGestureRecognizer(fingers)
     }
 
     @available(*, unavailable)
@@ -80,7 +87,7 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         if window == nil {
             ShannonLive2DStage.shared.detach(host: hostID)
         } else {
-            ShannonLive2DStage.shared.attach(host: hostID, container: self, layout: layout, touchEnabled: touchEnabled)
+            ShannonLive2DStage.shared.attach(host: hostID, container: self, priority: priority, layout: layout, touchEnabled: touchEnabled)
         }
     }
 
@@ -121,10 +128,47 @@ final class ShannonLive2DContainerView: UIView, UIGestureRecognizerDelegate {
         shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
     ) -> Bool { true }
 }
+
+/// Watches whether any finger is on the figure, and never recognises: the touches go on to the page.
+private final class ShannonFingerObserver: UIGestureRecognizer {
+    private let onChange: (Bool) -> Void
+    private var fingers = 0
+
+    init(onChange: @escaping (Bool) -> Void) {
+        self.onChange = onChange
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        if fingers == 0 { onChange(true) }
+        fingers += touches.count
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) { lifted(touches.count) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) { lifted(touches.count) }
+
+    override func reset() {
+        if fingers > 0 { onChange(false) }
+        fingers = 0
+    }
+
+    private func lifted(_ count: Int) {
+        fingers = max(0, fingers - count)
+        guard fingers == 0 else { return }
+        onChange(false)
+        state = .failed
+    }
+
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+    override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+}
 #elseif canImport(AppKit)
 extension ShannonLive2DHostView: NSViewRepresentable {
     func makeNSView(context: Context) -> ShannonLive2DContainerView {
-        let view = ShannonLive2DContainerView(hostID: hostID)
+        let view = ShannonLive2DContainerView(hostID: hostID, priority: priority)
         view.configure(layout: layout, touchEnabled: touchEnabled, onLayoutChange: onLayoutChange)
         return view
     }
@@ -142,14 +186,16 @@ extension ShannonLive2DHostView: NSViewRepresentable {
 /// and a trackpad pinch scales her. Moving her is not offered on the Mac.
 final class ShannonLive2DContainerView: NSView {
     let hostID: UUID
+    private let priority: ShannonLive2DHostPriority
     private var figureLayout = ShannonLive2DLayout()
     private var touchEnabled = true
     private var onLayoutChange: ((ShannonLive2DLayout) -> Void)?
     private var gestureStart: ShannonLive2DLayout?
     private lazy var magnify = NSMagnificationGestureRecognizer(target: self, action: #selector(magnified))
 
-    init(hostID: UUID) {
+    init(hostID: UUID, priority: ShannonLive2DHostPriority) {
         self.hostID = hostID
+        self.priority = priority
         super.init(frame: .zero)
         addGestureRecognizer(magnify)
         setAccessibilityElement(false)
@@ -171,7 +217,7 @@ final class ShannonLive2DContainerView: NSView {
         if window == nil {
             ShannonLive2DStage.shared.detach(host: hostID)
         } else {
-            ShannonLive2DStage.shared.attach(host: hostID, container: self, layout: figureLayout, touchEnabled: touchEnabled)
+            ShannonLive2DStage.shared.attach(host: hostID, container: self, priority: priority, layout: figureLayout, touchEnabled: touchEnabled)
         }
     }
 

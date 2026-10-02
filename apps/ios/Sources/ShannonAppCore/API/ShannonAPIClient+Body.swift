@@ -14,6 +14,8 @@ public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
     public let occurredAt: String
     public let durationMs: Int
     public let strength: Double
+    /// Which part was touched; left out when not known.
+    public let region: String?
 
     public init(touch: ShannonLive2DTouch, audience: ShannonBodyAudience) {
         id = touch.id
@@ -22,6 +24,7 @@ public struct ShannonBodyTouchEventDTO: Codable, Equatable, Sendable {
         occurredAt = touch.occurredAt
         durationMs = touch.durationMs
         strength = touch.strength
+        region = touch.sentRegion?.rawValue
     }
 }
 
@@ -32,6 +35,7 @@ public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
         public let durationMs: Int
         public let strength: Double
         public let ongoing: Bool
+        public let region: String?
     }
 
     public var scopeKey: String
@@ -43,7 +47,9 @@ public struct ShannonBodyReactionRequestDTO: Codable, Equatable, Sendable {
     public init(scopeKey: String, touch: ShannonLive2DTouch, audience: ShannonBodyAudience) {
         self.scopeKey = scopeKey
         id = touch.id
-        self.touch = Touch(type: touch.kind.rawValue, durationMs: touch.durationMs, strength: touch.strength, ongoing: touch.ongoing)
+        self.touch = Touch(
+            type: touch.kind.rawValue, durationMs: touch.durationMs, strength: touch.strength, ongoing: touch.ongoing,
+            region: touch.sentRegion?.rawValue)
         self.audience = audience
         occurredAt = touch.occurredAt
     }
@@ -102,6 +108,14 @@ public enum ShannonBodyRegistration {
     /// The capability flag of a body that only feels touch: it has no camera, shows none of her
     /// own messages, and its presence is never read as "her window is showing".
     public static let touchOnlyFlag = "touchOnly"
+    /// Where this body is, so that she is told 「iPhoneのアプリの中のボクの体」 and not 「PC」.
+    public static var surface: String {
+#if os(iOS)
+        "iphone"
+#else
+        "mac"
+#endif
+    }
     /// The body waits this long for her words and discards anything later.
     public static let reactionTimeoutSeconds: TimeInterval = 4.5
 
@@ -126,7 +140,8 @@ extension ShannonAPIClient: ShannonBodyServing {
             scopeKey: connection?.scopeKey ?? scopeKey,
             expressions: ShannonBodyRegistration.identifiers(expressions, limit: 64),
             gestures: ShannonBodyRegistration.identifiers(gestures, limit: 32),
-            flags: [ShannonBodyRegistration.touchOnlyFlag: true]
+            flags: [ShannonBodyRegistration.touchOnlyFlag: true],
+            surface: ShannonBodyRegistration.surface
         ))
         _ = try await bodyData(for: request)
     }
@@ -172,6 +187,7 @@ private struct TouchBodyCapabilitiesDTO: Encodable {
     let expressions: [String]
     let gestures: [String]
     let flags: [String: Bool]
+    let surface: String
 }
 
 private struct TouchEventsDTO: Encodable {

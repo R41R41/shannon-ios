@@ -62,6 +62,8 @@ struct ShannonBodyAttachment: ViewModifier {
     @Environment(\.scenePhase) private var scenePhase
     /// Moves on so that a step of hers stops being shown once it is three minutes old.
     @State private var clock = Date()
+    /// Worked out when the record, the loop's state or the clock changes, not on every render.
+    @State private var doing = ShannonBodyDoing.idle
 
     private var stage: ShannonLive2DStage { .shared }
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
@@ -73,7 +75,9 @@ struct ShannonBodyAttachment: ViewModifier {
         case .listening: .listening
         case .thinking: .thinking
         case .speaking: .speaking
-        case .requestingPermission, .connecting, .reconnecting, .failed: .waiting
+        // Not idle for the page: while a call is being set up or has failed, a touch asks for no words.
+        case .requestingPermission, .connecting, .reconnecting: .connecting
+        case .failed: .listening
         }
 #else
         nil
@@ -93,9 +97,8 @@ struct ShannonBodyAttachment: ViewModifier {
         ShannonBodySignals.phase(isSendingText: conversation.isSending, call: callActivity)
     }
 
-    private var doing: ShannonBodyDoing {
-        ShannonBodySignals.doing(loopState: memory.autonomy.overview?.loop?.state, days: memory.autonomy.days, now: clock)
-    }
+    private var loopState: String? { memory.autonomy.overview?.loop?.state }
+    private var activityStamp: String? { memory.autonomy.days.first?.entries.first?.id }
 
     private var awaitingReaction: Int {
         memory.autonomy.study.pieces.filter { $0.awaitingReaction == true }.count
@@ -140,6 +143,9 @@ struct ShannonBodyAttachment: ViewModifier {
             .onChange(of: stage.status) { if stage.status == .ready { pushAll() } }
             .onChange(of: conversation.state?.emotion) { pushMood() }
             .onChange(of: presence) { presenceChanged() }
+            .onChange(of: loopState) { refreshDoing() }
+            .onChange(of: activityStamp) { refreshDoing() }
+            .onChange(of: clock) { refreshDoing() }
             .onChange(of: phase) { phaseChanged() }
             .onChange(of: othersMayBeListening) { bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date()) }
             .onChange(of: reportsTouch) { bodyModel.touch.reportingChanged() }
@@ -161,6 +167,7 @@ struct ShannonBodyAttachment: ViewModifier {
             isDesignPreview: { [weak conversation] in conversation?.isDesignPreview ?? true },
             othersMayBeListening: { [weak voice] in Self.othersMayBeListening(voice) }
         )
+        refreshDoing()
         refreshWords()
         pushAll()
     }
@@ -180,6 +187,11 @@ struct ShannonBodyAttachment: ViewModifier {
             try? await Task.sleep(for: .seconds(30))
             clock = Date()
         }
+    }
+
+    private func refreshDoing() {
+        let next = ShannonBodySignals.doing(loopState: loopState, days: memory.autonomy.days, now: clock)
+        if next != doing { doing = next }
     }
 
     private func presenceChanged() {

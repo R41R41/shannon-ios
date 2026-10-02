@@ -10,6 +10,15 @@
   <!-- シャノンの体だけ。背景は透明。載せる側は window.shannonBody を呼ぶ（README.md を参照）。 -->
   <div id="stage" aria-label="シャノン" data-max-pixel-ratio="3" data-max-drawing-height="4096"></div>
   <div id="emotes" aria-hidden="true"></div>
+  <script>
+    // 読み込みが始まったことを、すぐ知らせる（次の assets.js は大きく、読み終えるまで何も起きない）。
+    (function () {
+      var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shannonBody;
+      var message = { type: 'loading', progress: 0 };
+      if (handler) handler.postMessage(message);
+      else console.log('[shannonBody]', JSON.stringify(message));
+    })();
+  </script>
   <!-- 絵・モデル・シェーダー（ページに埋め込んである。外への通信はしない） -->
   <script src="assets.js"></script>
   <script src="live2d/live2dcubismcore.min.js"></script>

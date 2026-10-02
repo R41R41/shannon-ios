@@ -52,7 +52,12 @@ public enum ShannonBodyCopy {
     public static let resetLayout = "位置を戻す"
     public static let gestureHint = "2本の指で、大きさと位置を変えられます"
     public static let loading = "Live2Dの姿を読み込んでいます…"
+    /// 「Live2Dの姿を読み込んでいます… 40%」 once the page reports how far it is.
+    public static func loading(progress: Double) -> String {
+        progress > 0 ? "\(loading) \(Int((min(1, max(0, progress)) * 100).rounded()))%" : loading
+    }
     public static let failed = "Live2Dの姿を表示できませんでした。水の光の目で表示しています。"
+    public static let shownElsewhere = "Live2Dの姿は、いま別の画面に出ています。ここでは水の光の目で表示しています。"
     public static let retry = "もう一度読み込む"
     public static let resting = "省電力のため、動きを止めています。触れると動きます"
     public static let restingReduceMotion = "視差効果を減らす設定のため、動きを止めています。触れると動きます"
@@ -61,6 +66,7 @@ public enum ShannonBodyCopy {
     public static let touchNotDelivered = "触れたことを伝えられませんでした。次に触れたときにもう一度送ります"
     public static let touchUnsupported = "サーバーが未対応のため、触れたことは伝わりません"
     public static let touchOthers = "「友人も一緒」の間は、ほかの人もいる時のこととして伝えます"
+    public static let figureDirectHint = "Live2Dの姿。この上では指がそのまま届きます。上下のスワイプで大きさを変えられます"
     public static let figureHint = "Live2Dの姿。指で触れられます"
     public static let openBodyHint = "からだの画面を開きます"
 

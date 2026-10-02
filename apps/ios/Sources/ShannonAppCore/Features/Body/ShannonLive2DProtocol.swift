@@ -19,12 +19,15 @@ public struct ShannonLive2DLayout: Equatable, Sendable {
     public var scale: Double
     public var offsetX: Double
     public var offsetY: Double
+    /// Fit the framed part to the width as well (`fit: 'contain'`), so that a square frame cuts off no hair or shoulder.
+    public var contained: Bool
 
-    public init(mode: Mode = .bust, scale: Double = 1, offsetX: Double = 0, offsetY: Double = 0) {
+    public init(mode: Mode = .bust, scale: Double = 1, offsetX: Double = 0, offsetY: Double = 0, contained: Bool = false) {
         self.mode = mode
         self.scale = scale
         self.offsetX = offsetX
         self.offsetY = offsetY
+        self.contained = contained
     }
 
     public var isMoved: Bool { scale != 1 || offsetX != 0 || offsetY != 0 }
@@ -107,6 +110,10 @@ public enum ShannonLive2DCommand: Equatable, Sendable {
     case setPaused(Bool)
     case setTouchEnabled(Bool)
     case setFrameStats(Bool)
+    /// Less movement of her own: no gestures she starts by herself, and how much her head and body sway (1 = as usual).
+    case setIdle(gestures: Bool, sway: Double)
+    /// At most this many frames a second (15–60); 0 follows the display.
+    case setFrameRate(Int)
 
     /// One guarded statement. Names and numbers are encoded as JSON, so nothing the server
     /// sent (an expression name, a feeling) can become script.
@@ -130,13 +137,18 @@ public enum ShannonLive2DCommand: Equatable, Sendable {
             call = "play(\(Self.json(gesture)))"
         case let .setLayout(layout):
             call = "setLayout({mode:\(Self.json(layout.mode.rawValue)),scale:\(Self.number(layout.scale)),"
-                + "offsetX:\(Self.number(layout.offsetX)),offsetY:\(Self.number(layout.offsetY))})"
+                + "offsetX:\(Self.number(layout.offsetX)),offsetY:\(Self.number(layout.offsetY)),fit:\(layout.contained ? "\"contain\"" : "null")})"
         case let .setPaused(paused):
             call = "setPaused(\(paused))"
         case let .setTouchEnabled(enabled):
             call = "setTouchEnabled(\(enabled))"
         case let .setFrameStats(enabled):
             call = "setFrameStats(\(enabled))"
+        case let .setIdle(gestures, sway):
+            // An older page has no such call: asked for only when it is there.
+            return "window.shannonBody&&typeof window.shannonBody.setIdle==='function'&&window.shannonBody.setIdle({gestures:\(gestures),sway:\(Self.number(min(1, max(0, sway))))});"
+        case let .setFrameRate(framesPerSecond):
+            return "window.shannonBody&&typeof window.shannonBody.setFrameRate==='function'&&window.shannonBody.setFrameRate(\(max(0, min(60, framesPerSecond))));"
         }
         return "window.shannonBody&&window.shannonBody.\(call);"
     }
@@ -162,26 +174,52 @@ public struct ShannonLive2DTouch: Equatable, Sendable {
         case pet, tickle, poke, holdHand
     }
 
+    /// Which part of her was touched (the body contract's vocabulary).
+    public enum Region: String, CaseIterable, Sendable {
+        case head, face, side, hand, body
+    }
+
     public let id: String
     public let occurredAt: String
     public let kind: Kind
     public let durationMs: Int
     public let strength: Double
     public let ongoing: Bool
+    /// As the page said. An older page says nothing; `sentRegion` then fills in what the gesture implies.
+    public let region: Region?
 
-    public init(id: String, occurredAt: String, kind: Kind, durationMs: Int, strength: Double, ongoing: Bool) {
+    public init(id: String, occurredAt: String, kind: Kind, durationMs: Int, strength: Double, ongoing: Bool, region: Region? = nil) {
         self.id = id
         self.occurredAt = occurredAt
         self.kind = kind
         self.durationMs = durationMs
         self.strength = strength
         self.ongoing = ongoing
+        self.region = region
+    }
+
+    /// The part reported to her: the page's own, or, where the gesture leaves no doubt, the gesture's
+    /// (a pet is on the head, a held hand is the hand, a tickle is on the side). A poke without a part stays without one.
+    public var sentRegion: Region? {
+        if let region { return region }
+        switch kind {
+        case .pet: return .head
+        case .holdHand: return .hand
+        case .tickle: return .side
+        case .poke: return nil
+        }
     }
 }
 
 public enum ShannonLive2DMessage: Equatable, Sendable {
     case ready(version: String, modelUpdatedAt: String, expressions: [String], gestures: [String])
-    case error(String)
+    /// How far the page is with loading (0–0.9). It arrives only before the first `ready`, and means the page is alive.
+    case loading(progress: Double)
+    /// The page could not draw. `contextLost`: the drawing surface was lost and the page could not make it again.
+    case error(String, code: String? = nil)
+    /// The drawing surface was lost; the page is making it again by itself.
+    case contextLost
+    case contextRestored
     /// A touch ended.
     case touch(ShannonLive2DTouch)
     /// The moment to ask whether she says something.
@@ -202,8 +240,15 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
                 expressions: Self.names(object["expressions"]),
                 gestures: Self.names(object["gestures"])
             )
+        case "loading":
+            let progress = (object["progress"] as? NSNumber)?.doubleValue ?? 0
+            self = .loading(progress: progress.isFinite ? min(1, max(0, progress)) : 0)
         case "error":
-            self = .error(String((object["message"] as? String ?? "").prefix(200)))
+            self = .error(String((object["message"] as? String ?? "").prefix(200)), code: (object["code"] as? String).map { String($0.prefix(40)) })
+        case "contextLost":
+            self = .contextLost
+        case "contextRestored":
+            self = .contextRestored
         case "touch", "askReaction":
             guard let id = object["id"] as? String, Self.isIdentifier(id),
                   let occurredAt = object["occurredAt"] as? String, occurredAt.count <= 40,
@@ -215,7 +260,9 @@ public enum ShannonLive2DMessage: Equatable, Sendable {
                 id: id, occurredAt: occurredAt, kind: kind,
                 durationMs: Int(min(600_000, max(0, duration.rounded()))),
                 strength: strength.isFinite ? min(1, max(0, strength)) : 0,
-                ongoing: type == "askReaction" && (touch["ongoing"] as? Bool ?? false)
+                ongoing: type == "askReaction" && (touch["ongoing"] as? Bool ?? false),
+                // A part outside the vocabulary (a newer page) is dropped, not the touch.
+                region: (touch["region"] as? String).flatMap(ShannonLive2DTouch.Region.init(rawValue:))
             )
             self = type == "touch" ? .touch(value) : .askReaction(value)
         case "tap":

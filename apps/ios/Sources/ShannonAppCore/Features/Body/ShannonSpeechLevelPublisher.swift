@@ -22,6 +22,11 @@ public final class ShannonSpeechLevelPublisher: @unchecked Sendable {
     private let lock = NSLock()
     private var sink: Sink?
     private var sequence: UInt64 = 0
+#if canImport(AVFoundation)
+    private weak var observed: AVAudioNode?
+    private var observedBus: AVAudioNodeBus = 0
+    private var tapped = false
+#endif
 
     public init() {}
 
@@ -51,6 +56,9 @@ public final class ShannonSpeechLevelPublisher: @unchecked Sendable {
         self.sink = sink
         sequence &+= 1
         lock.unlock()
+#if canImport(AVFoundation)
+        syncTap()
+#endif
     }
 
     /// One level now. For a playback path that already measures its output.
@@ -105,11 +113,32 @@ public final class ShannonSpeechLevelPublisher: @unchecked Sendable {
     }
 
 #if canImport(AVFoundation)
-    /// Listens to what a player node renders. Installing it twice on the same node is safe.
-    /// The tap runs on an audio thread; only the published level hops to the main actor.
+    /// Remembers the player node of the playback path. Its output is tapped only while somebody draws a
+    /// mouth from it: with the default form the call's audio graph is exactly what it was.
+    /// Call on the main thread (the transports build their graph there).
     public func observe(_ node: AVAudioNode, bus: AVAudioNodeBus = 0) {
+        lock.lock()
+        let previous = observed
+        let wasTapped = tapped
+        observed = node
+        observedBus = bus
+        tapped = false
+        lock.unlock()
+        if wasTapped, let previous, previous !== node { previous.removeTap(onBus: bus) }
+        syncTap()
+    }
+
+    private func syncTap() {
+        lock.lock()
+        let node = observed
+        let bus = observedBus
+        let wanted = sink != nil && node != nil
+        let change = wanted != tapped
+        tapped = wanted
+        lock.unlock()
+        guard change, let node else { return }
         node.removeTap(onBus: bus)
-        node.installTap(onBus: bus, bufferSize: 1_024, format: nil, block: Self.makeTap(self))
+        if wanted { node.installTap(onBus: bus, bufferSize: 1_024, format: nil, block: Self.makeTap(self)) }
     }
 
     /// Built outside any actor so the block carries no isolation onto the audio thread.

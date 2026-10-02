@@ -27,7 +27,7 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
-        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-02T17:09:06.469Z")
+        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-02T19:15:02.996Z")
     }
 
     func testCommandsAreGuardedCallsWithEncodedArguments() {
@@ -47,7 +47,17 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(ShannonLive2DCommand.setPaused(true).javaScript, "window.shannonBody&&window.shannonBody.setPaused(true);")
         XCTAssertEqual(
             ShannonLive2DCommand.setLayout(.init(mode: .full, scale: 1.5, offsetX: -12, offsetY: 30)).javaScript,
-            #"window.shannonBody&&window.shannonBody.setLayout({mode:"full",scale:1.500,offsetX:-12.000,offsetY:30.000});"#)
+            #"window.shannonBody&&window.shannonBody.setLayout({mode:"full",scale:1.500,offsetX:-12.000,offsetY:30.000,fit:null});"#)
+        XCTAssertEqual(
+            ShannonLive2DCommand.setLayout(.init(mode: .bust, contained: true)).javaScript,
+            #"window.shannonBody&&window.shannonBody.setLayout({mode:"bust",scale:1.000,offsetX:0.000,offsetY:0.000,fit:"contain"});"#)
+        // Calls an older page does not have are asked for only when they are there.
+        XCTAssertEqual(
+            ShannonLive2DCommand.setIdle(gestures: false, sway: 0).javaScript,
+            "window.shannonBody&&typeof window.shannonBody.setIdle==='function'&&window.shannonBody.setIdle({gestures:false,sway:0.000});")
+        XCTAssertEqual(
+            ShannonLive2DCommand.setFrameRate(30).javaScript,
+            "window.shannonBody&&typeof window.shannonBody.setFrameRate==='function'&&window.shannonBody.setFrameRate(30);")
         XCTAssertEqual(
             ShannonLive2DCommand.setPresence(.init(expression: "joyful", feeling: nil, intensity: 0.5, doing: "drafting", awaitingReaction: 2)).javaScript,
             #"window.shannonBody&&window.shannonBody.setPresence({expression:"joyful",feeling:null,intensity:0.500,doing:"drafting",awaitingReaction:2});"#)
@@ -66,6 +76,20 @@ final class ShannonBodyTests: XCTestCase {
             ShannonLive2DMessage(body: ["type": "askReaction", "id": "a1", "occurredAt": "2026-10-03T03:00:00.000Z", "touch": asking]),
             .askReaction(.init(id: "a1", occurredAt: "2026-10-03T03:00:00.000Z", kind: .holdHand, durationMs: 2000, strength: 1, ongoing: true)))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "tap"]), .tap)
+        // The newer page: progress while loading, a lost drawing surface it mends itself, and the touched part.
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "loading", "progress": 0.4]), .loading(progress: 0.4))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "loading", "progress": 7]), .loading(progress: 1))
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextLost"]), .contextLost)
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "contextRestored", "attempts": 2]), .contextRestored)
+        XCTAssertEqual(ShannonLive2DMessage(body: ["type": "error", "code": "contextLost", "message": "x"]), .error("x", code: "contextLost"))
+        let poked: [String: Any] = ["type": "poke", "durationMs": 0, "strength": 0, "ongoing": false, "region": "face"]
+        XCTAssertEqual(
+            ShannonLive2DMessage(body: ["type": "touch", "id": "p1", "occurredAt": "t", "touch": poked]),
+            .touch(.init(id: "p1", occurredAt: "t", kind: .poke, durationMs: 0, strength: 0, ongoing: false, region: .face)))
+        let unknownPart: [String: Any] = ["type": "poke", "durationMs": 0, "region": "ear"]
+        XCTAssertEqual(
+            ShannonLive2DMessage(body: ["type": "touch", "id": "p2", "occurredAt": "t", "touch": unknownPart]),
+            .touch(.init(id: "p2", occurredAt: "t", kind: .poke, durationMs: 0, strength: 0, ongoing: false)))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "frameStats", "fps": 58]), .frameStats(fps: 58))
         XCTAssertEqual(ShannonLive2DMessage(body: ["type": "error", "message": "WebGL2"]), .error("WebGL2"))
         XCTAssertEqual(
@@ -167,6 +191,23 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertTrue(Policy.mayReload(lastReloadAt: nil, now: now))
         XCTAssertFalse(Policy.mayReload(lastReloadAt: now.addingTimeInterval(-59), now: now))
         XCTAssertTrue(Policy.mayReload(lastReloadAt: now.addingTimeInterval(-60), now: now))
+        // A finger on her is not idleness.
+        XCTAssertFalse(Policy.rests(calm: true, phase: .idle, idleSeconds: 60, fingerDown: true))
+        // A page that never became ready is reloaded once, not for ever.
+        XCTAssertTrue(Policy.mayReload(lastReloadAt: nil, now: now, failuresWithoutReady: 1))
+        XCTAssertFalse(Policy.mayReload(lastReloadAt: nil, now: now, failuresWithoutReady: 2))
+        // Loading: a page that reports progress is given its time; a silent one is not.
+        XCTAssertFalse(Policy.loadTimedOut(waited: 60, silent: 3))
+        XCTAssertTrue(Policy.loadTimedOut(waited: 20, silent: 25))
+        XCTAssertTrue(Policy.loadTimedOut(waited: 90, silent: 0))
+        XCTAssertEqual(Policy.frameRate(lowPower: true), 30)
+        XCTAssertEqual(Policy.frameRate(lowPower: false), 0)
+        // The screen that shows her: the highest priority, and among equals the one that came last.
+        XCTAssertEqual(Policy.insertionIndex(for: .bodyScreen, among: [.dialogue]), 1)
+        XCTAssertEqual(Policy.insertionIndex(for: .dialogue, among: [.bodyScreen]), 0)
+        XCTAssertEqual(Policy.insertionIndex(for: .hero, among: [.hero, .dialogue, .voice]), 1)
+        XCTAssertEqual(Policy.insertionIndex(for: .voice, among: [.hero, .voice, .bodyScreen]), 2)
+        XCTAssertEqual(Policy.insertionIndex(for: .dialogue, among: []), 0)
         XCTAssertTrue(Policy.sendsMouthLevel(0.4, last: 0.2))
         XCTAssertFalse(Policy.sendsMouthLevel(0.41, last: 0.4))
         XCTAssertTrue(Policy.sendsMouthLevel(0, last: 0.4))
@@ -388,11 +429,23 @@ final class ShannonBodyTests: XCTestCase {
         let reaction = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
             ShannonBodyReactionRequestDTO(scopeKey: "owner", touch: touch, audience: .others))) as? [String: Any]
         XCTAssertEqual(Set(reaction?.keys ?? [:].keys), ["scopeKey", "id", "touch", "audience", "occurredAt"])
-        XCTAssertEqual(Set((reaction?["touch"] as? [String: Any])?.keys ?? [:].keys), ["type", "durationMs", "strength", "ongoing"])
+        // A pet is on the head even when the page did not say so.
+        XCTAssertEqual(Set((reaction?["touch"] as? [String: Any])?.keys ?? [:].keys), ["type", "durationMs", "strength", "ongoing", "region"])
+        XCTAssertEqual((reaction?["touch"] as? [String: Any])?["region"] as? String, "head")
         XCTAssertEqual(reaction?["audience"] as? String, "others")
         let event = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
             ShannonBodyTouchEventDTO(touch: touch, audience: .owner))) as? [String: Any]
-        XCTAssertEqual(Set(event?.keys ?? [:].keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength"])
+        XCTAssertEqual(Set(event?.keys ?? [:].keys), ["id", "type", "audience", "occurredAt", "durationMs", "strength", "region"])
+        // The part: the page's own when it says one; otherwise only what the gesture leaves no doubt about.
+        func part(_ kind: ShannonLive2DTouch.Kind, _ region: ShannonLive2DTouch.Region? = nil) -> String? {
+            ShannonLive2DTouch(id: "x", occurredAt: "t", kind: kind, durationMs: 0, strength: 0, ongoing: false, region: region).sentRegion?.rawValue
+        }
+        XCTAssertEqual([part(.pet), part(.holdHand), part(.tickle), part(.poke)], ["head", "hand", "side", nil])
+        XCTAssertEqual([part(.poke, .face), part(.poke, .side), part(.pet, .body)], ["face", "side", "body"])
+        let poke = try JSONSerialization.jsonObject(with: JSONEncoder().encode(ShannonBodyTouchEventDTO(
+            touch: .init(id: "x", occurredAt: "t", kind: .poke, durationMs: 0, strength: 0, ongoing: false), audience: .owner))) as? [String: Any]
+        XCTAssertNil(poke?["region"])
+        XCTAssertTrue(["iphone", "mac"].contains(ShannonBodyRegistration.surface))
     }
 
     func testAStudyCardSaysWhetherItAwaitsAReaction() throws {

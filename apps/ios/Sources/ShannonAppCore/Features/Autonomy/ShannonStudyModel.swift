@@ -64,6 +64,12 @@ public final class ShannonStudyModel {
         }
     }
 
+    /// A background refresh for a screen that only shows a count: a failure changes nothing and says nothing.
+    public func refreshQuietly() async {
+        guard let client, !isLoading, let overview = try? await client.loadStudy(scopeKey: scopeKey) else { return }
+        pieces = overview.pieces
+    }
+
     public func loadPiece(_ pieceID: String) async {
         guard let client, loadingPieceID != pieceID else { return }
         loadingPieceID = pieceID

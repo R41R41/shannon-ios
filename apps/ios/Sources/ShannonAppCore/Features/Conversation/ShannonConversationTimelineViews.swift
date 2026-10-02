@@ -47,7 +47,8 @@ struct ShannonEmptyConversation: View {
                     size: 96,
                     reactionTrigger: waterlightReaction,
                     allowsTouch: false,
-                    showsLine: false
+                    showsLine: false,
+                    priority: .hero
                 )
             }
             .buttonStyle(.plain)

@@ -87,7 +87,7 @@ public final class ShannonBodyTouchCoordinator {
             guard sends, !isAsking else { return nil }
             let request = ShannonBodyReactionRequestDTO(scopeKey: scopeKey, touch: touch, audience: environment.audience())
             return Task { await self.ask(request) }
-        case .ready, .error, .tap, .frameStats:
+        default:
             return nil
         }
     }

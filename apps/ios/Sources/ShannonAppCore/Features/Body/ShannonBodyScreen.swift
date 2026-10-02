@@ -36,7 +36,9 @@ public struct ShannonBodyScreen: View {
     private var layout: ShannonLive2DLayout {
         ShannonLive2DLayout(
             mode: ShannonLive2DLayout.Mode(rawValue: layoutModeRawValue) ?? .full,
-            scale: adjustment.scale, offsetX: adjustment.offsetX, offsetY: adjustment.offsetY
+            scale: adjustment.scale, offsetX: adjustment.offsetX, offsetY: adjustment.offsetY,
+            // 上半身 is fitted to the width as well: on a tall screen the height alone would cut her shoulders.
+            contained: layoutModeRawValue == ShannonLive2DLayout.Mode.bust.rawValue
         )
     }
 
@@ -46,13 +48,16 @@ public struct ShannonBodyScreen: View {
             VStack(spacing: 0) {
                 figure(palette, in: geometry.size)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text(ShannonBodyCopy.nowLine(face: face, doing: bodyModel?.doingLine))
-                    .font(.callout)
-                    .foregroundStyle(palette.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, ShannonSpacing.large)
-                    .padding(.vertical, ShannonSpacing.small)
-                    .accessibilityIdentifier("body-now-line")
+                // Only where something keeps it true (the conversation's driver); the Mac window has none.
+                if let bodyModel {
+                    Text(ShannonBodyCopy.nowLine(face: face, doing: bodyModel.doingLine))
+                        .font(.callout)
+                        .foregroundStyle(palette.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, ShannonSpacing.large)
+                        .padding(.vertical, ShannonSpacing.small)
+                        .accessibilityIdentifier("body-now-line")
+                }
                 // Never a scroll view around her: a scroll gesture would take the finger away from the page.
                 if dynamicTypeSize.isAccessibilitySize {
                     ScrollView { controls(palette) }
@@ -79,8 +84,8 @@ public struct ShannonBodyScreen: View {
             // What she is doing in her own time, read as the owner's app reads it elsewhere.
             guard scenePhase == .active, let memory else { return }
             while !Task.isCancelled {
-                await memory.autonomy.reload()
-                await memory.autonomy.study.reload()
+                await memory.autonomy.refreshQuietly()
+                await memory.autonomy.study.refreshQuietly()
                 try? await Task.sleep(for: .seconds(Self.refreshSeconds))
             }
         }
@@ -108,8 +113,12 @@ public struct ShannonBodyScreen: View {
             }
             if usesLive2D {
                 ShannonLive2DFigure(
-                    hostID: hostID, layout: layout, touchEnabled: true, face: face, activity: .idle, isShowing: showsLive2D,
-                    onLayoutChange: { adjustment = $0 }
+                    hostID: hostID, priority: .bodyScreen, layout: layout, touchEnabled: true, face: face, activity: .idle, isShowing: showsLive2D,
+                    onLayoutChange: { adjustment = $0 },
+                    directTouch: true,
+                    onAdjust: { larger in
+                        adjustment = adjustment.adjusted(scaleBy: larger ? 1.25 : 0.8, movedBy: .zero, in: size)
+                    }
                 )
             }
         }
@@ -151,8 +160,9 @@ public struct ShannonBodyScreen: View {
         guard ShannonLive2DStage.isAvailable else { return ShannonBodyCopy.unavailable }
         switch stage.status {
         case .failed: return ShannonBodyCopy.failed
-        case .loading, .unloaded: return ShannonBodyCopy.loading
+        case .loading, .unloaded: return ShannonBodyCopy.loading(progress: stage.loadProgress)
         case .ready:
+            if stage.activeHost != hostID { return ShannonBodyCopy.shownElsewhere }
             if stage.isResting { return stage.reduceMotion ? ShannonBodyCopy.restingReduceMotion : ShannonBodyCopy.resting }
 #if DEBUG
             if let fps = stage.framesPerSecond {
