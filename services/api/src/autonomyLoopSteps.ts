@@ -60,6 +60,8 @@ export interface StepDependencies {
   observer?: AutonomyReachOutObserver;
   /** The owner's context for her thinking, her writing and her messages (owner decisions 2026-10-02, ADR-0003); absent, or switched off in `loop`, no prompt carries it. */
   ownerContext?: AutonomyOwnerContext;
+  /** A line for the service log. Only closed codes are ever passed: never a word of a prompt or a reply. */
+  log?: (line: string) => void;
   /** The loop's clock, read while a step waits. */
   now?: () => string;
   /** Renews the runner's lease and heartbeat while a step waits; false once the lease is lost. */
@@ -357,6 +359,17 @@ function ownerWriting(dependencies: StepDependencies, scopeKey: string, at: stri
   let block: string | null = null;
   try { block = dependencies.ownerContext.forWriting(scopeKey, at, topic)?.section ?? null; } catch { block = null; }
   return { ownerInformed: true, ...(block ? { ownerContext: block } : {}) };
+}
+
+/**
+ * Why a planned step could not be carried out when its turn came, as `<action>.<why>` from closed sets: for her next
+ * thought (`unplannedSection`) and the log. Never a word of the step.
+ */
+export function unpreparedCode(dependencies: Pick<StepDependencies, 'store'>, cycle: Pick<AutonomyLoopCycle, 'scopeKey'>, step: AutonomyPlannedStep): string {
+  if (step.kind === 'draft' && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return 'draft.study_full';
+  if (step.kind === 'read' && step.url && dependencies.store.loop.wasRead(cycle.scopeKey, step.url)) return 'read.already_read';
+  if (step.kind === 'note' && !dependencies.store.loop.unnotedReadings(cycle.scopeKey).some(reading => reading.text)) return 'note.nothing_read';
+  return `${step.kind === 'reach_out' && step.reason === 'follow_up' ? 'follow_up' : step.kind}.unavailable`;
 }
 
 /** Stories that are open in her study: drafts and those she called 「見せてもいい」. */

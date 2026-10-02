@@ -4,12 +4,15 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configuredAutonomyLoop } from '../src/autonomyLoopConfig.js';
+import { mayRetryThought } from '../src/autonomyLoopPacing.js';
 import { OWNER_CONTEXT_HEADER, OWNER_CONTEXT_WRITING_HEADER, ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
+import { salvagedModelObject } from '../src/autonomyLoopPrompts.js';
 import { createOwnerContext } from '../src/autonomyOwnerContext.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
 import { SESSION_FACTS_HEADER, sessionFactsSection, type SessionFacts } from '../src/autonomyLoopSessionPrompts.js';
-import type { AutonomyTextRequest, AutonomyTextResult } from '../src/autonomyTextModel.js';
-import { FakeModel, FakeShowing, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
+import { AutonomyModelError, type AutonomyTextRequest, type AutonomyTextResult } from '../src/autonomyTextModel.js';
+import { planFromThought } from '../src/autonomyLoopPlan.js';
+import { FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**
  * She paces her own day (owner decision 2026-10-02, Syzygy ADR-0003): a session runs until she rests, she says when
@@ -84,13 +87,77 @@ describe('a session: she runs until she decides to rest', () => {
     }
   });
 
-  it('ends a session whose thought leads to no step, instead of thinking in a loop', async () => {
-    const { loop, model, store, entries } = sessions();
+  it('ends a session whose thoughts keep leading to no step, instead of thinking in a loop, and comes back sooner', async () => {
+    const { loop, model, store, entries, clock } = sessions();
+    const empty = { thought: 'うーん。', steps: [] };
+    model.plans = [empty, empty, empty, empty];
+    // One thought, two more inside the re-think limit, then the closing step.
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'think', 'think']);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+    // Nothing was done, so she comes back after the short rest, not the long default.
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
+    expect(entries().find(entry => entry.tool === 'study.rest' && entry.kind === 'action')?.summary).toBe('次の一歩が決まらなかったので、ここで一区切りにしました。次は10:30ごろに考えます。');
+    expect(entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action').map(entry => [entry.outcome, entry.reasonCode])).toEqual([['done', 'empty_plan'], ['done', 'empty_plan'], ['done', 'empty_plan']]);
+  });
+
+  it('does not let sessions that did nothing use up the day, and does not come back every half hour when the cause stays', async () => {
+    const { loop, model, store, advance, clock, service } = sessions({ loop: { sessionsPerDay: 2, maximumRethinksPerCycle: 0 } });
+    const idle = async () => { model.plans = [{ thought: 'うーん。', steps: [] }]; return runUntilIdle(loop); };
+    // The first idle session: a short rest. The next one is idle too: the long default, so a cause that stays is met rarely.
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
+    advance(30 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+    advance(150 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+    // Three sessions were begun and none of them counts: the day's two sessions are still hers.
+    expect(model.kinds()).toHaveLength(3);
+    expect(store.loop.sessions.startedOn(scope, '2026-10-02')).toBe(0);
+    expect(service.overview(scope).session).toMatchObject({ state: 'resting', endCode: 'idle', endLabel: '次の一歩が決まらず、何もせず終わりました' });
+    advance(150 * MINUTE);
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, rest(10)] }];
+    expect((await runUntilIdle(loop)).at(-1)).toBe('cycle-ended');
+    expect(store.loop.sessions.startedOn(scope, '2026-10-02')).toBe(1);
+    // After a session that did something, an idle one is again followed by the short rest.
+    advance(10 * MINUTE);
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(30 * MINUTE);
+  });
+
+  it('keeps a second idle session in a row far away also when the default rest is set short, and through the close without a step', async () => {
+    const { loop, model, store, advance, clock, service } = sessions({ loop: { maximumRethinksPerCycle: 0, sessionDefaultRestMilliseconds: 10 * MINUTE, sessionNoPlanRestMilliseconds: 10 * MINUTE } });
+    const idle = async () => { model.plans = [{ thought: 'うーん。', steps: [] }]; return runUntilIdle(loop); };
+    await idle();
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(10 * MINUTE);
+    advance(10 * MINUTE);
+    // The closing step cannot be recorded this time: the session is closed without one, by the same rule.
+    const recordAction = service.recordAction.bind(service);
+    service.recordAction = (scopeKey, report) => { if (report.summary.includes('一区切り')) throw new Error('DISK'); return recordAction(scopeKey, report); };
     model.plans = [{ thought: 'うーん。', steps: [] }];
-    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
-    expect(model.kinds()).toEqual(['think']);
-    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'no_plan' });
-    expect(entries().find(entry => entry.tool === 'study.rest' && entry.kind === 'action')?.summary).toBe('次の一歩が決まらなかったので、ここで一区切りにしました。次は12:30ごろに考えます。');
+    for (let index = 0; index < 8 && (index === 0 || store.loop.openCycle(scope)); index += 1) await loop.tick();
+    expect(store.loop.openCycle(scope)).toBeNull();
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+  });
+
+  it('does not count a thought the gate refused among the thoughts in a row', async () => {
+    const { store, loopConfig } = sessions();
+    const cycle = store.loop.startCycle(scope, '2026-10-02', 'activity', [], '2026-10-02T01:00:00.000Z');
+    const think = (status: 'reported' | 'refused') => {
+      const row = store.loop.beginStep(store.loop.openCycle(scope)!, { kind: 'think' }, [], '2026-10-02T01:00:00.000Z');
+      store.loop.finishStep(row.id, status, '2026-10-02T01:00:00.000Z');
+    };
+    const dependencies = { store, loop: loopConfig };
+    think('reported'); think('reported');
+    expect(mayRetryThought(dependencies, cycle, 2)).toBe(true);
+    // A pause landed between the check and the gate: that thought was never had.
+    think('refused'); think('refused');
+    expect(mayRetryThought(dependencies, cycle, 4)).toBe(true);
+    think('reported');
+    expect(mayRetryThought(dependencies, cycle, 5)).toBe(false);
   });
 
   it('thinks again when a step fails, with what happened in front of her, and her new plan replaces the old one', async () => {
@@ -104,12 +171,253 @@ describe('a session: she runs until she decides to rest', () => {
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', restReason: '読めなかったので' });
   });
 
-  it('ends when the thinking model gives nothing it can use', async () => {
-    const { loop, model, store } = sessions();
+  it('does not think again at all when the re-think limit is zero', async () => {
+    const { loop, model, store } = sessions({ loop: { maximumRethinksPerCycle: 0 } });
     model.plans = ['これはJSONではありません'];
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think']);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+  });
+});
+
+describe('a session: a thought that leads to no step', () => {
+  const twoStories = (store: ReturnType<typeof sessions>['store']) => ['傘のある駅', '橋の話'].map(title => {
+    const piece = store.study.create(scope, { kind: 'story', title, body: '本文。'.repeat(60), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    if (typeof piece === 'string') throw new Error(piece);
+    return piece;
+  });
+  const thinks = (entries: ReturnType<typeof sessions>['entries']) => entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action').reverse().map(entry => [entry.outcome, entry.reasonCode]);
+
+  it('says why a reply was no JSON, lets her think once more with that in front of her, and goes on', async () => {
+    const lines: string[] = [];
+    const { loop, model, store, entries } = sessions({ log: line => lines.push(line) });
+    model.plans = ['ええと、まず物語を直してから休もうと思います。', { thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, rest(60)] }];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'think', 'draft']);
+    expect(thinks(entries)).toEqual([['failed', 'unparsable'], ['done', undefined]]);
+    expect(entries().find(entry => entry.reasonCode === 'unparsable')!.summary).toBe('考えましたが、次の一歩にまとまりませんでした。');
+    // The second thought is told why, in a fixed sentence, and none of the words of the reply.
+    expect(model.prompts('think')[1]).toContain('[さっき考えた時のこと]（次の一歩が決まらなかった理由。事実だけ）\n- 返事がJSONの形になっていなかった。説明を付けず、JSONだけを返す。\n- できる一歩を選び直す。');
+    expect(model.prompts('think')[1]).not.toContain('まず物語を直してから');
+    expect(model.calls[1]!.prompt.endsWith(facts(model.calls[1]!.prompt))).toBe(true);
+    expect(lines).toEqual(['think unparsable']);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest' });
+  });
+
+  it('keeps the steps a cut-off reply had written out in full, and says that it was cut off', async () => {
+    const { loop, model, entries, store } = sessions();
+    const [piece] = twoStories(store);
+    model.plans = [`{"thought":"直します。","pursuits":[],"steps":[{"action":"revise","pieceId":"${piece!.id}","aim":"終わりを静かにする"},{"action":"rest","resumeInMinutes":60,"reason":"直したら、いちど離れて`];
+    model.truncatedCalls.add(0);
+    await loop.tick();
+    expect(thinks(entries)).toEqual([['done', 'truncated']]);
+    expect(store.loop.openCycle(scope)!.plan).toEqual([{ kind: 'revise', pieceId: piece!.id, intent: '終わりを静かにする' }]);
+  });
+
+  it('says that a reply was cut off before anything was written, and asks her for a shorter one', async () => {
+    const { loop, model, entries } = sessions();
+    model.plans = ['{"thought":"第一稿を寝かせたので、これから読み返して、', { thought: '休みます。', steps: [rest(60)] }];
+    model.truncatedCalls.add(0);
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
+    expect(thinks(entries)).toEqual([['failed', 'truncated'], ['done', undefined]]);
+    expect(entries().find(entry => entry.reasonCode === 'truncated')!.summary).toBe('考えましたが、返事が途中で切れて、次の一歩にまとまりませんでした。');
+    expect(model.prompts('think')[1]).toContain('- 返事が途中で切れた。thought は1文にして、steps は少なくする。');
+    // A thinking step of a session has room for the model's own reasoning and the reply.
+    expect(model.calls[0]!.maximumOutputTokens).toBe(4_000);
+  });
+
+  it('charges and names a reply whose whole ceiling went to the model\'s own reasoning, and does not ask again at the same ceiling', async () => {
+    const { loop, model, entries, service, store } = sessions();
+    model.during = kind => { if (kind === 'think') throw new AutonomyModelError('AUTONOMY_MODEL_TRUNCATED', { inputTokens: 4_600, outputTokens: 4_000 }); };
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    // No hint of hers can make the model reason less: one call, named, charged once, and the session ends.
+    expect(model.kinds()).toEqual(['think']);
+    expect(thinks(entries)).toEqual([['failed', 'truncated']]);
+    // (4,600 + 4,000) tokens at 10 USD a million and 160 yen: 13.76 yen for the reply that never came.
+    expect(entries().find(entry => entry.reasonCode === 'truncated')!.costYen).toBe(13.76);
+    expect(service.overview(scope).budget.spentYen).toBe(13.76);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+  });
+
+  it('asks the provider for little reasoning in a thinking step, and in no other step', async () => {
+    const low = sessions();
+    low.model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }, rest(60)] }];
+    await runUntilIdle(low.loop);
+    expect(low.model.calls.map(call => [callKind(call), call.reasoning])).toEqual([['think', 'low'], ['draft', undefined]]);
+    // The fixed cycles send the same field: nothing else of the request changes.
+    const cycles = loopHarness();
+    await runUntilIdle(cycles.loop);
+    expect(cycles.model.calls.map(call => [call.reasoning, call.maximumOutputTokens])).toEqual([['low', 1_500]]);
+    expect(cycles.model.calls[0]!.system).toContain('rest（今回はここまで）');
+    const plain = sessions({ loopEnvironment: { SHANNON_AUTONOMY_PLAN_REASONING: 'default' } });
+    await runUntilIdle(plain.loop);
+    expect('reasoning' in plain.model.calls[0]!).toBe(false);
+  });
+
+  it('thinks once more, told why, when the steps she planned could not be carried out when their turn came', async () => {
+    const lines: string[] = [];
+    const { loop, model, store, entries } = sessions({ log: line => lines.push(line) });
+    for (let index = 0; index < 12; index += 1) store.study.create(scope, { kind: 'story', title: `話${index}`, body: '本文。'.repeat(60), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    store.loop.addReading(scope, { url: 'https://www.aozora.gr.jp/', title: '青空文庫', text: '', links: [] }, '2026-10-01T00:00:00.000Z');
+    store.loop.markReadingNoted(scope, store.loop.unnotedReadings(scope)[0]!.id, '2026-10-01T00:00:00.000Z');
+    model.plans = [
+      // A draft with her study full, and a page she has read already: both are planned and neither can be done.
+      { thought: '書いて、読みます。', pursuits: [{ op: 'add', kind: 'question', title: '傘は誰のものか', why: '気になるからです。' }], steps: [{ action: 'draft', idea: '傘の話' }, { action: 'read', url: 'https://www.aozora.gr.jp/' }] },
+      { thought: '休みます。', steps: [rest(60)] },
+    ];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'think']);
+    expect(model.prompts('think')[1]).toContain([
+      '[さっき考えた時のこと]（次の一歩が決まらなかった理由。事実だけ）',
+      '- draft は、書斎の物語がいっぱいで、新しく書けなかった。先にどれかを ready にするか put_away でしまう。',
+      '- read は、もう読んだページだった。ほかのページを選ぶ。',
+      '- できる一歩を選び直す。',
+    ].join('\n'));
+    expect(lines).toEqual(['plan unprepared:draft.study_full,read.already_read']);
+    expect(store.loop.steps(store.loop.sessions.latestClosed(scope)!.cycleId)[1]!.step).toEqual({ kind: 'think', again: true, dropped: ['draft.study_full', 'read.already_read'] });
+    // That first thought did plan steps, so what it wrote in her ledger stands.
+    expect(store.pursuits.list(scope, '2026-10-02T02:00:00.000Z').map(item => item.title)).toContain('傘は誰のものか');
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest' });
+    expect(entries().filter(entry => entry.kind === 'action' && entry.tool === 'study.draft')).toEqual([]);
+  });
+
+  it('writes nothing in her ledger from a thought that is about to be thought again', async () => {
+    const { loop, model, store } = sessions();
+    model.plans = [
+      { thought: 'うーん。', pursuits: [{ op: 'add', kind: 'question', title: '捨てられる問い', why: '気になるからです。' }], steps: [] },
+      { thought: '休みます。', pursuits: [{ op: 'add', kind: 'question', title: '残る問い', why: '気になるからです。' }], steps: [rest(60)] },
+    ];
+    await runUntilIdle(loop);
+    const titles = store.pursuits.list(scope, '2026-10-02T02:00:00.000Z').map(item => item.title);
+    expect(titles).toContain('残る問い');
+    expect(titles).not.toContain('捨てられる問い');
+  });
+
+  it('says which steps could not be done and why, when every step she named is dropped', async () => {
+    const path = join(directory, 'filtered.sqlite');
+    const clock = { at: '2026-10-02T01:00:00.000Z' };
+    const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
+    persistent.appendTurn(scope, persistent.threadId(scope), '今日は釣りに行きました。', 'いいですね。', '2026-10-02T00:30:00.000Z');
+    const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
+    const lines: string[] = [];
+    const { loop, model, entries, store } = sessions({ path, clock, ownerContext, log: line => lines.push(line) });
+    twoStories(store);
+    model.plans = [
+      { thought: '直して、読みます。', steps: [{ action: 'revise', pieceId: 'the-draft', aim: '終わり' }, read('made-up'), read('made-up-too'), { action: 'note' }, { action: 'publish', to: 'everyone' }] },
+      { thought: '休みます。', steps: [rest(60)] },
+    ];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
+    expect(thinks(entries)).toEqual([['done', 'all_steps_filtered:revise.unknown_piece,read.not_listed,note.nothing_read,other.unavailable'], ['done', undefined]]);
+    const told = model.prompts('think')[1]!;
+    expect(told).toContain([
+      '[さっき考えた時のこと]（次の一歩が決まらなかった理由。事実だけ）',
+      '- revise は、pieceId の物語が書斎に見つからなかった。「書斎: 物語」の ( ) の中の id をそのまま書く。',
+      '- read は、「読めそうな場所」にない住所だった。そこにある住所をそのまま書く。',
+      '- note は、メモにする読み物がなかった。先に read する。',
+      '- 知らない action は、できない一歩だった。',
+      '- できる一歩を選び直す。',
+    ].join('\n'));
+    // No word of the reply is in her record or in what she is told: not the id she made up, not the action she invented.
+    expect(JSON.stringify(entries())).not.toMatch(/the-draft|publish|made-up/u);
+    expect(told).not.toMatch(/the-draft|publish|made-up/u);
+    expect(lines).toEqual(['think all_steps_filtered:revise.unknown_piece,read.not_listed,note.nothing_read,other.unavailable']);
+    // The plan that was stored for the second thought holds the same closed codes and nothing else.
+    expect(store.loop.steps(store.loop.sessions.latestClosed(scope)!.cycleId)[1]!.step).toEqual({ kind: 'think', again: true, dropped: ['revise.unknown_piece', 'read.not_listed', 'note.nothing_read', 'other.unavailable'] });
+    store.close(); persistent.close();
+  });
+
+  it('lets her revise her own unshown draft, with its id or, while it is her only story, without one', async () => {
+    const path = join(directory, 'revise.sqlite');
+    const clock = { at: '2026-10-02T11:59:47.000Z' };
+    const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
+    persistent.appendTurn(scope, persistent.threadId(scope), '物語、楽しみにしています。', 'がんばります、ライ氏。', '2026-10-02T09:00:00.000Z');
+    const ownerContext = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
+    const { loop, model, store, entries } = sessions({ path, clock, ownerContext });
+    // The state of the evening it went wrong: three notes, one story draft she has not shown.
+    for (const title of ['駅の光', '傘の忘れ物', '改札の音']) store.study.create(scope, { kind: 'note', title, body: '読んで思ったこと。', sources: [{ title: '随筆', url: 'https://example.org/essay' }] }, '2026-10-02T10:00:00.000Z');
+    const draft = store.study.create(scope, { kind: 'story', title: '傘のある駅', body: '本文。'.repeat(80), changeNote: '最初の稿です。' }, '2026-10-02T10:58:00.000Z');
+    if (typeof draft === 'string') throw new Error(draft);
+    model.plans = [{ thought: '第一稿を読み返して直します。', steps: [{ action: 'revise', pieceId: draft.id, aim: '客観的に読み返して直す' }, { action: 'revise', aim: 'もう一度' }, rest(90, '直したので、また寝かせる')] }];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think', 'revise', 'revise']);
+    expect(store.study.get(scope, draft.id)).toMatchObject({ version: 3, status: 'draft' });
+    expect(entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action')[0]!.reasonCode).toBeUndefined();
+    store.close(); persistent.close();
+  });
+
+  it('takes her only story for a revise that names none, and for nothing else: not for another action, a wrong or malformed id, or a story that is no draft', async () => {
+    const { loop, model, store, entries } = sessions();
+    const draft = store.study.create(scope, { kind: 'story', title: '傘のある駅', body: '本文。'.repeat(80), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    if (typeof draft === 'string') throw new Error(draft);
+    model.plans = [
+      { thought: 'しまいます。', steps: [{ action: 'put_away' }, { action: 'ready' }, { action: 'ready', pieceId: 'some-other-id' }, { action: 'revise', pieceId: 'some-other-id', aim: '終わり' }, { action: 'revise', pieceId: '', aim: '終わり' }, { action: 'revise', pieceId: 12, aim: '終わり' }] },
+      { thought: '休みます。', steps: [rest(60)] },
+    ];
+    await runUntilIdle(loop);
+    expect(store.study.get(scope, draft.id)).toMatchObject({ status: 'draft', version: 1 });
+    expect(thinks(entries)[0]).toEqual(['done', 'all_steps_filtered:put_away.unknown_piece,ready.unknown_piece,revise.unknown_piece']);
+    // Once she has called it ready it is no longer a draft she means by "the story".
+    const known = { pursuits: [], pieces: [{ ...store.study.get(scope, draft.id)!, status: 'ready' as const }], unnotedReadingIds: [] };
+    const bounds = { maximumSteps: 5, maximumReads: 2, notionAvailable: false, session: true };
+    expect(planFromThought({ steps: [{ action: 'revise', aim: '終わり' }] }, known, bounds).steps).toEqual([]);
+    expect(planFromThought({ steps: [{ action: 'revise', aim: '終わり' }] }, { ...known, pieces: [store.study.get(scope, draft.id)!] }, bounds).steps).toEqual([{ kind: 'revise', pieceId: draft.id, intent: '終わり' }]);
+  });
+
+  it('does not ask a provider that did not answer again at once', async () => {
+    const { loop, model, entries, store } = sessions();
+    model.during = () => { throw new Error('The operation was aborted due to timeout'); };
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think']);
+    expect(thinks(entries)).toEqual([['failed', 'model_failed']]);
+    expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'idle' });
+  });
+
+  it('takes the short rest only after a session that did nothing but think', async () => {
+    const { loop, model, store, clock } = sessions();
+    const empty = { thought: 'うーん。', steps: [] };
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }, empty, empty, empty];
+    await runUntilIdle(loop);
+    expect(model.kinds()).toEqual(['think', 'draft', 'think', 'think', 'think']);
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'no_plan' });
+    // She wrote a draft in this session: the next one begins after the usual default.
+    expect(Date.parse(store.loop.nextCycleAt(scope)!) - Date.parse(clock.at)).toBe(150 * MINUTE);
+  });
+
+  it('saves from a cut-off reply only what was written out in full', () => {
+    const cut = (text: string) => salvagedModelObject(text);
+    expect(cut('{"thought":"直す。","pursuits":[],"steps":[{"action":"revise","pieceId":"a","aim":"終わり"},{"action":"rest","resumeInMinutes":60,"reason":"直したら')).toEqual({ thought: '直す。', pursuits: [], steps: [{ action: 'revise', pieceId: 'a', aim: '終わり' }] });
+    expect(cut('```json\n{"thought":"書く。","steps":[{"action":"draft","idea":"傘"},{"action":"dra')).toEqual({ thought: '書く。', steps: [{ action: 'draft', idea: '傘' }] });
+    // A half-written step is never taken, and a reply cut before its steps gives nothing.
+    expect(cut('{"thought":"書く。","steps":[{"action":"draft","idea":"傘の')).toBeNull();
+    expect(cut('{"thought":"考えた。","pursuits":[{"op":"add","kind":"question","title":"傘","why":"気になる"},{"op":"add"')).toBeNull();
+    expect(cut('{"thought":"括弧 } のある文","steps":[{"action":"note"},{"action":"dr')).toEqual({ thought: '括弧 } のある文', steps: [{ action: 'note' }] });
+    expect(cut('返事はありません')).toBeNull();
+  });
+
+  it('under the fixed cycles a reply that was cut off is not saved from: it fails as before, with its reason', async () => {
+    const { loop, model, entries, store } = loopHarness();
+    const draft = store.study.create(scope, { kind: 'story', title: '傘のある駅', body: '本文。'.repeat(80), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    if (typeof draft === 'string') throw new Error(draft);
+    model.plans = [`{"thought":"直します。","steps":[{"action":"revise","pieceId":"${draft.id}","aim":"終わり"},{"action":"dra`];
+    model.truncatedCalls.add(0);
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think']);
+    expect(entries().filter(entry => entry.kind === 'action').map(entry => [entry.outcome, entry.reasonCode, entry.summary])).toEqual([['failed', 'truncated', '考えましたが、次の一歩にまとまりませんでした。']]);
+    // Nor is her only story taken for a step that names none.
+    const other = loopHarness();
+    other.store.study.create(scope, { kind: 'story', title: '傘のある駅', body: '本文。'.repeat(80), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
+    other.model.plans = [{ thought: '直します。', steps: [{ action: 'revise', aim: '終わり' }] }];
+    await runUntilIdle(other.loop);
+    expect(other.model.kinds()).toEqual(['think']);
+  });
+
+  it('under the fixed cycles a thought that leads to no step is recorded with its reason and nothing else changes', async () => {
+    const { loop, model, entries } = loopHarness();
+    model.plans = ['これはJSONではありません'];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    expect(model.kinds()).toEqual(['think']);
+    expect(model.calls[0]!.maximumOutputTokens).toBe(1_500);
+    expect(entries().filter(entry => entry.kind === 'action').map(entry => [entry.outcome, entry.reasonCode, entry.summary])).toEqual([['failed', 'unparsable', '考えましたが、次の一歩にまとまりませんでした。']]);
   });
 });
 
@@ -387,10 +695,13 @@ describe('a session: restart and a second runner', () => {
 
 describe('a session: she sees her budget as facts', () => {
   it('ends every thinking prompt with the day\'s budget, this session\'s use, what a step costs, the time, and when the day starts again', async () => {
-    const { loop, model, service, clock } = sessions({ clock: { at: '2026-10-02T05:05:00.000Z' } });
+    const { loop, model, service, clock, store } = sessions({ clock: { at: '2026-10-02T05:05:00.000Z' } });
     model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }, { thought: '読みます。', steps: [read('a')] }, { thought: '休みます。', steps: [rest(120)] }];
     expect(await loop.tick()).toBe('stepped');
     const first = model.calls[0]!;
+    const reserve = Number(/約(\d+)円の空きが要る/u.exec(first.prompt)![1]);
+    const step = store.loop.steps(store.loop.openCycle(scope)!.id)[0]!;
+    const asked = (step.estimate!.inputTokens + step.estimate!.outputTokens) * 0.0016;
     // Nothing has been spent: the estimates come from the price list.
     expect(facts(first.prompt)).toBe([
       '[いまのこと・お金のこと]（サーバーが数えた事実）',
@@ -400,8 +711,12 @@ describe('a session: she sees her budget as facts', () => {
       '- この時間: 14:05に始めて、ここまで0歩、0円使った。この時間のうちに使えるのはあと400円、あと39歩、あと約40分。',
       '- 動いた回数: この日はこれで1回目（1日12回まで）。',
       '- 一歩にかかるお金のめやす: 考える 約12円、読んだもののメモ 約9円、物語を書く 約10円、物語を直す 約13円。公開ページを読むこと自体は0円。',
+      `- 考える一歩を始めるには、約${reserve}円の空きが要る（使うのは、ふつうそれより少ない）。`,
       '- 読める回数: 今日あと200回',
     ].join('\n'));
+    // The amount she is shown is what the gate was asked to make room for, within a yen: the estimate of this very prompt.
+    expect(reserve).toBeGreaterThan(12);
+    expect(Math.abs(reserve - asked)).toBeLessThanOrEqual(1);
     // The facts are the last thing in the prompt, and the two lines that used to open it are gone.
     expect(first.prompt.endsWith(facts(first.prompt))).toBe(true);
     expect(first.prompt).not.toMatch(/\[いま\] |\[今日の残り\]/u);
@@ -435,14 +750,14 @@ describe('a session: she sees her budget as facts', () => {
   it('never shows more for the session than the day has left, and says when her study has no room for another story', async () => {
     const { loop, model, store } = sessions({ environment: { SHANNON_AUTONOMY_DAILY_BUDGET_YEN: '90' } });
     for (let index = 0; index < 12; index += 1) store.study.create(scope, { kind: 'story', title: `話${index}`, body: '本文。'.repeat(60), changeNote: '最初の稿です。' }, '2026-10-02T00:00:00.000Z');
-    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }];
-    expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
+    model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '傘の話' }] }, { thought: '休みます。', steps: [rest(60)] }];
+    expect(await runUntilIdle(loop)).toEqual(['stepped', 'stepped', 'cycle-ended']);
     const told = facts(model.calls[0]!.prompt);
     expect(told).toContain('- 今日の予算: 90円。ここまでに0円使って、あと90円（物語の下書き約8回分）。');
     expect(told).toContain('この時間のうちに使えるのはあと90円、');
     expect(told).toContain('- 書斎の物語: 開いているものが12個で、いっぱい。新しく draft するには、先にどれかを ready にするか put_away でしまう。');
-    // The draft that could not be kept was not asked for and not paid for.
-    expect(model.kinds()).toEqual(['think']);
+    // The draft that could not be kept was not asked for and not paid for; she thought again instead.
+    expect(model.kinds()).toEqual(['think', 'think']);
   });
 
   it('words the facts in meaning: what the remainder is worth, how the last session ended, and small amounts', () => {
@@ -504,7 +819,7 @@ describe('a session: with the owner\'s context', () => {
 });
 
 describe('a session: what a day can cost', () => {
-  it('never spends more than the day\'s cap, nor more than a session\'s, when every call costs its estimate and she never rests', async () => {
+  it('never spends more than the day\'s cap, nor more than a session\'s, when every call costs its estimate and she never rests', { timeout: 60_000 }, async () => {
     const path = join(directory, 'day.sqlite');
     const { loop, model, store, service, advance, clock, entries } = sessions({ path, model: new WorstCaseModel(), loop: { sessionMinimumRestMilliseconds: 10 * MINUTE, sessionDefaultRestMilliseconds: 10 * MINUTE } });
     // She writes one story and then revises it again and again, five times a plan, and never chooses to rest.
@@ -563,6 +878,13 @@ describe('a session: what a day can cost', () => {
     for (const value of ['Cycles', 'cycle', 'off', 'anything']) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: value }).pacing, value).toBe('cycles');
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: ' sessions ' }).pacing).toBe('sessions');
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_OWNER_CONTEXT: 'off' }).ownerContext).toBe(false);
+    // An output ceiling outside its range is held to the range; the no-plan rest is never longer than the default rest.
+    expect(loop).toMatchObject({ sessionThinkOutputTokens: 4_000, sessionNoPlanRestMilliseconds: 30 * MINUTE, planReasoning: 'low' });
+    for (const [value, tokens] of [['1000', 1_500], ['9000', 8_000], ['2500', 2_500], ['many', 4_000]] as const) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_THINK_OUTPUT_TOKENS: value }).sessionThinkOutputTokens, value).toBe(tokens);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600' }).sessionNoPlanRestMilliseconds).toBe(150 * MINUTE);
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_NO_PLAN_REST_MINUTES: '600', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '60' }).sessionNoPlanRestMilliseconds).toBe(60 * MINUTE);
+    for (const value of ['default', 'off', 'none', 'Low']) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: value }).planReasoning, value).toBe('default');
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PLAN_REASONING: ' low ' }).planReasoning).toBe('low');
     // A default rest outside the bounds is held inside them.
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES: '30', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '5' }).sessionDefaultRestMilliseconds).toBe(30 * MINUTE);
   });

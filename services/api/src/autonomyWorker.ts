@@ -76,7 +76,7 @@ const loopConfig = configuredAutonomyLoop(process.env);
 const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
 const loop = new ShannonAutonomyLoop({
-  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env),
+  store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({
     maximumBytes: boundedInteger(process.env.SHANNON_AUTONOMY_READ_MAX_BYTES, 10_000, 5_000_000, 1_500_000),
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
@@ -84,6 +84,8 @@ const loop = new ShannonAutonomyLoop({
   showing, now, looks, ...(notion ? { notion } : {}),
   reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) }, observer,
   ...(ownerContext ? { ownerContext: ownerContext.context } : {}),
+  // Content-free: a step kind and a closed reason code.
+  log: line => console.log(`Shannon autonomy step: ${line.replace(/[^a-z0-9_:., -]/giu, '_').slice(0, 300)}`),
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');
