@@ -11,7 +11,6 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  * is a closed outcome for one of her own messages, by a device that registered as her body.
  * Both tables hold identifiers, a closed vocabulary and timestamps: no text.
  */
-export const REACH_OUT_REPORT_PREFIX = '/v1/body/reach-outs/';
 /** A report is accepted this long after the message was written. */
 export const REACH_OUT_REPORT_WINDOW_MILLISECONDS = 24 * 60 * 60_000;
 /** A presence read this recent means her window is showing. */
@@ -19,25 +18,10 @@ export const REACH_OUT_PRESENCE_FRESH_MILLISECONDS = 30_000;
 /** The body's away and returned events are read this far back. */
 export const REACH_OUT_OWNER_EVENT_WINDOW_MILLISECONDS = 60 * 60_000;
 
-const INITIATIVE_ID = /^[A-Za-z0-9-]{1,80}$/u;
 /** When two bodies report differently, the one that got furthest stands. */
 const RANK: Readonly<Record<ReachOutDeliveryOutcome, number>> = Object.freeze({ shown_spoken: 5, shown: 4, away: 3, hidden: 2, muted: 1 });
 
 export type ReachOutReportResult = 'stored' | 'duplicate' | 'conflict' | 'not_found' | 'expired';
-
-/** The initiative id in `/v1/body/reach-outs/{id}/delivery`, or null. */
-export function reachOutReportId(path: string): string | null {
-  const match = /^\/v1\/body\/reach-outs\/([^/]+)\/delivery$/u.exec(path);
-  return match && INITIATIVE_ID.test(match[1]!) ? match[1]! : null;
-}
-
-/** The one field of a report besides `scopeKey`, or why the request is refused. */
-export function validatedReachOutReport(body: Record<string, unknown>): ReachOutDeliveryOutcome | string {
-  const unknown = Object.keys(body).find(key => key !== 'scopeKey' && key !== 'outcome');
-  if (unknown) return `${unknown.slice(0, 40)} is not allowed`;
-  const outcome = REACH_OUT_DELIVERY_OUTCOMES.find(value => value === body.outcome);
-  return outcome ?? `outcome must be one of ${REACH_OUT_DELIVERY_OUTCOMES.join(', ')}`;
-}
 
 export class SQLiteReachOutReports {
   private readonly database: DatabaseSync;

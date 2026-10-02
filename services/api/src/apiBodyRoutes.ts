@@ -1,10 +1,10 @@
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import { badRequest, objectBody, validScopeKey } from './apiValidation.js';
-import { REACH_OUT_DELIVERY_OUTCOMES, type ReachOutDeliveryOutcome } from './autonomyLoopObservations.js';
-import { BODY_SCHEMA_VERSION, validatedBodyCapabilities, validatedBodyEvents } from './bodyContract.js';
+import {
+  BODY_REACH_OUT_REPORT_PREFIX, BODY_SCHEMA_VERSION, bodyReachOutReportId, validatedBodyCapabilities, validatedBodyEvents, validatedBodyReachOutReport,
+} from './bodyContract.js';
 import { BODY_LOOK_RESULT_PREFIX, bodyLookResultId, validatedBodyLookResult } from './bodyLookContract.js';
 import type { BodyLookAnswer } from './bodyLook.js';
-import { REACH_OUT_REPORT_PREFIX, reachOutReportId, validatedReachOutReport } from './reachOutReports.js';
 import type { ShannonBody } from './shannonBody.js';
 
 export const BODY_ROUTE_PREFIX = '/v1/body/';
@@ -60,12 +60,12 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
   }
 
   // What the body did with a message she started on her own: one closed outcome, no text.
-  if (request.method === 'POST' && request.path.startsWith(REACH_OUT_REPORT_PREFIX)) {
-    const id = reachOutReportId(request.path);
+  if (request.method === 'POST' && request.path.startsWith(BODY_REACH_OUT_REPORT_PREFIX)) {
+    const id = bodyReachOutReportId(request.path);
     if (!id) return { status: 404, body: { error: 'NOT_FOUND' } };
-    const outcome = validatedReachOutReport(request.body);
-    if (!(REACH_OUT_DELIVERY_OUTCOMES as readonly string[]).includes(outcome)) return badRequest(outcome);
-    const result = body.reportReachOut(scopeKey, deviceId, id, outcome as ReachOutDeliveryOutcome);
+    const report = validatedBodyReachOutReport(request.body);
+    if (typeof report === 'string') return badRequest(report);
+    const result = body.reportReachOut(scopeKey, deviceId, id, report.outcome);
     if (result === 'stored' || result === 'duplicate') return { status: 200, body: { schemaVersion: BODY_SCHEMA_VERSION, id, status: result } };
     const [status, error, message] = REACH_OUT_REPORT_REFUSALS[result];
     return { status, body: { error, message } };

@@ -4,10 +4,10 @@ import type { AutonomyLoopHeartbeat } from './autonomyLoopState.js';
  * Owner-facing wording computed from the activity record and the loop's heartbeat,
  * without a model call: a short log of her day, and the state line of the loop.
  */
-interface LoggedEntry { kind: string; outcome: string; tool?: string }
+interface LoggedEntry { kind: string; outcome: string; tool?: string; reasonCode?: string }
 
 /** Activity-loop tools in the order a day usually runs: verb stem for a sentence, plain past for a prompt line. */
-const STEP_WORDING: readonly { tool: string; stem: (count: number) => string; plain: (count: number) => string }[] = [
+const STEP_WORDING: readonly { tool: string; code?: string; stem: (count: number) => string; plain: (count: number) => string }[] = [
   { tool: 'study.think', stem: () => '次にすることを考え', plain: () => '次にすることを考えた' },
   { tool: 'study.read', stem: count => `公開ページを${count}つ読み`, plain: count => `公開ページを${count}つ読んだ` },
   { tool: 'study.notion', stem: count => `Notionのページを${count}つ読み`, plain: count => `Notionのページを${count}つ読んだ` },
@@ -21,11 +21,16 @@ const STEP_WORDING: readonly { tool: string; stem: (count: number) => string; pl
   { tool: 'folder.write', stem: count => `自分のフォルダに写しを${count}つ置き`, plain: count => `自分のフォルダに写しを${count}つ置いた` },
   { tool: 'study.look', stem: count => `部屋を${count}回見`, plain: count => `部屋を${count}回見た` },
   { tool: 'owner.reach_out', stem: count => `自分から${count}回話しかけ`, plain: count => `自分から${count}回話しかけた` },
+  // What followed a message of hers, while she stays with it for a short while (`code`: the result's reason code).
+  { tool: 'owner.reach_out', code: 'replied', stem: count => `返事を${count}回もらい`, plain: count => `話しかけて返事をもらった（${count}回）` },
+  { tool: 'owner.reach_out', code: 'no_reply', stem: count => `返事のないまま${count}回待ち`, plain: count => `話しかけて待ったが返事がなかった（${count}回）` },
+  { tool: 'owner.reach_out_follow_up', stem: count => `もう一度${count}回声をかけ`, plain: count => `返事がないのでもう一度声をかけた（${count}回）` },
+  { tool: 'study.jot', stem: count => `思ったことを${count}つ書き留め`, plain: count => `思ったことを${count}つ書き留めた` },
 ];
 
 function stepCounts(entries: readonly LoggedEntry[]): { wording: (typeof STEP_WORDING)[number]; count: number }[] {
   return STEP_WORDING.map(wording => ({
-    wording, count: entries.filter(entry => entry.kind === 'action' && entry.outcome === 'done' && entry.tool === wording.tool).length,
+    wording, count: entries.filter(entry => entry.kind === 'action' && entry.outcome === 'done' && entry.tool === wording.tool && (!wording.code || entry.reasonCode === wording.code)).length,
   })).filter(item => item.count > 0);
 }
 

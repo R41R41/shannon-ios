@@ -118,7 +118,7 @@ export interface LoopHarnessOptions {
   agentic?: boolean;
   observer?: AutonomyReachOutObserver;
   /** Runs at every pause of a step that waits, after the clock moved. */
-  onWait?: (at: string) => void;
+  onWait?: (at: string) => void | Promise<void>;
 }
 
 export function loopHarness(options: LoopHarnessOptions = {}) {
@@ -142,7 +142,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   const wait = async (milliseconds: number) => {
     waits.push(milliseconds);
     clock.at = new Date(Date.parse(clock.at) + milliseconds).toISOString();
-    options.onWait?.(clock.at);
+    await options.onWait?.(clock.at);
   };
   const model = options.model ?? new FakeModel();
   const reader = options.reader ?? new FakeReader();

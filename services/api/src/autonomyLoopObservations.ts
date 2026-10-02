@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { BODY_REACH_OUT_DELIVERY_OUTCOMES, type BodyReachOutDeliveryOutcome } from './bodyContract.js';
 
 /**
  * What a step of her own activity led to, kept as facts she can think about (owner decision
@@ -10,9 +11,9 @@ import type { DatabaseSync } from 'node:sqlite';
  * a number of seconds, derived from timestamps by the caller. A row is read back through the
  * same closed sets, so nothing else can leave this table for a prompt.
  */
-export const REACH_OUT_DELIVERY_OUTCOMES = ['shown_spoken', 'shown', 'away', 'hidden', 'muted'] as const;
-/** What her body says it did with a message of hers. */
-export type ReachOutDeliveryOutcome = typeof REACH_OUT_DELIVERY_OUTCOMES[number];
+/** What her body says it did with a message of hers: the closed vocabulary of the body contract. */
+export const REACH_OUT_DELIVERY_OUTCOMES = BODY_REACH_OUT_DELIVERY_OUTCOMES;
+export type ReachOutDeliveryOutcome = BodyReachOutDeliveryOutcome;
 
 export const OBSERVED_REACH_OUT_REASONS = ['share', 'wonder', 'upcoming', 'saw', 'follow_up'] as const;
 export type ObservedReachOutReason = typeof OBSERVED_REACH_OUT_REASONS[number];

@@ -4,7 +4,7 @@ What Shannon's body must send and may read. The body is the Live2D desktop appli
 
 Everything here is additive. No existing route, table, or prompt wording changed.
 
-The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`), and **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`). The server never calls the body and never generates a reply because of an event. Only the answer to a look calls a model; no other route here does.
+The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`), **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`), and **says what it did with a message she started on her own** (`POST /v1/body/reach-outs/{id}/delivery`). The server never calls the body and never generates a reply because of an event. Only the answer to a look calls a model; no other route here does.
 
 ## Transport
 
@@ -86,7 +86,7 @@ Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` 
   ```
 
   Only the touch types and `ownerReturned` appear. An event appears for 30 minutes after `occurredAt`, at most three lines (one per type, the newest first, with a count), and the wording is fixed on the server from the type and the numbers. The block is read at the turn and nothing is written: it is in every owner text turn inside the window, and gone after it.
-- `ownerAway`, `callStarted`, `callEnded`, `windowHidden`, `windowShown` and `appStarted` are stored and used for nothing else yet.
+- `ownerAway` and `ownerReturned` are also read by her activity loop after a message of hers, as "he is away" / "he is back" (the newest of the last hour, whatever its `audience`). `callStarted`, `callEnded`, `windowHidden`, `windowShown` and `appStarted` are stored and used for nothing else yet.
 - **No reply is produced by an event.** No model is called, no message is added to a conversation, no notification is sent, and her stored feeling does not change. She is free not to mention it in her next reply.
 - Voice calls and the platform bridge do not receive the block.
 
@@ -107,7 +107,7 @@ What the server returns to the body is safe to show to others unless marked:
 
 ## `GET /v1/body/presence`
 
-A read-only snapshot of what the body should show. Reading it writes nothing to the database; the server remembers in memory when each device last read it, which is how it knows her window is showing.
+A read-only snapshot of what the body should show. Reading it changes nothing of her state. The server notes when each device last read it (in memory, and for a device that registered capabilities also as one timestamp per device in the database, at most every ten seconds), which is how it knows her window is showing.
 
 `GET /v1/body/presence?scopeKey=owner[&etag=…][&audience=owner|others]`
 
@@ -184,6 +184,50 @@ What the body must do:
 - She speaks even while other people are present ("that situation is fun too"). The server has already worded the message for that when it knew: send `audience=others` on presence reads while a stream is live or 「友人も一緒」 is on. The body does not filter the text.
 - A message older than a few minutes when the body first sees it (the PC was asleep) is better shown silently or skipped; `createdAt` says how old it is.
 - `saw` messages are about the owner's room. The server sends them like the others; the phone's lock screen shows only a fixed line for them.
+- After showing a message, or deciding not to, report what happened once: see [What the body did with her message](#what-the-body-did-with-her-message).
+
+### A second call (`follow_up`)
+
+Added 2026-10-02. After a message of hers she waits a few minutes (three by default) and observes: did the owner write or speak, and what did the body do with the message. If no answer came she thinks again and may, entirely as her own decision, call **once more**, in words she writes then — or look at the room first, or let it go.
+
+- A second call arrives **exactly like a first one**: `presence.reachOut` changes, and `GET /v1/initiatives` returns it with `kind: "reach_out"` and `reason: "follow_up"`, `expression: "curious"`. Show and speak it by the same rules as any reach-out, and report its delivery the same way.
+- There is at most one per message and at most three an owner-local day; it is not made once the owner has written or spoken.
+- **Do not speak into an empty room on the server's account.** The body is not asked to treat a `follow_up` differently when the PC looks idle: it applies its own rule (for example showing the bubble silently, or not showing it), and reports `away`. She is told that, and decides what to do next herself.
+- A look she takes between the two messages is an ordinary [look in her own time](#a-look-in-her-own-time).
+
+## What the body did with her message
+
+`POST /v1/body/reach-outs/{id}/delivery` (added 2026-10-02). `{id}` is the message's `id` from `GET /v1/initiatives` (the same value as `presence.reachOut.latestId`).
+
+```json
+{ "scopeKey": "owner", "outcome": "shown_spoken" }
+```
+
+| `outcome` | The body sends it when |
+| --- | --- |
+| `shown_spoken` | It showed the bubble and spoke `content`. |
+| `shown` | It showed the bubble and did not speak (sound off, or it chose to show silently). |
+| `away` | It did not show it because the owner is away from the PC (idle). |
+| `hidden` | It did not show it because her window is hidden or minimised. |
+| `muted` | It did not show it because 「話しかける」 is switched off on the body. |
+
+- Send it **once per message, as soon as the body knows** — ideally within a few seconds of seeing the message, and in any case inside her wait (three minutes by default). A report that arrives later is stored but she has by then thought without it: no report in time means she knows only that the phone was notified (`unknown`).
+- No other field is accepted: there is no text field, and the request is refused with `400` if one is sent. `outcome` outside the five values is `400`.
+- Only a device that has registered with `PUT /v1/body/capabilities` may report (`403 REACH_OUT_NOT_A_BODY` otherwise). The device is taken from its token.
+- Idempotent per device: the first report is stored (`"status": "stored"`); the same outcome again answers `200` with `"status": "duplicate"`; a different outcome from the same device answers `409 REACH_OUT_ALREADY_REPORTED` and changes nothing. If the body first shows silently and speaks later, report what it had done when it first reported. Two bodies may each report; the one that got furthest stands (`shown_spoken` over `shown` over `away` over `hidden` over `muted`).
+- The answer is `200`: `{ "schemaVersion": 1, "id": "0b6f…", "status": "stored" }`. Nothing is said in return, no model is called, and nothing is added to a conversation.
+
+| Status | `error` | Meaning | Retry |
+| --- | --- | --- | --- |
+| 400 | `BAD_REQUEST` | `outcome` missing or not one of the five; another field present; `scopeKey` missing. | With a corrected body |
+| 403 | `REACH_OUT_NOT_A_BODY` | The device has not registered capabilities. | After `PUT /v1/body/capabilities` |
+| 403 | `BODY_INGEST_DISABLED` | Body events are switched off on the server. | No |
+| 404 | `REACH_OUT_NOT_FOUND` | Unknown id, or an initiative that is not a message she started on her own. | No |
+| 404 | `NOT_FOUND` | A server that does not take delivery reports, or a malformed path. | No |
+| 409 | `REACH_OUT_ALREADY_REPORTED` | This device reported another outcome for this message. | No |
+| 410 | `REACH_OUT_EXPIRED` | The message is more than 24 hours old. | No |
+
+What the server does with it: it stores the outcome (`reach_out_deliveries`: scope, message id, device id, outcome, time). Her activity loop reads it once, after its wait, as one of a few facts she may think about — together with whether her window is showing (a registered body read presence in the last 30 seconds), the newest `ownerAway` / `ownerReturned` event of the last hour, and whether others are present. So keep sending `ownerAway` and `ownerReturned` events and keep polling presence only while her window is visible: these are what tell her whether he is there. A body that never reports works as before; she then knows less.
 
 ## `PUT /v1/body/capabilities`
 
@@ -372,6 +416,7 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 401 | `PAIRING_REQUIRED` | Missing or revoked device token. | After pairing |
 | 403 | `BODY_INGEST_DISABLED` | Body events are switched off on the server (`POST /v1/body/events` only). | No; drop the events and keep polling |
 | 404 | `NOT_FOUND` | Unknown path under `/v1/body/`, including `/v1/body/presence/stream`. | No |
+| 403 / 404 / 409 / 410 | `REACH_OUT_…` | See [What the body did with her message](#what-the-body-did-with-her-message). | No |
 | 405 | `METHOD_NOT_ALLOWED` | `PUT` anywhere but `/v1/body/capabilities`, or another method. | No |
 | 413 | `REQUEST_TOO_LARGE` | Body above 64 KiB (535,384 bytes for a look answer). | No |
 | 429 | `RATE_LIMITED` | More than 120 body requests from the device in a minute. | After a minute |

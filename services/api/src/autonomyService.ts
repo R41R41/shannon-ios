@@ -107,7 +107,8 @@ export class ShannonAutonomyService {
     this.now = dependencies.now;
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
-    this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now);
+    this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
+      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone } : null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
   }
 
@@ -418,7 +419,8 @@ export class ShannonAutonomyService {
 
   /**
    * Bounded projection for an owner one-to-one prompt: her current pursuits and, once she has done
-   * or made something, a few lines of what she is working on, and her recent notes about what she saw
+   * or made something, a few lines of what she is working on (among them what followed a message she started
+   * on her own today: facts, never words), and her recent notes about what she saw
    * of the room in her own time. Empty when there is nothing to add. With other people present the
    * caller keeps only the last block, marked (`guardedShannonSeenPrompt`).
    */

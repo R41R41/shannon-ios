@@ -145,14 +145,22 @@ export interface ShannonOwnWork {
   /** What she did today, each already a short phrase such as 「公開ページを2つ読んだ」. */
   readonly today: readonly string[];
   readonly pieces: readonly { readonly title?: string; readonly stage: string }[];
+  /**
+   * What followed a message she started on her own today, each a sentence of facts from her record such as
+   * 「13:05に話しかけた。3分待ったが返事はなかった。」. Never what was said, by her or by the owner.
+   */
+  readonly reachOuts?: readonly string[];
 }
 
 /** Compact, bounded lines for an owner one-to-one prompt. Empty when there is nothing to say. */
 export function buildShannonOwnWorkPrompt(work: ShannonOwnWork | null | undefined, options: { maximumCharacters?: number } = {}): string {
   if (!work) return '';
-  const maximumCharacters = Math.max(0, options.maximumCharacters ?? 320);
+  const reachOuts = (work.reachOuts ?? []).slice(0, 2).map(line => line.replace(/\s+/gu, ' ').trim().slice(0, 200)).filter(Boolean);
+  // What followed her messages has its own room, so it never pushes a piece out of the block.
+  const maximumCharacters = Math.max(0, options.maximumCharacters ?? 320 + reachOuts.reduce((sum, line) => sum + line.length + 40, 0));
   const lines = [
     ...(work.today.length ? [`- 今日したこと: ${work.today.slice(0, 6).join('、')}`] : []),
+    ...reachOuts.map(line => `- 自分から話しかけた時のこと（気になるなら自分から触れてよい）: ${line}`),
     ...work.pieces.slice(0, 3).map(piece => (piece.title
       ? `- 物語「${piece.title.slice(0, 40)}」: ${piece.stage}`
       : `- 作っている物語: ${piece.stage}（まだ見せていない。題名と中身は、見せる時まで言わなくてよい）`)),

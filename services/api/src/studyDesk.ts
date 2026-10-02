@@ -1,5 +1,6 @@
 import { SHANNON_AUTONOMY_SYSTEM_DOMAIN, SHANNON_SEEN_LIMITS, type ShannonOwnWork, type ShannonSeenNote } from '@shannon/cognition';
 import { autonomyDayPhrases } from './autonomyDayLog.js';
+import { AUTONOMY_REACH_OUT_MEMORY_MAXIMUM, reachOutMemories, reachOutMemoryLine } from './autonomyLoopObservePrompts.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import {
   STUDY_KIND_LABEL, STUDY_REACTION_LABEL, STUDY_STATUS_LABEL,
@@ -53,6 +54,8 @@ export class StudyDesk {
     private readonly store: SQLiteAutonomyStore,
     private readonly dayKey: (at: string) => string,
     private readonly now: () => string,
+    /** Set while she observes what follows her messages: the owner-local zone for the times in those sentences. */
+    private readonly reachOutMemory: { timeZone: string } | null = null,
   ) {}
 
   overview(scopeKey: string): StudyOverview {
@@ -123,7 +126,24 @@ export class StudyDesk {
       return { ...(readable ? { title: readable.title } : {}), stage };
     });
     const phrases = autonomyDayPhrases(today?.entries ?? []);
-    return phrases.length || pieces.length ? { today: phrases, pieces } : null;
+    const reachOuts = this.reachOuts(scopeKey, at);
+    return phrases.length || pieces.length || reachOuts.length ? { today: phrases, pieces, ...(reachOuts.length ? { reachOuts } : {}) } : null;
+  }
+
+  /**
+   * What followed the messages she started on her own today, newest first, as sentences of facts from her
+   * observations: when, whether an answer came while she waited, what her body reported, what she did then.
+   * Empty while the mechanism is switched off. No words of hers or of the owner's are in an observation.
+   */
+  private reachOuts(scopeKey: string, at: string): readonly string[] {
+    const memory = this.reachOutMemory;
+    if (!memory) return [];
+    try {
+      const since = new Date(Date.parse(at) - 24 * 60 * 60_000).toISOString();
+      return reachOutMemories(this.store.loop.observations.since(scopeKey, since))
+        .filter(item => this.dayKey(item.facts.sentAt) === this.dayKey(at))
+        .slice(0, AUTONOMY_REACH_OUT_MEMORY_MAXIMUM).map(item => reachOutMemoryLine(item, memory.timeZone));
+    } catch { return []; }
   }
 
   /**

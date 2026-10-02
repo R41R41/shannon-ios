@@ -4,7 +4,7 @@ import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import { callModel, paidCall } from './autonomyLoopCalls.js';
 import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
-import { ROOM_LOOK_DOMAIN, prepareRoomLook, roomLookAvailable, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
+import { ROOM_LOOK_DOMAIN, prepareRoomLook, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
 import { prepareFollowUp, prepareJot } from './autonomyLoopFollowUpStep.js';
 import type { ReachOutFacts } from './autonomyLoopObservations.js';
 import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';

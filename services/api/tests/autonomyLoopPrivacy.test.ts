@@ -7,6 +7,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import type { ShannonChatModel, ShannonChatModelRequest } from '../src/chatModel.js';
 import { BackgroundUpdateCoordinator } from '../src/backgroundUpdates.js';
 import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
+import { SQLiteStudyShowing } from '../src/autonomyShowing.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { OwnerUpcoming } from '../src/ownerUpcoming.js';
 import { sqliteOwnerSnapshot } from '../src/ownerUpcomingWiring.js';
@@ -14,7 +15,7 @@ import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
 import { SQLiteUpcomingStore } from '../src/upcomingStore.js';
 import { SQLitePeopleMemoryStore } from '../src/peopleMemoryStore.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { FakeModel, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { FakeModel, loopHarness, runUntilIdle, scope, type FakeShowing } from './autonomyLoopHarness.js';
 
 const directory = mkdtempSync(join(tmpdir(), 'shannon-autonomy-privacy-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -144,6 +145,87 @@ describe('what reaches the prompts of her own activity', () => {
     harness.store.close(); people.close?.(); speaker.close(); initiatives.close(); upcomingStore.close(); ownerState.close(); persistent.close();
   });
 
+  it('learns that the owner answered her message, and when, and never what he said', async () => {
+    const path = join(directory, 'answered.sqlite');
+    const clock = { at: '2026-10-02T04:00:00.000Z' };
+    const now = () => clock.at;
+    const persistent = new SQLiteShannonStore({ path, now });
+    const chatModel = new RecordingChatModel();
+    const model = new FakeModel();
+    const showing = new SQLiteStudyShowing(path);
+    const speaker = new SQLiteReachOutSpeaker(path);
+    const initiatives = new SQLiteInitiativeStore(path, now);
+    const SECRET = 'SENTINEL-ANSWER-6627';
+    const LATE = 'SENTINEL-LATE-ANSWER-1175';
+    let api: ReturnType<typeof createLocalApiKernel>;
+    const say = async (message: string) => {
+      expect((await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, message } })).status).toBe(200);
+      await api.waitForBackground(scope);
+    };
+    let pauses = 0;
+    let answerAtPause = 4;
+    // The act → observe → think-again mechanism is on, with the stores the worker gives the loop.
+    const harness = loopHarness({
+      // The real showing desk: the only thing of the loop that opens the conversation table.
+      path, clock, model, showing: showing as unknown as FakeShowing, reachOuts: speaker, agentic: true,
+      loop: { cycleIntervalMilliseconds: 60_000, cyclesPerDay: 6, reachOutSpacingMilliseconds: 0 },
+      onWait: async () => { pauses += 1; if (pauses === answerAtPause) await say(`${SECRET}です。いま会議中でした`); },
+    });
+    api = createLocalApiKernel(now, {
+      chatModel, stateStore: persistent, conversationStore: persistent, knowledgeStore: persistent,
+      background: new BackgroundUpdateCoordinator(persistent, persistent), autonomy: harness.service,
+    });
+    const wonder = { thought: '気になります。', steps: [{ action: 'reach_out', reason: 'wonder' }] };
+    const followUp = { thought: 'もう一度。', steps: [{ action: 'follow_up' }] };
+
+    // He answers twenty seconds after her message, with a secret in what he says.
+    model.plans = [wonder, followUp];
+    await runUntilIdle(harness.loop);
+    const answered = harness.store.loop.observations.since(scope, '2000-01-01T00:00:00.000Z').find(item => item.reachOut)!.reachOut!;
+    expect(answered).toMatchObject({ replied: true, repliedAfterSeconds: 20, waitedSeconds: 20 });
+    expect(Object.keys(answered).sort()).toEqual(['delivery', 'id', 'others', 'owner', 'reason', 'repliedAfterSeconds', 'replied', 'sentAt', 'waitedSeconds', 'windowVisible'].sort());
+    expect(model.kinds()).toEqual(['think', 'reach_out']);
+    // The secret is in the database the loop reads its timestamps from, and in an ordinary owner prompt.
+    const raw = new DatabaseSync(path);
+    expect(JSON.stringify(raw.prepare('SELECT content FROM conversation_messages').all())).toContain(SECRET);
+    expect(JSON.stringify(raw.prepare('SELECT * FROM autonomy_loop_observations').all())).not.toMatch(/SENTINEL|会議/u);
+    expect(JSON.stringify(raw.prepare('SELECT * FROM autonomy_activity').all())).not.toMatch(/SENTINEL|会議/u);
+    raw.close();
+
+    // The next message gets no answer during the wait; he answers, again with a secret, just before she thinks again.
+    clock.at = '2026-10-02T04:30:00.000Z';
+    pauses = 0;
+    answerAtPause = -1;
+    model.plans = [wonder, followUp];
+    await harness.loop.tick();
+    await harness.loop.tick();
+    await say(`${LATE}を買いました`);
+    await runUntilIdle(harness.loop);
+    expect(model.kinds()).toEqual(['think', 'reach_out', 'think', 'reach_out', 'think']);
+    const rethought = model.prompts('think').at(-1)!;
+    expect(rethought).toContain('3分待つあいだは返事がなかったが、そのあと返事があった。');
+    expect(rethought).not.toContain('follow_up（');
+    // And a later cycle, which is told what followed today's messages.
+    clock.at = '2026-10-02T05:30:00.000Z';
+    model.plans = [{ thought: '休みます。', steps: [{ action: 'rest' }] }];
+    await runUntilIdle(harness.loop);
+    const next = model.prompts('think').at(-1)!;
+    expect(next).toContain('[今日、話しかけたあとのこと]');
+    expect(next).toContain('20秒後に返事があった。');
+    expect(next).toContain('3分待ったが返事はなかった。そのあと、ライ氏は書くか話すかしている。');
+
+    // No prompt of the loop, in any of these steps, holds a word he or the conversation model said.
+    expect(model.calls.length).toBe(6);
+    for (const prompt of model.prompts()) {
+      for (const sentinel of [SECRET, LATE, 'SENTINEL-REPLY-5520', '会議中', '買いました']) expect(prompt, sentinel).not.toContain(sentinel);
+      for (const block of ['[ユーザーについて', '[現在の状態', '[Recent conversation]', '[続けている目的', '[覚えている人', '[想起']) expect(prompt, block).not.toContain(block);
+    }
+    // What a conversation with him is told about it is the same facts, from the same observations.
+    expect(harness.service.pursuitPrompt(scope)).toContain('自分から話しかけた時のこと');
+    expect(harness.service.pursuitPrompt(scope)).not.toMatch(/SENTINEL|会議|買いました/u);
+    harness.store.close(); showing.close(); speaker.close(); initiatives.close(); persistent.close();
+  });
+
   it('is closed by construction: the loop reaches no private store and its prompt builders take no private input', () => {
     const sourceDirectory = join(import.meta.dirname, '../src');
     const loopSources = readdirSync(sourceDirectory).filter(name => /^autonomyLoop.*\.ts$/u.test(name));
@@ -164,6 +246,8 @@ describe('what reaches the prompts of her own activity', () => {
       // and the one second call. The observer is an interface the step names; the reports and the body store are not imported.
       './autonomyLoopObservations.js', './autonomyLoopObserve.js', './autonomyLoopObservePrompts.js', './autonomyLoopFollowUpStep.js',
       './autonomyLoopThinkStep.js', './autonomyLoopCalls.js',
+      // The closed vocabulary of what her body may report about a message of hers: constants of the wire contract, no store.
+      './bodyContract.js',
       './autonomyBudget.js', './autonomyLoopConfig.js', './autonomyLoopPlan.js', './autonomyLoopPrompts.js', './autonomyLoopState.js',
       './autonomyLoopSteps.js', './autonomyModels.js', './autonomyPolicy.js', './autonomyReader.js', './autonomyService.js',
       './autonomyShowing.js', './autonomyStore.js', './autonomyTextModel.js', './studyStore.js',

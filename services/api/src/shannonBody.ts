@@ -4,7 +4,7 @@ import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION,
-  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge,
+  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge, type BodyReachOutDeliveryOutcome,
 } from './bodyContract.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
@@ -13,7 +13,6 @@ import { bodyNudgeCandidates } from './bodyNudges.js';
 import { SQLiteBodyStore, type StoredBodyCapabilities, type StoredBodyEvent } from './bodyStore.js';
 import { ownerDay, presentCompanionState } from './companionPresence.js';
 import type { ConversationStore } from './conversationStore.js';
-import type { ReachOutDeliveryOutcome } from './autonomyLoopObservations.js';
 import type { ReachOutReportResult, SQLiteReachOutReports } from './reachOutReports.js';
 
 /**
@@ -254,7 +253,7 @@ export class ShannonBody {
    * What this device did with one of her own messages. Only a device that registered as her body may report,
    * each device once per message; nothing is said in return, and no model is called.
    */
-  reportReachOut(scopeKey: string, deviceId: string, initiativeId: string, outcome: ReachOutDeliveryOutcome): ReachOutReportResult | 'disabled' | 'unavailable' | 'not_a_body' {
+  reportReachOut(scopeKey: string, deviceId: string, initiativeId: string, outcome: BodyReachOutDeliveryOutcome): ReachOutReportResult | 'disabled' | 'unavailable' | 'not_a_body' {
     const reports = this.dependencies.reachOutReports;
     if (!reports) return 'unavailable';
     if (!this.ingestEnabled) return 'disabled';
