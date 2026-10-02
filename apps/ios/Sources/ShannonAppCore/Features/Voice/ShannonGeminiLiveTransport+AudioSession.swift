@@ -21,10 +21,13 @@ extension ShannonGeminiLiveTransport {
         let audioSession = AVAudioSession.sharedInstance()
         // `playAndRecord` with the `audio` background mode keeps capture and playback running
         // after the owner leaves the app.
+        // A call from Shannon the owner answered is the system's call: the phone routes it as it routes any call
+        // (the receiver without earphones), so the speaker is not forced, and the session is already active.
+        let systemCall = ShannonVoiceCallHost.shared.systemCallIsActive
         try audioSession.setCategory(
             .playAndRecord,
             mode: .voiceChat,
-            options: [.defaultToSpeaker, .allowBluetoothHFP]
+            options: systemCall ? [.allowBluetoothHFP] : [.defaultToSpeaker, .allowBluetoothHFP]
         )
         try audioSession.setPreferredIOBufferDuration(0.02)
         try audioSession.setActive(true)

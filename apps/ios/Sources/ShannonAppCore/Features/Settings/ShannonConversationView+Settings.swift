@@ -78,6 +78,10 @@ extension ShannonConversationView {
 
                 ShannonPrivateListeningSettingsSection()
 
+#if os(iOS)
+                ShannonIncomingCallSettingsSection()
+#endif
+
                 ShannonAutonomySettingsSection(model: memoryModel.autonomy)
 
                 Section("接続と詳細") {

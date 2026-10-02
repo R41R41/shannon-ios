@@ -14,7 +14,12 @@ public struct ShannonConversationView: View {
     @State var worldSubscriptionModel: ShannonWorldSubscriptionModel
     @State var appIconModel = ShannonAppIconModel()
     @State var voiceModel = ShannonVoiceConversationModel()
+#if os(iOS)
+    // The one voice conversation of the app: a call from Shannon runs it too, also with no screen (`ShannonVoiceCallHost`).
+    @State var geminiLiveVoiceModel = ShannonVoiceCallHost.shared.voiceModel
+#else
     @State var geminiLiveVoiceModel = ShannonGeminiLiveSessionModel()
+#endif
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
     @State var showsAppIconSettings = false
@@ -37,7 +42,7 @@ public struct ShannonConversationView: View {
     @State var composerIsSubmitting = false
     @State var composerAttachmentError: String?
 #if os(iOS)
-    @State var voiceWorkspace = ShannonVoiceWorkspaceState()
+    @State var voiceWorkspace = ShannonVoiceCallHost.shared.workspace
     @State var composerPhoto: ShannonPreparedPhoto?
     @State var composerPhotoPickerItem: PhotosPickerItem?
     @State var composerIsPickingPhoto = false

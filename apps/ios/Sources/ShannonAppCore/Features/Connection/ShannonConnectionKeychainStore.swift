@@ -34,7 +34,7 @@ public struct ShannonKeychainConnectionStore: ShannonConnectionStoreProtocol, Se
         let data = try JSONEncoder().encode(credential)
         let attributes: [String: Any] = [
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrAccessible as String: accessibility,
         ]
         let status = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
@@ -52,6 +52,25 @@ public struct ShannonKeychainConnectionStore: ShannonConnectionStoreProtocol, Se
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw ShannonConnectionError.keychain(status)
         }
+    }
+
+    /// Set while the owner has 「シャノンからの着信を受ける」 switched on (`ShannonIncomingCallSettings`).
+    public static let readableWhileLockedDefaultsKey = "shannon.connection.readableWhileLocked"
+
+    /// The credential is readable only while the phone is unlocked, unless the owner switched calls from Shannon on:
+    /// a call answered on the lock screen has to reach the server, so the credential is then readable once the phone
+    /// was unlocked after its last restart. Either way it never leaves this device.
+    private var accessibility: CFString {
+        UserDefaults.standard.bool(forKey: Self.readableWhileLockedDefaultsKey)
+            ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly : kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    }
+
+    /// Changes how the stored credential is protected, now and for later saves. The credential itself is untouched.
+    /// Called from the owner's own switch, so the phone is unlocked.
+    public func setReadableWhileLocked(_ readable: Bool) throws {
+        UserDefaults.standard.set(readable, forKey: Self.readableWhileLockedDefaultsKey)
+        let status = SecItemUpdate(baseQuery as CFDictionary, [kSecAttrAccessible as String: accessibility] as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw ShannonConnectionError.keychain(status) }
     }
 
     private var baseQuery: [String: Any] {
