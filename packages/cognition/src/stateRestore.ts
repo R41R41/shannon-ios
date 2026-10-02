@@ -98,7 +98,7 @@ export function restoreCompanionState(
   };
   // A feeling can never lie ahead of her clock. Without a readable clock the awake stamps mean nothing:
   // the feeling then settles by the wall-clock rule, and nothing is kept underneath.
-  const emotionClock = restoreEmotionClock(row.emotionClock);
+  const emotionClock = restoreEmotionClock(row.emotionClock, nowIso);
   const restoredFeeling = restoreShannonExpressiveEmotion(
     row.expressiveEmotion,
     initial.expressiveEmotion!,

@@ -135,7 +135,9 @@ describe('Shannon local API kernel', () => {
     expect(result).toMatchObject({ status: 200, body: { reply: '最初の文です。次の文です。' } });
     expect(plans).toHaveLength(2);
     expect(plans[0]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
-    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { cause: '生成した応答の内容と会話文脈' } });
+    // The reconciled plan follows; a plan goes to a device and carries the feeling without its cause.
+    expect(plans[1]).toMatchObject({ shouldRespond: true, emotion: { target: 'ライ氏' } });
+    expect(plans[1]).not.toHaveProperty('emotion.cause');
     expect(deltas).toEqual(['最初の文です。', '次の文です。']);
     expect(model.streamingVoiceRequests).toHaveLength(1);
     expect(model.streamingVoiceRequests[0]?.systemPrompt).toContain('Current expressive emotion');

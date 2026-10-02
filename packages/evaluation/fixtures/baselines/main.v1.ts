@@ -17,7 +17,11 @@ import type { CognitiveEvaluationReport } from '../../src/report.js';
  * and `affect-baseline-drift`: on the awake clock the mood returns to its baseline
  * with awake time in the reducer, so the per-turn projection is the stimulus alone,
  * scaled by the room left toward the bound. Every scenario still passes its own
- * assertions.
+ * assertions. Two scenarios were added, so that the return to the baseline is
+ * still characterized now that it happens with awake time in the reducer:
+ * `affect-returns-with-awake-time` (two instants ten minutes apart) and
+ * `affect-stands-still-while-dormant` (weeks apart count as the idle cap). The
+ * scenario-set fingerprint and the total changed with them.
  */
 const resultFingerprints = {
   'state-transaction-atomic': '858b6d1a',
@@ -46,6 +50,8 @@ const resultFingerprints = {
   'affect-sleepy': '0a4a281b',
   'affect-bounds': '440ab202',
   'affect-baseline-drift': '005850b0',
+  'affect-returns-with-awake-time': '955c460e',
+  'affect-stands-still-while-dormant': 'b9e9fbaf',
   'intent-current-thread-priority': '08885c09',
   'intent-inactive-excluded': '6568af87',
   'prompt-plan-is-not-proof': '7cec918d',
@@ -56,7 +62,7 @@ const resultFingerprints = {
 export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze({
   schemaVersion: 1,
   implementationRevision: 'ac7397cacd0f914bcda356f8bead2f5feedd9f4a',
-  scenarioSetFingerprint: 'dd793f68',
+  scenarioSetFingerprint: '559a326b',
   status: 'passed',
   generatedAt: '2026-09-26T00:00:00.000Z',
   results: Object.freeze(Object.entries(resultFingerprints).map(([scenarioId, fingerprint]) => Object.freeze({
@@ -66,5 +72,5 @@ export const mainCognitiveBaselineV1: CognitiveEvaluationReport = Object.freeze(
     fingerprint,
     durationMilliseconds: 0,
   }))),
-  totals: Object.freeze({ passed: 31, failed: 0, invalid: 0 }),
+  totals: Object.freeze({ passed: 33, failed: 0, invalid: 0 }),
 });

@@ -53,6 +53,10 @@ const MOOD_LIKE = new Set<ShannonEmotionKind>([
  */
 const SUPPORT = new Set<ShannonEmotionKind>(['caring', 'protective', 'reassurance', 'apologetic', 'sad', 'anxious', 'regret']);
 
+export function isSupportEmotion(kind: ShannonEmotionKind): boolean {
+  return SUPPORT.has(kind);
+}
+
 /** -1 for an unpleasant feeling, 1 for a pleasant one, 0 for one that is neither. */
 export function shannonEmotionSign(kind: ShannonEmotionKind): -1 | 0 | 1 {
   return NEGATIVE.has(kind) ? -1 : POSITIVE.has(kind) ? 1 : 0;

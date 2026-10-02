@@ -108,7 +108,8 @@ export class TurnRefinementProcessor {
       delta: deriveEmotionDelta(current, userMessage, emotionTiming()),
     });
     // His apology or kind word eases what she still holds against him. Only a turn of the owner's own reaches this line.
-    const soothing = emotionTiming().clock === 'awake' ? soothingIn(userMessage) : null;
+    // Unlike the lines above this fails closed: without the recorded turn there is no proof the words were his, and nothing is eased.
+    const soothing = emotionTiming().clock === 'awake' && source && ownerSpoke(source.disclosure) ? soothingIn(userMessage) : null;
     if (soothing) this.stateStore.apply(scopeKey, { type: 'feeling-eased', by: soothing });
 
     const immediate = captureImmediateExplicitMemory(

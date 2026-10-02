@@ -18,16 +18,24 @@ const PERSONAL_CUES = ['僕は', '私は', '自分は', '実は', '本当は', '
 const CURIOUS_CUES = ['気になる', '知りたい', 'なぜ', 'どうして', '面白い', 'おもしろい', '考えたい'];
 const SLEEPY_CUES = ['眠い', '眠たい', 'ねむい', '寝る', 'おやすみ'];
 const CALM_CUES = ['安心', '落ち着いた', 'ほっとした', 'ゆっくり'];
-// Narrow on purpose: 「天気が悪かった」「ごめん、ちょっと待って」「さすがに無理」 are neither an apology nor a kind word to her.
-const APOLOGY = /(?:ごめんなさい|ごめんね|ごめんよ|ごめん[。！!\s]*$|ごめん[、,\s]*(?:言いすぎ|言い過ぎ|ひどいこと|傷つけ)|(?:さっき|昨日|昨夜|この前|今朝)は?ごめん|言いすぎた|言い過ぎた|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な|許して(?:ほしい|くれ|ください|ね)?[。！!\s]*$)/u;
-const KINDNESS = /(?:ありがとう|大好き|助かった|助かる|頼りにして)/u;
+// Only words said to her. Easing a hurt on a word that was about someone else would be worse than missing an apology,
+// so everything here errs toward not easing: a short utterance, no quotation, no one else it could be addressed to.
+const ADDRESSED = /(?:シャノン|あなた|きみ|君)/u;
+const QUOTED = /[「」『』“”"]|って(?:言|い)|と(?:言|伝え|謝)/u;
+const SOMEONE_ELSE = /(?:さん|くん|ちゃん|部長|課長|社長|上司|先生|先輩|後輩|同僚|友達|友人|彼女|彼氏|恋人|家族|母|父|兄|姉|弟|妹|妻|夫|客|みんな|皆)(?:に|へ|には|にも|から)/u;
+const APOLOGY = /(?:ごめん(?:なさい|ね|よ)?|言い(?:すぎ|過ぎ)た|(?:ボク|ぼく|僕|俺|おれ|私)が悪かった|申し訳な(?:い|かった)(?:です)?|許して(?:ほしい|くれ|ください|ね)?)[。、！!…\s]*$|^(?:シャノン[、,\s]*)?(?:(?:さっき|昨日|昨夜|この前|今朝)は?)?ごめん(?:なさい|ね|よ)?[、,。\s]*(?:言い(?:すぎ|過ぎ)た|ひどいこと|傷つけ)/u;
+const KINDNESS = /^(?:シャノン[、,\s]*)?(?:いつも|本当に|ほんとに)?(?:ありがとう|大好き(?:だよ)?|助かった|助かる|頼りにしてる)(?:ね|よ|な|ございます)?[。、！!…\s]*$|(?:シャノン|あなた|きみ|君)(?:、|の|が|は|に)?.{0,12}(?:ありがとう|大好き|助かった|頼りにしてる)(?:ね|よ)?[。！!…\s]*$/u;
+const SOOTHING_LENGTH = 40;
 
 /**
- * Whether the owner's words are an apology or a kind word. This reads his words as something that
- * happens to her, like the mood cues above; it never decides the label of her feeling.
+ * Whether the owner's words are an apology or a kind word said to her. This reads his words as
+ * something that happens to her, like the mood cues above; it never decides the label of her feeling.
+ * Unsure means no.
  */
 export function soothingIn(userMessage: string): 'apology' | 'kindness' | null {
-  const text = userMessage.trim().slice(0, 8_000);
+  const text = userMessage.trim();
+  if (!text || Array.from(text).length > SOOTHING_LENGTH || QUOTED.test(text)) return null;
+  if (SOMEONE_ELSE.test(text) && !ADDRESSED.test(text)) return null;
   return APOLOGY.test(text) ? 'apology' : KINDNESS.test(text) ? 'kindness' : null;
 }
 

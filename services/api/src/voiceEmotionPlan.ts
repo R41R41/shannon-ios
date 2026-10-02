@@ -34,8 +34,7 @@ export function voicePlanResponse(
     affect: emotion?.primary ?? decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
-    // The plan carries the feeling as it is stored: the resolver's notes to the reducer stay on the server.
-    ...(emotion ? { emotion: normalizeShannonExpressiveEmotion(emotion), ...deriveShannonFace(mood, emotion) } : {}),
+    ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion) } : {}),
     selectedSkills: decision.selectedSkills,
     skillScores: decision.skillScores,
     waitingPhrase,
@@ -44,6 +43,15 @@ export function voicePlanResponse(
     decisionLatencyMilliseconds: decision.elapsedMilliseconds,
     transcriptReliabilityProbability: decision.transcriptReliabilityProbability ?? null,
   };
+}
+
+/**
+ * The feeling as the plan may carry it to a device. No client reads its cause, and the device may be heard by
+ * others: the cause, her clock stamp and the resolver's notes to the reducer stay on the server.
+ */
+function planEmotion(emotion: ShannonExpressiveEmotion): Omit<ShannonExpressiveEmotion, 'cause' | 'awakeAt' | 'presentAt' | 'continued' | 'decided'> {
+  const { cause: _cause, awakeAt: _awakeAt, ...shown } = normalizeShannonExpressiveEmotion(emotion);
+  return shown;
 }
 
 function waitingPerformanceFor(

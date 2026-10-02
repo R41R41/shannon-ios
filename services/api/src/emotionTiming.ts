@@ -7,7 +7,7 @@ import { SHANNON_EMOTION_TIME, type ShannonEmotionTiming } from '@shannon/cognit
  * the only place the server may override a value, and every reader and writer of her feeling in
  * this process takes its timing from here, so they cannot disagree.
  *
- * - `SHANNON_EMOTION_CLOCK=awake|wall` (default `awake`). `wall` is the kill switch: fading is
+ * - `SHANNON_EMOTION_CLOCK=awake|wall` (unset: `awake`; any other value: `wall`, with one warning). `wall` is the kill switch: fading is
  *   measured on the wall clock by the rules as they were before the awake clock, and nothing is
  *   kept or shown underneath the feeling of the moment.
  * - `SHANNON_EMOTION_IDLE_MINUTES`: the gap after which she counts as dormant.
@@ -32,8 +32,12 @@ export function emotionTiming(environment: Readonly<Record<string, string | unde
     const parsed = Number(environment[name]);
     return environment[name]?.trim() && Number.isFinite(parsed) && parsed > 0 && parsed <= maximum ? parsed * unit : fallback;
   };
+  // Unset means the default. A value that is neither word is a typing mistake at the kill switch: the old behaviour is the safe reading.
+  const requested = environment.SHANNON_EMOTION_CLOCK?.trim().toLowerCase() ?? '';
+  const clock = requested === '' || requested === 'awake' ? 'awake' : 'wall';
+  if (clock === 'wall' && requested !== 'wall') console.warn('SHANNON_EMOTION_CLOCK is neither "awake" nor "wall"; using "wall".');
   const timing: ShannonEmotionTiming = Object.freeze({
-    clock: environment.SHANNON_EMOTION_CLOCK?.trim().toLowerCase() === 'wall' ? 'wall' : 'awake',
+    clock,
     idleCapMs: duration('SHANNON_EMOTION_IDLE_MINUTES', MINUTE, SHANNON_EMOTION_TIME.idleCapMs, 120),
     reactionHalfLifeMs: duration('SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES', MINUTE, SHANNON_EMOTION_TIME.reactionHalfLifeMs, 60),
     passingHalfLifeMs: duration('SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES', MINUTE, SHANNON_EMOTION_TIME.passingHalfLifeMs, 240),

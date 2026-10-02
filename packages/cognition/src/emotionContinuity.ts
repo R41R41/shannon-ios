@@ -9,6 +9,7 @@ import {
   isMoodLikeEmotion,
   isReactionEmotion,
   isShannonEmotionKind,
+  isSupportEmotion,
   shannonEmotionSign,
   unsafeCombination,
   visibilityFor,
@@ -103,7 +104,11 @@ export function presentShannonFeeling(
       }
     }
   }
-  if (surface && (!under || surface.intensity >= under.strength)) {
+  // What she owes the owner is read back as it was stored: a feeling held by an override, and her concern or apology
+  // while it is strong enough to show, stay on top of a stronger mood underneath until they have passed.
+  const owed = surface !== undefined && (surface.overrideReason !== undefined
+    || (isSupportEmotion(surface.primary) && surface.intensity >= 0.3));
+  if (surface && (!under || owed || surface.intensity >= under.strength)) {
     // What lies underneath stays beside the reaction of the moment.
     const beside = under && under.feeling.kind !== surface.primary && !surface.secondary.includes(under.feeling.kind)
       && !unsafeCombination(surface.primary, under.feeling.kind)
@@ -237,7 +242,7 @@ const KIND_PHRASE: Partial<Record<ShannonEmotionKind, string>> = {
 function sincePhrase(startedAt: string, now: string): string {
   const minutes = Math.floor((Date.parse(now) - Date.parse(startedAt)) / 60_000);
   if (!Number.isFinite(minutes) || minutes < 60) return 'さっき';
-  return minutes < 24 * 60 ? `${Math.round(minutes / 60)}時間前に` : `${Math.floor(minutes / (24 * 60))}日前に`;
+  return minutes < 24 * 60 ? `${Math.floor(minutes / 60)}時間前に` : `${Math.floor(minutes / (24 * 60))}日前に`;
 }
 
 /** One feeling underneath in meaning: when (a fact of the wall clock), what happened, and that it is still there. */
@@ -283,8 +288,14 @@ export function restoreLingering(value: unknown, awakeMs: number): readonly Shan
     if (typeof row.target !== 'string' || typeof row.cause !== 'string' || typeof row.startedAt !== 'string') continue;
     if (!number(row.strength) || !number(row.awakeAt) || !number(row.startedAwakeAt) || !Number.isFinite(Date.parse(row.startedAt))) continue;
     if ((row.awakeAt as number) > awakeMs || (row.startedAwakeAt as number) > (row.awakeAt as number)) continue;
+    const kind = row.kind;
+    const target = Array.from(row.target).slice(0, 80).join('');
+    const twin = restored.findIndex(item => item.kind === kind && item.target === target);
+    // One entry per kind and person: of two, the stronger stays.
+    if (twin >= 0 && restored[twin]!.strength >= clamp(row.strength as number, 0, 1)) continue;
+    if (twin >= 0) restored.splice(twin, 1);
     restored.push(Object.freeze({
-      kind: row.kind, target: Array.from(row.target).slice(0, 80).join(''), cause: Array.from(row.cause).slice(0, 240).join(''),
+      kind, target, cause: Array.from(row.cause).slice(0, 240).join(''),
       span: row.span === 'lingering' ? 'lingering' : 'mood', strength: clamp(row.strength as number, 0, 1),
       awakeAt: row.awakeAt as number, startedAwakeAt: row.startedAwakeAt as number, startedAt: row.startedAt,
     }));

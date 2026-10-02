@@ -104,11 +104,16 @@ export function awakeTimeAt(clock: ShannonEmotionClock | undefined, now: string,
   return advanceEmotionClock(clock, now, timing).clock?.awakeMs ?? 0;
 }
 
-/** A stored clock that cannot be read is dropped; the next event starts a new one at zero. */
-export function restoreEmotionClock(value: unknown): ShannonEmotionClock | undefined {
+/**
+ * A stored clock that cannot be read is dropped; the next event starts a new one at zero. One stamped
+ * later than `now` (a machine clock that was wrong for a while) is brought back to `now`: otherwise no
+ * event would advance it until the wall clock caught up, and nothing would fade.
+ */
+export function restoreEmotionClock(value: unknown, now: string): ShannonEmotionClock | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;
   if (typeof row.awakeMs !== 'number' || !Number.isFinite(row.awakeMs) || row.awakeMs < 0) return undefined;
   if (typeof row.at !== 'string' || !Number.isFinite(Date.parse(row.at))) return undefined;
-  return Object.freeze({ awakeMs: row.awakeMs, at: row.at });
+  const ahead = Date.parse(row.at) > Date.parse(now);
+  return Object.freeze({ awakeMs: row.awakeMs, at: ahead ? now : row.at });
 }

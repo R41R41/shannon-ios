@@ -9,6 +9,7 @@ import {
 } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { configuredAwakeClock } from '../src/autonomyAwakeClock.js';
+import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
 import { SHANNON_CORE_PATHS } from '../src/autonomyCore.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonVoiceModelRequest } from '../src/chatModel.js';
@@ -156,8 +157,9 @@ describe('(a) continuity across conversations, voice', () => {
     const plan = (response.body as { voicePlan: Record<string, any> }).voicePlan;
     // The greeting is answered brightly, a little more strongly than the sulk; the sulk stays beside it, in the plan and in the prompt.
     expect(plan.emotion).toMatchObject({ primary: 'bright', secondary: ['sulky'] });
-    // The plan is a response body: the resolver's notes to the reducer are not part of it.
-    for (const key of ['continued', 'decided', 'presentAt']) expect(plan.emotion).not.toHaveProperty(key);
+    // The plan goes to a device: no cause, no clock stamp, and none of the resolver's notes to the reducer.
+    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt']) expect(plan.emotion).not.toHaveProperty(key);
+    expect(Object.keys(plan.emotion).sort()).toEqual(['arousal', 'carryover', 'decay', 'intensity', 'primary', 'secondary', 'startedAt', 'target', 'updatedAt', 'valence', 'visibility']);
     expect(model.voiceRequests.at(-1)!.systemPrompt).toContain('primary=bright; secondary=sulky');
     expect(model.voiceRequests.at(-1)!.systemPrompt).toMatch(/まだ残っている気持ち: 9時間前にライ氏との会話ですねたことを、まだ少し引きずっている/u);
     // A bright tone is not a mood: nothing covers the sulk underneath, and when the moment has passed she is sulking again.
@@ -171,8 +173,8 @@ describe('(a) continuity across conversations, voice', () => {
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
     const held = (next.body as { voicePlan: Record<string, any> }).voicePlan;
     expect(held.emotion.primary).toBe('sulky');
-    for (const key of ['continued', 'decided', 'presentAt']) expect(held.emotion).not.toHaveProperty(key);
-    expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"/u);
+    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt']) expect(held.emotion).not.toHaveProperty(key);
+    expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"|"awakeAt"|"cause"/u);
     // Carrying it through that turn stored nothing new: what is underneath is the entry from the night.
     expect(state().lingering).toMatchObject([{ kind: 'sulky', startedAt: NIGHT, strength: 0.52 }]);
   });
@@ -274,6 +276,8 @@ describe('(j) the owner\'s call while someone else can hear', () => {
     expect((response.body as { voicePlan: Record<string, any> }).voicePlan.emotion.secondary.concat(
       (response.body as { voicePlan: Record<string, any> }).voicePlan.emotion.primary)).toContain('sulky');
     expect(prompt).toContain('cause=withheld while others can hear');
+    // Nor does the device, which others may be looking at, receive it.
+    expect(JSON.stringify(response.body)).not.toMatch(/つつかれた|"cause"/u);
     expect(prompt).toContain('Do not say why you feel this way while others can hear.');
     // Neither the touch nor the line about what lingers reaches the model.
     expect(prompt).not.toContain('つつかれた');
@@ -346,6 +350,19 @@ describe('(g) an activity session keeps her awake', () => {
     const missing = configuredAwakeClock(join(tmpdir(), 'shannon-emotion-test-missing', 'nowhere', 'shannon.sqlite'), { now: () => NIGHT });
     expect(() => { missing.observe(scope); missing.observe(scope); missing.close(); }).not.toThrow();
     expect(errors).toHaveBeenCalled();
+    errors.mockClear();
+    // A stored snapshot that cannot be parsed is logged by the name of the error only: its message can quote the snapshot.
+    const path = databasePath();
+    const store = new SQLiteShannonStore({ path, now: () => NIGHT });
+    store.snapshot(scope);
+    store.close();
+    const broken = new DatabaseSync(path);
+    broken.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run('{"scopeKey":"owner","secret":"内緒の話" oops', scope);
+    broken.close();
+    const reader = configuredAwakeClock(path, { now: () => MORNING });
+    reader.observe(scope);
+    reader.close();
+    expect(errors.mock.calls).toEqual([['Shannon awake clock failed', 'SyntaxError']]);
     errors.mockRestore();
   });
 
@@ -421,6 +438,57 @@ describe('(h) stored state from before the awake clock', () => {
   });
 });
 
+describe('her concern for the owner is what every surface shows while it lasts', () => {
+  it('answers his loss with concern in the reply, the returned state, the state read afterwards and the body, over a stronger sulk', async () => {
+    const { chat, advance, shown, body, stateStore, state } = harness();
+    stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'sulky', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.4, valence: -0.6,
+      visibility: 'expressed', startedAt: NIGHT, decay: 0.48, carryover: 0.6, updatedAt: NIGHT,
+    } });
+    expect(state().lingering).toMatchObject([{ kind: 'sulky', strength: 0.8 }]);
+    advance(MINUTE);
+    const reply = await chat('父が亡くなった', 'そばにいます、ライ氏。');
+    expect(reply.messageEmotion.expression).toBe('tender');
+    expect(reply.state.presence.mood).toMatchObject({ expression: 'tender', fromConversation: true });
+    expect((await shown()).presence.mood).toEqual(reply.state.presence.mood);
+    expect((await body()).mood).toMatchObject({ expression: 'tender', primary: 'caring', fromConversation: true });
+    advance(MINUTE);
+    expect((await chat('……うん', PLAIN)).messageEmotion.expression).toBe('tender');
+    // The sulk is still underneath for later.
+    expect(state().lingering).toMatchObject([{ kind: 'sulky' }]);
+  });
+});
+
+describe('an apology eases only on proof that it was his', () => {
+  it('eases nothing when the refinement has no recorded turn of the owner\'s to go by', () => {
+    const now = () => MORNING;
+    const stateStore = new InMemoryCompanionStateStore(now, emotionTiming());
+    const conversationStore = new InMemoryConversationStore();
+    stateStore.apply(scope, { type: 'expressive-emotion-updated', emotion: {
+      primary: 'hurt', secondary: [], intensity: 0.8, target: 'ライ氏', cause: '生成した応答の内容と会話文脈', arousal: 0.3, valence: -0.7,
+      visibility: 'expressed', startedAt: MORNING, decay: 0.24, carryover: 0.6, updatedAt: MORNING,
+    } });
+    const processor = new TurnRefinementProcessor(stateStore, conversationStore);
+    const strength = () => livingLingering(stateStore.snapshot(scope), MORNING, emotionTiming())[0]!.strength;
+    // No recorded turn, and a turn id the store does not know: the lookup misses, and the easing fails closed.
+    processor.process(scope, 'ごめんね', undefined, MORNING);
+    processor.process(scope, 'ごめんね', 'no-such-turn', MORNING);
+    expect(strength()).toBe(0.8);
+    // A turn recorded with someone else present is not his alone either.
+    const threadId = conversationStore.threadId(scope);
+    const others = conversationStore.appendTurn(scope, threadId, 'ごめんね', 'はい。', MORNING, {
+      messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' }, capturedStateVersion: 0,
+      audience: { kind: 'people', personIds: [], unknownGuest: true }, speaker: 'unknown' });
+    processor.process(scope, 'ごめんね', others.id, MORNING);
+    expect(strength()).toBe(0.8);
+    // His own recorded turn eases it.
+    const own = conversationStore.appendTurn(scope, threadId, 'ごめんね', 'はい。', MORNING, {
+      messageEmotion: { valence: 0, arousal: 0.3, openness: 0.35, expression: 'calm' }, capturedStateVersion: 0 });
+    processor.process(scope, 'ごめんね', own.id, MORNING);
+    expect(strength()).toBeCloseTo(0.32, 2);
+  });
+});
+
 describe('the state returned with a reply agrees with the state read afterwards', () => {
   it('shows a reaction she is still having, held through a neutral reply, the same in both', async () => {
     const { chat, advance, shown, stateStore } = harness();
@@ -463,8 +531,9 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
     const soon = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
     // Two minutes later the sulk still carries, as before: the resolver's own wording, not a continued reading.
-    expect((soon.body as { voicePlan: Record<string, any> }).voicePlan.emotion).toMatchObject({ primary: 'sulky', cause: '直前の感情が自然に続いている' });
+    expect((soon.body as { voicePlan: Record<string, any> }).voicePlan.emotion).toMatchObject({ primary: 'sulky' });
     expect((soon.body as { voicePlan: Record<string, any> }).voicePlan.emotion.continued).toBeUndefined();
+    expect(state().expressiveEmotion).toMatchObject({ primary: 'sulky', cause: '直前の感情が自然に続いている' });
     advance(9 * HOUR);
     const morning = await api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations',
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
@@ -478,7 +547,17 @@ describe('(l) the kill switch SHANNON_EMOTION_CLOCK=wall', () => {
   it('reads the environment in one place, bounded, and falls back to the table', () => {
     expect(emotionTiming({})).toEqual(SHANNON_EMOTION_TIME);
     expect(emotionTiming({ SHANNON_EMOTION_CLOCK: 'WALL ' }).clock).toBe('wall');
-    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: 'anything' }).clock).toBe('awake');
+    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: ' Awake' }).clock).toBe('awake');
+    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: '  ' }).clock).toBe('awake');
+    // A value that is neither word is a mistake at the kill switch: it means the old behaviour, and says so once, without the value.
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: 'wal' }).clock).toBe('wall');
+    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: 'wal' }).clock).toBe('wall');
+    expect(emotionTiming({ SHANNON_EMOTION_CLOCK: 'off' }).clock).toBe('wall');
+    expect(warnings.mock.calls).toEqual([
+      ['SHANNON_EMOTION_CLOCK is neither "awake" nor "wall"; using "wall".'], ['SHANNON_EMOTION_CLOCK is neither "awake" nor "wall"; using "wall".'],
+    ]);
+    warnings.mockRestore();
     expect(emotionTiming({
       SHANNON_EMOTION_IDLE_MINUTES: '15', SHANNON_EMOTION_REACTION_HALF_LIFE_MINUTES: '0.5', SHANNON_EMOTION_PASSING_HALF_LIFE_MINUTES: '8',
       SHANNON_EMOTION_MOOD_HALF_LIFE_MINUTES: '120', SHANNON_EMOTION_MOOD_VALUE_HALF_LIFE_MINUTES: '180',

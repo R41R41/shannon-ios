@@ -73,7 +73,8 @@ export function configuredAwakeClock(databasePath: string, options: { now: () =>
         }
         last.set(scopeKey, time);
       } catch (error) {
-        console.error('Shannon awake clock failed', error instanceof Error ? error.message : 'unknown');
+        // The name only: a parse error's message can quote the stored snapshot.
+        console.error('Shannon awake clock failed', error instanceof Error ? error.name : 'unknown');
       }
     },
     close() {
