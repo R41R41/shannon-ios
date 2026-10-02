@@ -14,6 +14,9 @@ import type { StepDependencies, StepResult } from './autonomyLoopSteps.js';
  * (her window showing, the owner away or back, others present). An outcome that could change
  * her plan puts one more thinking step at the front of the plan, a bounded number of times.
  *
+ * While a step waits it renews the runner's lease and heartbeat at every look (`renew`), so the wait
+ * may be longer than the lease and the owner's screens keep saying 動いています.
+ *
  * `SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0` switches all of it off: no wait, no observation, no
  * second thinking step, and every prompt is what it was. This file names interfaces only.
  */
@@ -57,7 +60,9 @@ export async function observeReachOut(
   const limit = options.wait ? reachOutWait(loop) : 0;
   let repliedAt = ownerRepliedAt(dependencies, scopeKey, sent.at);
   let at = now();
-  while (!repliedAt && Date.parse(at) - Date.parse(sent.at) < limit && !options.signal?.aborted) {
+  // The wait is part of the step, so the runner keeps its lease and its heartbeat while it waits; a lost lease ends the wait.
+  const held = () => { try { return dependencies.renew?.() ?? true; } catch { return false; } };
+  while (!repliedAt && held() && Date.parse(at) - Date.parse(sent.at) < limit && !options.signal?.aborted) {
     let paused = true;
     try { paused = store.control(scopeKey).paused; } catch { paused = true; }
     if (paused) break;
@@ -97,7 +102,7 @@ export interface ReachOutChain {
 /** The unanswered message of this cycle, if there is one that she has not already called after. */
 export function reachOutChain(observations: readonly StepObservation[]): ReachOutChain | null {
   const sent = [...observations].reverse().find(item => item.step === 'reach_out' && item.outcome === 'done' && item.reachOut && item.reachOut.reason !== 'follow_up');
-  if (!sent?.reachOut || sent.reachOut.replied) return null;
+  if (!sent?.reachOut || sent.reachOut.replied || sent.reachOut.unwatched) return null;
   const later = observations.filter(item => item.ordinal > sent.ordinal);
   // A second call that was asked for, whatever came of it, ends the chain: one per message.
   if (later.some(item => item.step === 'reach_out')) return null;
@@ -123,7 +128,7 @@ function worthThinkingAbout(step: AutonomyPlannedStep, observation: Pick<StepObs
   // He is talking, or he answered: she stays out of it and the plan goes on.
   if (observation.code === 'conversation_in_progress' || observation.code === 'replied') return false;
   if (observation.outcome !== 'done') return true;
-  if (observation.reachOut) return !observation.reachOut.replied && observation.reachOut.reason !== 'follow_up';
+  if (observation.reachOut) return !observation.reachOut.replied && !observation.reachOut.unwatched && observation.reachOut.reason !== 'follow_up';
   return step.kind === 'look' && step.chain === true;
 }
 
@@ -146,6 +151,21 @@ export function observeStep(
   dependencies.store.loop.observations.add(cycle.scopeKey, observation, at);
   if (!worthThinkingAbout(row.step, observation) || remaining[0]?.kind === 'think') return null;
   return mayThinkAgain(dependencies, cycle, row.ordinal + 1) ? [{ kind: 'think', again: true }, ...remaining] : null;
+}
+
+/**
+ * A step that a stopped process left open after its message was already written: the message was sent, and only what
+ * followed is unknown. Returns what to record instead of a failure, or null when no message of that step exists.
+ */
+export function sentBeforeStop(dependencies: StepDependencies, scopeKey: string, step: Pick<AutonomyLoopStep, 'step' | 'createdAt'>): ReachOutFacts | null {
+  if (!agenticLoop(dependencies) || step.step.kind !== 'reach_out' || !step.step.reason || !step.createdAt) return null;
+  let latest: { id: string; at: string; reason?: string } | null = null;
+  try { latest = dependencies.reachOuts?.latest?.(scopeKey) ?? null; } catch { latest = null; }
+  if (!latest || latest.at < step.createdAt || (latest.reason === 'follow_up') !== (step.step.reason === 'follow_up')) return null;
+  return {
+    id: latest.id, reason: step.step.reason, sentAt: latest.at, waitedSeconds: 0, replied: false, delivery: 'unknown',
+    windowVisible: false, owner: 'unknown', others: false, unwatched: true,
+  };
 }
 
 function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {

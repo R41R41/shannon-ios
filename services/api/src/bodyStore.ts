@@ -124,6 +124,17 @@ export class SQLiteBodyStore {
     }));
   }
 
+  /** The newest event of the given types in `[since, until]`, whoever was around: a type and a time, for the activity loop. */
+  latestOfTypes(scopeKey: string, types: readonly string[], since: string, until: string): { type: string; occurredAt: string } | null {
+    if (!types.length) return null;
+    const row = this.database.prepare(`
+      SELECT event_type, occurred_at FROM body_events
+      WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ? AND event_type IN (${types.map(() => '?').join(', ')})
+      ORDER BY occurred_at DESC, received_at DESC LIMIT 1
+    `).get(scopeKey, since, until, ...types) as unknown as { event_type: string; occurred_at: string } | undefined;
+    return row ? { type: row.event_type, occurredAt: row.occurred_at } : null;
+  }
+
   /** Who can see or hear the body, as it said on a presence read. One row per device. */
   noteAudience(scopeKey: string, deviceId: string, audience: BodyAudience, at: string): void {
     this.database.prepare(`

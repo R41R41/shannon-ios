@@ -211,7 +211,7 @@ Added 2026-10-02. After a message of hers she waits a few minutes (three by defa
 | `hidden` | It did not show it because her window is hidden or minimised. |
 | `muted` | It did not show it because 「話しかける」 is switched off on the body. |
 
-- Send it **once per message, as soon as the body knows** — ideally within a few seconds of seeing the message, and in any case inside her wait (three minutes by default). A report that arrives later is stored but she has by then thought without it: no report in time means she knows only that the phone was notified (`unknown`).
+- Send it **once per message, as soon as the body knows** — ideally within a few seconds of seeing the message, and in any case inside her wait (three minutes by default). A report that arrives later is stored but she has by then thought without it: no report in time means she knows only that the body said nothing (`unknown`): it may be off, not connected, or not showing her window.
 - No other field is accepted: there is no text field, and the request is refused with `400` if one is sent. `outcome` outside the five values is `400`.
 - Only a device that has registered with `PUT /v1/body/capabilities` may report (`403 REACH_OUT_NOT_A_BODY` otherwise). The device is taken from its token.
 - Idempotent per device: the first report is stored (`"status": "stored"`); the same outcome again answers `200` with `"status": "duplicate"`; a different outcome from the same device answers `409 REACH_OUT_ALREADY_REPORTED` and changes nothing. If the body first shows silently and speaks later, report what it had done when it first reported. Two bodies may each report; the one that got furthest stands (`shown_spoken` over `shown` over `away` over `hidden` over `muted`).
@@ -222,6 +222,7 @@ Added 2026-10-02. After a message of hers she waits a few minutes (three by defa
 | 400 | `BAD_REQUEST` | `outcome` missing or not one of the five; another field present; `scopeKey` missing. | With a corrected body |
 | 403 | `REACH_OUT_NOT_A_BODY` | The device has not registered capabilities. | After `PUT /v1/body/capabilities` |
 | 403 | `BODY_INGEST_DISABLED` | Body events are switched off on the server. | No |
+| 403 | `REACH_OUT_REPORTS_DISABLED` | The server has her second calls and observing switched off (`SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0`); nothing is stored. | No; keep showing messages |
 | 404 | `REACH_OUT_NOT_FOUND` | Unknown id, or an initiative that is not a message she started on her own. | No |
 | 404 | `NOT_FOUND` | A server that does not take delivery reports, or a malformed path. | No |
 | 409 | `REACH_OUT_ALREADY_REPORTED` | This device reported another outcome for this message. | No |

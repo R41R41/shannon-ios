@@ -52,6 +52,8 @@ export interface AutonomyServiceDependencies {
   reachOuts?: (scopeKey: string, at: string) => { today: number; maximumPerDay: number } | null;
   /** Second calls after a message of hers got no answer today, with the limit. Only the activity loop's service has it. */
   reachOutFollowUps?: (scopeKey: string, at: string) => { today: number; maximumPerDay: number } | null;
+  /** When the owner first wrote or spoke after an instant, or null: a timestamp, for what followed a message of hers. */
+  ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -108,7 +110,7 @@ export class ShannonAutonomyService {
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
-      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone } : null);
+      this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);
   }
 

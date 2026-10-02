@@ -4,7 +4,7 @@ import {
   AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS, REACH_OUT_REASON_LABEL, parsedModelObject, reachOutPrompt,
   type PromptUpcoming, type ReachOutReason,
 } from './autonomyLoopPrompts.js';
-import { agenticLoop, observeReachOut } from './autonomyLoopObserve.js';
+import { agenticLoop, observeReachOut, ownerRepliedAt } from './autonomyLoopObserve.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import type { PreparedStep, StepDependencies } from './autonomyLoopSteps.js';
 import { autonomyModelCostUsd } from './autonomyModels.js';
@@ -29,8 +29,10 @@ export interface AutonomyReachOuts {
   /** While someone other than the owner may see or hear her body: the speak-time rule text and the marker for owner-private lines. Otherwise null. */
   audience(scopeKey: string, at: string): { instructions: string; marker: string } | null;
   say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): 'sent' | 'limit' | 'unavailable';
-  /** The newest message she started: its initiative id and when it was written. An identifier, never its words. */
-  latest?(scopeKey: string): { id: string; at: string } | null;
+  /** The newest message she started: its initiative id, when it was written, and whether it is a second call. */
+  latest?(scopeKey: string): { id: string; at: string; reason?: string } | null;
+  /** The words of one of her own messages (owner decision 2026-10-02, ADR-0003): for the second call that follows it. Null when it is not hers. */
+  text?(scopeKey: string, initiativeId: string): string | null;
   /** Second calls she made on the owner-local day. */
   followUpsOn?(scopeKey: string, dayKey: string): number;
   /** Whether the message with this id was already called after. */
@@ -118,13 +120,20 @@ export function prepareReachOut(dependencies: StepDependencies, cycle: AutonomyL
       const text = reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_REACH_OUT_MAXIMUM_CHARACTERS);
       // Silence is hers to choose.
       if (!text) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, summary: `話しかけようかと思いましたが、やめておきました（理由: ${label}）。` };
+      // While she watches what follows, the message carries the time it is written, not the time the step began: an owner turn
+      // that arrived while the model was writing is then not an answer to it, and she does not speak over that turn.
+      const agentic = agenticLoop(dependencies);
+      const writeAt = agentic ? dependencies.now?.() ?? performAt : performAt;
+      if (agentic && (conversationInProgress(dependencies, cycle.scopeKey, writeAt) || ownerRepliedAt(dependencies, cycle.scopeKey, performAt))) {
+        return { outcome: 'failed', usage, summary: `話している最中なので、話しかけませんでした（理由: ${label}）。`, reasonCode: 'conversation_in_progress' };
+      }
       let delivery: ReturnType<AutonomyReachOuts['say']>;
       try {
-        delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(performAt, config), maximumPerDay: config.maximumReachOutsPerDay }, performAt);
+        delivery = adapters.reachOuts.say(cycle.scopeKey, { reason, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutsPerDay }, writeAt);
       } catch { delivery = 'unavailable'; }
       // What she said is in the Talk; the record keeps only that she spoke and why.
       if (delivery === 'sent') {
-        const sent = agenticLoop(dependencies) ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
+        const sent = agentic ? latestOf(adapters.reachOuts, cycle.scopeKey) : null;
         if (!sent) return { outcome: 'done', usage, summary: `持ち主に話しかけました（理由: ${label}）。` };
         // She stays with it for a short while: did he answer, and what did her body do with it. Facts only.
         let observed: Awaited<ReturnType<typeof observeReachOut>>;

@@ -82,6 +82,7 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
 const REACH_OUT_REPORT_REFUSALS = {
   unavailable: [404, 'NOT_FOUND', 'This server does not take delivery reports.'],
   disabled: [403, 'BODY_INGEST_DISABLED', 'Body events are switched off on the server.'],
+  reports_disabled: [403, 'REACH_OUT_REPORTS_DISABLED', 'Delivery reports are switched off on the server.'],
   not_a_body: [403, 'REACH_OUT_NOT_A_BODY', 'Only a device that registered its capabilities as her body may report.'],
   not_found: [404, 'REACH_OUT_NOT_FOUND', 'No such message of hers.'],
   conflict: [409, 'REACH_OUT_ALREADY_REPORTED', 'This device already reported another outcome for this message.'],

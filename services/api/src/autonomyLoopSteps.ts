@@ -58,6 +58,8 @@ export interface StepDependencies {
   observer?: AutonomyReachOutObserver;
   /** The loop's clock, read while a step waits. */
   now?: () => string;
+  /** Renews the runner's lease and heartbeat while a step waits; false once the lease is lost. */
+  renew?: () => boolean;
   /** The pause between two looks at whether the owner answered; absent, a real timer. */
   wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }

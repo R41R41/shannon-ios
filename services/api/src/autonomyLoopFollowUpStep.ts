@@ -11,9 +11,9 @@ import { AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL } from './autonomyPolicy.js';
  * What she may do after a message of hers got no answer (owner decision 2026-10-02), besides looking
  * at the room or letting it go: call once more, or write down what she thinks.
  *
- * The second call is one model call with the facts of the first message in front of her (never its
- * words, and never anything the owner said) and, when she looked at the room after it in this cycle,
- * her own note of that look. One per message, a few per day; the gate counts them apart from the day's
+ * The second call is one model call with the facts of the first message and her own words of it in
+ * front of her (owner decision 2026-10-02, ADR-0003; never anything the owner said) and, when she
+ * looked at the room after it in this cycle, her own note of that look. One per message, a few per day; the gate counts them apart from the day's
  * three messages. It is not made once he has written or spoken. This file names interfaces only.
  */
 export const REACH_OUT_FOLLOW_UP_TOOL = AUTONOMY_REACH_OUT_FOLLOW_UP_TOOL;
@@ -35,9 +35,12 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
   const seen = store.study.list(cycle.scopeKey)
     .filter(piece => piece.kind === 'note' && piece.origin === 'room_look' && piece.status !== 'put_away' && piece.createdAt >= origin.sentAt && piece.createdAt >= cycle.startedAt)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]?.body;
+  // Her own first message, in her words (owner decision 2026-10-02, ADR-0003), so the second call can follow from it.
+  let said: string | null = null;
+  try { said = reachOuts.text?.(cycle.scopeKey, origin.id) ?? null; } catch { said = null; }
   const happened = observations.filter(item => item.ordinal >= chain.ordinal).flatMap(item => happenedLines(item, { at, timeZone: config.timeZone }));
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', followUpPrompt({
-    localTime: ownerLocalTime(at, config.timeZone, true), happened, ...(seen ? { seen } : {}), others,
+    localTime: ownerLocalTime(at, config.timeZone, true), happened, ...(said ? { said } : {}), ...(seen ? { seen } : {}), others,
   }), OUTPUT_TOKENS);
   if (!call) return null;
   return {
@@ -49,19 +52,27 @@ export function prepareFollowUp(dependencies: StepDependencies, cycle: AutonomyL
     async perform(adapters, performAt, signal) {
       if (!adapters.model || !adapters.reachOuts?.sayAgain) return { outcome: 'failed', summary: '話しかける道具が渡されなかったため、声をかけませんでした。' };
       // He answered, or is talking: there is nothing to follow, and nothing is spent.
-      if (ownerRepliedAt(dependencies, cycle.scopeKey, origin.sentAt) || conversationInProgress(dependencies, cycle.scopeKey, performAt)) {
-        return { outcome: 'failed', summary: '返事が来ていたので、もう一度は声をかけませんでした。', reasonCode: 'replied' };
-      }
+      const stopped = (at: string, usage?: { inputTokens: number; outputTokens: number }) => (ownerRepliedAt(dependencies, cycle.scopeKey, origin.sentAt)
+        ? { outcome: 'failed' as const, summary: '返事が来ていたので、もう一度は声をかけませんでした。', reasonCode: 'replied', ...(usage ? { usage } : {}) }
+        : conversationInProgress(dependencies, cycle.scopeKey, at)
+          ? { outcome: 'failed' as const, summary: '話している最中なので、もう一度は声をかけませんでした。', reasonCode: 'conversation_in_progress', ...(usage ? { usage } : {}) }
+          : null);
+      const before = stopped(performAt);
+      if (before) return before;
       const { reply, usage } = await callModel(adapters, call, signal);
       if (!reply || typeof reply.message !== 'string') return { outcome: 'failed', summary: 'もう一度声をかけようとしましたが、言葉になりませんでした。', reasonCode: 'model_failed', usage };
       const text = reply.message.replace(/\s+/gu, ' ').trim().slice(0, AUTONOMY_FOLLOW_UP_MAXIMUM_CHARACTERS);
       // Letting it go is hers to choose.
       if (!text) return { outcome: 'done', usage, tool: REACH_OUT_HELD_TOOL, summary: 'もう一度声をかけようかと思いましたが、そのままにしました。' };
+      // The second call carries the time it is written, and is not made over a turn that arrived while the model was writing.
+      const writeAt = dependencies.now?.() ?? performAt;
+      const after = stopped(writeAt, usage);
+      if (after) return after;
       let delivery: 'sent' | 'limit' | 'unavailable';
       try {
         delivery = adapters.reachOuts.sayAgain(cycle.scopeKey, {
-          originId: origin.id, text, dayKey: autonomyDayKey(performAt, config), maximumPerDay: config.maximumReachOutFollowUpsPerDay, seen: Boolean(seen),
-        }, performAt);
+          originId: origin.id, text, dayKey: autonomyDayKey(writeAt, config), maximumPerDay: config.maximumReachOutFollowUpsPerDay, seen: Boolean(seen),
+        }, writeAt);
       } catch { delivery = 'unavailable'; }
       if (delivery !== 'sent') {
         return {

@@ -46,6 +46,7 @@ import { SQLiteCognitiveIntentStore } from './cognitiveIntent.js';
 import { SQLiteConversationOrchestrationStore } from './conversationOrchestrationPersistence.js';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAutonomy } from './autonomyBudget.js';
+import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, BODY_ROUTE_PREFIX } from './apiBodyRoutes.js';
@@ -80,8 +81,10 @@ const autonomyStore = new SQLiteAutonomyStore(configuredDatabasePath());
 const autonomyAnnouncer = new SQLiteAutonomyAnnouncer(configuredDatabasePath());
 const bodyStore = new SQLiteBodyStore(configuredDatabasePath());
 // Bounded autonomy (ADR-0002): the gate, record, budget and stop switch. No activity loop runs in this process.
+const autonomyConfig = configuredAutonomy(process.env, { databasePath: configuredDatabasePath() });
+const ownerTurns = new SQLiteStudyShowing(configuredDatabasePath());
 const autonomy = new ShannonAutonomyService({
-  store: autonomyStore, config: configuredAutonomy(process.env, { databasePath: configuredDatabasePath() }), now,
+  store: autonomyStore, config: autonomyConfig, now, ownerFirstActiveAfter: (scopeKey, after) => ownerTurns.ownerFirstActiveAfter(scopeKey, after),
   announcer: autonomyAnnouncer, agentTasks: agentTaskStore, defaultThread: scopeKey => persistentStore.threadId(scopeKey),
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null,
 });
@@ -126,7 +129,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey), reachOutReports, reachOutReportsEnabled: autonomyConfig.maximumReachOutFollowUpsPerDay > 0 },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -339,6 +342,7 @@ function shutdown(): void {
     bodyStore.close();
     reachOuts.close();
     reachOutReports.close();
+    ownerTurns.close();
     ownerUpcoming.close();
     closeBodyLookStores();
     opsStore.close();

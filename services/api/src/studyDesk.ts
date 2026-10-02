@@ -55,7 +55,7 @@ export class StudyDesk {
     private readonly dayKey: (at: string) => string,
     private readonly now: () => string,
     /** Set while she observes what follows her messages: the owner-local zone for the times in those sentences. */
-    private readonly reachOutMemory: { timeZone: string } | null = null,
+    private readonly reachOutMemory: { timeZone: string; ownerFirstActiveAfter?: (scopeKey: string, after: string) => string | null } | null = null,
   ) {}
 
   overview(scopeKey: string): StudyOverview {
@@ -142,7 +142,13 @@ export class StudyDesk {
       const since = new Date(Date.parse(at) - 24 * 60 * 60_000).toISOString();
       return reachOutMemories(this.store.loop.observations.since(scopeKey, since))
         .filter(item => this.dayKey(item.facts.sentAt) === this.dayKey(at))
-        .slice(0, AUTONOMY_REACH_OUT_MEMORY_MAXIMUM).map(item => reachOutMemoryLine(item, memory.timeZone));
+        .slice(0, AUTONOMY_REACH_OUT_MEMORY_MAXIMUM).map(item => {
+          if (item.facts.replied || !memory.ownerFirstActiveAfter) return reachOutMemoryLine(item, memory.timeZone);
+          // He wrote or spoke after her wait ended. The last two minutes are left out: that is the conversation this prompt is for.
+          const waitedUntil = new Date(Date.parse(item.facts.sentAt) + item.facts.waitedSeconds * 1_000).toISOString();
+          const first = memory.ownerFirstActiveAfter(scopeKey, waitedUntil);
+          return reachOutMemoryLine({ ...item, repliedSince: first !== null && Date.parse(first) < Date.parse(at) - 120_000 }, memory.timeZone);
+        });
     } catch { return []; }
   }
 

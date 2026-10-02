@@ -39,6 +39,8 @@ export interface ReachOutFacts {
   owner: 'away' | 'returned' | 'unknown';
   /** Someone other than the owner could see or hear her body. */
   others: boolean;
+  /** The step stopped before she could watch what followed: whether he answered is not known. */
+  unwatched?: true;
 }
 
 export interface StepObservation {
@@ -142,5 +144,6 @@ function reachOutFacts(value: unknown): ReachOutFacts | null {
     replied: raw.replied === true, ...(raw.replied === true ? { repliedAfterSeconds: seconds(raw.repliedAfterSeconds) } : {}),
     delivery, windowVisible: raw.windowVisible === true,
     owner: raw.owner === 'away' || raw.owner === 'returned' ? raw.owner : 'unknown', others: raw.others === true,
+    ...(raw.unwatched === true ? { unwatched: true as const } : {}),
   });
 }
