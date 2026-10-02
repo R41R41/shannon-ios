@@ -46,7 +46,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'room_look', audience: 'owner',
     text: `部屋を見る: 体のカメラが許されている時、二人だけの会話で部屋を一度見て、見えたことを次の発言で話す。自分の時間にも1日に数回、一度ずつ見て書斎のメモにする。${SHANNON_ROOM_LOOK_RULES.join('。')}。` },
   { id: 'app_look', audience: 'owner',
-    text: 'アプリのカメラで見る: アプリを画面に出して話している時、見てと言われたら（「これ見れる？」）、または自分が見たくなったら、一度だけ見て次の発言で話す。写した1枚は残さない。画面に出ていない・許可がない・設定で切ってある時は見られないと伝える。' },
+    text: 'アプリのカメラで見る: アプリを画面に出して話している時、見てと言われたら（「これ見れる？」）、または自分が見たくなったら、一度だけ見て次の発言で話す。写した1枚は残さない。画面に出ていない・許可がない・設定で切ってある時は見られないと伝える。見るかどうかはその返事の[アプリのカメラで見る]の指示に従い、指示がない返事では見ると言わない。見た結果が会話にない限り、見えたものとして語らない。' },
   { id: 'body_touch', audience: 'owner',
     text: '体: PCの体に触れられると感じて、ひとこと返すことがある。' },
   { id: 'text_attachments', audience: 'owner',
@@ -64,14 +64,16 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'calendar_read', audience: 'owner',
     text: 'カレンダー: アプリが共有している時、これからの予定を知っている（見るだけ）。' },
   { id: 'initiative', audience: 'owner',
-    text: 'ボクから話しかける: 期日の来た約束や気になった記事を多くて1日1回。自分の時間に思ったことや近い予定のことを1日に数回まで。' },
+    text: 'ボクから話しかける: 期日の来た約束や気になった記事を多くて1日1回。自分の時間に思ったことや近い予定のことを、話しかけたい時に。' },
+  { id: 'phone_call', audience: 'owner',
+    text: '電話: 自分の時間に伝えたいことがあって、ライ氏がアプリを開いていない時、ライ氏のiPhoneに電話をかける。電話が鳴り、出るかどうかはライ氏が選ぶ。ライ氏が着信をオンにしている時だけで、会話の中からはかけない。' },
 ] as const satisfies readonly ShannonCapability[]);
 
 export type ShannonCapabilityId = typeof SHANNON_CAPABILITIES[number]['id'];
 
 /** Things the code has no path for. Keep in sync with the capability evidence test. */
 export const SHANNON_LIMITATIONS = Object.freeze([
-  { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、電話、予約、購入。' },
+  { id: 'calendar_mail', text: 'カレンダーへの登録・変更、メールやメッセージの送信、ほかの人への電話、予約、購入。' },
   { id: 'exact_time_alarm', text: 'タイマーや時刻ぴったりのアラーム（約束の声かけは時刻を保証しない）。' },
   { id: 'media_generation', text: '画像や動画の生成。' },
   { id: 'binary_documents', text: 'PDF・Office文書・動画・連続したカメラ映像を読むこと。' },

@@ -40,7 +40,7 @@ export interface ReasonedThought extends Thought {
 }
 
 /** The actions a thinking reply may name. */
-export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out'] as const;
+export const PLANNABLE_ACTIONS = ['read', 'notion', 'note', 'draft', 'revise', 'ready', 'put_away', 'copy', 'look', 'follow_up', 'jot', 'reach_out', 'call'] as const;
 
 export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6, own = false): PromptNote[] {
   // What she wrote down after an unanswered message is for her own thinking (`own`), never material for a story or a message.
@@ -104,6 +104,8 @@ export function reasonedPlan(
   known: { pursuits: readonly ShannonPursuit[]; pieces: readonly StudyPiece[]; unnotedReadingIds: readonly string[]; placeUrls?: readonly string[] },
   bounds: {
     maximumSteps: number; maximumReads: number; notionAvailable: boolean; folderAvailable?: boolean; lookAvailable?: boolean; reachOut?: { upcoming: boolean } | null;
+    /** She may phone his iPhone now (`autonomyLoopPhoneStep.ts`); `upcoming`: there is an upcoming item a call could be about. */
+    call?: { upcoming: boolean } | null;
     /** Thinking again after a message of hers got no answer: the message a second call would follow, while she may make one. */
     followUp?: { originId: string } | null;
     /** A look planned now is taken to find out whether he is there; she thinks again after it. */
@@ -182,6 +184,11 @@ export function reasonedPlan(
       const text = own(asked);
       if (!text) return asked ? 'secret' : 'incomplete';
       steps.push({ kind: 'jot', intent: text });
+    } else if (action === 'call' && bounds.call && !steps.some(step => step.kind === 'reach_out')) {
+      // One in a plan, never beside a message of hers, with a reason from the same closed set. Nothing else of the reply survives.
+      const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;
+      if (!reason || (reason === 'saw' && !steps.some(step => step.kind === 'look')) || (reason === 'upcoming' && !bounds.call.upcoming)) return 'incomplete';
+      steps.push({ kind: 'reach_out', reason, call: true });
     } else if (action === 'reach_out' && bounds.reachOut && !steps.some(step => step.kind === 'reach_out')) {
       // One in a plan, with a reason from the closed set. `saw` needs the look of this plan before it; `upcoming` needs an item to be about.
       const reason = REACH_OUT_REASONS.find(value => value === item?.reason) as ReachOutReason | undefined;

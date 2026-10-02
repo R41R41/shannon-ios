@@ -75,12 +75,14 @@ Rows not reported for a day are deleted at the next report.
 
 ## Speaking a message she started
 
-A message she starts on her own (`reach_out`, and its one `follow_up`) is written exactly as before: one assistant message in the Talk and one initiative, which the apps show and the phone is notified of. Nothing about when she may write one changes: at most three an owner-local day, never while a conversation is in progress, through the approval gate. What is added is that the message may also be **said aloud through his earphones**, and that exactly one surface says it.
+A message she starts on her own (`reach_out`, and its one `follow_up`) is written exactly as before: one assistant message in the Talk and one initiative, which the apps show and the phone is notified of. Nothing about when she may write one changes here: never while a conversation is in progress, through the approval gate (since 2026-10-03 with no count a day unless the owner sets one, and at least five minutes apart). What is added is that the message may also be **said aloud through his earphones**, and that exactly one surface says it.
 
 ### Which surface speaks
 
 1. **An app that is privately listening and speaks.** When several are, the one whose device the owner used most recently (`ownerActiveAt`; a device with a known last use before one without; then the run that began later).
 2. **Her body**, only when no app is privately listening and able to speak, and by its own rules as before.
+
+A third surface exists since 2026-10-03, and it is never chosen here: **a call** to his iPhone is a step she chooses herself (`docs/incoming-call-contract.md`). A message she phones with is the call's from the moment she asks (`surface: iphone_call`): it is offered to no app and not told to her body. An ordinary message of hers is never rung with.
 
 Whoever speaks first holds the message's **claim**: one row whose primary key is the message, so two devices asking at the same instant cannot both get it, and it survives a restart.
 
@@ -109,7 +111,7 @@ While she speaks, every change of the route is checked at once and the sound sto
   "message": { "id": "0b6f…", "threadId": "…", "content": "ライ氏、いま何をしていますか。", "expression": "curious", "reason": "wonder", "createdAt": "2026-10-02T04:00:00.000Z" } }
 ```
 
-`status` is `held` when the same device asks again (a lost reply), and `spoken` then says whether it already reported speaking. No other field is accepted.
+`status` is `held` when the same device asks again (a lost reply), and `spoken` then says whether it already reported speaking. No other field is accepted, except `callId` from the iPhone that answered a call from her (`docs/incoming-call-contract.md`): the answer is then the same shape with `surface: "iphone_call"` and `listenSeconds: 0`, and the device does not have to be privately listening.
 
 | Status | `error` | Meaning |
 | --- | --- | --- |
@@ -168,6 +170,7 @@ On the iPhone, saying a message while another app is in front needs the Shannon 
 | `scope_key`, `initiative_id` | primary key: one holder per message |
 | `device_id` | the device that took it |
 | `surface` | `body` \| `mac` \| `iphone` |
+| `via` | nullable, added later: `call` for a claim the server took to ring the iPhone; such a claim is read as surface `iphone_call` |
 | `claimed_at` | |
 | `spoken_at` | nullable: set when the holder reported `shown_spoken`; from then on the claim is not given back |
 

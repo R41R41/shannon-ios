@@ -29,6 +29,11 @@ export interface AutonomyReachOuts {
   /** While someone other than the owner may see or hear her body: the speak-time rule text and the marker for owner-private lines. Otherwise null. */
   audience(scopeKey: string, at: string): { instructions: string; marker: string } | null;
   say(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string; maximumPerDay: number }, at: string): 'sent' | 'limit' | 'unavailable';
+  /**
+   * Her opening line of a call to his iPhone (`autonomyLoopPhoneStep.ts`), written as a message of hers. It is not one of
+   * the day's messages: calls have no count of their own, and take none of `maximumPerDay`.
+   */
+  sayByPhone?(scopeKey: string, input: { reason: ReachOutReason; text: string; dayKey: string }, at: string): 'sent' | 'limit' | 'unavailable';
   /** The newest message she started: its initiative id, when it was written, and whether it is a second call. */
   latest?(scopeKey: string): { id: string; at: string; reason?: string } | null;
   /** The words of one of her own messages (owner decision 2026-10-02, ADR-0003): for the second call that follows it. Null when it is not hers. */

@@ -98,9 +98,16 @@ export function directChoiceValue<const T extends readonly string[]>(value: unkn
   return value as T[number];
 }
 
+/** The three steps by which a model says how strong a feeling is. Voice (Jev) and the text reply share this one scale. */
+export const AFFECT_INTENSITY_STEPS = ['subtle', 'moderate', 'strong'] as const;
+export type AffectIntensityStep = typeof AFFECT_INTENSITY_STEPS[number];
+
+export function affectIntensityOf(step: AffectIntensityStep): number {
+  return step === 'subtle' ? 0.25 : step === 'moderate' ? 0.6 : 0.9;
+}
+
 export function affectIntensityValue(value: unknown): number {
-  const intensity = choiceValue(value, ['subtle', 'moderate', 'strong'] as const);
-  return intensity === 'subtle' ? 0.25 : intensity === 'moderate' ? 0.6 : 0.9;
+  return affectIntensityOf(choiceValue(value, AFFECT_INTENSITY_STEPS));
 }
 
 export function optionalProbability(value: string | undefined): number | undefined {

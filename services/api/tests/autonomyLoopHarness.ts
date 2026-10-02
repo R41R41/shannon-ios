@@ -4,6 +4,7 @@ import { configuredAutonomyLoop, type AutonomyLoopConfig } from '../src/autonomy
 import type { AutonomyRoomLooks } from '../src/autonomyLoopLookStep.js';
 import type { AutonomyReachOutObserver } from '../src/autonomyLoopObserve.js';
 import type { AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
+import { callGateContext, type AutonomyPhone } from '../src/autonomyLoopPhoneStep.js';
 import type { AutonomyReachOuts, AutonomyUpcoming } from '../src/autonomyLoopReachOutStep.js';
 import type { AutonomyNotionReader } from '../src/autonomyLoopSteps.js';
 import type { AutonomyPublicReader, PublicReading } from '../src/autonomyReader.js';
@@ -114,6 +115,8 @@ export interface LoopHarnessOptions {
   /** Speaking up on her own: the way her message leaves, and the owner's upcoming items. */
   reachOuts?: AutonomyReachOuts;
   upcoming?: AutonomyUpcoming;
+  /** Phoning the owner's iPhone: absent, as on a server where he has not switched calls on, no prompt speaks of it. */
+  phone?: AutonomyPhone;
   /**
    * Act → observe → think again. Off unless asked for, so every test written before it runs the loop with
    * `SHANNON_AUTONOMY_MAX_FOLLOW_UPS=0`, the kill switch that restores the loop as it was.
@@ -151,6 +154,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
   const service = new ShannonAutonomyService({
     store, config, now, ...(options.roomLooks ? { roomLooks: options.roomLooks } : {}),
     ...(reachOuts ? { reachOuts: (scopeKey: string, at: string) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }) } : {}),
+    ...(options.phone ? { calls: (scopeKey: string, at: string) => callGateContext(options.phone!, scopeKey, at) } : {}),
     ...(reachOuts?.followUpsOn ? { reachOutFollowUps: (scopeKey: string, at: string) => ({ today: reachOuts.followUpsOn!(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutFollowUpsPerDay }) } : {}),
   });
   /** A waiting step does not sleep: the pause moves the test's clock. */
@@ -167,7 +171,7 @@ export function loopHarness(options: LoopHarnessOptions = {}) {
     store, service, config, loop: loopConfig, model, reader, showing, now, workerId, wait,
     ...(options.observer ? { observer: options.observer } : {}),
     ...(options.notion ? { notion: options.notion } : {}), ...(options.looks ? { looks: options.looks } : {}),
-    ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}),
+    ...(reachOuts ? { reachOuts } : {}), ...(options.upcoming ? { upcoming: options.upcoming } : {}), ...(options.phone ? { phone: options.phone } : {}),
     ...(options.ownerContext ? { ownerContext: options.ownerContext } : {}), ...(options.log ? { log: options.log } : {}),
   });
   const loop = newLoop('runner-a');

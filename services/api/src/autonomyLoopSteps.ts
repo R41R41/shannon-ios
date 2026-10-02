@@ -10,13 +10,14 @@ import type { ReachOutFacts } from './autonomyLoopObservations.js';
 import type { AutonomyReachOutObserver } from './autonomyLoopObserve.js';
 import type { AutonomyOwnerContext } from './autonomyLoopOwnerContext.js';
 import { prepareRest, sessionOf } from './autonomyLoopPacing.js';
+import { preparePhoneCall, type AutonomyPhone } from './autonomyLoopPhoneStep.js';
 import { prepareReachOut, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
 import { storyNotes, withNoteAfterReading } from './autonomyLoopPlan.js';
 import { AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, revisePrompt } from './autonomyLoopPrompts.js';
 import type { AutonomyLoopCycle, AutonomyPlannedStep } from './autonomyLoopState.js';
 import { prepareThinking } from './autonomyLoopThinkStep.js';
 import type { AutonomyModelPurpose } from './autonomyModels.js';
-import type { AutonomousActionRequest, AutonomyDecision } from './autonomyPolicy.js';
+import { AUTONOMY_CALL_DOMAIN, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { AutonomyPublicReader } from './autonomyReader.js';
 import type { ShannonAutonomyService } from './autonomyService.js';
 import type { ShowingOutcome, StudyShowing } from './autonomyShowing.js';
@@ -54,6 +55,8 @@ export interface StepDependencies {
   looks?: AutonomyRoomLooks;
   /** Speaking up to the owner on her own; absent, a reach-out is never planned. */
   reachOuts?: AutonomyReachOuts;
+  /** Phoning the owner's iPhone; absent, a call is never planned and no prompt speaks of one. */
+  phone?: AutonomyPhone;
   /** The owner's upcoming items, for a reach-out; absent, there are none. */
   upcoming?: AutonomyUpcoming;
   /** What her body reported about a message of hers and what the server knows of the body; absent, both are unknown. */
@@ -79,6 +82,7 @@ export interface BoundAdapters {
   folder?: HostFolderDesk;
   looks?: AutonomyRoomLooks;
   reachOuts?: AutonomyReachOuts;
+  phone?: AutonomyPhone;
 }
 
 export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domain'>, dependencies: StepDependencies): BoundAdapters {
@@ -88,6 +92,8 @@ export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domai
     case 'public_read': return { reader: dependencies.reader };
     // Telling him a story is ready, or one message of her own: the latter also needs the model that words it.
     case 'owner_message': return { showing: dependencies.showing, ...(dependencies.reachOuts ? { reachOuts: dependencies.reachOuts, model: dependencies.model } : {}) };
+    // A call to his iPhone: the model that words her opening line, the path her line takes into the Talk, and the phone.
+    case AUTONOMY_CALL_DOMAIN: return dependencies.reachOuts && dependencies.phone ? { reachOuts: dependencies.reachOuts, model: dependencies.model, phone: dependencies.phone } : {};
     case NOTION_READ_DOMAIN: return dependencies.notion ? { notion: dependencies.notion } : {};
     case 'host_folder': return { folder: dependencies.service.folder };
     case ROOM_LOOK_DOMAIN: return dependencies.looks ? { looks: dependencies.looks } : {};
@@ -142,7 +148,8 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
-    case 'reach_out': return step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
+    case 'reach_out': return step.call ? preparePhoneCall(dependencies, cycle, step, at)
+      : step.reason === 'follow_up' ? prepareFollowUp(dependencies, cycle, step, at) : prepareReachOut(dependencies, cycle, step, at);
     case 'jot': return prepareJot(dependencies, cycle, step, at);
     case 'rest': return prepareRest(dependencies, cycle, step);
     default: return null;
@@ -369,7 +376,7 @@ export function unpreparedCode(dependencies: Pick<StepDependencies, 'store'>, cy
   if (step.kind === 'draft' && openStories(dependencies, cycle.scopeKey) >= STUDY_LIMITS.openStories) return 'draft.study_full';
   if (step.kind === 'read' && step.url && dependencies.store.loop.wasRead(cycle.scopeKey, step.url)) return 'read.already_read';
   if (step.kind === 'note' && !dependencies.store.loop.unnotedReadings(cycle.scopeKey).some(reading => reading.text)) return 'note.nothing_read';
-  return `${step.kind === 'reach_out' && step.reason === 'follow_up' ? 'follow_up' : step.kind}.unavailable`;
+  return `${step.kind === 'reach_out' && step.call ? 'call' : step.kind === 'reach_out' && step.reason === 'follow_up' ? 'follow_up' : step.kind}.unavailable`;
 }
 
 /** Stories that are open in her study: drafts and those she called 「見せてもいい」. */

@@ -9,8 +9,12 @@ import { secureDatabaseFiles } from './sqliteStoreContext.js';
  * the first to hold the message's claim. The claim is one row whose primary key is the message, so
  * two devices that ask at the same instant cannot both get it, and it stays through a restart.
  * A claim holds identifiers, a closed surface and a timestamp; no text.
+ *
+ * `iphone_call` (owner decision 2026-10-03, `docs/incoming-call-contract.md`): the server rang the owner's iPhone
+ * with this message. The table's own check knows three surfaces, so such a claim is stored as `iphone` with
+ * `via = 'call'`, a column added afterwards, and read back as `iphone_call`.
  */
-export const REACH_OUT_SURFACES = ['body', 'mac', 'iphone'] as const;
+export const REACH_OUT_SURFACES = ['body', 'mac', 'iphone', 'iphone_call'] as const;
 export type ReachOutSurface = typeof REACH_OUT_SURFACES[number];
 
 export interface ReachOutClaim { deviceId: string; surface: ReachOutSurface; claimedAt: string; /** When the holder said it had spoken the message; null until then. */ spokenAt: string | null }
@@ -47,6 +51,13 @@ export class SQLiteReachOutClaims {
         PRIMARY KEY (scope_key, initiative_id, device_id)
       );
     `);
+    // Added after the table first shipped. Two processes may start at once: the loser of the race finds the column there.
+    const columns = this.database.prepare(`PRAGMA table_info('reach_out_claims')`).all() as unknown as Array<{ name: string }>;
+    if (!columns.some(column => column.name === 'via')) {
+      try { this.database.exec('ALTER TABLE reach_out_claims ADD COLUMN via TEXT'); } catch (error) {
+        if (!(error instanceof Error && /duplicate column/iu.test(error.message))) throw error;
+      }
+    }
     secureDatabaseFiles(path);
   }
 
@@ -56,8 +67,8 @@ export class SQLiteReachOutClaims {
    */
   claim(scopeKey: string, initiativeId: string, deviceId: string, surface: ReachOutSurface, at: string): ReachOutClaimResult {
     const inserted = this.database.prepare(`
-      INSERT OR IGNORE INTO reach_out_claims (scope_key, initiative_id, device_id, surface, claimed_at) VALUES (?, ?, ?, ?, ?)
-    `).run(scopeKey, initiativeId, deviceId, surface, at);
+      INSERT OR IGNORE INTO reach_out_claims (scope_key, initiative_id, device_id, surface, claimed_at, via) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, initiativeId, deviceId, surface === 'iphone_call' ? 'iphone' : surface, at, surface === 'iphone_call' ? 'call' : null);
     if (Number(inserted.changes) > 0) return 'claimed';
     return this.holder(scopeKey, initiativeId)?.deviceId === deviceId ? 'held' : 'taken';
   }
@@ -96,7 +107,7 @@ export class SQLiteReachOutClaims {
 
   holder(scopeKey: string, initiativeId: string): ReachOutClaim | null {
     const row = this.database.prepare(`
-      SELECT device_id, surface, claimed_at, spoken_at FROM reach_out_claims WHERE scope_key = ? AND initiative_id = ?
+      SELECT device_id, surface, claimed_at, spoken_at, via FROM reach_out_claims WHERE scope_key = ? AND initiative_id = ?
     `).get(scopeKey, initiativeId) as unknown as ClaimRow | undefined;
     return row ? claimOf(row) : null;
   }
@@ -105,14 +116,14 @@ export class SQLiteReachOutClaims {
   unread(scopeKey: string): readonly UnreadReachOut[] {
     if (!this.tableExists('initiative_messages')) return [];
     const rows = this.database.prepare(`
-      SELECT m.initiative_id, m.created_at, c.device_id, c.surface, c.claimed_at, c.spoken_at
+      SELECT m.initiative_id, m.created_at, c.device_id, c.surface, c.claimed_at, c.spoken_at, c.via
       FROM initiative_messages m LEFT JOIN reach_out_claims c ON c.scope_key = m.scope_key AND c.initiative_id = m.initiative_id
       WHERE m.scope_key = ? AND m.read_at IS NULL AND m.source_item_id LIKE ?
       ORDER BY m.created_at DESC LIMIT 20
-    `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as Array<{ initiative_id: string; created_at: string; device_id: string | null; surface: string | null; claimed_at: string | null; spoken_at: string | null }>;
+    `).all(scopeKey, `${REACH_OUT_SOURCE_PREFIX}%`) as unknown as Array<{ initiative_id: string; created_at: string; device_id: string | null; surface: string | null; claimed_at: string | null; spoken_at: string | null; via: string | null }>;
     return rows.map(row => ({
       id: row.initiative_id, createdAt: row.created_at,
-      claim: row.device_id && row.surface && row.claimed_at ? claimOf({ device_id: row.device_id, surface: row.surface, claimed_at: row.claimed_at, spoken_at: row.spoken_at }) : null,
+      claim: row.device_id && row.surface && row.claimed_at ? claimOf({ device_id: row.device_id, surface: row.surface, claimed_at: row.claimed_at, spoken_at: row.spoken_at, via: row.via }) : null,
     }));
   }
 
@@ -138,6 +149,15 @@ export class SQLiteReachOutClaims {
     `).get(scopeKey, after));
   }
 
+  /** When the owner last wrote or spoke in any Talk, or null. A timestamp; no content is read. */
+  ownerLastActiveAt(scopeKey: string): string | null {
+    if (!this.tableExists('conversation_messages')) return null;
+    const row = this.database.prepare(`
+      SELECT MAX(observed_at) AS latest FROM conversation_messages WHERE scope_key = ? AND role = 'user'
+    `).get(scopeKey) as unknown as { latest: string | null };
+    return row.latest ?? null;
+  }
+
   close(): void {
     if (this.database.isOpen) this.database.close();
   }
@@ -147,9 +167,9 @@ export class SQLiteReachOutClaims {
   }
 }
 
-interface ClaimRow { device_id: string; surface: string; claimed_at: string; spoken_at: string | null }
+interface ClaimRow { device_id: string; surface: string; claimed_at: string; spoken_at: string | null; via?: string | null }
 
 function claimOf(row: ClaimRow): ReachOutClaim | null {
-  const surface = REACH_OUT_SURFACES.find(value => value === row.surface);
+  const surface = row.via === 'call' ? 'iphone_call' : REACH_OUT_SURFACES.find(value => value === row.surface);
   return surface ? { deviceId: row.device_id, surface, claimedAt: row.claimed_at, spokenAt: row.spoken_at ?? null } : null;
 }

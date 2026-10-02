@@ -39,7 +39,8 @@ export interface ShannonEmotionTiming {
   lingeringMaxWallMs: number;
   /**
    * An apology stays: for this long (awake) after a feeling was eased, the same kind of feeling is not
-   * brought back up by anything that is not above the height it had before.
+   * brought back up by anything that is not above the height it had before. For the same time a feeling
+   * that was eased (by him, or by a strong feeling of the opposite sign) is not eased again by a contrary feeling.
    */
   easedHoldMs: number;
 }
@@ -61,6 +62,8 @@ export const SHANNON_EMOTION_TIME: Readonly<ShannonEmotionTiming> = Object.freez
 export const SHANNON_EMOTION_CONTINUITY = Object.freeze({
   /** Below this present strength a feeling has settled. */
   settledBelow: 0.15,
+  /** Below this a feeling does not show. A mood of which less is left no longer bars a new feeling of its kind, nor holds its place against one. */
+  visibleFrom: 0.3,
   /** A mood-like feeling toward the owner expressed at least this strongly stays underneath as her mood. */
   moodFrom: 0.5,
   /** At least this strong, it lingers for one to two awake days. */

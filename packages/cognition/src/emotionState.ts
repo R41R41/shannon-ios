@@ -70,6 +70,11 @@ export function isMoodLikeEmotion(kind: ShannonEmotionKind): boolean {
   return MOOD_LIKE.has(kind);
 }
 
+/** An unpleasant feeling that is kept underneath as her mood toward the owner (what his apology eases). Tones such as tired are not. */
+export function isKeptUnpleasant(kind: ShannonEmotionKind): boolean {
+  return MOOD_LIKE.has(kind) && NEGATIVE.has(kind);
+}
+
 /**
  * Cues in Shannon's own completed reply. They describe how she just spoke, so
  * they are evidence of her feeling; the speaker's words are never matched here.
@@ -105,6 +110,8 @@ const FINAL_CUES: readonly { emotion: ShannonEmotionKind; pattern: RegExp }[] = 
   { emotion: 'gratitude', pattern: /(?:ありがとうございます|感謝)/u },
 ];
 
+/** The strength a cue word in her own reply gives the feeling it names: enough for a mood of hours, never for days. */
+export const SHANNON_EMOTION_CUE_STRENGTH = 0.52;
 /** Below this carry-over a previous feeling no longer continues into a new turn. */
 export const SHANNON_EMOTION_CARRY_THRESHOLD = 0.28;
 export const SHANNON_SETTLED_CAUSE = '前の気持ちは時間とともに落ち着いた';
@@ -134,6 +141,8 @@ export interface ResolveShannonEmotionInput {
   target?: string;
   /** The caller already decided by `holdsShannonFeeling` that this stimulus replaces the present feeling (a touch). */
   replaces?: boolean;
+  /** Decided by the writer of the reply itself (a text turn): a cue word of another kind does not rename it and stays beside it. Absent (voice), the cue names the kind. */
+  decidedKindWins?: boolean;
 }
 
 export function isShannonEmotionKind(value: string): value is ShannonEmotionKind {
@@ -212,6 +221,7 @@ export function resolveShannonEmotionState(
   let overrideReason: ShannonExpressiveEmotion['overrideReason'];
   let cause = reply ? REPLY_CAUSE : PROVISIONAL_CAUSE;
   let fromCue = false;
+  let cueBeside: ShannonEmotionKind | undefined;
 
   const support = supportOverrideFor(transcript);
   if (support === 'emergency') {
@@ -226,9 +236,12 @@ export function resolveShannonEmotionState(
     cause = '深い悲しみや喪失へ静かに寄り添う';
   } else {
     const finalCue = FINAL_CUES.find(rule => rule.pattern.test(reply));
-    if (finalCue) {
+    if (finalCue && input.decidedKindWins && primary !== 'neutral' && finalCue.emotion !== primary) {
+      // The writer of this reply decided its feeling: kind and strength stand, and the word is kept beside it.
+      cueBeside = finalCue.emotion;
+    } else if (finalCue) {
       primary = finalCue.emotion;
-      intensity = Math.max(intensity, 0.52);
+      intensity = Math.max(intensity, SHANNON_EMOTION_CUE_STRENGTH);
       // Her own words name the feeling. Its strength was decided for this reply only when the same kind was decided at
       // least as strongly as the cue's floor; a strength that comes from the floor alone is the cue's.
       fromCue = provisional.primary !== primary || provisional.intensity < intensity;
@@ -240,7 +253,9 @@ export function resolveShannonEmotionState(
     }
   }
 
-  if (accuracyOverrideApplies(combined, primary, PLAYFUL.has(primary) || ATTACHMENT.has(primary))) {
+  const playsWith = (kind: ShannonEmotionKind) => accuracyOverrideApplies(combined, kind, PLAYFUL.has(kind) || ATTACHMENT.has(kind));
+  // Play in her words is still play when the decided kind stands beside it: accuracy replaces it as before.
+  if (playsWith(primary) || (cueBeside !== undefined && playsWith(cueBeside))) {
     primary = /(?:ごめん|申し訳|失敗)/u.test(combined) ? 'apologetic' : 'focused';
     intensity = Math.min(0.72, Math.max(0.45, intensity));
     overrideReason = 'safety';
@@ -263,7 +278,12 @@ export function resolveShannonEmotionState(
         const easable = shannonEmotionSign(primary) < 0 && !SUPPORT.has(primary);
         // He eased it a moment ago: nothing short of its earlier height brings it back up.
         const eased = previous.easedPeak !== undefined && decidedStrength <= previous.easedPeak;
-        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable)) {
+        // An unpleasant mood toward the owner is a new, stronger one only above the height it was stored at, not above
+        // what it has faded to since: the same strength decided turn after turn does not keep it up.
+        const belowHeight = isKeptUnpleasant(primary) && decidedStrength <= (previous.heights?.[primary] ?? previous.intensity)
+          // Only while what is left of it still shows: once it is out of sight, the same strength is a new feeling.
+          && (previous.strengths?.[primary] ?? previous.intensity) >= SHANNON_EMOTION_CONTINUITY.visibleFrom;
+        if (eased || intensity <= previous.intensity || (decidedStrength <= previous.intensity && easable) || belowHeight) {
           return continuedShannonEmotion(previous, primary, input.now);
         }
       }
@@ -275,14 +295,28 @@ export function resolveShannonEmotionState(
       // Her concern or apology on top does not lower the bar: the mood it covers still holds against a weaker stimulus.
       || (previous.underneath !== undefined && holdsShannonFeeling(previous.underneath, { primary, intensity, overrideReason })))) {
       return continuedShannonEmotion(previous, primary, input.now);
+    } else if (!input.replaces && isKeptUnpleasant(primary) && intensity <= (previous.heights?.[primary] ?? -1)
+      && (previous.strengths?.[primary] ?? 0) >= SHANNON_EMOTION_CONTINUITY.visibleFrom) {
+      // The same bar when another feeling is on top and gives way: an unpleasant mood alive underneath is not stored anew at
+      // a strength it already had. It goes on, and the reply shows it at what is left of it, unless what is on top is owed
+      // to the owner (an override, her concern or apology). Once too little is left to show, it is a new feeling instead.
+      const owed = previous.overrideReason !== undefined || (SUPPORT.has(previous.primary) && previous.intensity >= 0.3);
+      return owed ? continuedShannonEmotion(previous, primary, input.now) : resurfacedShannonEmotion(previous, primary, previous.strengths?.[primary] ?? 0, input.now);
+    } else if (!input.replaces && isKeptUnpleasant(primary) && previous.heights?.[primary] === undefined
+      && intensity >= SHANNON_EMOTION_CONTINUITY.moodFrom && intensity <= (previous.placeAbove ?? -1)) {
+      // Every place underneath is held by an unpleasant mood at least this strong: a further one is not a new mood of hers.
+      return continuedShannonEmotion(previous, primary, input.now);
     }
   }
 
-  const secondary = previous && previous.primary !== primary
+  const carried = previous && previous.primary !== primary
     && (reading ? previous.primary !== 'neutral' : previous.carryover >= 0.24)
     && !unsafeCombination(primary, previous.primary)
     ? [previous.primary]
     : [];
+  // No override took the reply: the cue word her decided feeling did not follow is the feeling beside it.
+  const secondary = cueBeside && !overrideReason && cueBeside !== primary && !unsafeCombination(primary, cueBeside)
+    ? [cueBeside, ...carried.filter(kind => kind !== cueBeside)] : carried;
   const profile = emotionProfile(primary, intensity);
   const sameEpisode = previous?.primary === primary && !overrideReason;
   const decay = decayFor(primary);
@@ -342,12 +376,25 @@ export function continuedShannonEmotion(
   now: string,
 ): ShannonExpressiveEmotion {
   const { presentAt: _presentAt, ...kept } = previous;
-  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, ...rest } = kept;
+  const { continued: _continued, decided: _decided, underneath: _underneath, easedPeak: _easedPeak, heights: _heights, strengths: _strengths, placeAbove: _placeAbove, ...rest } = kept;
   const secondary = incoming !== 'neutral' && incoming !== previous.primary && !unsafeCombination(previous.primary, incoming)
     ? [incoming, ...previous.secondary.filter(kind => kind !== incoming)].slice(0, 2)
     : previous.secondary;
   return Object.freeze({
     ...rest, secondary: Object.freeze([...secondary]), visibility: visibilityFor(previous.intensity), updatedAt: validTimestamp(now),
+    continued: true,
+  });
+}
+
+/** A mood underneath comes up for this reply at what is left of it; it goes on (`continued`), so nothing is stored; the feeling it replaces stays beside it. */
+function resurfacedShannonEmotion(previous: ShannonExpressiveEmotion, kind: ShannonEmotionKind, strength: number, now: string): ShannonExpressiveEmotion {
+  const intensity = clamp(strength, 0, 1);
+  const secondary = previous.primary !== 'neutral' && previous.primary !== kind && !unsafeCombination(kind, previous.primary) ? [previous.primary] : [];
+  return Object.freeze({
+    primary: kind, secondary: Object.freeze(secondary), intensity, target: 'ライ氏', cause: CARRIED_CAUSE,
+    ...emotionProfile(kind, intensity), visibility: visibilityFor(intensity), startedAt: validTimestamp(now),
+    decay: decayFor(kind), carryover: intensity, updatedAt: validTimestamp(now),
+    ...(previous.awakeAt !== undefined ? { awakeAt: previous.awakeAt } : {}),
     continued: true,
   });
 }

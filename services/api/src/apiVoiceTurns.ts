@@ -1,5 +1,6 @@
 import { UNKNOWN_GUEST_PRESENCE, type CompanionStateStore } from '@shannon/cognition';
 import { presentCompanionState, resolveReplyEmotion } from './companionPresence.js';
+import { storedVoiceFace } from './voiceEmotionPlan.js';
 import { objectBody, validScopeKey, validBoundedString, badRequest } from './apiValidation.js';
 import type { ApiRequest, ApiResponse } from './contracts.js';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
@@ -46,8 +47,9 @@ export function dispatchVoiceTurn(request: ApiRequest, dependencies: {
   const completedAt = dependencies.now();
   // The stored face is the feeling the voice acted with: the client returns the reconciled
   // emotion of this reply. Older clients send none; the reply's own cues decide instead.
-  const { messageEmotion } = resolveReplyEmotion({ snapshot: captured, userMessage, reply: shannonReply, now: completedAt,
-    ...(decidedEmotion(request.body.emotion) ?? {}) });
+  const voiced = decidedEmotion(request.body.emotion);
+  const messageEmotion = storedVoiceFace(resolveReplyEmotion({ snapshot: captured, userMessage, reply: shannonReply, now: completedAt,
+    ...(voiced ?? {}) }), voiced?.decided);
   // Someone else was listening: the turn stays in the owner's thread, marked, and teaches nothing about the owner.
   const companion = request.body.companionPresent === true || ownerSaysCompanionPresent(userMessage)
     ? { audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const } : {};

@@ -53,8 +53,10 @@ describe('canonical Shannon persona', () => {
   it('stays compact enough for the response path', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(1_919); // +125 on 2026-10-02: the look through the app (owner decision).
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(2_849);
+    // +125 on 2026-10-02: the look through the app. 2026-10-03: +74, it does not announce a look by itself; and the phone call
+    // line with no count of messages a day (owner decisions).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_097);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_033);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });
@@ -138,7 +140,7 @@ describe('canonical capability description', () => {
   it('states the look through the app (owner decision 2026-10-02): when asked or curious, one frame, not kept, and when she cannot', () => {
     const line = SHANNON_CAPABILITIES.find(item => item.id === 'app_look')!;
     expect(line.audience).toBe('owner');
-    for (const part of ['これ見れる？', '自分が見たくなったら', '一度だけ見て', '写した1枚は残さない', '画面に出ていない', '許可がない', '設定で切ってある', '見られないと伝える']) {
+    for (const part of ['これ見れる？', '自分が見たくなったら', '一度だけ見て', '写した1枚は残さない', '画面に出ていない', '許可がない', '設定で切ってある', '見られないと伝える', '指示がない返事では見ると言わない', '見えたものとして語らない']) {
       expect(line.text, part).toContain(part);
     }
     expect(shannonCapabilityPrompt('owner')).toContain(line.text);

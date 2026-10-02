@@ -173,8 +173,8 @@ describe('(a) continuity across conversations, voice', () => {
       body: { scopeKey: scope, threadId: 'thread', transcript: '今日の予定を確認して' } });
     const held = (next.body as { voicePlan: Record<string, any> }).voicePlan;
     expect(held.emotion.primary).toBe('sulky');
-    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt', 'underneath', 'easedPeak']) expect(held.emotion).not.toHaveProperty(key);
-    expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"|"awakeAt"|"cause"/u);
+    for (const key of ['cause', 'awakeAt', 'continued', 'decided', 'presentAt', 'underneath', 'easedPeak', 'heights', 'strengths']) expect(held.emotion).not.toHaveProperty(key);
+    expect(JSON.stringify(next.body)).not.toMatch(/"continued"|"decided"|"presentAt"|"awakeAt"|"cause"|"heights"|"strengths"/u);
     // Carrying it through that turn stored nothing new: what is underneath is the entry from the night.
     expect(state().lingering).toMatchObject([{ kind: 'sulky', startedAt: NIGHT, strength: 0.52 }]);
   });

@@ -7,6 +7,8 @@ import { sendJson } from './serverHttp.js';
 export interface ServerDeviceRouteDependencies {
   deviceAuth: SQLiteDeviceAuthStore | null;
   pushStore: SQLitePushNotificationStore;
+  /** Told about a device that was just unpaired, so that whatever else is kept for it (its call token) goes too. */
+  revoked?: (deviceId: string) => void;
 }
 
 export function handleDeviceManagement(
@@ -55,6 +57,7 @@ export function handleDeviceManagement(
     return;
   }
   dependencies.pushStore.invalidateDevice(deviceId);
+  try { dependencies.revoked?.(deviceId); } catch { /* the device is unpaired either way */ }
   sendJson(response, 200, { revokedDeviceId: deviceId });
 }
 
