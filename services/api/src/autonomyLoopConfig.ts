@@ -72,7 +72,7 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     leaseMilliseconds: integer(environment.SHANNON_AUTONOMY_LEASE_SECONDS, 240, 3_600, 600) * 1_000,
     budgetRequestYen: integer(environment.SHANNON_AUTONOMY_BUDGET_REQUEST_YEN, 1, 100_000, 300),
     readingSeeds: readingSeeds(environment.SHANNON_AUTONOMY_READING_SEEDS_JSON),
-    pacing: environment.SHANNON_AUTONOMY_PACING?.trim() === 'cycles' ? 'cycles' as const : 'sessions' as const,
+    pacing: autonomyPacing(environment),
     sessionMaximumYen: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_YEN, 1, 100_000, 400),
     sessionMaximumMilliseconds: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_MINUTES, 1, 240, 40) * 60_000,
     maximumStepsPerSession: integer(environment.SHANNON_AUTONOMY_SESSION_MAX_STEPS, 2, 200, 40),
@@ -81,6 +81,12 @@ export function configuredAutonomyLoop(environment: Readonly<Record<string, stri
     ownerContext: environment.SHANNON_AUTONOMY_OWNER_CONTEXT?.trim() !== 'off',
     ownerContextCharacters: integer(environment.SHANNON_AUTONOMY_OWNER_CONTEXT_CHARACTERS, 400, 8_000, 2_400),
   });
+}
+
+/** `sessions` when unset or named; any other value is the fixed cycles, so a mistyped kill switch still switches sessions off. */
+export function autonomyPacing(environment: Readonly<Record<string, string | undefined>> = process.env): 'sessions' | 'cycles' {
+  const value = environment.SHANNON_AUTONOMY_PACING?.trim();
+  return !value || value === 'sessions' ? 'sessions' : 'cycles';
 }
 
 /** The rests she may take between sessions: the shortest is never under ten minutes' default, and the default lies between the two. */

@@ -209,7 +209,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
   const reading = (step.readingId ? store.loop.reading(cycle.scopeKey, step.readingId) : null) ?? store.loop.unnotedReadings(cycle.scopeKey)[0] ?? null;
   if (!reading || reading.notedAt || !reading.text) return null;
   const pursuit = reading.pursuitId ? store.pursuits.get(cycle.scopeKey, reading.pursuitId) : null;
-  const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading }), OUTPUT_TOKENS.note);
+  const call = paidCall(dependencies, cycle.scopeKey, 'research_reading', notePrompt({ pursuit, reading, ...ownerInformed(dependencies) }), OUTPUT_TOKENS.note);
   if (!call) return null;
   return {
     request: { domain: 'aether_study', summary: '読んだものについて、書斎にメモを書きます。', tool: 'study.note', paid: { model: call.model, estimatedCostYen: call.estimatedCostYen } },

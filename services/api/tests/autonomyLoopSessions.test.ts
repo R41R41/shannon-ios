@@ -104,7 +104,7 @@ describe('a session: she runs until she decides to rest', () => {
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', restReason: '読めなかったので' });
   });
 
-  it('ends when the thinking model gives nothing it can use, and a thought that fails later leaves the plan as it was', async () => {
+  it('ends when the thinking model gives nothing it can use', async () => {
     const { loop, model, store } = sessions();
     model.plans = ['これはJSONではありません'];
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
@@ -125,7 +125,8 @@ describe('a session: what stops it when she does not', () => {
     expect(spent).toBeGreaterThan(30);
     expect(spent).toBeLessThanOrEqual(60);
     expect(spent).toBe(service.overview(scope).budget.spentYen);
-    // No step was allowed whose estimate did not fit: at every paid step, what was spent before it plus its estimate was inside the cap.
+    // No step was allowed whose estimate did not fit: every call here costs exactly its estimate, and the sum stayed inside the cap.
+    expect(store.loop.steps(session.cycleId).filter(step => step.estimate).length).toBeGreaterThanOrEqual(3);
     const closing = entries().find(entry => entry.kind === 'action' && entry.tool === 'study.rest')!;
     expect(closing).toMatchObject({ reasonCode: 'session_budget', summary: '一度に使える金額の上限に届いたので、ここで一区切りにしました。次は12:30ごろに考えます。' });
     expect(store.loop.steps(session.cycleId).at(-1)!.step).toEqual({ kind: 'rest', forced: 'session_budget' });
@@ -223,7 +224,7 @@ describe('a session: what stops it when she does not', () => {
     advance(21 * HOUR);
     model.plans = [{ thought: '休みます。', steps: [rest(60)] }];
     await runUntilIdle(loop);
-    expect(facts(model.prompts('think').at(-1)!)).toContain('- 前の時間: 10:00に、今日の予算に収まらない一歩があって、そこで止まった。');
+    expect(facts(model.prompts('think').at(-1)!)).toContain('- 前の時間: 10:00に、その日の予算に収まらない一歩があって、そこで止まった。');
   });
 });
 
@@ -275,7 +276,7 @@ describe('a session: the owner comes first', () => {
     showing.ownerActive = false;
     await runUntilIdle(loop);
     const told = facts(model.prompts('think')[1]!);
-    expect(told).toContain('- この時間の途中で、ライ氏が話しはじめたので手を止めていた（約50分）。計画はそのまま残っていた。');
+    expect(told).toContain('- この時間の途中で、手を止めていた（約50分）。ライ氏が話していたか、止められていたあいだのこと。計画はそのまま残っていた。');
     expect(told).toContain('あと約40分。');
   });
 
@@ -291,6 +292,15 @@ describe('a session: the owner comes first', () => {
     expect(await runUntilIdle(loop)).toEqual(['stepped', 'cycle-ended']);
     expect(model.kinds()).toEqual(['think', 'draft']);
     expect(store.loop.sessions.latestClosed(scope)).toMatchObject({ endCode: 'rest', heldMilliseconds: 3 * HOUR });
+  });
+
+  it('counts a session that runs past midnight on the day it began', async () => {
+    const { loop, model, clock } = sessions({ clock: { at: '2026-10-02T14:50:00.000Z' } });
+    model.plans = [{ thought: '読みます。', steps: [read('a')] }, { thought: '休みます。', steps: [rest(60)] }];
+    await loop.tick();
+    clock.at = '2026-10-02T15:05:00.000Z';
+    await runUntilIdle(loop);
+    expect(facts(model.prompts('think')[1]!)).toContain('- 動いた回数: この日はこれで1回目（1日12回まで）。');
   });
 
   it('does not charge her budget for what the owner asks of her in a conversation', async () => {
@@ -388,7 +398,7 @@ describe('a session: she sees her budget as facts', () => {
       '- 今日の予算: 2,000円。ここまでに0円使って、あと2,000円（物語の下書き約192回分）。',
       '- 予算が新しくなるのは次の0時（あと9時間55分）。残した分は明日に持ち越せない。',
       '- この時間: 14:05に始めて、ここまで0歩、0円使った。この時間のうちに使えるのはあと400円、あと39歩、あと約40分。',
-      '- 今日動いた回数: これで1回目（1日12回まで）。',
+      '- 動いた回数: この日はこれで1回目（1日12回まで）。',
       '- 一歩にかかるお金のめやす: 考える 約12円、読んだもののメモ 約9円、物語を書く 約10円、物語を直す 約13円。公開ページを読むこと自体は0円。',
       '- 読める回数: 今日あと200回',
     ].join('\n'));
@@ -448,7 +458,7 @@ describe('a session: she sees her budget as facts', () => {
       '- 今日の予算: 2,000円。ここまでに1,995円使って、あと5円（物語の下書き1回分には足りない）。',
       '- 予算が新しくなるのは次の0時（あと10分）。残した分は明日に持ち越せない。',
       '- この時間: 23:40に始めて、ここまで3歩、1円使った。この時間のうちに使えるのはあと5円、あと36歩、あと約30分。',
-      '- 今日動いた回数: これで12回目（1日12回まで）。',
+      '- 動いた回数: この日はこれで12回目（1日12回まで）。',
       '- 一歩にかかるお金のめやす: 考える 1円未満、物語を書く 約42円。公開ページを読むこと自体は0円。',
       '- 読める回数: 今日あと0回',
       '- 前の時間: 21:00に、一度に動ける時間の上限に届いて止まった（自分で休んだのではない）。',
@@ -546,7 +556,9 @@ describe('a session: what a day can cost', () => {
     // Twelve sessions of 400 yen are 4,800 yen: more than any day's cap without the owner's raise, so the day's cap is the bound.
     expect(loop.sessionsPerDay * loop.sessionMaximumYen).toBe(4_800);
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: 'cycles' }).pacing).toBe('cycles');
-    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: 'anything' }).pacing).toBe('sessions');
+    // A mistyped kill switch still switches sessions off; only no value, or `sessions`, is sessions.
+    for (const value of ['Cycles', 'cycle', 'off', 'anything']) expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: value }).pacing, value).toBe('cycles');
+    expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_PACING: ' sessions ' }).pacing).toBe('sessions');
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_OWNER_CONTEXT: 'off' }).ownerContext).toBe(false);
     // A default rest outside the bounds is held inside them.
     expect(configuredAutonomyLoop({ SHANNON_AUTONOMY_SESSION_MIN_REST_MINUTES: '30', SHANNON_AUTONOMY_SESSION_DEFAULT_REST_MINUTES: '5' }).sessionDefaultRestMilliseconds).toBe(30 * MINUTE);

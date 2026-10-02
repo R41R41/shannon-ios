@@ -46,7 +46,7 @@ const MESSAGE_CHARACTERS = 190;
 const RECENT_THREADS = 2;
 const MARKER = /【機微:[^】]*】/gu;
 /** How many texts her free text is checked against, and how much of each. What she was just shown comes first. */
-const SECRETS_MAXIMUM = 2_000;
+const SECRETS_MAXIMUM = 4_000;
 const SECRET_CHARACTERS = 2_000;
 
 type Mode = 'thinking' | 'message' | 'message_others';
@@ -71,7 +71,7 @@ export function createOwnerContext(sources: OwnerContextSources, options: { char
       part('〈最近のふたりの会話（古い順）〉', guarded(() => talk(sources, state, scopeKey, present, marked, budget * SHARE.talk, options.timeZone, unspeakable)), budget * SHARE.talk, 'newest'),
       part('〈いま追っていることに近い記憶〉', guarded(() => recalled(sources, state, scopeKey, at, topic, present, options.timeZone, unspeakable).map(shown)), budget * SHARE.recalled),
       ...(alone ? [part('〈覚えている人〉', guarded(() => people(sources, state, scopeKey, topic)), budget * SHARE.people)] : []),
-      part('〈今日の関心〉', guarded(() => focus(sources, gate, scopeKey, at, options.timeZone, marked)), budget * SHARE.focus),
+      part('〈今日の関心〉', guarded(() => focus(sources, gate, scopeKey, at, options.timeZone, marked, unspeakable)), budget * SHARE.focus),
     ].filter(Boolean);
     if (!parts.length) return null;
     const section = [OWNER_CONTEXT_HEADER, ...parts].join('\n');
@@ -122,7 +122,10 @@ function about(sources: OwnerContextSources, gate: DisclosureGate, state: Compan
   const lines = [
     ...newest(disclosed.userFacts).flatMap(item => line(item.id, item.statement, item.disclosure)),
     ...newest(disclosed.relationships).flatMap(item => line(item.id, item.statement, item.disclosure)),
-    ...newest(disclosed.prospectiveMemories.filter(item => item.status === 'pending')).flatMap(item => line(item.id, item.summary, item.disclosure, '約束: ')),
+    // A promise goes with the turn it was made in, as in the conversation's own prompt.
+    ...newest(disclosed.prospectiveMemories.filter(item => item.status === 'pending'
+      && (!item.sourceExperienceId || visibleMemoryText(state, item.sourceExperienceId, item.summary) !== null)))
+      .flatMap(item => line(item.id, item.summary, item.disclosure, '約束: ')),
     ...(interests.length ? [`- ${marked ? UNLABELLED_DISCLOSURE_MARKER : ''}最近の関心: ${interests.join('、')}`] : []),
   ];
   // The projection is already filtered for forgetting and corrections; it has no labels, so it is for her thinking only.
@@ -191,10 +194,11 @@ function people(sources: OwnerContextSources, state: CompanionStateSnapshot, sco
 }
 
 /** Today's focus: hers, built from his interests. Dropped when it repeats something that must not reach this audience. */
-function focus(sources: OwnerContextSources, gate: DisclosureGate, scopeKey: string, at: string, timeZone: string, marked: boolean): string[] {
+function focus(sources: OwnerContextSources, gate: DisclosureGate, scopeKey: string, at: string, timeZone: string, marked: boolean, unspeakable: Unspeakable | null): string[] {
   const current = sources.dailyMind?.currentFocus(scopeKey, at, timeZone);
   if (!current) return [];
   const text = `${current.topic}（${current.reason}）`;
+  if (unspeakable?.gate.mentionsWithheld(text)) unspeakable.words.push(current.topic, current.reason);
   return gate.mentionsWithheld(text) ? [] : [`- ${marked ? UNLABELLED_DISCLOSURE_MARKER : ''}${text}`];
 }
 
@@ -205,18 +209,26 @@ function focus(sources: OwnerContextSources, gate: DisclosureGate, scopeKey: str
  */
 function secrets(sources: OwnerContextSources, state: CompanionStateSnapshot, scopeKey: string, unspeakable: Unspeakable): string[] {
   const { gate } = unspeakable;
+  // Whatever of his state a conversation with an unnamed guest would not be given: an item withheld by its own label, and
+  // one derived from a withheld turn, whatever its own label says. Each with its wording as stored and as she is shown it.
+  const kept = gate.snapshot();
+  const missing = <T extends { id: string }>(all: readonly T[], open: readonly T[]) => all.filter(item => !open.some(other => other.id === item.id));
+  const worded = (id: string, text: string, evidence?: string) => [text, visibleMemoryText(state, id, text) ?? '', evidence ?? ''];
   const items = [
-    ...state.userFacts.filter(item => !gate.allows(item.id, item.disclosure)).flatMap(item => [item.statement, item.evidence ?? '']),
-    ...state.relationships.filter(item => !gate.allows(item.id, item.disclosure)).flatMap(item => [item.statement, item.evidence ?? '']),
-    ...state.prospectiveMemories.filter(item => !gate.allows(item.id, item.disclosure)).map(item => item.summary),
+    ...missing(state.userFacts, kept.userFacts).flatMap(item => worded(item.id, item.statement, item.evidence)),
+    ...missing(state.relationships, kept.relationships).flatMap(item => worded(item.id, item.statement, item.evidence)),
+    ...missing(state.prospectiveMemories, kept.prospectiveMemories).flatMap(item => worded(item.id, item.summary)),
+    ...state.interests.filter(interest => !kept.interests.includes(interest)),
   ];
   // A turn is withheld with its own label, and also when a secret was in front of her when she answered it.
   const turns = sources.conversations.experienceCandidates(scopeKey).filter(turn => !gate.allowsTurn(turn))
     .flatMap(turn => [turn.userMessage, turn.shannonReply]);
   const told = sources.people ? sources.people.recall(scopeKey, state, '', OWNER_AUDIENCE).items
     .filter(item => !gate.allows(item.recallId, item.disclosure)).map(item => item.text) : [];
-  return [...new Set([...unspeakable.words, ...items, ...turns, ...told].map(text => text.trim()).filter(Boolean))]
-    .slice(0, SECRETS_MAXIMUM).map(text => text.slice(0, SECRET_CHARACTERS));
+  const all = [...new Set([...unspeakable.words, ...items, ...told, ...turns].map(text => text.trim().slice(0, SECRET_CHARACTERS)).filter(Boolean))];
+  // A list too long to check in full would leave some of it unchecked: then she is given no block.
+  if (all.length > SECRETS_MAXIMUM) throw new Error('OWNER_CONTEXT_SECRETS_TOO_MANY');
+  return all;
 }
 
 function clip(value: string, maximum: number): string {

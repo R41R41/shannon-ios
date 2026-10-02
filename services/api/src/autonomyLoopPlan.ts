@@ -188,7 +188,8 @@ export function planFromThought(
       if (id && pursuitIds.has(id) && (status || why)) pursuits.push({ op: 'update', id, ...(status ? { status } : {}), ...(why ? { why } : {}) });
     }
   }
-  return { text: string(reply.thought, 240) ?? '', pursuits, steps };
+  // What she thought goes into her record: with a secret in it, the record says only that she thought.
+  return { text: own(string(reply.thought, 240)) ?? '', pursuits, steps };
 }
 
 /** A read is always followed by its note, whatever the plan said. */

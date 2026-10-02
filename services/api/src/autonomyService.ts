@@ -26,6 +26,7 @@ import { resolvePhysicalPath, type AutonomyPathResolver } from './autonomyPaths.
 import { authorizeAutonomousAction, type AutonomousActionRequest, type AutonomyDecision } from './autonomyPolicy.js';
 import type { ShannonAgentTaskProposal, ShannonProposalDraft } from './autonomyProposals.js';
 import type { PursuitDraft, PursuitRejection } from './autonomyPursuits.js';
+import { autonomyPacing } from './autonomyLoopConfig.js';
 import { autonomySessionView, type AutonomySessionView } from './autonomySessionView.js';
 import { SQLiteAutonomyStore, type AutonomyBudgetRequest } from './autonomyStore.js';
 import { StudyDesk } from './studyDesk.js';
@@ -314,7 +315,7 @@ export class ShannonAutonomyService {
     const control = this.store.control(scopeKey);
     const proposals = this.store.proposals.list(scopeKey);
     const budget = this.budget(scopeKey, dayKey);
-    const session = autonomySessionView(this.store.loop, scopeKey, at, this.config.timeZone);
+    const session = autonomyPacing() === 'sessions' ? autonomySessionView(this.store.loop, scopeKey, at, this.config.timeZone) : null;
     return Object.freeze({
       control: {
         state: !this.config.enabled ? 'disabled' as const : control.paused ? 'paused' as const : 'active' as const,

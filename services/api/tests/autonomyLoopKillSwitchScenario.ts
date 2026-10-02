@@ -6,7 +6,7 @@ import { draftPrompt, notePrompt, reachOutPrompt, revisePrompt, roomLookNoteProm
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import { SQLiteReachOutSpeaker } from '../src/reachOutDelivery.js';
 import { SQLiteShannonStore } from '../src/sqliteStore.js';
-import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
+import { FULL_PLAN, FakeModel, FakeShowing, callKind, loopHarness, runUntilIdle, scope, type LoopHarnessOptions } from './autonomyLoopHarness.js';
 
 /**
  * One fixed day of her own activity, with every step kind and every optional part of a prompt, run with the
@@ -24,7 +24,7 @@ export function digest(text: string): string {
 export interface ScenarioCall { kind: string; digest: string }
 
 /** The loop with act → observe → think again on: every prompt it sends, in order. */
-export async function agenticDay(directory: string): Promise<ScenarioCall[]> {
+export async function agenticDay(directory: string, extra: Partial<LoopHarnessOptions> = {}): Promise<ScenarioCall[]> {
   const path = join(directory, 'kill-switch-agentic.sqlite');
   const clock = { at: '2026-10-02T01:00:00.000Z' };
   const now = () => clock.at;
@@ -43,7 +43,7 @@ export async function agenticDay(directory: string): Promise<ScenarioCall[]> {
     roomLooks: () => ({ lastHour: 0, maximumPerHour: 6, today: 0, maximumPerDay: 30 }),
     upcoming: { lines: () => [{ kindLabel: '予定', title: '歯医者', when: '今日 15:00〜16:00' }, { kindLabel: '約束', title: '母に電話する', when: '今日 17:00' }] },
     environment: { SHANNON_AUTONOMY_MAX_REACH_OUTS: '6', SHANNON_AUTONOMY_HOST_FOLDERS_JSON: '{"mac":{"deviceId":"0123456789abcdef"}}' },
-    loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0 },
+    ...extra, loop: { cycleIntervalMilliseconds: MINUTE, cyclesPerDay: 24, reachOutSpacingMilliseconds: 0, ...extra.loop },
   });
   const cycle = async (plans: unknown[], minutes = 10) => {
     harness.advance(minutes * MINUTE);

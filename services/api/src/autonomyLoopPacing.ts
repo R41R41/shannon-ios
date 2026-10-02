@@ -167,7 +167,8 @@ export function sessionFacts(
       remainingMinutes: Math.max(0, (loop.sessionMaximumMilliseconds - elapsed) / 60_000),
       heldMinutes: session.heldMilliseconds / 60_000,
     },
-    sessionsToday: store.loop.sessions.startedOn(cycle.scopeKey, autonomyDayKey(at, config)), sessionsPerDay: loop.sessionsPerDay,
+    // Counted on the day the session began, so a session that runs past midnight is still that day's.
+    sessionsToday: store.loop.sessions.startedOn(cycle.scopeKey, session.dayKey), sessionsPerDay: loop.sessionsPerDay,
     typical: typical.map(item => ({ label: item.label, yen: item.yen })),
     ...(typical.find(item => item.tool === 'study.draft') ? { draftYen: typical.find(item => item.tool === 'study.draft')!.yen } : {}),
     remainingReads: input.remainingReads,

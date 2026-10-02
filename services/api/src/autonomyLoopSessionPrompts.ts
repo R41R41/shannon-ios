@@ -57,7 +57,7 @@ const STOPPED: Readonly<Record<Exclude<SessionEndCode, 'rest'>, string>> = Objec
   session_budget: '一度に使える金額の上限に届いて止まった（自分で休んだのではない）',
   session_time: '一度に動ける時間の上限に届いて止まった（自分で休んだのではない）',
   session_steps: '一度にできる歩数の上限に届いて止まった（自分で休んだのではない）',
-  budget: '今日の予算に収まらない一歩があって、そこで止まった',
+  budget: 'その日の予算に収まらない一歩があって、そこで止まった',
   no_plan: '次の一歩が決まらなかったので、そこで終わった',
 });
 
@@ -86,8 +86,8 @@ export function sessionFactsSection(facts: SessionFacts): string {
     `- 今日の予算: ${yen(facts.capYen)}。ここまでに${yen(Math.ceil(facts.spentYen))}使って、あと${yen(facts.remainingYen)}${worth}。`,
     `- 予算が新しくなるのは次の0時（あと${duration(facts.resetInMinutes)}）。残した分は明日に持ち越せない。`,
     `- この時間: ${facts.session.startedClock}に始めて、ここまで${facts.session.steps}歩、${yen(Math.ceil(facts.session.spentYen))}使った。この時間のうちに使えるのはあと${yen(facts.session.remainingYen)}、あと${facts.session.remainingSteps}歩、あと約${duration(facts.session.remainingMinutes)}。`,
-    ...(facts.session.heldMinutes >= 1 ? [`- この時間の途中で、${SHANNON_OWNER_NAME}が話しはじめたので手を止めていた（約${duration(facts.session.heldMinutes)}）。計画はそのまま残っていた。`] : []),
-    `- 今日動いた回数: これで${facts.sessionsToday}回目（1日${facts.sessionsPerDay}回まで）。`,
+    ...(facts.session.heldMinutes >= 1 ? [`- この時間の途中で、手を止めていた（約${duration(facts.session.heldMinutes)}）。${SHANNON_OWNER_NAME}が話していたか、止められていたあいだのこと。計画はそのまま残っていた。`] : []),
+    `- 動いた回数: この日はこれで${Math.max(1, facts.sessionsToday)}回目（1日${facts.sessionsPerDay}回まで）。`,
     ...(facts.typical.length ? [`- 一歩にかかるお金のめやす: ${facts.typical.map(item => `${item.label} ${about(item.yen)}`).join('、')}。公開ページを読むこと自体は0円。`] : []),
     `- 読める回数: 今日あと${Math.max(0, facts.remainingReads)}回`,
     ...(facts.studyFull ? [`- 書斎の物語: 開いているものが${facts.studyFull}個で、いっぱい。新しく draft するには、先にどれかを ready にするか put_away でしまう。`] : []),

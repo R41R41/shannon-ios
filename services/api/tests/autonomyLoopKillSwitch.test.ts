@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ownerPrivateRule } from '../src/autonomyLoopOwnerContext.js';
+import { ownerPrivateRule, type AutonomyOwnerContext } from '../src/autonomyLoopOwnerContext.js';
 import { draftPrompt, reachOutPrompt, revisePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { agenticDay, builderDigests, plainDay } from './autonomyLoopKillSwitchScenario.js';
 import { loopHarness, runUntilIdle, scope } from './autonomyLoopHarness.js';
@@ -41,6 +41,24 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
     expect((await plainDay(directory)).map(call => [call.kind, call.digest])).toEqual(PLAIN_DAY_AT_78C3493);
   });
 
+  it('sends the same prompts when the owner\'s context is wired but switched off, and other prompts when it is on', async () => {
+    const wired: AutonomyOwnerContext = {
+      forThinking: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
+      forMessage: () => ({ section: '[ライ氏のこと・最近のふたりのこと]\n- 例', secrets: [] }),
+    };
+    const off = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-off-'));
+    const on = mkdtempSync(join(tmpdir(), 'shannon-autonomy-kill-switch-on-'));
+    try {
+      expect((await agenticDay(off, { ownerContext: wired, loop: { ownerContext: false } })).map(call => [call.kind, call.digest])).toEqual(AGENTIC_DAY_AT_78C3493);
+      // The fixed cycles alone do not restore the old prompts: the two switches are independent.
+      const withContext = await agenticDay(on, { ownerContext: wired, loop: { ownerContext: true } });
+      expect(withContext.filter(call => call.kind === 'think').every(call => !AGENTIC_DAY_AT_78C3493.some(([, digest]) => digest === call.digest))).toBe(true);
+    } finally {
+      rmSync(off, { recursive: true, force: true });
+      rmSync(on, { recursive: true, force: true });
+    }
+  });
+
   it('builds byte for byte the prompts of the commit before from every prompt builder', () => {
     expect(builderDigests()).toEqual(BUILDERS_AT_78C3493);
   });
@@ -61,7 +79,7 @@ describe('with pacing and the owner\'s context switched off, the loop is what it
 
   it('adds the output rule of owner-private material only where such material is, and nothing where it is not', () => {
     const bare = { localTime: 'x', remainingYen: 0, remainingReads: 0, maximumSteps: 1, pursuits: [], stories: [], notes: [], unnotedReadings: [], feedback: [], places: [], notionAvailable: false };
-    for (const kind of ['thinking', 'story', 'message'] as const) expect(ownerPrivateRule(kind, false)).toBeNull();
+    for (const kind of ['thinking', 'story', 'note', 'message'] as const) expect(ownerPrivateRule(kind, false)).toBeNull();
     const block = '[ライ氏のこと・最近のふたりのこと]\n- 例';
     const extras = { actions: '', examples: '', rules: [], sections: [], ownerContext: block };
     // Thinking: the block, the line that names it among her materials, and its output rule.

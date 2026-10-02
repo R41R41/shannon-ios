@@ -39,7 +39,7 @@ export interface AutonomyOwnerContext {
 }
 
 export const OWNER_CONTEXT_TITLE = `${SHANNON_OWNER_NAME}のこと・最近のふたりのこと`;
-export const OWNER_CONTEXT_HEADER = `[${OWNER_CONTEXT_TITLE}]（${SHANNON_OWNER_NAME}がボクにだけ見せてくれていること。${SHANNON_OWNER_NAME}と二人で話す時と同じ記憶から）`;
+export const OWNER_CONTEXT_HEADER = `[${OWNER_CONTEXT_TITLE}]（${SHANNON_OWNER_NAME}と二人で話す時にボクが思い出せること。ほかの人には見せない）`;
 
 /** Replaces the line of the thinking rules that says nothing of the owner's is given, while the block is. */
 export const OWNER_CONTEXT_MATERIALS_LINE = `- 使ってよい材料は、下に渡されるものだけ。自分の台帳、自分のメモと下書き、公開されている読み物、読者の反応、そして「${OWNER_CONTEXT_TITLE}」。そこにないことを、思い出したふりをして書かない。作品やメモに実在の個人のことを入れない。`;
@@ -53,12 +53,16 @@ export const OWNER_CONTEXT_MESSAGE_MATERIALS = `下の「${OWNER_CONTEXT_TITLE}�
  *
  * - `thinking`: she may think with it; it does not go into anything she writes down for a work, and she reads only pages she was shown.
  * - `story`: a draft or a revision. Inspiration, never the thing itself, never recognisable.
+ * - `note`: a note about a page she read, for a pursuit she may have written with it in front of her. Nothing of his in it.
  * - `message`: a message to the owner. She may touch on it, lightly, one thing at most.
  */
-export function ownerPrivateRule(kind: 'thinking' | 'story' | 'message', present: boolean): string | null {
+export function ownerPrivateRule(kind: 'thinking' | 'story' | 'note' | 'message', present: boolean): string | null {
   if (!present) return null;
   if (kind === 'thinking') {
-    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}がボクにだけ見せてくれていること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語の着想にしてもよいが、idea・aim・pursuits・text・query には、そのまま書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる形にしない。「内緒」「秘密」と言われたことは、考える時にだけ使い、どこにも書かない。ページの住所（url）も外に出る言葉なので、read で読むのは下の「読めそうな場所」にあるページだけ。`;
+    return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}と二人の時にボクが思い出せること。次に何をするか考える材料にしてよいし、${SHANNON_OWNER_NAME}に話しかけるきっかけにしてよい。物語の着想にしてもよいが、idea・aim・pursuits・text・query には、そのまま書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる形にしない。「内緒」「秘密」と言われたことは、考える時にだけ使い、thought にも reason にも、どこにも書かない。ページの住所（url）も外に出る言葉なので、read で読むのは下の「読めそうな場所」にあるページだけ。`;
+  }
+  if (kind === 'note') {
+    return `- 「いま追っていること」には、${SHANNON_OWNER_NAME}と二人の時に知ったことから思いついたものがあるかもしれない。メモには、${SHANNON_OWNER_NAME}やその周りの人、場所、出来事のことを書かない。`;
   }
   if (kind === 'story') {
     return `- 「書こうとしていること」「直したいこと」や台帳には、${SHANNON_OWNER_NAME}と二人の時に知ったことから思いついたものがあるかもしれない。着想にしてよいが、そのまま物語に書かない。${SHANNON_OWNER_NAME}やその周りの人、場所、出来事だと分かる名前や描写を入れない。`;
@@ -66,17 +70,18 @@ export function ownerPrivateRule(kind: 'thinking' | 'story' | 'message', present
   return `- 「${OWNER_CONTEXT_TITLE}」は、${SHANNON_OWNER_NAME}と二人の時に知ったこと。話しかけるきっかけや中身にしてよい。並べ立てない。触れるなら一つだけ、さりげなく。`;
 }
 
-/** A run of this many characters shared with a secret counts as carrying it. */
-export const SECRET_RUN_CHARACTERS = 8;
+/** A run of this many characters shared with a secret counts as carrying it; a shorter secret counts when it appears whole. */
+export const SECRET_RUN_CHARACTERS = 6;
+const SHORT_SECRET_CHARACTERS = 3;
 
 /** Whether her free text repeats a run of something that must reach nobody but the owner. Whitespace is ignored. */
 export function carriesSecret(text: string | null | undefined, secrets: readonly string[] | undefined): boolean {
   if (!text || !secrets?.length) return false;
   const compact = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '').toLowerCase();
   const candidate = compact(text);
-  if (candidate.length < SECRET_RUN_CHARACTERS) return false;
   return secrets.some(secret => {
     const words = compact(secret);
+    if (words.length < SECRET_RUN_CHARACTERS) return words.length >= SHORT_SECRET_CHARACTERS && candidate.includes(words);
     for (let index = 0; index + SECRET_RUN_CHARACTERS <= words.length; index += 1) {
       if (candidate.includes(words.slice(index, index + SECRET_RUN_CHARACTERS))) return true;
     }

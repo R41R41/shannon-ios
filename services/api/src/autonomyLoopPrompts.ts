@@ -226,9 +226,9 @@ export function thinkingPrompt(materials: ThinkingMaterials, extras?: ThinkingEx
 }
 
 /** Note-taking: one page she read, written up in her own words. */
-export function notePrompt(input: { pursuit: ShannonPursuit | null; reading: { title: string; url: string; text: string } }): AutonomyPrompt {
+export function notePrompt(input: { pursuit: ShannonPursuit | null; reading: { title: string; url: string; text: string }; /** Her thinking is given the owner's context, so the pursuit may come from it. */ ownerInformed?: boolean }): AutonomyPrompt {
   return {
-    system: system(NOTE_RULES),
+    system: system(withRule(NOTE_RULES, ownerPrivateRule('note', input.ownerInformed === true && input.pursuit !== null))),
     prompt: [
       QUOTED,
       section('[いま追っていること]', input.pursuit ? pursuitLines([input.pursuit]) : []),

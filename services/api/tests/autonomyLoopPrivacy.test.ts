@@ -149,13 +149,13 @@ async function ownerWorld(name: string, options: { ownerContext: boolean; charac
     thought: '読んで、書きます。',
     pursuits: [{ op: 'add', kind: 'question', title: '傘は誰のものか', why: '気になるからです。' }, { op: 'add', kind: 'work', title: '贈りものの話', why: carried(SECRET_FACT, '書いてみたいからです。') }],
     // A page she was shown (a seed). An address she makes up is not read while his context is in front of her.
-    steps: [...(options.ownerContext ? [{ action: 'read', url: `https://example.org/${encodeURIComponent(PROFILE)}` }] : []), { action: 'read', url: 'https://ja.wikipedia.org/wiki/物語' }, { action: 'note' }, { action: 'draft', idea: carried(`${SECRET_TALK}という話`, '傘の話') }, { action: 'reach_out', reason: 'upcoming' }],
+    steps: [...(options.ownerContext ? [{ action: 'read', url: `https://example.org/${encodeURIComponent(PROFILE)}` }] : []), { action: 'read', url: 'https://ja.wikipedia.org/wiki/物語', pursuitId: 'seed-goal-moving-story' }, { action: 'note' }, { action: 'draft', idea: carried(`${SECRET_TALK}という話`, '傘の話') }, { action: 'reach_out', reason: 'upcoming' }],
   });
   const piece = harness.store.study.list(scope).find(item => item.kind === 'story')!;
   await session('2026-10-02T04:10:00.000Z', { thought: '見せます。', steps: [{ action: 'ready', pieceId: piece.id }] });
   harness.service.study.react(scope, piece.id, 'like', '傘の場面が好きです。');
   await session('2026-10-02T04:20:00.000Z', { thought: '直します。', steps: [{ action: 'revise', pieceId: piece.id, aim: carried(`終わりに${HAND_MARKED}を足す`, '終わり') }, { action: 'reach_out', reason: 'share' }] });
-  await session('2026-10-02T04:30:00.000Z', { thought: '気になります。', steps: [{ action: 'reach_out', reason: 'wonder' }] });
+  await session('2026-10-02T04:30:00.000Z', { thought: carried(`${SECRET_FACT}のが気になります。`, '気になります。'), steps: [{ action: 'reach_out', reason: 'wonder' }] });
   // Someone other than the owner is with him now.
   audience.others = true;
   await session('2026-10-02T04:40:00.000Z', { thought: '予定が近いです。', steps: [{ action: 'reach_out', reason: 'upcoming' }] });
@@ -210,7 +210,7 @@ describe('what reaches the prompts of her own activity', () => {
       for (const prompt of model.prompts(kind)) {
         expect(prompt, kind).not.toContain(OWNER_CONTEXT_HEADER);
         for (const sentinel of OWNER_ALONE) expect(prompt, `${kind} ${sentinel}`).not.toContain(sentinel);
-        if (kind !== 'note') expect(prompt, kind).toContain(ownerPrivateRule('story', true)!);
+        expect(prompt, kind).toContain(ownerPrivateRule(kind === 'note' ? 'note' : 'story', true)!);
         // His upcoming items stay where they were: the thinking step and the message about them.
         expect(prompt, kind).not.toMatch(/UPCOMING-|ライ氏のこれから/u);
       }
@@ -242,6 +242,8 @@ describe('what reaches the prompts of her own activity', () => {
     const written = JSON.stringify([raw.prepare('SELECT title, body FROM study_pieces').all(), raw.prepare('SELECT * FROM autonomy_activity').all(), raw.prepare('SELECT * FROM autonomy_loop_observations').all()]);
     raw.close();
     for (const sentinel of [...SECRETS, ...FORGOTTEN, 'SENTINEL-PROFILE-4402', 'SENTINEL-TALK-7731']) expect(written, sentinel).not.toContain(sentinel);
+    // The thought that repeated a secret left only the plain sentence in her record.
+    expect(harness.entries().filter(entry => entry.tool === 'study.think' && entry.kind === 'action').map(entry => entry.summary)).toContain('次に何をするか考えました。');
     close();
   });
 
@@ -251,7 +253,7 @@ describe('what reaches the prompts of her own activity', () => {
       // (d) Nothing of it, in any step.
       for (const sentinel of [...OWNER_ALONE, 'SENTINEL-REPLY-5520', ...SECRETS, ...FORGOTTEN]) expect(prompt, sentinel).not.toContain(sentinel);
       expect(prompt).not.toContain(OWNER_CONTEXT_HEADER);
-      for (const kind of ['thinking', 'story', 'message'] as const) expect(prompt).not.toContain(ownerPrivateRule(kind, true)!);
+      for (const kind of ['thinking', 'story', 'note', 'message'] as const) expect(prompt).not.toContain(ownerPrivateRule(kind, true)!);
       for (const block of CONVERSATION_BLOCKS) expect(prompt, block).not.toContain(block);
       // Of an upcoming item only its kind, time and title: never where it is, and never more than twelve lines.
       expect(prompt).not.toContain('SENTINEL-LOCATION');
@@ -311,10 +313,47 @@ describe('what reaches the prompts of her own activity', () => {
     state.close(); persistent.close();
   });
 
+  it('counts as secret what was derived from a secret turn, a corrected secret, and a short one, and forgets a promise with its turn', () => {
+    const path = join(directory, 'derived.sqlite');
+    const clock = { at: '2026-10-02T01:00:00.000Z' };
+    const persistent = new SQLiteShannonStore({ path, now: () => clock.at });
+    const threadId = persistent.threadId(scope);
+    const secretTurn = persistent.appendTurn(scope, threadId, '内緒だけど、来月会社を辞めるつもりです', 'わかりました、ライ氏。', '2026-10-01T02:00:00.000Z');
+    const forgottenTurn = persistent.appendTurn(scope, threadId, '週末に山へ行く計画を立てています', 'いいですね。', '2026-10-01T02:10:00.000Z');
+    const apply = (event: unknown) => persistent.apply(scope, event as Parameters<typeof persistent.apply>[1]);
+    // A fact the background drew from the secret turn: labelled by its own words, which say nothing of a secret.
+    apply({ type: 'user-fact-upserted', source: 'sleep', fact: { id: 'quit', statement: 'ユーザーは退職を考えている', confidence: 0.8, observedAt: clock.at, evidence: '会社を辞める', sourceExperienceId: secretTurn.id, disclosure: { audience: { kind: 'owner' }, sensitivity: 'sensitive', category: 'work', decidedBy: 'rule' } } });
+    // A secret he corrected: she is shown the corrected wording.
+    apply({ type: 'user-fact-upserted', source: 'sleep', fact: { id: 'gift', statement: 'ユーザーは時計を贈る', confidence: 0.8, observedAt: clock.at, evidence: '贈る', disclosure: { audience: { kind: 'owner' }, sensitivity: 'sensitive', category: 'secret', decidedBy: 'rule' } } });
+    apply({ type: 'memory-control-upserted', control: { memoryId: 'gift', kind: 'user-fact', status: 'active', pinned: false, updatedAt: clock.at, changeReason: 'user', overrideText: 'ユーザーは万年筆を贈る' } });
+    // A short secret.
+    apply({ type: 'user-fact-upserted', source: 'sleep', fact: { id: 'short', statement: '転職活動中', confidence: 0.8, observedAt: clock.at, evidence: '転職', disclosure: { audience: { kind: 'owner' }, sensitivity: 'sensitive', category: 'secret', decidedBy: 'rule' } } });
+    // A promise made in a turn he later asked her to forget.
+    apply({ type: 'prospective-memory-upserted', memory: { id: 'hike', summary: '登山靴を調べておく', status: 'pending', createdAt: clock.at, updatedAt: clock.at, sourceExperienceId: forgottenTurn.id } });
+    apply({ type: 'memory-control-upserted', control: { memoryId: forgottenTurn.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: clock.at, changeReason: 'user' } });
+    const context = createOwnerContext({ snapshot: scopeKey => persistent.snapshot(scopeKey), conversations: persistent, profile: persistent }, { characters: 2_400, timeZone: 'Asia/Tokyo' });
+    const thinking = context.forThinking(scope, clock.at, '物語')!;
+    // Her thinking sees the secret things, in the wording he corrected them to; the forgotten promise is gone.
+    for (const shown of ['ユーザーは退職を考えている', 'ユーザーは万年筆を贈る', '転職活動中']) expect(thinking.section).toContain(shown);
+    for (const gone of ['登山靴', '山へ行く', 'ユーザーは時計を贈る']) expect(thinking.section).not.toContain(gone);
+    // Each of them is checked for in what she writes down.
+    for (const idea of ['退職を考えている人の話', '万年筆を贈る人の話', '転職活動中の人', '会社を辞めるつもりの人']) expect(carriesSecret(idea, thinking.secrets), idea).toBe(true);
+    expect(carriesSecret('傘を忘れた人の話', thinking.secrets)).toBe(false);
+    // A message is given none of them, and not the forgotten promise either.
+    for (const others of [false, true]) {
+      const message = context.forMessage(scope, clock.at, '物語', others)?.section ?? '';
+      for (const hidden of ['退職', '万年筆', '時計を贈る', '転職活動中', '会社を辞める', '登山靴', '山へ行く']) expect(message, `${others} ${hidden}`).not.toContain(hidden);
+    }
+    persistent.close();
+  });
+
   it('drops free text of hers that repeats a run of a secret, and keeps everything else', () => {
-    const secrets = ['ここだけの話、来月の誕生日に指輪を贈るつもりでいます', '短い'];
+    const secrets = ['ここだけの話、来月の誕生日に指輪を贈るつもりでいます', '短い', '転職中'];
     expect(carriesSecret('来月の誕生日に指輪を贈る人の話', secrets)).toBe(true);
     expect(carriesSecret('来月の 誕生日に\n指輪を贈る', secrets)).toBe(true);
+    // Six characters in a row are enough; a secret shorter than that counts when it appears whole, and one of two characters never does.
+    expect(carriesSecret('指輪を贈るつもりの人', secrets)).toBe(true);
+    expect(carriesSecret('転職中の人の話', secrets)).toBe(true);
     expect(carriesSecret('指輪をめぐる、だれも知らない話', secrets)).toBe(false);
     expect(carriesSecret('短い話を書く', secrets)).toBe(false);
     expect(carriesSecret('来月の誕生日に指輪を贈る人の話', [])).toBe(false);
@@ -331,6 +370,9 @@ describe('what reaches the prompts of her own activity', () => {
       ],
     }, known, bounds);
     expect(thought.pursuits.map(item => item.title)).toEqual(['贈りものはなぜ嬉しいのか']);
+    expect(thought.text).toBe('考えました。');
+    // A thought that repeats a secret is not written into her record.
+    expect(planFromThought({ thought: '来月の誕生日に指輪を贈るらしいので、贈りものの話を書きます。', steps: [] }, known, bounds).text).toBe('');
     expect(thought.steps).toEqual([
       { kind: 'read', url: 'https://example.org/gifts' }, { kind: 'draft', intent: '' }, { kind: 'draft', intent: '贈りものを選ぶ人' }, { kind: 'rest', minutes: 30 },
     ]);
