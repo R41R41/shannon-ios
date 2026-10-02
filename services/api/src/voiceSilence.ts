@@ -124,9 +124,9 @@ const AIMED_AT_HER = /寂し|さみし|疲れ|つかれた|しんど|つら|辛�
  * Ends in the middle of a word or on a particle that cannot close a sentence. 「は」「に」「も」「から」 are not here:
  * 「天気は」 is a question, 「自由に」 an ending and 「最初から」 a request, so those are the models' to judge.
  */
-const CUT_ALWAYS = /(?:[っッ]|を|へ|とか|という|について)$/u;
-/** Endings that can close a sentence (「お願いがあるんですが。」): a cut only when nothing closes the segment. */
-const CUT_OPEN = /(?:が|けどさ|でさ|てさ)$/u;
+const CUT_ALWAYS = /(?:[っッ]|を|へ|という|について)$/u;
+/** Endings that can close a sentence: a cut only when nothing closes the segment. 「〜んですが」 and 「ラーメンとか」 are left to the models. */
+const CUT_OPEN = /(?:けどさ|でさ|てさ)$/u;
 
 const answer = (reason: VoiceAnswerReason): VoiceSilenceVerdict => ({ respond: true, reason });
 const ADDRESS_REASON: Readonly<Partial<Record<GuestAddressReason, VoiceAnswerReason>>> = {

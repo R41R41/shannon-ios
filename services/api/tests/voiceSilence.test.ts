@@ -54,8 +54,9 @@ describe('the local rules, one category at a time', () => {
       '元気', 'だるい', 'ひま', 'カレー', '天気は', '今日の予定は', '他には', '理由は', '次は', '言われた。', '出るの。', '今日は', '本当に', '自由に',
     ]) expect(quiet(transcript), transcript).toBeNull();
     // A particle that can close a sentence is a cut only when nothing closes the segment.
-    expect(quiet('一つ気になることがあるんですが。')).toBeNull();
-    expect(quiet('一つ気になることがあるんですが')).toBe('unfinished');
+    expect(quiet('昨日の夜の話なんだけどさ。')).toBeNull();
+    expect(quiet('昨日の夜の話なんだけどさ')).toBe('unfinished');
+    for (const transcript of ['お願いがあるんですが', 'ちょっと聞きたいんだが', 'ラーメンとか', '映画とか']) expect(quiet(transcript), transcript).toBeNull();
   });
 
   it('(d) says nothing to "wait a moment", and answers when it is an objection', () => {

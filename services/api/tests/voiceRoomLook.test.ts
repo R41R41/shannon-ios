@@ -146,7 +146,8 @@ describe('the owner asks her to look, aloud', () => {
         expect(turn.prompt, name).toContain(`本当の理由: ${ROOM_LOOK_UNAVAILABLE_REASON[reason]}。`);
         expect(turn.prompt, name).not.toContain(voiceRoomLookPrompt(true));
         // The line itself names the excuses only to forbid them.
-        expect(turn.prompt, name).toContain('カメラの許可、接続、画像が届かないなど、ここに書かれていない原因を作って言わない');
+        expect(turn.prompt, name).toContain(reason === 'body_away' ? 'カメラの許可、画像が届かないなど、ここに書かれていない原因を作って言わない'
+          : 'カメラの許可、接続、画像が届かないなど、ここに書かれていない原因を作って言わない');
         h.advance(SECOND);
         await h.presence();
         expect(h.lookStore.waiting(scope), name).toEqual([]);
@@ -180,6 +181,8 @@ describe('the owner asks her to look, aloud', () => {
     const turn = await h.say('部屋を見て。');
     expect(turn.prompt).toContain(voiceRoomLookPrompt(true));
     expect(h.lookStore.waiting(scope)).toEqual([]);
+    // She had said she would look: one honest line follows in the Talk of the call.
+    expect(h.messages().map(message => [message.role, message.content])).toEqual([['assistant', bodyLookNotSeenLine('camera_off')]]);
   });
 
   it('never looks in 「友人も一緒」 or with someone listening, and says so', async () => {
@@ -221,9 +224,14 @@ describe('the owner asks her to look, aloud', () => {
       '私のメール見てくれる', '僕の予定見て', '私のノート見て', 'ここのバグ見てくれない', 'スライドのここを見てください', 'ここ見て、3行目', 'これ見てよ',
       'カメラの設定を見て', 'カメラロール見て', 'カメラで撮った写真見て', '新しいカメラを使ってる', 'カメラを買って使ってみて', 'オンライン会議でカメラをオンにして',
       '星が見えてる', '字幕見えてる', '画面見えてる', '窓の外が見えない', '外は雨が見える', '何が見えたの昨日', '僕のこと見てた?',
+      // He is the one who sees; a video call; some other camera; reported speech.
+      '私は見えるよ', '僕は見えてるよ', '俺も見えるけど', '私も見れるかな', '僕も見れる', '私見えますよ', '僕も見てみて',
+      'こっちは見えてるよ', 'こっちも見えます', 'ビデオ会議でこっち見えてる', '相手にこっちが見えてますか', '向こうからこっち見える',
+      '新しいカメラ使ってみて', '一眼レフカメラ使ってみてよ', 'このカメラ使ってね', 'このカメラ使っていい', 'カメラを使ってほしい', 'スマホのカメラで見て',
+      'カメラ使っていい?って聞かれた', '周り見えてる', '次の部屋を見て',
     ]) expect(asksForLookAloud(transcript), transcript).toBe(false);
     for (const transcript of [
-      ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', 'こっち見える?', '僕が見える?', 'カメラで見てみて', 'カメラ使って', '何が見える?', '机の上見てくれる',
+      ...PRODUCTION_ASKS, 'もちろんそうカメラ使っていいよ自由に', 'こっち見て', '僕が見える?', '僕のこと見えてる?', 'カメラで見てみて', 'カメラ使ってもいいよ', '何が見える?', '机の上見てくれる',
       '部屋を見てほしいんだけど',
     ]) expect(asksForLookAloud(transcript), transcript).toBe(true);
     // Long or repetitive input costs nothing: the patterns repeat no alternation and look only at short clauses.
@@ -239,6 +247,17 @@ describe('the owner asks her to look, aloud', () => {
     const turn = await h.say('部屋を見て。');
     expect(turn.prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
     expect(h.lookStore.waiting(scope)).toEqual([]);
+  });
+
+  it('his words open nothing when a model tier could not trust the transcript; with no model\'s score they are taken as heard', async () => {
+    const distrusted = harness({ voiceDecision: gateway({ transcriptReliabilityProbability: 0.3 }) });
+    await distrusted.ready();
+    expect((await distrusted.say('部屋を見て。')).prompt).toContain(VOICE_ROOM_LOOK_READY_PROMPT);
+    expect(distrusted.lookStore.waiting(scope)).toEqual([]);
+    const local = harness({ voiceDecision: new LocalVoiceDecisionGateway() });
+    await local.ready();
+    expect((await local.say('部屋を見て。')).prompt).toContain(voiceRoomLookPrompt(true));
+    expect(local.lookStore.waiting(scope)).toHaveLength(1);
   });
 
   it('opens nothing when the call is cut off before her reply is written', async () => {
@@ -261,13 +280,13 @@ describe('the owner asks her to look, aloud', () => {
 });
 
 describe('she looks because she wants to', () => {
-  it('only through the gateway\'s judgement, as a look she chose herself', async () => {
+  it('only through the gateway\'s judgement; said aloud, so a failure would get her one honest line like a look he asked for', async () => {
     const h = harness({ voiceDecision: gateway({ roomLookProbability: 0.92, transcriptReliabilityProbability: 0.95 }) });
     await h.ready();
     const turn = await h.say('じゃーん、髪を切ってきたんだ。');
     expect(turn.prompt).toContain(voiceRoomLookPrompt(false));
     const look = await h.openLook();
-    expect(h.lookStore.get(scope, look!.id)).toMatchObject({ ownerAsked: false, threadId: 'voice-thread' });
+    expect(h.lookStore.get(scope, look!.id)).toMatchObject({ ownerAsked: true, threadId: 'voice-thread' });
   });
 
   it('not below the threshold, not on a transcript the gateway could not trust, and not without the gateway', async () => {

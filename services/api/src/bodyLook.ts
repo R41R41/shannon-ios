@@ -120,6 +120,11 @@ export const ROOM_LOOK_UNAVAILABLE_REASON: Readonly<Record<Unavailable, string>>
   limit_day: '今日見られる回数を使い切った',
 });
 
+/** Which of her fixed lines says why a look she announced in a voice turn was not opened after all. */
+const UNOPENED_CODE: Readonly<Partial<Record<Unavailable, BodyLookCode>>> = Object.freeze({
+  no_body: 'timeout', no_camera: 'camera_off', body_away: 'timeout', busy: 'busy', limit_hour: 'rate_limited', limit_day: 'rate_limited',
+});
+
 /** Neutral wording for the activity record. */
 const NOT_SEEN_REASON: Readonly<Record<BodyLookCode, string>> = Object.freeze({
   camera_off: 'カメラが切ってあった',
@@ -213,7 +218,13 @@ export class BodyLooks {
       if (typeof state === 'string') return { unavailable: state, open: () => false };
       return {
         unavailable: null,
-        open: (threadId, choice, spoken) => { try { return this.open(scopeKey, threadId, choice, spoken); } catch { return false; } },
+        open: (threadId, choice, spoken) => {
+          try {
+            if (this.open(scopeKey, threadId, choice, spoken)) return true;
+            this.unopened(scopeKey, threadId);
+          } catch { /* the reply is already spoken */ }
+          return false;
+        },
       };
     } catch { return { unavailable: 'no_viewer', open: () => false }; }
   }
@@ -360,6 +371,20 @@ export class BodyLooks {
         BODY_LOOK_LIMITS.lifetimeMilliseconds + 250).unref();
     }
     return true;
+  }
+
+  /**
+   * A voice turn in which she said aloud that she would look, and the conditions stopped holding before the look
+   * could be opened: one honest line in the Talk and one activity entry. Nothing is said when other people may now
+   * hear it, or for a reason that cannot change within a turn.
+   */
+  private unopened(scopeKey: string, threadId: string): void {
+    const at = this.dependencies.now();
+    const state = this.availability(scopeKey, at, 'owner');
+    const code = typeof state === 'string' ? UNOPENED_CODE[state] : 'busy';
+    if (!code) return;
+    try { this.dependencies.record(scopeKey, { summary: bodyLookNotSeenSummary(code), outcome: 'failed', reasonCode: code }); } catch { /* her line still says it */ }
+    try { this.dependencies.speaker.say(scopeKey, threadId, { id: randomUUID(), outcome: 'not_seen' }, bodyLookNotSeenLine(code), at); } catch { /* nothing more to do */ }
   }
 
   /** The last few messages of the look's Talk, then the voice turn it was opened in while that turn is not stored yet. */

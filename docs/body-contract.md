@@ -311,7 +311,8 @@ Added 2026-10-02 (owner: 「カメラ使っていいよ、自由に」). **Nothi
 - It is opened by a voice turn (`POST /v1/voice/…/delegations` with `participantMode: "owner"` and nobody else listening) in which the owner asks her to look (「僕のこと見れる?」「カメラ使っていいよ」「部屋を見て」) or the decision gateway judges that a look is welcome. Her spoken reply to that turn only says that she will look (「見てみますね」). The look is opened when that reply has been written, so it is in `presence` while the body is still speaking it.
 - The conditions are those of a text turn. A voice turn sent with `participantMode: "guest"` (a stream, 「友人も一緒」), or an owner turn with `companionPresent`, never opens a look and ends one in progress (`409 LOOK_ALREADY_ANSWERED` for a late answer); when asked, she says that she does not look with other people present.
 - When she cannot look she is given the server's own reason and says it: no body registered its capabilities, `flags.camera` is not true, no presence read from the camera device in the last 75 seconds (she says that nothing has come from her body for a while: the window is hidden or the body is not running; the server keeps these reads in memory, so for up to one poll after an API restart this is said although the window is showing), a look already open, the hourly or daily limit, looks switched off. She no longer has to guess, so a wrong reason now points at one of these facts.
-- If the conditions stop holding between the turn and her reply (the camera is switched off in those seconds), she has said 「見てみますね」 and no look follows. Nothing is said about it; the next request gets the reason.
+- If the conditions stop holding between the turn and her reply (the camera is switched off in those seconds), she has said 「見てみますね」 and no look follows in `presence`. One honest fixed line is stored in the Talk of the call and sent as an initiative (the Mac app and the iPhone show it); the body is not handed it, because there is no look for it to answer.
+- Every look opened from a voice turn counts as asked for: when it fails, the answer of the body's `POST` carries her one honest line in `message`, and the body should speak it.
 
 What the body must check for a call:
 
@@ -319,7 +320,7 @@ What the body must check for a call:
 2. It takes the frame and answers while its own reply audio is playing or the microphone is open; a look must not wait for the call to end (it expires 30 seconds after `requestedAt`).
 3. It speaks `message.text` of the answer **in the call**, after the reply it is speaking, as her next utterance: queued behind the current speech, not dropped because a call is active and not interrupting her. The text is already stored in the Talk of the call (`message.threadId` is the call's thread) and must not be sent again as a voice turn (`/v1/voice/…/turns`), or it would be stored twice.
 4. It registers that utterance with its echo guard as her own speech, so that the microphone hearing it does not come back as an owner utterance.
-5. A `message` of `null` is silence: a look she chose herself that did not happen leaves no line.
+5. A `message` of `null` is silence (a look withdrawn because someone else joined).
 6. If the call runs on another device (the iPhone) while the body only shows her, the body still receives the look and the answer; whether it speaks the line then is the body's choice. The iPhone gets the message as a push and in the Talk, not in the call audio.
 
 The next voice turn replays the stored message as history, so she knows what she said about the room whichever device spoke it.

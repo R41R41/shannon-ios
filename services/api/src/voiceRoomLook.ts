@@ -37,18 +37,24 @@ function lookThreshold(environment: Environment): number {
 /** A request to look, and "can you see". The plain progressive (「見てる」) is neither: 「僕もニュース見てるよ」. */
 const LOOK = '(?:見て|のぞいて|写して|映して)';
 const CAN_SEE = '(?:見える|見えてる|見えます|見えてます|見れる|見れます|見られる)';
-/** The owner himself, or where he is. Not 「ここ」「これ」「外」: those are as often a screen, a document, the weather. */
-const ME = '(?:(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:のこと|の顔|の姿|の様子)?|こっち|こちら)(?:が|を|は|も)?';
-const ROOM = '(?:部屋|まわり|周り|机|手元)(?:の中|の様子|の上)?(?:が|を|は|も)?';
+/**
+ * The owner himself as what is looked at (「僕のこと」「僕が」「僕を」), never as the one who sees (「私は見えるよ」「僕も見れる」),
+ * or where he is. Not 「ここ」「これ」「外」「周り」: those are as often a screen, a document, the weather, a video call.
+ */
+const ME = '(?:僕|ぼく|ボク|俺|おれ|私|わたし)(?:(?:のこと|の顔|の姿|の様子)(?:が|を)?|が|を)';
+const ROOM = '(?<!次の|隣の|別の)(?:部屋|机|手元)(?:の中|の様子|の上)?(?:が|を)?';
 /** What may close the clause after the verb, each part once and in this order: 「見てみて」「見てくれる」「見えるかな」「見てほしいんだけど」. */
 const TAIL = '(?:みて)?(?:ほしい|欲しい|くれる|くれない|くれ|もらえる|ください)?(?:んだけど|けど)?(?:かな|か|の|よね|よ|ね|な)?';
 /** The object stands directly before the verb: 「僕の予定見て」「カメラの設定を見て」 are about something else. */
 const ASKS = [
   new RegExp(`(?:${ME}|${ROOM})(?:${LOOK}|${CAN_SEE})${TAIL}$`, 'u'),
-  new RegExp(`(?<!防犯|監視)カメラ(?:で|を|から|越しに)?(?:${LOOK}|${CAN_SEE}|使って(?:も)?(?:いい|大丈夫)?)${TAIL}(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
+  // 「こっち見て」 is a request; 「こっちは見えてるよ」 is a video call.
+  new RegExp(`(?:こっち|こちら)を?${LOOK}${TAIL}$`, 'u'),
+  // Her camera, with leave to use it; not some other camera (「このカメラ使ってみて」「スマホのカメラで見て」).
+  new RegExp(`(?<!防犯|監視|この|その|新しい|スマホの|レフ)カメラ(?:で|を|から|越しに)?(?:${LOOK}|${CAN_SEE}|使って(?:も)?(?:いい|大丈夫))${TAIL}(?:自由に|好きに|いつでも|どうぞ)?$`, 'u'),
   /(?:何|なに)が見え(?:る|てる|ます|てます)(?:かな|か|の)?$/u,
 ];
-const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて/u;
+const REFUSES = /見ないで|見なくて|見るな|使わないで|切って|オフ|やめて|って(?:聞かれ|言われ)/u;
 const CLAUSE_CHARACTERS = 40;
 
 /**
@@ -108,7 +114,8 @@ const VOICE_OFF_REASON = '声の会話で部屋を見る機能は止めてある
 /** She cannot look: the server's own reason, and nothing else, in one short sentence. */
 export const voiceRoomLookUnavailablePrompt = (reason: VoiceRoomLookUnavailable) =>
   `[部屋を見る]（体のカメラで見てほしいという頼みなら、いまは見られない。本当の理由: ${reason === 'voice_off' ? VOICE_OFF_REASON : ROOM_LOOK_UNAVAILABLE_REASON[reason]}。`
-  + 'この理由だけを短い一文で正直に伝える。見たふりをしない。カメラの許可、接続、画像が届かないなど、ここに書かれていない原因を作って言わない）';
+  // 「体からの知らせが届いていない」 is itself about the link to her body, so that reason does not forbid the word.
+  + `この理由だけを短い一文で正直に伝える。見たふりをしない。カメラの許可、${reason === 'body_away' ? '' : '接続、'}画像が届かないなど、ここに書かれていない原因を作って言わない）`;
 
 export interface VoiceRoomLookTurn {
   /** One line for the turn's prompt, or empty. */
@@ -139,7 +146,9 @@ export function voiceRoomLookTurn(
   const state = looks.voiceTurn(turn.scopeKey, turn.at, turn.audience);
   if (!turn.decision.shouldRespond) return NO_LOOK;
   // His words ask for it, and a model tier that also judged the turn did not say plainly that no look is wanted.
-  const asked = asksForLookAloud(turn.transcript) && (turn.decision.roomLookProbability ?? 1) >= ASKED_CONTRADICTED_BELOW;
+  // Nor on words a model tier scored as unreliable; with no model's score (the local tier) his words are taken as heard.
+  const distrusted = turn.uncertain && turn.decision.transcriptReliabilityProbability !== undefined;
+  const asked = !distrusted && asksForLookAloud(turn.transcript) && (turn.decision.roomLookProbability ?? 1) >= ASKED_CONTRADICTED_BELOW;
   // Her own wish to look comes only from the gateway's judgement, and not from words it could not trust.
   const judged = !turn.uncertain && (turn.decision.roomLookProbability ?? 0) >= lookThreshold(environment);
   const mentioned = asked || judged || asksToLook(turn.transcript);
@@ -149,7 +158,8 @@ export function voiceRoomLookTurn(
   if (!asked && !judged) return { ...NO_LOOK, prompt: VOICE_ROOM_LOOK_READY_PROMPT };
   return {
     prompt: voiceRoomLookPrompt(asked),
-    open: (threadId, reply) => state.open(threadId, asked ? 'asked' : 'curious', [
+    // She says aloud that she will look, so a look that then does not happen always gets her one honest line (`asked`).
+    open: (threadId, reply) => state.open(threadId, 'asked', [
       { role: 'user', content: turn.transcript }, ...(reply.trim() ? [{ role: 'assistant' as const, content: reply.trim() }] : []),
     ]),
   };
