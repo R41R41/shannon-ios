@@ -48,6 +48,8 @@ export interface AutonomyServiceDependencies {
   resolvePath?: AutonomyPathResolver;
   /** Every look at the room in the last hour and today, with the overall limits; null while looks are switched off. Only the activity loop's service has it. */
   roomLooks?: (scopeKey: string, at: string) => { lastHour: number; maximumPerHour: number; today: number; maximumPerDay: number } | null;
+  /** Messages she started on her own today, with the limit. Only the activity loop's service has it. */
+  reachOuts?: (scopeKey: string, at: string) => { today: number; maximumPerDay: number } | null;
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -118,6 +120,7 @@ export class ShannonAutonomyService {
     try { paused = this.store.control(scopeKey).paused; } catch { paused = true; }
     const budget = this.budget(scopeKey, dayKey);
     const looks = this.dependencies.roomLooks?.(scopeKey, at) ?? null;
+    const reachOuts = this.dependencies.reachOuts?.(scopeKey, at) ?? null;
     const decision = authorizeAutonomousAction(request, {
       enabled: this.config.enabled,
       paused,
@@ -133,6 +136,7 @@ export class ShannonAutonomyService {
         activityToday: this.store.activity.countForDay(scopeKey, dayKey, 'room_look', 'allowed'),
         maximumActivityPerDay: this.config.maximumRoomLooksPerDay, ...looks,
       } } : {}),
+      ...(reachOuts ? { reachOuts } : {}),
     });
     const declared = request && typeof request === 'object' ? request : {} as Partial<AutonomousActionRequest>;
     const entry = this.store.activity.append(scopeKey, dayKey, at, {

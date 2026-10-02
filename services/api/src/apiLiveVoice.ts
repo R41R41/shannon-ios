@@ -305,7 +305,7 @@ async function completeLiveVoiceDelegation(
     : await conversationCapabilityContext(scopeKey, transcript, dependencies, {
       aetherNotes: selectedSkills.has('aether_notes'),
       voyagerTasks: selectedSkills.has('voyager_tasks'),
-      notion: notionTurn,
+      notion: notionTurn, upcoming: temporaryGuest ? false : alone ? true : 'guarded',
     });
   const capabilityPrompt = capability.prompt;
   observer?.signal?.throwIfAborted();

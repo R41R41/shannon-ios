@@ -20,6 +20,7 @@ const STEP_WORDING: readonly { tool: string; stem: (count: number) => string; pl
   // Counted when the device reports the file is in place, not when she queues it.
   { tool: 'folder.write', stem: count => `自分のフォルダに写しを${count}つ置き`, plain: count => `自分のフォルダに写しを${count}つ置いた` },
   { tool: 'study.look', stem: count => `部屋を${count}回見`, plain: count => `部屋を${count}回見た` },
+  { tool: 'owner.reach_out', stem: count => `自分から${count}回話しかけ`, plain: count => `自分から${count}回話しかけた` },
 ];
 
 function stepCounts(entries: readonly LoggedEntry[]): { wording: (typeof STEP_WORDING)[number]; count: number }[] {

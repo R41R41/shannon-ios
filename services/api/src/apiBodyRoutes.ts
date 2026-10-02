@@ -25,7 +25,10 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     if (request.path === '/v1/body/presence') {
       const etag = request.query?.get('etag') ?? undefined;
       if (etag !== undefined && !/^[0-9a-f]{16}$/u.test(etag)) return badRequest('etag is invalid');
-      return { status: 200, body: body.presence(scopeKey, deviceId, etag) };
+      // Optional: who can see or hear the body right now. An older body sends none, and nothing is assumed.
+      const audience = request.query?.get('audience') ?? undefined;
+      if (audience !== undefined && audience !== 'owner' && audience !== 'others') return badRequest('audience must be owner or others');
+      return { status: 200, body: body.presence(scopeKey, deviceId, etag, audience) };
     }
     if (request.path === '/v1/body/nudges') return { status: 200, body: body.nudges(scopeKey) };
     return { status: 404, body: { error: 'NOT_FOUND' } };

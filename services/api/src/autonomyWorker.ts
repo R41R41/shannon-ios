@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
-import { configuredAutonomy } from './autonomyBudget.js';
+import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
 import { BoundedPublicReader } from './autonomyReader.js';
@@ -8,7 +8,7 @@ import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { configuredAutonomyTextModel } from './autonomyTextModel.js';
-import { bodyIngestEnabled } from './bodyContract.js';
+import { BODY_LIMITS, bodyIngestEnabled } from './bodyContract.js';
 import { ActivityRoomLooks } from './bodyLookActivity.js';
 import { SQLiteBodyLookActivityStore } from './bodyLookActivityStore.js';
 import { configuredBodyLook } from './bodyLookContract.js';
@@ -17,6 +17,8 @@ import { SQLiteBodyStore } from './bodyStore.js';
 import { ownerDay } from './companionPresence.js';
 import { notionLoopReader } from './notionLoopReader.js';
 import { configuredNotionSource } from './notionSource.js';
+import { configuredOwnerUpcoming, sqliteOwnerSnapshot } from './ownerUpcomingWiring.js';
+import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 import { configuredDatabasePath } from './sqliteStore.js';
 
 /**
@@ -41,7 +43,17 @@ const looks = new ActivityRoomLooks({
   looks: lookStore, hand: lookHand, config: configuredBodyLook(process.env), ingestEnabled: bodyIngestEnabled(process.env),
   cameraDevices: scopeKey => bodyStore.devicesWithFlag(scopeKey, 'camera'), now, dayKey: ownerDay,
 });
-const service = new ShannonAutonomyService({ store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at) });
+// Speaking up on her own (話しかける). Her message takes the initiative path; who is around her body decides how guarded its wording is.
+// SHANNON_AUTONOMY_MAX_REACH_OUTS=0 switches it off.
+const reachOuts = new SQLiteReachOutSpeaker(databasePath, (scopeKey, at) => bodyIngestEnabled(process.env)
+  && bodyStore.othersPresent(scopeKey, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds));
+// The owner's upcoming items: calendar snapshots, promises with a due time, and the task snapshot the API process keeps. No Voyager credential here.
+const ownerState = sqliteOwnerSnapshot(databasePath);
+const ownerUpcoming = configuredOwnerUpcoming(process.env, databasePath, { snapshot: ownerState.read, now });
+const service = new ShannonAutonomyService({
+  store, config, now, announcer, roomLooks: (scopeKey, at) => looks.counts(scopeKey, at),
+  reachOuts: (scopeKey, at) => ({ today: reachOuts.sentOn(scopeKey, autonomyDayKey(at, config)), maximumPerDay: config.maximumReachOutsPerDay }),
+});
 // Read-only Notion, only when the owner connected it; without a token the loop never plans a Notion step.
 const notion = notionLoopReader(configuredNotionSource(process.env, { log: line => console.log(line) }));
 const loop = new ShannonAutonomyLoop({
@@ -51,6 +63,7 @@ const loop = new ShannonAutonomyLoop({
     timeoutMilliseconds: boundedInteger(process.env.SHANNON_AUTONOMY_READ_TIMEOUT_MS, 1_000, 60_000, 10_000),
   }),
   showing, now, looks, ...(notion ? { notion } : {}),
+  reachOuts, upcoming: { lines: (scopeKey, at, present) => ownerUpcoming.upcoming.loopLines(scopeKey, at, present) },
 });
 const pollMilliseconds = boundedInteger(process.env.SHANNON_AUTONOMY_POLL_SECONDS, 5, 3_600, 60) * 1_000;
 const once = process.argv.includes('--once');
@@ -82,6 +95,9 @@ try {
   } while (!stopping);
 } finally {
   try { loop.release(); } catch { /* the lease runs out by itself */ }
+  ownerUpcoming.close();
+  ownerState.close();
+  reachOuts.close();
   lookHand.close();
   lookStore.close();
   bodyStore.close();

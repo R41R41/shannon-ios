@@ -84,7 +84,8 @@ const OWNER_TURN: ChatAudienceTurn = Object.freeze({
 
 const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
   audience: 'others', present: UNKNOWN_GUEST_PRESENCE, alone: false, participantMode: 'guest',
-  capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false }),
+  // The owner's upcoming items stay readable, guarded like the rest of what is his alone.
+  capabilities: Object.freeze({ aetherNotes: false, voyagerTasks: false, notion: false, upcoming: 'guarded' as const }),
   instructions: [chatOthersPresentInstructions, speakTimePrivacyCheck].join('\n\n'),
   turnLabel: Object.freeze({ audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const }),
   identity: () => shannonIdentityPrompt('owner'),

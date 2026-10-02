@@ -131,6 +131,11 @@ export interface VoyagerTaskDestination {
 export interface VoyagerCatalog {
   searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]>;
   listProjects(limit: number): Promise<VoyagerProjectProjection[]>;
+  /**
+   * Open tasks that are due in `[from, until)`. Present only when the deployment names a Voyager read for it
+   * (`SHANNON_VOYAGER_TASK_UPCOMING_URL`); the search contract has no due date, so without it nothing is read.
+   */
+  upcomingTasks?(from: string, until: string, limit: number): Promise<{ id: string; title: string; dueAt: string }[]>;
 }
 
 export class DisabledVoyagerCatalog implements VoyagerCatalog {
@@ -145,7 +150,25 @@ export class HttpVoyagerCatalog implements VoyagerCatalog {
     token: string;
     workspaceId: string;
     fetcher?: typeof fetch;
-  }) {}
+    upcomingEndpoint?: string;
+  }) {
+    if (options.upcomingEndpoint) this.upcomingTasks = (from, until, limit) => this.readUpcoming(options.upcomingEndpoint!, from, until, limit);
+  }
+
+  upcomingTasks?: VoyagerCatalog['upcomingTasks'];
+
+  private async readUpcoming(endpoint: string, from: string, until: string, limit: number): Promise<{ id: string; title: string; dueAt: string }[]> {
+    const url = new URL(endpoint);
+    url.searchParams.set('workspaceId', this.options.workspaceId);
+    url.searchParams.set('dueFrom', from);
+    url.searchParams.set('dueBefore', until);
+    url.searchParams.set('limit', String(normalizedLimit(limit, 20, 50)));
+    return projectionItems(await this.read(url)).flatMap(item => {
+      const row = item as { id?: unknown; title?: unknown; dueAt?: unknown };
+      return typeof row?.id === 'string' && typeof row.title === 'string' && typeof row.dueAt === 'string' && Number.isFinite(Date.parse(row.dueAt))
+        ? [{ id: bounded(row.id, 160), title: bounded(row.title, 500), dueAt: row.dueAt }] : [];
+    });
+  }
 
   async searchTasks(query: string, limit: number): Promise<VoyagerTaskProjection[]> {
     const url = new URL(this.options.tasksEndpoint);
@@ -266,5 +289,13 @@ export function createConfiguredVoyagerCatalog(environment: Readonly<Record<stri
     tasksEndpoint = environment.SHANNON_VOYAGER_TASK_SEARCH_URL?.trim() || new URL(`${prefix}/tasks/search`, base).toString();
     projectsEndpoint = environment.SHANNON_VOYAGER_PROJECTS_URL?.trim() || new URL(`${prefix}/projects`, base).toString();
   } catch { return new DisabledVoyagerCatalog(); }
-  return new HttpVoyagerCatalog({ tasksEndpoint, projectsEndpoint, token, workspaceId });
+  const upcomingEndpoint = httpUrl(environment.SHANNON_VOYAGER_TASK_UPCOMING_URL);
+  return new HttpVoyagerCatalog({ tasksEndpoint, projectsEndpoint, token, workspaceId, ...(upcomingEndpoint ? { upcomingEndpoint } : {}) });
+}
+
+function httpUrl(value: string | undefined): string | null {
+  try {
+    const url = new URL(value?.trim() ?? '');
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : null;
+  } catch { return null; }
 }

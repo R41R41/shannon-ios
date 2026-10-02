@@ -4,8 +4,8 @@ import type { OrganizeSession } from './organize.js';
 import type { ShannonPlace } from './placeDiscovery.js';
 
 export interface ApiRequest {
-  /** `PUT` exists only for `/v1/body/capabilities`. */
-  method: 'GET' | 'POST' | 'PUT';
+  /** `PUT` exists only for `/v1/body/capabilities` and `/v1/calendar/upcoming`; `DELETE` only for the latter. */
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string;
   query?: URLSearchParams;
   body?: unknown;

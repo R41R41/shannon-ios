@@ -57,6 +57,9 @@ import { opsIngestEnabled } from './opsContract.js';
 import { SQLiteOpsStore } from './opsStore.js';
 import { createOpsRoute, isOpsPath } from './serverOpsRoutes.js';
 import { dispatchWithChatSentences } from './serverChatSentenceStream.js';
+import { CALENDAR_UPCOMING_PATH, calendarRequestBytes } from './calendarContract.js';
+import { configuredOwnerUpcoming } from './ownerUpcomingWiring.js';
+import { SQLiteReachOutSpeaker } from './reachOutDelivery.js';
 const now = () => new Date().toISOString();
 const persistentStore = new SQLiteShannonStore({ path: configuredDatabasePath(), now });
 const worldStore = new SQLiteWorldStore(configuredDatabasePath(), now);
@@ -82,6 +85,10 @@ const autonomy = new ShannonAutonomyService({
   defaultAgentHost: process.env.SHANNON_AGENT_DEFAULT_HOST?.trim() || null,
 });
 const backgroundDispatcher = new DurableBackgroundDispatcher(persistentStore, persistentStore);
+const voyagerCatalog = createConfiguredVoyagerCatalog(process.env);
+// The owner's upcoming items (docs/calendar-contract.md): calendar snapshots from the apps, promises, dated Voyager tasks when configured.
+const ownerUpcoming = configuredOwnerUpcoming(process.env, configuredDatabasePath(), { snapshot: scopeKey => persistentStore.snapshot(scopeKey), now, tasks: voyagerCatalog });
+const reachOuts = new SQLiteReachOutSpeaker(configuredDatabasePath());
 const chatModel = createConfiguredChatModel(process.env, persistentStore);
 const kernel = createLocalApiKernel(now, {
   chatModel,
@@ -107,7 +114,7 @@ const kernel = createLocalApiKernel(now, {
   dailyMind: dailyMindStore,
   organizeStore,
   organizeExtractor: createConfiguredOrganizeExtractor(process.env),
-  voyagerCatalog: createConfiguredVoyagerCatalog(process.env),
+  voyagerCatalog, upcoming: ownerUpcoming.upcoming,
   voyagerDestination: createConfiguredVoyagerDestination(process.env),
   personIdentities: personIdentityStore,
   peopleMemory: peopleMemoryStore,
@@ -117,7 +124,7 @@ const kernel = createLocalApiKernel(now, {
   memoryRecall: createConfiguredTurnMemoryRecall(persistentStore),
   autonomy,
   // Her body (docs/body-contract.md). SHANNON_BODY_INGEST=off refuses its events and keeps them out of conversation.
-  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore) },
+  body: { store: bodyStore, ingestEnabled: bodyIngestEnabled(process.env), look: configuredBodyLookOptions(process.env, configuredDatabasePath(), persistentStore), reachOuts: scopeKey => reachOuts.pending(scopeKey) },
   // Read-only Notion (owner decision 2026-10-02). Without SHANNON_NOTION_TOKEN this is the "not connected" reader.
   notion: configuredNotionSource(process.env, { log: line => console.log(line) }),
 });
@@ -154,12 +161,15 @@ const liveVoiceStreamRoute = createLiveVoiceStreamRoute(
 );
 const server = createServer(async (request, response) => {
   try {
-    if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT') {
+    if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT' && request.method !== 'DELETE') {
       sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return;
     }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    if (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH) {
+    // DELETE exists for one path: a device taking its calendar snapshot away. It carries no body.
+    const calendarDelete = request.method === 'DELETE';
+    if ((calendarDelete && url.pathname !== CALENDAR_UPCOMING_PATH)
+      || (request.method === 'PUT' && url.pathname !== BODY_CAPABILITIES_PATH && url.pathname !== CALENDAR_UPCOMING_PATH)) {
       sendJson(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       return;
     }
@@ -242,7 +252,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     // One ended 「友人も一緒」 period carries up to sixty turns of text.
-    const body = request.method !== 'GET' ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
+    const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
     if (url.pathname === '/v1/devices') {
@@ -325,6 +335,8 @@ function shutdown(): void {
     peopleMemoryStore.close();
     autonomyAnnouncer.close();
     bodyStore.close();
+    reachOuts.close();
+    ownerUpcoming.close();
     closeBodyLookStores();
     opsStore.close();
     autonomyStore.close();

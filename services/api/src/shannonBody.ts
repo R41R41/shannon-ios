@@ -4,7 +4,7 @@ import type { AutonomyActivityDay } from './autonomyActivity.js';
 import type { AutonomyControlLabel, ShannonAutonomyService } from './autonomyService.js';
 import {
   BODY_LIMITS, BODY_SCHEMA_VERSION,
-  type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge,
+  type BodyAudience, type BodyCapabilities, type BodyDoing, type BodyEvent, type BodyEventType, type BodyNudge,
 } from './bodyContract.js';
 import { BODY_LOOK_TOOL, BodyLooks, type BodyLookOptions } from './bodyLook.js';
 import { BODY_LOOK_LIMITS } from './bodyLookContract.js';
@@ -29,6 +29,8 @@ export interface ShannonBodyOptions {
   ingestEnabled?: boolean;
   /** Looking at the room (`bodyLook.ts`): its table, switch and limits, the model call, and the way her message is delivered. */
   look?: BodyLookOptions;
+  /** Messages she started on her own that the owner has not read (`reachOutDelivery.ts`); absent, presence has no `reachOut`. */
+  reachOuts?: (scopeKey: string) => { pending: number; latestId?: string };
 }
 
 export interface ShannonBodyDependencies extends ShannonBodyOptions {
@@ -65,6 +67,8 @@ export interface BodyPresence {
   capabilities: StoredBodyCapabilities | null;
   /** A look this device is asked to take now, or null. Absent while looks are switched off on the server. */
   look?: { id: string; requestedAt: string; expiresAt: string } | null;
+  /** Unread messages she started on her own; `latestId` is the newest one's initiative id. Absent when the server does not deliver them. */
+  reachOut?: { pending: number; latestId?: string };
 }
 
 export type BodyPresenceUnchanged = Pick<BodyPresence, 'schemaVersion' | 'etag' | 'changedAt' | 'pollAfterSeconds'> & { unchanged: true };
@@ -109,6 +113,7 @@ export class ShannonBody {
   private readonly store: SQLiteBodyStore;
   private readonly ingestEnabled: boolean;
   private readonly seen = new Map<string, { etag: string; changedAt: string }>();
+  private readonly audiences = new Map<string, { audience: BodyAudience; at: number }>();
   /** Looking at the room through the body's camera. */
   readonly looks: BodyLooks;
 
@@ -182,8 +187,9 @@ export class ShannonBody {
     return this.store.saveCapabilities(scopeKey, deviceId, capabilities, this.dependencies.now());
   }
 
-  presence(scopeKey: string, deviceId: string, knownEtag?: string): BodyPresence | BodyPresenceUnchanged {
+  presence(scopeKey: string, deviceId: string, knownEtag?: string, audience?: BodyAudience): BodyPresence | BodyPresenceUnchanged {
     const at = this.dependencies.now();
+    if (audience && this.ingestEnabled) this.noteAudience(scopeKey, deviceId, audience, at);
     const snapshot = this.dependencies.stateStore.snapshot(scopeKey);
     // 「いま」 as the state sheet shows it. Its cause is conversation text and stays out: the body may be on a stream.
     const mood = presentCompanionState(snapshot, at).presence.mood;
@@ -204,6 +210,7 @@ export class ShannonBody {
       study: { awaitingReaction: this.awaitingReaction(scopeKey) },
       capabilities: this.store.capabilities(scopeKey, deviceId),
       ...(looking.look !== undefined ? { look: looking.look } : {}),
+      ...this.reachOut(scopeKey),
     };
     const etag = createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
     const key = `${scopeKey}\u0000${deviceId}`;
@@ -235,6 +242,23 @@ export class ShannonBody {
       quietUntil: quiet ? new Date(quietEnd).toISOString() : null,
       nudges: quiet ? [] : bodyNudgeCandidates(at, this.awaitingReaction(scopeKey)),
     };
+  }
+
+  private reachOut(scopeKey: string): { reachOut?: { pending: number; latestId?: string } } {
+    try { return this.dependencies.reachOuts ? { reachOut: this.dependencies.reachOuts(scopeKey) } : {}; } catch { return {}; }
+  }
+
+  /** Who can see or hear the body, as it says on a presence read. Written when it changes, otherwise at most every thirty seconds. */
+  private noteAudience(scopeKey: string, deviceId: string, audience: BodyAudience, at: string): void {
+    const key = `${scopeKey}\u0000${deviceId}`;
+    const last = this.audiences.get(key);
+    const time = Date.parse(at);
+    if (last && last.audience === audience && time - last.at < BODY_LIMITS.audienceWriteMilliseconds) return;
+    try {
+      this.store.noteAudience(scopeKey, deviceId, audience, at);
+      if (this.audiences.size >= 256) this.audiences.clear();
+      this.audiences.set(key, { audience, at: time });
+    } catch { /* presence is still answered */ }
   }
 
   /** Stories the owner can read and has not reacted to: the study card's own `awaitingReaction`. */

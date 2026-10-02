@@ -83,6 +83,7 @@ import {
 import { recordCompletedCognitiveCycle } from './cognitiveCycle.js';
 import { createInMemoryAutonomyService, type ShannonAutonomyService } from './autonomyService.js';
 import { BODY_ROUTE_PREFIX, dispatchBodyRequest } from './apiBodyRoutes.js';
+import { CALENDAR_UPCOMING_PATH, dispatchCalendarRequest, localOwnerUpcoming, type OwnerUpcoming } from './calendarRoutes.js';
 import { ShannonBody, type ShannonBodyOptions } from './shannonBody.js';
 import {
   DisabledVoyagerTaskDestination,
@@ -127,7 +128,7 @@ export interface ShannonApiKernelOptions {
   memoryRecall?: TurnMemoryRecall;
   peopleMemory?: PeopleMemoryStore;
   autonomy?: ShannonAutonomyService;
-  notion?: NotionTurnReader; body?: ShannonBodyOptions;
+  notion?: NotionTurnReader; body?: ShannonBodyOptions; upcoming?: OwnerUpcoming;
 }
 export class ShannonApiKernel {
   private readonly chatModel: ShannonChatModel;
@@ -155,7 +156,7 @@ export class ShannonApiKernel {
   private readonly memoryRecall: TurnMemoryRecall | null;
   private readonly people: PeopleMemory;
   private readonly autonomy: ShannonAutonomyService;
-  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody;
+  private readonly notion: NotionTurnReader | null; private readonly body: ShannonBody; private readonly upcoming: OwnerUpcoming;
   constructor(
     private readonly stateStore: CompanionStateStore,
     private readonly now: CompanionClock,
@@ -191,6 +192,7 @@ export class ShannonApiKernel {
     this.notion = options.notion ?? null;
     this.people = new PeopleMemory(options.peopleMemory ?? new SQLitePeopleMemoryStore(':memory:'), this.stateStore);
     this.autonomy = options.autonomy ?? createInMemoryAutonomyService(this.now, { agentTasks: this.agentTasks, defaultThread: scope => this.conversationStore.threadId(scope) });
+    this.upcoming = options.upcoming ?? localOwnerUpcoming(this.stateStore, this.now);
     this.body = new ShannonBody({ ...options.body, stateStore: this.stateStore, autonomy: this.autonomy, conversationStore: this.conversationStore, now: this.now });
   }
 
@@ -221,6 +223,7 @@ export class ShannonApiKernel {
     });
     if (preferenceResponse) return preferenceResponse;
     if (request.path.startsWith(BODY_ROUTE_PREFIX)) return dispatchBodyRequest(request, this.body);
+    if (request.path === CALENDAR_UPCOMING_PATH) return dispatchCalendarRequest(request, this.upcoming, this.now);
 
     if (request.method === 'GET' && request.path === '/v1/state') {
       const scopeKey = request.query?.get('scopeKey');
@@ -375,7 +378,7 @@ export class ShannonApiKernel {
       const basePrompt = this.autonomy.identityProjection(body.scopeKey, audience.identity(() => this.knowledgeStore?.promptProjection(body.scopeKey)
         ?? assembleShannonSystemPrompt(captured)));
       const capabilityContext = explicitCommand ? NO_CAPABILITY_CONTEXT : conversationCapabilityContext(body.scopeKey, message,
-        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion }, audience.capabilities);
+        { aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming }, audience.capabilities);
       const capability = capabilityContext instanceof Promise ? await capabilityContext : capabilityContext;
       const roomLook = this.body.looks.turn(body.scopeKey, message, occurredAt, audience.audience);
       const dailyMindPrompt = [audience.ownFocus(this.dailyMind?.promptFor(body.scopeKey, this.now()) ?? '', this.autonomy.pursuitPrompt(body.scopeKey), captured, this.conversationStore, body.scopeKey),
@@ -482,7 +485,7 @@ export class ShannonApiKernel {
       chatModel: this.chatModel, voiceDecision: this.voiceDecision,
       stateStore: this.stateStore, conversationStore: this.conversationStore,
       knowledgeStore: this.knowledgeStore, dailyMind: this.dailyMind, autonomy: this.autonomy, agentTasks: this.agentTasks,
-      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion,
+      aetherContext: this.aetherContext, voyagerCatalog: this.voyagerCatalog, notion: this.notion, upcoming: this.upcoming,
       aetherProposals: this.aetherProposals, organizeStore: this.organizeStore,
       personIdentities: this.personIdentities, cognitiveIntents: this.cognitiveIntents, now: this.now,
       conversationOrchestration: this.conversationOrchestration, memoryRecall: this.memoryRecall, people: this.people,

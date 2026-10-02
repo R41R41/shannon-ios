@@ -95,6 +95,12 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/sleepConsolidationRules.ts',
     'services/api/src/backgroundWorker.ts',
     'services/api/src/backgroundUpdates.ts',
+    // The owner's upcoming items: calendar snapshots from the apps, and the one projection that reaches a prompt.
+    'services/api/src/calendarContract.ts',
+    'services/api/src/calendarRoutes.ts',
+    'services/api/src/upcomingStore.ts',
+    'services/api/src/ownerUpcoming.ts',
+    'services/api/src/ownerUpcomingWiring.ts',
   ]),
   approval_and_budget: Object.freeze([
     'services/api/src/autonomyCore.ts',
@@ -128,6 +134,9 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'services/api/src/bodyLookActivity.ts',
     'services/api/src/bodyLookActivityStore.ts',
     'services/api/src/bodyLookActivityVision.ts',
+    // Speaking up on her own: the gated step and the one way its message leaves.
+    'services/api/src/autonomyLoopReachOutStep.ts',
+    'services/api/src/reachOutDelivery.ts',
     'services/api/src/llmUsage.ts',
     'services/api/src/agentTaskStore.ts',
     'services/api/src/agentTaskPersistence.ts',

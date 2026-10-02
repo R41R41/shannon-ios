@@ -4,6 +4,7 @@ import type { HostFolderDesk } from './autonomyHostFolderDesk.js';
 import type { AutonomyLoopConfig } from './autonomyLoopConfig.js';
 import { prepareFolderCopy } from './autonomyLoopFolderStep.js';
 import { ROOM_LOOK_DOMAIN, prepareRoomLook, roomLookAvailable, type AutonomyRoomLooks } from './autonomyLoopLookStep.js';
+import { prepareReachOut, reachOutsRemaining, type AutonomyReachOuts, type AutonomyUpcoming } from './autonomyLoopReachOutStep.js';
 import { planFromThought, storyNotes, thinkingMaterials, withNoteAfterReading, type Thought } from './autonomyLoopPlan.js';
 import {
   AUTONOMY_NOTE_MAXIMUM_CHARACTERS, draftPrompt, notePrompt, parsedModelObject, revisePrompt, thinkingPrompt, type AutonomyPrompt,
@@ -46,6 +47,10 @@ export interface StepDependencies {
   notion?: AutonomyNotionReader;
   /** Looking at the room through her body's camera; absent, a look is never planned. */
   looks?: AutonomyRoomLooks;
+  /** Speaking up to the owner on her own; absent, a reach-out is never planned. */
+  reachOuts?: AutonomyReachOuts;
+  /** The owner's upcoming items, for a reach-out; absent, there are none. */
+  upcoming?: AutonomyUpcoming;
 }
 
 /** The adapters of one domain. A step allowed for a domain can reach nothing else. */
@@ -56,6 +61,7 @@ interface BoundAdapters {
   showing?: StudyShowing;
   folder?: HostFolderDesk;
   looks?: AutonomyRoomLooks;
+  reachOuts?: AutonomyReachOuts;
 }
 
 export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domain'>, dependencies: StepDependencies): BoundAdapters {
@@ -63,7 +69,8 @@ export function adaptersFor(decision: Pick<AutonomyDecision, 'decision' | 'domai
   switch (decision.domain as ShannonAutonomyDomainId | typeof NOTION_READ_DOMAIN) {
     case 'thinking': case 'aether_study': return { model: dependencies.model };
     case 'public_read': return { reader: dependencies.reader };
-    case 'owner_message': return { showing: dependencies.showing };
+    // Telling him a story is ready, or one message of her own: the latter also needs the model that words it.
+    case 'owner_message': return { showing: dependencies.showing, ...(dependencies.reachOuts ? { reachOuts: dependencies.reachOuts, model: dependencies.model } : {}) };
     case NOTION_READ_DOMAIN: return dependencies.notion ? { notion: dependencies.notion } : {};
     case 'host_folder': return { folder: dependencies.service.folder };
     case ROOM_LOOK_DOMAIN: return dependencies.looks ? { looks: dependencies.looks } : {};
@@ -118,6 +125,7 @@ export function prepareStep(dependencies: StepDependencies, cycle: AutonomyLoopC
     case 'put_away': return preparePutAway(dependencies, cycle, step);
     case 'copy': return prepareFolderCopy(dependencies, cycle, step, at);
     case 'look': return prepareRoomLook(dependencies, cycle, at);
+    case 'reach_out': return prepareReachOut(dependencies, cycle, step, at);
     default: return null;
   }
 }
@@ -153,12 +161,14 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const overview = service.overview(cycle.scopeKey);
   const readsToday = store.activity.countForDay(cycle.scopeKey, overview.budget.dayKey, 'public_read', 'allowed');
   const maximumSteps = Math.max(0, loop.maximumStepsPerCycle - cycle.stepsTaken - 1);
+  const reachOuts = reachOutsRemaining(dependencies, cycle.scopeKey, at);
   const materials = thinkingMaterials(store, cycle.scopeKey, {
     at, localTime: localTime(at, config.timeZone), remainingYen: overview.budget.remainingYen,
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
     folderAvailable: service.folder.available(cycle.scopeKey, at),
     lookAvailable: roomLookAvailable(dependencies, cycle.scopeKey, at),
+    reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });
   const call = paidCall(dependencies, cycle.scopeKey, 'planning', thinkingPrompt(materials), OUTPUT_TOKENS.think);
   if (!call) return null;
@@ -171,7 +181,7 @@ function prepareThinking(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       const thought: Thought = planFromThought(reply, {
         pursuits: materials.pursuits, pieces: store.study.list(cycle.scopeKey), unnotedReadingIds: materials.unnotedReadings.map(item => item.id),
         placeUrls: materials.places.map(place => place.url),
-      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true, lookAvailable: materials.lookAvailable === true });
+      }, { maximumSteps, maximumReads: Math.min(loop.maximumReadsPerCycle, materials.remainingReads), notionAvailable: materials.notionAvailable, folderAvailable: materials.folderAvailable === true, lookAvailable: materials.lookAvailable === true, reachOut: materials.reachOut ? { upcoming: (materials.upcoming?.length ?? 0) > 0 } : null });
       return {
         outcome: 'done', usage,
         summary: thought.text ? `次に何をするか考えました。「${thought.text}」` : '次に何をするか考えました。',
@@ -384,6 +394,10 @@ function preparePutAway(dependencies: StepDependencies, cycle: AutonomyLoopCycle
       };
     },
   };
+}
+
+function upcomingLines(dependencies: StepDependencies, scopeKey: string, at: string) {
+  try { return dependencies.upcoming?.lines(scopeKey, at, 'owner') ?? []; } catch { return []; }
 }
 
 function waitingReason(outcome: ShowingOutcome): string {

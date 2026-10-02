@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import type { ReachOutReason } from './autonomyLoopPrompts.js';
 
 /**
  * Durable state of the activity loop (Syzygy ADR-0002 step 3): the single-runner
@@ -11,7 +12,7 @@ import type { DatabaseSync } from 'node:sqlite';
  * the same transaction that writes its activity-record entry and its cost. A step a
  * crash left `planned` or `authorized` is closed as `abandoned` and never run again.
  */
-export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look';
+export type AutonomyStepKind = 'think' | 'read' | 'notion' | 'note' | 'draft' | 'revise' | 'show' | 'put_away' | 'copy' | 'look' | 'reach_out';
 export type AutonomyStepStatus = 'planned' | 'authorized' | 'reported' | 'refused' | 'abandoned';
 /** What the loop process last said about itself; the API reads it to describe the loop to the owner. */
 export type AutonomyLoopReadiness = 'ready' | 'disabled' | 'no_credential';
@@ -26,6 +27,8 @@ export interface AutonomyPlannedStep {
   intent?: string;
   /** For `notion`: what she is looking for in the shared pages. */
   query?: string;
+  /** For `reach_out`: why she speaks up, from the closed set. */
+  reason?: ReachOutReason;
 }
 
 export interface AutonomyLoopCycle {
