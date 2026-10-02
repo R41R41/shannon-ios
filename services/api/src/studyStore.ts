@@ -50,7 +50,7 @@ export interface StudyPiece {
   updatedAt: string;
   shownAt?: string;
   putAwayBy?: 'shannon' | 'owner';
-  /** `room_look`: her note about one look at the owner's room. It is for the owner alone and is never material for a story or a copy. */
+  /** `room_look`: her note about one look at the owner's room. She may use it in her own thinking and recall it with the owner; it is never copied to her folder, and never written into a story as it is. */
   origin?: StudyPieceOrigin;
 }
 

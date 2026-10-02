@@ -1,6 +1,7 @@
 import {
   OWNER_AUDIENCE,
   UNKNOWN_GUEST_PRESENCE,
+  guardedShannonSeenPrompt,
   shannonIdentityPrompt,
   type CompanionStateSnapshot,
   type MemoryAudience,
@@ -87,9 +88,12 @@ const OTHERS_TURN: ChatAudienceTurn = Object.freeze({
   instructions: [chatOthersPresentInstructions, speakTimePrivacyCheck].join('\n\n'),
   turnLabel: Object.freeze({ audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' as const }),
   identity: () => shannonIdentityPrompt('owner'),
-  // What she does in her own time is told to the owner alone.
-  ownFocus: (focus: string, _pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) =>
-    sharedDailyFocus(new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, store, scopeKey), focus),
+  // What she does in her own time is told to the owner alone. What she saw of his room stays, guarded: each
+  // line carries the marker of unlabelled personal information, and the speak-time check decides what is said.
+  ownFocus: (focus: string, pursuits: string, state: CompanionStateSnapshot, store: ConversationStore, scopeKey: string) => {
+    const gate = new DisclosureGate(UNKNOWN_GUEST_PRESENCE, state, store, scopeKey);
+    return [sharedDailyFocus(gate, focus), guardedShannonSeenPrompt(pursuits, gate.unlabelledMarker)].filter(Boolean).join('\n\n');
+  },
   visible: sharedChatResponse,
 });
 

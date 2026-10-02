@@ -6,6 +6,9 @@ import { SHANNON_CURRENT_GOAL, SHANNON_OWNER_NAME, SHANNON_ROOM_LOOK_RULES, purs
  * What may reach these prompts is closed by the types below: her pursuits ledger, her
  * own notes and drafts, public pages she read, pages of the owner's shared Notion when
  * that reading is allowed, reader feedback, and how much of the day's budget is left.
+ * Her notes include what she saw of the room in her own time (owner decision 2026-10-02):
+ * a prompt that receives such a note also receives the rule that it is not written into a
+ * story as it is.
  * The prompt of a look at the room carries no material at all: the one frame is attached
  * by the API process and never passes through this file.
  * No type here can carry a conversation, the owner's profile, a memory of a person, or
@@ -24,7 +27,7 @@ export interface PromptPiece {
   lastChange: string;
 }
 
-export interface PromptNote { title: string; excerpt: string; sourceUrl?: string }
+export interface PromptNote { title: string; excerpt: string; sourceUrl?: string; /** Her note about a look at the owner's room. */ seen?: true }
 export interface PromptReading { id: string; title: string; url: string }
 export interface PromptFeedback { pieceId: string; pieceTitle: string; version: number; reactionLabel: string; comment: string }
 export interface PromptPlace { title: string; url: string }
@@ -102,6 +105,18 @@ ${SHANNON_ROOM_LOOK_RULES.map(rule => `- ${rule}。`).join('\n')}
 - これは${SHANNON_OWNER_NAME}だけが読むメモで、誰かへの発言ではない。呼びかけや質問にしない。
 メモの本文だけを返す。`;
 
+/** Added to a prompt only when a note about a look at the room is among its materials. */
+export const SEEN_THINKING_RULE = '- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。次に何をするか考える材料にしてよい。物語には見たままを書かない。';
+export const SEEN_STORY_RULE = '- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。着想にしてよいが、見たままを物語に書かない。持ち主やその部屋だと分かる描写を入れない。';
+const JSON_LINE = '\nJSONだけを返す';
+
+/** The rules with one more line before the reply format, when a note about a look is among the materials; otherwise the rules as they are. */
+function withSeenRule(rules: string, notes: readonly PromptNote[], rule: string): string {
+  if (!notes.some(note => note.seen)) return rules;
+  const index = rules.lastIndexOf(JSON_LINE);
+  return `${rules.slice(0, index)}\n${rule}${rules.slice(index)}`;
+}
+
 function system(rules: string): string {
   return `${shannonPersonaPrompt('owner')}\n\n${rules}`;
 }
@@ -123,7 +138,8 @@ export function pursuitLines(pursuits: readonly ShannonPursuit[], maximum = 12):
 /** Thinking: choose what to do next from her own ledger and study. */
 export function thinkingPrompt(materials: ThinkingMaterials): AutonomyPrompt {
   return {
-    system: system(THINKING_RULES(materials.maximumSteps, materials.notionAvailable, materials.folderAvailable === true, materials.lookAvailable === true)),
+    system: system(withSeenRule(THINKING_RULES(materials.maximumSteps, materials.notionAvailable, materials.folderAvailable === true, materials.lookAvailable === true),
+      materials.notes.slice(0, 6), SEEN_THINKING_RULE)),
     prompt: [
       QUOTED,
       `[いま] ${materials.localTime}`,
@@ -157,7 +173,7 @@ export function notePrompt(input: { pursuit: ShannonPursuit | null; reading: { t
 /** Drafting: a new short story from her ledger and her own notes. */
 export function draftPrompt(input: { idea: string; pursuit: ShannonPursuit | null; notes: readonly PromptNote[] }): AutonomyPrompt {
   return {
-    system: system(DRAFT_RULES),
+    system: system(withSeenRule(DRAFT_RULES, input.notes.slice(0, 5), SEEN_STORY_RULE)),
     prompt: [
       QUOTED,
       `[書こうとしていること]\n${oneLine(input.idea, 300) || '（決めていない。いま書きたいものを書く）'}`,
@@ -175,7 +191,7 @@ export function revisePrompt(input: {
   notes: readonly PromptNote[];
 }): AutonomyPrompt {
   return {
-    system: system(REVISE_RULES),
+    system: system(withSeenRule(REVISE_RULES, input.notes.slice(0, 3), SEEN_STORY_RULE)),
     prompt: [
       QUOTED,
       `[直したいこと]\n${oneLine(input.aim, 300) || '（読み返して、気になるところを直す）'}`,

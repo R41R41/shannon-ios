@@ -6,6 +6,7 @@ import {
   UNKNOWN_GUEST_PRESENCE,
   assembleShannonSystemPrompt,
   buildExpressiveEmotionPrompt,
+  guardedShannonSeenPrompt,
   isOwnerOnly,
   projectEmotionReaction,
   resolveShannonEmotionState,
@@ -293,7 +294,8 @@ async function completeLiveVoiceDelegation(
     ].join('\n\n');
   // Today's focus is built from the owner's interests, which carry no label: it is marked when others can hear.
   const focus = legacyGuest || !selectedSkills.has('daily_mind') ? '' : dependencies.dailyMind?.promptFor(scopeKey, dependencies.now()) ?? '';
-  const dailyMindPrompt = sharedDailyFocus(new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey), focus);
+  const focusGate = new DisclosureGate(present, captured, dependencies.conversationStore, scopeKey);
+  const dailyMindPrompt = sharedDailyFocus(focusGate, focus);
   // Agent work, notes and tasks keep their bounded projections; the speak-time check says how far to go aloud.
   const taskPrompt = legacyGuest || !selectedSkills.has('agent_status')
     ? ''
@@ -315,8 +317,10 @@ async function completeLiveVoiceDelegation(
     // Alone: 「誰と何を話した？」 with provenance. 友人も一緒: who is here and what she remembers of them.
     guestPresence ? guestPeoplePrompt({ ...guestPresence, items: peopleRecall?.items ?? [] }) : peopleRecall?.prompt,
     dailyMindPrompt,
-    // What she is doing in her own time: only when the owner is alone with her.
-    alone && !temporaryGuest && !legacyGuest ? dependencies.autonomy?.pursuitPrompt(scopeKey) : '',
+    // What she is doing in her own time: only when the owner is alone with her. With someone listening beside the owner,
+    // only what she saw of the room stays, marked for the speak-time check. A friend's own call gets nothing.
+    temporaryGuest ? '' : alone ? dependencies.autonomy?.pursuitPrompt(scopeKey)
+      : guardedShannonSeenPrompt(dependencies.autonomy?.pursuitPrompt(scopeKey) ?? '', focusGate.unlabelledMarker),
     taskPrompt,
     capabilityPrompt,
     [

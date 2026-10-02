@@ -55,8 +55,11 @@ export {
 export {
   SHANNON_PURSUIT_LIMITS,
   SHANNON_SEED_PURSUITS,
+  SHANNON_SEEN_LIMITS,
   buildShannonOwnWorkPrompt,
   buildShannonPursuitsPrompt,
+  buildShannonSeenPrompt,
+  guardedShannonSeenPrompt,
   isSeedPursuitId,
   pursuitKindLabel,
   seedPursuits,
@@ -66,6 +69,7 @@ export {
   type ShannonPursuitLink,
   type ShannonPursuitOrigin,
   type ShannonPursuitStatus,
+  type ShannonSeenNote,
 } from './pursuits.js';
 export {
   SHANNON_CORE_PROMPT,

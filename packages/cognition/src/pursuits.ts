@@ -99,6 +99,43 @@ export function buildShannonPursuitsPrompt(
   return result === header ? '' : result;
 }
 
+/** One note she wrote after a look at the room in her own time: when, and her own words. */
+export interface ShannonSeenNote {
+  /** Owner-local, such as 「10月2日 10時」. */
+  readonly when: string;
+  readonly text: string;
+}
+
+export const SHANNON_SEEN_LIMITS = Object.freeze({ notes: 3, characters: 400, days: 7 });
+const SEEN_TITLE = '[ボクが体のカメラで見たこと]';
+const SEEN_HEADER = `${SEEN_TITLE}（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。話が合う時や聞かれた時に、自分の言葉で話してよい）`;
+/** The header while other people are present: what she saw is the owner's room, so the speak-time check applies. */
+const SEEN_GUARDED_HEADER = `${SEEN_TITLE}（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライ氏の部屋とライ氏のことなので、この場では【機微:…】の確かめに従う）`;
+
+/**
+ * Her recent notes about what she saw of the room, for a conversation the owner is part of.
+ * With `marker` (other people can hear or read the reply) every line carries it, so the
+ * speak-time check treats what she saw as personal information of the owner's.
+ */
+export function buildShannonSeenPrompt(notes: readonly ShannonSeenNote[] | null | undefined, options: { marker?: string } = {}): string {
+  const lines = (notes ?? []).slice(0, SHANNON_SEEN_LIMITS.notes).flatMap(note => {
+    const text = note.text.replace(/\s+/gu, ' ').trim();
+    const clipped = text.length > SHANNON_SEEN_LIMITS.characters ? `${text.slice(0, SHANNON_SEEN_LIMITS.characters - 1)}…` : text;
+    return clipped ? [`- ${options.marker ?? ''}${note.when.replace(/\s+/gu, ' ').trim().slice(0, 20)}: ${clipped}`] : [];
+  });
+  return lines.length ? [SEEN_HEADER, ...lines].join('\n') : '';
+}
+
+/**
+ * The same block taken out of an assembled owner prompt and marked, for a turn in which other
+ * people are present with the owner. Everything else of the owner's own-time prompt is dropped.
+ */
+export function guardedShannonSeenPrompt(ownerPrompt: string, marker: string): string {
+  const block = ownerPrompt.split('\n\n').find(section => section.startsWith(SEEN_HEADER));
+  if (!block || !marker) return '';
+  return [SEEN_GUARDED_HEADER, ...block.split('\n').slice(1).map(line => (line.startsWith('- ') ? `- ${marker}${line.slice(2)}` : line))].join('\n');
+}
+
 /**
  * What she is doing in her own time, from the activity record and her study: facts, not
  * wishes. A piece she has not shown yet has no title here, so the reply cannot give it

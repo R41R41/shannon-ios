@@ -3,6 +3,7 @@ import {
   SHANNON_CONVERSATION_ACTION_DOMAIN,
   buildShannonOwnWorkPrompt,
   buildShannonPursuitsPrompt,
+  buildShannonSeenPrompt,
   withAutonomyRunning,
   type ShannonPursuit,
   type ShannonPursuitLink,
@@ -409,13 +410,15 @@ export class ShannonAutonomyService {
 
   /**
    * Bounded projection for an owner one-to-one prompt: her current pursuits and, once she has done
-   * or made something, a few lines of what she is working on. Empty when there is nothing to add.
+   * or made something, a few lines of what she is working on, and her recent notes about what she saw
+   * of the room in her own time. Empty when there is nothing to add. With other people present the
+   * caller keeps only the last block, marked (`guardedShannonSeenPrompt`).
    */
   pursuitPrompt(scopeKey: string): string {
     try {
       const at = this.now();
-      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at)), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at))]
-        .filter(Boolean).join('\n\n');
+      return [buildShannonPursuitsPrompt(this.store.pursuits.list(scopeKey, at)), buildShannonOwnWorkPrompt(this.study.ownWork(scopeKey, at)),
+        buildShannonSeenPrompt(this.study.seen(scopeKey, at))].filter(Boolean).join('\n\n');
     } catch { return ''; }
   }
 

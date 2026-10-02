@@ -11,8 +11,9 @@ import { AUTONOMY_ROOM_LOOK_MODEL, AUTONOMY_ROOM_LOOK_TOKENS, autonomyModelCostU
  * The loop only asks for the look and waits. The frame goes from the body to the API
  * process, which shows it to the model once and drops it; this process receives her
  * short text about it and the token counts, never the frame. The text becomes a note in
- * her study that the owner can read. It is not a message, nothing is sent, and the note
- * is never given to a prompt of the loop, so it cannot find its way into a story.
+ * her study that the owner can read. It is not a message and nothing is sent. The note is
+ * hers to use: a prompt of the loop that is given it also gets the rule that what she saw
+ * is not written into a story as it is (`autonomyLoopPrompts.ts`).
  */
 export interface AutonomyRoomLooks {
   /** A body with its camera on is showing her window, no look is open, and the overall hour and day limits have room. */

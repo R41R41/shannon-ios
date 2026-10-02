@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SHANNON_ROOM_LOOK_RULES, shannonCapabilityPrompt } from '@shannon/cognition';
+import { SHANNON_ROOM_LOOK_RULES, buildShannonSeenPrompt, guardedShannonSeenPrompt, shannonCapabilityPrompt } from '@shannon/cognition';
 import { createLocalApiKernel } from '../src/apiKernel.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
 import { copyableStudyPiece } from '../src/autonomyHostFolderPath.js';
 import type { AutonomyLoopConfig } from '../src/autonomyLoopConfig.js';
 import { planFromThought } from '../src/autonomyLoopPlan.js';
-import { roomLookNotePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
+import { SEEN_STORY_RULE, SEEN_THINKING_RULE, draftPrompt, revisePrompt, roomLookNotePrompt, thinkingPrompt } from '../src/autonomyLoopPrompts.js';
 import { ShannonAutonomyService } from '../src/autonomyService.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { bodyLookNotSeenSummary } from '../src/bodyLook.js';
@@ -23,7 +23,7 @@ import { SQLiteBodyLookStore } from '../src/bodyLookStore.js';
 import type { RoomLookViewRequest, RoomLookViewer } from '../src/bodyLookVision.js';
 import { closeBodyLookStores, configuredBodyLookOptions } from '../src/bodyLookWiring.js';
 import { SQLiteBodyStore } from '../src/bodyStore.js';
-import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult } from '../src/chatModel.js';
+import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { ownerDay } from '../src/companionPresence.js';
 import { SQLiteInitiativeStore } from '../src/initiativeStore.js';
 import type { BodyPresence } from '../src/shannonBody.js';
@@ -62,8 +62,13 @@ class FakeChat implements ShannonChatModel {
   readonly mode = 'local-stub' as const;
   readonly model = 'fake';
   readonly requests: ShannonChatModelRequest[] = [];
+  readonly voicePrompts: string[] = [];
   async generate(request: ShannonChatModelRequest): Promise<ShannonChatModelResult> {
     this.requests.push(request);
+    return { mode: this.mode, model: this.model, reply: 'はい。' };
+  }
+  async generateVoice(request: ShannonVoiceModelRequest) {
+    this.voicePrompts.push(request.systemPrompt);
     return { mode: this.mode, model: this.model, reply: 'はい。' };
   }
 }
@@ -306,7 +311,7 @@ describe('one look in her own time, across two processes', () => {
     expect(h.service.study.ownWork(scope, h.clock.at)?.today).toEqual(['次にすることを考えた', '部屋を1回見た']);
   });
 
-  it('keeps what she saw out of every prompt: her own activity, the owner\'s Talk, and a turn other people can see', async () => {
+  it('lets her use what she saw in her own thinking, and adds the story rule only to a prompt that is given such a note', async () => {
     const h = stage2();
     await h.bodyShowing();
     h.model.plans = [LOOK_PLAN];
@@ -314,7 +319,6 @@ describe('one look in her own time, across two processes', () => {
     const note = h.store.study.list(scope)[0]!;
     expect(note.body).toBe(LOOK_TEXT);
 
-    // Her next cycles think, draft and revise without it, so it cannot be used in a story.
     h.advance(11 * MINUTE);
     h.model.plans = [{ thought: '書きます。', steps: [{ action: 'draft', idea: '部屋の話' }] }];
     await runUntilIdle(h.loop);
@@ -323,22 +327,131 @@ describe('one look in her own time, across two processes', () => {
     h.model.plans = [{ thought: '直します。', steps: [{ action: 'revise', pieceId: story.id, aim: '終わり' }] }];
     await runUntilIdle(h.loop);
     expect(h.model.kinds()).toEqual(['think', 'think', 'draft', 'think', 'revise']);
-    for (const prompt of h.model.prompts()) {
-      expect(prompt).not.toContain(LOOK_TEXT);
-      expect(prompt).not.toContain('見たこと（');
+    const [first, second] = h.model.prompts('think');
+    // Before the look there is no such note: no rule, no text.
+    expect(first).not.toContain('「見たこと');
+    expect(first).not.toContain(SEEN_THINKING_RULE);
+    // Afterwards the note is one of her notes, bounded like the others (140 characters in thinking), with the rule.
+    expect(second).toContain(`- 「見たこと（10月2日 10時）」 ${LOOK_TEXT}`);
+    expect(second).toContain(SEEN_THINKING_RULE);
+    for (const prompt of [h.model.prompts('draft')[0]!, h.model.prompts('revise')[0]!]) {
+      expect(prompt).toContain(`- 「見たこと（10月2日 10時）」 ${LOOK_TEXT}`);
+      expect(prompt).toContain(`${SEEN_STORY_RULE}\nJSONだけを返す`);
+      expect(prompt).not.toContain(SEEN_THINKING_RULE);
     }
-    // It is not a piece she can copy to her folder either.
+    // Still not a piece she can copy to her folder.
     expect(copyableStudyPiece(note)).toBe(false);
-    expect(h.service.folder.nextCopy(scope, h.clock.at, note.id)).toBeNull();
+    // A note she put away is no longer material.
+    h.store.study.putAway(scope, note.id, 'shannon', h.clock.at);
+    h.advance(11 * MINUTE);
+    await runUntilIdle(h.loop);
+    expect(h.model.prompts('think').at(-1)).not.toContain('「見たこと');
+    expect(h.model.prompts('think').at(-1)).not.toContain(SEEN_THINKING_RULE);
+  });
 
-    // A conversation: the owner alone, then with others. Neither prompt carries it; a non-owner audience cannot be told.
+  it('keeps every loop prompt byte-identical while no note about a look is among its materials', () => {
+    const plain = [{ title: '駅の光', excerpt: '光が低いと懐かしい。' }];
+    const seen = [...plain, { title: '見たこと（10月2日 10時）', excerpt: LOOK_TEXT, seen: true as const }];
+    const piece = { title: '傘', body: '本文', version: 1 };
+    const thinking = thinkingPrompt({ ...emptyMaterials, notes: plain });
+    expect(thinking.system).toBe(thinkingPrompt(emptyMaterials).system);
+    expect(thinking.system).not.toContain('見たこと');
+    const withSeen = thinkingPrompt({ ...emptyMaterials, notes: seen });
+    expect(withSeen.system.replace(`\n${SEEN_THINKING_RULE}`, '')).toBe(thinking.system);
+    expect(withSeen.system).toContain(`${SEEN_THINKING_RULE}\nJSONだけを返す:`);
+
+    const draft = draftPrompt({ idea: '傘', pursuit: null, notes: plain });
+    expect(draft.system).toBe(draftPrompt({ idea: '傘', pursuit: null, notes: [] }).system);
+    const draftSeen = draftPrompt({ idea: '傘', pursuit: null, notes: seen });
+    expect(draftSeen.system.replace(`\n${SEEN_STORY_RULE}`, '')).toBe(draft.system);
+    expect(draftSeen.system).toContain(`${SEEN_STORY_RULE}\nJSONだけを返す: {"title"`);
+
+    const revise = revisePrompt({ aim: '', piece, feedback: [], notes: plain });
+    expect(revise.system).toBe(revisePrompt({ aim: '', piece, feedback: [], notes: [] }).system);
+    const reviseSeen = revisePrompt({ aim: '', piece, feedback: [], notes: seen });
+    expect(reviseSeen.system.replace(`\n${SEEN_STORY_RULE}`, '')).toBe(revise.system);
+    // A note beyond what the prompt shows does not add the rule: the revising prompt shows three notes.
+    const far = [plain[0]!, plain[0]!, plain[0]!, seen[1]!];
+    expect(revisePrompt({ aim: '', piece, feedback: [], notes: far }).system).toBe(revise.system);
+    expect(SEEN_STORY_RULE).toBe('- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。着想にしてよいが、見たままを物語に書かない。持ち主やその部屋だと分かる描写を入れない。');
+    expect(SEEN_THINKING_RULE).toBe('- メモのうち「見たこと」は、体のカメラで見た持ち主の部屋と持ち主のこと。次に何をするか考える材料にしてよい。物語には見たままを書かない。');
+  });
+
+  it('lets her recall what she saw with the owner alone, guards it while others are present with him, and gives a friend\'s own call nothing', async () => {
+    const h = stage2();
+    const HEADER = '[ボクが体のカメラで見たこと]（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。話が合う時や聞かれた時に、自分の言葉で話してよい）';
+    const GUARDED = '[ボクが体のカメラで見たこと]（自分の時間に部屋を一度ずつ見て、書斎に書いたメモ。ライ氏の部屋とライ氏のことなので、この場では【機微:…】の確かめに従う）';
+    const MARKED = `- 【機微:未分類・ライ氏だけが知っている】10月2日 10時: ${LOOK_TEXT}`;
+    const voice = async (body: Record<string, unknown>) => {
+      const response = await h.api.dispatch({ method: 'POST', path: '/v1/voice/gemini/cascade/delegations', body: { scopeKey: scope, transcript: '部屋で何か見えた？', ...body } });
+      expect(response.status).toBe(200);
+      return h.chatModel.voicePrompts.at(-1)!;
+    };
+    const companion = { deviceContext: { timeZoneIdentifier: 'Asia/Tokyo', requestedLocation: false, location: null, companionPresent: true } };
+    // Nothing seen yet: no block anywhere.
+    expect((await h.chat('おはよう')).request.systemPrompt).not.toContain('体のカメラで見たこと');
+
+    await h.bodyShowing();
+    h.model.plans = [LOOK_PLAN];
+    await runUntilIdle(h.loop);
+
+    // The owner alone, text and voice: the note, when, and that it is her own look.
     const alone = await h.chat('今日は何をしていましたか');
-    expect(`${alone.request.systemPrompt}\n${JSON.stringify(alone.request.history)}`).not.toContain(LOOK_TEXT);
-    expect(alone.request.systemPrompt).toContain('部屋を1回見た');
+    expect(alone.request.systemPrompt).toContain(`${HEADER}\n- 10月2日 10時: ${LOOK_TEXT}`);
+    expect(alone.request.systemPrompt).not.toContain('【機微');
+    expect(await voice({})).toContain(`${HEADER}\n- 10月2日 10時: ${LOOK_TEXT}`);
+    expect(h.api.realtimeVoiceSession(scope).instructions).toContain(`- 10月2日 10時: ${LOOK_TEXT}`);
+
+    // Other people present with the owner (a text turn with `audience: others`, a voice turn with someone listening):
+    // the same gate as the rest of memory. The note reaches the model marked, with the speak-time check; nothing else of her own time does.
     const shared = await h.chat('みんな来ました', { audience: 'others', threadId: alone.body.threadId });
-    expect(`${shared.request.systemPrompt}\n${JSON.stringify(shared.request.history)}`).not.toContain(LOOK_TEXT);
-    expect(shared.request.systemPrompt).not.toContain('部屋を1回見た');
+    const companionTurn = await voice(companion);
+    for (const prompt of [shared.request.systemPrompt, companionTurn]) {
+      expect(prompt).toContain(`${GUARDED}\n${MARKED}`);
+      expect(prompt).not.toContain(`- 10月2日 10時: ${LOOK_TEXT}`);
+      expect(prompt).not.toContain(HEADER);
+      expect(prompt).toContain('[Speak-time privacy check — other people can hear this reply]');
+      expect(prompt).not.toContain('部屋を1回見た');
+      expect(prompt).not.toContain('[ボクがひとりの時間にしていること]');
+    }
+    expect(JSON.stringify(shared.request.history)).not.toContain(LOOK_TEXT);
+
+    // A friend talking to her without the owner in the conversation: never.
+    expect(await voice({ participantMode: 'guest' })).not.toContain(LOOK_TEXT);
+    expect(h.api.realtimeVoiceSession(scope, undefined, { participantMode: 'guest' }).instructions).not.toContain(LOOK_TEXT);
     expect(shannonCapabilityPrompt('guest')).not.toMatch(/部屋を見る|自分のフォルダ/u);
+    // Platform conversations (Discord and the others) are built without her own-time prompt at all.
+    for (const name of ['platformBridge.ts', 'platformPeople.ts', 'platformPeopleSummaries.ts']) {
+      expect(readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8'), name).not.toMatch(/pursuitPrompt|SeenPrompt|studyDesk|\.study\b/u);
+    }
+  });
+
+  it('bounds what a conversation is given: the latest three notes of the last seven days, 400 characters each, none put away', () => {
+    const h = stage2();
+    const add = (at: string, body: string) => {
+      const piece = h.store.study.create(scope, { kind: 'note', title: `見たこと（${at.slice(5, 10)}）`, body, origin: 'room_look' }, at);
+      if (typeof piece === 'string') throw new Error(piece);
+      return piece;
+    };
+    add('2026-09-24T00:00:00.000Z', '八日前に見たもの。');
+    add('2026-09-27T00:00:00.000Z', '五日前に見たもの。');
+    const away = add('2026-09-28T00:00:00.000Z', 'しまったもの。');
+    add('2026-09-29T00:00:00.000Z', '三日前に見たもの。');
+    add('2026-09-30T00:00:00.000Z', '二日前に見たもの。');
+    add('2026-10-01T00:00:00.000Z', `${'あ'.repeat(500)}`);
+    h.store.study.putAway(scope, away.id, 'owner', START);
+    h.store.study.create(scope, { kind: 'note', title: '読んだこと', body: '読んだもののメモ。' }, START);
+    expect(h.service.study.seen(scope, START).map(note => note.when)).toEqual(['10-01', '09-30', '09-29']);
+    const block = buildShannonSeenPrompt(h.service.study.seen(scope, START));
+    expect(block.split('\n')).toHaveLength(4);
+    expect(block.split('\n')[1]).toBe(`- 10-01: ${'あ'.repeat(399)}…`);
+    expect(h.service.pursuitPrompt(scope)).toContain(block);
+    expect(h.service.pursuitPrompt(scope)).not.toMatch(/八日前|五日前|しまったもの|読んだもののメモ/u);
+    // Everything older than a week: no block.
+    h.clock.at = '2026-10-20T00:00:00.000Z';
+    expect(h.service.pursuitPrompt(scope)).not.toContain('体のカメラで見たこと');
+    expect(guardedShannonSeenPrompt('関係のない文', '【機微:未分類・ライ氏だけが知っている】')).toBe('');
+    expect(guardedShannonSeenPrompt(block, '')).toBe('');
   });
 
   it('never keeps the frame: not in the database files, not in a log line', async () => {

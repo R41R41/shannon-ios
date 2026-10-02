@@ -1,4 +1,4 @@
-import { SHANNON_AUTONOMY_SYSTEM_DOMAIN, type ShannonOwnWork } from '@shannon/cognition';
+import { SHANNON_AUTONOMY_SYSTEM_DOMAIN, SHANNON_SEEN_LIMITS, type ShannonOwnWork, type ShannonSeenNote } from '@shannon/cognition';
 import { autonomyDayPhrases } from './autonomyDayLog.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import {
@@ -124,6 +124,20 @@ export class StudyDesk {
     });
     const phrases = autonomyDayPhrases(today?.entries ?? []);
     return phrases.length || pieces.length ? { today: phrases, pieces } : null;
+  }
+
+  /**
+   * Her recent notes about a look at the room, newest first, for a conversation the owner is part of:
+   * at most three, from the last seven days, none she or the owner put away.
+   */
+  seen(scopeKey: string, at: string): readonly ShannonSeenNote[] {
+    const since = Date.parse(at) - SHANNON_SEEN_LIMITS.days * 24 * 60 * 60_000;
+    return this.store.study.list(scopeKey)
+      .filter(piece => piece.origin === 'room_look' && piece.status !== 'put_away' && Date.parse(piece.createdAt) >= since)
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+      .slice(0, SHANNON_SEEN_LIMITS.notes)
+      // The title is written by the step as 「見たこと（10月2日 10時）」; the time in it is the owner-local hour of the look.
+      .map(piece => ({ when: /^見たこと（(.+)）$/u.exec(piece.title)?.[1] ?? piece.createdAt.slice(0, 10), text: piece.body }));
   }
 
   private card(scopeKey: string, piece: StudyPiece): StudyPieceCard {

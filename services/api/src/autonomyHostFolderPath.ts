@@ -73,7 +73,7 @@ export function hostFolderRelativePath(value: unknown): { path: string } | { pro
 
 /**
  * A note, or a story whose current version she has called 「見せてもいい」. Never a draft, never a piece put away,
- * and never her note about a look at the room: what she saw stays in the study, for the owner alone.
+ * and never her note about a look at the room: what she saw of the owner's room is not put into a file.
  */
 export function copyableStudyPiece(piece: StudyPiece): boolean {
   if (piece.status === 'put_away' || piece.readableVersion !== piece.version || piece.origin === 'room_look') return false;

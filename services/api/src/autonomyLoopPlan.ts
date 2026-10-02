@@ -29,12 +29,13 @@ export interface Thought {
 }
 
 export function storyNotes(store: SQLiteAutonomyStore, scopeKey: string, pursuitId?: string, limit = 6): PromptNote[] {
-  // What she saw of the owner's room is never material for a prompt of the loop, so it cannot be used in a story.
-  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away' && piece.origin !== 'room_look');
+  const notes = store.study.list(scopeKey).filter(piece => piece.kind === 'note' && piece.status !== 'put_away');
   // Notes written for the same pursuit come first; the rest follow by recency.
   const ordered = pursuitId ? [...notes.filter(note => note.pursuitId === pursuitId), ...notes.filter(note => note.pursuitId !== pursuitId)] : notes;
   return ordered.slice(0, limit).map(note => ({
     title: note.title, excerpt: note.body, ...(note.sources[0] ? { sourceUrl: note.sources[0].url } : {}),
+    // What she saw of the owner's room: the prompt that receives it adds the rule that it is not written into a story as it is.
+    ...(note.origin === 'room_look' ? { seen: true as const } : {}),
   }));
 }
 
