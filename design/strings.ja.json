@@ -1227,6 +1227,20 @@
       "note": "カメラの状態の 1 行。state は 切／見てよい／いま見ています。iPhone は向き合う表示と音声会話の上、切の間はシートの 設定 のタイルの下（A7）。「ようす」の体のカメラも同じ形。"
     },
     {
+      "key": "ops.connectionInvalid",
+      "text": "接続が無効になりました。もう一度接続してください。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift",
+      "only": "apple",
+      "note": "運用を読もうとしてサーバーに接続を断られたとき（401）。運用の画面と、設定 › 管理 › 運用 の行に出す。運用の印は出さない（接続の問題で、運用の問題ではない。接続していないアプリに印が出続けないように。2026-10-05 の見直し）。"
+    },
+    {
+      "key": "talk.dictation.waitsForCall",
+      "text": "音声会話がマイクを使っている間は、音声入力を始められません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift",
+      "only": "apple",
+      "note": "入力欄のマイク（音声入力）が使えないときの手がかり（読み上げ）。通話中と、触れたあとにシャノンが返事を聞いている数秒。"
+    },
+    {
       "key": "talk.display.facing",
       "text": "向き合う",
       "apple": "apps/ios/Sources/ShannonAppCore/Domain/Appearance/ShannonAppearanceModels.swift",

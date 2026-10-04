@@ -18,7 +18,10 @@ extension ShannonConversationView {
             }
             .accessibilityLabel("トークと画面を開く")
             .accessibilityValue(ShannonEntryMarks.accessibilityValue(
-                unread: model.totalBadgeCount, waiting: shannonWaitingCount, opsAttention: yousu.ops.attentionReason()
+                unread: model.totalBadgeCount,
+                waiting: ShannonEntryMarks.waitingNotUnread(
+                    yousu.now.waiting(approvals: yousuApprovals), unreadTaskIDs: model.unreadAgentTaskIDs),
+                opsAttention: yousu.ops.attentionReason()
             ))
             .overlay(alignment: .topTrailing) {
                 if model.totalBadgeCount > 0 || shannonWaitingCount > 0 {

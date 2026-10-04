@@ -38,8 +38,10 @@ public struct ShannonConversationView: View {
     @State var hubShowsYousu = false
     /// 「設定 › 管理 › 運用」 is open.
     @State var settingsShowsOps = false
-    /// A `shannon://` link that arrived while the call screen was up: opened once it is minimised or the call ends.
-    @State var deferredLink: ShannonYousuLink.Request?
+    /// A `shannon://` link that waits until what is on screen lets its place be seen (`ShannonLinkRoute`).
+    @State var deferredLink: ShannonDeferredLink?
+    /// Settings is really on screen (its cover appeared), not only asked for.
+    @State var settingsIsOnScreen = false
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -138,7 +140,10 @@ public struct ShannonConversationView: View {
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
         .onAppear { openPendingYousuLink() }
         .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in openPendingYousuLink() }
-        .onChange(of: showsGeminiLiveVoice) { openDeferredLink() }
+        // A waiting link tries again whenever what is on screen changes, once it has settled.
+        .task(id: linkRetryKey) { await retryDeferredLink() }
+        // A work task he opened himself (from the call screen, say) is newer than a waiting link: the link gives way.
+        .onChange(of: selectedAgentTaskID) { if selectedAgentTaskID != nil { deferredLink = nil } }
 #if os(iOS)
         // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
         .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
@@ -174,12 +179,16 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .fullScreenCover(isPresented: $showsSettings) {
             settingsSheet
+                .onAppear { settingsIsOnScreen = true }
+                .onDisappear { settingsIsOnScreen = false }
                 .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
                     conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
         }
 #else
         .sheet(isPresented: $showsSettings) {
             settingsSheet
+                .onAppear { settingsIsOnScreen = true }
+                .onDisappear { settingsIsOnScreen = false }
         }
 #endif
         .sheet(isPresented: $showsThreadList) {

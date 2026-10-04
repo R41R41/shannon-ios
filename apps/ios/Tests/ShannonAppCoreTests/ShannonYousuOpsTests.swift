@@ -11,6 +11,10 @@ private final class FakeYousuClient: ShannonYousuServing, @unchecked Sendable {
     var outcome: ShannonOpsSendOutcome = .unknownDelivery
     var sent: [(type: ShannonOpsCommandType, target: String, key: String)] = []
     var afterSend: (() -> Void)?
+    /// The pairing the readings belong to; nil as for an app that is not paired.
+    var scope: String? = "server|owner|device-1"
+
+    func opsReportScope(scopeKey: String) -> String? { scope }
 
     func loadOps(scopeKey: String) async throws -> ShannonOpsReading {
         if let loadError { throw loadError }
@@ -221,50 +225,84 @@ final class ShannonYousuOpsTests: XCTestCase {
     }
 
     @MainActor
-    func testAServerDownAtLaunchIsMarkedOnceAReportHadArrivedBefore() async throws {
+    func testAServerDownAtLaunchIsMarkedOnceAReportHadArrivedBeforeForThisPairing() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)"))
-        // An earlier launch: a report arrived for this scope.
+        // An earlier launch: a report arrived for this pairing.
         let client = FakeYousuClient()
         client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
-        let earlier = ShannonOpsModel(scopeKey: "owner", client: client, defaults: defaults)
+        let earlier = ShannonOpsModel(scopeKey: "local-owner", client: client, defaults: defaults)
         await earlier.refresh()
         XCTAssertTrue(earlier.reportArrivedBefore)
 
         // This launch: the server cannot be reached, so no report is in memory.
         let down = FakeYousuClient()
         down.loadError = URLError(.cannotConnectToHost)
-        let launched = ShannonOpsModel(scopeKey: "owner", client: down, defaults: defaults)
-        XCTAssertTrue(launched.reportArrivedBefore)
+        let launched = ShannonOpsModel(scopeKey: "local-owner", client: down, defaults: defaults)
         XCTAssertNil(launched.attentionReason(), "not read yet: nothing is claimed")
         await launched.refresh()
         XCTAssertFalse(launched.hasReport)
         XCTAssertEqual(launched.attentionReason(), "サーバーに届きません")
         XCTAssertTrue(launched.needsAttention)
 
-        // A connection that became invalid says the same.
-        let refused = FakeYousuClient()
-        refused.loadError = ShannonAPIError.rejected(status: 401)
-        let invalid = ShannonOpsModel(scopeKey: "owner", client: refused, defaults: defaults)
-        await invalid.refresh()
-        XCTAssertEqual(invalid.attentionReason(), "サーバーに届きません")
-
-        // Another scope never had a report: no mark, whatever the server does.
-        let other = ShannonOpsModel(scopeKey: "someone-else", client: down, defaults: defaults)
+        // Another pairing (paired again, or another server) never had a report: no mark.
+        let repaired = FakeYousuClient()
+        repaired.loadError = URLError(.cannotConnectToHost)
+        repaired.scope = "server|owner|device-2"
+        let other = ShannonOpsModel(scopeKey: "local-owner", client: repaired, defaults: defaults)
         await other.refresh()
         XCTAssertFalse(other.reportArrivedBefore)
         XCTAssertNil(other.attentionReason())
 
+        // An app that is not paired remembers nobody's 運用.
+        let unpaired = FakeYousuClient()
+        unpaired.loadError = URLError(.cannotConnectToHost)
+        unpaired.scope = nil
+        let lonely = ShannonOpsModel(scopeKey: "local-owner", client: unpaired, defaults: defaults)
+        await lonely.refresh()
+        XCTAssertNil(lonely.attentionReason())
+
         // An older server without 運用 hides it, mark and all.
         let older = FakeYousuClient()
         older.loadError = ShannonAPIError.rejected(status: 404)
-        let gone = ShannonOpsModel(scopeKey: "owner", client: older, defaults: defaults)
+        let gone = ShannonOpsModel(scopeKey: "local-owner", client: older, defaults: defaults)
         await gone.refresh()
         XCTAssertNil(gone.attentionReason())
 
         // Without a place to keep it, nothing is remembered.
-        let forgetful = ShannonOpsModel(scopeKey: "owner", client: down)
+        let forgetful = ShannonOpsModel(scopeKey: "local-owner", client: down)
         await forgetful.refresh()
         XCTAssertNil(forgetful.attentionReason())
+
+        // Unpairing or pairing again forgets it.
+        ShannonOpsModel.forgetArrivedReports(in: defaults)
+        let afterUnpair = ShannonOpsModel(scopeKey: "local-owner", client: down, defaults: defaults)
+        await afterUnpair.refresh()
+        XCTAssertFalse(afterUnpair.reportArrivedBefore)
+        XCTAssertNil(afterUnpair.attentionReason())
+    }
+
+    @MainActor
+    func testARefusedConnectionIsNotAnOpsMarkAndIsSaidInItsOwnWords() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)"))
+        let client = FakeYousuClient()
+        client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
+        let clock = TestClock()
+        let model = ShannonOpsModel(scopeKey: "local-owner", client: client, clock: { clock.date }, defaults: defaults)
+        await model.refresh()
+        XCTAssertEqual(model.attentionReason(), "Notionが不調")
+        // The device was unpaired elsewhere: every reading is refused.
+        client.loadError = ShannonAPIError.rejected(status: 401)
+        await model.refresh()
+        XCTAssertTrue(model.connectionIsInvalid)
+        XCTAssertNil(model.attentionReason())
+        XCTAssertFalse(model.needsAttention)
+        XCTAssertEqual(model.unreachableMessage, ShannonGeneratedStrings.opsConnectionInvalid)
+        XCTAssertEqual(model.allowed(), .nothing)
+        // Let in again: the mark is what 運用 says.
+        client.loadError = nil
+        await model.refresh()
+        XCTAssertFalse(model.connectionIsInvalid)
+        XCTAssertEqual(model.attentionReason(), "Notionが不調")
     }
 
     @MainActor

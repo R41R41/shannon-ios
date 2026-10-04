@@ -32,6 +32,13 @@ final class ShannonVoiceWorkspaceState {
     var callMemory: ShannonVoiceCallMemoryState?
     /// Counts calls ended through `endCall`, so every open call screen can close itself.
     var callEndRevision = 0
+    /// The call screens that are up now: the root's, or one shown from inside Settings, the thread list or a
+    /// work task (each modal has its own). A link never closes what is under any of them.
+    private(set) var callScreenPresenters: Set<UUID> = []
+    var callScreenIsUp: Bool { !callScreenPresenters.isEmpty }
+    func setCallScreen(_ presenter: UUID, isUp: Bool) {
+        if isUp { callScreenPresenters.insert(presenter) } else { callScreenPresenters.remove(presenter) }
+    }
 
     func clearPhoto() {
         showsPhotoSource = false

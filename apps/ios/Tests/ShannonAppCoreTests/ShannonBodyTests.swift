@@ -196,6 +196,9 @@ final class ShannonBodyTests: XCTestCase {
             ("cameraExplanation", \.cameraExplanation),
         ]
         XCTAssertEqual(Mirror(reflecting: none).children.compactMap(\.label), covers.map(\.0))
+        // Every field is a Bool, so `isAny` reads each one; a field of another type would be skipped silently.
+        XCTAssertEqual(Mirror(reflecting: none).children.count, 8)
+        XCTAssertTrue(Mirror(reflecting: none).children.allSatisfy { $0.value is Bool })
         XCTAssertFalse(none.isAny)
         XCTAssertTrue(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covers: none))
         for (name, cover) in covers {
@@ -226,6 +229,14 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.idle))
         XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.failed))
+        // Only starting waits: dictation that already runs can be finished or stopped.
+        for phase in [ShannonVoicePhase.idle, .denied, .failed] {
+            XCTAssertTrue(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: true), phase.rawValue)
+            XCTAssertFalse(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: false), phase.rawValue)
+        }
+        for phase in [ShannonVoicePhase.listening, .ready, .speaking] {
+            XCTAssertFalse(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: true), phase.rawValue)
+        }
     }
 
     func testOthersStayTheAudienceForAWhileAfterAFriendWasListening() {

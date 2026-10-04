@@ -422,7 +422,10 @@ final class ShannonAppLookTests: XCTestCase {
         XCTAssertNil(coordinator.cameraIsPresent)
         XCTAssertTrue(coordinator.hasCamera)
         XCTAssertEqual(camera.lookups, 0, "reading the state does not look for devices")
-        await coordinator.discoverCamera()
+        // Two that ask at once share one look.
+        async let first: Void = coordinator.discoverCamera()
+        async let second: Void = coordinator.discoverCamera()
+        _ = await (first, second)
         await coordinator.discoverCamera()
         XCTAssertEqual(coordinator.cameraIsPresent, false)
         XCTAssertFalse(coordinator.hasCamera)

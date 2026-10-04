@@ -236,8 +236,19 @@ extension ShannonConversationView {
         .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
         .buttonStyle(.plain)
         .disabled(model.isSending || [.requestingPermission, .transcribing, .thinking].contains(voiceModel.phase)
-            || (voiceModel.phase != .listening && voiceCallHoldsMicrophone))
+            || dictationWaitsForCall)
         .accessibilityLabel(voiceModel.phase == .listening ? "音声入力を終了" : "音声入力")
+        .accessibilityHint(dictationWaitsForCall ? ShannonGeneratedStrings.talkDictationWaitsForCall : "")
+    }
+
+    /// A tap would start dictation while the voice conversation holds the microphone: it waits. Finishing
+    /// or stopping dictation that already runs (listening, ready, speaking) is never held back.
+    var dictationWaitsForCall: Bool {
+        Self.dictationWaits(dictation: voiceModel.phase, callHoldsMicrophone: voiceCallHoldsMicrophone)
+    }
+
+    nonisolated static func dictationWaits(dictation: ShannonVoicePhase, callHoldsMicrophone: Bool) -> Bool {
+        callHoldsMicrophone && [.idle, .denied, .failed].contains(dictation)
     }
 
     /// The voice conversation holds the microphone: a call, or the few seconds after her spoken line for a

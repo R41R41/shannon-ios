@@ -360,6 +360,10 @@ public enum ShannonGeneratedStrings {
     public static let talkFigureHeroHint = "向き合う表示にします。そこで姿に触れられます"
     /// `look.state.line`
     public static func lookStateLine(state: String) -> String { "カメラ：\(state)" }
+    /// `ops.connectionInvalid`
+    public static let opsConnectionInvalid = "接続が無効になりました。もう一度接続してください。"
+    /// `talk.dictation.waitsForCall`
+    public static let talkDictationWaitsForCall = "音声会話がマイクを使っている間は、音声入力を始められません"
     /// `talk.display.facing`
     public static let talkDisplayFacing = "向き合う"
 }

@@ -181,6 +181,8 @@ export const shannonStrings = {
   "talk.display.menuHint": "長押しで、姿と映し方を選べます",
   "talk.figure.heroHint": "向き合う表示にします。そこで姿に触れられます",
   "look.state.line": "カメラ：{state}",
+  "ops.connectionInvalid": "接続が無効になりました。もう一度接続してください。",
+  "talk.dictation.waitsForCall": "音声会話がマイクを使っている間は、音声入力を始められません",
   "talk.display.facing": "向き合う",
 } as const;
 

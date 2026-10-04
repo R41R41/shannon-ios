@@ -29,16 +29,19 @@ public final class ShannonOpsModel {
     public private(set) var isSupported = true
     /// Set while the API itself did not answer: a different message from a stale report.
     public private(set) var unreachableMessage: String?
+    /// The server refused this app's connection (401). A matter of the connection, not of 運用: no mark,
+    /// and the 運用 row says it in the same words as the page (decision of the review, 2026-10-05).
+    public private(set) var connectionIsInvalid = false
     public private(set) var isSending = false
     public private(set) var notice: Notice?
 
     private let scopeKey: String
     private let client: (any ShannonYousuServing)?
     private let clock: @Sendable () -> Date
-    /// Where "a report has arrived for this scope before" is kept across launches; nil keeps nothing.
+    /// Where "a report has arrived for this pairing before" is kept across launches; nil keeps nothing.
     private let defaults: UserDefaults?
-    /// A report has arrived for this scope at some time, in this launch or an earlier one.
-    public private(set) var reportArrivedBefore = false
+    /// Whose 運用 the last reading was (`ShannonYousuServing.opsReportScope`), asked at every reading.
+    private var reportScope: String?
     private var fetchedAt: Date?
     private var ageAtFetch: TimeInterval = 0
     private var acceptedAt: Date?
@@ -55,12 +58,26 @@ public final class ShannonOpsModel {
         self.client = client
         self.clock = clock
         self.defaults = defaults
-        reportArrivedBefore = defaults?.bool(forKey: Self.reportArrivedKey(scopeKey)) ?? false
         if client == nil { isSupported = false }
     }
 
+    /// A report has arrived for this pairing at some time, in this launch or an earlier one.
+    /// False for an app that is not paired: there is nobody's 運用 to remember.
+    public var reportArrivedBefore: Bool {
+        guard let defaults, let reportScope else { return false }
+        return defaults.bool(forKey: Self.reportArrivedKey(reportScope))
+    }
+
     /// Only a yes or no is kept: no part of a report is written to the device.
-    static func reportArrivedKey(_ scopeKey: String) -> String { "shannon.ops.report-arrived.\(scopeKey)" }
+    nonisolated static let reportArrivedPrefix = "shannon.ops.report-arrived."
+    static func reportArrivedKey(_ scope: String) -> String { reportArrivedPrefix + scope }
+
+    /// Unpairing or pairing again starts from "no report has arrived" (`ShannonConnectionModel`).
+    nonisolated public static func forgetArrivedReports(in defaults: UserDefaults = .standard) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(reportArrivedPrefix) {
+            defaults.removeObject(forKey: key)
+        }
+    }
 
     // MARK: What the screen may show
 
@@ -115,7 +132,7 @@ public final class ShannonOpsModel {
     /// operation of the last hour failed or expired. "Ever" outlives the launch: a server that is
     /// down when the app starts is marked if a report had arrived before.
     public func attentionReason(at date: Date? = nil) -> String? {
-        guard isSupported, hasReport || reportArrivedBefore else { return nil }
+        guard isSupported, !connectionIsInvalid, hasReport || reportArrivedBefore else { return nil }
         if unreachableMessage != nil { return ShannonGeneratedStrings.opsAttentionUnreachable }
         // Not read yet in this launch: nothing is known, and nothing is claimed.
         guard didLoad else { return nil }
@@ -221,13 +238,14 @@ public final class ShannonOpsModel {
     }
 
     private func read(_ client: any ShannonYousuServing) async {
+        reportScope = client.opsReportScope(scopeKey: scopeKey)
         do {
             let reading = try await client.loadOps(scopeKey: scopeKey)
             let readAt = clock()
             view = reading.view
-            if reading.view.snapshot != nil, !reportArrivedBefore {
-                reportArrivedBefore = true
-                defaults?.set(true, forKey: Self.reportArrivedKey(scopeKey))
+            connectionIsInvalid = false
+            if reading.view.snapshot != nil, let reportScope, !reportArrivedBefore {
+                defaults?.set(true, forKey: Self.reportArrivedKey(reportScope))
             }
             fetchedAt = readAt
             ageAtFetch = Self.age(of: reading, readAt: readAt)
@@ -241,12 +259,15 @@ public final class ShannonOpsModel {
             // An older server has no operations console. The screen is not offered.
             isSupported = false
             view = nil
+            connectionIsInvalid = false
             didLoad = true
         } catch let error as ShannonAPIError where error == .rejected(status: 401) {
-            unreachableMessage = "接続が無効になりました。もう一度接続してください。"
+            unreachableMessage = ShannonGeneratedStrings.opsConnectionInvalid
+            connectionIsInvalid = true
             didLoad = true
         } catch {
             unreachableMessage = "シャノンのサーバーに届きませんでした。サーバーが止まっているか、通信ができていません。"
+            connectionIsInvalid = false
             didLoad = true
         }
     }

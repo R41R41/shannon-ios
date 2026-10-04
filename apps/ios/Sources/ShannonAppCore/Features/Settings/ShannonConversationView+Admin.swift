@@ -41,6 +41,12 @@ extension ShannonConversationView {
         } header: {
             Text(ShannonGeneratedStrings.navAdmin)
         }
+        // The number of connected devices on its row, without opening the list first.
+        .task(id: connectionModel?.isConnected) {
+            guard let connectionModel, connectionModel.isConnected, connectionModel.connectedDevices.isEmpty,
+                  !connectionModel.isLoadingDevices else { return }
+            await connectionModel.loadConnectedDevices()
+        }
     }
 
     /// The page the 運用 row opens, inside Settings' own navigation.
@@ -54,7 +60,9 @@ extension ShannonConversationView {
 
     private func opsRow(_ palette: ShannonPalette) -> some View {
         let reason = yousu.ops.attentionReason()
-        let detail = reason ?? (yousu.ops.didLoad && !yousu.ops.hasReport ? ShannonGeneratedStrings.opsNotReported : nil)
+        let detail = reason
+            ?? (yousu.ops.connectionIsInvalid ? ShannonGeneratedStrings.opsConnectionInvalid : nil)
+            ?? (yousu.ops.didLoad && !yousu.ops.hasReport ? ShannonGeneratedStrings.opsNotReported : nil)
         return HStack(spacing: ShannonSpacing.medium) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {

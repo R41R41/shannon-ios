@@ -68,51 +68,6 @@ extension ShannonConversationView {
         openLink(request)
     }
 
-    func openLink(_ request: ShannonYousuLink.Request) {
-        let route = ShannonLinkRoute.make(
-            request, callScreen: showsGeminiLiveVoice, threadList: showsThreadList,
-            settings: showsSettings, workTask: selectedAgentTaskID != nil
-        )
-        // As a task opened from the call screen does: the place opens once the call is minimised or ends.
-        if route.waitsForCallScreen {
-            deferredLink = request
-            return
-        }
-        composerIsFocused = false
-        if route.closesThreadList { showsThreadList = false }
-        if route.closesSettings { showsSettings = false }
-        if route.closesWorkTask { selectedAgentTaskID = nil }
-        switch request {
-        case .yousu:
-            settleWorkspace(on: .shannon)
-            hubShowsYousu = true
-        case .ops:
-            guard route.presentsSettingsAfterDismissal else {
-                showsSettings = true
-                settingsShowsOps = true
-                return
-            }
-            // A cover cannot come up while another is leaving: Settings follows once it has gone.
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(600))
-                showsSettings = true
-                settingsShowsOps = true
-            }
-        }
-    }
-
-    /// The call screen went away: a link that waited for it opens its place now.
-    func openDeferredLink() {
-        guard !showsGeminiLiveVoice, deferredLink != nil else { return }
-        // After the call screen has finished leaving: nothing comes up while it is still on its way out.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !showsGeminiLiveVoice, let request = deferredLink else { return }
-            deferredLink = nil
-            openLink(request)
-        }
-    }
-
     /// Keeps what the top-left button marks current while the app is in front.
     func keepEntryMarks() async {
         guard scenePhase == .active else { return }

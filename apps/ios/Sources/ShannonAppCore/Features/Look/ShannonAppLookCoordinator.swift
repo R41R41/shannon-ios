@@ -243,12 +243,19 @@ public final class ShannonAppLookCoordinator {
     public var permission: ShannonMediaPermission { environment.permission() }
 
     /// Looks for a camera once per launch, away from the main thread (device discovery can take a moment).
+    /// Callers that ask while it is looking wait for the same look.
     public func discoverCamera() async {
         guard cameraIsPresent == nil else { return }
-        let camera = environment.camera
-        let present = await Task.detached(priority: .utility) { !camera.cameras().isEmpty }.value
+        let discovery = cameraDiscovery ?? {
+            let camera = environment.camera
+            let started = Task.detached(priority: .utility) { !camera.cameras().isEmpty }
+            cameraDiscovery = started
+            return started
+        }()
+        let present = await discovery.value
         cameraIsPresent = present
     }
+    @ObservationIgnored private var cameraDiscovery: Task<Bool, Never>?
 
     public func dismissCue(_ id: UUID? = nil) {
         guard id == nil || cue?.id == id else { return }
