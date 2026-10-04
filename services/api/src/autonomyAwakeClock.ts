@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
-import { reduceCompanionState, restoreCompanionState } from '@shannon/cognition';
+import { reduceCompanionState, restoreCompanionState, type CompanionStateSnapshot } from '@shannon/cognition';
 import { emotionTiming } from './emotionTiming.js';
+import { recordMoodPoint } from './moodHistory.js';
+import type { MoodHistoryRecording } from './moodHistoryContract.js';
 
 /**
  * While she works in a session of her own she is awake, so her awake clock runs. Core: emotion.
@@ -15,6 +17,10 @@ import { emotionTiming } from './emotionTiming.js';
  *
  * It writes at most once a minute; the time between two writes is still counted, up to the idle
  * cap. A scope without a stored state is left alone. A failure here never stops a step.
+ *
+ * After a write has committed, the mood history (`moodHistory.ts`) may add a point of her mood from
+ * the state as written, under the same coalescing rule as the API's writes; it creates no table and
+ * skips while the API has not created it, and it hands the loop nothing either.
  */
 const MINIMUM_INTERVAL_MILLISECONDS = 60_000;
 
@@ -24,7 +30,9 @@ export interface AutonomyAwakeClock {
   close(): void;
 }
 
-export function configuredAwakeClock(databasePath: string, options: { now: () => string }): AutonomyAwakeClock {
+export function configuredAwakeClock(
+  databasePath: string, options: { now: () => string; /** Absent or `null`: no mood history from this process. */ moodHistory?: MoodHistoryRecording | null },
+): AutonomyAwakeClock {
   let database: DatabaseSync | null = null;
   const last = new Map<string, number>();
   const open = (): DatabaseSync => {
@@ -54,6 +62,7 @@ export function configuredAwakeClock(databasePath: string, options: { now: () =>
         if (!connection.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'companion_states'`).get()) return;
         // The write lock first, then the read: the API and its workers write the same row.
         connection.exec('BEGIN IMMEDIATE');
+        let written: CompanionStateSnapshot | undefined;
         try {
           const row = connection.prepare('SELECT snapshot_json FROM companion_states WHERE scope_key = ?').get(scopeKey) as unknown as { snapshot_json: string } | undefined;
           const stored: unknown = row ? JSON.parse(row.snapshot_json) : null;
@@ -64,6 +73,8 @@ export function configuredAwakeClock(databasePath: string, options: { now: () =>
               connection.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify({
                 ...stored, emotion: next.emotion, emotionClock: next.emotionClock, lingering: next.lingering ?? [],
               }), scopeKey);
+              // The state as written: what was read, with the three values this event moves.
+              written = { ...current, emotion: next.emotion, emotionClock: next.emotionClock, lingering: next.lingering ?? [] };
             }
           }
           connection.exec('COMMIT');
@@ -72,6 +83,7 @@ export function configuredAwakeClock(databasePath: string, options: { now: () =>
           throw error;
         }
         last.set(scopeKey, time);
+        if (written) recordMoodPoint(connection, options.moodHistory ?? null, scopeKey, written, at, timing);
       } catch (error) {
         // The name and the code only: a parse error's message can quote the stored snapshot.
         const code = (error as { code?: unknown } | null)?.code;

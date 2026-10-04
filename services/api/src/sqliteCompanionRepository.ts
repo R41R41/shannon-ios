@@ -37,7 +37,8 @@ interface KnowledgeEvidenceRow { answer_id: string; quote: string; source: Knowl
 interface KnowledgeRevisionRow { revision_id: string; answer_id: string; previous_answer: string | null; next_answer: string; reason: string; observed_at: string; }
 
 export class SQLiteCompanionRepository implements CompanionStateStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore {
-  constructor(private readonly context: SQLiteStoreContext) {}
+  /** `committed` sees every state as it was written, after the write (the mood history, `moodHistory.ts`); it cannot change it. */
+  constructor(private readonly context: SQLiteStoreContext, private readonly committed?: (scopeKey: string, state: CompanionStateSnapshot) => void) {}
 
   snapshot(scopeKey: string): CompanionStateSnapshot {
     const row = this.context.database.prepare(`
@@ -61,7 +62,8 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
   }
 
   apply(scopeKey: string, event: CompanionStateEvent): CompanionStateSnapshot {
-    return this.context.transaction(() => {
+    let written: CompanionStateSnapshot | undefined;
+    const result = this.context.transaction(() => {
       // API and sleep worker share this database. Read only after obtaining
       // the write lock so a later writer cannot overwrite a fresh correction.
       const current = this.snapshot(scopeKey);
@@ -70,7 +72,7 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       if (next.version === current.version) {
         // Her clock alone moved (and what fades with it): no event row, no version, no prompt projection.
         this.context.database.prepare('UPDATE companion_states SET snapshot_json = ? WHERE scope_key = ?').run(JSON.stringify(next), scopeKey);
-        return next;
+        return written = next;
       }
       this.context.database.prepare(`
         UPDATE companion_states
@@ -91,8 +93,10 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
         this.writePersonalityProfile(scopeKey, next, next.updatedAt);
       }
       this.writePromptProjection(scopeKey, next);
-      return next;
+      return written = next;
     });
+    if (written) this.committed?.(scopeKey, written);
+    return result;
   }
 
   synchronizeFact(scopeKey: string, fact: CompanionStateSnapshot['userFacts'][number], source: KnowledgeSource): void {
@@ -474,8 +478,6 @@ export class SQLiteCompanionRepository implements CompanionStateStore, Knowledge
       VALUES (?, ?, ?, ?, 1, ?)
     `).run(randomUUID(), scopeKey, Number(previous.version) + 1, analysis, createdAt);
   }
-
-
 }
 
 function validatedRealtimeVoiceScope(scopeKey: string): string {

@@ -67,6 +67,9 @@ import { SQLiteReachOutReports } from './reachOutReports.js';
 import { SHANNON_NOW_PATH, shannonNowEnabled, shannonNowOwnerScope } from './shannonNowContract.js';
 import { SQLiteShannonNowReader } from './shannonNowReader.js';
 import { createShannonNowRoute } from './serverShannonNowRoute.js';
+import { MOOD_HISTORY_PATH, moodHistoryEnabled } from './moodHistoryContract.js';
+import { SQLiteMoodHistoryReader } from './moodHistoryReader.js';
+import { createMoodHistoryRoute } from './serverMoodHistoryRoute.js';
 import { createPrivateListeningRoute } from './serverPrivateListeningRoute.js';
 import { createIncomingCallRoute, type IncomingCallRoute } from './serverIncomingCallRoute.js';
 const now = () => new Date().toISOString();
@@ -175,6 +178,11 @@ const shannonNowRoute = createShannonNowRoute({
   reader: shannonNowReader, snapshot: scopeKey => (shannonNowReader.hasState(scopeKey) ? persistentStore.snapshot(scopeKey) : null), now,
   enabled: () => shannonNowEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
 });
+// Her mood over time for the owner's own apps (docs/mood-history-contract.md): a read-only connection, held by this route only.
+const moodHistoryReader = new SQLiteMoodHistoryReader(configuredDatabasePath());
+const moodHistoryRoute = createMoodHistoryRoute({
+  reader: moodHistoryReader, now, enabled: () => moodHistoryEnabled(process.env), ownerScopeKey: shannonNowOwnerScope(process.env),
+});
 const deviceUsage = new Map<string, { startedAt: number; count: number }>();
 const bodyUsage = new Map<string, { startedAt: number; count: number }>();
 let activeChats = 0;
@@ -245,6 +253,10 @@ const server = createServer(async (request, response) => {
     }
     if (url.pathname === SHANNON_NOW_PATH) {
       shannonNowRoute(request, response, principal);
+      return;
+    }
+    if (url.pathname === MOOD_HISTORY_PATH) {
+      moodHistoryRoute(request, response, principal);
       return;
     }
     if (
@@ -383,6 +395,7 @@ function shutdown(): void {
     closeBodyLookStores(); closeBodyReactionStores();
     opsStore.close();
     shannonNowReader.close();
+    moodHistoryReader.close();
     autonomyStore.close();
     persistentStore.close();
     process.exitCode = 0;

@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { SQLiteAutonomyAnnouncer } from './autonomyAnnouncer.js';
 import { configuredAwakeClock } from './autonomyAwakeClock.js';
+import { moodHistoryRecording } from './moodHistoryContract.js';
 import { autonomyDayKey, configuredAutonomy } from './autonomyBudget.js';
 import { ShannonAutonomyLoop } from './autonomyLoop.js';
 import { configuredAutonomyLoop } from './autonomyLoopConfig.js';
@@ -98,7 +99,8 @@ const loopConfig = configuredAutonomyLoop(process.env);
 const ownerContext = loopConfig.ownerContext
   ? configuredOwnerContext(databasePath, { now, characters: loopConfig.ownerContextCharacters, timeZone: config.timeZone }) : null;
 // A step of her own is time she is awake: her emotional clock runs through it, and through nothing else of the loop.
-const awakeClock = configuredAwakeClock(databasePath, { now });
+// What that write stores may add a point to her mood history (SHANNON_MOOD_HISTORY); the loop is handed nothing of it.
+const awakeClock = configuredAwakeClock(databasePath, { now, moodHistory: moodHistoryRecording(process.env) });
 const loop = new ShannonAutonomyLoop({
   store, service, config, loop: loopConfig, model: configuredAutonomyTextModel(process.env, undefined, line => console.log(line)),
   reader: new BoundedPublicReader({

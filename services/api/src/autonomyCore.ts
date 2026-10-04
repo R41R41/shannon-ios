@@ -46,6 +46,8 @@ export const SHANNON_CORE_PATHS: Readonly<Record<ShannonCoreAreaId, readonly str
     'packages/cognition/src/emotionContinuity.ts',
     'services/api/src/emotionTiming.ts',
     'services/api/src/autonomyAwakeClock.ts',
+    // The record of her mood written beside each committed state write; it reads the state and never changes it.
+    'services/api/src/moodHistory.ts',
     'packages/cognition/src/emotionOverrides.ts',
     'packages/cognition/src/replyEmotion.ts',
     'packages/cognition/src/expression.ts',

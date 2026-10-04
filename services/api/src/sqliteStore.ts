@@ -34,11 +34,17 @@ import { ensureTurnCaptureSchema, type TurnCaptureRecord } from './turnCaptures.
 import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from './sqliteReplaySummary.js';
 import type { ReplaySummaryRecord } from './conversationStore.js';
 import { SQLiteImpressionStore } from './sqliteImpressions.js';
+import { ensureMoodHistorySchema, recordMoodPoint } from './moodHistory.js';
+import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryContract.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
 
 export interface PersistedExperienceEvent { sequence: number; id: string; scopeKey: string; type: string; observedAt: string; payload: unknown; }
-export interface SQLiteShannonStoreOptions { path: string; now: CompanionClock; /** Absent: this process's `emotionTiming()`. */ emotionTiming?: ShannonEmotionTiming; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number; }
+export interface SQLiteShannonStoreOptions {
+  path: string; now: CompanionClock; /** Absent: this process's `emotionTiming()`. */ emotionTiming?: ShannonEmotionTiming; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number;
+  /** Whose mood is recorded beside each committed state write (`moodHistory.ts`); `null` records nothing. Absent: `SHANNON_MOOD_HISTORY` and the owner scope of this process. */
+  moodHistory?: MoodHistoryRecording | null;
+}
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
   private readonly context: SQLiteStoreContext;
@@ -52,13 +58,17 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
-    this.companion = new SQLiteCompanionRepository(this.context);
+    const moodHistory = options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
+    // After each committed write of her state, a point of her mood from the state as written; it never changes the state.
+    this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state) => recordMoodPoint(
+      this.context.database, moodHistory, scopeKey, state, this.context.now(), this.context.emotionTiming()));
     this.conversations = new SQLiteConversationRepository(this.context);
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
+    ensureMoodHistorySchema(this.context.database);
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
