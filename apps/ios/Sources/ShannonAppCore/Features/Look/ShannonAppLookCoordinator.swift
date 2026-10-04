@@ -71,6 +71,8 @@ public final class ShannonAppLookCoordinator {
     public static let cueSeconds = 4.0
 
     public private(set) var cue: Cue?
+    /// The camera is open for a frame right now: 「いま見ています」.
+    public private(set) var isCapturing = false
     /// Non-nil while the explanation that precedes the system's camera prompt is on screen.
     public private(set) var primerPhase: ShannonPermissionPrimerPhase?
 
@@ -123,7 +125,12 @@ public final class ShannonAppLookCoordinator {
         // Cut in after that: still not taken, unless he has just answered the camera prompt himself to let her look.
         if Task.isCancelled, !allowedJustNow { return .refused(.interrupted) }
         do {
-            let image = try await environment.camera.capture(camera)
+            isCapturing = true
+            let image: CGImage
+            do {
+                defer { isCapturing = false }
+                image = try await environment.camera.capture(camera)
+            }
             // A frame taken as the app left the screen is dropped unseen.
             guard environment.isForeground(), environment.isEnabled() else {
                 return .refused(environment.isEnabled() ? .background : .switchedOff)
@@ -227,6 +234,10 @@ public final class ShannonAppLookCoordinator {
             self?.dismissCue(shown.id)
         }
     }
+
+    /// Whether there is a camera at all, and what the system allows, for the state shown in Talk and the call.
+    public var hasCamera: Bool { !environment.camera.cameras().isEmpty }
+    public var permission: ShannonMediaPermission { environment.permission() }
 
     public func dismissCue(_ id: UUID? = nil) {
         guard id == nil || cue?.id == id else { return }

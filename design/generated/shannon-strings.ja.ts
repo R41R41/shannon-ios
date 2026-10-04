@@ -180,6 +180,7 @@ export const shannonStrings = {
   "settings.figure.replyModeExplanation": "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
   "talk.display.menuHint": "長押しで、姿と映し方を選べます",
   "talk.figure.heroHint": "対話表示にします。そこで姿に触れられます",
+  "look.state.line": "カメラ：{state}",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

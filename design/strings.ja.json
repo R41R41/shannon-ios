@@ -941,7 +941,7 @@
     {
       "key": "look.state.looking",
       "text": "いま見ています",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/renderer/index.html",
       "windowsNow": "いま見ています",
@@ -1218,6 +1218,13 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
       "note": "空のトークの小さな姿（Live2Dの姿のとき）の手がかり（読み上げ）。"
+    },
+    {
+      "key": "look.state.line",
+      "text": "カメラ：{state}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift",
+      "only": "apple",
+      "note": "カメラの状態の 1 行。state は 切／見てよい／いま見ています。iPhone は対話表示と音声会話の上、切の間はシートの 設定 のタイルの下（A7）。「ようす」の体のカメラも同じ形。"
     }
   ]
 }

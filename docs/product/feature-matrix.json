@@ -2572,11 +2572,14 @@
       "description": "どの画面にいても、切／見てよい／いま見ています、が分かる。",
       "surfaces": {
         "ios": {
-          "status": "partial",
-          "note": "見た瞬間に「いま見ました」が出る。ふだんの状態は設定を開かないと分からない。",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookViews.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Dialogue.swift#ShannonAppLookStateBadge",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveVoiceView.swift#ShannonAppLookStateBadge",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift#cameraOffLine"
+          ],
+          "note": "対話表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
         },
         "macos": {
           "status": "partial",

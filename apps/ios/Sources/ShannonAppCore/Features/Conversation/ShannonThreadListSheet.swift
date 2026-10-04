@@ -187,6 +187,7 @@ struct ShannonThreadListSheet: View {
                     .accessibilityLabel(destination.accessibilityLabel)
                     .accessibilityAddTraits(.isButton)
                 }
+                cameraOffLine(palette)
             }
         } else {
             Section {
@@ -204,6 +205,25 @@ struct ShannonThreadListSheet: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                cameraOffLine(palette)
+            }
+        }
+    }
+
+    /// 「カメラ：切」 under the 設定 tile, only while she may not look (A7). Talk and the call show every state.
+    func cameraOffLine(_ palette: ShannonPalette) -> some View {
+        ShannonAppLookStateReader(coordinator: model.appLook) { state in
+            if state == .off {
+                Label(state.line, systemImage: "eye.slash")
+                    .font(.footnote)
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(state.line)
+                    .accessibilityIdentifier("sheet-app-look-off")
+                    .listRowInsets(EdgeInsets(top: 0, leading: ShannonSpacing.large, bottom: 0, trailing: ShannonSpacing.large))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
     }

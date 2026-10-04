@@ -11,15 +11,26 @@ extension ShannonConversationView {
     var dialogueShowsLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue }
 
     func dialogueStage(_ palette: ShannonPalette) -> some View {
-        GeometryReader { geometry in
+        GeometryReader { stage in
             ZStack(alignment: .top) {
-                dialogueBackground(palette, size: geometry.size)
-                if dialogueShowsLive2D {
-                    live2DDialogue(palette, geometry: geometry)
-                } else {
-                    waterlightDialogue(palette, geometry: geometry)
-                        .contentShape(Rectangle())
-                        .onTapGesture { composerIsFocused = false }
+                dialogueBackground(palette, size: stage.size)
+                VStack(spacing: 0) {
+                    // The camera's state, always there over the dialogue display (A7): 切／見てよい／いま見ています.
+                    HStack {
+                        Spacer(minLength: 0)
+                        ShannonAppLookStateBadge(coordinator: model.appLook)
+                    }
+                    .padding(.horizontal, ShannonSpacing.large)
+                    .padding(.top, ShannonSpacing.extraSmall)
+                    GeometryReader { geometry in
+                        if dialogueShowsLive2D {
+                            live2DDialogue(palette, geometry: geometry)
+                        } else {
+                            waterlightDialogue(palette, geometry: geometry)
+                                .contentShape(Rectangle())
+                                .onTapGesture { composerIsFocused = false }
+                        }
+                    }
                 }
             }
         }

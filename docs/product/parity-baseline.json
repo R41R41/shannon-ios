@@ -16,7 +16,6 @@
     "devices.status windows partial",
     "devices.unpair-other windows no",
     "look.activity-log macos no",
-    "look.always-visible-state ios partial",
     "look.always-visible-state macos partial",
     "look.app-camera macos partial",
     "memory.commitments windows no",

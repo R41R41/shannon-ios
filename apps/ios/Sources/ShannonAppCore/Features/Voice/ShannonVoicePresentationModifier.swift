@@ -48,7 +48,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         }) {
             ShannonGeminiLiveVoiceView(
                 model: geminiVoiceModel, workspace: workspace,
-                expression: expression, task: voiceTask,
+                expression: expression, task: voiceTask, appLook: conversationModel.appLook,
                 analyzeCameraSnapshot: { data in
                     guard let threadID = workspace.threadContext?.threadID else {
                         throw ShannonAPIError.invalidResponse
