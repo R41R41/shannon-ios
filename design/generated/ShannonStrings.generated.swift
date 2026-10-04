@@ -322,4 +322,26 @@ public enum ShannonGeneratedStrings {
     public static let lookActionTurnOff = "切にする"
     /// `task.approvalNeeded`
     public static let taskApprovalNeeded = "許可が必要です"
+    /// `hub.card.hint`
+    public static let hubCardHint = "ようすを開きます"
+    /// `hub.card.waiting`
+    public static func hubCardWaiting(count: String, summary: String) -> String { "待っていること \(count)件：\(summary)" }
+    /// `hub.memory.hint`
+    public static let hubMemoryHint = "記憶、約束、人、目的、日記、使用量を開きます"
+    /// `hub.autonomy.hint`
+    public static let hubAutonomyHint = "動いてよい状態、今日の予算、提案、やりたいこと、したことの記録を開きます"
+    /// `autonomy.pursuits.hint`
+    public static let autonomyPursuitsHint = "シャノン自身の目標・問い・作品と、使うモデルを開きます"
+    /// `autonomy.pursuits.footer`
+    public static let autonomyPursuitsFooter = "あなたの目的とは別に、シャノン自身が持っている目標と問いです。使うモデルもここから見られます。"
+    /// `entry.waiting`
+    public static func entryWaiting(count: String) -> String { "シャノンが待っていること\(count)件" }
+    /// `entry.opsReason`
+    public static func entryOpsReason(reason: String) -> String { "運用：\(reason)" }
+    /// `admin.ops.hint`
+    public static let adminOpsHint = "旧ランタイムのサービスの状態と、開始・停止・起動・今すぐ実行を開きます"
+    /// `admin.devices.hint`
+    public static let adminDevicesHint = "接続中の端末の一覧と、接続の解除を開きます"
+    /// `admin.devices.count`
+    public static func adminDevicesCount(count: String) -> String { "\(count)台" }
 }

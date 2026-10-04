@@ -257,6 +257,16 @@ test('decided wording says what Windows shows today, and may be new on the Apple
   assert.match(validateStrings(missing, repo).join('\n'), /is decided and needs windowsNow/u);
 });
 
+test('an Apple-only sentence needs no Windows place but must be in its Apple source', () => {
+  const repo = fakeRepository({ 'Hub.swift': '.accessibilityHint("ようすを開きます")' });
+  const only = (entry) => ({ windowsRead: '2026-10-03', strings: [{ key: 'hub.cardHint', text: 'ようすを開きます', apple: 'Hub.swift', only: 'apple', ...entry }] });
+  assert.deepEqual(validateStrings(only({}), repo), []);
+  assert.match(validateStrings(only({ apple: 'new' }), repo).join('\n'), /Apple-only and needs the Apple source/u);
+  assert.match(validateStrings(only({ windows: 'shannon-desktop:x.ts' }), repo).join('\n'), /Apple-only and names a Windows place/u);
+  assert.match(validateStrings(only({ text: 'ほかの文' }), repo).join('\n'), /no longer contains/u);
+  assert.match(validateStrings(only({ only: 'windows' }), repo).join('\n'), /only must be "apple"/u);
+});
+
 test('the repository reader lists feature folders', () => {
   const folders = repository().directories('apps/ios/Sources/ShannonAppCore/Features');
   assert.ok(folders.includes('apps/ios/Sources/ShannonAppCore/Features/Conversation'));

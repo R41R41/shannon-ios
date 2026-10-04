@@ -9,7 +9,8 @@
     "apple は、その文がいま書かれている Apple 側の場所。「branch:」で始まるものは、まだ main に入っていない作業中のブランチ。",
     "windows は shannon-desktop の中の場所（このリポジトリからは確かめられない。読んだ日は windowsRead）。",
     "状態と結果の文は中立に書く。シャノンの台詞にする文は、ボク・ライ氏・です・ますの声にする（packages/cognition/src/persona.ts）。",
-    "decided がある文は、所有者が決めた言葉。windowsNow は Windows がいま出している言葉、macNow は Mac がいま出している言葉（違うなら直す）。apple が new のものは、まだどのコードにも無い新しい言葉。"
+    "decided がある文は、所有者が決めた言葉。windowsNow は Windows がいま出している言葉、macNow は Mac がいま出している言葉（違うなら直す）。apple が new のものは、まだどのコードにも無い新しい言葉。",
+    "only が \"apple\" の文は、Apple 側（iPhone・Mac）にだけある文（Windows にまだ置き場所が無いもの）。windows は書かず、apple に書いてある場所にあることだけを確かめる。新しい画面の文は、まずここに入れる。"
   ],
   "windowsRead": "2026-10-03",
   "strings": [
@@ -1098,6 +1099,76 @@
       "decided": "2026-10-05",
       "windowsNow": "許可が必要です",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。許可待ちの作業の見出し（Windows の「判断が必要です」を直したもの）。"
+    },
+    {
+      "key": "hub.card.hint",
+      "text": "ようすを開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "only": "apple",
+      "note": "「シャノン」の先頭のカードの手がかり（読み上げ）。"
+    },
+    {
+      "key": "hub.card.waiting",
+      "text": "待っていること {count}件：{summary}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "only": "apple",
+      "note": "「シャノン」の先頭のカード。summary は「感想 1・判断 2」の形。"
+    },
+    {
+      "key": "hub.memory.hint",
+      "text": "記憶、約束、人、目的、日記、使用量を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "only": "apple"
+    },
+    {
+      "key": "hub.autonomy.hint",
+      "text": "動いてよい状態、今日の予算、提案、やりたいこと、したことの記録を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+      "only": "apple"
+    },
+    {
+      "key": "autonomy.pursuits.hint",
+      "text": "シャノン自身の目標・問い・作品と、使うモデルを開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift",
+      "only": "apple"
+    },
+    {
+      "key": "autonomy.pursuits.footer",
+      "text": "あなたの目的とは別に、シャノン自身が持っている目標と問いです。使うモデルもここから見られます。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift",
+      "only": "apple"
+    },
+    {
+      "key": "entry.waiting",
+      "text": "シャノンが待っていること{count}件",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonEntryMarks.swift",
+      "only": "apple",
+      "note": "左上のボタンの読み上げ。"
+    },
+    {
+      "key": "entry.opsReason",
+      "text": "運用：{reason}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonEntryMarks.swift",
+      "only": "apple",
+      "note": "左上のボタンと設定のタイルの読み上げ。"
+    },
+    {
+      "key": "admin.ops.hint",
+      "text": "旧ランタイムのサービスの状態と、開始・停止・起動・今すぐ実行を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
+      "only": "apple"
+    },
+    {
+      "key": "admin.devices.hint",
+      "text": "接続中の端末の一覧と、接続の解除を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
+      "only": "apple"
+    },
+    {
+      "key": "admin.devices.count",
+      "text": "{count}台",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
+      "only": "apple"
     }
   ]
 }

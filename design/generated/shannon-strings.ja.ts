@@ -162,6 +162,17 @@ export const shannonStrings = {
   "ops.attention.expired": "{target}の操作が期限切れ",
   "look.action.turnOff": "切にする",
   "task.approvalNeeded": "許可が必要です",
+  "hub.card.hint": "ようすを開きます",
+  "hub.card.waiting": "待っていること {count}件：{summary}",
+  "hub.memory.hint": "記憶、約束、人、目的、日記、使用量を開きます",
+  "hub.autonomy.hint": "動いてよい状態、今日の予算、提案、やりたいこと、したことの記録を開きます",
+  "autonomy.pursuits.hint": "シャノン自身の目標・問い・作品と、使うモデルを開きます",
+  "autonomy.pursuits.footer": "あなたの目的とは別に、シャノン自身が持っている目標と問いです。使うモデルもここから見られます。",
+  "entry.waiting": "シャノンが待っていること{count}件",
+  "entry.opsReason": "運用：{reason}",
+  "admin.ops.hint": "旧ランタイムのサービスの状態と、開始・停止・起動・今すぐ実行を開きます",
+  "admin.devices.hint": "接続中の端末の一覧と、接続の解除を開きます",
+  "admin.devices.count": "{count}台",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

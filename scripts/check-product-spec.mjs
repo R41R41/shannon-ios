@@ -249,9 +249,14 @@ export function validateStrings(strings, repo) {
       if (!datePattern.test(entry.decided)) failures.push(`strings: ${key} decided must be a date`);
       if (!isText(entry.windowsNow)) failures.push(`strings: ${key} is decided and needs windowsNow (what Windows shows today, or the same text)`);
       if (entry.windows !== undefined && (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix))) failures.push(`strings: ${key} windows must be "${windowsPrefix}<path>"`);
+    } else if (entry.only === 'apple') {
+      // A sentence of the Apple apps that Windows has no place for yet: written down first, checked in its source.
+      if (entry.windows !== undefined) failures.push(`strings: ${key} is Apple-only and names a Windows place`);
+      if (!isText(entry.apple) || entry.apple === 'new' || entry.apple.startsWith('branch:')) failures.push(`strings: ${key} is Apple-only and needs the Apple source it is written in`);
     } else if (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix)) {
       failures.push(`strings: ${key} needs windows: "${windowsPrefix}<path>"`);
     }
+    if (entry.only !== undefined && entry.only !== 'apple') failures.push(`strings: ${key} only must be "apple"`);
     if (!isText(entry.apple)) { failures.push(`strings: ${key} needs apple (a source path, branch:<branch>:<path>, or new)`); continue; }
     if (entry.apple === 'new') {
       if (entry.decided === undefined) failures.push(`strings: ${key} has no Apple source; only decided wording may be new`);
