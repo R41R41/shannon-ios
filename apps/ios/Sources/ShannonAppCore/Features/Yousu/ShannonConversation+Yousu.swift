@@ -103,9 +103,14 @@ extension ShannonConversationView {
 
     /// The call screen went away: a link that waited for it opens its place now.
     func openDeferredLink() {
-        guard !showsGeminiLiveVoice, let request = deferredLink else { return }
-        deferredLink = nil
-        openLink(request)
+        guard !showsGeminiLiveVoice, deferredLink != nil else { return }
+        // After the call screen has finished leaving: nothing comes up while it is still on its way out.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !showsGeminiLiveVoice, let request = deferredLink else { return }
+            deferredLink = nil
+            openLink(request)
+        }
     }
 
     /// Keeps what the top-left button marks current while the app is in front.
