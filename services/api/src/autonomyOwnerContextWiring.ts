@@ -19,7 +19,8 @@ export function configuredOwnerContext(
   options: { now: () => string; characters: number; timeZone: string },
 ): { context: AutonomyOwnerContext; close(): void } {
   const exists = sqliteOwnerSnapshot(databasePath);
-  const store = new SQLiteShannonStore({ path: databasePath, now: options.now });
+  // Read-only here: this store leaves the mood history alone (no table created, nothing pruned, nothing recorded).
+  const store = new SQLiteShannonStore({ path: databasePath, now: options.now, leavesMoodHistory: true });
   const peopleStore = new SQLitePeopleMemoryStore(databasePath);
   const dailyMind = new SQLiteDailyMindStore(databasePath, options.now);
   const context = createOwnerContext({

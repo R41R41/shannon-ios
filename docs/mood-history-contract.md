@@ -25,7 +25,7 @@ Values are rounded to 0.01. There is no field for why she felt something, for wh
 - **It cannot alter the state.** The recorder is given the committed snapshot, computes a point with pure functions of `@shannon/cognition`, and writes one row of its own table. It never writes `companion_states`, the event log or the prompt projection, and nothing reads its table back into a state, a prompt or a model. The test applies the same writes with and without recording and compares the stored bytes.
 - **A failure to record never fails the write.** The state's transaction has committed before the recorder runs; inside a transaction a caller holds, the recorder uses a savepoint and undoes only its own row. An error is logged as `Shannon mood history failed` with the error's name and code only. The one error that is thrown on is SQLite rolling back the caller's whole transaction (a full disk, an I/O error, out of memory): the write is then lost anyway, and the caller fails as it would have at its own next statement instead of going on outside a transaction.
 - **Coalesced.** A new point when the quiet face (`expression`, `feeling`) or the present `kind` (including to and from `null`) changed since the last point, when `valence`, `arousal` or `openness` moved by 0.05 or more since the last point, and otherwise at most every 10 minutes while writes happen.
-- **Kept 14 days.** Points older than 14 days are deleted when a point is written and whenever the API's store opens (a restart of the API or a worker), also while the switch is off (on an index of the time).
+- **Kept 14 days.** Points older than 14 days are deleted when a point is written and whenever a store of the API or its workers opens (a restart of the API or a worker), also while the switch is off (on an index of the time). The activity loop's process never prunes: its awake clock opens no store, and the store it reads the owner's context through is opened with `leavesMoodHistory`, which neither creates, prunes nor records.
 - **The owner's scope only** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`).
 
 ## Privacy rule
@@ -85,7 +85,7 @@ An older server answers `404`. On `403` and `404` the app shows its view without
 
 ## Table
 
-`shannon_mood_history` (created with `CREATE TABLE IF NOT EXISTS` when the API's store opens, outside the numbered migrations; schema version unchanged; the activity loop's process creates nothing and skips while it is absent):
+`shannon_mood_history` (created with `CREATE TABLE IF NOT EXISTS` when a store of the API or its workers opens, outside the numbered migrations; schema version unchanged; the activity loop's process creates nothing, also through the read-only store of its owner context (`leavesMoodHistory`), and skips while it is absent):
 
 | Column | Type |
 | --- | --- |

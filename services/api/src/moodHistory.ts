@@ -24,11 +24,15 @@ import { MOOD_HISTORY_LIMITS, type MoodHistoryRecording } from './moodHistoryCon
  * Coalesced: a new point when the quiet face of her mood or the kind she feels changed, when a
  * mood value moved by `moodStep` (0.05) or more, and otherwise at most every `everyMinutes` (10)
  * while writes happen. Points older than `keepDays` (14) are deleted when a point is written and
- * when the API's store opens, also while recording is switched off. Only the owner's scope is recorded.
+ * when a store of the API or its workers opens, also while recording is switched off (never in the activity loop's process). Only the owner's scope is recorded.
  */
 export const MOOD_HISTORY_TABLE = 'shannon_mood_history';
 
-/** Additive and restart-safe: created when absent, never altered. The activity loop's process creates nothing and skips while it is absent. */
+/**
+ * Additive and restart-safe: created when absent, never altered. Only the API's stores (the API and its workers) create it;
+ * the activity loop's process creates nothing and skips while it is absent (its awake clock opens no store, and the store of
+ * its owner context is opened with `leavesMoodHistory`).
+ */
 export function ensureMoodHistorySchema(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS shannon_mood_history (
@@ -49,7 +53,7 @@ export function ensureMoodHistorySchema(database: DatabaseSync): void {
 }
 
 /**
- * Deletes points older than `keepDays` before `at`, for every scope. The API's store calls it when it opens, whatever the
+ * Deletes points older than `keepDays` before `at`, for every scope. A store of the API or its workers calls it when it opens, whatever the
  * switch says; a failure is logged and the store opens.
  */
 export function pruneMoodHistory(database: DatabaseSync, at: string): void {

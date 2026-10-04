@@ -45,6 +45,11 @@ export interface SQLiteShannonStoreOptions {
   path: string; now: CompanionClock; /** Absent: this process's `emotionTiming()`. */ emotionTiming?: ShannonEmotionTiming; maximumModelConversationItems?: number; maximumDisplayedConversationItems?: number; maximumExperiences?: number;
   /** Whose mood is recorded beside each committed state write (`moodHistory.ts`); `null` records nothing. Absent: `SHANNON_MOOD_HISTORY` and the owner scope of this process. */
   moodHistory?: MoodHistoryRecording | null;
+  /**
+   * A store of a process that only reads through it (the activity loop's owner context, `autonomyOwnerContextWiring.ts`):
+   * it neither creates, prunes nor records the mood history. That table stays the API's.
+   */
+  leavesMoodHistory?: true;
 }
 
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
@@ -60,7 +65,7 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
 
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
-    const moodHistory = options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
+    const moodHistory = options.leavesMoodHistory ? null : options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
     // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at; it never changes the state.
     this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at) => recordMoodPoint(
       this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming()));
@@ -71,9 +76,11 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureTurnCaptureSchema(this.context.database);
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
-    ensureMoodHistorySchema(this.context.database);
-    // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
-    pruneMoodHistory(this.context.database, this.context.now());
+    if (!options.leavesMoodHistory) {
+      ensureMoodHistorySchema(this.context.database);
+      // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
+      pruneMoodHistory(this.context.database, this.context.now());
+    }
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));

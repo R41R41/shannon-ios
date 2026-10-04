@@ -528,6 +528,49 @@ describe('GET /v1/shannon/mood-history', () => {
   });
 });
 
+describe('the activity loop\'s process', () => {
+  it('opens its owner context through a store that neither creates, prunes nor records the mood history', async () => {
+    const path = databasePath();
+    const api = new SQLiteShannonStore({ path, now: () => START, moodHistory: RECORDING });
+    api.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('happy', 0.8, START) });
+    api.close();
+    // A point far older than fourteen days, which any store of the API would delete on opening.
+    const raw = new DatabaseSync(path);
+    raw.prepare(`INSERT INTO shannon_mood_history (scope_key, recorded_at, valence, arousal, openness, expression) VALUES (?, ?, 0, 0.3, 0.3, 'calm')`)
+      .run(OWNER, at(-40 * DAY));
+    raw.close();
+    const later = at(30 * DAY);
+    const { configuredOwnerContext } = await import('../src/autonomyOwnerContextWiring.js');
+    const owner = configuredOwnerContext(path, { now: () => later, characters: 2_000, timeZone: 'Asia/Tokyo' });
+    // It reads the owner's context as the loop does.
+    owner.context.forThinking(OWNER, later, '紅茶');
+    owner.close();
+    expect(rows(path).map(point => point.at)).toContain(at(-40 * DAY));
+
+    // On a database whose API has not created the table, that store does not create it.
+    const fresh = databasePath();
+    const older = new SQLiteShannonStore({ path: fresh, now: () => START, moodHistory: null });
+    older.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('happy', 0.8, START) });
+    older.close();
+    const drop = new DatabaseSync(fresh);
+    drop.exec('DROP TABLE shannon_mood_history');
+    drop.close();
+    configuredOwnerContext(fresh, { now: () => later, characters: 2_000, timeZone: 'Asia/Tokyo' }).close();
+    const check = new DatabaseSync(fresh);
+    expect(check.prepare(`SELECT COUNT(*) AS count FROM sqlite_master WHERE name = 'shannon_mood_history'`).get()).toEqual({ count: 0 });
+    check.close();
+  });
+
+  it('a store opened with leavesMoodHistory records nothing, whatever recording it is given', () => {
+    const path = databasePath();
+    new SQLiteShannonStore({ path, now: () => START, moodHistory: RECORDING }).close();
+    const reading = new SQLiteShannonStore({ path, now: () => START, moodHistory: RECORDING, leavesMoodHistory: true });
+    closers.push(reading);
+    reading.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('happy', 0.8, START) });
+    expect(rows(path)).toEqual([]);
+  });
+});
+
 describe('structure', () => {
   const source = (name: string) => readFileSync(resolve(import.meta.dirname, '../src', name), 'utf8');
 
@@ -552,11 +595,17 @@ describe('structure', () => {
     // The point is made from the state alone: no cause, no target, no conversation.
     expect(source('moodHistory.ts')).not.toMatch(/\.cause|\.target|conversation_|ConversationStore/u);
     // The recorder writes its own table and nothing else.
-    expect([...source('moodHistory.ts').matchAll(/\b(?:INSERT INTO|DELETE FROM|UPDATE|CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS [a-z_]+ ON) ([a-z_]+)/gu)]
-      .map(match => match[1])).toEqual(['shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history']);
+    // Every writing statement, in any spelling, names its table literally (a template name would be captured as `${…}`).
+    const writes = /\b(?:INSERT(?:\s+OR\s+[A-Z]+)?\s+INTO|REPLACE\s+INTO|DELETE\s+FROM|UPDATE(?:\s+OR\s+[A-Z]+)?|CREATE\s+(?:TABLE|INDEX|TRIGGER|VIEW)(?:\s+IF\s+NOT\s+EXISTS)?(?:\s+[a-z_]+\s+ON)?)\s+(\S+)/gu;
+    expect([...source('moodHistory.ts').matchAll(writes)].map(match => match[1])).toEqual(Array(6).fill('shannon_mood_history'));
     expect(source('moodHistory.ts')).not.toMatch(/\b(?:ALTER|DROP)\b|companion_states/u);
-    // The activity loop's process creates no table and prunes nothing: only the API's store does.
+    // The activity loop's process creates no table and prunes nothing: its awake clock opens no store, and the store of its
+    // owner context is opened with `leavesMoodHistory` (and that is shown by what it does, below).
     expect(source('autonomyAwakeClock.ts')).not.toMatch(/ensureMoodHistorySchema|pruneMoodHistory/u);
     expect(names.filter(name => /ensureMoodHistorySchema\(|pruneMoodHistory\(/u.test(source(name)) && name !== 'moodHistory.ts')).toEqual(['sqliteStore.ts']);
+    // Who opens a store: the API, its workers, and the loop's owner context, which alone leaves the mood history alone.
+    expect(names.filter(name => source(name).includes('new SQLiteShannonStore(')).sort())
+      .toEqual(['autonomyOwnerContextWiring.ts', 'server.ts', 'worker.ts', 'worldWorker.ts']);
+    expect(names.filter(name => source(name).includes('leavesMoodHistory: true'))).toEqual(['autonomyOwnerContextWiring.ts']);
   });
 });
