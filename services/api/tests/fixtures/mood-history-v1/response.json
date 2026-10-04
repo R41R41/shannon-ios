@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-05T06:00:00.000Z",
+  "hours": 24,
+  "points": [
+    {
+      "at": "2026-10-05T00:00:00.000Z",
+      "valence": 0,
+      "arousal": 0.3,
+      "openness": 0.35,
+      "mood": {
+        "expression": "calm"
+      },
+      "present": null
+    },
+    {
+      "at": "2026-10-05T00:02:00.000Z",
+      "valence": 0,
+      "arousal": 0.3,
+      "openness": 0.35,
+      "mood": {
+        "expression": "calm"
+      },
+      "present": {
+        "kind": "happy",
+        "intensity": 0.6
+      }
+    },
+    {
+      "at": "2026-10-05T00:03:00.000Z",
+      "valence": 0.2,
+      "arousal": 0.4,
+      "openness": 0.35,
+      "mood": {
+        "expression": "calm"
+      },
+      "present": {
+        "kind": "happy",
+        "intensity": 0.6
+      }
+    },
+    {
+      "at": "2026-10-05T00:40:00.000Z",
+      "valence": 0.2,
+      "arousal": 0.38,
+      "openness": 0.35,
+      "mood": {
+        "expression": "calm"
+      },
+      "present": {
+        "kind": "happy",
+        "intensity": 0.54
+      }
+    },
+    {
+      "at": "2026-10-05T03:00:00.000Z",
+      "valence": 0.2,
+      "arousal": 0.36,
+      "openness": 0.35,
+      "mood": {
+        "expression": "calm"
+      },
+      "present": {
+        "kind": "sulky",
+        "intensity": 0.85
+      }
+    },
+    {
+      "at": "2026-10-05T03:01:00.000Z",
+      "valence": -0.26,
+      "arousal": 0.36,
+      "openness": 0.35,
+      "mood": {
+        "expression": "concerned"
+      },
+      "present": {
+        "kind": "sulky",
+        "intensity": 0.85
+      }
+    },
+    {
+      "at": "2026-10-05T05:00:00.000Z",
+      "valence": -0.25,
+      "arousal": 0.34,
+      "openness": 0.35,
+      "mood": {
+        "expression": "concerned"
+      },
+      "present": {
+        "kind": "sulky",
+        "intensity": 0.33
+      }
+    }
+  ],
+  "downsampled": false,
+  "limits": {
+    "defaultHours": 24,
+    "maxHours": 336,
+    "maxPoints": 300,
+    "keepDays": 14,
+    "everyMinutes": 10,
+    "moodStep": 0.05
+  }
+}

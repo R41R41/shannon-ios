@@ -624,7 +624,9 @@ describe('the emotion source stays core', () => {
     const raw = new DatabaseSync(path);
     const tables = (raw.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map(row => row.name);
     raw.close();
-    expect(tables.filter(name => /emotion|feeling|mood|linger/iu.test(name))).toEqual([]);
+    // The one such table is the owner's record of her mood over time (owner decision 2026-10-05, `moodHistory.ts`): written from
+    // the stored state after it was written, and read back by nothing that builds a state, a prompt or a reply.
+    expect(tables.filter(name => /emotion|feeling|mood|linger/iu.test(name))).toEqual(['shannon_mood_history']);
     // A fresh state has neither of the new parts until something happens.
     expect(Object.keys(createInitialCompanionState(scope, NIGHT)).filter(key => /emotion|lingering/iu.test(key))).toEqual(['emotion', 'expressiveEmotion']);
   });
@@ -632,8 +634,13 @@ describe('the emotion source stays core', () => {
   it('gives the loop\'s process one narrow write and nothing to read', () => {
     const source = (name: string) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
     const clock = source('autonomyAwakeClock.ts');
-    // It opens no conversation store and no model, and its only event is the content-free one.
-    expect([...clock.matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort()).toEqual(['./emotionTiming.js', '@shannon/cognition', 'node:sqlite']);
+    // It opens no conversation store and no model, and its only event is the content-free one. After its write the mood
+    // history may add a point of the state as written (`moodHistory.ts`, which imports no store either).
+    expect([...clock.matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort())
+      .toEqual(['./emotionTiming.js', './moodHistory.js', './moodHistoryContract.js', '@shannon/cognition', 'node:sqlite']);
+    expect([...source('moodHistory.ts').matchAll(/from '([^']+)'/gu)].map(match => match[1]).sort())
+      .toEqual(['./moodHistoryContract.js', '@shannon/cognition', 'node:sqlite']);
+    expect([...source('moodHistoryContract.ts').matchAll(/from '([^']+)'/gu)].map(match => match[1])).toEqual(['./shannonNowContract.js']);
     expect(clock).not.toMatch(/SQLiteShannonStore|conversationStore|chatModel|peopleMemory|OPENAI_API_KEY|GEMINI_API_KEY|INSERT |DELETE |CREATE /u);
     expect(clock.match(/type: '[a-z-]+'/gu)).toEqual(["type: 'awake-observed'"]);
     expect(clock.match(/UPDATE [a-z_]+ SET [a-z_]+ = \?/gu)).toEqual(['UPDATE companion_states SET snapshot_json = ?']);
