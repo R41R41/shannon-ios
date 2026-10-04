@@ -274,6 +274,76 @@ class PlainModel implements ShannonChatModel {
   }
 }
 
+describe('recording: retention, the reducer\'s instant, and a lost transaction', () => {
+  it('deletes points older than fourteen days when the store opens, also while recording is off', () => {
+    const { path, clock, store: shannon } = store();
+    shannon.apply(OWNER, { type: 'awake-observed' });
+    clock.at = at(10 * DAY);
+    shannon.apply(OWNER, { type: 'emotion-adjusted', delta: { valence: 0.2 } });
+    shannon.close();
+    closers.splice(closers.indexOf(shannon), 1);
+    expect(rows(path)).toHaveLength(2);
+    // Weeks without a write, with the switch off: opening the store still lets the old points go.
+    const off = store({ path, recording: null, start: at(20 * DAY) });
+    expect(rows(path).map(point => point.at)).toEqual([at(10 * DAY)]);
+    off.store.close();
+    closers.splice(closers.indexOf(off.store), 1);
+    store({ path, recording: null, start: at(25 * DAY) });
+    expect(rows(path)).toEqual([]);
+  });
+
+  it('takes the instant the reducer was given as the point\'s time, not a later reading of the clock', () => {
+    let tick = Date.parse(START);
+    const path = databasePath();
+    // A clock that moves on at every reading.
+    const shannon = new SQLiteShannonStore({ path, now: () => new Date(tick += 7).toISOString(), moodHistory: RECORDING });
+    closers.push(shannon);
+    shannon.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('happy', 0.8, START) });
+    const stored = shannon.snapshot(OWNER);
+    expect(rows(path).at(-1)!.at).toBe(stored.emotionClock!.at);
+    expect(rows(path).at(-1)).toEqual(moodPointOf(stored, stored.emotionClock!.at, emotionTiming()));
+  });
+
+  it('throws on when SQLite rolled back the whole transaction a caller held, and only logs otherwise', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { path, store: shannon } = store();
+    shannon.apply(OWNER, { type: 'awake-observed' });
+    // A point that cannot be written without SQLite rolling back the whole transaction around it.
+    const raw = new DatabaseSync(path);
+    raw.exec(`CREATE TRIGGER lose_the_transaction BEFORE INSERT ON shannon_mood_history BEGIN SELECT RAISE(ROLLBACK, 'lost'); END`);
+    raw.close();
+    const before = JSON.stringify(shannon.snapshot(OWNER));
+    const context = (shannon as unknown as { context: { database: DatabaseSync; transaction<T>(operation: () => T): T } }).context;
+    // Inside a caller's transaction (the sleep worker's outcome, say): the caller fails, nothing of it stays, and no statement
+    // after it runs outside a transaction.
+    let after = false;
+    expect(() => context.transaction(() => {
+      shannon.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('sulky', 0.85, START) });
+      after = true;
+    })).toThrow(/lost/u);
+    expect(after).toBe(false);
+    expect(context.database.isTransaction).toBe(false);
+    expect(JSON.stringify(shannon.snapshot(OWNER))).toBe(before);
+    // On its own the state write commits first; the lost point is logged and the write stands.
+    expect(errors).not.toHaveBeenCalled();
+    const written = shannon.apply(OWNER, { type: 'expressive-emotion-updated', emotion: feeling('sulky', 0.85, START) });
+    expect(shannon.snapshot(OWNER)).toEqual(written);
+    expect(written.expressiveEmotion?.primary).toBe('sulky');
+    expect(errors).toHaveBeenCalledWith('Shannon mood history failed', 'Error', expect.any(String));
+  });
+
+  it('keeps the newest points when a read reaches its bound', () => {
+    const { path, clock, store: shannon } = store();
+    for (let index = 0; index < 6; index += 1) {
+      clock.at = at(index * 11 * MINUTE);
+      shannon.apply(OWNER, { type: 'awake-observed' });
+    }
+    const reader = new SQLiteMoodHistoryReader(path, 3);
+    closers.push(reader);
+    expect(reader.points(OWNER, '0000').map(point => point.at)).toEqual([at(33 * MINUTE), at(44 * MINUTE), at(55 * MINUTE)]);
+  });
+});
+
 describe('recording: a turn with others present', () => {
   it('stores nothing of that turn: no point, and every point is the stored state', async () => {
     const { path, clock, store: shannon } = store();
@@ -481,5 +551,12 @@ describe('structure', () => {
     expect(server.indexOf('moodHistoryRoute(request, response, principal)')).toBeGreaterThan(server.indexOf("error: 'PAIRING_REQUIRED'"));
     // The point is made from the state alone: no cause, no target, no conversation.
     expect(source('moodHistory.ts')).not.toMatch(/\.cause|\.target|conversation_|ConversationStore/u);
+    // The recorder writes its own table and nothing else.
+    expect([...source('moodHistory.ts').matchAll(/\b(?:INSERT INTO|DELETE FROM|UPDATE|CREATE TABLE IF NOT EXISTS|CREATE INDEX IF NOT EXISTS [a-z_]+ ON) ([a-z_]+)/gu)]
+      .map(match => match[1])).toEqual(['shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history', 'shannon_mood_history']);
+    expect(source('moodHistory.ts')).not.toMatch(/\b(?:ALTER|DROP)\b|companion_states/u);
+    // The activity loop's process creates no table and prunes nothing: only the API's store does.
+    expect(source('autonomyAwakeClock.ts')).not.toMatch(/ensureMoodHistorySchema|pruneMoodHistory/u);
+    expect(names.filter(name => /ensureMoodHistorySchema\(|pruneMoodHistory\(/u.test(source(name)) && name !== 'moodHistory.ts')).toEqual(['sqliteStore.ts']);
   });
 });

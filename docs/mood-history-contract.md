@@ -21,11 +21,11 @@ Values are rounded to 0.01. There is no field for why she felt something, for wh
 
 ## How points are written
 
-- **From the state as written, after it was written.** In the API process and its workers, `SQLiteCompanionRepository.apply` hands the snapshot it just committed to the recorder; in the activity loop's process, the awake clock (`autonomyAwakeClock.ts`) does the same after its one write commits. These are every committed change of her state. Creating the first state is not a change and is not recorded. Nothing wakes to record: without a write of the state there is no point.
+- **From the state as written, after it was written.** In the API process and its workers, `SQLiteCompanionRepository.apply` hands the snapshot it just wrote, and the instant the reducer was given, to the recorder: after the state's transaction committed, or, when a caller holds a transaction around that write (the sleep worker applying an outcome, say), inside that transaction, so that the point commits or rolls back with the write. In the activity loop's process, the awake clock (`autonomyAwakeClock.ts`) does the same after its one write commits. These are every change of her state. Creating the first state is not a change and is not recorded. Nothing wakes to record: without a write of the state there is no point.
 - **It cannot alter the state.** The recorder is given the committed snapshot, computes a point with pure functions of `@shannon/cognition`, and writes one row of its own table. It never writes `companion_states`, the event log or the prompt projection, and nothing reads its table back into a state, a prompt or a model. The test applies the same writes with and without recording and compares the stored bytes.
-- **A failure to record never fails the write.** The state's transaction has committed before the recorder runs (inside a transaction a caller holds, the recorder uses a savepoint and undoes only its own row). An error is logged as `Shannon mood history failed` with the error's name and code only.
+- **A failure to record never fails the write.** The state's transaction has committed before the recorder runs; inside a transaction a caller holds, the recorder uses a savepoint and undoes only its own row. An error is logged as `Shannon mood history failed` with the error's name and code only. The one error that is thrown on is SQLite rolling back the caller's whole transaction (a full disk, an I/O error, out of memory): the write is then lost anyway, and the caller fails as it would have at its own next statement instead of going on outside a transaction.
 - **Coalesced.** A new point when the quiet face (`expression`, `feeling`) or the present `kind` (including to and from `null`) changed since the last point, when `valence`, `arousal` or `openness` moved by 0.05 or more since the last point, and otherwise at most every 10 minutes while writes happen.
-- **Kept 14 days.** When a point is written, points older than 14 days are deleted (on an index of the time).
+- **Kept 14 days.** Points older than 14 days are deleted when a point is written and whenever the API's store opens (a restart of the API or a worker), also while the switch is off (on an index of the time).
 - **The owner's scope only** (`SHANNON_OWNER_SCOPE_KEY`, default `owner`).
 
 ## Privacy rule
@@ -81,7 +81,7 @@ An older server answers `404`. On `403` and `404` the app shows its view without
 
 ## Server switch
 
-`SHANNON_MOOD_HISTORY` (default on). `off`, `false`, `0` or `disabled` records nothing, in the API and its workers and in the activity loop's process, and refuses the read. Points already written age out after 14 days. A restart applies it; all services read the same environment file.
+`SHANNON_MOOD_HISTORY` (default on). `off`, `false`, `0` or `disabled` records nothing, in the API and its workers and in the activity loop's process, and refuses the read. Points already written are deleted once older than 14 days, at the next start of the API or a worker. A restart applies it; all services read the same environment file.
 
 ## Table
 

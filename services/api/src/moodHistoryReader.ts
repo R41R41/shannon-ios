@@ -10,7 +10,7 @@ import { MOOD_HISTORY_LIMITS, type MoodHistoryPoint } from './moodHistoryContrac
 export class SQLiteMoodHistoryReader {
   private readonly database: DatabaseSync;
 
-  constructor(path: string) {
+  constructor(path: string, private readonly maximumRows = MAXIMUM_ROWS_READ) {
     this.database = new DatabaseSync(path);
     this.database.exec('PRAGMA busy_timeout = 5000; PRAGMA query_only = ON;');
   }
@@ -21,9 +21,10 @@ export class SQLiteMoodHistoryReader {
       if (!this.database.prepare(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'shannon_mood_history'`).get()) return [];
       const rows = this.database.prepare(`
         SELECT recorded_at, valence, arousal, openness, expression, feeling, present_kind, present_intensity
-        FROM shannon_mood_history WHERE scope_key = ? AND recorded_at >= ? ORDER BY recorded_at ASC, point_id ASC LIMIT ?
-      `).all(scopeKey, since, MAXIMUM_ROWS_READ) as unknown as MoodHistoryRow[];
-      return rows.map(storedPoint);
+        FROM shannon_mood_history WHERE scope_key = ? AND recorded_at >= ? ORDER BY recorded_at DESC, point_id DESC LIMIT ?
+      `).all(scopeKey, since, this.maximumRows) as unknown as MoodHistoryRow[];
+      // Newest first, so that a bound reached drops the oldest; returned oldest first.
+      return rows.reverse().map(storedPoint);
     } catch {
       // A table in a shape this reader does not know is an empty history, not a failed page.
       return [];

@@ -7,20 +7,24 @@ import { MOOD_HISTORY_LIMITS, type MoodHistoryRecording } from './moodHistoryCon
 /**
  * The record of her mood over time (`docs/mood-history-contract.md`). Core: emotion.
  *
- * A point is written beside a committed write of the companion state, from the state as it was
- * stored: in the API process and its workers after `SQLiteCompanionRepository.apply` committed,
- * and in the activity loop's process after the awake clock committed. Nothing else writes here and
- * nothing wakes for it: without a write of the state there is no point.
+ * A point is written beside a write of the companion state, from the state as it was stored: in
+ * the API process and its workers once `SQLiteCompanionRepository.apply` has written (after its
+ * transaction committed, or, when a caller holds a transaction around that write, inside it, so the
+ * point commits or rolls back with it), and in the activity loop's process after the awake clock
+ * committed. Nothing else writes here and nothing wakes for it: without a write of the state there
+ * is no point.
  *
- * It only reads the stored state. It is handed the committed snapshot after the write, computes a
- * point with pure functions, and writes one row of its own table; it never writes the state, and
- * nothing reads this table back into the state, a prompt, or a model. A failure here is logged by
- * the name of the error and the state write stands.
+ * It only reads the stored state. It is handed the snapshot as written, computes a point with pure
+ * functions, and writes one row of its own table; it never writes the state, and nothing reads this
+ * table back into the state, a prompt, or a model. A failure here is logged by the name of the error
+ * and the state write stands. The one exception: when SQLite itself rolled back a caller's whole
+ * transaction (a full disk, an I/O error), the error is thrown on, so that the caller fails as it
+ * would have failed at its own next statement, instead of going on outside a transaction.
  *
  * Coalesced: a new point when the quiet face of her mood or the kind she feels changed, when a
  * mood value moved by `moodStep` (0.05) or more, and otherwise at most every `everyMinutes` (10)
- * while writes happen. Points older than `keepDays` (14) are deleted when a point is written.
- * Only the owner's scope is recorded.
+ * while writes happen. Points older than `keepDays` (14) are deleted when a point is written and
+ * when the API's store opens, also while recording is switched off. Only the owner's scope is recorded.
  */
 export const MOOD_HISTORY_TABLE = 'shannon_mood_history';
 
@@ -42,6 +46,24 @@ export function ensureMoodHistorySchema(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS shannon_mood_history_scope_time ON shannon_mood_history (scope_key, recorded_at);
     CREATE INDEX IF NOT EXISTS shannon_mood_history_time ON shannon_mood_history (recorded_at);
   `);
+}
+
+/**
+ * Deletes points older than `keepDays` before `at`, for every scope. The API's store calls it when it opens, whatever the
+ * switch says; a failure is logged and the store opens.
+ */
+export function pruneMoodHistory(database: DatabaseSync, at: string): void {
+  try {
+    const time = Date.parse(at);
+    if (!Number.isFinite(time)) return;
+    database.prepare('DELETE FROM shannon_mood_history WHERE recorded_at < ?').run(keepCutoff(time));
+  } catch (error) {
+    logFailure(error);
+  }
+}
+
+function keepCutoff(time: number): string {
+  return new Date(time - MOOD_HISTORY_LIMITS.keepDays * 24 * 60 * 60_000).toISOString();
 }
 
 /** One point as stored. Numbers are rounded to 0.001. */
@@ -113,14 +135,24 @@ export function recordMoodPoint(
           (scope_key, recorded_at, valence, arousal, openness, expression, feeling, present_kind, present_intensity)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(scopeKey, point.at, point.valence, point.arousal, point.openness, point.expression, point.feeling, point.presentKind, point.presentIntensity);
-      const cutoff = new Date(Date.parse(point.at) - MOOD_HISTORY_LIMITS.keepDays * 24 * 60 * 60_000).toISOString();
       // On the index of the time alone: also the points of a scope that is no longer the owner's age out.
-      database.prepare('DELETE FROM shannon_mood_history WHERE recorded_at < ?').run(cutoff);
+      database.prepare('DELETE FROM shannon_mood_history WHERE recorded_at < ?').run(keepCutoff(Date.parse(point.at)));
     });
   } catch (error) {
-    const code = (error as { code?: unknown } | null)?.code;
-    console.error('Shannon mood history failed', error instanceof Error ? error.name : 'unknown', typeof code === 'string' && /^[A-Z_]+$/u.test(code) ? code : '');
+    if (error instanceof CallerTransactionLost) throw error.original;
+    logFailure(error);
   }
+}
+
+/** The name and the code only: a message could quote a stored value. */
+function logFailure(error: unknown): void {
+  const code = (error as { code?: unknown } | null)?.code;
+  console.error('Shannon mood history failed', error instanceof Error ? error.name : 'unknown', typeof code === 'string' && /^[A-Z_]+$/u.test(code) ? code : '');
+}
+
+/** SQLite rolled back the transaction a caller held around the state write; carries the original error. */
+class CallerTransactionLost extends Error {
+  constructor(readonly original: unknown) { super('MOOD_HISTORY_CALLER_TRANSACTION_LOST'); }
 }
 
 function latestPoint(database: DatabaseSync, scopeKey: string): StoredMoodPoint | null {
@@ -147,7 +179,8 @@ export function storedPoint(row: MoodHistoryRow): StoredMoodPoint {
 /**
  * Inside a transaction someone else opened (a caller of the state store that holds one), a savepoint,
  * so that a failure here undoes only this point. Otherwise a write transaction of its own, after the
- * state's own transaction committed.
+ * state's own transaction committed. When SQLite rolled back the caller's whole transaction, that is
+ * not this point's failure alone: it is reported as `CallerTransactionLost`.
  */
 function ownTransaction(database: DatabaseSync, operation: () => void): void {
   const nested = database.isTransaction;
@@ -156,6 +189,7 @@ function ownTransaction(database: DatabaseSync, operation: () => void): void {
     operation();
     database.exec(nested ? 'RELEASE shannon_mood_history' : 'COMMIT');
   } catch (error) {
+    if (nested && !database.isTransaction) throw new CallerTransactionLost(error);
     if (database.isTransaction) database.exec(nested ? 'ROLLBACK TO shannon_mood_history; RELEASE shannon_mood_history' : 'ROLLBACK');
     throw error;
   }

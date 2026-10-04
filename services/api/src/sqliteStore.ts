@@ -34,7 +34,8 @@ import { ensureTurnCaptureSchema, type TurnCaptureRecord } from './turnCaptures.
 import { ensureReplaySummarySchema, selectRecentMessages, selectReplaySummary, selectThreadOfTurn, upsertReplaySummary } from './sqliteReplaySummary.js';
 import type { ReplaySummaryRecord } from './conversationStore.js';
 import { SQLiteImpressionStore } from './sqliteImpressions.js';
-import { ensureMoodHistorySchema, recordMoodPoint } from './moodHistory.js';
+import { ensureMoodHistorySchema, pruneMoodHistory, recordMoodPoint } from './moodHistory.js';
+import { SQLiteRealtimeVoiceRepository } from './sqliteRealtimeVoiceRepository.js';
 import { moodHistoryRecording, type MoodHistoryRecording } from './moodHistoryContract.js';
 
 const DEFAULT_DATABASE_PATH = resolve(fileURLToPath(new URL('../../../data/shannon.sqlite', import.meta.url)));
@@ -49,6 +50,7 @@ export interface SQLiteShannonStoreOptions {
 export class SQLiteShannonStore implements CompanionStateStore, ConversationStore, BackgroundJobStore, KnowledgeStore, LlmUsageStore, RealtimeVoiceReservationStore, MemoryEmbeddingIndex, ShannonKnowledgeStore {
   private readonly context: SQLiteStoreContext;
   private readonly companion: SQLiteCompanionRepository;
+  private readonly realtimeVoice: SQLiteRealtimeVoiceRepository;
   private readonly conversations: SQLiteConversationRepository;
   private readonly jobs: SQLiteBackgroundJobRepository;
   private readonly memorySearch: SQLiteMemorySearchRepository;
@@ -59,9 +61,10 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   constructor(options: SQLiteShannonStoreOptions) {
     this.context = new SQLiteStoreContext(options);
     const moodHistory = options.moodHistory === undefined ? moodHistoryRecording(process.env) : options.moodHistory;
-    // After each committed write of her state, a point of her mood from the state as written; it never changes the state.
-    this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state) => recordMoodPoint(
-      this.context.database, moodHistory, scopeKey, state, this.context.now(), this.context.emotionTiming()));
+    // After each write of her state, a point of her mood from the state as written, at the instant it was reduced at; it never changes the state.
+    this.companion = new SQLiteCompanionRepository(this.context, (scopeKey, state, at) => recordMoodPoint(
+      this.context.database, moodHistory, scopeKey, state, at, this.context.emotionTiming()));
+    this.realtimeVoice = new SQLiteRealtimeVoiceRepository(this.context);
     this.conversations = new SQLiteConversationRepository(this.context);
     this.jobs = new SQLiteBackgroundJobRepository(this.context, this.companion);
     new SQLiteStoreMigrator(this.context, this.companion).migrate();
@@ -69,6 +72,8 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
     ensureSummaryLineageSchema(this.context.database);
     ensureReplaySummarySchema(this.context.database);
     ensureMoodHistorySchema(this.context.database);
+    // Retention holds also while nothing is recorded (the switch is off, or no write for weeks): old points go at every start.
+    pruneMoodHistory(this.context.database, this.context.now());
     this.memorySearch = new SQLiteMemorySearchRepository(this.context.database);
     this.embeddings = new SQLiteMemoryEmbeddingIndex(this.context.database);
     this.shannonKnowledge = new SQLiteShannonKnowledgeStore(this.context.database, operation => this.context.transaction(operation));
@@ -88,14 +93,14 @@ export class SQLiteShannonStore implements CompanionStateStore, ConversationStor
   backgroundLlmCostUsd(monthKey: string) { return this.companion.backgroundLlmCostUsd(monthKey); }
   backgroundLlmCostUsdForDay(dayKey: string) { return this.companion.backgroundLlmCostUsdForDay(dayKey); }
   voiceLlmCostUsdForDay(scopeKey: string, dayKey: string) { return this.companion.voiceLlmCostUsdForDay(scopeKey, dayKey); }
-  reserveRealtimeVoiceSession(request: RealtimeVoiceSessionReservationRequest): RealtimeVoiceSessionReservation | null { return this.companion.reserveRealtimeVoiceSession(request); }
-  releaseRealtimeVoiceSessionReservation(reservationId: string) { return this.companion.releaseRealtimeVoiceSessionReservation(reservationId); }
-  realtimeVoiceReservedSecondsForDay(scopeKey: string, dayKey: string) { return this.companion.realtimeVoiceReservedSecondsForDay(scopeKey, dayKey); }
+  reserveRealtimeVoiceSession(request: RealtimeVoiceSessionReservationRequest): RealtimeVoiceSessionReservation | null { return this.realtimeVoice.reserveRealtimeVoiceSession(request); }
+  releaseRealtimeVoiceSessionReservation(reservationId: string) { return this.realtimeVoice.releaseRealtimeVoiceSessionReservation(reservationId); }
+  realtimeVoiceReservedSecondsForDay(scopeKey: string, dayKey: string) { return this.realtimeVoice.realtimeVoiceReservedSecondsForDay(scopeKey, dayKey); }
   realtimeVoiceAllowanceStatus(scopeKey: string, dayKey: string, baseAllowanceSeconds: number, maximumAllowanceSeconds?: number): RealtimeVoiceAllowanceStatus {
-    return this.companion.realtimeVoiceAllowanceStatus(scopeKey, dayKey, baseAllowanceSeconds, maximumAllowanceSeconds);
+    return this.realtimeVoice.realtimeVoiceAllowanceStatus(scopeKey, dayKey, baseAllowanceSeconds, maximumAllowanceSeconds);
   }
   extendRealtimeVoiceAllowance(scopeKey: string, dayKey: string, baseAllowanceSeconds: number, additionalSeconds: number, maximumAllowanceSeconds: number, updatedAt: string): RealtimeVoiceAllowanceStatus | null {
-    return this.companion.extendRealtimeVoiceAllowance(
+    return this.realtimeVoice.extendRealtimeVoiceAllowance(
       scopeKey, dayKey, baseAllowanceSeconds, additionalSeconds, maximumAllowanceSeconds, updatedAt,
     );
   }
