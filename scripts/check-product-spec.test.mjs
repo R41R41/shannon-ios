@@ -54,6 +54,9 @@ test('the product spec of this repository passes its own check', () => {
 
 test('every generated file is produced from the three sources', () => {
   assert.deepEqual(Object.keys(outputs(readSources())).sort(), [
+    // The same Swift, compiled into the shared Apple package (A3).
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonDesignTokens.generated.swift',
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings.generated.swift',
     'design/generated/ShannonDesignTokens.generated.swift',
     'design/generated/ShannonStrings.generated.swift',
     'design/generated/shannon-strings.ja.ts',
