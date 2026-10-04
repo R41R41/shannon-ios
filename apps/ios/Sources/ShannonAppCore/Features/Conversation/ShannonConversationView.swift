@@ -58,6 +58,8 @@ public struct ShannonConversationView: View {
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
+    @AppStorage(ShannonForm.storageKey) var formRawValue = ShannonForm.waterlight.rawValue
+    @AppStorage(ShannonBodyPreference.layoutModeKey) var figureLayoutRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
@@ -120,6 +122,11 @@ public struct ShannonConversationView: View {
         // front, and whether 運用 deserves a look, read then and every few minutes while the app stays in front.
         .task(id: scenePhase == .active) { await keepEntryMarks() }
         .onChange(of: showsSettings) { if !showsSettings { settingsShowsOps = false } }
+        // Her figure in the dialogue display is the surface that may answer a touch in voice: only while it is what he sees.
+        .onChange(of: dialogueFigureIsInFront, initial: true) { bodyModel.dialogueIsInFront = dialogueFigureIsInFront }
+        .onChange(of: bodyModel.dialogueRequest) { showFigureInTalk() }
+        // A new 映し方, from Talk's display options or 設定 › すがた, starts from her own size and place.
+        .onChange(of: figureLayoutRawValue) { bodyModel.figureAdjustment = ShannonLive2DLayout() }
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }

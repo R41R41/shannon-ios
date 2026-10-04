@@ -15,7 +15,8 @@ extension ShannonConversationView {
 
 #if DEBUG
     func applyDesignPreviewLaunchState() {
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDialogue") {
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDialogue")
+            || ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBody") {
             displayMode = .dialogue
         }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewWork") {

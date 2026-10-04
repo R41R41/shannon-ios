@@ -157,6 +157,33 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(tracker.pinch(scale: .nan), 1)
     }
 
+    @MainActor
+    func testHerVoiceAnswersOnlyFromTheDialogueDisplayInFrontAndEveryOtherConditionStillHolds() {
+        // The surface: Talk, its dialogue display, nothing over it (the body screen's "it is up", since A6).
+        XCTAssertTrue(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .scroll, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covered: true))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .work, displayMode: .dialogue, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .shannon, displayMode: .dialogue, covered: false))
+
+        func answers(
+            front: Bool = true, active: Bool = true, audience: ShannonBodyAudience = .owner,
+            mode: ShannonBodyReplyMode = .voice, reports: Bool = true, form: ShannonForm = .live2d
+        ) -> Bool {
+            ShannonBodyModel.answersInVoice(dialogueIsInFront: front, sceneIsActive: active, audience: audience, replyMode: mode, reportsTouch: reports, form: form)
+        }
+        XCTAssertTrue(answers())
+        // Each condition alone is enough to keep her voice and the microphone off.
+        XCTAssertFalse(answers(front: false))
+        XCTAssertFalse(answers(active: false))
+        XCTAssertFalse(answers(audience: .others))
+        XCTAssertFalse(answers(mode: .text))
+        XCTAssertFalse(answers(reports: false))
+        XCTAssertFalse(answers(form: .waterlight))
+        // A model that was never told the dialogue is in front answers in text.
+        XCTAssertFalse(ShannonBodyModel().dialogueIsInFront)
+    }
+
     func testOthersStayTheAudienceForAWhileAfterAFriendWasListening() {
         var rule = ShannonBodyAudienceRule()
         let start = Date(timeIntervalSince1970: 1_000)

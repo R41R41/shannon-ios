@@ -41,23 +41,51 @@ extension ShannonConversationView {
 
         if selectedPage == .talk {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: toggleDisplayMode) {
+                // One tap switches the display, as before; a long press offers her figure's options
+                // (her form, and in the Live2D form 映し方 and 位置を戻す). 設定 › すがた has the same.
+                Menu {
+                    Button(action: toggleDisplayMode) {
+                        Label("\(displayMode.switchActionTitle)表示へ切り替える", systemImage: displayMode.switchActionSymbolName)
+                    }
+                    figureDisplayOptions
+                } label: {
                     Image(systemName: displayMode.switchActionSymbolName)
+                } primaryAction: {
+                    toggleDisplayMode()
                 }
                 .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
-
-                Button { bodyModel.showsScreen = true } label: {
-                    Image(systemName: "figure.stand")
-                }
-                .accessibilityLabel(ShannonBodyCopy.screenTitle)
-                .accessibilityHint(ShannonBodyCopy.openBodyHint)
-                .accessibilityIdentifier("open-body")
+                .accessibilityHint(ShannonBodyCopy.displayMenuHint)
+                .accessibilityIdentifier("talk-display-menu")
 
                 Button(action: createThreadFromHeader) {
                     Image(systemName: "square.and.pencil")
                 }
                 .accessibilityLabel("新しいトーク")
             }
+        }
+    }
+
+    /// Her form, and in the Live2D form 映し方 and 位置を戻す: Talk's display options (the long press of the display button).
+    @ViewBuilder
+    var figureDisplayOptions: some View {
+        Picker(ShannonBodyCopy.formTitle, selection: $formRawValue) {
+            ForEach(ShannonForm.allCases) { form in
+                Text(form.japaneseName).tag(form.rawValue)
+            }
+        }
+        .pickerStyle(.menu)
+        if formRawValue == ShannonForm.live2d.rawValue, ShannonLive2DStage.isAvailable {
+            Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
+                Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
+                Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
+            }
+            .pickerStyle(.menu)
+            Button {
+                bodyModel.figureAdjustment = ShannonLive2DLayout()
+            } label: {
+                Label(ShannonBodyCopy.resetLayout, systemImage: "arrow.uturn.backward")
+            }
+            .disabled(!bodyModel.figureAdjustment.isMoved)
         }
     }
 

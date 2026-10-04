@@ -49,7 +49,6 @@
     "settings.avatar-style macos no",
     "settings.avatar-style windows no",
     "settings.calendar-sharing windows no",
-    "settings.figure ios partial",
     "settings.figure macos partial",
     "settings.figure windows partial",
     "settings.profile-state macos no",

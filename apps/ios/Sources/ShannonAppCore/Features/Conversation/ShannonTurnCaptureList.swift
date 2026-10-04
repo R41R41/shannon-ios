@@ -12,6 +12,7 @@ public struct ShannonTurnCaptureList: View {
     @State private var failure: String?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
 
     public init(message: ConversationMessage, conversation: ShannonConversationModel, memory: ShannonMemoryModel) {
         self.message = message
@@ -44,6 +45,9 @@ public struct ShannonTurnCaptureList: View {
         .sheet(item: $opened, onDismiss: { Task { await conversation.refreshCaptures() } }) { capture in
             ShannonTurnCaptureDestination(capture: capture, memory: memory)
         }
+        // In the dialogue display this sheet comes over her figure: her voice for a touch stops while it is up.
+        .onChange(of: opened != nil) { bodyModel?.sheetFromWordsIsUp = opened != nil }
+        .onDisappear { if opened != nil { bodyModel?.sheetFromWordsIsUp = false } }
         .confirmationDialog(
             confirming.map(ShannonTurnCapturePresentation.undoTitle) ?? "取り消す",
             isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),

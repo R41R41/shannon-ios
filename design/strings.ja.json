@@ -1169,6 +1169,55 @@
       "text": "{count}台",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
       "only": "apple"
+    },
+    {
+      "key": "settings.figure.showInTalk",
+      "text": "トークで姿を見る",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "設定 › すがた のボタン。トークの対話表示（information-architecture.md では「向き合う表示」）を出す。情報設計 3 の決定（2026-10-03）の言葉。"
+    },
+    {
+      "key": "settings.figure.showInTalkHint",
+      "text": "トークを対話表示にして、シャノンの姿を出します",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "「トークで姿を見る」の手がかり（読み上げ）。"
+    },
+    {
+      "key": "settings.figure.formHint",
+      "text": "会話と音声会話でのシャノンの姿を切り替えます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "姿の切り替えの手がかり（読み上げ）。copy-differences.md の 16。"
+    },
+    {
+      "key": "settings.figure.layoutOnlyLive2D",
+      "text": "映し方と位置は、Live2Dの姿のときに使えます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "水の光の目のとき、映し方の手がかり（読み上げ）。"
+    },
+    {
+      "key": "settings.figure.replyModeExplanation",
+      "text": "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "設定 › すがた の「触れたときの返事」の説明。"
+    },
+    {
+      "key": "talk.display.menuHint",
+      "text": "長押しで、姿と映し方を選べます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "トークの表示の切り替えボタンの手がかり（読み上げ）。押すと表示が替わり、長押しで姿・映し方・位置を戻す。"
+    },
+    {
+      "key": "talk.figure.heroHint",
+      "text": "対話表示にします。そこで姿に触れられます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "only": "apple",
+      "note": "空のトークの小さな姿（Live2Dの姿のとき）の手がかり（読み上げ）。"
     }
   ]
 }

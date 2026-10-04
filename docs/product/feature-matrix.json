@@ -2199,11 +2199,11 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyView.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
           ],
-          "note": "いまは別の「からだ」の画面（全画面）にも出る。決定（2026-10-03）: トークの向き合う表示にたたむ（A6）。"
+          "note": "トークの対話表示（向き合う表示）に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
         },
         "macos": {
           "status": "partial",
@@ -2233,10 +2233,10 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#figureDisplayOptions"
           ],
-          "note": "いまは設定と「からだ」の画面。決定: トークの表示の設定と 設定 › すがた（A6）。"
+          "note": "トークの表示の切り替えボタンの長押しと、設定 › すがた（A6）。"
         },
         "macos": {
           "status": "partial",
@@ -2313,10 +2313,11 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ],
-          "note": "いまは「からだ」の画面の中。決定: トークの表示の設定と 設定 › すがた（A6）。2 本の指で大きさと位置。"
+          "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。"
         },
         "macos": {
           "status": "partial",
@@ -2379,7 +2380,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ],
-          "note": "いまは「からだ」の画面で触れる（トークの中の姿は押すと画面が開く）。決定: トークの向き合う表示の中で触れる（A6）。"
+          "note": "トークの対話表示の姿に、その場で触れる（A6）。"
         },
         "macos": {
           "status": "partial",
@@ -2484,9 +2485,10 @@
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#ShannonBodyReplyMode",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
           ],
-          "note": "いまは「からだ」の画面の中。決定: 設定 › すがた（A6）。"
+          "note": "設定 › すがた（A6）。声で返すのは、トークの対話表示の姿が見えている間だけ。"
         },
         "macos": {
           "status": "no",
@@ -3054,11 +3056,11 @@
       "description": "姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。",
       "surfaces": {
         "ios": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "設定の区画「すがた」に、姿の切り替え・「からだを開く」・体に起きたことを伝える。映し方と触れたときの返事は「からだ」の画面の中（A6 で移す）。"
+          "note": "姿、映し方、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
         },
         "macos": {
           "status": "partial",

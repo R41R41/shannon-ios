@@ -1,14 +1,17 @@
 import SwiftUI
 
-/// 「からだ」: her figure large, the switch between her two forms, what she feels and is doing
-/// in one quiet line, and the switch that lets a touch reach her.
+#if os(macOS)
+/// The Mac's body sheet 「からだ」 (opened from Settings): her figure large and the switch between her
+/// two forms. On the iPhone her figure lives in Talk's dialogue display and its options in 設定 › すがた
+/// (decision 2026-10-03, roadmap A6); the Mac gets the same when her figure stands beside the
+/// conversation (A15), and this sheet goes then.
 public struct ShannonBodyScreen: View {
     let memory: ShannonMemoryModel?
     let showsCloseButton: Bool
 
     @AppStorage(ShannonForm.storageKey) private var formRawValue = ShannonForm.waterlight.rawValue
     @AppStorage(ShannonBodyPreference.reportsTouchKey) private var reportsTouch = false
-    @AppStorage(Self.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
+    @AppStorage(ShannonBodyPreference.layoutModeKey) private var layoutModeRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @AppStorage(ShannonBodyReplyMode.storageKey) private var replyModeRawValue = ShannonBodyReplyMode.text.rawValue
     @State private var hostID = UUID()
     @State private var adjustment = ShannonLive2DLayout()
@@ -20,7 +23,6 @@ public struct ShannonBodyScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    static let layoutModeKey = "shannon.body.layout-mode"
     static let refreshSeconds = 30.0
 
     public init(memory: ShannonMemoryModel? = nil, showsCloseButton: Bool = true) {
@@ -250,29 +252,7 @@ public struct ShannonBodyScreen: View {
     }
 }
 
-/// Presents the body screen from the model's switch, so the entry can live anywhere.
-struct ShannonBodyScreenPresentation: ViewModifier {
-    @Bindable var bodyModel: ShannonBodyModel
-    let memory: ShannonMemoryModel
-
-    func body(content: Content) -> some View {
-        content
-#if os(iOS)
-            .fullScreenCover(isPresented: $bodyModel.showsScreen) { screen }
-#else
-            .sheet(isPresented: $bodyModel.showsScreen) { screen.frame(minWidth: 460, minHeight: 720) }
-#endif
-    }
-
-    private var screen: some View {
-        NavigationStack {
-            ShannonBodyScreen(memory: memory)
-        }
-        .environment(bodyModel)
-    }
-}
-
-/// 「すがた」 in Settings: the form, the way to the body screen, and the touch switch.
+/// 「すがた」 in the Mac's Settings: the form, the way to the body sheet, and the touch switch.
 public struct ShannonFormSettingsSection: View {
     let openBody: (() -> Void)?
     let showsTouchSwitch: Bool
@@ -319,3 +299,4 @@ public struct ShannonFormSettingsSection: View {
         }
     }
 }
+#endif

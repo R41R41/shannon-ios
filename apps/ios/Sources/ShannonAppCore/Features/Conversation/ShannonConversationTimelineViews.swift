@@ -37,10 +37,10 @@ struct ShannonEmptyConversation: View {
     private var hero: some View {
 #if os(iOS)
         if ShannonConversationFeatureFlags.waterlightHero {
-            // In the Live2D form the small figure is the way to the body screen, where she can be touched.
-            let opensBody = formRawValue == ShannonForm.live2d.rawValue && bodyModel != nil
+            // In the Live2D form the small figure is the way to the dialogue display, where she can be touched.
+            let opensDialogue = formRawValue == ShannonForm.live2d.rawValue && bodyModel != nil
             Button {
-                if opensBody { bodyModel?.showsScreen = true } else { waterlightReaction &+= 1 }
+                if opensDialogue { bodyModel?.requestDialogue() } else { waterlightReaction &+= 1 }
             } label: {
                 ShannonBodyView(
                     expression: .curious,
@@ -53,7 +53,7 @@ struct ShannonEmptyConversation: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("シャノン")
-            .accessibilityHint(opensBody ? ShannonBodyCopy.openBodyHint : "触れると表情が変わります")
+            .accessibilityHint(opensDialogue ? ShannonBodyCopy.heroHint : "触れると表情が変わります")
         } else {
             ShannonAvatarView(expression: .curious, size: 96)
                 .accessibilityLabel("シャノン")
