@@ -82,6 +82,10 @@ An older server answers `404`. On `403` and `404` the app shows the page without
 
 `shannonNowReader.ts` holds `REACH_OUT_DELIVERY_SOURCES`: one function per surface, each reading its own table and returning nothing while that table does not exist. A new surface adds one function that maps its rows to `{ id, surface, outcome, at }`. A source that throws is left out of the answer; the rest of the page still arrives.
 
+## Her mood over time
+
+How her mood went over hours or days is a read of its own: `GET /v1/shannon/mood-history` (`docs/mood-history-contract.md`), with the same callers, codes and rate limit as this one.
+
 ## Not built
 
 - The Live2D body on iPhone, and reading or changing the desktop body's settings from the phone (that needs a body-side contract).
