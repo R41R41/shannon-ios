@@ -1175,11 +1175,11 @@
       "text": "トークで姿を見る",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
-      "note": "設定 › すがた のボタン。トークの対話表示（information-architecture.md では「向き合う表示」）を出す。情報設計 3 の決定（2026-10-03）の言葉。"
+      "note": "設定 › すがた のボタン。トークの向き合う表示を出す。情報設計 3 の決定（2026-10-03）の言葉。"
     },
     {
       "key": "settings.figure.showInTalkHint",
-      "text": "トークを対話表示にして、シャノンの姿を出します",
+      "text": "トークを向き合う表示にして、シャノンの姿を出します",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
       "note": "「トークで姿を見る」の手がかり（読み上げ）。"
@@ -1200,7 +1200,7 @@
     },
     {
       "key": "settings.figure.replyModeExplanation",
-      "text": "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
+      "text": "「声で返す」では、トークの向き合う表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
       "note": "設定 › すがた の「触れたときの返事」の説明。"
@@ -1214,7 +1214,7 @@
     },
     {
       "key": "talk.figure.heroHint",
-      "text": "対話表示にします。そこで姿に触れられます",
+      "text": "向き合う表示にします。そこで姿に触れられます",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "only": "apple",
       "note": "空のトークの小さな姿（Live2Dの姿のとき）の手がかり（読み上げ）。"
@@ -1224,7 +1224,14 @@
       "text": "カメラ：{state}",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift",
       "only": "apple",
-      "note": "カメラの状態の 1 行。state は 切／見てよい／いま見ています。iPhone は対話表示と音声会話の上、切の間はシートの 設定 のタイルの下（A7）。「ようす」の体のカメラも同じ形。"
+      "note": "カメラの状態の 1 行。state は 切／見てよい／いま見ています。iPhone は向き合う表示と音声会話の上、切の間はシートの 設定 のタイルの下（A7）。「ようす」の体のカメラも同じ形。"
+    },
+    {
+      "key": "talk.display.facing",
+      "text": "向き合う",
+      "apple": "apps/ios/Sources/ShannonAppCore/Domain/Appearance/ShannonAppearanceModels.swift",
+      "only": "apple",
+      "note": "トークの、姿と向き合って話す表示の名前（もう 1 つは一覧の表示。そこへ戻るボタンは「履歴」）。表示の切り替えボタンは「向き合う表示へ切り替える」、説明は「向き合う表示」。所有者の決定（2026-10-05）: 名前を 1 つにする。それまでアプリは「対話」、仕様は「向き合う表示」と、2 つの名前があった。「対話」は一覧の表示も会話なので紛らわしく、「向き合う」は見えるもの（こちらを向いた姿）を言う。"
     }
   ]
 }

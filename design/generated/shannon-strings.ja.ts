@@ -174,13 +174,14 @@ export const shannonStrings = {
   "admin.devices.hint": "接続中の端末の一覧と、接続の解除を開きます",
   "admin.devices.count": "{count}台",
   "settings.figure.showInTalk": "トークで姿を見る",
-  "settings.figure.showInTalkHint": "トークを対話表示にして、シャノンの姿を出します",
+  "settings.figure.showInTalkHint": "トークを向き合う表示にして、シャノンの姿を出します",
   "settings.figure.formHint": "会話と音声会話でのシャノンの姿を切り替えます",
   "settings.figure.layoutOnlyLive2D": "映し方と位置は、Live2Dの姿のときに使えます",
-  "settings.figure.replyModeExplanation": "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
+  "settings.figure.replyModeExplanation": "「声で返す」では、トークの向き合う表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。",
   "talk.display.menuHint": "長押しで、姿と映し方を選べます",
-  "talk.figure.heroHint": "対話表示にします。そこで姿に触れられます",
+  "talk.figure.heroHint": "向き合う表示にします。そこで姿に触れられます",
   "look.state.line": "カメラ：{state}",
+  "talk.display.facing": "向き合う",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;

@@ -12,17 +12,17 @@ extension ShannonConversationView {
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .combine)
-                .accessibilityHint("旧ランタイムのサービスの状態と、開始・停止・起動・今すぐ実行を開きます")
+                .accessibilityHint(ShannonGeneratedStrings.adminOpsHint)
                 .accessibilityIdentifier("settings-admin-ops")
             }
             if let connectionModel {
                 settingsValueButton(
                     title: ShannonGeneratedStrings.settingsSectionDevices,
-                    value: connectionModel.connectedDevices.isEmpty ? "" : "\(connectionModel.connectedDevices.count)台",
+                    value: connectionModel.connectedDevices.isEmpty ? "" : ShannonGeneratedStrings.adminDevicesCount(count: String(connectionModel.connectedDevices.count)),
                     symbol: "laptopcomputer.and.iphone",
                     palette: palette
                 ) { showsConnectionDetails = true }
-                .accessibilityHint("接続中の端末の一覧と、接続の解除を開きます")
+                .accessibilityHint(ShannonGeneratedStrings.adminDevicesHint)
             }
             settingsValueButton(
                 title: ShannonGeneratedStrings.navDelivery,

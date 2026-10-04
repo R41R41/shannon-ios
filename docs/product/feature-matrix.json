@@ -2203,7 +2203,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyView.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
           ],
-          "note": "トークの対話表示（向き合う表示）に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
+          "note": "トークの向き合う表示に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
         },
         "macos": {
           "status": "partial",
@@ -2380,7 +2380,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ],
-          "note": "トークの対話表示の姿に、その場で触れる（A6）。"
+          "note": "トークの向き合う表示の姿に、その場で触れる（A6）。"
         },
         "macos": {
           "status": "partial",
@@ -2488,7 +2488,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
           ],
-          "note": "設定 › すがた（A6）。声で返すのは、トークの対話表示の姿が見えている間だけ。"
+          "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
         },
         "macos": {
           "status": "no",
@@ -2579,7 +2579,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveVoiceView.swift#ShannonAppLookStateBadge",
             "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift#cameraOffLine"
           ],
-          "note": "対話表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
+          "note": "向き合う表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
         },
         "macos": {
           "status": "partial",

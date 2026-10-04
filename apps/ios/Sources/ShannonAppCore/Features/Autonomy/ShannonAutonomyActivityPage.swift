@@ -94,12 +94,12 @@ public struct ShannonAutonomyActivityPage: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
             }
-            .accessibilityHint("シャノン自身の目標・問い・作品と、使うモデルを開きます")
+            .accessibilityHint(ShannonGeneratedStrings.autonomyPursuitsHint)
             .accessibilityIdentifier("autonomy-pursuits-entry")
         } header: {
             Text("シャノンのやりたいこと")
         } footer: {
-            Text("あなたの目的とは別に、シャノン自身が持っている目標と問いです。使うモデルもここから見られます。")
+            Text(ShannonGeneratedStrings.autonomyPursuitsFooter)
         }
     }
 

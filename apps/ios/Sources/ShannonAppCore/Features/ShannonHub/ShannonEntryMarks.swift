@@ -8,8 +8,8 @@ enum ShannonEntryMarks {
     static func accessibilityValue(unread: Int, waiting: Int, opsAttention: String? = nil) -> String {
         var parts: [String] = []
         if unread > 0 { parts.append("未確認\(unread)件") }
-        if waiting > 0 { parts.append("シャノンが待っていること\(waiting)件") }
-        if let opsAttention { parts.append("運用：\(opsAttention)") }
+        if waiting > 0 { parts.append(ShannonGeneratedStrings.entryWaiting(count: String(waiting))) }
+        if let opsAttention { parts.append(ShannonGeneratedStrings.entryOpsReason(reason: opsAttention)) }
         return parts.isEmpty ? "未確認なし" : parts.joined(separator: "、")
     }
 }

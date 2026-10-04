@@ -44,20 +44,20 @@ public enum ShannonBodyCopy {
     public static let screenTitle = "からだ"
     public static let sectionTitle = "すがた"
     public static let formTitle = "すがた"
-    public static let formHint = "会話と音声会話でのシャノンの姿を切り替えます"
+    public static let formHint = ShannonGeneratedStrings.settingsFigureFormHint
     /// The Mac's settings only (A15).
     public static let openScreenTitle = "からだを開く"
-    /// 設定 › すがた on the iPhone: opens Talk's dialogue display, where her figure is.
-    public static let showInTalk = "トークで姿を見る"
-    public static let showInTalkHint = "トークを対話表示にして、シャノンの姿を出します"
+    /// 設定 › すがた on the iPhone: opens Talk's dialogue display (「向き合う」), where her figure is.
+    public static let showInTalk = ShannonGeneratedStrings.settingsFigureShowInTalk
+    public static let showInTalkHint = ShannonGeneratedStrings.settingsFigureShowInTalkHint
     /// The display button of Talk: one tap switches the display, a long press offers her figure's options.
-    public static let displayMenuHint = "長押しで、姿と映し方を選べます"
+    public static let displayMenuHint = ShannonGeneratedStrings.talkDisplayMenuHint
     public static let reportsTouchTitle = "体に起きたことをシャノンに伝える"
     public static let reportsTouchHint = "オンにすると、Live2Dの姿に触れたことがシャノンに届きます"
     public static let settingsExplanation = "Live2Dの姿は指で触れられます（頭をなでる、つつく、くすぐる、手をつなぐ）。「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
     public static let macExplanation = "Live2Dの姿は「からだを開く」で見られます。このMacからは、触れたことをシャノンに伝えません。"
     public static let replyModeTitle = "触れたときの返事"
-    public static let replyModeExplanation = "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。"
+    public static let replyModeExplanation = ShannonGeneratedStrings.settingsFigureReplyModeExplanation
     public static let layoutTitle = "映し方"
     public static let layoutFull = "全身"
     public static let layoutBust = "上半身"
@@ -70,7 +70,7 @@ public enum ShannonBodyCopy {
     }
     public static let failed = "Live2Dの姿を表示できませんでした。水の光の目で表示しています。"
     public static let shownElsewhere = "Live2Dの姿は、いま別の画面に出ています。ここでは水の光の目で表示しています。"
-    public static let layoutOnlyLive2D = "映し方と位置は、Live2Dの姿のときに使えます"
+    public static let layoutOnlyLive2D = ShannonGeneratedStrings.settingsFigureLayoutOnlyLive2D
     public static let retry = "もう一度読み込む"
     public static let resting = "省電力のため、動きを止めています。触れると動きます"
     public static let restingReduceMotion = "視差効果を減らす設定のため、動きを止めています。触れると動きます"
@@ -82,7 +82,7 @@ public enum ShannonBodyCopy {
     public static let figureDirectHint = "Live2Dの姿。この上では指がそのまま届きます。上下のスワイプで大きさを変えられます"
     public static let figureHint = "Live2Dの姿。指で触れられます"
     /// The small figure of an empty Talk in the Live2D form: it opens the dialogue display, where she can be touched.
-    public static let heroHint = "対話表示にします。そこで姿に触れられます"
+    public static let heroHint = ShannonGeneratedStrings.talkFigureHeroHint
 
     /// 「いま：〈気持ち〉・〈していること〉」: one quiet line under her figure.
     public static func nowLine(face: ShannonFace, doing: String?) -> String {

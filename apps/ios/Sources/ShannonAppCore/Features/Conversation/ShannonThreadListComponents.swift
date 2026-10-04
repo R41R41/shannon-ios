@@ -13,7 +13,7 @@ struct ShannonThreadListDestination: Identifiable {
     var id: String { title }
 
     var accessibilityLabel: String {
-        if attention, let attentionReason { return "\(title)、運用：\(attentionReason)" }
+        if attention, let attentionReason { return "\(title)、\(ShannonGeneratedStrings.entryOpsReason(reason: attentionReason))" }
         if attention { return "\(title)、確かめたいことがあります" }
         guard let badge, badge > 0 else { return title }
         return "\(title)、\(badge)件"

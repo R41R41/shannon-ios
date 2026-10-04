@@ -34,7 +34,7 @@ struct ShannonHubView: View {
                 } label: {
                     row(ShannonGeneratedStrings.navMemory, symbol: "brain.head.profile", detail: nil, palette: palette)
                 }
-                .accessibilityHint("記憶、約束、人、目的、日記、使用量を開きます")
+                .accessibilityHint(ShannonGeneratedStrings.hubMemoryHint)
                 .accessibilityIdentifier("shannon-hub-memory")
                 if autonomy.isSupported {
                     NavigationLink {
@@ -42,7 +42,7 @@ struct ShannonHubView: View {
                     } label: {
                         row(ShannonGeneratedStrings.navAutonomy, symbol: "sparkles", detail: autonomy.overview == nil ? nil : autonomy.stateLabel, palette: palette)
                     }
-                    .accessibilityHint("動いてよい状態、今日の予算、提案、やりたいこと、したことの記録を開きます")
+                    .accessibilityHint(ShannonGeneratedStrings.hubAutonomyHint)
                     .accessibilityIdentifier("shannon-hub-autonomy")
                 }
                 if autonomy.study.isSupported {
@@ -91,7 +91,7 @@ struct ShannonHubView: View {
     private var waitingLine: String {
         let items = waiting
         guard !items.isEmpty else { return ShannonGeneratedStrings.shannonCardNothingWaiting }
-        return "待っていること \(items.count)件：\(ShannonNowText.waitingSummary(items))"
+        return ShannonGeneratedStrings.hubCardWaiting(count: String(items.count), summary: ShannonNowText.waitingSummary(items))
     }
 
     private func card(palette: ShannonPalette) -> some View {
@@ -132,7 +132,7 @@ struct ShannonHubView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(cardAccessibilityLabel)
-        .accessibilityHint("ようすを開きます")
+        .accessibilityHint(ShannonGeneratedStrings.hubCardHint)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("shannon-hub-card")
     }

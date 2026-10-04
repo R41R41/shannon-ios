@@ -347,17 +347,19 @@ public enum ShannonGeneratedStrings {
     /// `settings.figure.showInTalk`
     public static let settingsFigureShowInTalk = "トークで姿を見る"
     /// `settings.figure.showInTalkHint`
-    public static let settingsFigureShowInTalkHint = "トークを対話表示にして、シャノンの姿を出します"
+    public static let settingsFigureShowInTalkHint = "トークを向き合う表示にして、シャノンの姿を出します"
     /// `settings.figure.formHint`
     public static let settingsFigureFormHint = "会話と音声会話でのシャノンの姿を切り替えます"
     /// `settings.figure.layoutOnlyLive2D`
     public static let settingsFigureLayoutOnlyLive2D = "映し方と位置は、Live2Dの姿のときに使えます"
     /// `settings.figure.replyModeExplanation`
-    public static let settingsFigureReplyModeExplanation = "「声で返す」では、トークの対話表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。"
+    public static let settingsFigureReplyModeExplanation = "「声で返す」では、トークの向き合う表示で触れたときのひとことをシャノンが声に出して言い、そのあと数秒だけマイクを開いて返事を聞きます。ほかの人がいる時と、通話や読み上げの最中は、文字だけで返します。"
     /// `talk.display.menuHint`
     public static let talkDisplayMenuHint = "長押しで、姿と映し方を選べます"
     /// `talk.figure.heroHint`
-    public static let talkFigureHeroHint = "対話表示にします。そこで姿に触れられます"
+    public static let talkFigureHeroHint = "向き合う表示にします。そこで姿に触れられます"
     /// `look.state.line`
     public static func lookStateLine(state: String) -> String { "カメラ：\(state)" }
+    /// `talk.display.facing`
+    public static let talkDisplayFacing = "向き合う"
 }

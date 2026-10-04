@@ -39,7 +39,7 @@ public enum ShannonAppLookVisibleState: Equatable, Sendable {
 }
 
 extension ShannonAppLookCopy {
-    public static func stateLine(_ state: String) -> String { "カメラ：\(state)" }
+    public static func stateLine(_ state: String) -> String { ShannonGeneratedStrings.lookStateLine(state: state) }
 }
 
 /// Reads the facts the state is made of and keeps them current while the view is up.
