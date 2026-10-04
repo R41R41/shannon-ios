@@ -3,7 +3,7 @@
 # Shannon 機能の一覧表（iOS・macOS・Windows）
 
 元の定義は `docs/product/feature-matrix.json`。この表は `node scripts/generate-product-spec.mjs` で作り直す。
-Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows 側は 2026-10-03 に読んだ `azure-constant-server:~/handoff/shannon-desktop-src.zip` から埋めた。
+Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows 側は 2026-10-03 に読んだ `azure-constant-server:~/handoff/shannon-desktop-src.zip` から埋めた。
 
 記号: ○ ある／△ 一部だけある／× ない／— その画面には当てはまらない／予定 作業中のブランチにある／？ 分からない。
 
@@ -13,9 +13,9 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 87 | 4 | 9 | 9 | 25 | 0 |
-| macOS | 63 | 11 | 38 | 4 | 18 | 0 |
-| Windows | 60 | 24 | 43 | 6 | 0 | 1 |
+| iOS | 108 | 7 | 9 | 9 | 1 | 0 |
+| macOS | 64 | 17 | 40 | 4 | 9 | 0 |
+| Windows | 63 | 22 | 42 | 6 | 0 | 1 |
 
 ## 構成（入口）（`structure`）
 
@@ -23,13 +23,13 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `structure.four-entries` | **入口は トーク／作業／シャノン／設定** 入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。 | △ | △ | △ |
+| `structure.four-entries` | **入口は トーク／作業／シャノン／設定** 入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。 | △ | △ | ○ |
 | `structure.shannon-hub` | **「シャノン」の場所** 先頭のカードにシャノンのいまと待っていること（押すと「ようす」が開く）。その下に 頭の中・自律活動・書斎 の入口。 | 予定 | 予定 | × |
 
 - `structure.four-entries` iOS（△）: シートのタイルは 作業／頭の中／設定。「シャノン」が無い。
 - `structure.four-entries` macOS（△）: サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。
-- `structure.four-entries` Windows（△）: サイドバーは トーク／作業全体／自律活動／書斎／運用／設定 の 6 つ。
-- `structure.shannon-hub` iOS（予定）: ブランチ `未定`。いちばん近いのは「頭の中」（中に自律活動と書斎の入口がある）。ようすは作業中のブランチ。
+- `structure.four-entries` Windows（○）: トーク／作業／シャノン／設定（W4。2026-10-05 に Windows の担当が知らせた）。
+- `structure.shannon-hub` iOS（予定）: ブランチ `codex/shannon/unified-structure`。いちばん近いのは「頭の中」（中に自律活動と書斎の入口がある）と、シートの「ようす」のタイル。
 - `structure.shannon-hub` macOS（予定）: ブランチ `未定`
 - `structure.shannon-hub` Windows（×）: 自律活動と書斎が別々の入口。まとめる場所が無い。
 
@@ -51,7 +51,7 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `talk.source-attribution` | **出典の表示** 調べて答えた返事に、出典を付ける。 | ○ | ○ | ○ |
 | `talk.generated-artifacts` | **作ってくれた文書を開く** シャノンが返事と一緒に作った文書を開いて読む。 | ○ | ○ | △ |
 | `talk.feeling-face` | **返事の横の表情** 返事ごとのシャノンの気持ちを、表情で出す。 | ○ | ○ | △ |
-| `talk.feeling-strength` | **気持ちの強さが文字の会話にも出る** 文字の返事にも、気持ちの強さと続き方が反映される（サーバー側）。 | 予定 | 予定 | ？ |
+| `talk.feeling-strength` | **気持ちの強さが文字の会話にも出る** 文字の返事にも、気持ちの強さと続き方が反映される（サーバー側）。 | ○ | ○ | ？ |
 | `talk.capture-lines` | **返事の下の「覚えました・約束にしました」** その回に覚えたこと・約束にしたことを 1 行で出し、開く・取り消すができる。約束の知らせには「完了にする／あとで」。 | ○ | ○ | × |
 | `talk.memory-recall-cue` | **思い出しているしるし** 記憶を探している間、そのことを待ちの表示で伝える。 | ○ | ○ | △ |
 | `talk.organize-review` | **整理の提案を確かめる（Aether）** シャノンが出したノートの整理の提案を、1 件ずつ見て採る・断る。 | ○ | ○ | × |
@@ -69,8 +69,8 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 - `talk.attachments` macOS（△）: 文章・Markdown・コードのファイルを 4 件まで。写真は添付できない。
 - `talk.generated-artifacts` Windows（△）: 折りたたみの中に本文を出すだけ。
 - `talk.feeling-face` Windows（△）: 身体の窓は Live2D の顔で出す。管理画面のトークには表情が無い。
-- `talk.feeling-strength` iOS（予定）: ブランチ `codex/shannon/text-feeling-strength`。サーバーと認知の変更。画面の変更は無い。
-- `talk.feeling-strength` macOS（予定）: ブランチ `codex/shannon/text-feeling-strength`。サーバーと認知の変更。画面の変更は無い。
+- `talk.feeling-strength` iOS（○）: サーバーと認知の変更。画面の変更は無い。
+- `talk.feeling-strength` macOS（○）: サーバーと認知の変更。画面の変更は無い。
 - `talk.feeling-strength` Windows（？）: サーバー側の変更なので、Windows でも返事の表情に出るはずだが、ブランチが入ってから確かめる。
 - `talk.memory-recall-cue` Windows（△）: 「返答を待っています…」だけ。記憶を探しているかは出ない。
 - `talk.place-map` macOS（×）: Mac のトークには地図のカードが無い。
@@ -187,16 +187,14 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `yousu.now` | **シャノンのいま** 気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。 | 予定 | × | △ |
-| `yousu.waiting` | **待っていること** 感想待ち・判断待ち・許可待ちを、1 か所に集める。 | 予定 | × | △ |
-| `yousu.recent-events` | **最近のできごとの記録** 部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。 | 予定 | × | △ |
+| `yousu.now` | **シャノンのいま** 気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。 | ○ | × | △ |
+| `yousu.waiting` | **待っていること** 感想待ち・判断待ち・許可待ちを、1 か所に集める。 | ○ | × | △ |
+| `yousu.recent-events` | **最近のできごとの記録** 部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。 | ○ | × | △ |
 
-- `yousu.now` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
+- `yousu.now` iOS（○）: いまはシートの 4 つめのタイル「ようす」から開く。「シャノン」の先頭のカードから開く形は A4。
 - `yousu.now` macOS（×）: ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。
 - `yousu.now` Windows（△）: 身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。
-- `yousu.waiting` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
 - `yousu.waiting` Windows（△）: 身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。
-- `yousu.recent-events` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチの「ようす」は、シャノンのいまと運用の切り替え。決定（2026-10-03）で運用は 設定 › 管理 へ移り、ようすはシャノンのいまだけになる。
 - `yousu.recent-events` Windows（△）: カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。
 
 ## 運用（`ops`）
@@ -205,23 +203,24 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `ops.status` | **運用の状態** 旧ランタイムのサービス（Discord・YouTube・Minecraft など）が動いているかを見る。報告が古いときは、いまの状態として見せない。 | 予定 | × | ○ |
-| `ops.service-control` | **サービスの開始・停止** サービスと Minecraft サーバーを、確かめてから開始・停止する。 | 予定 | × | ○ |
-| `ops.minebot-start` | **Minebot の体の起動** 入らせる Minecraft サーバーを選んで起動する。費用と版の文を必ず出す。 | 予定 | × | ○ |
-| `ops.schedule-run` | **予定の一覧と「今すぐ実行」** 予約投稿の予定を見て、いますぐ実行する。公開の場へ出ることを必ず確かめる。 | 予定 | × | ○ |
-| `ops.kpi-skills` | **今日の数字とスキル** 今日の投稿数・トークン・API 呼出と、スキルの一覧を見る。 | 予定 | × | ○ |
-| `ops.command-record` | **操作の記録** 直近の操作と、その結果・理由を読む。 | 予定 | × | ○ |
-| `ops.minebot-task` | **Minebot のいまの作業** Minebot がいましている作業と手順を見る。 | 予定 | × | ○ |
-| `ops.attention-mark` | **運用が止まっていることに気づける印** 不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。 通知は、あとで決める（まずは印だけ）。 | 予定 | × | ○ |
+| `ops.status` | **運用の状態** 旧ランタイムのサービス（Discord・YouTube・Minecraft など）が動いているかを見る。報告が古いときは、いまの状態として見せない。 | ○ | × | ○ |
+| `ops.service-control` | **サービスの開始・停止** サービスと Minecraft サーバーを、確かめてから開始・停止する。 | ○ | × | ○ |
+| `ops.minebot-start` | **Minebot の体の起動** 入らせる Minecraft サーバーを選んで起動する。費用と版の文を必ず出す。 | ○ | × | ○ |
+| `ops.schedule-run` | **予定の一覧と「今すぐ実行」** 予約投稿の予定を見て、いますぐ実行する。公開の場へ出ることを必ず確かめる。 | ○ | × | ○ |
+| `ops.kpi-skills` | **今日の数字とスキル** 今日の投稿数・トークン・API 呼出と、スキルの一覧を見る。 | ○ | × | ○ |
+| `ops.command-record` | **操作の記録** 直近の操作と、その結果・理由を読む。 | ○ | × | ○ |
+| `ops.minebot-task` | **Minebot のいまの作業** Minebot がいましている作業と手順を見る。 | ○ | × | ○ |
+| `ops.attention-mark` | **運用が止まっていることに気づける印** 不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。 通知は、あとで決める（まずは印だけ）。 | △ | × | ○ |
 
-- `ops.status` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.service-control` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。iPhone は確認の画面で長押しして決める。 ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.minebot-start` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.schedule-run` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.kpi-skills` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.command-record` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.minebot-task` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」の中。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す。
-- `ops.attention-mark` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。ブランチでは「ようす」のタイルに印が出る。設定のタイルと左上のボタンへ移す。
+- `ops.status` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.service-control` iOS（○）: iPhone は確認の画面で長押しして決める。いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.minebot-start` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.schedule-run` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.kpi-skills` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.command-record` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.minebot-task` iOS（○）: いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。
+- `ops.attention-mark` iOS（△）: 印は「ようす」のタイルにだけ出る。左上のボタンと設定のタイルへ移し、操作の失敗・期限切れでも出すのは A5。
+- `ops.attention-mark` Windows（○）: サイドバーの 設定 の行と、サイドバーの下の 1 行（W4。2026-10-05 に Windows の担当が知らせた）。
 
 ## からだ・二つの姿（`body`）
 
@@ -229,26 +228,25 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `body.live2d` | **Live2D の体** 体のページ（embed）で、Live2D のシャノンを出す。表情・気分・口の動き・しぐさ。 | 予定 | 予定 | ○ |
-| `body.form-switch` | **二つの姿の切り替え** 「水の光の目」と「Live2D の姿」を切り替える。会話・音声会話・からだの画面の姿が変わる。 | 予定 | 予定 | × |
+| `body.live2d` | **Live2D の体** 体のページ（embed）で、Live2D のシャノンを出す。表情・気分・口の動き・しぐさ。 | ○ | △ | ○ |
+| `body.form-switch` | **二つの姿の切り替え** 「水の光の目」と「Live2D の姿」を切り替える。会話・音声会話・からだの画面の姿が変わる。 | ○ | △ | × |
 | `body.waterlight-eye` | **水の光の目** 顔だけの姿。話す・聞く・考える・作業するなどで目が変わる。触れると照れる。 | ○ | △ | × |
-| `body.presence-on-body` | **体に「いま」が出る** 気分、残っている気持ち、自分の時間にしていることが、体の顔としぐさに出る。 | 予定 | 予定 | ○ |
-| `body.layout` | **映し方（全身・上半身）と大きさ・位置** 体のどこを映すかと、大きさ・位置を変える。 | 予定 | 予定 | △ |
-| `body.idle-gestures` | **何もしていない時のしぐさ** 気分・時刻・していることに合わせて、自分からしぐさをする。 | 予定 | 予定 | ○ |
+| `body.presence-on-body` | **体に「いま」が出る** 気分、残っている気持ち、自分の時間にしていることが、体の顔としぐさに出る。 | ○ | × | ○ |
+| `body.layout` | **映し方（全身・上半身）と大きさ・位置** 体のどこを映すかと、大きさ・位置を変える。 | ○ | △ | △ |
+| `body.idle-gestures` | **何もしていない時のしぐさ** 気分・時刻・していることに合わせて、自分からしぐさをする。 | ○ | △ | ○ |
 
-- `body.live2d` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは別の「からだ」の画面。決定（2026-10-03）: トークの向き合う表示の中に出し、別の画面はたたむ。
-- `body.live2d` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは設定の「からだを開く」から見るだけ。決定（2026-10-03）: トークの会話の横に出す。デスクトップに立つ体は SwiftUI で作り直す（ADR-0004）。いまの Mac のデスクトップの体は Electron 版。
-- `body.form-switch` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは設定と「からだ」の画面。決定（2026-10-03）: トークの表示の設定と、設定 › すがた。
-- `body.form-switch` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチの Mac 側は、設定から「からだを開く」だけ。切り替えが Mac のトークに効くかは確かめていない。
+- `body.live2d` iOS（○）: いまは別の「からだ」の画面（全画面）にも出る。決定（2026-10-03）: トークの向き合う表示にたたむ（A6）。
+- `body.live2d` macOS（△）: 設定 › すがた の「からだを開く」のシートで見るだけ。トークの会話の横に出すのは A15。
+- `body.form-switch` iOS（○）: いまは設定と「からだ」の画面。決定: トークの表示の設定と 設定 › すがた（A6）。
+- `body.form-switch` macOS（△）: 設定で切り替えられるが、効くのは「からだを開く」のシートだけ。Mac のトークには姿が無い（A15）。
 - `body.form-switch` Windows（×）: Live2D の姿だけ。水の光の目は無い（確認用の静止画はある）。決定（2026-10-03）: Windows にも水の光の目を作る（順番は後ろ。roadmap の W11）。
 - `body.waterlight-eye` macOS（△）: 小さな表情のアイコンだけ。向き合う大きさの目は無い。
-- `body.presence-on-body` iOS（予定）: ブランチ `codex/shannon/two-forms`
-- `body.presence-on-body` macOS（予定）: ブランチ `codex/shannon/two-forms`
-- `body.layout` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは「からだ」の画面の中。決定（2026-10-03）: トークの表示の設定と、設定 › すがた へ移す。2 本の指で大きさと位置。
-- `body.layout` macOS（予定）: ブランチ `codex/shannon/two-forms`
+- `body.presence-on-body` macOS（×）: Mac の「からだを開く」のシートには、気分・いま・話している様子を体のページへ送る仕組み（ShannonBodyAttachment）がつながっていない。A15。
+- `body.layout` iOS（○）: いまは「からだ」の画面の中。決定: トークの表示の設定と 設定 › すがた（A6）。2 本の指で大きさと位置。
+- `body.layout` macOS（△）: 「からだを開く」のシートの中だけ。
 - `body.layout` Windows（△）: 大きさ（40〜500%、画面いっぱい）と置き場所。映し方の切り替えは無い。
-- `body.idle-gestures` iOS（予定）: ブランチ `codex/shannon/two-forms`。体のページのしぐさ。
-- `body.idle-gestures` macOS（予定）: ブランチ `codex/shannon/two-forms`
+- `body.idle-gestures` iOS（○）: 体のページのしぐさ。
+- `body.idle-gestures` macOS（△）: 体のページのしぐさは出るが、見られるのは「からだを開く」のシートだけ。
 
 ## 触る（`touch`）
 
@@ -256,20 +254,19 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `touch.gestures` | **触る（撫でる・つつく・くすぐる・手をつなぐ）** 体に触れると、すぐ顔としぐさで返す。 | 予定 | 予定 | ○ |
-| `touch.tell-shannon` | **体に起きたことをシャノンに伝える** 設定が入のとき、触れた種類・長さ・強さ・時刻だけを本体へ送る。シャノンがひとこと返すことがある。 | 予定 | 予定 | ○ |
+| `touch.gestures` | **触る（撫でる・つつく・くすぐる・手をつなぐ）** 体に触れると、すぐ顔としぐさで返す。 | ○ | △ | ○ |
+| `touch.tell-shannon` | **体に起きたことをシャノンに伝える** 設定が入のとき、触れた種類・長さ・強さ・時刻だけを本体へ送る。シャノンがひとこと返すことがある。 | ○ | × | ○ |
 | `touch.eye-tap` | **目に触れると照れる**【iPhone だけ】 水の光の目に触れると、驚いてから照れる。 | ○ | × | — |
 | `touch.carry` | **つまんで運ぶ**【デスクトップの追加】 体をつまんで、画面の好きな場所へ運ぶ。 | — | 予定 | ○ |
-| `touch.reply-mode` | **触れたときの返事（文字で返す・声で返す）** 触れたときのひとことを、文字だけで返すか、声に出して返して数秒マイクを開くかを選ぶ。 | 予定 | × | △ |
+| `touch.reply-mode` | **触れたときの返事（文字で返す・声で返す）** 触れたときのひとことを、文字だけで返すか、声に出して返して数秒マイクを開くかを選ぶ。 | ○ | × | △ |
 
-- `touch.gestures` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは「からだ」の画面でだけ触れられる（トークの中の姿は押すと画面が開く）。決定（2026-10-03）: トークの向き合う表示の中で触れる。
-- `touch.gestures` macOS（予定）: ブランチ `codex/shannon/two-forms`。Mac では見るだけで、触れたことは伝えない（ブランチの設定の文）。
-- `touch.tell-shannon` iOS（予定）: ブランチ `codex/shannon/two-forms`
-- `touch.tell-shannon` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、Mac からは伝えない。
+- `touch.gestures` iOS（○）: いまは「からだ」の画面で触れる（トークの中の姿は押すと画面が開く）。決定: トークの向き合う表示の中で触れる（A6）。
+- `touch.gestures` macOS（△）: 「からだを開く」のシートの中で、ポインターで触れると体のページが動く。シャノンには伝えない。
+- `touch.tell-shannon` macOS（×）: Mac からは伝えない（設定の文）。A15 で決める。
 - `touch.eye-tap` Windows（—）: Windows には水の光の目が無い。
 - `touch.carry` iOS（—）: アプリの 1 画面の中では、窓ごと運べない（体のページにも無い）。
 - `touch.carry` macOS（予定）: ブランチ `未定`。デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。
-- `touch.reply-mode` iOS（予定）: ブランチ `codex/shannon/two-forms`
+- `touch.reply-mode` iOS（○）: いまは「からだ」の画面の中。決定: 設定 › すがた（A6）。
 - `touch.reply-mode` macOS（×）: ブランチの Mac は、触れたことをシャノンに伝えない。
 - `touch.reply-mode` Windows（△）: 声で返して数秒マイクを開く動きはある。選ぶ設定は無い。
 
@@ -284,14 +281,14 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `look.always-visible-state` | **カメラの状態がいつも見える** どの画面にいても、切／見てよい／いま見ています、が分かる。 | △ | △ | ○ |
 | `look.room-look` | **部屋をひと目見る（デスクトップの体のカメラ）**【デスクトップの追加】 PC の前の部屋を、体の窓が出ている間だけ、1 枚見る。自分の時間にも見ることがある。 | — | 予定 | ○ |
 | `look.preview-and-device` | **映るものを確かめる・使うカメラを選ぶ**【デスクトップの追加】 いまカメラに映るものを、どこにも送らずに確かめる。カメラが複数あれば選ぶ。 | × | × | ○ |
-| `look.activity-log` | **見た・断った記録** いつ、誰の頼みで見たか・断ったかを読む（絵は残さない）。 | 予定 | × | ○ |
+| `look.activity-log` | **見た・断った記録** いつ、誰の頼みで見たか・断ったかを読む（絵は残さない）。 | ○ | × | ○ |
 
 - `look.app-camera` macOS（△）: 設定と、見るための仕組みは共有のコードにある。Mac のトークに「いま見ました」の表示が出るかは確かめていない。
 - `look.always-visible-state` iOS（△）: 見た瞬間に「いま見ました」が出る。ふだんの状態は設定を開かないと分からない。
 - `look.always-visible-state` macOS（△）: 設定を開かないと分からない。
 - `look.room-look` iOS（—）: iPhone は持ち歩く端末で、「PC の前の部屋」を見るカメラではない。アプリのカメラ（look.app-camera）が対応する機能。
 - `look.room-look` macOS（予定）: ブランチ `未定`。デスクトップに立つ体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版。
-- `look.activity-log` iOS（予定）: ブランチ `codex/shannon/ios-yousu`。「ようす」の最近のできごとに出る。
+- `look.activity-log` iOS（○）: 「ようす」の最近のできごとに出る。
 
 ## 話しかけ・電話（`reach`）
 
@@ -302,17 +299,16 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `reach.earphone-speaking` | **イヤホンのときは声で話しかける** 登録したイヤホンから音が出ている間だけ、シャノンが自分から声で話しかける。あと数秒マイクを開く。 | ○ | ○ | — |
 | `reach.earphone-registration` | **イヤホンの登録と「自分だけに聞こえる」** イヤホンを登録し、いまの音の出口が自分だけに聞こえるかをシャノンに伝える。 | ○ | ○ | × |
 | `reach.standby` | **ほかのアプリを使っている間も待機する**【iPhone だけ】 登録したイヤホンをつないでいる間、アプリを閉じても話しかけを受けられる。 | ○ | — | — |
-| `reach.body-speaking` | **体が声と吹き出しで話しかける** シャノンのほうから話しかけてきた一言と、場面ごとの一言を、体が伝える。 | 予定 | 予定 | ○ |
+| `reach.body-speaking` | **体が声と吹き出しで話しかける** シャノンのほうから話しかけてきた一言と、場面ごとの一言を、体が伝える。 | △ | 予定 | ○ |
 | `reach.toggle` | **シャノンから話しかけてよいかの設定** 話しかけを受けるかどうかを切り替える。 | ○ | ○ | ○ |
 | `reach.delivery-report` | **話しかけがどう届いたかを本体へ知らせる** 声で届いた・表示された・席を外していた、などを本体へ返す。 | ○ | ○ | ○ |
-| `reach.incoming-call` | **シャノンからの電話**【iPhone だけ】 シャノンが電話で伝えたいと思ったときに、電話がかかってくる。出ると音声会話になる。 | 予定 | — | — |
+| `reach.incoming-call` | **シャノンからの電話**【iPhone だけ】 シャノンが電話で伝えたいと思ったときに、電話がかかってくる。出ると音声会話になる。 | ○ | — | — |
 
 - `reach.earphone-speaking` Windows（—）: Windows は体が声と吹き出しで話しかける（reach.body-speaking）。イヤホンかどうかの見分けは入っていない。
 - `reach.standby` macOS（—）: Mac のアプリは開いたまま動く。
 - `reach.standby` Windows（—）: 常駐しているので、待機の設定は要らない。
-- `reach.body-speaking` iOS（予定）: ブランチ `codex/shannon/two-forms`。からだの画面を開いている間、シャノンの一言を出す（ブランチの文言から。場面ごとの一言まで入るかは確かめていない）。
+- `reach.body-speaking` iOS（△）: 触れたときのひとことだけ（吹き出しと、「声で返す」なら声）。シャノンのほうから体で話しかけることは無い。
 - `reach.body-speaking` macOS（予定）: ブランチ `未定`。デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。
-- `reach.incoming-call` iOS（予定）: ブランチ `codex/shannon/incoming-call`
 - `reach.incoming-call` macOS（—）: CallKit の着信は iPhone の仕組み。Mac では、イヤホンの話しかけと（将来は）デスクトップの体が対応する。
 - `reach.incoming-call` Windows（—）: CallKit の着信は iPhone の仕組み。Windows は体が声で話しかける。
 
@@ -322,7 +318,7 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
-| `settings.appearance` | **外観（システム・ライト・ダーク）** アプリの明るさを選ぶ。 | ○ | ○ | × |
+| `settings.appearance` | **外観（システム・ライト・ダーク）** アプリの明るさを選ぶ。 | ○ | ○ | ○ |
 | `settings.app-icon` | **アプリアイコンを選ぶ** アプリのアイコンを選ぶ。 | ○ | ○ | × |
 | `settings.avatar-style` | **トークのアバターの種類** 返事の横のアイコンを、表情の絵にするかなどを選ぶ。 | ○ | × | × |
 | `settings.voice-provider` | **声の種類** 読み上げと音声会話の声を、Gemini と ElevenLabs から選ぶ。 | ○ | △ | ○ |
@@ -330,19 +326,19 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 | `settings.world-subscriptions` | **情報源** シャノンが読む情報源の候補と試し読みを見て、購読を決める。 | ○ | ○ | × |
 | `settings.profile-state` | **シャノンの状態の札** 設定のいちばん上に、いまの顔と気持ちを出し、押すと状態を開く。 | ○ | × | × |
 | `settings.about` | **アプリの版** アプリの版とビルドの番号を見る。 | △ | ○ | × |
-| `settings.figure` | **設定 › すがた** 姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。 | 予定 | 予定 | △ |
-| `settings.admin` | **設定 › 管理** 運用（状態・操作・記録）、接続中の端末、配信、診断を、設定の中の「管理」に並べる。 | × | × | △ |
+| `settings.figure` | **設定 › すがた** 姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。 | △ | △ | △ |
+| `settings.admin` | **設定 › 管理** 運用（状態・操作・記録）、接続中の端末、配信、診断を、設定の中の「管理」に並べる。 | × | × | ○ |
 
-- `settings.appearance` Windows（×）: OS の設定に従うだけで、アプリの中では選べない。
+- `settings.appearance` Windows（○）: 設定 › 外観: Windowsの設定に合わせる／ライト／ダーク（W13 の外観だけ先に入った。2026-10-05 に Windows の担当が知らせた）。
 - `settings.voice-provider` macOS（△）: 「Gemini（サーバー設定）」と出るだけで、選べない。
 - `settings.about` iOS（△）: 版は「配信」の画面で分かる。設定に版の欄は無い。
 - `settings.about` Windows（×）: 管理画面の設定に版は出ない。
-- `settings.figure` iOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、映し方と触れたときの返事が「からだ」の画面にある。設定の区画へ移す。
-- `settings.figure` macOS（予定）: ブランチ `codex/shannon/two-forms`。ブランチでは、姿の切り替えと「からだを開く」だけ。
+- `settings.figure` iOS（△）: 設定の区画「すがた」に、姿の切り替え・「からだを開く」・体に起きたことを伝える。映し方と触れたときの返事は「からだ」の画面の中（A6 で移す）。
+- `settings.figure` macOS（△）: 姿の切り替えと「からだを開く」だけ。
 - `settings.figure` Windows（△）: 「デスクトップのシャノン」に、体に起きたことを伝える・大きさがある。姿の切り替え・映し方・触れたときの返事は無い。
-- `settings.admin` iOS（×）: 運用は作業中のブランチ（codex/shannon/ios-yousu）で「ようす」の中にある。決定（2026-10-03）で 設定 › 管理 へ移す。接続中の端末は「接続」の中。 配信と診断は、いま設定の「接続と詳細」の中。
+- `settings.admin` iOS（×）: 運用は「ようす」の中、接続中の端末は「接続」の中、配信と診断は設定の「接続と詳細」の中。決定（2026-10-03）で 設定 › 管理 にまとめる（A5）。
 - `settings.admin` macOS（×）: 運用が無い。接続中の端末は接続のシートの中。
-- `settings.admin` Windows（△）: 運用は独立の入口、接続中の端末は設定の中。「管理」としてまとまっていない。
+- `settings.admin` Windows（○）: 設定 › 管理 に 運用・接続中の端末（配信と診断は Windows には無い）。W4。2026-10-05 に Windows の担当が知らせた。
 
 ## 端末と接続（`devices`）
 
@@ -408,6 +404,7 @@ Apple 側（iOS・macOS）は `c40a65e`（2026-10-03）のコード、Windows �
 
 - `desktop.tray` iOS（—）: iPhone にはトレイが無い。
 - `desktop.tray` macOS（予定）: ブランチ `未定`。デスクトップの体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版がメニューバーに出る。
+- `desktop.tray` Windows（○）: トレイのメニューは、4 つの入口への近道と「終了」だけ（所有者の決定 2026-10-05。カメラ・声・友人も一緒の入切はトレイから外した）。
 - `desktop.always-on-top` iOS（—）: アプリの中の 1 画面なので、当てはまらない。
 - `desktop.always-on-top` macOS（予定）: ブランチ `未定`。ADR-0004 の移行で決める。
 - `desktop.open-at-login` iOS（—）: iPhone のアプリは常駐しない。

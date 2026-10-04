@@ -146,6 +146,22 @@ export const shannonStrings = {
   "voice.thisCall": "この通話",
   "nav.delivery": "配信",
   "nav.diagnostics": "診断",
+  "settings.section.devices": "接続中の端末",
+  "settings.section.voice": "声",
+  "settings.section.speakUp": "話しかけ",
+  "settings.section.camera": "カメラ",
+  "settings.section.folder": "専用フォルダ",
+  "settings.section.thisPC": "この PC のシャノン",
+  "shannon.card.nothingWaiting": "あなたを待っていることは、ありません。",
+  "shannon.card.awaitingReaction": "感想待ち",
+  "shannon.card.budgetRequest": "予算を増やしてほしいという頼み",
+  "ops.attention.unreachable": "サーバーに届きません",
+  "ops.attention.noReport": "報告が届いていません",
+  "ops.attention.unwell": "{name}が不調",
+  "ops.attention.failed": "{target}の操作が失敗",
+  "ops.attention.expired": "{target}の操作が期限切れ",
+  "look.action.turnOff": "切にする",
+  "task.approvalNeeded": "許可が必要です",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -185,12 +201,12 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "nav.work": {
     "decided": "2026-10-03",
-    "windowsBefore": "作業全体",
+    "windowsBefore": "作業",
     "macBefore": "作業全体"
   },
   "nav.shannon": {
     "decided": "2026-10-03",
-    "windowsBefore": "（無い。自律活動・書斎・運用が別々の入口）",
+    "windowsBefore": "シャノン",
     "macBefore": "（無い。頭の中）"
   },
   "nav.yousu": {
@@ -215,57 +231,57 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "nav.admin": {
     "decided": "2026-10-03",
-    "windowsBefore": "（無い。運用が独立の入口）",
+    "windowsBefore": "管理",
     "macBefore": "（無い）"
   },
   "settings.figure": {
     "decided": "2026-10-03",
-    "windowsBefore": "デスクトップのシャノン",
+    "windowsBefore": "すがた",
     "macBefore": "（無い）"
   },
   "task.status.proposed": {
     "decided": "2026-10-03",
-    "windowsBefore": "作業候補"
+    "windowsBefore": "提案"
   },
   "task.status.queued": {
     "decided": "2026-10-03",
-    "windowsBefore": "待機中"
+    "windowsBefore": "準備中"
   },
   "task.status.waitingApproval": {
     "decided": "2026-10-03",
-    "windowsBefore": "判断待ち"
+    "windowsBefore": "許可待ち"
   },
   "task.group.now": {
     "decided": "2026-10-03",
-    "windowsBefore": "進行中"
+    "windowsBefore": "いま"
   },
   "task.group.next": {
     "decided": "2026-10-03",
-    "windowsBefore": "作業候補"
+    "windowsBefore": "これから"
   },
   "voice.name": {
     "decided": "2026-10-03",
-    "windowsBefore": "声の会話"
+    "windowsBefore": "音声会話"
   },
   "voice.start": {
     "decided": "2026-10-03",
-    "windowsBefore": "話す"
+    "windowsBefore": "音声会話を開始"
   },
   "voice.end": {
     "decided": "2026-10-03",
-    "windowsBefore": "切る"
+    "windowsBefore": "終了"
   },
   "guest.name": {
     "decided": "2026-10-03",
-    "windowsBefore": "友人といっしょ"
+    "windowsBefore": "友人も一緒"
   },
   "look.setting": {
     "decided": "2026-10-03",
-    "windowsBefore": "シャノンがカメラで部屋を見てよい"
+    "windowsBefore": "会話中にシャノンがカメラで見る"
   },
   "look.state.off": {
     "decided": "2026-10-03",
-    "windowsBefore": "見られない"
+    "windowsBefore": "切"
   },
   "look.state.allowed": {
     "decided": "2026-10-03",
@@ -273,7 +289,7 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "talk.thinking": {
     "decided": "2026-10-03",
-    "windowsBefore": "返答を待っています…",
+    "windowsBefore": "考えている…",
     "macBefore": "考えています"
   },
   "talk.searchingMemory": {
@@ -283,11 +299,11 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "talk.placeholder": {
     "decided": "2026-10-03",
-    "windowsBefore": "メッセージを入力（Enterで送信、Shift+Enterで改行）／シャノンに話しかける"
+    "windowsBefore": "シャノンに話す"
   },
   "record.actor.owner": {
     "decided": "2026-10-03",
-    "windowsBefore": "所有者"
+    "windowsBefore": "あなた"
   },
   "look.state.looking": {
     "decided": "2026-10-03",
@@ -306,6 +322,70 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
     "decided": "2026-10-03",
     "windowsBefore": "（無い）",
     "macBefore": "（無い）"
+  },
+  "settings.section.devices": {
+    "decided": "2026-10-05",
+    "windowsBefore": "接続中の端末"
+  },
+  "settings.section.voice": {
+    "decided": "2026-10-05",
+    "windowsBefore": "声"
+  },
+  "settings.section.speakUp": {
+    "decided": "2026-10-05",
+    "windowsBefore": "話しかけ"
+  },
+  "settings.section.camera": {
+    "decided": "2026-10-05",
+    "windowsBefore": "カメラ"
+  },
+  "settings.section.folder": {
+    "decided": "2026-10-05",
+    "windowsBefore": "専用フォルダ"
+  },
+  "settings.section.thisPC": {
+    "decided": "2026-10-05",
+    "windowsBefore": "この PC のシャノン"
+  },
+  "shannon.card.nothingWaiting": {
+    "decided": "2026-10-05",
+    "windowsBefore": "あなたを待っていることは、ありません。"
+  },
+  "shannon.card.awaitingReaction": {
+    "decided": "2026-10-05",
+    "windowsBefore": "感想待ち"
+  },
+  "shannon.card.budgetRequest": {
+    "decided": "2026-10-05",
+    "windowsBefore": "予算を増やしてほしいという頼み"
+  },
+  "ops.attention.unreachable": {
+    "decided": "2026-10-05",
+    "windowsBefore": "サーバーに届きません"
+  },
+  "ops.attention.noReport": {
+    "decided": "2026-10-05",
+    "windowsBefore": "報告が届いていません"
+  },
+  "ops.attention.unwell": {
+    "decided": "2026-10-05",
+    "windowsBefore": "{name}が不調"
+  },
+  "ops.attention.failed": {
+    "decided": "2026-10-05",
+    "windowsBefore": "{target}の操作が失敗"
+  },
+  "ops.attention.expired": {
+    "decided": "2026-10-05",
+    "windowsBefore": "{target}の操作が期限切れ"
+  },
+  "look.action.turnOff": {
+    "decided": "2026-10-05",
+    "windowsBefore": "切にする"
+  },
+  "task.approvalNeeded": {
+    "decided": "2026-10-05",
+    "windowsBefore": "許可が必要です"
   }
 };
 

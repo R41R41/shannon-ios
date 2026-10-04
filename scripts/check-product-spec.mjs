@@ -180,6 +180,8 @@ export function validateTokens(tokens, repo) {
   for (const [name, style] of Object.entries(tokens?.typography?.scale ?? {})) {
     for (const key of ['size', 'lineHeight', 'weight']) if (!(Number(style[key]) > 0)) failures.push(`tokens: typography ${name}.${key} must be a positive number`);
   }
+  const reading = tokens?.typography?.reading;
+  if (reading !== undefined && !(Number(reading.lineHeightRatio) >= 1)) failures.push('tokens: typography.reading.lineHeightRatio must be a ratio of at least 1');
   const desktop = tokens?.typography?.desktop?.scale;
   if (desktop) {
     const names = Object.keys(tokens.typography.scale ?? {}).sort().join(',');

@@ -54,6 +54,8 @@ A1・A3・A7・A11・A13 は、ほかを待たずに入れられる。A16 と A1
 
 どの段のあとでも、アプリはそのまま使える。くわしい当てはめ方は [`for-windows-app.md`](for-windows-app.md) の 3。
 
+**W0〜W4 は済んだ（2026-10-05、Windows の担当の知らせ）。** 外観の切り替え（W13 の一部）も先に入った。そのとき決まったことは [`information-architecture.md`](information-architecture.md) の 8。
+
 | 段 | すること | 大きさ | 先に要るもの | 緑になる行 |
 |---|---|:-:|---|---|
 | W0 | **仕様を受け取る場所を作る。** 生成した CSS・TS と一覧表を読み込む。Windows の列の `evidence` のファイルがあることを確かめる試験を 1 本 | S | D3 | —（Windows の列を、Windows の側でも確かめられるようになる） |

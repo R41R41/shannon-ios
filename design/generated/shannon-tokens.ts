@@ -203,7 +203,8 @@ export const shannonTokens = {
       "medium": 500,
       "semibold": 600,
       "bold": 700
-    }
+    },
+    "readingLineHeightRatio": 1.85
   },
   "spacing": {
     "extraSmall": 4,

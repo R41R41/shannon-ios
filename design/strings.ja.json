@@ -305,201 +305,201 @@
     {
       "key": "body.shareTouches",
       "text": "体に起きたことをシャノンに伝える",
-      "apple": "branch:codex/shannon/two-forms:apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx"
     },
     {
       "key": "ops.title",
       "text": "運用",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx",
       "note": "決定（2026-10-03）: 運用は 設定 › 管理 の中に置く。"
     },
     {
       "key": "ops.status.running",
       "text": "動いている",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.status.stopped",
       "text": "止まっている",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.status.degraded",
       "text": "不調",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.status.unknown",
       "text": "不明",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.command.start",
       "text": "開始",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.command.stop",
       "text": "停止",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.command.runNow",
       "text": "今すぐ実行",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.command.launch",
       "text": "起動",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.pending",
       "text": "実行待ち",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.claimed",
       "text": "実行中",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.done",
       "text": "完了",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.failed",
       "text": "失敗",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.refused",
       "text": "断られました",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commandStatus.expired",
       "text": "期限切れ",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.notRegistered",
       "text": "旧ランタイムに、その対象がありませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.alreadyRunning",
       "text": "すでに動いていました",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.alreadyStopped",
       "text": "すでに止まっていました",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.busy",
       "text": "同じ対象の、ほかの操作が進行中でした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.labRunning",
       "text": "ラボの実走中のため、Minecraft サーバーを起動しませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.timeout",
       "text": "時間内に終わりませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.error",
       "text": "失敗しました（理由は、旧ランタイムのログにあります）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.unsupported",
       "text": "旧ランタイムが、この操作に対応していません",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.notAllowed",
       "text": "旧ランタイムの側で、許可されていない対象でした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.noReport",
       "text": "結果が届きませんでした（実行されたかどうかは、状態を見て確かめてください）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.minebotStart.alreadyStopped",
       "text": "選んだ Minecraft サーバーが止まっていたので、起動しませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.minebotStart.alreadyRunning",
       "text": "Minebot の体は、すでに動いていました",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.minebotStart.labRunning",
       "text": "ラボの実走中のため、Minebot の体を起動しませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.minebotStart.notRegistered",
       "text": "サーバーか、Minebot の体の状態を取れませんでした",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.code.expired",
       "text": "5 分以内に受け取られなかったので、実行していません",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.confirm.scheduleRun.question",
       "text": "予定「{name}」を、いますぐ実行しますか？",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true
     },
     {
       "key": "ops.confirm.scheduleRun.consequence",
       "text": "実行すると、この予定の処理がいま動き、実際に公開の場（X（Twitter）や YouTube など）へ投稿・返信されます。取り消せません。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true,
       "note": "所有者への約束の文。言い回しを変えない（docs/ops-contract.md、2026-10-02）。"
@@ -507,7 +507,7 @@
     {
       "key": "ops.confirm.scheduleRun.postedToday",
       "text": "今日は、すでに投稿済みです。実行すると、もう一度投稿されます。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true,
       "note": "所有者への約束の文。言い回しを変えない（docs/ops-contract.md、2026-10-02）。"
@@ -515,7 +515,7 @@
     {
       "key": "ops.confirm.scheduleRun.maybePosted",
       "text": "今日すでに投稿済みの場合でも、もう一度投稿されます。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true,
       "note": "所有者への約束の文。言い回しを変えない（docs/ops-contract.md、2026-10-02）。"
@@ -523,14 +523,14 @@
     {
       "key": "ops.confirm.minebotStart.question",
       "text": "Minebot の体を、{name} に入らせて起動しますか？",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true
     },
     {
       "key": "ops.confirm.minebotStart.cost",
       "text": "起動すると、課金つきの計画機能が動き始めます。止めるまで費用がかかります。この画面には費用は表示されません。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true,
       "note": "所有者への約束の文。言い回しを変えない（docs/ops-contract.md、2026-10-02）。"
@@ -538,7 +538,7 @@
     {
       "key": "ops.confirm.minebotStart.version",
       "text": "いま動くのは、ラボでネザーに到達した版より古い版です。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true,
       "note": "所有者への約束の文。言い回しを変えない（docs/ops-contract.md、2026-10-02）。"
@@ -546,63 +546,63 @@
     {
       "key": "ops.confirm.stop",
       "text": "{name} を停止しますか？\n\n止めている間、この機能は動きません（もう一度動かすには、ここから開始します）。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true
     },
     {
       "key": "ops.confirm.start",
       "text": "{name} を開始しますか？",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts",
       "verbatim": true
     },
     {
       "key": "ops.section.services",
       "text": "サービス",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.section.schedules",
       "text": "スケジュール",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.section.kpi",
       "text": "今日の数字",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.section.commands",
       "text": "操作の記録",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.kpi.posts",
       "text": "投稿",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.kpi.tokens",
       "text": "トークン",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.kpi.apiCalls",
       "text": "API 呼出",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.schedule.note",
       "text": "「今すぐ実行」は、その予定の処理をいま動かします。実際に公開の場（X（Twitter）や YouTube など）へ投稿・返信されます（今日すでに投稿済みでも、もう一度出ます）。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx",
       "verbatim": true,
       "note": "iPhone 側（作業中のブランチ）は文の前半までを確かめた。統一のときに全文を照合する。"
@@ -610,134 +610,134 @@
     {
       "key": "ops.schedule.postedToday",
       "text": "今日は投稿済み",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.schedule.notYetToday",
       "text": "今日はまだ",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.schedule.daily",
       "text": "毎日 {time}",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.schedule.hourly",
       "text": "毎時 {minute} 分",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.schedule.everyHours",
       "text": "{hours} 時間ごと（{minute} 分）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.commands.empty",
       "text": "まだ操作はありません。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.commands.footer",
       "text": "操作は、押してから 5 分以内に実行されなければ取り消され、あとから実行されることはありません。結果が届かなかった操作も、やり直されません。もう一度行うときは、状態を見てから、あらためて押してください。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx",
       "note": "iPhone 側（作業中のブランチ）は文の前半までを確かめた。統一のときに全文を照合する。"
     },
     {
       "key": "ops.readOnly",
       "text": "いまは見るだけです。開始・停止などの操作は、本体の側で止められています。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.waitingResult",
       "text": "結果待ち…",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.services.empty",
       "text": "報告されているサービスはありません。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.notReported",
       "text": "運用の報告は、まだ届いていません。",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.minebot.needServer",
       "text": "起動するには、先に Minecraft サーバーを開始してください",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.report.latest",
       "text": "最新の報告",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.report.last",
       "text": "最後の報告",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.skills",
       "text": "スキル（{count} 件）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
       "windows": "shannon-desktop:src/desk/views/OpsView.tsx"
     },
     {
       "key": "ops.service.minebot",
       "text": "Minebot（管理側）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.service.minebotBody",
       "text": "Minebot の体",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.service.youtubeLiveChat",
       "text": "YouTube ライブチャット",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.service.twitter",
       "text": "X（Twitter）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.service.minecraftServer",
       "text": "Minecraft サーバー {name}",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.target.schedule",
       "text": "予定「{name}」",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
       "key": "ops.target.minebotBody",
       "text": "Minebot の体（{name} に入る）",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
       "windows": "shannon-desktop:src/desk/opsText.ts"
     },
     {
@@ -746,7 +746,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/App.tsx",
-      "windowsNow": "作業全体",
+      "windowsNow": "作業",
       "macNow": "作業全体",
       "note": "iPhone の画面の見出し「作業全体」も「作業」にする。"
     },
@@ -755,14 +755,14 @@
       "text": "シャノン",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
       "decided": "2026-10-03",
-      "windowsNow": "（無い。自律活動・書斎・運用が別々の入口）",
+      "windowsNow": "シャノン",
       "macNow": "（無い。頭の中）",
       "note": "3 つめの柱。ようす・頭の中・自律活動・書斎をまとめる場所の名前。"
     },
     {
       "key": "nav.yousu",
       "text": "ようす",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuView.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）"
@@ -770,7 +770,7 @@
     {
       "key": "nav.now",
       "text": "シャノンのいま",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuLink.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuLink.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）"
@@ -798,16 +798,16 @@
       "text": "管理",
       "apple": "new",
       "decided": "2026-10-03",
-      "windowsNow": "（無い。運用が独立の入口）",
+      "windowsNow": "管理",
       "macNow": "（無い）",
       "note": "設定の中の区画。運用、接続中の端末、配信、診断を置く。"
     },
     {
       "key": "settings.figure",
       "text": "すがた",
-      "apple": "branch:codex/shannon/two-forms:apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift",
       "decided": "2026-10-03",
-      "windowsNow": "デスクトップのシャノン",
+      "windowsNow": "すがた",
       "macNow": "（無い）",
       "note": "設定の中の区画。姿の切り替え、映し方、体に起きたことを伝える、触れたときの返事。"
     },
@@ -817,7 +817,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskStatus.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/contracts.ts",
-      "windowsNow": "作業候補"
+      "windowsNow": "提案"
     },
     {
       "key": "task.status.queued",
@@ -825,7 +825,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskStatus.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/contracts.ts",
-      "windowsNow": "待機中"
+      "windowsNow": "準備中"
     },
     {
       "key": "task.status.waitingApproval",
@@ -833,7 +833,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskStatus.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/contracts.ts",
-      "windowsNow": "判断待ち"
+      "windowsNow": "許可待ち"
     },
     {
       "key": "task.group.now",
@@ -841,7 +841,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOverviewView.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
-      "windowsNow": "進行中"
+      "windowsNow": "いま"
     },
     {
       "key": "task.group.next",
@@ -849,7 +849,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOverviewView.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
-      "windowsNow": "作業候補"
+      "windowsNow": "これから"
     },
     {
       "key": "voice.name",
@@ -857,7 +857,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
-      "windowsNow": "声の会話"
+      "windowsNow": "音声会話"
     },
     {
       "key": "voice.start",
@@ -865,7 +865,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/renderer/voiceUi.ts",
-      "windowsNow": "話す"
+      "windowsNow": "音声会話を開始"
     },
     {
       "key": "voice.end",
@@ -873,7 +873,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveCallControls.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/renderer/voiceUi.ts",
-      "windowsNow": "切る",
+      "windowsNow": "終了",
       "note": "読み上げ用の長い形は「音声会話を終了する」。"
     },
     {
@@ -882,7 +882,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveCallControls.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
-      "windowsNow": "友人といっしょ"
+      "windowsNow": "友人も一緒"
     },
     {
       "key": "look.setting",
@@ -890,22 +890,22 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookPolicy.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:electron/main.ts",
-      "windowsNow": "シャノンがカメラで部屋を見てよい",
+      "windowsNow": "会話中にシャノンがカメラで見る",
       "note": "名前はこのまま。自分の時間にも見ることがある画面（Windows の体）では、そのことを説明の文に書く。"
     },
     {
       "key": "look.state.off",
       "text": "切",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/App.tsx",
-      "windowsNow": "見られない",
+      "windowsNow": "切",
       "note": "いつも見える所に出す、カメラの状態の言葉。"
     },
     {
       "key": "look.state.allowed",
       "text": "見てよい",
-      "apple": "branch:codex/shannon/ios-yousu:apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/App.tsx",
       "windowsNow": "見てよい"
@@ -916,7 +916,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonThinkingState.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/TalkView.tsx",
-      "windowsNow": "返答を待っています…",
+      "windowsNow": "考えている…",
       "macNow": "考えています"
     },
     {
@@ -933,7 +933,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/TalkView.tsx",
-      "windowsNow": "メッセージを入力（Enterで送信、Shift+Enterで改行）／シャノンに話しかける"
+      "windowsNow": "シャノンに話す"
     },
     {
       "key": "record.actor.owner",
@@ -941,7 +941,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Autonomy/AutonomyDTOs.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/AutonomyView.tsx",
-      "windowsNow": "所有者"
+      "windowsNow": "あなた"
     },
     {
       "key": "look.state.looking",
@@ -977,6 +977,134 @@
       "windowsNow": "（無い）",
       "macNow": "（無い）",
       "note": "設定 › 管理 の中。"
+    },
+    {
+      "key": "settings.section.devices",
+      "text": "接続中の端末",
+      "apple": "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "接続中の端末",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。設定 › 管理 の行。"
+    },
+    {
+      "key": "settings.section.voice",
+      "text": "声",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "声",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。設定の区画。"
+    },
+    {
+      "key": "settings.section.speakUp",
+      "text": "話しかけ",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "話しかけ",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。設定の区画（シャノンから話しかけること。iPhone ではイヤホンと電話も）。"
+    },
+    {
+      "key": "settings.section.camera",
+      "text": "カメラ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookPolicy.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "カメラ",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。設定の区画。"
+    },
+    {
+      "key": "settings.section.folder",
+      "text": "専用フォルダ",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "専用フォルダ",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。デスクトップだけの設定の区画。"
+    },
+    {
+      "key": "settings.section.thisPC",
+      "text": "この PC のシャノン",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "この PC のシャノン",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。Windows だけの設定の区画。"
+    },
+    {
+      "key": "shannon.card.nothingWaiting",
+      "text": "あなたを待っていることは、ありません。",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "あなたを待っていることは、ありません。",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカード。iPhone の「ようす」は、いま「待っていることはありません」（copy-differences.md の 0）。"
+    },
+    {
+      "key": "shannon.card.awaitingReaction",
+      "text": "感想待ち",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "感想待ち",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカードの、待っていることの種類。"
+    },
+    {
+      "key": "shannon.card.budgetRequest",
+      "text": "予算を増やしてほしいという頼み",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "予算を増やしてほしいという頼み",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカードの、待っていることの種類。"
+    },
+    {
+      "key": "ops.attention.unreachable",
+      "text": "サーバーに届きません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "サーバーに届きません",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。"
+    },
+    {
+      "key": "ops.attention.noReport",
+      "text": "報告が届いていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "報告が届いていません",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。"
+    },
+    {
+      "key": "ops.attention.unwell",
+      "text": "{name}が不調",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "{name}が不調",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。"
+    },
+    {
+      "key": "ops.attention.failed",
+      "text": "{target}の操作が失敗",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "{target}の操作が失敗",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。直近 1 時間の操作だけを数える。"
+    },
+    {
+      "key": "ops.attention.expired",
+      "text": "{target}の操作が期限切れ",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "{target}の操作が期限切れ",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。直近 1 時間の操作だけを数える。"
+    },
+    {
+      "key": "look.action.turnOff",
+      "text": "切にする",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "切にする",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。カメラの状態から、見てよいを切にするボタン。"
+    },
+    {
+      "key": "task.approvalNeeded",
+      "text": "許可が必要です",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windowsNow": "許可が必要です",
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。許可待ちの作業の見出し（Windows の「判断が必要です」を直したもの）。"
     }
   ]
 }

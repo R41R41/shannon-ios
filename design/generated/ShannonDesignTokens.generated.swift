@@ -143,6 +143,8 @@ public enum ShannonGeneratedTokens {
         public static let footnote = TextStyle(size: 13, lineHeight: 18, weight: 400, swiftTextStyle: "footnote")
         public static let caption = TextStyle(size: 12, lineHeight: 16, weight: 400, swiftTextStyle: "caption")
         public static let caption2 = TextStyle(size: 11, lineHeight: 13, weight: 400, swiftTextStyle: "caption2")
+        /// 長い文（物語・作品）を読むときの行の高さ。文字の大きさに掛ける比。Windows の担当が選び、2026-10-05 に受け入れた。
+        public static let readingLineHeightRatio: CGFloat = 1.85
     }
 
     /// Wide screens (macOS and Windows): fixed sizes, one step below the phone scale. The phone keeps Dynamic Type.

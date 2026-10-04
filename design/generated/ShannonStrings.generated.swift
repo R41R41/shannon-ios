@@ -290,4 +290,36 @@ public enum ShannonGeneratedStrings {
     public static let navDelivery = "配信"
     /// `nav.diagnostics`
     public static let navDiagnostics = "診断"
+    /// `settings.section.devices`
+    public static let settingsSectionDevices = "接続中の端末"
+    /// `settings.section.voice`
+    public static let settingsSectionVoice = "声"
+    /// `settings.section.speakUp`
+    public static let settingsSectionSpeakUp = "話しかけ"
+    /// `settings.section.camera`
+    public static let settingsSectionCamera = "カメラ"
+    /// `settings.section.folder`
+    public static let settingsSectionFolder = "専用フォルダ"
+    /// `settings.section.thisPC`
+    public static let settingsSectionThisPC = "この PC のシャノン"
+    /// `shannon.card.nothingWaiting`
+    public static let shannonCardNothingWaiting = "あなたを待っていることは、ありません。"
+    /// `shannon.card.awaitingReaction`
+    public static let shannonCardAwaitingReaction = "感想待ち"
+    /// `shannon.card.budgetRequest`
+    public static let shannonCardBudgetRequest = "予算を増やしてほしいという頼み"
+    /// `ops.attention.unreachable`
+    public static let opsAttentionUnreachable = "サーバーに届きません"
+    /// `ops.attention.noReport`
+    public static let opsAttentionNoReport = "報告が届いていません"
+    /// `ops.attention.unwell`
+    public static func opsAttentionUnwell(name: String) -> String { "\(name)が不調" }
+    /// `ops.attention.failed`
+    public static func opsAttentionFailed(target: String) -> String { "\(target)の操作が失敗" }
+    /// `ops.attention.expired`
+    public static func opsAttentionExpired(target: String) -> String { "\(target)の操作が期限切れ" }
+    /// `look.action.turnOff`
+    public static let lookActionTurnOff = "切にする"
+    /// `task.approvalNeeded`
+    public static let taskApprovalNeeded = "許可が必要です"
 }

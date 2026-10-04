@@ -58,6 +58,10 @@ export function renderTokensSwift(tokens) {
   for (const [name, style] of Object.entries(tokens.typography.scale)) {
     lines.push(`        public static let ${name} = TextStyle(size: ${number(style.size)}, lineHeight: ${number(style.lineHeight)}, weight: ${style.weight}, swiftTextStyle: "${style.swiftTextStyle}")`);
   }
+  if (tokens.typography.reading) {
+    lines.push(`        /// ${tokens.typography.reading.about}`);
+    lines.push(`        public static let readingLineHeightRatio: CGFloat = ${number(tokens.typography.reading.lineHeightRatio)}`);
+  }
   lines.push('    }', '');
   if (tokens.typography.desktop) {
     lines.push('    /// Wide screens (macOS and Windows): fixed sizes, one step below the phone scale. The phone keeps Dynamic Type.');
@@ -94,6 +98,7 @@ export function renderTokensCss(tokens) {
     lines.push(`  --shannon-font-weight-${kebab(name)}: ${style.weight};`);
   }
   for (const [name, value] of Object.entries(tokens.typography.weight)) lines.push(`  --shannon-weight-${kebab(name)}: ${value};`);
+  if (tokens.typography.reading) lines.push(`  --shannon-line-height-reading: ${number(tokens.typography.reading.lineHeightRatio)};`);
   for (const [name, value] of Object.entries(tokens.spacing)) lines.push(`  --shannon-space-${kebab(name)}: ${number(value)}px;`);
   for (const [name, value] of Object.entries(tokens.radius)) lines.push(`  --shannon-radius-${kebab(name)}: ${number(value)}px;`);
   for (const [name, value] of Object.entries(tokens.size)) lines.push(`  --shannon-size-${kebab(name)}: ${number(value)}px;`);
@@ -132,6 +137,7 @@ export function renderTokensTs(tokens) {
       scale: Object.fromEntries(Object.entries(tokens.typography.scale).map(([name, style]) => [name, { size: style.size, lineHeight: style.lineHeight, weight: style.weight }])),
       desktopScale: Object.fromEntries(Object.entries(tokens.typography.desktop?.scale ?? {}).map(([name, style]) => [name, { size: style.size, lineHeight: style.lineHeight, weight: style.weight }])),
       weight: tokens.typography.weight,
+      ...(tokens.typography.reading ? { readingLineHeightRatio: tokens.typography.reading.lineHeightRatio } : {}),
     },
     spacing: tokens.spacing,
     radius: tokens.radius,
