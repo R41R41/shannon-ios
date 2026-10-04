@@ -10,14 +10,14 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0` |
-| `builtAt` | `2026-10-04T17:10:20.145Z` |
-| `modelUpdatedAt` | `2026-10-02T22:07:02.281Z` (the face texture at full resolution; same `window.shannonBody` API and messages as the build of 2026-10-02) |
-| Size | about 20.4 MB, of which `assets.js` is 19.5 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
+| `version` | `0.1.0+202610041927` |
+| `builtAt` | `2026-10-04T19:27:38.622Z` |
+| `modelUpdatedAt` | `2026-10-04T19:22:15.824Z` (the boots texture redrawn; otherwise the build of 2026-10-04 with the face texture at full resolution; same `window.shannonBody` API and messages as the build of 2026-10-02) |
+| Size | about 20.4 MB, of which `assets.js` is 19.6 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
-bundle with their relative paths and pins `modelUpdatedAt`; her figure in Talk's dialogue display (and the
+bundle with their relative paths and pins `modelUpdatedAt`; her figure in Talk's dialogue display (「向き合う」; and the
 Mac's body sheet) shows the loaded page's `modelUpdatedAt` in a debug build started with `-ShannonPreviewBodyStats`.
 
 ## Updating the page
