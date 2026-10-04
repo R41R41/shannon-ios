@@ -34,12 +34,11 @@ extension ShannonConversationView {
                 guard let id = UUID(uuidString: item.id) else { return }
                 openAgentTask(id)
             },
-            showsYousu: $hubShowsYousu,
-            yousuSegment: hubYousuSegment
+            showsYousu: $hubShowsYousu
         )
     }
 
-    /// Opens 「シャノン › ようす」 for a `shannon://yousu` link that arrived.
+    /// Opens the place of a `shannon://yousu` or `shannon://admin/ops` link that arrived.
     func openPendingYousuLink() {
 #if DEBUG
         if model.isDesignPreview, !didApplyYousuPreview, let variant = ShannonYousuFixtureClient.launchVariant {
@@ -50,28 +49,51 @@ extension ShannonConversationView {
                 switch variant {
                 case "tile": showsThreadList = true
                 case "hub": settleWorkspace(on: .shannon)
-                default: openYousu(segment: variant == "now" ? .now : .ops)
+                case "now": openLink(.yousu)
+                case "admin": openSettings()
+                default: openLink(.ops)
                 }
             }
             return
         }
 #endif
         guard let request = ShannonYousuLink.takePending() else { return }
-        openYousu(segment: request.segment)
+        openLink(request)
     }
 
-    func openYousu(segment: ShannonYousuSegment?) {
+    func openLink(_ request: ShannonYousuLink.Request) {
         composerIsFocused = false
         showsThreadList = false
-        hubYousuSegment = segment
-        settleWorkspace(on: .shannon)
-        hubShowsYousu = true
+        switch request {
+        case .yousu:
+            settleWorkspace(on: .shannon)
+            hubShowsYousu = true
+        case .ops:
+            showsSettings = true
+            settingsShowsOps = true
+        }
     }
+
+    /// Keeps what the top-left button marks current while the app is in front.
+    func keepEntryMarks() async {
+        guard scenePhase == .active else { return }
+        await yousu.now.reload()
+        while !Task.isCancelled {
+            await yousu.ops.refresh()
+            do { try await Task.sleep(for: .seconds(Self.entryMarkSeconds)) } catch { return }
+        }
+    }
+
+    /// 運用 is read this often for its mark; its own page reads every 30 seconds while it is open.
+    static var entryMarkSeconds: Double { 180 }
 }
 
 extension ShannonThreadListSheet {
-    /// 「設定」.
+    /// 「設定」, with the 運用 mark while something there deserves a look.
     var settingsDestination: ShannonThreadListDestination {
-        ShannonThreadListDestination(title: ShannonGeneratedStrings.navSettings, symbol: "gearshape", badge: nil, action: openSettings)
+        ShannonThreadListDestination(
+            title: ShannonGeneratedStrings.navSettings, symbol: "gearshape", badge: nil,
+            attention: yousu.needsAttention, attentionReason: yousu.ops.attentionReason(), action: openSettings
+        )
     }
 }

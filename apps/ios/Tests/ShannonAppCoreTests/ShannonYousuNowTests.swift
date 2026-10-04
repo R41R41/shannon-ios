@@ -176,20 +176,37 @@ final class ShannonYousuNowTests: XCTestCase {
     }
 
     func testLinks() {
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu")!), .init(segment: nil))
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu/ops")!), .init(segment: .ops))
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "SHANNON://Yousu/Now")!), .init(segment: .now))
-        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.ops)), .init(segment: .ops))
+        // ようす is シャノンのいま only; 運用 is 「設定 › 管理 › 運用」, also for the older link.
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu")!), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "SHANNON://Yousu/Now")!), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu/ops")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://admin/ops")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://Admin/OPS")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.url(.ops).absoluteString, "shannon://admin/ops")
+        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.yousu)), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.ops)), .ops)
         // Anything else stays what it was: a pairing link, or nothing.
-        for other in ["shannon://connect?code=ABCDEF012345", "shannon://yousu/other", "shannon://yousu/ops/extra", "https://yousu/ops", "shannon://pair/yousu"] {
+        for other in [
+            "shannon://connect?code=ABCDEF012345", "shannon://yousu/other", "shannon://yousu/ops/extra", "https://yousu/ops",
+            "shannon://pair/yousu", "shannon://admin", "shannon://admin/devices", "https://admin/ops",
+        ] {
             XCTAssertNil(ShannonYousuLink.request(from: URL(string: other)!), other)
         }
-        XCTAssertEqual(ShannonYousuSegment.allCases.map(\.title), ["シャノンのいま", "運用"])
     }
 
-    func testTheTileSaysWhenSomethingDeservesALook() {
-        XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, attention: true, action: {}).accessibilityLabel, "ようす、確かめたいことがあります")
-        XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, action: {}).accessibilityLabel, "ようす")
+    func testTheTilesAndTheTopLeftButtonSayWhatTheyMark() {
+        XCTAssertEqual(ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, attention: true, action: {}).accessibilityLabel, "設定、確かめたいことがあります")
+        XCTAssertEqual(
+            ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, attention: true, attentionReason: "Notionが不調", action: {}).accessibilityLabel,
+            "設定、運用：Notionが不調"
+        )
+        XCTAssertEqual(ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, action: {}).accessibilityLabel, "設定")
+        XCTAssertEqual(ShannonThreadListDestination(title: "シャノン", symbol: "x", badge: 2, action: {}).accessibilityLabel, "シャノン、2件")
+        XCTAssertEqual(ShannonEntryMarks.accessibilityValue(unread: 0, waiting: 0), "未確認なし")
+        XCTAssertEqual(
+            ShannonEntryMarks.accessibilityValue(unread: 3, waiting: 1, opsAttention: "報告が届いていません"),
+            "未確認3件、シャノンが待っていること1件、運用：報告が届いていません"
+        )
     }
 
     func testATouchIsToldWithItsPartAndSurfaceWhenTheServerKnowsThem() throws {

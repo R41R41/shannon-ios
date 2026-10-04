@@ -13,8 +13,6 @@ struct ShannonHubView: View {
     let openApproval: (ShannonNowWaitingItem) -> Void
     /// ようす is open. Set by the card and by a `shannon://yousu` link.
     @Binding var showsYousu: Bool
-    /// The segment a link asked ようす for, until the page has applied it.
-    var yousuSegment: ShannonYousuSegment?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
@@ -65,7 +63,7 @@ struct ShannonHubView: View {
         .background(palette.canvas)
         .navigationDestination(isPresented: $showsYousu) {
             ShannonYousuView(
-                model: yousu, requested: yousuSegment, fallbackMood: fallbackMood,
+                model: yousu, fallbackMood: fallbackMood,
                 approvals: approvals, openApproval: openApproval, autonomy: autonomy
             )
         }

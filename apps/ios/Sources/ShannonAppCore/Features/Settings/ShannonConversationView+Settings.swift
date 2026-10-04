@@ -19,6 +19,8 @@ extension ShannonConversationView {
                     settingsProfileRow(palette)
                 }
 
+                adminSection(palette)
+
                 Section("見た目") {
                     settingsValueButton(
                         title: "外観",
@@ -86,7 +88,8 @@ extension ShannonConversationView {
                 ShannonIncomingCallSettingsSection()
 #endif
 
-                Section("接続と詳細") {
+                // 配信 and 診断 are in 管理 at the top; 「接続と詳細」 is no more (decision 2026-10-03).
+                Section {
                     if let connectionModel {
                         settingsValueButton(
                             title: "接続",
@@ -101,22 +104,9 @@ extension ShannonConversationView {
                         symbol: "newspaper",
                         palette: palette
                     ) { showsWorldSubscriptions = true }
-                    settingsValueButton(
-                        title: "配信",
-                        value: "TestFlight",
-                        symbol: "arrow.down.app",
-                        palette: palette
-                    ) { showsTestFlightDelivery = true }
-                    .accessibilityHint("アプリの更新、TestFlightの配信状況と履歴を開きます")
-                    settingsValueButton(
-                        title: "診断",
-                        value: "音声",
-                        symbol: "waveform.badge.magnifyingglass",
-                        palette: palette
-                    ) { showsVoiceDiagnostics = true }
-                    .accessibilityHint("音声の処理時間を確認・コピーします")
                 }
             }
+            .navigationDestination(isPresented: $settingsShowsOps) { adminOpsPage }
             .scrollContentBackground(.hidden)
             .background(palette.canvas)
             .navigationTitle("設定")

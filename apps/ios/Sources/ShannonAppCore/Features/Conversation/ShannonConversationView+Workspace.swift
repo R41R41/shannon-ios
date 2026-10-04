@@ -17,12 +17,23 @@ extension ShannonConversationView {
                 Image(systemName: "sidebar.left")
             }
             .accessibilityLabel("トークと画面を開く")
-            .accessibilityValue(ShannonEntryMarks.accessibilityValue(unread: model.totalBadgeCount, waiting: shannonWaitingCount))
+            .accessibilityValue(ShannonEntryMarks.accessibilityValue(
+                unread: model.totalBadgeCount, waiting: shannonWaitingCount, opsAttention: yousu.ops.attentionReason()
+            ))
             .overlay(alignment: .topTrailing) {
                 if model.totalBadgeCount > 0 || shannonWaitingCount > 0 {
                     Circle()
                         .fill(ShannonPalette.resolve(resolvedColorScheme).danger)
                         .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if yousu.needsAttention {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(ShannonPalette.resolve(resolvedColorScheme).attention)
+                        .offset(x: 4, y: 3)
                         .accessibilityHidden(true)
                 }
             }

@@ -6,11 +6,14 @@ struct ShannonThreadListDestination: Identifiable {
     let badge: Int?
     /// A small mark instead of a count: something there deserves a look.
     var attention = false
+    /// Why, in one line (運用 on the 設定 tile): read out with the mark.
+    var attentionReason: String?
     let action: () -> Void
 
     var id: String { title }
 
     var accessibilityLabel: String {
+        if attention, let attentionReason { return "\(title)、運用：\(attentionReason)" }
         if attention { return "\(title)、確かめたいことがあります" }
         guard let badge, badge > 0 else { return title }
         return "\(title)、\(badge)件"

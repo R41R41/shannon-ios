@@ -33,9 +33,10 @@ public struct ShannonConversationView: View {
     @State var showsThreadList = false
     @State var yousu: ShannonYousuModel
     @State var didApplyYousuPreview = false
-    /// 「シャノン › ようす」 is open, and the segment a link asked it for.
+    /// 「シャノン › ようす」 is open.
     @State var hubShowsYousu = false
-    @State var hubYousuSegment: ShannonYousuSegment?
+    /// 「設定 › 管理 › 運用」 is open.
+    @State var settingsShowsOps = false
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -115,11 +116,10 @@ public struct ShannonConversationView: View {
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
             await pollAgentTasksWhileActive()
         }
-        // What waits for the owner in 「シャノン」, for the mark on the top-left button: read when the app comes to the front.
-        .task(id: scenePhase == .active) {
-            guard scenePhase == .active else { return }
-            await yousu.now.reload()
-        }
+        // The marks on the top-left button: what waits for the owner in 「シャノン」, read when the app comes to the
+        // front, and whether 運用 deserves a look, read then and every few minutes while the app stays in front.
+        .task(id: scenePhase == .active) { await keepEntryMarks() }
+        .onChange(of: showsSettings) { if !showsSettings { settingsShowsOps = false } }
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }

@@ -1909,7 +1909,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift"
           ],
-          "note": "「シャノン」の先頭のカードから開く（A4）。"
+          "note": "「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。"
         },
         "macos": {
           "status": "no",
@@ -1990,7 +1990,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2017,7 +2017,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsConfirmationSheet.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#func send"
           ],
-          "note": "iPhone は確認の画面で長押しして決める。いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "iPhone は確認の画面で長押しして決める。 設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2044,7 +2044,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#minebotStartServers"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2071,7 +2071,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#scheduleRun"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2097,7 +2097,7 @@
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2122,7 +2122,7 @@
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2147,7 +2147,7 @@
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
           ],
-          "note": "いまは「ようす」の中（運用の切り替え）。決定（2026-10-03）: 設定 › 管理 › 運用 へ移す（A5）。"
+          "note": "設定 › 管理 › 運用（A5）。"
         },
         "macos": {
           "status": "no"
@@ -2168,12 +2168,14 @@
       "description": "不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。 通知は、あとで決める（まずは印だけ）。",
       "surfaces": {
         "ios": {
-          "status": "partial",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#needsAttention",
-            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonConversation+Yousu.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#attentionReason",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#exclamationmark.triangle.fill",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonConversation+Yousu.swift#settingsDestination",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift"
           ],
-          "note": "印は「ようす」のタイルにだけ出る。左上のボタンと設定のタイルへ移し、操作の失敗・期限切れでも出すのは A5。"
+          "note": "左上のボタンに橙の三角（赤い点とは別の形）、シートの 設定 のタイルと 設定 › 管理 › 運用 の行に同じ印と理由の 1 行。報告が 1 度も届いていない間は出さない。操作の失敗・期限切れは直近 1 時間だけ（A5）。"
         },
         "macos": {
           "status": "no"
@@ -3083,8 +3085,12 @@
       "description": "運用（状態・操作・記録）、接続中の端末、配信、診断を、設定の中の「管理」に並べる。",
       "surfaces": {
         "ios": {
-          "status": "no",
-          "note": "運用は「ようす」の中、接続中の端末は「接続」の中、配信と診断は設定の「接続と詳細」の中。決定（2026-10-03）で 設定 › 管理 にまとめる（A5）。"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift#adminSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift#adminSection"
+          ],
+          "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は「接続」と同じ画面を開く。"
         },
         "macos": {
           "status": "no",

@@ -96,11 +96,47 @@ public final class ShannonOpsModel {
         unreachableMessage == nil && !openCommands.isEmpty ? .seconds(3) : .seconds(30)
     }
 
-    /// Something on the screen deserves a look: a report that stopped arriving, or a service that is not well.
-    public var needsAttention: Bool {
-        guard hasReport, let snapshot else { return false }
-        if !isCurrent() { return true }
-        return snapshot.services.contains { $0.status == .degraded || $0.status == .unknown }
+    /// Something in 運用 deserves a look (docs/product/information-architecture.md, 4 and 8): the mark on the
+    /// top-left button, on the 設定 tile and on the 運用 row. Never before the first report ever arrived.
+    public var needsAttention: Bool { attentionReason() != nil }
+
+    /// Why 運用 deserves a look, in one line; nil while all is well or before the first report.
+    /// The server cannot be reached, the report stopped arriving, a service is not well, or an
+    /// operation of the last hour failed or expired.
+    public func attentionReason(at date: Date? = nil) -> String? {
+        guard hasReport, let snapshot else { return nil }
+        if unreachableMessage != nil { return ShannonGeneratedStrings.opsAttentionUnreachable }
+        if isStale(at: date) { return ShannonGeneratedStrings.opsAttentionNoReport }
+        if let service = snapshot.services.first(where: { $0.status == .degraded || $0.status == .unknown }) {
+            return ShannonGeneratedStrings.opsAttentionUnwell(name: ShannonOpsText.serviceName(service))
+        }
+        if let command = recentProblemCommand(at: date) {
+            let target = ShannonOpsText.commandTargetName(type: command.type, target: command.target)
+            return command.status == .failed
+                ? ShannonGeneratedStrings.opsAttentionFailed(target: target)
+                : ShannonGeneratedStrings.opsAttentionExpired(target: target)
+        }
+        return nil
+    }
+
+    /// Only operations of the last hour count for the mark; older ones stay in the record (2026-10-05).
+    static let problemWindowSeconds: TimeInterval = 60 * 60
+
+    /// The newest operation of the last hour that failed or expired.
+    func recentProblemCommand(at date: Date? = nil) -> ShannonOpsCommandDTO? {
+        let now = date ?? clock()
+        return commands
+            .filter { $0.status == .failed || $0.status == .expired }
+            .compactMap { command in Self.problemTime(command).map { (command, $0) } }
+            .filter { now.timeIntervalSince($0.1) <= Self.problemWindowSeconds }
+            .max { $0.1 < $1.1 }?.0
+    }
+
+    /// When it ended: its finish, the moment it expired, or else when it was asked for.
+    private static func problemTime(_ command: ShannonOpsCommandDTO) -> Date? {
+        if let finished = command.finishedAt.flatMap(ShannonYousuTime.date) { return finished }
+        if command.status == .expired, let expired = ShannonYousuTime.date(command.expiresAt) { return expired }
+        return ShannonYousuTime.date(command.createdAt)
     }
 
     /// A command for this target still awaits its result; its buttons wait with it.

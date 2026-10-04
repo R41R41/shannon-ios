@@ -768,7 +768,7 @@
     {
       "key": "nav.now",
       "text": "シャノンのいま",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonYousuLink.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
       "macNow": "（無い）"
@@ -792,7 +792,7 @@
     {
       "key": "nav.admin",
       "text": "管理",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift",
       "decided": "2026-10-03",
       "windowsNow": "管理",
       "macNow": "（無い）",
@@ -1062,7 +1062,7 @@
     {
       "key": "ops.attention.unwell",
       "text": "{name}が不調",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift",
       "decided": "2026-10-05",
       "windowsNow": "{name}が不調",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。"
@@ -1070,7 +1070,7 @@
     {
       "key": "ops.attention.failed",
       "text": "{target}の操作が失敗",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift",
       "decided": "2026-10-05",
       "windowsNow": "{target}の操作が失敗",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。直近 1 時間の操作だけを数える。"
@@ -1078,7 +1078,7 @@
     {
       "key": "ops.attention.expired",
       "text": "{target}の操作が期限切れ",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift",
       "decided": "2026-10-05",
       "windowsNow": "{target}の操作が期限切れ",
       "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。運用の印の理由（1 行）。直近 1 時間の操作だけを数える。"

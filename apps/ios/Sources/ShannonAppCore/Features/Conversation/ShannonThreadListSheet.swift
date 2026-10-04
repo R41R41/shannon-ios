@@ -54,7 +54,7 @@ struct ShannonThreadListSheet: View {
             ),
             ShannonThreadListDestination(
                 title: ShannonGeneratedStrings.navShannon, symbol: "person.crop.circle",
-                badge: yousu.now.waitingItems.count, attention: yousu.needsAttention, action: openShannon
+                badge: yousu.now.waitingItems.count, action: openShannon
             ),
             settingsDestination,
         ]
