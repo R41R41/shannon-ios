@@ -221,6 +221,53 @@ final class ShannonYousuOpsTests: XCTestCase {
     }
 
     @MainActor
+    func testAServerDownAtLaunchIsMarkedOnceAReportHadArrivedBefore() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)"))
+        // An earlier launch: a report arrived for this scope.
+        let client = FakeYousuClient()
+        client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
+        let earlier = ShannonOpsModel(scopeKey: "owner", client: client, defaults: defaults)
+        await earlier.refresh()
+        XCTAssertTrue(earlier.reportArrivedBefore)
+
+        // This launch: the server cannot be reached, so no report is in memory.
+        let down = FakeYousuClient()
+        down.loadError = URLError(.cannotConnectToHost)
+        let launched = ShannonOpsModel(scopeKey: "owner", client: down, defaults: defaults)
+        XCTAssertTrue(launched.reportArrivedBefore)
+        XCTAssertNil(launched.attentionReason(), "not read yet: nothing is claimed")
+        await launched.refresh()
+        XCTAssertFalse(launched.hasReport)
+        XCTAssertEqual(launched.attentionReason(), "サーバーに届きません")
+        XCTAssertTrue(launched.needsAttention)
+
+        // A connection that became invalid says the same.
+        let refused = FakeYousuClient()
+        refused.loadError = ShannonAPIError.rejected(status: 401)
+        let invalid = ShannonOpsModel(scopeKey: "owner", client: refused, defaults: defaults)
+        await invalid.refresh()
+        XCTAssertEqual(invalid.attentionReason(), "サーバーに届きません")
+
+        // Another scope never had a report: no mark, whatever the server does.
+        let other = ShannonOpsModel(scopeKey: "someone-else", client: down, defaults: defaults)
+        await other.refresh()
+        XCTAssertFalse(other.reportArrivedBefore)
+        XCTAssertNil(other.attentionReason())
+
+        // An older server without 運用 hides it, mark and all.
+        let older = FakeYousuClient()
+        older.loadError = ShannonAPIError.rejected(status: 404)
+        let gone = ShannonOpsModel(scopeKey: "owner", client: older, defaults: defaults)
+        await gone.refresh()
+        XCTAssertNil(gone.attentionReason())
+
+        // Without a place to keep it, nothing is remembered.
+        let forgetful = ShannonOpsModel(scopeKey: "owner", client: down)
+        await forgetful.refresh()
+        XCTAssertNil(forgetful.attentionReason())
+    }
+
+    @MainActor
     func testAReportThatAgesPastThreeMinutesLosesItsControlsWithoutANewReading() async throws {
         // Read when the report was already 100 seconds old on the server's clock.
         let received = ShannonYousuTime.date("2026-10-03T07:00:00.000Z")!

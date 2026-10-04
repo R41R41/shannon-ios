@@ -235,8 +235,23 @@ extension ShannonConversationView {
         }
         .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
         .buttonStyle(.plain)
-        .disabled(model.isSending || [.requestingPermission, .transcribing, .thinking].contains(voiceModel.phase))
+        .disabled(model.isSending || [.requestingPermission, .transcribing, .thinking].contains(voiceModel.phase)
+            || (voiceModel.phase != .listening && voiceCallHoldsMicrophone))
         .accessibilityLabel(voiceModel.phase == .listening ? "音声入力を終了" : "音声入力")
+    }
+
+    /// The voice conversation holds the microphone: a call, or the few seconds after her spoken line for a
+    /// touch when she listens for his answer. Dictation does not start then; two captures never run at once.
+    var voiceCallHoldsMicrophone: Bool {
+#if os(iOS)
+        Self.callHoldsMicrophone(geminiLiveVoiceModel.phase)
+#else
+        false
+#endif
+    }
+
+    nonisolated static func callHoldsMicrophone(_ phase: ShannonGeminiLivePhase) -> Bool {
+        phase != .idle && phase != .failed
     }
 
     func composerPrimaryButton(_ palette: ShannonPalette) -> some View {

@@ -13,8 +13,13 @@ public final class ShannonBodyModel {
     /// picker): her figure there is what the owner sees. Set by the conversation root. This is the
     /// surface that may answer a touch in voice, as the body screen 「からだ」 was before.
     public internal(set) var dialogueIsInFront = false
-    /// A sheet opened from her words in the dialogue display (what she took in from a turn) is over her figure.
-    var sheetFromWordsIsUp = false
+    /// The sheets and confirmations opened from her words (what she took in from a turn) that are over her
+    /// figure now, one id per list of those words: one list closing its sheet does not uncover another's.
+    private(set) var coversFromWords: Set<UUID> = []
+    var sheetFromWordsIsUp: Bool { !coversFromWords.isEmpty }
+    func setCoverFromWords(_ id: UUID, isUp: Bool) {
+        if isUp { coversFromWords.insert(id) } else { coversFromWords.remove(id) }
+    }
     /// Her size and place in Talk after two fingers moved her; 「位置を戻す」 sets it back. Not kept across launches.
     public var figureAdjustment = ShannonLive2DLayout()
     /// Asks the conversation root to show Talk's dialogue display (「トークで姿を見る」, the small figure of an empty Talk).
@@ -42,6 +47,10 @@ public final class ShannonBodyModel {
     /// Talk in front, in its dialogue display, with nothing over it.
     nonisolated static func dialogueIsInFront(page: ShannonWorkspacePage, displayMode: ShannonConversationDisplayMode, covered: Bool) -> Bool {
         page == .talk && displayMode == .dialogue && !covered
+    }
+
+    nonisolated static func dialogueIsInFront(page: ShannonWorkspacePage, displayMode: ShannonConversationDisplayMode, covers: ShannonDialogueCovers) -> Bool {
+        dialogueIsInFront(page: page, displayMode: displayMode, covered: covers.isAny)
     }
 
     /// Every condition at once, so that none can be dropped unnoticed: the one rule for her voice after a touch.
@@ -368,4 +377,23 @@ struct ShannonBodyAttachment: ViewModifier {
         let face: ShannonFace?
         let emotion: ShannonVoiceTurnEmotionDTO?
     }
+}
+
+/// Everything that can come over Talk's dialogue display. Each one alone hides her figure there, and
+/// with it her voice for a touch and the microphone after it. There is no default for any of them: the
+/// conversation root must say each one, so a cover cannot be left out of the rule unnoticed.
+struct ShannonDialogueCovers: Equatable, Sendable {
+    var threadList: Bool
+    var settings: Bool
+    var callScreen: Bool
+    var workTask: Bool
+    var fileImporter: Bool
+    var photoPicker: Bool
+    /// A sheet or the 「取り消す」 confirmation opened from her words (`ShannonTurnCaptureList`).
+    var fromWords: Bool
+    /// The explanation that comes before the system's camera prompt.
+    var cameraExplanation: Bool
+
+    /// Any one of them is up. Read from every field, so a cover added above counts at once.
+    var isAny: Bool { Mirror(reflecting: self).children.contains { ($0.value as? Bool) == true } }
 }

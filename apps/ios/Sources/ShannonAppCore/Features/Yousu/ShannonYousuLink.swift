@@ -84,8 +84,9 @@ public final class ShannonYousuModel {
     public let ops: ShannonOpsModel
     public let now: ShannonNowModel
 
-    public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)? = ShannonAPIClient()) {
-        ops = ShannonOpsModel(scopeKey: scopeKey, client: client)
+    /// `defaults` keeps, per scope, only whether a report of 運用 has ever arrived (its mark's rule).
+    public init(scopeKey: String = "local-owner", client: (any ShannonYousuServing)? = ShannonAPIClient(), defaults: UserDefaults? = nil) {
+        ops = ShannonOpsModel(scopeKey: scopeKey, client: client, defaults: defaults)
         now = ShannonNowModel(scopeKey: scopeKey, client: client)
     }
 

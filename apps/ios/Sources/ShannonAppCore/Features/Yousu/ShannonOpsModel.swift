@@ -35,6 +35,10 @@ public final class ShannonOpsModel {
     private let scopeKey: String
     private let client: (any ShannonYousuServing)?
     private let clock: @Sendable () -> Date
+    /// Where "a report has arrived for this scope before" is kept across launches; nil keeps nothing.
+    private let defaults: UserDefaults?
+    /// A report has arrived for this scope at some time, in this launch or an earlier one.
+    public private(set) var reportArrivedBefore = false
     private var fetchedAt: Date?
     private var ageAtFetch: TimeInterval = 0
     private var acceptedAt: Date?
@@ -44,13 +48,19 @@ public final class ShannonOpsModel {
     public init(
         scopeKey: String = "local-owner",
         client: (any ShannonYousuServing)? = ShannonAPIClient(),
-        clock: @escaping @Sendable () -> Date = { Date() }
+        clock: @escaping @Sendable () -> Date = { Date() },
+        defaults: UserDefaults? = nil
     ) {
         self.scopeKey = scopeKey
         self.client = client
         self.clock = clock
+        self.defaults = defaults
+        reportArrivedBefore = defaults?.bool(forKey: Self.reportArrivedKey(scopeKey)) ?? false
         if client == nil { isSupported = false }
     }
+
+    /// Only a yes or no is kept: no part of a report is written to the device.
+    static func reportArrivedKey(_ scopeKey: String) -> String { "shannon.ops.report-arrived.\(scopeKey)" }
 
     // MARK: What the screen may show
 
@@ -100,12 +110,16 @@ public final class ShannonOpsModel {
     /// top-left button, on the 設定 tile and on the 運用 row. Never before the first report ever arrived.
     public var needsAttention: Bool { attentionReason() != nil }
 
-    /// Why 運用 deserves a look, in one line; nil while all is well or before the first report.
+    /// Why 運用 deserves a look, in one line; nil while all is well or before the first report ever arrived.
     /// The server cannot be reached, the report stopped arriving, a service is not well, or an
-    /// operation of the last hour failed or expired.
+    /// operation of the last hour failed or expired. "Ever" outlives the launch: a server that is
+    /// down when the app starts is marked if a report had arrived before.
     public func attentionReason(at date: Date? = nil) -> String? {
-        guard hasReport, let snapshot else { return nil }
+        guard isSupported, hasReport || reportArrivedBefore else { return nil }
         if unreachableMessage != nil { return ShannonGeneratedStrings.opsAttentionUnreachable }
+        // Not read yet in this launch: nothing is known, and nothing is claimed.
+        guard didLoad else { return nil }
+        guard let snapshot else { return ShannonGeneratedStrings.opsAttentionNoReport }
         if isStale(at: date) { return ShannonGeneratedStrings.opsAttentionNoReport }
         if let service = snapshot.services.first(where: { $0.status == .degraded || $0.status == .unknown }) {
             return ShannonGeneratedStrings.opsAttentionUnwell(name: ShannonOpsText.serviceName(service))
@@ -211,6 +225,10 @@ public final class ShannonOpsModel {
             let reading = try await client.loadOps(scopeKey: scopeKey)
             let readAt = clock()
             view = reading.view
+            if reading.view.snapshot != nil, !reportArrivedBefore {
+                reportArrivedBefore = true
+                defaults?.set(true, forKey: Self.reportArrivedKey(scopeKey))
+            }
             fetchedAt = readAt
             ageAtFetch = Self.age(of: reading, readAt: readAt)
             isSupported = true

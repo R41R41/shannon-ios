@@ -184,6 +184,50 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(ShannonBodyModel().dialogueIsInFront)
     }
 
+    func testEveryCoverOfTheDialogueDisplayHidesHerFigure() {
+        let none = ShannonDialogueCovers(
+            threadList: false, settings: false, callScreen: false, workTask: false,
+            fileImporter: false, photoPicker: false, fromWords: false, cameraExplanation: false
+        )
+        // The covers the conversation root must name, each one: a new one is added here and there together.
+        let covers: [(String, WritableKeyPath<ShannonDialogueCovers, Bool>)] = [
+            ("threadList", \.threadList), ("settings", \.settings), ("callScreen", \.callScreen), ("workTask", \.workTask),
+            ("fileImporter", \.fileImporter), ("photoPicker", \.photoPicker), ("fromWords", \.fromWords),
+            ("cameraExplanation", \.cameraExplanation),
+        ]
+        XCTAssertEqual(Mirror(reflecting: none).children.compactMap(\.label), covers.map(\.0))
+        XCTAssertFalse(none.isAny)
+        XCTAssertTrue(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covers: none))
+        for (name, cover) in covers {
+            var one = none
+            one[keyPath: cover] = true
+            XCTAssertTrue(one.isAny, name)
+            XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covers: one), name)
+        }
+    }
+
+    func testOneListClosingItsSheetDoesNotUncoverAnothers() {
+        let model = ShannonBodyModel()
+        let first = UUID(), second = UUID()
+        model.setCoverFromWords(first, isUp: true)
+        model.setCoverFromWords(second, isUp: true)
+        model.setCoverFromWords(first, isUp: false)
+        XCTAssertTrue(model.sheetFromWordsIsUp)
+        // A list that goes away twice, or one that never had a sheet up, changes nothing.
+        model.setCoverFromWords(first, isUp: false)
+        XCTAssertTrue(model.sheetFromWordsIsUp)
+        model.setCoverFromWords(second, isUp: false)
+        XCTAssertFalse(model.sheetFromWordsIsUp)
+    }
+
+    func testDictationWaitsWhileTheVoiceConversationHoldsTheMicrophone() {
+        for phase in [ShannonGeminiLivePhase.requestingPermission, .connecting, .listening, .thinking, .speaking, .reconnecting] {
+            XCTAssertTrue(ShannonConversationView.callHoldsMicrophone(phase), phase.rawValue)
+        }
+        XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.idle))
+        XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.failed))
+    }
+
     func testOthersStayTheAudienceForAWhileAfterAFriendWasListening() {
         var rule = ShannonBodyAudienceRule()
         let start = Date(timeIntervalSince1970: 1_000)

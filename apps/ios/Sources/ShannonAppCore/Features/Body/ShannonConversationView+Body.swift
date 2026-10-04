@@ -2,14 +2,23 @@ import SwiftUI
 
 extension ShannonConversationView {
     /// Talk is in front in its dialogue display, and nothing covers it: no sheet or cover of the workspace
-    /// (the thread list, Settings, a work task, the call screen), no sheet opened from her words, and no picker of the composer.
+    /// (the thread list, Settings, a work task, the call screen), nothing opened from her words, no picker
+    /// of the composer, and no camera explanation.
     var dialogueFigureIsInFront: Bool {
-        var covered = showsThreadList || showsSettings || showsGeminiLiveVoice || selectedAgentTaskID != nil || composerIsImporting
-            || bodyModel.sheetFromWordsIsUp
+        ShannonBodyModel.dialogueIsInFront(page: selectedPage, displayMode: displayMode, covers: dialogueCovers)
+    }
+
+    var dialogueCovers: ShannonDialogueCovers {
 #if os(iOS)
-        covered = covered || composerIsPickingPhoto
+        let photoPicker = composerIsPickingPhoto
+#else
+        let photoPicker = false
 #endif
-        return ShannonBodyModel.dialogueIsInFront(page: selectedPage, displayMode: displayMode, covered: covered)
+        return ShannonDialogueCovers(
+            threadList: showsThreadList, settings: showsSettings, callScreen: showsGeminiLiveVoice,
+            workTask: selectedAgentTaskID != nil, fileImporter: composerIsImporting, photoPicker: photoPicker,
+            fromWords: bodyModel.sheetFromWordsIsUp, cameraExplanation: model.appLook.primerPhase != nil
+        )
     }
 
     /// Opens Talk's dialogue display, where her figure is (「トークで姿を見る」, the small figure of an empty Talk).

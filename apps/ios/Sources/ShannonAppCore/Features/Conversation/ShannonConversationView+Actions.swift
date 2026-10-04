@@ -299,6 +299,7 @@ extension ShannonConversationView {
     func performTranscriptionPrimaryAction() {
         switch voiceModel.phase {
         case .idle, .denied, .failed:
+            guard !voiceCallHoldsMicrophone else { return }
             composerIsFocused = false
             Task { await voiceModel.startListening() }
 

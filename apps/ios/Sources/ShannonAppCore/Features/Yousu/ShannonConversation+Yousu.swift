@@ -11,7 +11,10 @@ extension ShannonYousuModel {
             return ShannonYousuModel(scopeKey: conversation.scopeKey, client: ShannonYousuFixtureClient(stale: variant == "opsStale"))
         }
 #endif
-        return ShannonYousuModel(scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonYousuServing)
+        return ShannonYousuModel(
+            scopeKey: conversation.scopeKey, client: conversation.client as? any ShannonYousuServing,
+            defaults: conversation.isDesignPreview ? nil : .standard
+        )
     }
 }
 
