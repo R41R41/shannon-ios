@@ -25,6 +25,10 @@ struct ShannonThreadListSheet: View {
     @State var isCreating = false
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
+    @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) var cameraEnabled = true
+    /// The camera's facts, read when the list opens (the sheet is opened anew each time).
+    @State var cameraHasCamera = true
+    @State var cameraPermission = ShannonMediaPermission.undetermined
 
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -118,6 +122,8 @@ struct ShannonThreadListSheet: View {
             .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
             // One read when the list opens, so the tiles can carry their count and mark; no polling here.
             .task {
+                cameraHasCamera = model.appLook.hasCamera
+                cameraPermission = model.appLook.permission
                 async let ops: Void = yousu.ops.refresh()
                 async let now: Void = yousu.now.reload()
                 _ = await (ops, now)
@@ -211,20 +217,23 @@ struct ShannonThreadListSheet: View {
     }
 
     /// 「カメラ：切」 under the 設定 tile, only while she may not look (A7). Talk and the call show every state.
+    @ViewBuilder
     func cameraOffLine(_ palette: ShannonPalette) -> some View {
-        ShannonAppLookStateReader(coordinator: model.appLook) { state in
-            if state == .off {
-                Label(state.line, systemImage: "eye.slash")
-                    .font(.footnote)
-                    .foregroundStyle(palette.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(state.line)
-                    .accessibilityIdentifier("sheet-app-look-off")
-                    .listRowInsets(EdgeInsets(top: 0, leading: ShannonSpacing.large, bottom: 0, trailing: ShannonSpacing.large))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
+        let state = ShannonAppLookVisibleState.make(
+            enabled: cameraEnabled, hasCamera: cameraHasCamera, permission: cameraPermission,
+            isCapturing: model.appLook.isCapturing)
+        // Read here, not in a reader view: a List makes no row, and runs nothing, for a view that shows nothing.
+        if state == .off {
+            Label(state.line, systemImage: "eye.slash")
+                .font(.footnote)
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(state.line)
+                .accessibilityIdentifier("sheet-app-look-off")
+                .listRowInsets(EdgeInsets(top: 0, leading: ShannonSpacing.large, bottom: 0, trailing: ShannonSpacing.large))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         }
     }
 
