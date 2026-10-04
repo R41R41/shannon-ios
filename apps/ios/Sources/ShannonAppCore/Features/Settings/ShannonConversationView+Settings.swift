@@ -86,8 +86,6 @@ extension ShannonConversationView {
                 ShannonIncomingCallSettingsSection()
 #endif
 
-                ShannonAutonomySettingsSection(model: memoryModel.autonomy)
-
                 Section("接続と詳細") {
                     if let connectionModel {
                         settingsValueButton(

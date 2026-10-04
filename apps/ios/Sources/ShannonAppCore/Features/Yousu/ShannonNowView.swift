@@ -71,7 +71,7 @@ public struct ShannonNowView: View {
         let items = waiting
         Section {
             if items.isEmpty {
-                Label("待っていることはありません", systemImage: "checkmark.circle")
+                Label(ShannonGeneratedStrings.shannonCardNothingWaiting, systemImage: "checkmark.circle")
                     .font(.callout)
                     .foregroundStyle(palette.textSecondary)
             } else {

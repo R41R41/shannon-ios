@@ -5,17 +5,16 @@ import UIKit
 import AppKit
 #endif
 
-/// iPhone conversation list: search on top, four destination tiles, then threads grouped by date.
+/// iPhone conversation list: search on top, the three entries 作業／シャノン／設定
+/// (the fourth, トーク, is this list itself), then threads grouped by date.
 struct ShannonThreadListSheet: View {
     let model: ShannonConversationModel
-    /// 「ようす」: its models, the autonomy model its waiting items open, and a link's request for it.
+    /// What the 「シャノン」 tile counts and the 「設定」 tile marks.
     let yousu: ShannonYousuModel
-    let autonomy: ShannonAutonomyModel?
-    @Binding var yousuRequest: ShannonYousuLink.Request?
     let selectedThreadId: String?
     let openTalk: () -> Void
     let openWork: () -> Void
-    let openMemory: () -> Void
+    let openShannon: () -> Void
     let openSettings: () -> Void
     let openAgentTask: (UUID) -> Void
     let close: () -> Void
@@ -26,8 +25,6 @@ struct ShannonThreadListSheet: View {
     @State var isCreating = false
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
-    @State var showsYousu = false
-    @State var yousuSegment: ShannonYousuSegment?
 
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,14 +47,16 @@ struct ShannonThreadListSheet: View {
     var destinations: [ShannonThreadListDestination] {
         [
             ShannonThreadListDestination(
-                title: "作業",
+                title: ShannonGeneratedStrings.navWork,
                 symbol: "point.3.connected.trianglepath.dotted",
                 badge: model.unreadAgentTaskCount,
                 action: openWork
             ),
-            ShannonThreadListDestination(title: "頭の中", symbol: "brain.head.profile", badge: nil, action: openMemory),
-            yousuDestination,
-            ShannonThreadListDestination(title: "設定", symbol: "gearshape", badge: nil, action: openSettings),
+            ShannonThreadListDestination(
+                title: ShannonGeneratedStrings.navShannon, symbol: "person.crop.circle",
+                badge: yousu.now.waitingItems.count, attention: yousu.needsAttention, action: openShannon
+            ),
+            settingsDestination,
         ]
     }
 
@@ -117,10 +116,12 @@ struct ShannonThreadListSheet: View {
                 }
             }
             .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
-            .navigationDestination(isPresented: $showsYousu) { yousuPage }
-            .onChange(of: yousuRequest, initial: true) { applyYousuRequest() }
-            // One read when the list opens, so the tile can carry its mark; no polling here.
-            .task { await yousu.ops.refresh() }
+            // One read when the list opens, so the tiles can carry their count and mark; no polling here.
+            .task {
+                async let ops: Void = yousu.ops.refresh()
+                async let now: Void = yousu.now.reload()
+                _ = await (ops, now)
+            }
             .navigationTitle("シャノン")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -165,7 +166,7 @@ struct ShannonThreadListSheet: View {
         }
     }
 
-    /// Four equal tiles; accessibility text sizes fall back to full-width native rows.
+    /// Three equal tiles; accessibility text sizes fall back to full-width native rows.
     @ViewBuilder
     func destinationsSection(palette: ShannonPalette) -> some View {
         if dynamicTypeSize.isAccessibilitySize {

@@ -751,7 +751,7 @@
     {
       "key": "nav.shannon",
       "text": "シャノン",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonWorkspaceChrome.swift",
       "decided": "2026-10-03",
       "windowsNow": "シャノン",
       "macNow": "（無い。頭の中）",
@@ -1022,10 +1022,10 @@
     {
       "key": "shannon.card.nothingWaiting",
       "text": "あなたを待っていることは、ありません。",
-      "apple": "new",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
       "decided": "2026-10-05",
       "windowsNow": "あなたを待っていることは、ありません。",
-      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカード。iPhone の「ようす」は、いま「待っていることはありません」（copy-differences.md の 0）。"
+      "note": "Windows の担当が W0〜W4 で足した文。2026-10-05 に受け入れた（Syzygy の調整役）。「シャノン」の先頭のカード。iPhone も A4 でこの文にした（ようす と シャノンのカード）。"
     },
     {
       "key": "shannon.card.awaitingReaction",

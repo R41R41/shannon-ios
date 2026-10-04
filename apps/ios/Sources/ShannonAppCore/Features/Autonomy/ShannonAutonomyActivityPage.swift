@@ -1,14 +1,19 @@
 import SwiftUI
 
 /// 「したことの記録」: the state of the stop switch, today's budget, what waits for
-/// the owner, and the append-only record grouped by day. Reached from 頭の中 and Settings.
+/// the owner, and the append-only record grouped by day. On the iPhone it is the page
+/// 「シャノン › 自律活動」 (`isHub`), which also leads to her pursuits and models;
+/// the Mac reaches it from 頭の中 and Settings.
 public struct ShannonAutonomyActivityPage: View {
     @Bindable private var model: ShannonAutonomyModel
+    private let isHub: Bool
     @State private var approvedAmount: Double = 0
     @State private var proposalToStart: ShannonAutonomyProposalDTO?
+    @Environment(\.colorScheme) private var colorScheme
 
-    public init(model: ShannonAutonomyModel) {
+    public init(model: ShannonAutonomyModel, isHub: Bool = false) {
         self.model = model
+        self.isHub = isHub
     }
 
     public var body: some View {
@@ -25,6 +30,7 @@ public struct ShannonAutonomyActivityPage: View {
                 budgetSection(overview)
                 proposalSection
             }
+            if isHub { pursuitsSection }
             ForEach(model.days) { day in
                 Section {
                     Text(day.summary)
@@ -46,7 +52,7 @@ public struct ShannonAutonomyActivityPage: View {
                 }
             }
         }
-        .navigationTitle("したことの記録")
+        .navigationTitle(isHub ? ShannonGeneratedStrings.navAutonomy : "したことの記録")
         .overlay {
             if model.overview == nil, model.isLoading {
                 ProgressView("記録を確認中")
@@ -66,6 +72,34 @@ public struct ShannonAutonomyActivityPage: View {
             Button("キャンセル", role: .cancel) {}
         } message: { proposal in
             Text("「\(proposal.title)」を作業として開始します。進み具合は作業の一覧で確認できます。")
+        }
+    }
+
+    // MARK: Pursuits
+
+    /// Her own aims and questions, and the models she uses: one row to the page that has both.
+    private var pursuitsSection: some View {
+        Section {
+            NavigationLink {
+                ShannonAutonomyPursuitsPage(model: model)
+            } label: {
+                VStack(alignment: .leading, spacing: ShannonSpacing.small) {
+                    ForEach(model.featuredPursuits) { pursuit in
+                        ShannonPursuitLine(pursuit: pursuit, palette: ShannonPalette.resolve(colorScheme))
+                    }
+                    if model.featuredPursuits.isEmpty {
+                        Text(model.overview == nil ? (model.errorMessage ?? "読み込み中…") : "いま続けているものはありません")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
+            }
+            .accessibilityHint("シャノン自身の目標・問い・作品と、使うモデルを開きます")
+            .accessibilityIdentifier("autonomy-pursuits-entry")
+        } header: {
+            Text("シャノンのやりたいこと")
+        } footer: {
+            Text("あなたの目的とは別に、シャノン自身が持っている目標と問いです。使うモデルもここから見られます。")
         }
     }
 

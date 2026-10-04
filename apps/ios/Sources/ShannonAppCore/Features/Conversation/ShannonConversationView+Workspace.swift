@@ -17,9 +17,9 @@ extension ShannonConversationView {
                 Image(systemName: "sidebar.left")
             }
             .accessibilityLabel("トークと画面を開く")
-            .accessibilityValue(model.totalBadgeCount > 0 ? "未確認\(model.totalBadgeCount)件" : "未確認なし")
+            .accessibilityValue(ShannonEntryMarks.accessibilityValue(unread: model.totalBadgeCount, waiting: shannonWaitingCount))
             .overlay(alignment: .topTrailing) {
-                if model.totalBadgeCount > 0 {
+                if model.totalBadgeCount > 0 || shannonWaitingCount > 0 {
                     Circle()
                         .fill(ShannonPalette.resolve(resolvedColorScheme).danger)
                         .frame(width: 8, height: 8)
@@ -50,6 +50,9 @@ extension ShannonConversationView {
         }
     }
 
+    /// Her stories that wait for a reaction, and her proposals and budget request that wait for a decision.
+    var shannonWaitingCount: Int { yousu.now.waitingItems.count }
+
     func workspaceContent(_ palette: ShannonPalette) -> some View {
         Group {
             switch selectedPage {
@@ -57,12 +60,8 @@ extension ShannonConversationView {
                 talkPage(palette)
             case .work:
             ShannonAgentTaskOverviewView(model: model, openTask: openAgentTask)
-            case .memory:
-            ShannonMemoryView(
-                model: memoryModel,
-                showsDismissButton: false,
-                workspaceTopInset: 0
-            )
+            case .shannon:
+                shannonHub
             }
         }
     }

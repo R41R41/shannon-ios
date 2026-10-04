@@ -9,7 +9,11 @@ extension ShannonConversationView {
     func handleSelectedPageChange() {
         composerIsFocused = false
         voiceModel.cancel()
-        guard selectedPage == .memory else { return }
+        guard selectedPage == .shannon else {
+            // Leaving 「シャノン」 closes what was pushed there, so that it opens on its card next time.
+            hubShowsYousu = false
+            return
+        }
         Task { await memoryModel.reload() }
     }
 
@@ -68,8 +72,8 @@ extension ShannonConversationView {
         Task { await model.acknowledgeVisibleInitiatives() }
     }
 
-    func openMemoryFromThreadList() {
-        settleWorkspace(on: .memory)
+    func openShannonFromThreadList() {
+        settleWorkspace(on: .shannon)
         closeThreadList()
     }
 

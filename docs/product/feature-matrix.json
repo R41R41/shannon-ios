@@ -124,11 +124,12 @@
       "description": "入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。",
       "surfaces": {
         "ios": {
-          "status": "partial",
-          "note": "シートのタイルは 作業／頭の中／設定。「シャノン」が無い。",
+          "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift"
-          ]
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonWorkspaceChrome.swift#case shannon"
+          ],
+          "note": "トークはシートの一覧そのもの。上のタイルは 作業／シャノン／設定（A4）。"
         },
         "macos": {
           "status": "partial",
@@ -154,9 +155,12 @@
       "description": "先頭のカードにシャノンのいまと待っていること（押すと「ようす」が開く）。その下に 頭の中・自律活動・書斎 の入口。",
       "surfaces": {
         "ios": {
-          "status": "planned",
-          "note": "いちばん近いのは「頭の中」（中に自律活動と書斎の入口がある）と、シートの「ようす」のタイル。",
-          "branch": "codex/shannon/unified-structure"
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonConversation+Yousu.swift#shannonHub"
+          ],
+          "note": "先頭のカード（シャノンのいまと待っていること。押すと ようす）と、頭の中／自律活動／書斎（A4）。"
         },
         "macos": {
           "status": "planned",
@@ -1363,7 +1367,7 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyModel.swift"
           ]
         },
@@ -1473,7 +1477,8 @@
         "ios": {
           "status": "yes",
           "evidence": [
-            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift"
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift#ShannonAutonomyPursuitsPage",
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift#pursuitsSection"
           ]
         },
         "macos": {
@@ -1904,7 +1909,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift"
           ],
-          "note": "いまはシートの 4 つめのタイル「ようす」から開く。「シャノン」の先頭のカードから開く形は A4。"
+          "note": "「シャノン」の先頭のカードから開く（A4）。"
         },
         "macos": {
           "status": "no",

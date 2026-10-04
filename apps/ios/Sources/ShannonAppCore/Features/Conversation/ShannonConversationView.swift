@@ -32,8 +32,10 @@ public struct ShannonConversationView: View {
     @State var showsSettings = false
     @State var showsThreadList = false
     @State var yousu: ShannonYousuModel
-    @State var yousuRequest: ShannonYousuLink.Request?
     @State var didApplyYousuPreview = false
+    /// 「シャノン › ようす」 is open, and the segment a link asked it for.
+    @State var hubShowsYousu = false
+    @State var hubYousuSegment: ShannonYousuSegment?
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -113,6 +115,11 @@ public struct ShannonConversationView: View {
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
             await pollAgentTasksWhileActive()
         }
+        // What waits for the owner in 「シャノン」, for the mark on the top-left button: read when the app comes to the front.
+        .task(id: scenePhase == .active) {
+            guard scenePhase == .active else { return }
+            await yousu.now.reload()
+        }
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
@@ -166,12 +173,10 @@ public struct ShannonConversationView: View {
             ShannonThreadListSheet(
                 model: model,
                 yousu: yousu,
-                autonomy: memoryModel.autonomy.isSupported ? memoryModel.autonomy : nil,
-                yousuRequest: $yousuRequest,
                 selectedThreadId: model.selectedThreadId,
                 openTalk: openTalkFromThreadList,
                 openWork: openWorkFromThreadList,
-                openMemory: openMemoryFromThreadList,
+                openShannon: openShannonFromThreadList,
                 openSettings: openSettingsFromThreadList,
                 openAgentTask: openAgentTaskFromThreadList,
                 close: closeThreadList
