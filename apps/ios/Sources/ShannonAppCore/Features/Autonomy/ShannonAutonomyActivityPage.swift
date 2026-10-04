@@ -88,7 +88,7 @@ public struct ShannonAutonomyActivityPage: View {
             VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                 LabeledContent("使った額", value: overview.budget.usedLabel)
                 ProgressView(value: overview.budget.fraction)
-                    .tint(overview.budget.exhausted ? Color.shannonAttention : Color.accentColor)
+                    .tint(overview.budget.exhausted ? Color.shannonAttention : Color.shannonActionColor)
                     .accessibilityHidden(true)
                 if overview.budget.extraYen > 0 {
                     Text("今日だけ\(ShannonAutonomyFormat.yen(overview.budget.extraYen))増やしています。")
@@ -241,7 +241,7 @@ struct ShannonAutonomyActivityRow: View {
                     } label: {
                         Text("書斎で開く")
                             .font(.footnote)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Color.shannonActionColor)
                             .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                     }
                     .accessibilityHint("この時に書いたものを書斎で開きます")
@@ -258,7 +258,7 @@ struct ShannonAutonomyActivityRow: View {
     private var tint: Color {
         switch entry.outcome {
         case "refused", "failed": Color.shannonAttention
-        case "needs_approval", "requested": Color.accentColor
+        case "needs_approval", "requested": Color.shannonActionColor
         default: Color.secondary
         }
     }

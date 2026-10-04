@@ -77,7 +77,7 @@ Windows の実装は、このリポジトリからは確かめられない。Win
 
 ## 生成したファイルを、いつアプリが使い始めるか
 
-いまは、アプリは生成したファイルを使っていない（見た目も動きも変えていない）。生成したファイルは `design/generated/` にあり、Swift のパッケージには入っていない。使い始める順番:
+生成した Swift は、`design/generated/` と同じものが Swift のパッケージの `apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/` にも出る（`scripts/generate-product-spec.mjs`。古ければ検証が落ちる）。**A3（2026-10-05）で、1 と 2 の色・余白・角丸は生成した値を読むようになった。** `Color.accentColor`（7 か所）は `Color.shannonActionColor`（`action` の青）にした。iPhone の強調色は同じ青なので、iPhone の見た目は変わらない。残り（OS の色、角丸 22・18・12・2、文字の大きさ、細かい余白、動きの長さ）は、目盛りに無い値で、置き換えると見た目が変わるので、まだそのまま。使い始める順番:
 
 1. **色**: `ShannonDesignSystem.swift` の `ShannonColorTokens` の値を、`ShannonGeneratedTokens.Color` から取るようにする。生成した Swift を `apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/` に出すよう、生成の出力先を足す。値は同じなので、見た目は変わらない。`ShannonPalette` の名前（`brandPresence` など）はそのままでよい。役割の対応は `tokens.json` の `swift` に書いてある。
 2. **余白・角丸・動き**: `ShannonSpacing`、`ShannonShape` を生成した値に向ける。動きの長さは、直接書いてある所（下の一覧）を `ShannonGeneratedTokens.Motion` に置き換える。

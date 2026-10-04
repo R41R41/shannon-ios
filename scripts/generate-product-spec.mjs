@@ -18,6 +18,7 @@ export const sourcePaths = {
   matrix: 'docs/product/feature-matrix.json',
 };
 
+export const appleGeneratedFolder = 'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated';
 export const surfaces = ['ios', 'macos', 'windows'];
 export const surfaceTitles = { ios: 'iOS', macos: 'macOS', windows: 'Windows' };
 export const statuses = ['yes', 'partial', 'no', 'not_applicable', 'planned', 'unknown'];
@@ -277,6 +278,9 @@ export function outputs({ tokens, strings, matrix }) {
     'design/generated/shannon-tokens.css': renderTokensCss(tokens),
     'design/generated/shannon-tokens.ts': renderTokensTs(tokens),
     'design/generated/ShannonStrings.generated.swift': renderStringsSwift(strings),
+    // The same Swift, compiled into the shared Apple package (iOS and macOS read these values).
+    [`${appleGeneratedFolder}/ShannonDesignTokens.generated.swift`]: renderTokensSwift(tokens),
+    [`${appleGeneratedFolder}/ShannonStrings.generated.swift`]: renderStringsSwift(strings),
     'design/generated/shannon-strings.ja.ts': renderStringsTs(strings),
     'docs/product/feature-matrix.md': renderMatrixMarkdown(matrix),
   };

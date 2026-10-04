@@ -84,7 +84,7 @@ struct ShannonStudyPieceRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
             Image(systemName: piece.symbolName)
-                .foregroundStyle(piece.hidden ? Color.secondary : Color.accentColor)
+                .foregroundStyle(piece.hidden ? Color.secondary : Color.shannonActionColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(piece.displayTitle)
@@ -260,7 +260,7 @@ public struct ShannonStudyPiecePage: View {
                                 .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
                         }
                         .buttonStyle(.bordered)
-                        .tint(isSelected ? Color.accentColor : Color.secondary)
+                        .tint(isSelected ? Color.shannonActionColor : Color.secondary)
                         .accessibilityAddTraits(isSelected ? .isSelected : [])
                         .accessibilityIdentifier("study-reaction-\(choice.id)")
                     }
