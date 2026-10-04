@@ -273,8 +273,13 @@ final class ShannonYousuOpsTests: XCTestCase {
         await forgetful.refresh()
         XCTAssertNil(forgetful.attentionReason())
 
-        // Unpairing or pairing again forgets it.
+        // The pairing is not written as it is.
+        XCTAssertFalse(defaults.dictionaryRepresentation().keys.contains { $0.contains("device-1") })
+        // Unpairing or pairing again forgets it, and a mark already shown drops at once.
+        XCTAssertNotNil(launched.attentionReason())
         ShannonOpsModel.forgetArrivedReports(in: defaults)
+        XCTAssertNil(launched.attentionReason())
+        XCTAssertNil(earlier.snapshot)
         let afterUnpair = ShannonOpsModel(scopeKey: "local-owner", client: down, defaults: defaults)
         await afterUnpair.refresh()
         XCTAssertFalse(afterUnpair.reportArrivedBefore)

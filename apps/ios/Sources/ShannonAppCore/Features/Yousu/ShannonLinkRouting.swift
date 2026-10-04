@@ -1,31 +1,31 @@
 import SwiftUI
 
 /// What a link moves out of the way so that its place is what the owner sees. Pure, so it can be tested.
-/// - A call screen, wherever it is shown, is never covered or closed: the link waits until it is minimised
-///   or the call ends. So does anything else up that a link cannot close itself (a sheet from her words,
-///   a picker, the camera explanation, a page inside Settings): every cover of `ShannonDialogueCovers`
-///   other than the thread list, Settings and a work task makes it wait.
-/// - ようす (「シャノン › ようす」) is a page of the workspace: the thread list, Settings and a work task close.
-/// - 運用 is in Settings: the thread list and a work task close, and Settings comes up once they have gone.
+/// The rules are few on purpose:
+/// - A link closes only the thread list and a work task. Anything else that is up makes it wait until it is
+///   gone: a call screen wherever it is shown, any other cover of `ShannonDialogueCovers` (a sheet from her
+///   words, a picker, the camera explanation), and for ようす, Settings itself, whatever is open inside it
+///   (a page, a confirmation): a link never closes Settings.
+/// - ようす (「シャノン › ようす」) is a page of the workspace: it opens once the thread list and a work task are closed.
+/// - 運用 is in Settings: with Settings open it is pushed inside it; otherwise Settings comes up, after what
+///   was closed has finished leaving.
 struct ShannonLinkRoute: Equatable {
     var waits = false
     var closesThreadList = false
-    var closesSettings = false
     var closesWorkTask = false
     /// The place opens on the next try, once what was closed has finished leaving.
     var opensAfterClosing = false
 
-    static func make(
-        _ request: ShannonYousuLink.Request, covers: ShannonDialogueCovers, callScreenElsewhere: Bool, settingsDetail: Bool
-    ) -> Self {
+    static func make(_ request: ShannonYousuLink.Request, covers: ShannonDialogueCovers, callScreenElsewhere: Bool) -> Self {
         var others = covers
         others.threadList = false
         others.settings = false
         others.workTask = false
-        guard !others.isAny, !callScreenElsewhere, !(covers.settings && settingsDetail) else { return Self(waits: true) }
+        guard !others.isAny, !callScreenElsewhere else { return Self(waits: true) }
         switch request {
         case .yousu:
-            return Self(closesThreadList: covers.threadList, closesSettings: covers.settings, closesWorkTask: covers.workTask)
+            guard !covers.settings else { return Self(waits: true) }
+            return Self(closesThreadList: covers.threadList, closesWorkTask: covers.workTask)
         case .ops:
             return Self(
                 closesThreadList: covers.threadList, closesWorkTask: covers.workTask,
@@ -50,7 +50,6 @@ struct ShannonLinkRetryKey: Equatable {
     var pending: ShannonDeferredLink?
     var covers: ShannonDialogueCovers
     var callScreenElsewhere: Bool
-    var settingsDetail: Bool
 }
 
 extension ShannonConversationView {
@@ -63,16 +62,8 @@ extension ShannonConversationView {
 #endif
     }
 
-    /// A sheet of Settings' own is over it.
-    var settingsDetailIsUp: Bool {
-        showsStateDetails || showsConnectionDetails || showsConnectedDevices || showsAppIconSettings
-            || showsAppearanceSettings || showsTestFlightDelivery || showsVoiceDiagnostics || showsWorldSubscriptions
-    }
-
     var linkRetryKey: ShannonLinkRetryKey {
-        ShannonLinkRetryKey(
-            pending: deferredLink, covers: dialogueCovers, callScreenElsewhere: callScreenElsewhere, settingsDetail: settingsDetailIsUp
-        )
+        ShannonLinkRetryKey(pending: deferredLink, covers: dialogueCovers, callScreenElsewhere: callScreenElsewhere)
     }
 
     /// Opens the place of a link, or lets it wait (`ShannonLinkRoute`).
@@ -82,16 +73,13 @@ extension ShannonConversationView {
             deferredLink = nil
             return
         }
-        let route = ShannonLinkRoute.make(
-            request, covers: dialogueCovers, callScreenElsewhere: callScreenElsewhere, settingsDetail: settingsDetailIsUp
-        )
+        let route = ShannonLinkRoute.make(request, covers: dialogueCovers, callScreenElsewhere: callScreenElsewhere)
         if route.waits {
             deferredLink = link
             return
         }
         composerIsFocused = false
         if route.closesThreadList { showsThreadList = false }
-        if route.closesSettings { showsSettings = false }
         if route.closesWorkTask { selectedAgentTaskID = nil }
         // A cover cannot come up while another is leaving: the place opens on the next try.
         if route.opensAfterClosing {
@@ -104,10 +92,10 @@ extension ShannonConversationView {
             settleWorkspace(on: .shannon)
             hubShowsYousu = true
         case .ops:
-            let wasOpen = showsSettings
-            showsSettings = true
             settingsShowsOps = true
-            if !wasOpen { confirmSettingsCameUp(link) }
+            guard !showsSettings else { return }
+            showsSettings = true
+            checkSettingsCameUp()
         }
     }
 
@@ -120,14 +108,17 @@ extension ShannonConversationView {
         openLink(link.request, since: link.since)
     }
 
-    /// Settings was asked for but did not come up (something came over the workspace meanwhile): it is not
-    /// left asked for, so the 設定 button keeps working and her figure is not held covered; the link waits again.
-    private func confirmSettingsCameUp(_ link: ShannonDeferredLink) {
+    /// One try: if Settings, asked for by this link, has not come up (something unseen was over the workspace),
+    /// it is not left asked for, so the 設定 button keeps working, and the link is dropped. The request's own
+    /// token is cleared when Settings appears or closes, so this never touches a Settings he opened himself.
+    private func checkSettingsCameUp() {
+        let token = UUID()
+        settingsLinkRequest = token
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(1_500))
-            guard showsSettings, !settingsIsOnScreen else { return }
+            guard settingsLinkRequest == token else { return }
+            settingsLinkRequest = nil
             showsSettings = false
-            deferredLink = link
         }
     }
 }

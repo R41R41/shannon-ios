@@ -1,5 +1,16 @@
+import CryptoKit
 import Foundation
 import Observation
+
+/// Counts unpairings and pairings of this app. A reading of 運用 belongs to the pairing it was made under:
+/// when this moves on, what was read before is no longer shown or marked, at once.
+@MainActor
+@Observable
+final class ShannonOpsPairingEpoch {
+    static let shared = ShannonOpsPairingEpoch()
+    private(set) var value = 0
+    func advance() { value &+= 1 }
+}
 
 /// The operations console on the owner's phone: the latest report of the legacy runtime,
 /// and the commands the server says it would accept (`docs/ops-contract.md`).
@@ -40,8 +51,11 @@ public final class ShannonOpsModel {
     private let clock: @Sendable () -> Date
     /// Where "a report has arrived for this pairing before" is kept across launches; nil keeps nothing.
     private let defaults: UserDefaults?
-    /// Whose 運用 the last reading was (`ShannonYousuServing.opsReportScope`), asked at every reading.
+    /// Whose 運用 the readings are (`ShannonYousuServing.opsReportScope`): asked once per pairing, not at every poll.
     private var reportScope: String?
+    private var reportScopeIsKnown = false
+    private var pairingEpoch = ShannonOpsPairingEpoch.shared.value
+    private var isCurrentPairing: Bool { pairingEpoch == ShannonOpsPairingEpoch.shared.value }
     private var fetchedAt: Date?
     private var ageAtFetch: TimeInterval = 0
     private var acceptedAt: Date?
@@ -69,19 +83,24 @@ public final class ShannonOpsModel {
     }
 
     /// Only a yes or no is kept: no part of a report is written to the device.
+    /// The scope is hashed: the server, scope and pairing are not written to the device as they are.
     nonisolated static let reportArrivedPrefix = "shannon.ops.report-arrived."
-    static func reportArrivedKey(_ scope: String) -> String { reportArrivedPrefix + scope }
+    nonisolated static func reportArrivedKey(_ scope: String) -> String {
+        reportArrivedPrefix + SHA256.hash(data: Data(scope.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+    }
 
-    /// Unpairing or pairing again starts from "no report has arrived" (`ShannonConnectionModel`).
-    nonisolated public static func forgetArrivedReports(in defaults: UserDefaults = .standard) {
+    /// Unpairing or pairing again starts from "no report has arrived" (`ShannonConnectionModel`), and what
+    /// was read under the old pairing stops showing and marking at once.
+    public static func forgetArrivedReports(in defaults: UserDefaults = .standard) {
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(reportArrivedPrefix) {
             defaults.removeObject(forKey: key)
         }
+        ShannonOpsPairingEpoch.shared.advance()
     }
 
     // MARK: What the screen may show
 
-    public var snapshot: ShannonOpsSnapshotDTO? { view?.snapshot }
+    public var snapshot: ShannonOpsSnapshotDTO? { isCurrentPairing ? view?.snapshot : nil }
 
     /// The screen exists only once a report was received (contract: otherwise hide it).
     public var hasReport: Bool { isSupported && snapshot != nil }
@@ -99,7 +118,7 @@ public final class ShannonOpsModel {
 
     /// What may be commanded now. Nothing while the report is old or the server is unreachable.
     public func allowed(at date: Date? = nil) -> ShannonOpsAllowedDTO {
-        guard let view, view.commandsSupported, isCurrent(at: date), !isSending else { return .nothing }
+        guard isCurrentPairing, let view, view.commandsSupported, isCurrent(at: date), !isSending else { return .nothing }
         return view.allowed
     }
 
@@ -132,7 +151,7 @@ public final class ShannonOpsModel {
     /// operation of the last hour failed or expired. "Ever" outlives the launch: a server that is
     /// down when the app starts is marked if a report had arrived before.
     public func attentionReason(at date: Date? = nil) -> String? {
-        guard isSupported, !connectionIsInvalid, hasReport || reportArrivedBefore else { return nil }
+        guard isCurrentPairing, isSupported, !connectionIsInvalid, hasReport || reportArrivedBefore else { return nil }
         if unreachableMessage != nil { return ShannonGeneratedStrings.opsAttentionUnreachable }
         // Not read yet in this launch: nothing is known, and nothing is claimed.
         guard didLoad else { return nil }
@@ -238,9 +257,18 @@ public final class ShannonOpsModel {
     }
 
     private func read(_ client: any ShannonYousuServing) async {
-        reportScope = client.opsReportScope(scopeKey: scopeKey)
-        do {
-            let reading = try await client.loadOps(scopeKey: scopeKey)
+        if !isCurrentPairing { forgetReading() }
+        if !reportScopeIsKnown {
+            reportScope = client.opsReportScope(scopeKey: scopeKey)
+            reportScopeIsKnown = true
+        }
+        let epoch = pairingEpoch
+        let result: Result<ShannonOpsReading, Error>
+        do { result = .success(try await client.loadOps(scopeKey: scopeKey)) } catch { result = .failure(error) }
+        // Unpaired or paired anew meanwhile: the answer belongs to a pairing that is gone, and is not kept.
+        guard epoch == ShannonOpsPairingEpoch.shared.value else { return }
+        switch result {
+        case .success(let reading):
             let readAt = clock()
             view = reading.view
             connectionIsInvalid = false
@@ -252,24 +280,37 @@ public final class ShannonOpsModel {
             isSupported = true
             unreachableMessage = nil
             didLoad = true
-        } catch where Self.isCancellation(error) {
+        case .failure(let error) where Self.isCancellation(error):
             // The screen went away mid-request. Nothing was learned, and nothing is claimed.
             return
-        } catch let error as ShannonAPIError where error == .rejected(status: 404) {
+        case .failure(let error as ShannonAPIError) where error == .rejected(status: 404):
             // An older server has no operations console. The screen is not offered.
             isSupported = false
             view = nil
             connectionIsInvalid = false
             didLoad = true
-        } catch let error as ShannonAPIError where error == .rejected(status: 401) {
+        case .failure(let error as ShannonAPIError) where error == .rejected(status: 401):
             unreachableMessage = ShannonGeneratedStrings.opsConnectionInvalid
             connectionIsInvalid = true
             didLoad = true
-        } catch {
+        case .failure:
             unreachableMessage = "シャノンのサーバーに届きませんでした。サーバーが止まっているか、通信ができていません。"
             connectionIsInvalid = false
             didLoad = true
         }
+    }
+
+    /// What was read under a pairing that is gone.
+    private func forgetReading() {
+        pairingEpoch = ShannonOpsPairingEpoch.shared.value
+        view = nil
+        fetchedAt = nil
+        didLoad = false
+        unreachableMessage = nil
+        connectionIsInvalid = false
+        notice = nil
+        reportScope = nil
+        reportScopeIsKnown = false
     }
 
     nonisolated static func isCancellation(_ error: Error) -> Bool {

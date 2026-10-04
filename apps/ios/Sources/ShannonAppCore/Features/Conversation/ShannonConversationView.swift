@@ -40,8 +40,8 @@ public struct ShannonConversationView: View {
     @State var settingsShowsOps = false
     /// A `shannon://` link that waits until what is on screen lets its place be seen (`ShannonLinkRoute`).
     @State var deferredLink: ShannonDeferredLink?
-    /// Settings is really on screen (its cover appeared), not only asked for.
-    @State var settingsIsOnScreen = false
+    /// Set while Settings, asked for by a link, has not appeared yet; cleared when it appears or closes.
+    @State var settingsLinkRequest: UUID?
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -126,7 +126,12 @@ public struct ShannonConversationView: View {
         // The marks on the top-left button: what waits for the owner in 「シャノン」, read when the app comes to the
         // front, and whether 運用 deserves a look, read then and every few minutes while the app stays in front.
         .task(id: scenePhase == .active) { await keepEntryMarks() }
-        .onChange(of: showsSettings) { if !showsSettings { settingsShowsOps = false } }
+        .onChange(of: showsSettings) {
+            if !showsSettings {
+                settingsShowsOps = false
+                settingsLinkRequest = nil
+            }
+        }
         // Her figure in the dialogue display is the surface that may answer a touch in voice: only while it is what he sees.
         .onChange(of: dialogueFigureIsInFront, initial: true) { bodyModel.dialogueIsInFront = dialogueFigureIsInFront }
         .onChange(of: bodyModel.dialogueRequest) { showFigureInTalk() }
@@ -179,16 +184,14 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .fullScreenCover(isPresented: $showsSettings) {
             settingsSheet
-                .onAppear { settingsIsOnScreen = true }
-                .onDisappear { settingsIsOnScreen = false }
+                .onAppear { settingsLinkRequest = nil }
                 .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
                     conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
         }
 #else
         .sheet(isPresented: $showsSettings) {
             settingsSheet
-                .onAppear { settingsIsOnScreen = true }
-                .onDisappear { settingsIsOnScreen = false }
+                .onAppear { settingsLinkRequest = nil }
         }
 #endif
         .sheet(isPresented: $showsThreadList) {

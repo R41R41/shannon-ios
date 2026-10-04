@@ -210,8 +210,8 @@ final class ShannonYousuNowTests: XCTestCase {
             change(&value)
             return value
         }
-        func route(_ request: ShannonYousuLink.Request, _ covers: ShannonDialogueCovers, elsewhere: Bool = false, detail: Bool = false) -> Route {
-            Route.make(request, covers: covers, callScreenElsewhere: elsewhere, settingsDetail: detail)
+        func route(_ request: ShannonYousuLink.Request, _ covers: ShannonDialogueCovers, elsewhere: Bool = false) -> Route {
+            Route.make(request, covers: covers, callScreenElsewhere: elsewhere)
         }
         for request in [ShannonYousuLink.Request.yousu, .ops] {
             // A call screen, the root's or one shown from inside Settings, the thread list or a work task: wait.
@@ -223,11 +223,10 @@ final class ShannonYousuNowTests: XCTestCase {
             for cover: WritableKeyPath<ShannonDialogueCovers, Bool> in [\.fileImporter, \.photoPicker, \.fromWords, \.cameraExplanation] {
                 XCTAssertEqual(route(request, covers { $0[keyPath: cover] = true }), Route(waits: true))
             }
-            // A page of Settings' own over it.
-            XCTAssertEqual(route(request, covers { $0.settings = true }, detail: true), Route(waits: true))
         }
-        // ようす is a page of the workspace: whatever the link may close, closes.
-        XCTAssertEqual(route(.yousu, covers { $0.settings = true }), Route(closesSettings: true))
+        // A link never closes Settings, whatever is open inside it: ようす waits until Settings closes.
+        XCTAssertEqual(route(.yousu, covers { $0.settings = true }), Route(waits: true))
+        // ようす is a page of the workspace: the thread list and a work task close.
         XCTAssertEqual(
             route(.yousu, covers { $0.threadList = true; $0.workTask = true }), Route(closesThreadList: true, closesWorkTask: true)
         )
