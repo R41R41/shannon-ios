@@ -184,8 +184,7 @@ export const shannonVerbatimKeys: readonly ShannonStringKey[] = [
 export const shannonDecidedWording: Readonly<Record<string, { decided: string; windowsBefore?: string; macBefore?: string }>> = {
   "nav.talk": {
     "decided": "2026-10-03",
-    "windowsBefore": "トーク",
-    "macBefore": "会話"
+    "windowsBefore": "トーク"
   },
   "talk.fromShannon": {
     "decided": "2026-10-03",
@@ -201,8 +200,7 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "nav.work": {
     "decided": "2026-10-03",
-    "windowsBefore": "作業",
-    "macBefore": "作業全体"
+    "windowsBefore": "作業"
   },
   "nav.shannon": {
     "decided": "2026-10-03",
@@ -221,13 +219,11 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "nav.memory": {
     "decided": "2026-10-03",
-    "windowsBefore": "（無い）",
-    "macBefore": "頭の中"
+    "windowsBefore": "（無い）"
   },
   "nav.autonomy": {
     "decided": "2026-10-03",
-    "windowsBefore": "自律活動",
-    "macBefore": "シャノンの自律（設定の見出し）"
+    "windowsBefore": "自律活動"
   },
   "nav.admin": {
     "decided": "2026-10-03",
@@ -289,13 +285,11 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "talk.thinking": {
     "decided": "2026-10-03",
-    "windowsBefore": "考えている…",
-    "macBefore": "考えています"
+    "windowsBefore": "考えている…"
   },
   "talk.searchingMemory": {
     "decided": "2026-10-03",
-    "windowsBefore": "（無い）",
-    "macBefore": "記憶を探しています"
+    "windowsBefore": "（無い）"
   },
   "talk.placeholder": {
     "decided": "2026-10-03",
@@ -315,8 +309,7 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   },
   "nav.delivery": {
     "decided": "2026-10-03",
-    "windowsBefore": "（無い）",
-    "macBefore": "Release Center"
+    "windowsBefore": "（無い）"
   },
   "nav.diagnostics": {
     "decided": "2026-10-03",

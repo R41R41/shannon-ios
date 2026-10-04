@@ -25,8 +25,7 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift",
       "windows": "shannon-desktop:src/desk/App.tsx",
       "decided": "2026-10-03",
-      "windowsNow": "トーク",
-      "macNow": "会話"
+      "windowsNow": "トーク"
     },
     {
       "key": "nav.study",
@@ -747,7 +746,6 @@
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/App.tsx",
       "windowsNow": "作業",
-      "macNow": "作業全体",
       "note": "iPhone の画面の見出し「作業全体」も「作業」にする。"
     },
     {
@@ -780,8 +778,7 @@
       "text": "頭の中",
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
       "decided": "2026-10-03",
-      "windowsNow": "（無い）",
-      "macNow": "頭の中"
+      "windowsNow": "（無い）"
     },
     {
       "key": "nav.autonomy",
@@ -790,7 +787,6 @@
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/App.tsx",
       "windowsNow": "自律活動",
-      "macNow": "シャノンの自律（設定の見出し）",
       "note": "iPhone と Mac の設定の見出し「シャノンの自律」も「自律活動」にする。"
     },
     {
@@ -916,16 +912,14 @@
       "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonThinkingState.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/TalkView.tsx",
-      "windowsNow": "考えている…",
-      "macNow": "考えています"
+      "windowsNow": "考えている…"
     },
     {
       "key": "talk.searchingMemory",
       "text": "記憶を探しています…",
       "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonThinkingState.swift",
       "decided": "2026-10-03",
-      "windowsNow": "（無い）",
-      "macNow": "記憶を探しています"
+      "windowsNow": "（無い）"
     },
     {
       "key": "talk.placeholder",
@@ -966,7 +960,6 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）",
-      "macNow": "Release Center",
       "note": "設定 › 管理 の中。Mac では、作業の中にも「配信」として出す。"
     },
     {

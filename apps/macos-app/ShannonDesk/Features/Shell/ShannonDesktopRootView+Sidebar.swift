@@ -29,13 +29,13 @@ extension ShannonDesktopRootView {
             List(selection: sidebarSelection) {
                 Section("ワークスペース") {
                     sidebarDestinationRow(
-                        title: "会話",
+                        title: "トーク",
                         symbol: "bubble.left.and.bubble.right",
                         badge: conversation.unreadInitiativeCount,
                         destination: .talk
                     )
                     sidebarDestinationRow(
-                        title: "作業全体",
+                        title: "作業",
                         symbol: "point.3.connected.trianglepath.dotted",
                         badge: conversation.unreadAgentTaskCount,
                         destination: .work
@@ -79,7 +79,7 @@ extension ShannonDesktopRootView {
                         destination: .development
                     )
                     sidebarDestinationRow(
-                        title: "Release Center",
+                        title: "配信",
                         symbol: "shippingbox",
                         badge: 0,
                         destination: .release

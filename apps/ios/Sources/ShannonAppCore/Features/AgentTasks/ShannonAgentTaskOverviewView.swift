@@ -124,7 +124,7 @@ struct ShannonAgentTaskOverviewView: View {
     private func overviewHeader(palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                Text("作業全体")
+                Text("作業")
                     .font(.largeTitle.bold())
                     .foregroundStyle(palette.textPrimary)
                     .textCase(nil)

@@ -118,7 +118,7 @@ enum ShannonWorkspacePage: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .talk: "トーク"
-        case .work: "作業全体"
+        case .work: "作業"
         case .memory: "頭の中"
         }
     }

@@ -72,7 +72,7 @@ public struct ShannonTestFlightDeliveryView: View {
             }
             .refreshable { await model.reload() }
             .background(palette.readingSurface)
-            .navigationTitle("Release Center")
+            .navigationTitle("配信")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -116,7 +116,7 @@ public struct ShannonTestFlightDeliveryView: View {
     private func releaseProgress(_ release: ShannonReleaseProgressDTO, palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             HStack {
-                Label("Release Center", systemImage: "shippingbox")
+                Label("配信", systemImage: "shippingbox")
                     .font(.headline)
                 Spacer()
                 if let version = release.buildVersion {

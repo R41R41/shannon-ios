@@ -8,7 +8,7 @@ extension ShannonDesktopRootView {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("作業全体")
+                    Text("作業")
                         .font(.largeTitle.weight(.semibold))
                     Text("何を目指し、いまどこにいて、次に何をするかを一つの面で見渡します。")
                         .foregroundStyle(.secondary)
@@ -149,7 +149,7 @@ extension ShannonDesktopRootView {
                             )
                             .foregroundStyle(.secondary)
                         }
-                        DesktopInspectorSection(title: "会話") {
+                        DesktopInspectorSection(title: "トーク") {
                             let context = ShannonDesktopConversationContext(task: task)
                             Label(context.title(in: conversation.threads), systemImage: "bubble.left.and.text.bubble.right")
                                 .foregroundStyle(.secondary)
