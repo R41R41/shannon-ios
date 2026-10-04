@@ -12,6 +12,7 @@ private final class FakeNowClient: ShannonYousuServing, @unchecked Sendable {
     func loadShannonOwnTime(scopeKey: String) async throws -> ShannonNowOwnTimeDTO { try ownTime.get() }
     func loadShannonStudyWaiting(scopeKey: String) async throws -> ShannonNowStudyDTO { try study.get() }
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO { throw ShannonAPIError.rejected(status: 404) }
+    func opsReportScope(scopeKey: String) -> String? { nil }
 }
 
 final class ShannonYousuNowTests: XCTestCase {
@@ -157,6 +158,10 @@ final class ShannonYousuNowTests: XCTestCase {
         XCTAssertEqual(model.waitingItems.map(\.id), ["piece-s1", "budget-b1", "proposal-p1"])
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems), "感想 1・判断 2")
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems + [.init(id: "t", kind: .approval, title: "t", detail: "d")]), "感想 1・判断 2・許可 1")
+        // One list for the card, ようす, the 「シャノン」 tile and the top-left dot: hers, then work waiting for a permission.
+        let approval = ShannonNowWaitingItem(id: "t", kind: .approval, title: "t", detail: "d")
+        XCTAssertEqual(model.waiting(approvals: [approval]).map(\.id), ["piece-s1", "budget-b1", "proposal-p1", "t"])
+        XCTAssertEqual(model.waiting(approvals: []).count, 3)
 
         // A reading that was cancelled (the page went away) claims nothing.
         client.now = .failure(URLError(.cancelled))
@@ -176,20 +181,89 @@ final class ShannonYousuNowTests: XCTestCase {
     }
 
     func testLinks() {
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu")!), .init(segment: nil))
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu/ops")!), .init(segment: .ops))
-        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "SHANNON://Yousu/Now")!), .init(segment: .now))
-        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.ops)), .init(segment: .ops))
+        // ようす is シャノンのいま only; 運用 is 「設定 › 管理 › 運用」, also for the older link.
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu")!), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "SHANNON://Yousu/Now")!), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://yousu/ops")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://admin/ops")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.request(from: URL(string: "shannon://Admin/OPS")!), .ops)
+        XCTAssertEqual(ShannonYousuLink.url(.ops).absoluteString, "shannon://admin/ops")
+        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.yousu)), .yousu)
+        XCTAssertEqual(ShannonYousuLink.request(from: ShannonYousuLink.url(.ops)), .ops)
         // Anything else stays what it was: a pairing link, or nothing.
-        for other in ["shannon://connect?code=ABCDEF012345", "shannon://yousu/other", "shannon://yousu/ops/extra", "https://yousu/ops", "shannon://pair/yousu"] {
+        for other in [
+            "shannon://connect?code=ABCDEF012345", "shannon://yousu/other", "shannon://yousu/ops/extra", "https://yousu/ops",
+            "shannon://pair/yousu", "shannon://admin", "shannon://admin/devices", "https://admin/ops",
+        ] {
             XCTAssertNil(ShannonYousuLink.request(from: URL(string: other)!), other)
         }
-        XCTAssertEqual(ShannonYousuSegment.allCases.map(\.title), ["シャノンのいま", "運用"])
     }
 
-    func testTheTileSaysWhenSomethingDeservesALook() {
-        XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, attention: true, action: {}).accessibilityLabel, "ようす、確かめたいことがあります")
-        XCTAssertEqual(ShannonThreadListDestination(title: "ようす", symbol: "x", badge: nil, action: {}).accessibilityLabel, "ようす")
+    func testALinkMakesItsPlaceSeenAndNeverClosesWhatItCannot() {
+        typealias Route = ShannonLinkRoute
+        let none = ShannonDialogueCovers(
+            threadList: false, settings: false, callScreen: false, workTask: false,
+            fileImporter: false, photoPicker: false, fromWords: false, cameraExplanation: false
+        )
+        func covers(_ change: (inout ShannonDialogueCovers) -> Void) -> ShannonDialogueCovers {
+            var value = none
+            change(&value)
+            return value
+        }
+        func route(_ request: ShannonYousuLink.Request, _ covers: ShannonDialogueCovers, elsewhere: Bool = false) -> Route {
+            Route.make(request, covers: covers, callScreenElsewhere: elsewhere)
+        }
+        for request in [ShannonYousuLink.Request.yousu, .ops] {
+            // A call screen, the root's or one shown from inside Settings, the thread list or a work task: wait.
+            XCTAssertEqual(route(request, covers { $0.callScreen = true }), Route(waits: true))
+            XCTAssertEqual(route(request, covers { $0.settings = true }, elsewhere: true), Route(waits: true))
+            XCTAssertEqual(route(request, covers { $0.threadList = true }, elsewhere: true), Route(waits: true))
+            XCTAssertEqual(route(request, covers { $0.workTask = true }, elsewhere: true), Route(waits: true))
+            // Anything else up that a link cannot close: wait until it is gone. Every such cover, one at a time.
+            for cover: WritableKeyPath<ShannonDialogueCovers, Bool> in [\.fileImporter, \.photoPicker, \.fromWords, \.cameraExplanation] {
+                XCTAssertEqual(route(request, covers { $0[keyPath: cover] = true }), Route(waits: true))
+            }
+        }
+        // A link never closes Settings, whatever is open inside it: ようす waits until Settings closes.
+        XCTAssertEqual(route(.yousu, covers { $0.settings = true }), Route(waits: true))
+        // ようす is a page of the workspace: the thread list and a work task close.
+        XCTAssertEqual(
+            route(.yousu, covers { $0.threadList = true; $0.workTask = true }), Route(closesThreadList: true, closesWorkTask: true)
+        )
+        XCTAssertEqual(route(.yousu, none), Route())
+        // 運用 is in Settings: what is over the workspace gives way, and Settings comes up on the next try.
+        XCTAssertEqual(route(.ops, covers { $0.workTask = true }), Route(closesWorkTask: true, opensAfterClosing: true))
+        XCTAssertEqual(route(.ops, covers { $0.threadList = true }), Route(closesThreadList: true, opensAfterClosing: true))
+        XCTAssertEqual(route(.ops, covers { $0.settings = true }), Route())
+        XCTAssertEqual(route(.ops, none), Route())
+    }
+
+    func testAWaitingLinkIsDroppedOnceItIsAFewMinutesOld() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let link = ShannonDeferredLink(request: .ops, since: start)
+        XCTAssertFalse(link.isStale(at: start.addingTimeInterval(ShannonDeferredLink.lifetime)))
+        XCTAssertTrue(link.isStale(at: start.addingTimeInterval(ShannonDeferredLink.lifetime + 1)))
+    }
+
+    func testTheTilesAndTheTopLeftButtonSayWhatTheyMark() {
+        XCTAssertEqual(ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, attention: true, action: {}).accessibilityLabel, "設定、確かめたいことがあります")
+        XCTAssertEqual(
+            ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, attention: true, attentionReason: "Notionが不調", action: {}).accessibilityLabel,
+            "設定、運用：Notionが不調"
+        )
+        XCTAssertEqual(ShannonThreadListDestination(title: "設定", symbol: "x", badge: nil, action: {}).accessibilityLabel, "設定")
+        XCTAssertEqual(ShannonThreadListDestination(title: "シャノン", symbol: "x", badge: 2, action: {}).accessibilityLabel, "シャノン、2件")
+        XCTAssertEqual(ShannonEntryMarks.accessibilityValue(unread: 0, waiting: 0), "未確認なし")
+        // A work task waiting for a permission and already unread is said once, as unread.
+        let approval = ShannonNowWaitingItem(id: "task-1", kind: .approval, title: "t", detail: "d")
+        let story = ShannonNowWaitingItem(id: "piece-1", kind: .reaction, title: "s", detail: "d")
+        XCTAssertEqual(ShannonEntryMarks.waitingNotUnread([story, approval], unreadTaskIDs: ["task-1"]), 1)
+        XCTAssertEqual(ShannonEntryMarks.waitingNotUnread([story, approval], unreadTaskIDs: []), 2)
+        XCTAssertEqual(ShannonEntryMarks.waitingNotUnread([.init(id: "task-1", kind: .reaction, title: "s", detail: "d")], unreadTaskIDs: ["task-1"]), 1)
+        XCTAssertEqual(
+            ShannonEntryMarks.accessibilityValue(unread: 3, waiting: 1, opsAttention: "報告が届いていません"),
+            "未確認3件、シャノンが待っていること1件、運用：報告が届いていません"
+        )
     }
 
     func testATouchIsToldWithItsPartAndSurfaceWhenTheServerKnowsThem() throws {

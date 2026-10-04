@@ -43,7 +43,7 @@ public struct ShannonStudyPieceLinkCard: View {
             } label: {
                 HStack(alignment: .center, spacing: ShannonSpacing.small) {
                     Image(systemName: "book.closed")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.shannonActionColor)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(link.title.isEmpty ? "シャノンの物語" : link.title)

@@ -10,8 +10,11 @@ public struct ShannonTurnCaptureList: View {
     @State private var opened: ShannonTurnCaptureDTO?
     @State private var confirming: ShannonTurnCaptureDTO?
     @State private var failure: String?
+    /// This list's own id among the covers of her figure.
+    @State private var coverID = UUID()
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ShannonBodyModel.self) private var bodyModel: ShannonBodyModel?
 
     public init(message: ConversationMessage, conversation: ShannonConversationModel, memory: ShannonMemoryModel) {
         self.message = message
@@ -23,6 +26,8 @@ public struct ShannonTurnCaptureList: View {
         message.role == .shannon
             && (!message.captures.isEmpty || (message.reminder.map { $0.state != "superseded" } ?? false))
     }
+
+    private var coversFigure: Bool { opened != nil || confirming != nil }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -44,6 +49,10 @@ public struct ShannonTurnCaptureList: View {
         .sheet(item: $opened, onDismiss: { Task { await conversation.refreshCaptures() } }) { capture in
             ShannonTurnCaptureDestination(capture: capture, memory: memory)
         }
+        // In the dialogue display this sheet, and the confirmation below, come over her figure:
+        // her voice for a touch stops while either is up.
+        .onChange(of: coversFigure) { bodyModel?.setCoverFromWords(coverID, isUp: coversFigure) }
+        .onDisappear { bodyModel?.setCoverFromWords(coverID, isUp: false) }
         .confirmationDialog(
             confirming.map(ShannonTurnCapturePresentation.undoTitle) ?? "取り消す",
             isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),

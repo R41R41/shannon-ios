@@ -45,6 +45,13 @@ extension ShannonConversationModel {
         agentTasks.filter { $0.status.isActive }.map(\.id.uuidString).sorted().joined(separator: ",")
     }
 
+    /// The work tasks counted as unread (the 作業 tile and the top-left 未確認).
+    var unreadAgentTaskIDs: Set<String> {
+        Set(agentTasks.filter { task in
+            task.attention?.countsAsUnread == true && agentTaskNeedsNotice(task)
+        }.map(\.id.uuidString))
+    }
+
     public var unreadAgentTaskCount: Int {
         agentTasks.filter { task in
             task.attention?.countsAsUnread == true && agentTaskNeedsNotice(task)

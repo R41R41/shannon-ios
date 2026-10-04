@@ -128,6 +128,7 @@ public final class ShannonConnectionModel {
                 expiresAt: expiresAt
             )
             try store.save(credential)
+            ShannonOpsModel.forgetArrivedReports()
             connectedDeviceRevision += 1
             connectedDevices = []
             status = .connected(deviceName: paired.displayName)
@@ -238,6 +239,7 @@ public final class ShannonConnectionModel {
                 throw ShannonConnectionError.rejected(status: http.statusCode)
             }
             try store.delete()
+            ShannonOpsModel.forgetArrivedReports()
             connectedDeviceRevision += 1
             status = .disconnected
             verificationStatus = .idle

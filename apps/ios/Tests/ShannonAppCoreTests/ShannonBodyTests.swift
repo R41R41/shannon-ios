@@ -27,7 +27,7 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
-        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-02T21:10:28.760Z")
+        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-04T19:22:15.824Z")
     }
 
     func testCommandsAreGuardedCallsWithEncodedArguments() {
@@ -155,6 +155,88 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(layout.scale, 1, accuracy: 0.0001)
         XCTAssertEqual(layout.offsetX, 50, accuracy: 0.0001)
         XCTAssertEqual(tracker.pinch(scale: .nan), 1)
+    }
+
+    @MainActor
+    func testHerVoiceAnswersOnlyFromTheDialogueDisplayInFrontAndEveryOtherConditionStillHolds() {
+        // The surface: Talk, its dialogue display, nothing over it (the body screen's "it is up", since A6).
+        XCTAssertTrue(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .scroll, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covered: true))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .work, displayMode: .dialogue, covered: false))
+        XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .shannon, displayMode: .dialogue, covered: false))
+
+        func answers(
+            front: Bool = true, active: Bool = true, audience: ShannonBodyAudience = .owner,
+            mode: ShannonBodyReplyMode = .voice, reports: Bool = true, form: ShannonForm = .live2d
+        ) -> Bool {
+            ShannonBodyModel.answersInVoice(dialogueIsInFront: front, sceneIsActive: active, audience: audience, replyMode: mode, reportsTouch: reports, form: form)
+        }
+        XCTAssertTrue(answers())
+        // Each condition alone is enough to keep her voice and the microphone off.
+        XCTAssertFalse(answers(front: false))
+        XCTAssertFalse(answers(active: false))
+        XCTAssertFalse(answers(audience: .others))
+        XCTAssertFalse(answers(mode: .text))
+        XCTAssertFalse(answers(reports: false))
+        XCTAssertFalse(answers(form: .waterlight))
+        // A model that was never told the dialogue is in front answers in text.
+        XCTAssertFalse(ShannonBodyModel().dialogueIsInFront)
+    }
+
+    func testEveryCoverOfTheDialogueDisplayHidesHerFigure() {
+        let none = ShannonDialogueCovers(
+            threadList: false, settings: false, callScreen: false, workTask: false,
+            fileImporter: false, photoPicker: false, fromWords: false, cameraExplanation: false
+        )
+        // The covers the conversation root must name, each one: a new one is added here and there together.
+        let covers: [(String, WritableKeyPath<ShannonDialogueCovers, Bool>)] = [
+            ("threadList", \.threadList), ("settings", \.settings), ("callScreen", \.callScreen), ("workTask", \.workTask),
+            ("fileImporter", \.fileImporter), ("photoPicker", \.photoPicker), ("fromWords", \.fromWords),
+            ("cameraExplanation", \.cameraExplanation),
+        ]
+        XCTAssertEqual(Mirror(reflecting: none).children.compactMap(\.label), covers.map(\.0))
+        // Every field is a Bool, so `isAny` reads each one; a field of another type would be skipped silently.
+        XCTAssertEqual(Mirror(reflecting: none).children.count, 8)
+        XCTAssertTrue(Mirror(reflecting: none).children.allSatisfy { $0.value is Bool })
+        XCTAssertFalse(none.isAny)
+        XCTAssertTrue(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covers: none))
+        for (name, cover) in covers {
+            var one = none
+            one[keyPath: cover] = true
+            XCTAssertTrue(one.isAny, name)
+            XCTAssertFalse(ShannonBodyModel.dialogueIsInFront(page: .talk, displayMode: .dialogue, covers: one), name)
+        }
+    }
+
+    func testOneListClosingItsSheetDoesNotUncoverAnothers() {
+        let model = ShannonBodyModel()
+        let first = UUID(), second = UUID()
+        model.setCoverFromWords(first, isUp: true)
+        model.setCoverFromWords(second, isUp: true)
+        model.setCoverFromWords(first, isUp: false)
+        XCTAssertTrue(model.sheetFromWordsIsUp)
+        // A list that goes away twice, or one that never had a sheet up, changes nothing.
+        model.setCoverFromWords(first, isUp: false)
+        XCTAssertTrue(model.sheetFromWordsIsUp)
+        model.setCoverFromWords(second, isUp: false)
+        XCTAssertFalse(model.sheetFromWordsIsUp)
+    }
+
+    func testDictationWaitsWhileTheVoiceConversationHoldsTheMicrophone() {
+        for phase in [ShannonGeminiLivePhase.requestingPermission, .connecting, .listening, .thinking, .speaking, .reconnecting] {
+            XCTAssertTrue(ShannonConversationView.callHoldsMicrophone(phase), phase.rawValue)
+        }
+        XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.idle))
+        XCTAssertFalse(ShannonConversationView.callHoldsMicrophone(.failed))
+        // Only starting waits: dictation that already runs can be finished or stopped.
+        for phase in [ShannonVoicePhase.idle, .denied, .failed] {
+            XCTAssertTrue(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: true), phase.rawValue)
+            XCTAssertFalse(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: false), phase.rawValue)
+        }
+        for phase in [ShannonVoicePhase.listening, .ready, .speaking] {
+            XCTAssertFalse(ShannonConversationView.dictationWaits(dictation: phase, callHoldsMicrophone: true), phase.rawValue)
+        }
     }
 
     func testOthersStayTheAudienceForAWhileAfterAFriendWasListening() {

@@ -417,7 +417,7 @@ private struct ShannonOrganizeItemRow: View {
     private var decisionColor: Color {
         if item.destinationStatus == .applied { return Color.shannonSuccess }
         return switch item.decision {
-        case .accepted: Color.accentColor
+        case .accepted: Color.shannonActionColor
         case .rejected: Color.secondary
         case .deferred: Color.shannonAttention
         case .proposed: Color.secondary

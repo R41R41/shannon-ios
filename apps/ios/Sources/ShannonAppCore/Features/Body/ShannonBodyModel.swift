@@ -2,16 +2,29 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// What the screens that show her figure share: whether the body screen is open, her face and
-/// what she is doing in words, and the coordinator of touches. `ShannonBodyAttachment` keeps it
-/// current and passes the same facts to the Live2D page.
+/// What the screens that show her figure share: whether her figure in Talk's dialogue display is
+/// what the owner sees, her face and what she is doing in words, how her figure is scaled and moved,
+/// and the coordinator of touches. `ShannonBodyAttachment` keeps it current and passes the same facts
+/// to the Live2D page. (Decision 2026-10-03: からだ is a display of Talk, not a screen of its own.)
 @MainActor
 @Observable
 public final class ShannonBodyModel {
-    /// The body screen 「からだ」. Any entry (the toolbar, a tile, her figure) sets this.
-    public var showsScreen = false
-    /// The same screen, opened from Settings (which is itself a cover over the workspace).
-    public var showsScreenFromSettings = false
+    /// Talk is in front in its dialogue display and nothing covers it (no sheet, cover, call screen or
+    /// picker): her figure there is what the owner sees. Set by the conversation root. This is the
+    /// surface that may answer a touch in voice, as the body screen 「からだ」 was before.
+    public internal(set) var dialogueIsInFront = false
+    /// The sheets and confirmations opened from her words (what she took in from a turn) that are over her
+    /// figure now, one id per list of those words: one list closing its sheet does not uncover another's.
+    private(set) var coversFromWords: Set<UUID> = []
+    var sheetFromWordsIsUp: Bool { !coversFromWords.isEmpty }
+    func setCoverFromWords(_ id: UUID, isUp: Bool) {
+        if isUp { coversFromWords.insert(id) } else { coversFromWords.remove(id) }
+    }
+    /// Her size and place in Talk after two fingers moved her; 「位置を戻す」 sets it back. Not kept across launches.
+    public var figureAdjustment = ShannonLive2DLayout()
+    /// Asks the conversation root to show Talk's dialogue display (「トークで姿を見る」, the small figure of an empty Talk).
+    public private(set) var dialogueRequest = 0
+    public func requestDialogue() { dialogueRequest &+= 1 }
     public internal(set) var face = ShannonFace(expression: .calm)
     public internal(set) var doingLine: String?
     /// Someone else may be listening, or was a moment ago: touches are then reported as seen by others.
@@ -22,11 +35,30 @@ public final class ShannonBodyModel {
     /// The app is in front. Her voice for a touch and the microphone after it never run in the background.
     @ObservationIgnored var sceneIsActive = true
 
-    /// The body screen still answers a touch in voice: it is up, 声で返す and 伝える are on, the app is in front, and nobody else is around.
+    /// Talk still answers a touch in voice: its dialogue display with her figure is in front, 声で返す and 伝える
+    /// are on, the Live2D form is chosen, the app is in front, and nobody else is around.
     var answersInVoice: Bool {
-        (showsScreen || showsScreenFromSettings) && sceneIsActive && audience == .owner
-            && ShannonBodyReplyMode.current() == .voice && ShannonBodyPreference.reportsTouch()
-            && ShannonForm.current() == .live2d
+        Self.answersInVoice(
+            dialogueIsInFront: dialogueIsInFront, sceneIsActive: sceneIsActive, audience: audience,
+            replyMode: ShannonBodyReplyMode.current(), reportsTouch: ShannonBodyPreference.reportsTouch(), form: ShannonForm.current()
+        )
+    }
+
+    /// Talk in front, in its dialogue display, with nothing over it.
+    nonisolated static func dialogueIsInFront(page: ShannonWorkspacePage, displayMode: ShannonConversationDisplayMode, covered: Bool) -> Bool {
+        page == .talk && displayMode == .dialogue && !covered
+    }
+
+    nonisolated static func dialogueIsInFront(page: ShannonWorkspacePage, displayMode: ShannonConversationDisplayMode, covers: ShannonDialogueCovers) -> Bool {
+        dialogueIsInFront(page: page, displayMode: displayMode, covered: covers.isAny)
+    }
+
+    /// Every condition at once, so that none can be dropped unnoticed: the one rule for her voice after a touch.
+    nonisolated static func answersInVoice(
+        dialogueIsInFront: Bool, sceneIsActive: Bool, audience: ShannonBodyAudience,
+        replyMode: ShannonBodyReplyMode, reportsTouch: Bool, form: ShannonForm
+    ) -> Bool {
+        dialogueIsInFront && sceneIsActive && audience == .owner && replyMode == .voice && reportsTouch && form == .live2d
     }
 
     /// Stops her spoken line; the listening call notices by itself (`answersInVoice`).
@@ -74,9 +106,8 @@ public final class ShannonBodyModel {
     }
 }
 
-/// Keeps the Live2D figure and the body model in step with what the app already knows, and
-/// presents the body screen. Attached once, at the root of the conversation workspace, so its
-/// environment reaches every sheet and cover. With the Waterlight form chosen it only keeps
+/// Keeps the Live2D figure and the body model in step with what the app already knows. Attached
+/// once, at the root of the conversation workspace, so its environment reaches every sheet and cover. With the Waterlight form chosen it only keeps
 /// the model's words current; nothing is sent to a page that is not loaded.
 struct ShannonBodyAttachment: ViewModifier {
     let bodyModel: ShannonBodyModel
@@ -157,7 +188,6 @@ struct ShannonBodyAttachment: ViewModifier {
     func body(content: Content) -> some View {
         feelings(signals(content))
             .environment(bodyModel)
-            .modifier(ShannonBodyScreenPresentation(bodyModel: bodyModel, memory: memory))
             .task {
                 bodyModel.sceneIsActive = scenePhase == .active
                 connect()
@@ -166,9 +196,6 @@ struct ShannonBodyAttachment: ViewModifier {
             .onAppear {
                 bodyModel.audienceRule.observe(othersMayBeListening: othersMayBeListening, at: Date())
                 applyForm()
-#if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBody") { bodyModel.showsScreen = true }
-#endif
             }
     }
 
@@ -253,9 +280,10 @@ struct ShannonBodyAttachment: ViewModifier {
         }
     }
 
-    /// Read here so that leaving the screen, switching the mode or the reporting off, or the form, stops her voice at once.
+    /// Read here so that leaving the dialogue display (or covering it), switching the mode or the reporting off,
+    /// or the form, stops her voice at once.
     private var answersInVoice: Bool {
-        (bodyModel.showsScreen || bodyModel.showsScreenFromSettings) && scenePhase == .active
+        bodyModel.dialogueIsInFront && scenePhase == .active
             && replyModeRawValue == ShannonBodyReplyMode.voice.rawValue && reportsTouch && usesLive2D
     }
 
@@ -349,4 +377,23 @@ struct ShannonBodyAttachment: ViewModifier {
         let face: ShannonFace?
         let emotion: ShannonVoiceTurnEmotionDTO?
     }
+}
+
+/// Everything that can come over Talk's dialogue display. Each one alone hides her figure there, and
+/// with it her voice for a touch and the microphone after it. There is no default for any of them: the
+/// conversation root must say each one, so a cover cannot be left out of the rule unnoticed.
+struct ShannonDialogueCovers: Equatable, Sendable {
+    var threadList: Bool
+    var settings: Bool
+    var callScreen: Bool
+    var workTask: Bool
+    var fileImporter: Bool
+    var photoPicker: Bool
+    /// A sheet or the 「取り消す」 confirmation opened from her words (`ShannonTurnCaptureList`).
+    var fromWords: Bool
+    /// The explanation that comes before the system's camera prompt.
+    var cameraExplanation: Bool
+
+    /// Any one of them is up. Read from every field, so a cover added above counts at once.
+    var isAny: Bool { Mirror(reflecting: self).children.contains { ($0.value as? Bool) == true } }
 }

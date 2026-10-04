@@ -8,70 +8,74 @@ import AppKit
 
 /// Shared semantic color contract used by Shannon on every Apple platform.
 /// Names describe product intent, while concrete values preserve Shannon's visual identity.
+/// The values come from the one product spec (`design/tokens.json`, generated into
+/// `Generated/ShannonDesignTokens.generated.swift`); the names here stay as the app knows them.
 enum ShannonColorTokens {
+    fileprivate typealias Generated = ShannonGeneratedTokens.Color
+
     enum Intelligence {
-        static let sky: UInt = 0x78D9FF
-        static let core: UInt = 0x5865F2
-        static let depth: UInt = 0x3039A8
-        static let ink: UInt = 0x090A0F
+        static let sky: UInt = Generated.Fixed.intelligenceSky
+        static let core: UInt = Generated.Light.intelligence
+        static let depth: UInt = Generated.Fixed.intelligenceDepth
+        static let ink: UInt = Generated.Fixed.intelligenceInk
     }
 
     enum Light {
-        static let brandPresence: UInt = Intelligence.core
-        static let action: UInt = 0x0088FF
-        static let onAction: UInt = 0xFFFFFF
-        static let canvas: UInt = 0xFFFFFF
-        static let readingSurface: UInt = 0xFFFFFF
-        static let subtleSurface: UInt = 0xF2F2F7
-        static let elevatedSurface: UInt = 0xFFFFFF
-        static let userMessage: UInt = 0xE5F3FF
-        static let intelligenceSoft: UInt = 0xE0E3FF
-        static let textPrimary: UInt = 0x111114
-        static let textSecondary: UInt = 0x66666D
-        static let borderStrong: UInt = 0x8E8E93
-        static let divider: UInt = 0xD1D1D6
-        static let creation: UInt = 0xFFCC00
-        static let creationText: UInt = 0x3A2C00
-        static let creationTint: UInt = 0xFFF5CC
-        static let success: UInt = 0x34C759
-        static let successTint: UInt = 0xE8F7EC
-        static let successTintText: UInt = 0x146C2E
-        static let attention: UInt = 0xFF8D28
-        static let attentionTint: UInt = 0xFFF0DC
-        static let attentionTintText: UInt = 0x7A3E00
-        static let danger: UInt = 0xFF383C
-        static let dangerTint: UInt = 0xFFE5E6
-        static let dangerTintText: UInt = 0x5F0004
-        static let characterBlush: UInt = 0xF2A6B8
+        static let brandPresence: UInt = Generated.Light.intelligence
+        static let action: UInt = Generated.Light.action
+        static let onAction: UInt = Generated.Light.onAction
+        static let canvas: UInt = Generated.Light.canvas
+        static let readingSurface: UInt = Generated.Light.readingSurface
+        static let subtleSurface: UInt = Generated.Light.subtleSurface
+        static let elevatedSurface: UInt = Generated.Light.elevatedSurface
+        static let userMessage: UInt = Generated.Light.userMessage
+        static let intelligenceSoft: UInt = Generated.Light.intelligenceSoft
+        static let textPrimary: UInt = Generated.Light.textPrimary
+        static let textSecondary: UInt = Generated.Light.textSecondary
+        static let borderStrong: UInt = Generated.Light.borderStrong
+        static let divider: UInt = Generated.Light.divider
+        static let creation: UInt = Generated.Light.creation
+        static let creationText: UInt = Generated.Light.onCreation
+        static let creationTint: UInt = Generated.Light.creationTint
+        static let success: UInt = Generated.Light.success
+        static let successTint: UInt = Generated.Light.successTint
+        static let successTintText: UInt = Generated.Light.onSuccessTint
+        static let attention: UInt = Generated.Light.attention
+        static let attentionTint: UInt = Generated.Light.attentionTint
+        static let attentionTintText: UInt = Generated.Light.onAttentionTint
+        static let danger: UInt = Generated.Light.danger
+        static let dangerTint: UInt = Generated.Light.dangerTint
+        static let dangerTintText: UInt = Generated.Light.onDangerTint
+        static let characterBlush: UInt = Generated.Light.characterBlush
     }
 
     enum Dark {
-        static let brandPresence: UInt = Intelligence.core
-        static let action: UInt = 0x0091FF
-        static let onAction: UInt = 0xFFFFFF
-        static let canvas: UInt = 0x000000
-        static let readingSurface: UInt = 0x1C1C1E
-        static let subtleSurface: UInt = 0x1C1C1E
-        static let elevatedSurface: UInt = 0x2C2C2E
-        static let userMessage: UInt = 0x0D3151
-        static let intelligenceSoft: UInt = 0x292C4D
-        static let textPrimary: UInt = 0xF5F5F7
-        static let textSecondary: UInt = 0xAEAEB2
-        static let borderStrong: UInt = 0x8E8E93
-        static let divider: UInt = 0x38383A
-        static let creation: UInt = 0xFFD600
-        static let creationText: UInt = 0x2B2100
-        static let creationTint: UInt = 0x3D3300
-        static let success: UInt = 0x30D158
-        static let successTint: UInt = 0x12351D
-        static let successTintText: UInt = 0xA8F0BB
-        static let attention: UInt = 0xFF9230
-        static let attentionTint: UInt = 0x3F2A0B
-        static let attentionTintText: UInt = 0xFFD29B
-        static let danger: UInt = 0xFF4245
-        static let dangerTint: UInt = 0x4A1517
-        static let dangerTintText: UInt = 0xFFE5E6
-        static let characterBlush: UInt = 0xF5A3B6
+        static let brandPresence: UInt = Generated.Dark.intelligence
+        static let action: UInt = Generated.Dark.action
+        static let onAction: UInt = Generated.Dark.onAction
+        static let canvas: UInt = Generated.Dark.canvas
+        static let readingSurface: UInt = Generated.Dark.readingSurface
+        static let subtleSurface: UInt = Generated.Dark.subtleSurface
+        static let elevatedSurface: UInt = Generated.Dark.elevatedSurface
+        static let userMessage: UInt = Generated.Dark.userMessage
+        static let intelligenceSoft: UInt = Generated.Dark.intelligenceSoft
+        static let textPrimary: UInt = Generated.Dark.textPrimary
+        static let textSecondary: UInt = Generated.Dark.textSecondary
+        static let borderStrong: UInt = Generated.Dark.borderStrong
+        static let divider: UInt = Generated.Dark.divider
+        static let creation: UInt = Generated.Dark.creation
+        static let creationText: UInt = Generated.Dark.onCreation
+        static let creationTint: UInt = Generated.Dark.creationTint
+        static let success: UInt = Generated.Dark.success
+        static let successTint: UInt = Generated.Dark.successTint
+        static let successTintText: UInt = Generated.Dark.onSuccessTint
+        static let attention: UInt = Generated.Dark.attention
+        static let attentionTint: UInt = Generated.Dark.attentionTint
+        static let attentionTintText: UInt = Generated.Dark.onAttentionTint
+        static let danger: UInt = Generated.Dark.danger
+        static let dangerTint: UInt = Generated.Dark.dangerTint
+        static let dangerTintText: UInt = Generated.Dark.onDangerTint
+        static let characterBlush: UInt = Generated.Dark.characterBlush
     }
 }
 
@@ -187,24 +191,24 @@ struct ShannonPalette {
 }
 
 enum ShannonSpacing {
-    static let extraSmall: CGFloat = 4
-    static let small: CGFloat = 8
-    static let medium: CGFloat = 12
-    static let large: CGFloat = 16
-    static let extraLarge: CGFloat = 24
-    static let huge: CGFloat = 32
+    static let extraSmall: CGFloat = ShannonGeneratedTokens.Spacing.extraSmall
+    static let small: CGFloat = ShannonGeneratedTokens.Spacing.small
+    static let medium: CGFloat = ShannonGeneratedTokens.Spacing.medium
+    static let large: CGFloat = ShannonGeneratedTokens.Spacing.large
+    static let extraLarge: CGFloat = ShannonGeneratedTokens.Spacing.extraLarge
+    static let huge: CGFloat = ShannonGeneratedTokens.Spacing.huge
 }
 
 enum ShannonShape {
-    static let small: CGFloat = 8
-    static let medium: CGFloat = 12
-    static let large: CGFloat = 16
-    static let extraLarge: CGFloat = 28
-    static let full: CGFloat = 999
+    static let small: CGFloat = ShannonGeneratedTokens.Radius.small
+    static let medium: CGFloat = ShannonGeneratedTokens.Radius.medium
+    static let large: CGFloat = ShannonGeneratedTokens.Radius.large
+    static let extraLarge: CGFloat = ShannonGeneratedTokens.Radius.extraLarge
+    static let full: CGFloat = ShannonGeneratedTokens.Radius.full
 }
 
 enum ShannonTouchTarget {
-    static let minimum: CGFloat = 48
+    static let minimum: CGFloat = ShannonGeneratedTokens.Size.touchTargetMinimum
 }
 
 extension Color {
@@ -212,6 +216,12 @@ extension Color {
         Color(hex: colorScheme == .dark ? ShannonColorTokens.Dark.action : ShannonColorTokens.Light.action)
     }
 
+    /// The action blue where no colour scheme is at hand (instead of the system accent colour, which
+    /// on iPhone is the same blue and on the Mac follows the system setting).
+    public static let shannonActionColor = adaptive(
+        light: ShannonColorTokens.Light.action,
+        dark: ShannonColorTokens.Dark.action
+    )
     public static let shannonSuccess = adaptive(
         light: ShannonColorTokens.Light.success,
         dark: ShannonColorTokens.Dark.success

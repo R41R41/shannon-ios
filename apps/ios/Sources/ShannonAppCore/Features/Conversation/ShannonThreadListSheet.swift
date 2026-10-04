@@ -5,17 +5,18 @@ import UIKit
 import AppKit
 #endif
 
-/// iPhone conversation list: search on top, four destination tiles, then threads grouped by date.
+/// iPhone conversation list: search on top, the three entries 作業／シャノン／設定
+/// (the fourth, トーク, is this list itself), then threads grouped by date.
 struct ShannonThreadListSheet: View {
     let model: ShannonConversationModel
-    /// 「ようす」: its models, the autonomy model its waiting items open, and a link's request for it.
+    /// What the 「シャノン」 tile counts and the 「設定」 tile marks.
     let yousu: ShannonYousuModel
-    let autonomy: ShannonAutonomyModel?
-    @Binding var yousuRequest: ShannonYousuLink.Request?
+    /// A friend is in the voice conversation: the camera is 切, as in Talk and the call.
+    var cameraOthersPresent = false
     let selectedThreadId: String?
     let openTalk: () -> Void
     let openWork: () -> Void
-    let openMemory: () -> Void
+    let openShannon: () -> Void
     let openSettings: () -> Void
     let openAgentTask: (UUID) -> Void
     let close: () -> Void
@@ -26,8 +27,10 @@ struct ShannonThreadListSheet: View {
     @State var isCreating = false
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
-    @State var showsYousu = false
-    @State var yousuSegment: ShannonYousuSegment?
+    @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) var cameraEnabled = true
+    /// The system's answer about the camera, read again when the app comes back; nil reads the system itself.
+    @State var cameraPermission: ShannonMediaPermission?
+    @Environment(\.scenePhase) var scenePhase
 
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,14 +53,16 @@ struct ShannonThreadListSheet: View {
     var destinations: [ShannonThreadListDestination] {
         [
             ShannonThreadListDestination(
-                title: "作業",
+                title: ShannonGeneratedStrings.navWork,
                 symbol: "point.3.connected.trianglepath.dotted",
                 badge: model.unreadAgentTaskCount,
                 action: openWork
             ),
-            ShannonThreadListDestination(title: "頭の中", symbol: "brain.head.profile", badge: nil, action: openMemory),
-            yousuDestination,
-            ShannonThreadListDestination(title: "設定", symbol: "gearshape", badge: nil, action: openSettings),
+            ShannonThreadListDestination(
+                title: ShannonGeneratedStrings.navShannon, symbol: "person.crop.circle",
+                badge: yousu.now.waiting(approvals: model.waitingApprovals).count, action: openShannon
+            ),
+            settingsDestination,
         ]
     }
 
@@ -117,10 +122,14 @@ struct ShannonThreadListSheet: View {
                 }
             }
             .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
-            .navigationDestination(isPresented: $showsYousu) { yousuPage }
-            .onChange(of: yousuRequest, initial: true) { applyYousuRequest() }
-            // One read when the list opens, so the tile can carry its mark; no polling here.
-            .task { await yousu.ops.refresh() }
+            // One read when the list opens, so the tiles can carry their count and mark; no polling here.
+            .onChange(of: scenePhase) { if scenePhase == .active { cameraPermission = model.appLook.permission } }
+            .task {
+                async let camera: Void = model.appLook.discoverCamera()
+                async let ops: Void = yousu.ops.refresh()
+                async let now: Void = yousu.now.reload()
+                _ = await (camera, ops, now)
+            }
             .navigationTitle("シャノン")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -165,7 +174,7 @@ struct ShannonThreadListSheet: View {
         }
     }
 
-    /// Four equal tiles; accessibility text sizes fall back to full-width native rows.
+    /// Three equal tiles; accessibility text sizes fall back to full-width native rows.
     @ViewBuilder
     func destinationsSection(palette: ShannonPalette) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
@@ -186,6 +195,7 @@ struct ShannonThreadListSheet: View {
                     .accessibilityLabel(destination.accessibilityLabel)
                     .accessibilityAddTraits(.isButton)
                 }
+                cameraOffLine(palette)
             }
         } else {
             Section {
@@ -203,7 +213,29 @@ struct ShannonThreadListSheet: View {
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
+                cameraOffLine(palette)
             }
+        }
+    }
+
+    /// 「カメラ：切」 under the 設定 tile, only while she may not look (A7). Talk and the call show every state.
+    @ViewBuilder
+    func cameraOffLine(_ palette: ShannonPalette) -> some View {
+        let state = ShannonAppLookVisibleState.make(
+            enabled: cameraEnabled, hasCamera: model.appLook.hasCamera, permission: cameraPermission ?? model.appLook.permission,
+            othersPresent: cameraOthersPresent, isCapturing: model.appLook.isCapturing)
+        // Read here, not in a reader view: a List makes no row, and runs nothing, for a view that shows nothing.
+        if state == .off {
+            Label(state.line, systemImage: "eye.slash")
+                .font(.footnote)
+                .foregroundStyle(palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(state.line)
+                .accessibilityIdentifier("sheet-app-look-off")
+                .listRowInsets(EdgeInsets(top: 0, leading: ShannonSpacing.large, bottom: 0, trailing: ShannonSpacing.large))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         }
     }
 

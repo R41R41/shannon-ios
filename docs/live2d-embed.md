@@ -10,15 +10,15 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0` |
-| `builtAt` | `2026-10-02T21:25:15.797Z` |
-| `modelUpdatedAt` | `2026-10-02T21:10:28.760Z` |
-| Size | about 18.9 MB (`assets.js` holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.1 MB zipped |
+| `version` | `0.1.0+202610041927` |
+| `builtAt` | `2026-10-04T19:27:38.622Z` |
+| `modelUpdatedAt` | `2026-10-04T19:22:15.824Z` (the boots texture redrawn; otherwise the build of 2026-10-04 with the face texture at full resolution; same `window.shannonBody` API and messages as the build of 2026-10-02) |
+| Size | about 20.4 MB, of which `assets.js` is 19.6 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
-bundle with their relative paths and pins `modelUpdatedAt`; the body screen shows the loaded page's
-`modelUpdatedAt` in a debug build started with `-ShannonPreviewBodyStats`.
+bundle with their relative paths and pins `modelUpdatedAt`; her figure in Talk's dialogue display (「向き合う」; and the
+Mac's body sheet) shows the loaded page's `modelUpdatedAt` in a debug build started with `-ShannonPreviewBodyStats`.
 
 ## Updating the page
 
@@ -30,7 +30,7 @@ model) and `embed.js` (poses, hit regions, timing) belong together.
 3. Update the table above and the pinned `modelUpdatedAt` in `ShannonBodyTests` from the new `version.json`.
 4. Read the new `README.md` of the folder for changes to `window.shannonBody` or the posted messages, and
    follow them in `ShannonLive2DProtocol.swift`.
-5. `swift test --package-path apps/ios`, then look at the body screen on a device in both layouts.
+5. `swift test --package-path apps/ios`, then look at her figure in Talk's dialogue display on a device in both layouts.
 
 The Cubism Core (`embed/live2d/live2dcubismcore.min.js`) is Live2D's proprietary redistributable code. It
 stays inside the folder as delivered and is not copied anywhere else in the repository.
@@ -38,8 +38,9 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
 ## How the apps use it
 
 - `ShannonLive2DStage` owns the only web view. Of the screens that show her, the one with the highest
-  priority shows it (body screen, then the voice call, then the dialogue stage, then the small figure of an
-  empty Talk; among equals the one that appeared last); every other place her figure stands shows the
+  priority shows it (the Mac's body sheet, then the voice call, then Talk's dialogue display, then the small
+  figure of an empty Talk; among equals the one that appeared last. On the iPhone her figure lives in the
+  dialogue display since A6: the body screen was folded into it); every other place her figure stands shows the
   Waterlight Eye meanwhile. With no screen showing her, the page is paused at once and the web view is
   released after 90 seconds (the model holds a large texture in GPU memory); a memory warning with no
   screen showing her releases it immediately. A visible figure is never released by the app.
@@ -50,22 +51,22 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   or something to show (the page would otherwise draw for as long as the screen is up). The page's version does not say which calls it has, so the app asks the page
   (`typeof window.shannonBody.setIdle`); a page without them is paused into a still picture after five idle
   seconds instead, never while a finger is on her, and moves again on a touch.
-- Loading: the page reports `loading { progress }`, shown on the body screen as a percentage. A page that
+- Loading: the page reports `loading { progress }`, shown under her figure as a percentage. A page that
   sends no message at all for 40 foreground seconds, or is not `ready` after 90, is reloaded. A lost WebGL context is
   mended by the page itself (`contextLost` → `contextRestored`, after which the app says the layout, the
   calm and the pause again); the app reloads only on `error` (including
   `code: contextLost`, after the page gave up), on a failed load, or when the page's process ended. One
-  automatic reload a minute, and a page that failed twice without once becoming ready is shown as failed on
-  the body screen with 「もう一度読み込む」, with the Waterlight Eye in its place.
+  automatic reload a minute, and a page that failed twice without once becoming ready is shown as failed under
+  her figure with 「もう一度読み込む」, with the Waterlight Eye in its place.
 - No network: navigation is limited to the bundled folder, and a content rule list blocks `http(s)`,
   `ws(s)` and `ftp` (one rule per scheme). If the rule list does not compile, the page is not loaded at all.
-- Framing: the square figures (dialogue stage, voice call, empty Talk) and the body screen's 上半身 use
+- Framing: the square figures (voice call, empty Talk) and 上半身 of the large figure (Talk's dialogue display, the Mac's body sheet) use
   `setLayout({ mode: 'bust', fit: 'contain' })`; 全身 uses `full`.
 - `ShannonBodyAttachment` passes what the app already knows to the page: the reply's face → `express`,
   the voice turn's emotion → `expressEmotion`, the `/v1/state` mood → `setMood`, text and call phases →
   `setPhase` (a call that is connecting or has failed is not idle, so a touch asks for no words then), the
   played speech level → `setMouthLevel` (a tap on the player node, installed only while the Live2D form is
   in use), and her own-time activity → `setPresence`. What she is doing in her own time comes from the
-  owner's activity record: it is refreshed every 30 seconds on the body screen and otherwise as old as the
+  owner's activity record: it is refreshed every 30 seconds while her Live2D figure is in Talk's dialogue display and otherwise as old as the
   app's last read of that record.
 - Touch, the part that was touched, and her voice: `docs/body-contract.md`, "A body that only feels touch".

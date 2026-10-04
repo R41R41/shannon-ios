@@ -71,6 +71,8 @@ public final class ShannonAppLookCoordinator {
     public static let cueSeconds = 4.0
 
     public private(set) var cue: Cue?
+    /// The camera is open for a frame right now: 「いま見ています」.
+    public private(set) var isCapturing = false
     /// Non-nil while the explanation that precedes the system's camera prompt is on screen.
     public private(set) var primerPhase: ShannonPermissionPrimerPhase?
 
@@ -123,7 +125,12 @@ public final class ShannonAppLookCoordinator {
         // Cut in after that: still not taken, unless he has just answered the camera prompt himself to let her look.
         if Task.isCancelled, !allowedJustNow { return .refused(.interrupted) }
         do {
-            let image = try await environment.camera.capture(camera)
+            isCapturing = true
+            let image: CGImage
+            do {
+                defer { isCapturing = false }
+                image = try await environment.camera.capture(camera)
+            }
             // A frame taken as the app left the screen is dropped unseen.
             guard environment.isForeground(), environment.isEnabled() else {
                 return .refused(environment.isEnabled() ? .background : .switchedOff)
@@ -227,6 +234,28 @@ public final class ShannonAppLookCoordinator {
             self?.dismissCue(shown.id)
         }
     }
+
+    /// Whether this device has a camera at all: looked up once, off the main thread (`discoverCamera()`).
+    /// Nil until then; the state shown in Talk, the call and the sheet reads it as present meanwhile.
+    public private(set) var cameraIsPresent: Bool?
+    public var hasCamera: Bool { cameraIsPresent ?? true }
+    /// What the system allows now. A cheap question, asked again whenever the app comes back to the front.
+    public var permission: ShannonMediaPermission { environment.permission() }
+
+    /// Looks for a camera once per launch, away from the main thread (device discovery can take a moment).
+    /// Callers that ask while it is looking wait for the same look.
+    public func discoverCamera() async {
+        guard cameraIsPresent == nil else { return }
+        let discovery = cameraDiscovery ?? {
+            let camera = environment.camera
+            let started = Task.detached(priority: .utility) { !camera.cameras().isEmpty }
+            cameraDiscovery = started
+            return started
+        }()
+        let present = await discovery.value
+        cameraIsPresent = present
+    }
+    @ObservationIgnored private var cameraDiscovery: Task<Bool, Never>?
 
     public func dismissCue(_ id: UUID? = nil) {
         guard id == nil || cue?.id == id else { return }

@@ -7,7 +7,8 @@ public enum ShannonConversationDisplayMode: String, CaseIterable, Equatable, Sen
     public var japaneseName: String {
         switch self {
         case .scroll: "スクロール"
-        case .dialogue: "対話"
+        // 「向き合う」: the one name of this display (owner's decision, 2026-10-05).
+        case .dialogue: ShannonGeneratedStrings.talkDisplayFacing
         }
     }
 
@@ -20,7 +21,7 @@ public enum ShannonConversationDisplayMode: String, CaseIterable, Equatable, Sen
 
     public var switchActionTitle: String {
         switch self {
-        case .scroll: "対話"
+        case .scroll: ShannonGeneratedStrings.talkDisplayFacing
         case .dialogue: "履歴"
         }
     }

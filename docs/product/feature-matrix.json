@@ -1,0 +1,3643 @@
+{
+  "version": 1,
+  "about": "Shannon の機能の一覧表。機能ごとに iOS・macOS・Windows の対応を書く。ここが元で、docs/product/feature-matrix.md は scripts/generate-product-spec.mjs が作る。決まりは docs/product/README.md。",
+  "baseline": {
+    "apple": {
+      "commit": "5943c29",
+      "date": "2026-10-05"
+    },
+    "windows": {
+      "source": "azure-constant-server:~/handoff/shannon-desktop-src.zip",
+      "read": "2026-10-03"
+    }
+  },
+  "statuses": {
+    "yes": "ある。evidence に、その機能のコードの場所を書く。",
+    "partial": "一部だけある。note に、何が足りないかを書く。evidence も要る。",
+    "no": "無い。",
+    "not_applicable": "その画面には当てはまらない。reason に理由を書く。",
+    "planned": "作業中のブランチにある（main にはまだ無い）。branch にブランチの名前を書く。「未定」は、決まっているが、まだブランチが無いもの。",
+    "unknown": "分からない。note に、何を確かめていないかを書く。docs/product/gaps.md の「分からなかったこと」に載せる。"
+  },
+  "scopes": {
+    "all": "3 つの画面すべてにあるべき機能（scope を書かないとき）。",
+    "desktop": "デスクトップ（macOS・Windows）の追加。iPhone に無くてよい。",
+    "phone": "iPhone の仕組みに乗った機能。デスクトップに無くてよい。"
+  },
+  "areas": [
+    {
+      "id": "structure",
+      "title": "構成（入口）",
+      "place": "アプリ全体"
+    },
+    {
+      "id": "talk",
+      "title": "トーク",
+      "place": "トーク"
+    },
+    {
+      "id": "voice",
+      "title": "声の会話",
+      "place": "トーク（入力欄から始める）"
+    },
+    {
+      "id": "tasks",
+      "title": "作業",
+      "place": "作業"
+    },
+    {
+      "id": "autonomy",
+      "title": "自律活動",
+      "place": "シャノン › 自律活動"
+    },
+    {
+      "id": "study",
+      "title": "書斎",
+      "place": "シャノン › 書斎"
+    },
+    {
+      "id": "memory",
+      "title": "頭の中（記憶）",
+      "place": "シャノン › 頭の中"
+    },
+    {
+      "id": "yousu",
+      "title": "ようす（シャノンのいま）",
+      "place": "シャノンの先頭のカードから開く「ようす」（シャノンのいま）"
+    },
+    {
+      "id": "ops",
+      "title": "運用",
+      "place": "設定 › 管理 › 運用"
+    },
+    {
+      "id": "body",
+      "title": "からだ・二つの姿",
+      "place": "トークの表示（向き合う表示／会話の横）と、設定 › すがた"
+    },
+    {
+      "id": "touch",
+      "title": "触る",
+      "place": "トークの表示の中の姿と、設定 › すがた"
+    },
+    {
+      "id": "look",
+      "title": "見る（カメラ）",
+      "place": "設定 › カメラ。状態は、いつも見える所"
+    },
+    {
+      "id": "reach",
+      "title": "話しかけ・電話",
+      "place": "設定（イヤホン・話しかけ・電話）"
+    },
+    {
+      "id": "settings",
+      "title": "設定",
+      "place": "設定"
+    },
+    {
+      "id": "devices",
+      "title": "端末と接続",
+      "place": "設定 › 管理（接続中の端末）と、設定 › 接続"
+    },
+    {
+      "id": "notifications",
+      "title": "通知",
+      "place": "（OS の通知と、入口の印）"
+    },
+    {
+      "id": "delivery",
+      "title": "配信（TestFlight）",
+      "place": "設定 › 管理 › 配信。Mac は作業の中にも（デスクトップの追加）"
+    },
+    {
+      "id": "desktop",
+      "title": "デスクトップだけのもの",
+      "place": "同じ領域の中に付ける（体とトレイだけは窓の外）"
+    }
+  ],
+  "features": [
+    {
+      "id": "structure.four-entries",
+      "area": "structure",
+      "title": "入口は トーク／作業／シャノン／設定",
+      "description": "入口を 4 つにそろえる。iPhone はシートのタイル、広い画面はサイドバー（下にトークの一覧）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonWorkspaceChrome.swift#case shannon"
+          ],
+          "note": "トークはシートの一覧そのもの。上のタイルは 作業／シャノン／設定（A4）。"
+        },
+        "macos": {
+          "status": "partial",
+          "note": "サイドバーは 会話／作業全体／頭の中 と、ツール（開発／Release Center／設定）。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "note": "トーク／作業／シャノン／設定（W4。2026-10-05 に Windows の担当が知らせた）。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "structure.shannon-hub",
+      "area": "structure",
+      "title": "「シャノン」の場所",
+      "description": "先頭のカードにシャノンのいまと待っていること（押すと「ようす」が開く）。その下に 頭の中・自律活動・書斎 の入口。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonConversation+Yousu.swift#shannonHub"
+          ],
+          "note": "先頭のカード（シャノンのいまと待っていること。押すと ようす）と、頭の中／自律活動／書斎（A4）。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定"
+        },
+        "windows": {
+          "status": "no",
+          "note": "自律活動と書斎が別々の入口。まとめる場所が無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.text-chat",
+      "area": "talk",
+      "title": "文字で話す",
+      "description": "メッセージを送り、シャノンの返事を読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+SendPipeline.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx",
+            "shannon-desktop:src/renderer/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.threads",
+      "area": "talk",
+      "title": "トークの一覧と新しいトーク",
+      "description": "トークを並べ、選び、新しく始める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+Threads.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.thread-search",
+      "area": "talk",
+      "title": "トークを検索",
+      "description": "題名や中身でトークを探す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadSearch.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "no",
+          "note": "管理画面のトークの一覧に検索は無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.thread-rename-archive",
+      "area": "talk",
+      "title": "トークの題名変更とアーカイブ",
+      "description": "トークの題名を変える。使わないトークを片付ける。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+Threads.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.from-shannon-unread",
+      "area": "talk",
+      "title": "「シャノンから」の未読",
+      "description": "シャノンのほうから話しかけてきたトークを、未読として上に出す。読むと既読になる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Initiatives/ShannonConversationModel+Integrations.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.markdown-code",
+      "area": "talk",
+      "title": "Markdown とコードの表示",
+      "description": "返事の見出し・表・コードを整えて出す。コードはコピーでき、長いものはたためる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonMessageMarkdown.swift",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonCodeBlock.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopCodeBlock.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "Markdown は出る。コードのコピーと折りたたみは無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/markdown.ts",
+            "shannon-desktop:src/desk/views/TalkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.copy-retry",
+      "area": "talk",
+      "title": "返事のコピーと送り直し",
+      "description": "返事をコピーする。送れなかったメッセージを送り直す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Actions.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationTimelineViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.attachments",
+      "area": "talk",
+      "title": "写真とファイルの添付",
+      "description": "写真やファイルを 4 件まで添えて送る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonChatAttachmentLoader.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "文章・Markdown・コードのファイルを 4 件まで。写真は添付できない。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift",
+            "apps/macos-app/ShannonDesk/ShannonDesktopAttachment.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.web-search",
+      "area": "talk",
+      "title": "その回だけ Web で調べる",
+      "description": "送るときに選ぶと、その返事だけ Web を調べて答える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopComposer.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.source-attribution",
+      "area": "talk",
+      "title": "出典の表示",
+      "description": "調べて答えた返事に、出典を付ける。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationTimelineViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.generated-artifacts",
+      "area": "talk",
+      "title": "作ってくれた文書を開く",
+      "description": "シャノンが返事と一緒に作った文書を開いて読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonGeneratedArtifactViews.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonGeneratedArtifact.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopArtifactComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "折りたたみの中に本文を出すだけ。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx",
+            "shannon-desktop:src/desk/contracts.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.feeling-face",
+      "area": "talk",
+      "title": "返事の横の表情",
+      "description": "返事ごとのシャノンの気持ちを、表情で出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonAvatarView.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonFace.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体の窓は Live2D の顔で出す。管理画面のトークには表情が無い。",
+          "evidence": [
+            "shannon-desktop:src/acting/emotionMap.ts",
+            "shannon-desktop:src/renderer/character.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.feeling-strength",
+      "area": "talk",
+      "title": "気持ちの強さが文字の会話にも出る",
+      "description": "文字の返事にも、気持ちの強さと続き方が反映される（サーバー側）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "services/api/src/chatReplyFeeling.ts"
+          ],
+          "note": "サーバーと認知の変更。画面の変更は無い。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "services/api/src/chatReplyFeeling.ts"
+          ],
+          "note": "サーバーと認知の変更。画面の変更は無い。"
+        },
+        "windows": {
+          "status": "unknown",
+          "note": "サーバー側の変更なので、Windows でも返事の表情に出るはずだが、ブランチが入ってから確かめる。"
+        }
+      }
+    },
+    {
+      "id": "talk.capture-lines",
+      "area": "talk",
+      "title": "返事の下の「覚えました・約束にしました」",
+      "description": "その回に覚えたこと・約束にしたことを 1 行で出し、開く・取り消すができる。約束の知らせには「完了にする／あとで」。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonTurnCaptureList.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+Captures.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.memory-recall-cue",
+      "area": "talk",
+      "title": "思い出しているしるし",
+      "description": "記憶を探している間、そのことを待ちの表示で伝える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonMemoryRecallCue.swift",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonThinkingState.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "「返答を待っています…」だけ。記憶を探しているかは出ない。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.organize-review",
+      "area": "talk",
+      "title": "整理の提案を確かめる（Aether）",
+      "description": "シャノンが出したノートの整理の提案を、1 件ずつ見て採る・断る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Organize/ShannonConversationOrganizeCard.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonOrganizeSessionCard.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Aether/AetherProposalDTOs.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.place-map",
+      "area": "talk",
+      "title": "場所の地図カード",
+      "description": "返事に出た場所を、地図のカードで出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPlaceMapCard.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPlaceLinks.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac のトークには地図のカードが無い。"
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.prompt-suggestions",
+      "area": "talk",
+      "title": "空のトークのおすすめ",
+      "description": "空のトークで、今日の関心や進行中の作業から、話しかけの候補を 3 つまで出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonPromptSuggestions.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "空のトークに案内の文は出るが、候補は出ない。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.dictation",
+      "area": "talk",
+      "title": "声で入力する（音声入力）",
+      "description": "入力欄に、声で文字を入れる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceTranscriptionProtocol.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Composer.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no",
+          "note": "声の会話はあるが、入力欄へ声で文字を入れる機能は無い。"
+        }
+      }
+    },
+    {
+      "id": "talk.dialogue-mode",
+      "area": "talk",
+      "title": "姿と向き合って話す表示（からだ）",
+      "description": "トークの表示を、履歴の一覧と、シャノンの姿と向き合う表示とで切り替える。広い画面では、姿が会話の右の補助パネル（目次・現在地と切り替え）に立つ。姿は「すがた」の設定に従う。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Dialogue.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonWaterlightEyeView.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "決定（2026-10-03）: Mac は会話の横に姿を出す。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "体の窓が同じ役目（体と吹き出しで話す）。管理画面のトークの横には出ない。決定（2026-10-03）: 管理画面のトークの横にも出す。",
+          "evidence": [
+            "shannon-desktop:src/renderer/main.ts",
+            "shannon-desktop:src/renderer/index.html"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.sentence-stream",
+      "area": "talk",
+      "title": "返事が文ごとに届く",
+      "description": "返事を待たずに、最初の一文から出す（声や字幕向け）。",
+      "surfaces": {
+        "ios": {
+          "status": "no",
+          "note": "トークは、返事が全部できてから出す。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体の窓だけ。管理画面のトークは一度に出る。",
+          "evidence": [
+            "shannon-desktop:src/bridge.ts",
+            "shannon-desktop:electron/api.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.reply-read-aloud",
+      "area": "talk",
+      "title": "文字の返事を声で読み上げる",
+      "description": "文字で話したときの返事を、声でも読む。",
+      "surfaces": {
+        "ios": {
+          "status": "no",
+          "note": "文字のトークの返事を読み上げる設定は見つからない（声は音声会話とイヤホンの話しかけだけ）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/voice/speechPipeline.ts",
+            "shannon-desktop:electron/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "talk.outline-summary",
+      "area": "talk",
+      "title": "会話の目次と要約",
+      "description": "長い会話の見出しを横に並べ、押すとその場所へ移る。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopArtifactComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "talk.artifact-export",
+      "area": "talk",
+      "title": "作ってくれた文書をファイルに保存",
+      "description": "文書を、選んだ場所へ保存する。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopArtifactComponents.swift",
+            "apps/macos-app/ShannonDesk/ShannonDesktopArtifactDocument.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "voice.conversation",
+      "area": "voice",
+      "title": "声で話す（音声会話）",
+      "description": "声で話しかけ、声で返事を聞く。途中で割り込める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveVoiceView.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac には音声会話が無い（ShannonGeminiLiveSessionModelUnavailable）。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体の窓だけ（「話す」「切る」）。管理画面には無い。",
+          "evidence": [
+            "shannon-desktop:src/voice/call.ts",
+            "shannon-desktop:src/renderer/voiceUi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.mute-and-mic",
+      "area": "voice",
+      "title": "ミュートと入力マイクの選択",
+      "description": "通話中にマイクを切る。使うマイクを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveCallControls.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceInputMenu.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no",
+          "note": "ミュートもマイクの選択も無い（切るだけ）。"
+        }
+      }
+    },
+    {
+      "id": "voice.text-in-call",
+      "area": "voice",
+      "title": "通話中に文字でも送る",
+      "description": "声の会話の途中で、文字を打って送る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceTextComposer.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no",
+          "note": "声の会話の間は、入力欄から文字を送る流れが別になっている。"
+        }
+      }
+    },
+    {
+      "id": "voice.photo-and-camera-in-call",
+      "area": "voice",
+      "title": "通話中に写真やカメラを見せる",
+      "description": "声の会話の途中で、写真を選ぶかカメラで撮って見せる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveVoiceView+Photo.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceCameraPicker.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no",
+          "note": "README の「まだのこと」に、声の会話での写真は無いとある。"
+        }
+      }
+    },
+    {
+      "id": "voice.guest-mode",
+      "area": "voice",
+      "title": "友人も一緒（ほかの人がいる通話）",
+      "description": "ほかの人がいる場として話す。個人的なことは話す前に確かめ、残し方を変える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestCall.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceGuestModeNotice.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "設定「声の会話を記憶に残さない（友人といっしょ）」で、通話全体をゲスト扱いにする。通話の途中での切り替えと、終わりの「今回は残さない」は無い。",
+          "evidence": [
+            "shannon-desktop:electron/main.ts",
+            "shannon-desktop:src/renderer/voiceUi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.background-continue",
+      "area": "voice",
+      "title": "アプリを閉じても通話が続く",
+      "description": "ほかのアプリへ移っても通話が続く。無言が 1 分続くと自分で終わる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveSessionModel+Background.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceBackgroundSilence.swift"
+          ]
+        },
+        "macos": {
+          "status": "not_applicable",
+          "reason": "Mac には音声会話そのものが無い。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "窓を隠しても続く。無言で切れるまでが 5 分で、iPhone の 1 分と違う。",
+          "evidence": [
+            "shannon-desktop:src/renderer/voiceUi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.minimised-call",
+      "area": "voice",
+      "title": "通話を小さくして、ほかの画面を見る",
+      "description": "通話を続けたまま、トークや作業の画面を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceSessionBar.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceWorkspaceState.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体の窓と管理画面が別の窓なので、通話しながら管理画面を見られる。小さくする操作そのものは無い。",
+          "evidence": [
+            "shannon-desktop:src/renderer/voiceUi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.call-summary",
+      "area": "voice",
+      "title": "通話のまとめ",
+      "description": "通話のあと、話したことのまとめをトークに残す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceCallSummary.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationModel+VoiceCallSummary.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "voice.emotion-in-call",
+      "area": "voice",
+      "title": "通話中の気持ちが顔に出る",
+      "description": "声の番ごとの気持ちを、顔に出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceEmbodimentFrame.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonEyeRig+Activity.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/acting/emotionMap.ts",
+            "shannon-desktop:src/voice/speechStyle.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.task-in-call",
+      "area": "voice",
+      "title": "通話中に作業を頼む",
+      "description": "声で作業を頼むと、作業の提案が出て、押して始められる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/RealtimeVoiceSessionModel+Delegation.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceWorkspaceState+Call.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/taskProposals.ts",
+            "shannon-desktop:src/renderer/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "voice.location-in-call",
+      "area": "voice",
+      "title": "通話中にいまいる場所を伝える",
+      "description": "許可した場合だけ、いまいる場所を通話に添える。",
+      "scope": "phone",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonVoiceLocationProvider.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no",
+          "note": "README の「まだのこと」に、声の会話での位置は無いとある。"
+        }
+      }
+    },
+    {
+      "id": "voice.diagnostics",
+      "area": "voice",
+      "title": "音声の診断",
+      "description": "声の処理にかかった時間を見て、コピーする。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonVoiceDiagnosticsView.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonVoiceDiagnostics.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "tasks.overview",
+      "area": "tasks",
+      "title": "作業の一覧",
+      "description": "続いている作業・これからの提案・終わった作業を並べる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOverviewView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.search-filter-pin-archive",
+      "area": "tasks",
+      "title": "作業の検索・絞り込み・ピン留め・アーカイブ",
+      "description": "作業を探し、絞り、大切なものを上に留め、終わったものを片付ける。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOverviewView.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "開発の画面にだけ検索・絞り込み・ピン留め・アーカイブがある。「作業全体」には無い。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "tasks.detail",
+      "area": "tasks",
+      "title": "作業の現在地",
+      "description": "目的・いましていること・次・計画・変更・検証の結果を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskRoomView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskPlanTimelineView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskOutcomeViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift",
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopPlanTimeline.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.approval",
+      "area": "tasks",
+      "title": "許可を出す・断る",
+      "description": "作業が許可を求めたとき、今回だけ許可・この作業中・許可しない、の 3 つから選ぶ（3 つの画面とも同じ 3 つ）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "「今回だけ許可」と「許可しない」だけ。「この作業中は許可」が無い。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.steer",
+      "area": "tasks",
+      "title": "追加の指示",
+      "description": "進んでいる作業に、指示を足す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskControls.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.pause-resume-cancel",
+      "area": "tasks",
+      "title": "一時停止・再開・中止",
+      "description": "作業を止める、続ける、やめる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskRoomView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonConversationModel+AgentTasks.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.proposal-start",
+      "area": "tasks",
+      "title": "作業の提案を始める・やめる",
+      "description": "会話で頼んだ作業の提案を見て、始めるか決める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskCards.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonConversationModel+AgentTaskPersistence.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TaskProposals.tsx",
+            "shannon-desktop:electron/taskProposals.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.notice-in-talk",
+      "area": "tasks",
+      "title": "トークの上の作業の知らせ",
+      "description": "許可待ちや結果を、トークの上に小さく出し、押すと作業を開く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskNotice.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskAttention.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "サイドバーの件数と、トークの横の「現在地」で分かる。トークの上の知らせは無い。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "Windows の通知と、身体のしぐさで知らせる。管理画面のトークの上には出ない。",
+          "evidence": [
+            "shannon-desktop:electron/main.ts",
+            "shannon-desktop:src/bridge.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.open-origin-thread",
+      "area": "tasks",
+      "title": "作業から元の会話を開く",
+      "description": "作業を頼んだトークへ戻る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskRoomView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Work/ShannonDesktopRootView+Work.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/WorkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "tasks.hold-to-confirm",
+      "area": "tasks",
+      "title": "長く効く許可は、長押しで決める",
+      "description": "「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。"
+        },
+        "windows": {
+          "status": "no",
+          "note": "ボタンを 1 回押すだけ。決定（2026-10-03）で、Windows も長押しにする。"
+        }
+      }
+    },
+    {
+      "id": "autonomy.status-and-pause",
+      "area": "autonomy",
+      "title": "自律活動の状態と止めるスイッチ",
+      "description": "シャノンが自分から動いてよい状態かを見て、止める・解除する。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.budget",
+      "area": "autonomy",
+      "title": "今日の予算",
+      "description": "今日使った額と上限を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.budget-request",
+      "area": "autonomy",
+      "title": "予算を増やすお願いへの返事",
+      "description": "シャノンのお願いに、今日だけ増やすか見送るかを答える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.proposals",
+      "area": "autonomy",
+      "title": "シャノンからの提案",
+      "description": "シャノンが自分の活動から出した提案を、作業として始めるか見送る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.pursuits",
+      "area": "autonomy",
+      "title": "シャノンのやりたいこと",
+      "description": "シャノン自身の目標・問い・作品を見て、休ませる・やめるよう伝える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift#ShannonAutonomyPursuitsPage",
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift#pursuitsSection"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.model-choices",
+      "area": "autonomy",
+      "title": "使うモデル",
+      "description": "何にどのモデルを使っているかを見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "autonomy.activity-record",
+      "area": "autonomy",
+      "title": "したことの記録",
+      "description": "シャノンが自分からしたことを、日ごとに読む（書き換えも消去もできない）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonAutonomyActivityPage.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/AutonomyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "study.list",
+      "area": "study",
+      "title": "書斎の一覧",
+      "description": "シャノンが自分の時間に書いた物語とメモを並べる。見せてもいいと言うまで、題名も本文も出ない。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyViews.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/StudyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "study.read",
+      "area": "study",
+      "title": "作品を読む",
+      "description": "本文、直した記録、参考にしたものを読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/StudyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "study.reaction",
+      "area": "study",
+      "title": "感想を返す",
+      "description": "感想の種類を選び、ひとことを添えて送る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/StudyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "study.put-away",
+      "area": "study",
+      "title": "しまうよう伝える",
+      "description": "作品をしまうよう、シャノンに伝える（文章と記録は残る）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/StudyView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "study.open-from-talk",
+      "area": "study",
+      "title": "トークから作品を開く",
+      "description": "シャノンが見せてくれた物語を、トークの中の札から開く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Autonomy/ShannonStudyPieceLink.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopConversationComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.hub",
+      "area": "memory",
+      "title": "頭の中（いまの状態と入口）",
+      "description": "シャノンのいまの状態と、記憶・目的・人・活動への入口。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryHubView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "no",
+          "note": "Windows には「頭の中」の画面が無い。"
+        }
+      }
+    },
+    {
+      "id": "memory.state-sheet",
+      "area": "memory",
+      "title": "シャノンの気持ち・関心・関係",
+      "description": "気分、興味、ふたりの関係、その元になった出来事を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryStateCards.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryOverviewCards.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.manage",
+      "area": "memory",
+      "title": "記憶の管理",
+      "description": "覚えていることを見て、直す・忘れさせる・事実でないと伝える・戻す。機微にする。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryLibraryView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryDetailView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.commitments",
+      "area": "memory",
+      "title": "約束と声かけ",
+      "description": "約束を見て、完了にする・取り消す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryCommitmentsPage.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.people",
+      "area": "memory",
+      "title": "人",
+      "description": "覚えている人を見て、名前を直す・まとめる・忘れさせる・戻す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonPeopleMemoryViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.intents",
+      "area": "memory",
+      "title": "続けている目的と認知の記録",
+      "description": "持ち主の目的を見て、止める・完了にする・再開する。認知の周期の記録を読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonCognitionView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.knowledge-correction",
+      "area": "memory",
+      "title": "知識と性格分析の訂正",
+      "description": "シャノンが持ち主について持っている答えを直す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemorySections.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.diary-and-sleep",
+      "area": "memory",
+      "title": "日記と夜の整理",
+      "description": "シャノンの日記と、夜の整理の結果を読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonSleepReportView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryTimelineCards.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "memory.usage-activity",
+      "area": "memory",
+      "title": "使用量と活動",
+      "description": "AI の使用量、最近の自発的な動き、活動の履歴を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryHubView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Memory/ShannonMemoryCategoryPages.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "no",
+          "note": "自律活動の予算は出るが、全体の使用量の画面は無い。"
+        }
+      }
+    },
+    {
+      "id": "yousu.now",
+      "area": "yousu",
+      "title": "シャノンのいま",
+      "description": "気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift"
+          ],
+          "note": "「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。",
+          "evidence": [
+            "shannon-desktop:src/bridge.ts",
+            "shannon-desktop:electron/bodyApi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "yousu.waiting",
+      "area": "yousu",
+      "title": "待っていること",
+      "description": "感想待ち・判断待ち・許可待ちを、1 か所に集める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。",
+          "evidence": [
+            "shannon-desktop:src/bridge.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "yousu.recent-events",
+      "area": "yousu",
+      "title": "最近のできごとの記録",
+      "description": "部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/CameraSection.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.status",
+      "area": "ops",
+      "title": "運用の状態",
+      "description": "旧ランタイムのサービス（Discord・YouTube・Minecraft など）が動いているかを見る。報告が古いときは、いまの状態として見せない。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx",
+            "shannon-desktop:src/desk/opsText.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.service-control",
+      "area": "ops",
+      "title": "サービスの開始・停止",
+      "description": "サービスと Minecraft サーバーを、確かめてから開始・停止する。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsConfirmationSheet.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#func send"
+          ],
+          "note": "iPhone は確認の画面で長押しして決める。 設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx",
+            "shannon-desktop:electron/deskApi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.minebot-start",
+      "area": "ops",
+      "title": "Minebot の体の起動",
+      "description": "入らせる Minecraft サーバーを選んで起動する。費用と版の文を必ず出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#minebotStartServers"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx",
+            "shannon-desktop:src/desk/opsText.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.schedule-run",
+      "area": "ops",
+      "title": "予定の一覧と「今すぐ実行」",
+      "description": "予約投稿の予定を見て、いますぐ実行する。公開の場へ出ることを必ず確かめる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#scheduleRun"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx",
+            "shannon-desktop:src/desk/opsText.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.kpi-skills",
+      "area": "ops",
+      "title": "今日の数字とスキル",
+      "description": "今日の投稿数・トークン・API 呼出と、スキルの一覧を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsView.swift"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.command-record",
+      "area": "ops",
+      "title": "操作の記録",
+      "description": "直近の操作と、その結果・理由を読む。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.minebot-task",
+      "area": "ops",
+      "title": "Minebot のいまの作業",
+      "description": "Minebot がいましている作業と手順を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsRows.swift"
+          ],
+          "note": "設定 › 管理 › 運用（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/OpsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "ops.attention-mark",
+      "area": "ops",
+      "title": "運用が止まっていることに気づける印",
+      "description": "不調・報告が届かない・操作が失敗したとき、設定の入口と、いつも見える所（iPhone は左上のボタン、広い画面はサイドバーの下）に印を出す。 通知は、あとで決める（まずは印だけ）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsModel.swift#attentionReason",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#exclamationmark.triangle.fill",
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonConversation+Yousu.swift#settingsDestination",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift"
+          ],
+          "note": "左上のボタンに橙の三角（赤い点とは別の形）、シートの 設定 のタイルと 設定 › 管理 › 運用 の行に同じ印と理由の 1 行。報告が 1 度も届いていない間は出さない。操作の失敗・期限切れは直近 1 時間だけ（A5）。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "note": "サイドバーの 設定 の行と、サイドバーの下の 1 行（W4。2026-10-05 に Windows の担当が知らせた）。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "body.live2d",
+      "area": "body",
+      "title": "Live2D の体",
+      "description": "体のページ（embed）で、Live2D のシャノンを出す。表情・気分・口の動き・しぐさ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
+          ],
+          "note": "トークの向き合う表示に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+          ],
+          "note": "設定 › すがた の「からだを開く」のシートで見るだけ。トークの会話の横に出すのは A15。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/live2d/entry.ts",
+            "shannon-desktop:src/acting/engine.ts",
+            "shannon-desktop:src/embed/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "body.form-switch",
+      "area": "body",
+      "title": "二つの姿の切り替え",
+      "description": "「水の光の目」と「Live2D の姿」を切り替える。会話・音声会話・からだの画面の姿が変わる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#figureDisplayOptions"
+          ],
+          "note": "トークの表示の切り替えボタンの長押しと、設定 › すがた（A6）。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift"
+          ],
+          "note": "設定で切り替えられるが、効くのは「からだを開く」のシートだけ。Mac のトークには姿が無い（A15）。"
+        },
+        "windows": {
+          "status": "no",
+          "note": "Live2D の姿だけ。水の光の目は無い（確認用の静止画はある）。決定（2026-10-03）: Windows にも水の光の目を作る（順番は後ろ。roadmap の W11）。"
+        }
+      }
+    },
+    {
+      "id": "body.waterlight-eye",
+      "area": "body",
+      "title": "水の光の目",
+      "description": "顔だけの姿。話す・聞く・考える・作業するなどで目が変わる。触れると照れる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonWaterlightEyeView.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonEyeRig.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "小さな表情のアイコンだけ。向き合う大きさの目は無い。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "body.presence-on-body",
+      "area": "body",
+      "title": "体に「いま」が出る",
+      "description": "気分、残っている気持ち、自分の時間にしていることが、体の顔としぐさに出る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodySignals.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyModel.swift#ShannonBodyAttachment"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac の「からだを開く」のシートには、気分・いま・話している様子を体のページへ送る仕組み（ShannonBodyAttachment）がつながっていない。A15。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/bodyApi.ts",
+            "shannon-desktop:src/acting/idle.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "body.layout",
+      "area": "body",
+      "title": "映し方（全身・上半身）と大きさ・位置",
+      "description": "体のどこを映すかと、大きさ・位置を変える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonDialogueFigure.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
+          ],
+          "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift"
+          ],
+          "note": "「からだを開く」のシートの中だけ。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "大きさ（40〜500%、画面いっぱい）と置き場所。映し方の切り替えは無い。",
+          "evidence": [
+            "shannon-desktop:src/bodySize.ts",
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "body.idle-gestures",
+      "area": "body",
+      "title": "何もしていない時のしぐさ",
+      "description": "気分・時刻・していることに合わせて、自分からしぐさをする。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift"
+          ],
+          "note": "体のページのしぐさ。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage.swift",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ],
+          "note": "体のページのしぐさは出るが、見られるのは「からだを開く」のシートだけ。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/acting/idle.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "touch.gestures",
+      "area": "touch",
+      "title": "触る（撫でる・つつく・くすぐる・手をつなぐ）",
+      "description": "体に触れると、すぐ顔としぐさで返す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
+          ],
+          "note": "トークの向き合う表示の姿に、その場で触れる（A6）。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
+          ],
+          "note": "「からだを開く」のシートの中で、ポインターで触れると体のページが動く。シャノンには伝えない。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/acting/touch.ts",
+            "shannon-desktop:src/renderer/touchInput.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "touch.tell-shannon",
+      "area": "touch",
+      "title": "体に起きたことをシャノンに伝える",
+      "description": "設定が入のとき、触れた種類・長さ・強さ・時刻だけを本体へ送る。シャノンがひとこと返すことがある。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+Body.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac からは伝えない（設定の文）。A15 で決める。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/bodyApi.ts",
+            "shannon-desktop:src/acting/touchAsk.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "touch.eye-tap",
+      "area": "touch",
+      "title": "目に触れると照れる",
+      "description": "水の光の目に触れると、驚いてから照れる。",
+      "scope": "phone",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonEyeReactionTimeline.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Windows には水の光の目が無い。"
+        }
+      }
+    },
+    {
+      "id": "touch.carry",
+      "area": "touch",
+      "title": "つまんで運ぶ",
+      "description": "体をつまんで、画面の好きな場所へ運ぶ。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "アプリの 1 画面の中では、窓ごと運べない（体のページにも無い）。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/acting/touch.ts",
+            "shannon-desktop:electron/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "touch.reply-mode",
+      "area": "touch",
+      "title": "触れたときの返事（文字で返す・声で返す）",
+      "description": "触れたときのひとことを、文字だけで返すか、声に出して返して数秒マイクを開くかを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift#ShannonBodyReplyMode",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyTouchCoordinator.swift"
+          ],
+          "note": "設定 › すがた（A6）。声で返すのは、トークの向き合う表示の姿が見えている間だけ。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "ブランチの Mac は、触れたことをシャノンに伝えない。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "声で返して数秒マイクを開く動きはある。選ぶ設定は無い。",
+          "evidence": [
+            "shannon-desktop:src/acting/touchAsk.ts",
+            "shannon-desktop:src/voice/listenWindow.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.app-camera",
+      "area": "look",
+      "title": "アプリのカメラでひと目見る",
+      "description": "話している時に、見てと言われた時か気になった時だけ、1 枚だけ見る。見た時は「いま見ました」と出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookCoordinator.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookViews.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "設定と、見るための仕組みは共有のコードにある。Mac のトークに「いま見ました」の表示が出るかは確かめていない。",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookSettingsSection.swift",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/cameraService.ts",
+            "shannon-desktop:src/renderer/camera.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.permission-setting",
+      "area": "look",
+      "title": "見てよいかの設定",
+      "description": "既定は切。切の間は、見ようとしてもカメラを開かない。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookPolicy.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/CameraSection.tsx",
+            "shannon-desktop:electron/cameraService.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.always-visible-state",
+      "area": "look",
+      "title": "カメラの状態がいつも見える",
+      "description": "どの画面にいても、切／見てよい／いま見ています、が分かる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Look/ShannonAppLookStateViews.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Dialogue.swift#ShannonAppLookStateBadge",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveVoiceView.swift#ShannonAppLookStateBadge",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift#cameraOffLine"
+          ],
+          "note": "向き合う表示と音声会話の上に「カメラ：切／見てよい／いま見ています」。切の間は、シートの 設定 のタイルの下に「カメラ：切」（A7）。見た直後の「いま見ました」はこれまでどおり。"
+        },
+        "macos": {
+          "status": "partial",
+          "note": "設定を開かないと分からない。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx",
+            "shannon-desktop:src/renderer/index.html"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.room-look",
+      "area": "look",
+      "title": "部屋をひと目見る（デスクトップの体のカメラ）",
+      "description": "PC の前の部屋を、体の窓が出ている間だけ、1 枚見る。自分の時間にも見ることがある。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iPhone は持ち歩く端末で、「PC の前の部屋」を見るカメラではない。アプリのカメラ（look.app-camera）が対応する機能。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "デスクトップに立つ体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/cameraService.ts",
+            "shannon-desktop:electron/bodyHost.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.preview-and-device",
+      "area": "look",
+      "title": "映るものを確かめる・使うカメラを選ぶ",
+      "description": "いまカメラに映るものを、どこにも送らずに確かめる。カメラが複数あれば選ぶ。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/CameraSection.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "look.activity-log",
+      "area": "look",
+      "title": "見た・断った記録",
+      "description": "いつ、誰の頼みで見たか・断ったかを読む（絵は残さない）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift"
+          ],
+          "note": "「ようす」の最近のできごとに出る。"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/CameraSection.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "reach.earphone-speaking",
+      "area": "reach",
+      "title": "イヤホンのときは声で話しかける",
+      "description": "登録したイヤホンから音が出ている間だけ、シャノンが自分から声で話しかける。あと数秒マイクを開く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPhoneEarphoneSpeaking.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateReachOutCoordinator.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonMacEarphoneSpeaking.swift",
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
+          ]
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Windows は体が声と吹き出しで話しかける（reach.body-speaking）。イヤホンかどうかの見分けは入っていない。"
+        }
+      }
+    },
+    {
+      "id": "reach.earphone-registration",
+      "area": "reach",
+      "title": "イヤホンの登録と「自分だけに聞こえる」",
+      "description": "イヤホンを登録し、いまの音の出口が自分だけに聞こえるかをシャノンに伝える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "reach.standby",
+      "area": "reach",
+      "title": "ほかのアプリを使っている間も待機する",
+      "description": "登録したイヤホンをつないでいる間、アプリを閉じても話しかけを受けられる。",
+      "scope": "phone",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonStandbyAudio.swift"
+          ]
+        },
+        "macos": {
+          "status": "not_applicable",
+          "reason": "Mac のアプリは開いたまま動く。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "常駐しているので、待機の設定は要らない。"
+        }
+      }
+    },
+    {
+      "id": "reach.body-speaking",
+      "area": "reach",
+      "title": "体が声と吹き出しで話しかける",
+      "description": "シャノンのほうから話しかけてきた一言と、場面ごとの一言を、体が伝える。",
+      "surfaces": {
+        "ios": {
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyView.swift#ShannonBodyLineBubble",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyVoice.swift"
+          ],
+          "note": "触れたときのひとことだけ（吹き出しと、「声で返す」なら声）。シャノンのほうから体で話しかけることは無い。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "デスクトップに立つ体を SwiftUI で作るときに入れる（ADR-0004）。いまは Electron 版。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/reachOut.ts",
+            "shannon-desktop:src/renderer/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "reach.toggle",
+      "area": "reach",
+      "title": "シャノンから話しかけてよいかの設定",
+      "description": "話しかけを受けるかどうかを切り替える。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateListeningSettingsSection.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "reach.delivery-report",
+      "area": "reach",
+      "title": "話しかけがどう届いたかを本体へ知らせる",
+      "description": "声で届いた・表示された・席を外していた、などを本体へ返す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonPrivateReachOutCoordinator.swift",
+            "apps/ios/Sources/ShannonAppCore/API/ShannonAPIClient+PrivateListening.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/PrivateListening/ShannonMacEarphoneSpeaking.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/bridge.ts",
+            "shannon-desktop:electron/bodyApi.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "reach.incoming-call",
+      "area": "reach",
+      "title": "シャノンからの電話",
+      "description": "シャノンが電話で伝えたいと思ったときに、電話がかかってくる。出ると音声会話になる。",
+      "scope": "phone",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/IncomingCall/ShannonCallKitBridge.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/IncomingCall/ShannonIncomingCallSettings.swift"
+          ]
+        },
+        "macos": {
+          "status": "not_applicable",
+          "reason": "CallKit の着信は iPhone の仕組み。Mac では、イヤホンの話しかけと（将来は）デスクトップの体が対応する。"
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "CallKit の着信は iPhone の仕組み。Windows は体が声で話しかける。"
+        }
+      }
+    },
+    {
+      "id": "settings.appearance",
+      "area": "settings",
+      "title": "外観（システム・ライト・ダーク）",
+      "description": "アプリの明るさを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonAppearanceSettingsView.swift",
+            "apps/ios/Sources/ShannonAppCore/Domain/Appearance/ShannonAppearanceModels.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/main.ts#applyAppearance",
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "note": "設定 › 外観: Windowsの設定に合わせる／ライト／ダーク（W13 の外観だけ先に入った。2026-10-05 に Windows の担当が知らせた）。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "settings.app-icon",
+      "area": "settings",
+      "title": "アプリアイコンを選ぶ",
+      "description": "アプリのアイコンを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonAppIconSettingsView.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonAppIcon.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "settings.avatar-style",
+      "area": "settings",
+      "title": "トークのアバターの種類",
+      "description": "返事の横のアイコンを、表情の絵にするかなどを選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "settings.voice-provider",
+      "area": "settings",
+      "title": "声の種類",
+      "description": "読み上げと音声会話の声を、Gemini と ElevenLabs から選ぶ。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonSpeechProvider.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "「Gemini（サーバー設定）」と出るだけで、選べない。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx",
+            "shannon-desktop:electron/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "settings.calendar-sharing",
+      "area": "settings",
+      "title": "カレンダーの予定をシャノンに伝える",
+      "description": "これから 14 日ぶんの予定を、シャノンに伝える。切にすると、送った予定を消す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Calendar/ShannonCalendarSharingSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Calendar/ShannonCalendarSharingModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "settings.world-subscriptions",
+      "area": "settings",
+      "title": "情報源",
+      "description": "シャノンが読む情報源の候補と試し読みを見て、購読を決める。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonWorldSubscriptions.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "settings.profile-state",
+      "area": "settings",
+      "title": "シャノンの状態の札",
+      "description": "設定のいちばん上に、いまの顔と気持ちを出し、押すと状態を開く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift"
+          ]
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "settings.about",
+      "area": "settings",
+      "title": "アプリの版",
+      "description": "アプリの版とビルドの番号を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "partial",
+          "note": "版は「配信」の画面で分かる。設定に版の欄は無い。",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonTestFlightDeliveryView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "no",
+          "note": "管理画面の設定に版は出ない。"
+        }
+      }
+    },
+    {
+      "id": "settings.figure",
+      "area": "settings",
+      "title": "設定 › すがた",
+      "description": "姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
+          ],
+          "note": "姿、映し方、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
+          ],
+          "note": "姿の切り替えと「からだを開く」だけ。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "「デスクトップのシャノン」に、体に起きたことを伝える・大きさがある。姿の切り替え・映し方・触れたときの返事は無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "settings.admin",
+      "area": "settings",
+      "title": "設定 › 管理",
+      "description": "運用（状態・操作・記録）、接続中の端末、配信、診断を、設定の中の「管理」に並べる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift#adminSection",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift#adminSection"
+          ],
+          "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は端末の一覧と解除だけを、設定 › 接続 はこの端末の接続（状態、確認、この端末の解除）を開く（2026-10-05）。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "運用が無い。接続中の端末は接続のシートの中。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx",
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "note": "設定 › 管理 に 運用・接続中の端末（配信と診断は Windows には無い）。W4。2026-10-05 に Windows の担当が知らせた。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "devices.pair",
+      "area": "devices",
+      "title": "シャノンと接続する",
+      "description": "接続リンクか接続コードで、この端末をシャノンにつなぐ。",
+      "surfaces": {
+        "ios": {
+          "status": "partial",
+          "note": "接続リンク（shannon://）を開いてつなぐ。コードを打つ欄は無い。",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Connection/ShannonConnectionModel.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift"
+          ]
+        },
+        "macos": {
+          "status": "partial",
+          "note": "接続リンクを開いてつなぐ。コードを打つ欄は無い。",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/ConnectView.tsx",
+            "shannon-desktop:electron/api.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "devices.status",
+      "area": "devices",
+      "title": "接続の状態",
+      "description": "つながっているか、通信が確かめられているかを見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonSettingsSummary.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "この端末の名前と期限が出る。つながっているかの印は無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "devices.list",
+      "area": "devices",
+      "title": "接続中の端末の一覧",
+      "description": "つながっている端末と、最後に使った時を見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "名前だけ。最後に使った時は出ない。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "devices.unpair-this",
+      "area": "devices",
+      "title": "この端末の接続を解除",
+      "description": "この端末の接続をやめる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Connection/ShannonConnectionModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift"
+          ]
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "devices.unpair-other",
+      "area": "devices",
+      "title": "ほかの端末の接続を解除",
+      "description": "一覧から、ほかの端末の接続を切る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonConnectionView.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView.swift"
+          ]
+        },
+        "windows": {
+          "status": "no",
+          "note": "一覧に解除のボタンが無い。"
+        }
+      }
+    },
+    {
+      "id": "notifications.push",
+      "area": "notifications",
+      "title": "通知",
+      "description": "新しい許可待ちの作業、シャノンからの話、結果を、通知で知らせる。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios-app/ShannonApp/ShannonApp.swift"
+          ]
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac のアプリには通知のコードが無い。"
+        },
+        "windows": {
+          "status": "partial",
+          "note": "新しい判断待ちの作業と、身体を隠している間の「シャノンから」。作業の結果の通知は無い。",
+          "evidence": [
+            "shannon-desktop:electron/main.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "notifications.badge",
+      "area": "notifications",
+      "title": "未確認の数",
+      "description": "未確認の作業と未読の話の数を、アイコンと入口に出す。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Navigation.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+Sidebar.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "「シャノンから」の印だけ。作業の件数は出ない。",
+          "evidence": [
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "notifications.open-target",
+      "area": "notifications",
+      "title": "通知から、その作業やトークを開く",
+      "description": "通知を押すと、そのものが開く。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios-app/ShannonApp/ShannonApp.swift"
+          ]
+        },
+        "macos": {
+          "status": "not_applicable",
+          "reason": "通知そのものが無い（notifications.push）。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/main.ts",
+            "shannon-desktop:src/desk/App.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "delivery.testflight",
+      "area": "delivery",
+      "title": "TestFlight の配信の状況",
+      "description": "新しいビルドが届いたか、入れたか、実機で確かめたかを見る。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/ShannonTestFlightDeliveryView.swift",
+            "apps/ios/Sources/ShannonAppCore/ShannonTestFlightDeliveryModel.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Apple の配信の仕組み。Windows アプリの配り方（release/ のフォルダー）とは別。"
+        }
+      }
+    },
+    {
+      "id": "delivery.request-release",
+      "area": "delivery",
+      "title": "配信を頼む",
+      "description": "シャノンに配信の作業を頼み、許可・結果・実機確認まで追う。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Delivery/ShannonAppleReleaseTask.swift"
+          ]
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Talk/ShannonDesktopRootView+Talk.swift"
+          ]
+        },
+        "windows": {
+          "status": "not_applicable",
+          "reason": "Apple のアプリの配信。"
+        }
+      }
+    },
+    {
+      "id": "desktop.tray",
+      "area": "desktop",
+      "title": "タスクトレイ・メニューバーに常駐",
+      "description": "トレイのアイコンから、体を出す・隠す、管理画面を開く、設定を切り替える。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iPhone にはトレイが無い。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "デスクトップの体を SwiftUI で作るときに決める（ADR-0004）。いまは Electron 版がメニューバーに出る。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/main.ts"
+          ],
+          "note": "トレイのメニューは、4 つの入口への近道と「終了」だけ（所有者の決定 2026-10-05。カメラ・声・友人も一緒の入切はトレイから外した）。",
+          "read": "2026-10-05"
+        }
+      }
+    },
+    {
+      "id": "desktop.always-on-top",
+      "area": "desktop",
+      "title": "体を常に手前に出す",
+      "description": "体の窓を、ほかの窓の手前に出す。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "アプリの中の 1 画面なので、当てはまらない。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "ADR-0004 の移行で決める。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/main.ts",
+            "shannon-desktop:src/desk/views/SettingsView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.open-at-login",
+      "area": "desktop",
+      "title": "PC の起動時に開く",
+      "description": "起動したときに、自動で開く。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iPhone のアプリは常駐しない。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac のアプリに、ログイン時に開く設定は無い。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/loginItem.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.stream-output",
+      "area": "desktop",
+      "title": "配信用の出力（OBS）",
+      "description": "この PC の中の URL に、背景が透明のシャノンを出す。入れている間は、ほかの人が聞いている場として扱う。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "この PC の中の URL へ出す仕組み。iPhone には持っていかない。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "ADR-0004 の一覧で、移し方を決める。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/streamServer.ts",
+            "shannon-desktop:src/renderer/stream.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.folder-host",
+      "area": "desktop",
+      "title": "シャノン専用フォルダ",
+      "description": "シャノンが自分のものとして使ってよい、この PC の中のフォルダ。選ぶ・止める・確かめる・やめる・操作の記録。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "PC のフォルダに置く機能。iPhone では、結果を「したことの記録」で読む。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "取り決めは docs/host-folder-contract.md にある。Mac の SwiftUI のアプリには、まだ無い。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/FolderSection.tsx",
+            "shannon-desktop:folderHost/operations.ts",
+            "shannon-desktop:electron/folderService.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.pc-presence",
+      "area": "desktop",
+      "title": "PC の様子への反応",
+      "description": "カーソルを目で追う。PC が操作されないと眠る。席を外した・戻ったを感じる。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "PC だけのもの。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "デスクトップの体を SwiftUI で作るときに入れる。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/renderer/idleInput.ts",
+            "shannon-desktop:src/acting/idle.ts"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.pose-check",
+      "area": "desktop",
+      "title": "表情としぐさを確認する",
+      "description": "表情 33 種としぐさ 14 種を、1 つずつ出して確かめる。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "no"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/main.ts",
+            "shannon-desktop:src/acting/poses.json"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.development",
+      "area": "desktop",
+      "title": "開発の作業場",
+      "description": "プロジェクト、実行先、モデル、ファイル、コマンドの履歴、差分、Git、ビルドの結果を、1 つの画面で見る。GitHub のリポジトリを足す。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopRootView+Development.swift",
+            "apps/macos-app/ShannonDesk/Features/Development/ShannonDesktopDevelopmentResourceViews.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "desktop.task-inspector",
+      "area": "desktop",
+      "title": "トークの横の「現在地」",
+      "description": "トークを読みながら、横に作業の現在地を出す。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "no"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopRootView+State.swift",
+            "apps/macos-app/ShannonDesk/Features/Shell/ShannonDesktopSidebarComponents.swift"
+          ]
+        },
+        "windows": {
+          "status": "no"
+        }
+      }
+    },
+    {
+      "id": "desktop.menu-shortcuts",
+      "area": "desktop",
+      "title": "メニューとキーボードの近道",
+      "description": "メニューと ⌘ の近道で、画面を移り、トークを作り、探す。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iPhone にはメニューバーが無い。"
+        },
+        "macos": {
+          "status": "yes",
+          "evidence": [
+            "apps/macos-app/ShannonDesk/ShannonDeskApp.swift"
+          ]
+        },
+        "windows": {
+          "status": "partial",
+          "note": "Enter で送信、Shift+Enter で改行、Ctrl+ホイールで大きさ。画面を移る近道は無い。",
+          "evidence": [
+            "shannon-desktop:src/desk/views/TalkView.tsx"
+          ],
+          "read": "2026-10-03"
+        }
+      }
+    }
+  ],
+  "decisions": {
+    "date": "2026-10-03",
+    "source": "Syzygy work/shannon-unified-structure-comparison（所有者が比較ページで選んだ）",
+    "structure": "トーク／作業／シャノン／設定。シャノンは、先頭のカード（押すと ようす）と 頭の中・自律活動・書斎。からだはトークの表示の 1 つ（広い画面は会話の右の補助パネル）。設定 › 管理 に 運用・接続中の端末・配信・診断。",
+    "details": "docs/product/information-architecture.md"
+  }
+}

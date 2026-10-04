@@ -235,8 +235,34 @@ extension ShannonConversationView {
         }
         .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
         .buttonStyle(.plain)
-        .disabled(model.isSending || [.requestingPermission, .transcribing, .thinking].contains(voiceModel.phase))
+        .disabled(model.isSending || [.requestingPermission, .transcribing, .thinking].contains(voiceModel.phase)
+            || dictationWaitsForCall)
         .accessibilityLabel(voiceModel.phase == .listening ? "音声入力を終了" : "音声入力")
+        .accessibilityHint(dictationWaitsForCall ? ShannonGeneratedStrings.talkDictationWaitsForCall : "")
+    }
+
+    /// A tap would start dictation while the voice conversation holds the microphone: it waits. Finishing
+    /// or stopping dictation that already runs (listening, ready, speaking) is never held back.
+    var dictationWaitsForCall: Bool {
+        Self.dictationWaits(dictation: voiceModel.phase, callHoldsMicrophone: voiceCallHoldsMicrophone)
+    }
+
+    nonisolated static func dictationWaits(dictation: ShannonVoicePhase, callHoldsMicrophone: Bool) -> Bool {
+        callHoldsMicrophone && [.idle, .denied, .failed].contains(dictation)
+    }
+
+    /// The voice conversation holds the microphone: a call, or the few seconds after her spoken line for a
+    /// touch when she listens for his answer. Dictation does not start then; two captures never run at once.
+    var voiceCallHoldsMicrophone: Bool {
+#if os(iOS)
+        Self.callHoldsMicrophone(geminiLiveVoiceModel.phase)
+#else
+        false
+#endif
+    }
+
+    nonisolated static func callHoldsMicrophone(_ phase: ShannonGeminiLivePhase) -> Bool {
+        phase != .idle && phase != .failed
     }
 
     func composerPrimaryButton(_ palette: ShannonPalette) -> some View {

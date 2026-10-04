@@ -30,7 +30,7 @@ public struct ShannonNowView: View {
         self.autonomy = autonomy
     }
 
-    private var waiting: [ShannonNowWaitingItem] { model.waitingItems + approvals }
+    private var waiting: [ShannonNowWaitingItem] { model.waiting(approvals: approvals) }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -71,7 +71,7 @@ public struct ShannonNowView: View {
         let items = waiting
         Section {
             if items.isEmpty {
-                Label("待っていることはありません", systemImage: "checkmark.circle")
+                Label(ShannonGeneratedStrings.shannonCardNothingWaiting, systemImage: "checkmark.circle")
                     .font(.callout)
                     .foregroundStyle(palette.textSecondary)
             } else {

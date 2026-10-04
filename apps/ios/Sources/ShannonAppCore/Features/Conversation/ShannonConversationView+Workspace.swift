@@ -17,12 +17,26 @@ extension ShannonConversationView {
                 Image(systemName: "sidebar.left")
             }
             .accessibilityLabel("トークと画面を開く")
-            .accessibilityValue(model.totalBadgeCount > 0 ? "未確認\(model.totalBadgeCount)件" : "未確認なし")
+            .accessibilityValue(ShannonEntryMarks.accessibilityValue(
+                unread: model.totalBadgeCount,
+                waiting: ShannonEntryMarks.waitingNotUnread(
+                    yousu.now.waiting(approvals: yousuApprovals), unreadTaskIDs: model.unreadAgentTaskIDs),
+                opsAttention: yousu.ops.attentionReason()
+            ))
             .overlay(alignment: .topTrailing) {
-                if model.totalBadgeCount > 0 {
+                if model.totalBadgeCount > 0 || shannonWaitingCount > 0 {
                     Circle()
                         .fill(ShannonPalette.resolve(resolvedColorScheme).danger)
                         .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if yousu.needsAttention {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(ShannonPalette.resolve(resolvedColorScheme).attention)
+                        .offset(x: 4, y: 3)
                         .accessibilityHidden(true)
                 }
             }
@@ -30,17 +44,21 @@ extension ShannonConversationView {
 
         if selectedPage == .talk {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: toggleDisplayMode) {
+                // One tap switches the display, as before; a long press offers her figure's options
+                // (her form, and in the Live2D form 映し方 and 位置を戻す). 設定 › すがた has the same.
+                Menu {
+                    Button(action: toggleDisplayMode) {
+                        Label("\(displayMode.switchActionTitle)表示へ切り替える", systemImage: displayMode.switchActionSymbolName)
+                    }
+                    figureDisplayOptions
+                } label: {
                     Image(systemName: displayMode.switchActionSymbolName)
+                } primaryAction: {
+                    toggleDisplayMode()
                 }
                 .accessibilityLabel("\(displayMode.switchActionTitle)表示へ切り替える")
-
-                Button { bodyModel.showsScreen = true } label: {
-                    Image(systemName: "figure.stand")
-                }
-                .accessibilityLabel(ShannonBodyCopy.screenTitle)
-                .accessibilityHint(ShannonBodyCopy.openBodyHint)
-                .accessibilityIdentifier("open-body")
+                .accessibilityHint(ShannonBodyCopy.displayMenuHint)
+                .accessibilityIdentifier("talk-display-menu")
 
                 Button(action: createThreadFromHeader) {
                     Image(systemName: "square.and.pencil")
@@ -50,6 +68,34 @@ extension ShannonConversationView {
         }
     }
 
+    /// Her form, and in the Live2D form 映し方 and 位置を戻す: Talk's display options (the long press of the display button).
+    @ViewBuilder
+    var figureDisplayOptions: some View {
+        Picker(ShannonBodyCopy.formTitle, selection: $formRawValue) {
+            ForEach(ShannonForm.allCases) { form in
+                Text(form.japaneseName).tag(form.rawValue)
+            }
+        }
+        .pickerStyle(.menu)
+        if formRawValue == ShannonForm.live2d.rawValue, ShannonLive2DStage.isAvailable {
+            Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
+                Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
+                Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)
+            }
+            .pickerStyle(.menu)
+            Button {
+                bodyModel.figureAdjustment = ShannonLive2DLayout()
+            } label: {
+                Label(ShannonBodyCopy.resetLayout, systemImage: "arrow.uturn.backward")
+            }
+            .disabled(!bodyModel.figureAdjustment.isMoved)
+        }
+    }
+
+    /// What waits for the owner: her stories, proposals and budget request, and work tasks that wait for a
+    /// permission. The same list as the 「シャノン」 card and its tile (`ShannonNowModel.waiting(approvals:)`).
+    var shannonWaitingCount: Int { yousu.now.waiting(approvals: yousuApprovals).count }
+
     func workspaceContent(_ palette: ShannonPalette) -> some View {
         Group {
             switch selectedPage {
@@ -57,12 +103,8 @@ extension ShannonConversationView {
                 talkPage(palette)
             case .work:
             ShannonAgentTaskOverviewView(model: model, openTask: openAgentTask)
-            case .memory:
-            ShannonMemoryView(
-                model: memoryModel,
-                showsDismissButton: false,
-                workspaceTopInset: 0
-            )
+            case .shannon:
+                shannonHub
             }
         }
     }

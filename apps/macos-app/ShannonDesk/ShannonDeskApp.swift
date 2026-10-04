@@ -156,10 +156,10 @@ private struct ShannonDeskCommands: Commands {
 
             Divider()
 
-            Button("会話") { actions?.showTalk() }
+            Button("トーク") { actions?.showTalk() }
                 .keyboardShortcut("1")
                 .disabled(actions == nil)
-            Button("作業全体") { actions?.showWork() }
+            Button("作業") { actions?.showWork() }
                 .keyboardShortcut("2")
                 .disabled(actions == nil)
             Button("頭の中") { actions?.showMemory() }
@@ -168,7 +168,7 @@ private struct ShannonDeskCommands: Commands {
             Button("開発") { actions?.showDevelopment() }
                 .keyboardShortcut("4")
                 .disabled(actions == nil)
-            Button("Release Center") { actions?.showRelease() }
+            Button("配信") { actions?.showRelease() }
                 .keyboardShortcut("5")
                 .disabled(actions == nil)
             Button("設定") { actions?.showSettings() }

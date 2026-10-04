@@ -43,15 +43,21 @@ public final class ShannonNowModel {
         if let request = ownTime?.budgetRequest, request.isPending {
             items.append(.init(
                 id: "budget-\(request.id)", kind: .decision,
-                title: "今日の予算を\(ShannonAutonomyFormat.yen(request.requestedYen))増やすお願い", detail: "頭の中の「したことの記録」で決められます"
+                title: "今日の予算を\(ShannonAutonomyFormat.yen(request.requestedYen))増やすお願い", detail: "自律活動で決められます"
             ))
         }
         items += (ownTime?.proposals ?? []).filter(\.isWaiting).map { proposal in
             ShannonNowWaitingItem(
-                id: "proposal-\(proposal.id)", kind: .decision, title: proposal.title, detail: "シャノンからの提案。頭の中の「したことの記録」で決められます"
+                id: "proposal-\(proposal.id)", kind: .decision, title: proposal.title, detail: "シャノンからの提案。自律活動で決められます"
             )
         }
         return items
+    }
+
+    /// What waits for the owner, as one list: what she waits for, then work tasks that wait for a permission.
+    /// The 「シャノン」 card, ようす, the 「シャノン」 tile and the top-left dot all count this one list.
+    public func waiting(approvals: [ShannonNowWaitingItem]) -> [ShannonNowWaitingItem] {
+        waitingItems + approvals
     }
 
     /// What she is doing in her own time: the server's own sentence for the owner.

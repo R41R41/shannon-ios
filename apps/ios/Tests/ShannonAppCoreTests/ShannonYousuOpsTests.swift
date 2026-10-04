@@ -11,6 +11,10 @@ private final class FakeYousuClient: ShannonYousuServing, @unchecked Sendable {
     var outcome: ShannonOpsSendOutcome = .unknownDelivery
     var sent: [(type: ShannonOpsCommandType, target: String, key: String)] = []
     var afterSend: (() -> Void)?
+    /// The pairing the readings belong to; nil as for an app that is not paired.
+    var scope: String? = "server|owner|device-1"
+
+    func opsReportScope(scopeKey: String) -> String? { scope }
 
     func loadOps(scopeKey: String) async throws -> ShannonOpsReading {
         if let loadError { throw loadError }
@@ -46,14 +50,14 @@ final class ShannonYousuOpsTests: XCTestCase {
     """
 
     private func current(
-        stale: Bool = false, commandsSupported: Bool = true, commands: String = "[]",
+        stale: Bool = false, commandsSupported: Bool = true, commands: String = "[]", services: String = ShannonYousuOpsTests.services,
         allowed: String = #"{ "serviceStart": ["discord", "notion", "youtube:live_chat"], "serviceStop": ["twitter", "notion", "minebot:bot"], "minecraft": true, "scheduleRun": true, "minebotStart": true }"#
     ) throws -> ShannonOpsViewDTO {
         try decode("""
         { "schemaVersion": 1, "receivedAt": "2026-10-03T07:00:00.000Z", "stale": \(stale), "staleAfterSeconds": 180,
           "commandsSupported": \(commandsSupported), "commands": \(commands), "allowed": \(allowed),
           "snapshot": { "reportedAt": "2026-10-03T06:59:58.000Z", "runtime": { "release": "v1", "startedAt": "2026-10-03T00:00:00.000Z" },
-            "services": \(Self.services), "minebot": [], "skills": [],
+            "services": \(services), "minebot": [], "skills": [],
             "schedules": [ { "name": "朝の占い", "time": "0 8 * * *", "postedToday": true }, { "name": "夜の投稿", "time": "30 21 * * *" } ] } }
         """)
     }
@@ -151,6 +155,7 @@ final class ShannonYousuOpsTests: XCTestCase {
         XCTAssertTrue(stale.hasReport)
         XCTAssertFalse(stale.isCurrent())
         XCTAssertTrue(stale.needsAttention)
+        XCTAssertEqual(stale.attentionReason(), "報告が届いていません")
         for service in stale.snapshot!.services {
             XCTAssertEqual(stale.actions(for: service), [])
             XCTAssertNil(stale.minebotStartServers(for: service))
@@ -170,6 +175,139 @@ final class ShannonYousuOpsTests: XCTestCase {
         await model.refresh()
         XCTAssertNil(model.unreachableMessage)
         XCTAssertFalse(model.actions(for: model.snapshot!.services[1]).isEmpty)
+    }
+
+    @MainActor
+    func testTheMarkSaysWhyAndCountsOnlyOperationsOfTheLastHour() async throws {
+        let healthy = #"[ { "id": "twitter", "label": "twitter", "category": "platform", "status": "running" } ]"#
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        let iso = { (seconds: Double) in now.addingTimeInterval(-seconds).formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true)) }
+
+        // All well: no mark, no reason.
+        let (calm, _, _) = await loaded(try current(services: healthy))
+        XCTAssertFalse(calm.needsAttention)
+        XCTAssertNil(calm.attentionReason())
+
+        // A service that is not well, by its name.
+        let (unwell, client, clock) = await loaded(try current())
+        XCTAssertEqual(unwell.attentionReason(), "Notionが不調")
+
+        // An operation that failed 50 minutes ago counts; one that expired two hours ago does not.
+        let commands = """
+        [ { "id": "a", "type": "service.stop", "target": "twitter", "status": "failed", "createdAt": "\(iso(3_000))", "finishedAt": "\(iso(3_000))" },
+          { "id": "b", "type": "schedule.run", "target": "朝の占い", "status": "expired", "createdAt": "\(iso(7_500))", "expiresAt": "\(iso(7_200))" } ]
+        """
+        let (failed, failedClient, failedClock) = await loaded(try current(commands: commands, services: healthy))
+        XCTAssertEqual(failed.attentionReason(), "X（Twitter）の操作が失敗")
+        XCTAssertNil(failed.recentProblemCommand(at: now.addingTimeInterval(11 * 60)), "older than an hour: the record keeps it, the mark does not")
+        let expiredOnly = """
+        [ { "id": "b", "type": "schedule.run", "target": "朝の占い", "status": "expired", "createdAt": "\(iso(400))", "expiresAt": "\(iso(100))" } ]
+        """
+        failedClient.reading = ShannonOpsReading(view: try current(commands: expiredOnly, services: healthy), serverDate: nil)
+        failedClock.date = now
+        await failed.refresh()
+        XCTAssertEqual(failed.attentionReason(), "予定「朝の占い」の操作が期限切れ")
+
+        // The server cannot be reached: said before anything else.
+        client.loadError = URLError(.cannotConnectToHost)
+        await unwell.refresh()
+        XCTAssertEqual(unwell.attentionReason(), "サーバーに届きません")
+        _ = clock
+
+        // Before the first report ever arrived there is no mark at all, whatever else is true.
+        let empty = FakeYousuClient()
+        empty.loadError = URLError(.cannotConnectToHost)
+        let never = ShannonOpsModel(scopeKey: "owner", client: empty)
+        await never.refresh()
+        XCTAssertFalse(never.hasReport)
+        XCTAssertFalse(never.needsAttention)
+        XCTAssertNil(never.attentionReason())
+    }
+
+    @MainActor
+    func testAServerDownAtLaunchIsMarkedOnceAReportHadArrivedBeforeForThisPairing() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)"))
+        // An earlier launch: a report arrived for this pairing.
+        let client = FakeYousuClient()
+        client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
+        let earlier = ShannonOpsModel(scopeKey: "local-owner", client: client, defaults: defaults)
+        await earlier.refresh()
+        XCTAssertTrue(earlier.reportArrivedBefore)
+
+        // This launch: the server cannot be reached, so no report is in memory.
+        let down = FakeYousuClient()
+        down.loadError = URLError(.cannotConnectToHost)
+        let launched = ShannonOpsModel(scopeKey: "local-owner", client: down, defaults: defaults)
+        XCTAssertNil(launched.attentionReason(), "not read yet: nothing is claimed")
+        await launched.refresh()
+        XCTAssertFalse(launched.hasReport)
+        XCTAssertEqual(launched.attentionReason(), "サーバーに届きません")
+        XCTAssertTrue(launched.needsAttention)
+
+        // Another pairing (paired again, or another server) never had a report: no mark.
+        let repaired = FakeYousuClient()
+        repaired.loadError = URLError(.cannotConnectToHost)
+        repaired.scope = "server|owner|device-2"
+        let other = ShannonOpsModel(scopeKey: "local-owner", client: repaired, defaults: defaults)
+        await other.refresh()
+        XCTAssertFalse(other.reportArrivedBefore)
+        XCTAssertNil(other.attentionReason())
+
+        // An app that is not paired remembers nobody's 運用.
+        let unpaired = FakeYousuClient()
+        unpaired.loadError = URLError(.cannotConnectToHost)
+        unpaired.scope = nil
+        let lonely = ShannonOpsModel(scopeKey: "local-owner", client: unpaired, defaults: defaults)
+        await lonely.refresh()
+        XCTAssertNil(lonely.attentionReason())
+
+        // An older server without 運用 hides it, mark and all.
+        let older = FakeYousuClient()
+        older.loadError = ShannonAPIError.rejected(status: 404)
+        let gone = ShannonOpsModel(scopeKey: "local-owner", client: older, defaults: defaults)
+        await gone.refresh()
+        XCTAssertNil(gone.attentionReason())
+
+        // Without a place to keep it, nothing is remembered.
+        let forgetful = ShannonOpsModel(scopeKey: "local-owner", client: down)
+        await forgetful.refresh()
+        XCTAssertNil(forgetful.attentionReason())
+
+        // The pairing is not written as it is.
+        XCTAssertFalse(defaults.dictionaryRepresentation().keys.contains { $0.contains("device-1") })
+        // Unpairing or pairing again forgets it, and a mark already shown drops at once.
+        XCTAssertNotNil(launched.attentionReason())
+        ShannonOpsModel.forgetArrivedReports(in: defaults)
+        XCTAssertNil(launched.attentionReason())
+        XCTAssertNil(earlier.snapshot)
+        let afterUnpair = ShannonOpsModel(scopeKey: "local-owner", client: down, defaults: defaults)
+        await afterUnpair.refresh()
+        XCTAssertFalse(afterUnpair.reportArrivedBefore)
+        XCTAssertNil(afterUnpair.attentionReason())
+    }
+
+    @MainActor
+    func testARefusedConnectionIsNotAnOpsMarkAndIsSaidInItsOwnWords() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "shannon-ops-tests-\(UUID().uuidString)"))
+        let client = FakeYousuClient()
+        client.reading = ShannonOpsReading(view: try current(), serverDate: nil)
+        let clock = TestClock()
+        let model = ShannonOpsModel(scopeKey: "local-owner", client: client, clock: { clock.date }, defaults: defaults)
+        await model.refresh()
+        XCTAssertEqual(model.attentionReason(), "Notionが不調")
+        // The device was unpaired elsewhere: every reading is refused.
+        client.loadError = ShannonAPIError.rejected(status: 401)
+        await model.refresh()
+        XCTAssertTrue(model.connectionIsInvalid)
+        XCTAssertNil(model.attentionReason())
+        XCTAssertFalse(model.needsAttention)
+        XCTAssertEqual(model.unreachableMessage, ShannonGeneratedStrings.opsConnectionInvalid)
+        XCTAssertEqual(model.allowed(), .nothing)
+        // Let in again: the mark is what 運用 says.
+        client.loadError = nil
+        await model.refresh()
+        XCTAssertFalse(model.connectionIsInvalid)
+        XCTAssertEqual(model.attentionReason(), "Notionが不調")
     }
 
     @MainActor

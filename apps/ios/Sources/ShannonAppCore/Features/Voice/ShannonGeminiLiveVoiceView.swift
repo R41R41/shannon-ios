@@ -15,6 +15,8 @@ public struct ShannonGeminiLiveVoiceView: View {
     private let minimize: () -> Void
     let end: () -> Void
     let analyzeCameraSnapshot: @MainActor (Data) async throws -> String
+    /// Her eyes in this app: the camera's state is always shown under the title.
+    private let appLook: ShannonAppLookCoordinator?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -28,6 +30,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         workspace: ShannonVoiceWorkspaceState,
         expression: ShannonExpressionDTO,
         task: ShannonAgentTask?,
+        appLook: ShannonAppLookCoordinator? = nil,
         analyzeCameraSnapshot: @escaping @MainActor (Data) async throws -> String,
         switchParticipantMode: @escaping (ShannonVoiceParticipantMode) -> Void,
         openTask: @escaping (UUID) -> Void,
@@ -38,6 +41,7 @@ public struct ShannonGeminiLiveVoiceView: View {
         self.workspace = workspace
         self.expression = expression
         self.task = task
+        self.appLook = appLook
         self.analyzeCameraSnapshot = analyzeCameraSnapshot
         self.switchParticipantMode = switchParticipantMode
         self.openTask = openTask
@@ -52,6 +56,10 @@ public struct ShannonGeminiLiveVoiceView: View {
                 .ignoresSafeArea()
             VStack(spacing: ShannonSpacing.small) {
                 header(palette)
+                if let appLook {
+                    ShannonAppLookStateBadge(coordinator: appLook, othersPresent: ShannonAppLookVisibleState.othersPresent(
+                        callIsLive: model.phase != .idle, participantMode: model.participantMode))
+                }
                 GeometryReader { proxy in
                     ScrollView {
                         conversationContent(palette)

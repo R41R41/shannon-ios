@@ -36,9 +36,20 @@ public protocol ShannonYousuServing: Sendable {
     func loadShannonOwnTime(scopeKey: String) async throws -> ShannonNowOwnTimeDTO
     func loadShannonStudyWaiting(scopeKey: String) async throws -> ShannonNowStudyDTO
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO
+    /// Whose 運用 a reading is: the server, the connection's scope and this pairing. Nil while this app has no
+    /// way to be let in (not paired and no developer token): then nothing about 運用 is remembered or marked.
+    func opsReportScope(scopeKey: String) -> String?
 }
 
 extension ShannonAPIClient: ShannonYousuServing {
+    public func opsReportScope(scopeKey: String) -> String? {
+        if let connection = currentConnection() {
+            return "\(connection.baseURL.absoluteString)|\(connection.scopeKey)|\(connection.deviceID)"
+        }
+        guard let apiToken, !apiToken.isEmpty, !apiToken.contains("$(") else { return nil }
+        return "\(baseURL.absoluteString)|\(scopeKey)|token"
+    }
+
     public func loadOps(scopeKey: String) async throws -> ShannonOpsReading {
         let (data, response) = try await session.data(for: autonomyGet("/v1/ops", scopeKey: scopeKey))
         guard let http = response as? HTTPURLResponse else { throw ShannonAPIError.invalidResponse }

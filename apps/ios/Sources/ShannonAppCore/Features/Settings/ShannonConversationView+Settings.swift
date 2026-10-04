@@ -19,6 +19,8 @@ extension ShannonConversationView {
                     settingsProfileRow(palette)
                 }
 
+                adminSection(palette)
+
                 Section("見た目") {
                     settingsValueButton(
                         title: "外観",
@@ -74,7 +76,7 @@ extension ShannonConversationView {
                     Text("声と読み上げの変更は、通話中の会話を変えず次の通話から反映されます。")
                 }
 
-                ShannonFormSettingsSection(openBody: { bodyModel.showsScreenFromSettings = true })
+                ShannonFigureSettingsSection(showInTalk: showFigureInTalk)
 
                 ShannonCalendarSharingSettingsSection()
 
@@ -86,9 +88,8 @@ extension ShannonConversationView {
                 ShannonIncomingCallSettingsSection()
 #endif
 
-                ShannonAutonomySettingsSection(model: memoryModel.autonomy)
-
-                Section("接続と詳細") {
+                // 配信 and 診断 are in 管理 at the top; 「接続と詳細」 is no more (decision 2026-10-03).
+                Section {
                     if let connectionModel {
                         settingsValueButton(
                             title: "接続",
@@ -103,22 +104,9 @@ extension ShannonConversationView {
                         symbol: "newspaper",
                         palette: palette
                     ) { showsWorldSubscriptions = true }
-                    settingsValueButton(
-                        title: "配信",
-                        value: "TestFlight",
-                        symbol: "arrow.down.app",
-                        palette: palette
-                    ) { showsTestFlightDelivery = true }
-                    .accessibilityHint("アプリの更新、TestFlightの配信状況と履歴を開きます")
-                    settingsValueButton(
-                        title: "診断",
-                        value: "音声",
-                        symbol: "waveform.badge.magnifyingglass",
-                        palette: palette
-                    ) { showsVoiceDiagnostics = true }
-                    .accessibilityHint("音声の処理時間を確認・コピーします")
                 }
             }
+            .navigationDestination(isPresented: $settingsShowsOps) { adminOpsPage }
             .scrollContentBackground(.hidden)
             .background(palette.canvas)
             .navigationTitle("設定")
@@ -132,21 +120,18 @@ extension ShannonConversationView {
             }
         }
         .foregroundStyle(palette.textPrimary)
-#if os(iOS)
-        .fullScreenCover(isPresented: $bodyModel.showsScreenFromSettings) {
-            NavigationStack { ShannonBodyScreen(memory: memoryModel) }
-        }
-#else
-        .sheet(isPresented: $bodyModel.showsScreenFromSettings) {
-            NavigationStack { ShannonBodyScreen(memory: memoryModel) }
-        }
-#endif
         .sheet(isPresented: $showsStateDetails) {
             ShannonStateSheet(state: model.state, face: model.presentFace)
         }
+        // 設定 › 接続 is this device's connection; 管理 › 接続中の端末 is the list of devices.
         .sheet(isPresented: $showsConnectionDetails) {
             if let connectionModel {
-                ShannonConnectionView(model: connectionModel)
+                ShannonConnectionView(model: connectionModel, part: .connection)
+            }
+        }
+        .sheet(isPresented: $showsConnectedDevices) {
+            if let connectionModel {
+                ShannonConnectionView(model: connectionModel, part: .devices)
             }
         }
         .sheet(isPresented: $showsAppIconSettings) {

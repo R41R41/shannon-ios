@@ -34,6 +34,11 @@ run_architecture() {
   "$node_bin" scripts/check-architecture.mjs
 }
 
+run_product_spec() {
+  "$node_bin" --test scripts/check-product-spec.test.mjs
+  "$node_bin" scripts/check-product-spec.mjs
+}
+
 run_fast() {
   "$node_bin" scripts/check-harness.mjs
   "$node_bin" --test scripts/check-xcode-workspace.test.mjs
@@ -42,6 +47,7 @@ run_fast() {
   "$node_bin" scripts/check-semantic-role-map.mjs
   "$node_bin" --test scripts/gemini-tts-lab.test.mjs scripts/gemini-voice-lab.test.mjs
   run_architecture
+  run_product_spec
 }
 
 run_ios() {
@@ -77,6 +83,7 @@ target="${1:-all}"
 case "$target" in
   fast) run_fast ;;
   architecture) run_architecture ;;
+  product-spec) run_product_spec ;;
   api) run_fast; run_api ;;
   cognition-eval) run_fast; run_cognition_eval ;;
   ios) run_fast; run_ios ;;
@@ -96,7 +103,7 @@ case "$target" in
     run_release_runner
     ;;
   *)
-    echo "Usage: scripts/verify.sh [fast|architecture|api|cognition-eval|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
+    echo "Usage: scripts/verify.sh [fast|architecture|product-spec|api|cognition-eval|ios|app|mac|mac-smoke|mac-release|release|release-runner|all]" >&2
     exit 2
     ;;
 esac

@@ -111,6 +111,8 @@ struct ShannonYousuFixtureClient: ShannonYousuServing {
         ShannonNowStudyDTO(pieces: [.init(id: "s1", title: "灯台と白い猫", awaitingReaction: true)])
     }
 
+    func opsReportScope(scopeKey: String) -> String? { nil }
+
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO {
         ShannonAutonomyActivityDTO(control: .init(state: "active", enabled: true, paused: false), days: [])
     }

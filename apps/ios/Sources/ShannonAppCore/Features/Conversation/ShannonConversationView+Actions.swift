@@ -15,14 +15,15 @@ extension ShannonConversationView {
 
 #if DEBUG
     func applyDesignPreviewLaunchState() {
-        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDialogue") {
+        if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewDialogue")
+            || ProcessInfo.processInfo.arguments.contains("-ShannonPreviewBody") {
             displayMode = .dialogue
         }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewWork") {
             selectedPage = .work
         }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewMemory") {
-            selectedPage = .memory
+            selectedPage = .shannon
         }
         if ProcessInfo.processInfo.arguments.contains("-ShannonPreviewAgentTask"),
            let task = model.agentTasks.first(where: { $0.status == .proposed }) {
@@ -298,6 +299,7 @@ extension ShannonConversationView {
     func performTranscriptionPrimaryAction() {
         switch voiceModel.phase {
         case .idle, .denied, .failed:
+            guard !dictationWaitsForCall else { return }
             composerIsFocused = false
             Task { await voiceModel.startListening() }
 

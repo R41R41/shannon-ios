@@ -96,7 +96,7 @@ struct ShannonApp: App {
                 // An iPhone app in the background is suspended unless it stands by: it withdraws its report when it leaves the foreground.
                 .shannonPrivateListening(privateListeningModel)
                 .onOpenURL { url in
-                    // `shannon://yousu` opens 「ようす」; every other link is a pairing link, as before.
+                    // `shannon://yousu` opens 「シャノン › ようす」, `shannon://admin/ops` 「設定 › 管理 › 運用」; every other link is a pairing link, as before.
                     guard !ShannonYousuLink.open(url) else { return }
                     Task { await connectionModel.connect(using: url) }
                 }

@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0",
-  "builtAt": "2026-10-02T21:25:15.797Z",
-  "modelUpdatedAt": "2026-10-02T21:10:28.760Z",
+  "version": "0.1.0+202610041927",
+  "builtAt": "2026-10-04T19:27:38.622Z",
+  "modelUpdatedAt": "2026-10-04T19:22:15.824Z",
   "files": [
     "model/Shannon.model3.json",
     "model/Shannon.moc3",

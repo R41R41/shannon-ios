@@ -1,15 +1,31 @@
 import SwiftUI
 
 public struct ShannonConnectionView: View {
+    /// Which part of the connection a place of Settings opens. On the iPhone 設定 › 接続 is this device's
+    /// connection, and 設定 › 管理 › 接続中の端末 is the list of devices (docs/product/information-architecture.md, 1).
+    public enum Part: Sendable {
+        /// Both, as the Mac's sheet shows them.
+        case all
+        /// The state, the first pairing, the check of the connection, and unpairing this device.
+        case connection
+        /// The connected devices, and unpairing another one.
+        case devices
+    }
+
     @Bindable private var model: ShannonConnectionModel
+    private let part: Part
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @State private var devicePendingRevocation: ShannonConnectedDevice?
     @State private var showsSelfDisconnectConfirmation = false
 
-    public init(model: ShannonConnectionModel) {
+    public init(model: ShannonConnectionModel, part: Part = .all) {
         self.model = model
+        self.part = part
     }
+
+    private var showsConnection: Bool { part != .devices }
+    private var showsDevices: Bool { part != .connection }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
@@ -17,9 +33,10 @@ public struct ShannonConnectionView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
-                    connectionStatus(palette)
+                    // The list of devices alone says the state only while there is no list to show.
+                    if showsConnection || !model.isConnected { connectionStatus(palette) }
 
-                    if !model.isConnected {
+                    if !model.isConnected, showsConnection {
                         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
                             Label("最初の一度だけ", systemImage: "link.badge.plus")
                                 .font(.title3.weight(.semibold))
@@ -36,89 +53,17 @@ public struct ShannonConnectionView: View {
                         }
                         .padding(ShannonSpacing.large)
                         .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
-                    } else {
-                        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("認証された通信")
-                                        .font(.headline)
-                                    Text(model.verificationLabel)
-                                        .font(.callout)
-                                        .foregroundStyle(verificationColor(palette))
-                                }
-                                Spacer()
-                                if model.isVerifying {
-                                    ProgressView().controlSize(.small)
-                                }
-                                Button("接続を確認") {
-                                    Task { await model.verifyConnection() }
-                                }
-                                .disabled(model.isVerifying)
-                            }
-                            if case .failed(let message) = model.verificationStatus {
-                                Text(message)
-                                    .font(.caption)
-                                    .foregroundStyle(palette.danger)
-                            }
-                            Divider()
-                            Button(role: .destructive) {
-                                showsSelfDisconnectConfirmation = true
-                            } label: {
-                                Label("この\(deviceNoun)の接続を解除", systemImage: "link.badge.minus")
-                                    .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding(ShannonSpacing.large)
-                        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
-
-                        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                            HStack {
-                                Label("接続端末", systemImage: "laptopcomputer.and.iphone")
-                                    .font(.title3.weight(.semibold))
-                                Spacer()
-                                if model.isLoadingDevices {
-                                    ProgressView().controlSize(.small)
-                                } else {
-                                    Button("再読込") { Task { await model.loadConnectedDevices() } }
-                                        .buttonStyle(.borderless)
-                                }
-                            }
-                            if model.connectedDevices.isEmpty && !model.isLoadingDevices {
-                                Text(model.deviceManagementError ?? "接続中の端末を読み込んでいます。")
-                                    .font(.callout)
-                                    .foregroundStyle(model.deviceManagementError == nil ? palette.textSecondary : palette.danger)
-                            } else {
-                                ForEach(model.connectedDevices) { device in
-                                    Divider()
-                                    connectedDeviceRow(device, palette: palette)
-                                }
-                                if let error = model.deviceManagementError {
-                                    Text(error).font(.caption).foregroundStyle(palette.danger)
-                                }
-                            }
-                        }
-                        .padding(ShannonSpacing.large)
-                        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
+                    } else if model.isConnected {
+                        if showsConnection { connectionCard(palette) }
+                        if showsDevices { devicesCard(palette) }
                     }
 
-                    VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-                        Label("秘密は\(deviceNoun)の中に", systemImage: "lock.shield")
-                            .font(.title3.weight(.semibold))
-                        Text("端末トークンは、この\(deviceNoun)のKeychainへ保存します。OpenAI APIキーや接続コードは保存しません。")
-                            .font(.callout)
-                            .foregroundStyle(palette.textSecondary)
-                        Text(model.baseURL.host ?? model.baseURL.absoluteString)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(palette.action)
-                    }
-                    .padding(ShannonSpacing.large)
-                    .background(palette.userMessage, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
+                    if showsConnection { secretCard(palette) }
                 }
                 .padding(ShannonSpacing.extraLarge)
             }
             .background(palette.canvas)
-            .navigationTitle("シャノンとの接続")
+            .navigationTitle(part == .devices ? ShannonGeneratedStrings.settingsSectionDevices : "シャノンとの接続")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("閉じる") { dismiss() }
@@ -127,7 +72,7 @@ public struct ShannonConnectionView: View {
         }
         .presentationDetents([.medium, .large])
         .task(id: model.isConnected) {
-            if model.isConnected { await model.loadConnectedDevices() }
+            if model.isConnected, showsDevices { await model.loadConnectedDevices() }
         }
         .confirmationDialog(
             "この端末の接続を解除しますか？",
@@ -157,6 +102,89 @@ public struct ShannonConnectionView: View {
         } message: {
             Text("サーバー上の端末資格と通知登録も失効します。再利用するには、もう一度接続してください。")
         }
+    }
+
+    private func connectionCard(_ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("認証された通信")
+                        .font(.headline)
+                    Text(model.verificationLabel)
+                        .font(.callout)
+                        .foregroundStyle(verificationColor(palette))
+                }
+                Spacer()
+                if model.isVerifying {
+                    ProgressView().controlSize(.small)
+                }
+                Button("接続を確認") {
+                    Task { await model.verifyConnection() }
+                }
+                .disabled(model.isVerifying)
+            }
+            if case .failed(let message) = model.verificationStatus {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(palette.danger)
+            }
+            Divider()
+            Button(role: .destructive) {
+                showsSelfDisconnectConfirmation = true
+            } label: {
+                Label("この\(deviceNoun)の接続を解除", systemImage: "link.badge.minus")
+                    .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(ShannonSpacing.large)
+        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
+    }
+
+    private func devicesCard(_ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            HStack {
+                Label("接続端末", systemImage: "laptopcomputer.and.iphone")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                if model.isLoadingDevices {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("再読込") { Task { await model.loadConnectedDevices() } }
+                        .buttonStyle(.borderless)
+                }
+            }
+            if model.connectedDevices.isEmpty && !model.isLoadingDevices {
+                Text(model.deviceManagementError ?? "接続中の端末を読み込んでいます。")
+                    .font(.callout)
+                    .foregroundStyle(model.deviceManagementError == nil ? palette.textSecondary : palette.danger)
+            } else {
+                ForEach(model.connectedDevices) { device in
+                    Divider()
+                    connectedDeviceRow(device, palette: palette)
+                }
+                if let error = model.deviceManagementError {
+                    Text(error).font(.caption).foregroundStyle(palette.danger)
+                }
+            }
+        }
+        .padding(ShannonSpacing.large)
+        .background(palette.subtleSurface, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
+    }
+
+    private func secretCard(_ palette: ShannonPalette) -> some View {
+        VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
+            Label("秘密は\(deviceNoun)の中に", systemImage: "lock.shield")
+                .font(.title3.weight(.semibold))
+            Text("端末トークンは、この\(deviceNoun)のKeychainへ保存します。OpenAI APIキーや接続コードは保存しません。")
+                .font(.callout)
+                .foregroundStyle(palette.textSecondary)
+            Text(model.baseURL.host ?? model.baseURL.absoluteString)
+                .font(.caption.monospaced())
+                .foregroundStyle(palette.action)
+        }
+        .padding(ShannonSpacing.large)
+        .background(palette.userMessage, in: RoundedRectangle(cornerRadius: ShannonShape.extraLarge))
     }
 
     @ViewBuilder

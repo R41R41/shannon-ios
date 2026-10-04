@@ -387,6 +387,71 @@ final class ShannonAppLookTests: XCTestCase {
         XCTAssertTrue(primer.benefits.contains { $0.text.contains("会話中にシャノンがカメラで見る") })
     }
 
+    // MARK: The state that is always on screen (A7)
+
+    func testTheVisibleStateIsOffUnlessSheReallyMayLookAndLookingWhileTheCameraIsOpen() {
+        typealias State = ShannonAppLookVisibleState
+        XCTAssertEqual(State.make(enabled: true, hasCamera: true, permission: .granted, isCapturing: false), .allowed)
+        // An unanswered permission is asked on the first look: she may still look.
+        XCTAssertEqual(State.make(enabled: true, hasCamera: true, permission: .undetermined, isCapturing: false), .allowed)
+        XCTAssertEqual(State.make(enabled: false, hasCamera: true, permission: .granted, isCapturing: false), .off)
+        XCTAssertEqual(State.make(enabled: true, hasCamera: false, permission: .granted, isCapturing: false), .off)
+        XCTAssertEqual(State.make(enabled: true, hasCamera: true, permission: .denied, isCapturing: false), .off)
+        // 「友人も一緒」: the call does not offer her the camera.
+        XCTAssertEqual(State.make(enabled: true, hasCamera: true, permission: .granted, othersPresent: true, isCapturing: false), .off)
+        XCTAssertEqual(State.make(enabled: true, hasCamera: true, permission: .granted, isCapturing: true), .looking)
+        XCTAssertEqual(State.off.line, "カメラ：切")
+        XCTAssertEqual(State.allowed.line, "カメラ：見てよい")
+        XCTAssertEqual(State.looking.line, "カメラ：いま見ています")
+    }
+
+    func testAFriendInTheCallTurnsTheCameraOffEverywhereWhileTheCallLasts() {
+        typealias State = ShannonAppLookVisibleState
+        XCTAssertTrue(State.othersPresent(callIsLive: true, participantMode: .guest))
+        // Minimised or not, the call is the same call: Talk and the sheet say 切 too.
+        XCTAssertFalse(State.othersPresent(callIsLive: true, participantMode: .owner))
+        // The mode of a call that has ended is not a friend in the room now.
+        XCTAssertFalse(State.othersPresent(callIsLive: false, participantMode: .guest))
+    }
+
+    func testTheCameraIsLookedForOnceAndAwayFromTheMainThread() async {
+        let camera = CountingCamera(available: [])
+        let coordinator = Fixtures.coordinator(ShannonAppLookEnvironment(
+            isEnabled: { true }, isForeground: { true }, permission: { .granted }, requestPermission: { true }, camera: camera))
+        // Until it is known, the state reads the camera as present (no 切 that may be wrong).
+        XCTAssertNil(coordinator.cameraIsPresent)
+        XCTAssertTrue(coordinator.hasCamera)
+        XCTAssertEqual(camera.lookups, 0, "reading the state does not look for devices")
+        // Two that ask at once share one look.
+        async let first: Void = coordinator.discoverCamera()
+        async let second: Void = coordinator.discoverCamera()
+        _ = await (first, second)
+        await coordinator.discoverCamera()
+        XCTAssertEqual(coordinator.cameraIsPresent, false)
+        XCTAssertFalse(coordinator.hasCamera)
+        XCTAssertEqual(camera.lookups, 1)
+        XCTAssertFalse(camera.lookedUpOnMainThread)
+    }
+
+    func testTheCameraIsShownAsLookingOnlyWhileTheFrameIsTaken() async throws {
+        let camera = HeldCamera()
+        let coordinator = Fixtures.coordinator(ShannonAppLookEnvironment(
+            isEnabled: { true }, isForeground: { true }, permission: { .granted }, requestPermission: { true }, camera: camera))
+        XCTAssertFalse(coordinator.isCapturing)
+        let look = Task { await coordinator.look(Fixtures.ask()) }
+        try await Fixtures.wait { camera.isHeld }
+        XCTAssertTrue(coordinator.isCapturing)
+        camera.release(failing: false)
+        _ = await look.value
+        XCTAssertFalse(coordinator.isCapturing)
+        // A capture that fails ends the state too.
+        let failing = Task { await coordinator.look(Fixtures.ask()) }
+        try await Fixtures.wait { camera.isHeld }
+        camera.release(failing: true)
+        _ = await failing.value
+        XCTAssertFalse(coordinator.isCapturing)
+    }
+
     private func json<T: Encodable>(_ value: T) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as? [String: Any])
     }
@@ -422,6 +487,50 @@ private final class StubCamera: ShannonAppLookCapturing, @unchecked Sendable {
         if let error { throw error }
         guard let image = Fixtures.image(width: 1_280, height: 720) else { throw ShannonAppLookCaptureError.failed }
         return image
+    }
+}
+
+/// Counts how often devices were looked for, and on which thread.
+private final class CountingCamera: ShannonAppLookCapturing, @unchecked Sendable {
+    private let lock = NSLock()
+    private let available: [ShannonAppLookCamera]
+    private var count = 0
+    private var onMain = false
+    init(available: [ShannonAppLookCamera]) { self.available = available }
+    var lookups: Int { lock.withLock { count } }
+    var lookedUpOnMainThread: Bool { lock.withLock { onMain } }
+    func cameras() -> [ShannonAppLookCamera] {
+        lock.withLock {
+            count += 1
+            onMain = onMain || Thread.isMainThread
+        }
+        return available
+    }
+    func capture(_ camera: ShannonAppLookCamera) async throws -> CGImage { throw ShannonAppLookCaptureError.failed }
+}
+
+/// A camera that holds its frame until the test lets it go.
+private final class HeldCamera: ShannonAppLookCapturing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CGImage, Error>?
+
+    var isHeld: Bool { lock.withLock { continuation != nil } }
+
+    func cameras() -> [ShannonAppLookCamera] { [.back] }
+
+    func capture(_ camera: ShannonAppLookCamera) async throws -> CGImage {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.withLock { self.continuation = continuation }
+        }
+    }
+
+    func release(failing: Bool) {
+        let held = lock.withLock { () -> CheckedContinuation<CGImage, Error>? in
+            defer { continuation = nil }
+            return continuation
+        }
+        if failing { held?.resume(throwing: ShannonAppLookCaptureError.failed) }
+        else if let image = Fixtures.image(width: 640, height: 480) { held?.resume(returning: image) }
     }
 }
 

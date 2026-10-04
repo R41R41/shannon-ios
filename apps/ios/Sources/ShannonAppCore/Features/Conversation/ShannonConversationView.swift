@@ -23,6 +23,7 @@ public struct ShannonConversationView: View {
     @State var bodyModel = ShannonBodyModel()
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
+    @State var showsConnectedDevices = false
     @State var showsAppIconSettings = false
     @State var showsAppearanceSettings = false
     @State var showsTestFlightDelivery = false
@@ -32,8 +33,15 @@ public struct ShannonConversationView: View {
     @State var showsSettings = false
     @State var showsThreadList = false
     @State var yousu: ShannonYousuModel
-    @State var yousuRequest: ShannonYousuLink.Request?
     @State var didApplyYousuPreview = false
+    /// 「シャノン › ようす」 is open.
+    @State var hubShowsYousu = false
+    /// 「設定 › 管理 › 運用」 is open.
+    @State var settingsShowsOps = false
+    /// A `shannon://` link that waits until what is on screen lets its place be seen (`ShannonLinkRoute`).
+    @State var deferredLink: ShannonDeferredLink?
+    /// Set while Settings, asked for by a link, has not appeared yet; cleared when it appears or closes.
+    @State var settingsLinkRequest: UUID?
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -55,6 +63,8 @@ public struct ShannonConversationView: View {
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceModeRawValue = ShannonAppearanceMode.system.rawValue
     @AppStorage(ShannonChatAvatarStyle.storageKey) var chatAvatarStyleRawValue = ShannonChatAvatarStyle.expression.rawValue
     @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
+    @AppStorage(ShannonForm.storageKey) var formRawValue = ShannonForm.waterlight.rawValue
+    @AppStorage(ShannonBodyPreference.layoutModeKey) var figureLayoutRawValue = ShannonLive2DLayout.Mode.full.rawValue
     @FocusState var composerIsFocused: Bool
 
     @Environment(\.colorScheme) var colorScheme
@@ -113,12 +123,32 @@ public struct ShannonConversationView: View {
         .task(id: "\(scenePhase)-\(model.agentTaskPollingKey)") {
             await pollAgentTasksWhileActive()
         }
+        // The marks on the top-left button: what waits for the owner in 「シャノン」, read when the app comes to the
+        // front, and whether 運用 deserves a look, read then and every few minutes while the app stays in front.
+        .task(id: scenePhase == .active) { await keepEntryMarks() }
+        .onChange(of: showsSettings) {
+            if !showsSettings {
+                settingsShowsOps = false
+                settingsLinkRequest = nil
+            }
+        }
+        // Her figure in the dialogue display is the surface that may answer a touch in voice: only while it is what he sees.
+        .onChange(of: dialogueFigureIsInFront, initial: true) { bodyModel.dialogueIsInFront = dialogueFigureIsInFront }
+        .onChange(of: bodyModel.dialogueRequest) { showFigureInTalk() }
+        // A new 映し方, from Talk's display options or 設定 › すがた, starts from her own size and place.
+        .onChange(of: figureLayoutRawValue) { bodyModel.figureAdjustment = ShannonLive2DLayout() }
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
+        // Whether there is a camera, once and off the main thread, before the camera's state is first shown.
+        .task { await model.appLook.discoverCamera() }
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
         .onAppear { openPendingYousuLink() }
         .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in openPendingYousuLink() }
+        // A waiting link tries again whenever what is on screen changes, once it has settled.
+        .task(id: linkRetryKey) { await retryDeferredLink() }
+        // A work task he opened himself (from the call screen, say) is newer than a waiting link: the link gives way.
+        .onChange(of: selectedAgentTaskID) { if selectedAgentTaskID != nil { deferredLink = nil } }
 #if os(iOS)
         // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
         .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
@@ -154,24 +184,25 @@ public struct ShannonConversationView: View {
 #if os(iOS)
         .fullScreenCover(isPresented: $showsSettings) {
             settingsSheet
+                .onAppear { settingsLinkRequest = nil }
                 .modifier(ShannonVoiceAccessoryModifier(workspace: voiceWorkspace,
                     conversationModel: model, geminiVoiceModel: geminiLiveVoiceModel))
         }
 #else
         .sheet(isPresented: $showsSettings) {
             settingsSheet
+                .onAppear { settingsLinkRequest = nil }
         }
 #endif
         .sheet(isPresented: $showsThreadList) {
             ShannonThreadListSheet(
                 model: model,
                 yousu: yousu,
-                autonomy: memoryModel.autonomy.isSupported ? memoryModel.autonomy : nil,
-                yousuRequest: $yousuRequest,
+                cameraOthersPresent: cameraOthersPresent,
                 selectedThreadId: model.selectedThreadId,
                 openTalk: openTalkFromThreadList,
                 openWork: openWorkFromThreadList,
-                openMemory: openMemoryFromThreadList,
+                openShannon: openShannonFromThreadList,
                 openSettings: openSettingsFromThreadList,
                 openAgentTask: openAgentTaskFromThreadList,
                 close: closeThreadList

@@ -11,6 +11,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
     var allowsTaskNavigation = true
     var openTask: (UUID) -> Void = { _ in }
     @State private var taskToOpen: UUID?
+    @State private var presenterID = UUID()
     @Environment(\.colorScheme) private var colorScheme
 
     private var voiceTask: ShannonAgentTask? {
@@ -48,7 +49,7 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         }) {
             ShannonGeminiLiveVoiceView(
                 model: geminiVoiceModel, workspace: workspace,
-                expression: expression, task: voiceTask,
+                expression: expression, task: voiceTask, appLook: conversationModel.appLook,
                 analyzeCameraSnapshot: { data in
                     guard let threadID = workspace.threadContext?.threadID else {
                         throw ShannonAPIError.invalidResponse
@@ -66,6 +67,9 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         .onChange(of: isPresented) {
             if isPresented, geminiVoiceModel.phase == .idle { beginCall(.owner) }
         }
+        // Whether a call screen is up anywhere, for the links that must not close what is under it.
+        .onChange(of: isPresented, initial: true) { workspace.setCallScreen(presenterID, isUp: isPresented) }
+        .onDisappear { workspace.setCallScreen(presenterID, isUp: false) }
         // A spoken switch happens in the session, so an unshared photo is cleared here too.
         .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
         // A call that ended without this sheet's 終了 (silence in the background, no answer to her own line) closes it too.
