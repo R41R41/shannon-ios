@@ -123,9 +123,15 @@ extension ShannonConversationView {
         .sheet(isPresented: $showsStateDetails) {
             ShannonStateSheet(state: model.state, face: model.presentFace)
         }
+        // 設定 › 接続 is this device's connection; 管理 › 接続中の端末 is the list of devices.
         .sheet(isPresented: $showsConnectionDetails) {
             if let connectionModel {
-                ShannonConnectionView(model: connectionModel)
+                ShannonConnectionView(model: connectionModel, part: .connection)
+            }
+        }
+        .sheet(isPresented: $showsConnectedDevices) {
+            if let connectionModel {
+                ShannonConnectionView(model: connectionModel, part: .devices)
             }
         }
         .sheet(isPresented: $showsAppIconSettings) {

@@ -18,13 +18,17 @@ extension ShannonYousuModel {
     }
 }
 
-extension ShannonConversationView {
+extension ShannonConversationModel {
     /// Work tasks that wait for a permission, as 「シャノンのいま」 lists them.
-    var yousuApprovals: [ShannonNowWaitingItem] {
-        model.agentTasks.filter { $0.pendingApproval != nil && !$0.isArchived }.map { task in
+    var waitingApprovals: [ShannonNowWaitingItem] {
+        agentTasks.filter { $0.pendingApproval != nil && !$0.isArchived }.map { task in
             ShannonNowWaitingItem(id: task.id.uuidString, kind: .approval, title: task.title, detail: "作業が、あなたの許可を待っています")
         }
     }
+}
+
+extension ShannonConversationView {
+    var yousuApprovals: [ShannonNowWaitingItem] { model.waitingApprovals }
 
     /// The 「シャノン」 page of the workspace.
     var shannonHub: some View {
@@ -65,16 +69,43 @@ extension ShannonConversationView {
     }
 
     func openLink(_ request: ShannonYousuLink.Request) {
+        let route = ShannonLinkRoute.make(
+            request, callScreen: showsGeminiLiveVoice, threadList: showsThreadList,
+            settings: showsSettings, workTask: selectedAgentTaskID != nil
+        )
+        // As a task opened from the call screen does: the place opens once the call is minimised or ends.
+        if route.waitsForCallScreen {
+            deferredLink = request
+            return
+        }
         composerIsFocused = false
-        showsThreadList = false
+        if route.closesThreadList { showsThreadList = false }
+        if route.closesSettings { showsSettings = false }
+        if route.closesWorkTask { selectedAgentTaskID = nil }
         switch request {
         case .yousu:
             settleWorkspace(on: .shannon)
             hubShowsYousu = true
         case .ops:
-            showsSettings = true
-            settingsShowsOps = true
+            guard route.presentsSettingsAfterDismissal else {
+                showsSettings = true
+                settingsShowsOps = true
+                return
+            }
+            // A cover cannot come up while another is leaving: Settings follows once it has gone.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                showsSettings = true
+                settingsShowsOps = true
+            }
         }
+    }
+
+    /// The call screen went away: a link that waited for it opens its place now.
+    func openDeferredLink() {
+        guard !showsGeminiLiveVoice, let request = deferredLink else { return }
+        deferredLink = nil
+        openLink(request)
     }
 
     /// Keeps what the top-left button marks current while the app is in front.

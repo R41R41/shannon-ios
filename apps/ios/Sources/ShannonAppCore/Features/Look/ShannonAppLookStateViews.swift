@@ -18,6 +18,12 @@ public enum ShannonAppLookVisibleState: Equatable, Sendable {
         return .allowed
     }
 
+    /// Someone else is in the voice conversation (「友人も一緒」): the call does not offer her the camera, so Talk,
+    /// the sheet and the call screen all say 切 while it lasts, also with the call minimised.
+    public static func othersPresent(callIsLive: Bool, participantMode: ShannonVoiceParticipantMode) -> Bool {
+        callIsLive && participantMode != .owner
+    }
+
     public var word: String {
         switch self {
         case .off: ShannonGeneratedStrings.lookStateOff
@@ -49,20 +55,18 @@ struct ShannonAppLookStateReader<Content: View>: View {
     @ViewBuilder let content: (ShannonAppLookVisibleState) -> Content
 
     @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) private var enabled = true
-    @State private var permission = ShannonMediaPermission.undetermined
-    @State private var hasCamera = true
+    /// The last answer read; nil until something asked again, so the first frame reads the system itself.
+    @State private var permission: ShannonMediaPermission?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         content(ShannonAppLookVisibleState.make(
-            enabled: enabled, hasCamera: hasCamera, permission: permission, othersPresent: othersPresent,
-            isCapturing: coordinator.isCapturing
+            enabled: enabled, hasCamera: coordinator.hasCamera, permission: permission ?? coordinator.permission,
+            othersPresent: othersPresent, isCapturing: coordinator.isCapturing
         ))
+        .task { await coordinator.discoverCamera() }
         // The system's permission can change in the Settings app: read again whenever the app comes back.
-        .task(id: scenePhase == .active) {
-            permission = coordinator.permission
-            hasCamera = coordinator.hasCamera
-        }
+        .onChange(of: scenePhase) { if scenePhase == .active { permission = coordinator.permission } }
         // The first look asks the system: its answer shows as soon as the frame is taken or refused.
         .onChange(of: coordinator.isCapturing) { permission = coordinator.permission }
         .onChange(of: coordinator.primerPhase) { permission = coordinator.permission }

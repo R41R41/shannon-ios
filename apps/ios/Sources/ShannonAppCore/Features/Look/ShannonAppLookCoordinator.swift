@@ -235,9 +235,20 @@ public final class ShannonAppLookCoordinator {
         }
     }
 
-    /// Whether there is a camera at all, and what the system allows, for the state shown in Talk and the call.
-    public var hasCamera: Bool { !environment.camera.cameras().isEmpty }
+    /// Whether this device has a camera at all: looked up once, off the main thread (`discoverCamera()`).
+    /// Nil until then; the state shown in Talk, the call and the sheet reads it as present meanwhile.
+    public private(set) var cameraIsPresent: Bool?
+    public var hasCamera: Bool { cameraIsPresent ?? true }
+    /// What the system allows now. A cheap question, asked again whenever the app comes back to the front.
     public var permission: ShannonMediaPermission { environment.permission() }
+
+    /// Looks for a camera once per launch, away from the main thread (device discovery can take a moment).
+    public func discoverCamera() async {
+        guard cameraIsPresent == nil else { return }
+        let camera = environment.camera
+        let present = await Task.detached(priority: .utility) { !camera.cameras().isEmpty }.value
+        cameraIsPresent = present
+    }
 
     public func dismissCue(_ id: UUID? = nil) {
         guard id == nil || cue?.id == id else { return }

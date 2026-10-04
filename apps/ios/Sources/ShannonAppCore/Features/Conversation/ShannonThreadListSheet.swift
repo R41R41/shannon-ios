@@ -11,6 +11,8 @@ struct ShannonThreadListSheet: View {
     let model: ShannonConversationModel
     /// What the 「シャノン」 tile counts and the 「設定」 tile marks.
     let yousu: ShannonYousuModel
+    /// A friend is in the voice conversation: the camera is 切, as in Talk and the call.
+    var cameraOthersPresent = false
     let selectedThreadId: String?
     let openTalk: () -> Void
     let openWork: () -> Void
@@ -26,9 +28,9 @@ struct ShannonThreadListSheet: View {
     @State var editingThread: ChatThreadDTO?
     @State var searchText = ""
     @AppStorage(ShannonAppLookPreference.enabledDefaultsKey) var cameraEnabled = true
-    /// The camera's facts, read when the list opens (the sheet is opened anew each time).
-    @State var cameraHasCamera = true
-    @State var cameraPermission = ShannonMediaPermission.undetermined
+    /// The system's answer about the camera, read again when the app comes back; nil reads the system itself.
+    @State var cameraPermission: ShannonMediaPermission?
+    @Environment(\.scenePhase) var scenePhase
 
     var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -58,7 +60,7 @@ struct ShannonThreadListSheet: View {
             ),
             ShannonThreadListDestination(
                 title: ShannonGeneratedStrings.navShannon, symbol: "person.crop.circle",
-                badge: yousu.now.waitingItems.count, action: openShannon
+                badge: yousu.now.waiting(approvals: model.waitingApprovals).count, action: openShannon
             ),
             settingsDestination,
         ]
@@ -121,12 +123,12 @@ struct ShannonThreadListSheet: View {
             }
             .searchable(text: $searchText, placement: Self.searchPlacement, prompt: "トークを検索")
             // One read when the list opens, so the tiles can carry their count and mark; no polling here.
+            .onChange(of: scenePhase) { if scenePhase == .active { cameraPermission = model.appLook.permission } }
             .task {
-                cameraHasCamera = model.appLook.hasCamera
-                cameraPermission = model.appLook.permission
+                async let camera: Void = model.appLook.discoverCamera()
                 async let ops: Void = yousu.ops.refresh()
                 async let now: Void = yousu.now.reload()
-                _ = await (ops, now)
+                _ = await (camera, ops, now)
             }
             .navigationTitle("シャノン")
 #if os(iOS)
@@ -220,8 +222,8 @@ struct ShannonThreadListSheet: View {
     @ViewBuilder
     func cameraOffLine(_ palette: ShannonPalette) -> some View {
         let state = ShannonAppLookVisibleState.make(
-            enabled: cameraEnabled, hasCamera: cameraHasCamera, permission: cameraPermission,
-            isCapturing: model.appLook.isCapturing)
+            enabled: cameraEnabled, hasCamera: model.appLook.hasCamera, permission: cameraPermission ?? model.appLook.permission,
+            othersPresent: cameraOthersPresent, isCapturing: model.appLook.isCapturing)
         // Read here, not in a reader view: a List makes no row, and runs nothing, for a view that shows nothing.
         if state == .off {
             Label(state.line, systemImage: "eye.slash")

@@ -157,6 +157,10 @@ final class ShannonYousuNowTests: XCTestCase {
         XCTAssertEqual(model.waitingItems.map(\.id), ["piece-s1", "budget-b1", "proposal-p1"])
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems), "感想 1・判断 2")
         XCTAssertEqual(ShannonNowText.waitingSummary(model.waitingItems + [.init(id: "t", kind: .approval, title: "t", detail: "d")]), "感想 1・判断 2・許可 1")
+        // One list for the card, ようす, the 「シャノン」 tile and the top-left dot: hers, then work waiting for a permission.
+        let approval = ShannonNowWaitingItem(id: "t", kind: .approval, title: "t", detail: "d")
+        XCTAssertEqual(model.waiting(approvals: [approval]).map(\.id), ["piece-s1", "budget-b1", "proposal-p1", "t"])
+        XCTAssertEqual(model.waiting(approvals: []).count, 3)
 
         // A reading that was cancelled (the page went away) claims nothing.
         client.now = .failure(URLError(.cancelled))
@@ -192,6 +196,36 @@ final class ShannonYousuNowTests: XCTestCase {
         ] {
             XCTAssertNil(ShannonYousuLink.request(from: URL(string: other)!), other)
         }
+    }
+
+    func testALinkMakesItsPlaceSeenAndNeverCoversTheCallScreen() {
+        typealias Route = ShannonLinkRoute
+        // The call screen is up: the link waits for it, whatever else is open.
+        for request in [ShannonYousuLink.Request.yousu, .ops] {
+            XCTAssertEqual(Route.make(request, callScreen: true, threadList: true, settings: true, workTask: false), Route(waitsForCallScreen: true))
+        }
+        // ようす is a page of the workspace: whatever is over it closes.
+        XCTAssertEqual(
+            Route.make(.yousu, callScreen: false, threadList: false, settings: true, workTask: false),
+            Route(closesSettings: true)
+        )
+        XCTAssertEqual(
+            Route.make(.yousu, callScreen: false, threadList: true, settings: false, workTask: true),
+            Route(closesThreadList: true, closesWorkTask: true)
+        )
+        XCTAssertEqual(Route.make(.yousu, callScreen: false, threadList: false, settings: false, workTask: false), Route())
+        // 運用 is in Settings: a work task gives way, and Settings comes up once it has gone.
+        XCTAssertEqual(
+            Route.make(.ops, callScreen: false, threadList: false, settings: false, workTask: true),
+            Route(closesWorkTask: true, presentsSettingsAfterDismissal: true)
+        )
+        XCTAssertEqual(
+            Route.make(.ops, callScreen: false, threadList: true, settings: false, workTask: false),
+            Route(closesThreadList: true, presentsSettingsAfterDismissal: true)
+        )
+        // Settings already open: 運用 is pushed inside it.
+        XCTAssertEqual(Route.make(.ops, callScreen: false, threadList: false, settings: true, workTask: false), Route())
+        XCTAssertEqual(Route.make(.ops, callScreen: false, threadList: false, settings: false, workTask: false), Route())
     }
 
     func testTheTilesAndTheTopLeftButtonSayWhatTheyMark() {

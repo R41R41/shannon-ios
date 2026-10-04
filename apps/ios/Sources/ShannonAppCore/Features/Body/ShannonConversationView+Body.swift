@@ -21,6 +21,16 @@ extension ShannonConversationView {
         )
     }
 
+    /// A friend is in the voice conversation, also with the call minimised: the camera is 切 in Talk and the sheet.
+    var cameraOthersPresent: Bool {
+#if os(iOS)
+        ShannonAppLookVisibleState.othersPresent(
+            callIsLive: geminiLiveVoiceModel.phase != .idle, participantMode: geminiLiveVoiceModel.participantMode)
+#else
+        false
+#endif
+    }
+
     /// Opens Talk's dialogue display, where her figure is (「トークで姿を見る」, the small figure of an empty Talk).
     func showFigureInTalk() {
         showsSettings = false

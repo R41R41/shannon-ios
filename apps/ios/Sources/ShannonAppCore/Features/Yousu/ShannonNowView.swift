@@ -30,7 +30,7 @@ public struct ShannonNowView: View {
         self.autonomy = autonomy
     }
 
-    private var waiting: [ShannonNowWaitingItem] { model.waitingItems + approvals }
+    private var waiting: [ShannonNowWaitingItem] { model.waiting(approvals: approvals) }
 
     public var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)

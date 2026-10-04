@@ -23,6 +23,7 @@ public struct ShannonConversationView: View {
     @State var bodyModel = ShannonBodyModel()
     @State var showsStateDetails = false
     @State var showsConnectionDetails = false
+    @State var showsConnectedDevices = false
     @State var showsAppIconSettings = false
     @State var showsAppearanceSettings = false
     @State var showsTestFlightDelivery = false
@@ -37,6 +38,8 @@ public struct ShannonConversationView: View {
     @State var hubShowsYousu = false
     /// 「設定 › 管理 › 運用」 is open.
     @State var settingsShowsOps = false
+    /// A `shannon://` link that arrived while the call screen was up: opened once it is minimised or the call ends.
+    @State var deferredLink: ShannonYousuLink.Request?
     @State var selectedPage: ShannonWorkspacePage = .talk
     @State var displayMode: ShannonConversationDisplayMode = Self.savedDisplayMode
     @State var dialogueIsExpanded = false
@@ -130,9 +133,12 @@ public struct ShannonConversationView: View {
         .task {
             await loadInitialExperience(activeColorScheme: activeColorScheme)
         }
+        // Whether there is a camera, once and off the main thread, before the camera's state is first shown.
+        .task { await model.appLook.discoverCamera() }
         .shannonOpensStudyPieces(with: memoryModel.autonomy.study)
         .onAppear { openPendingYousuLink() }
         .onReceive(NotificationCenter.default.publisher(for: .shannonYousuLinkOpened)) { _ in openPendingYousuLink() }
+        .onChange(of: showsGeminiLiveVoice) { openDeferredLink() }
 #if os(iOS)
         // With a friend in the call, earphones or not, the app does not say that only the owner can hear.
         .onChange(of: geminiLiveVoiceModel.othersMayBeListening, initial: true) {
@@ -180,6 +186,7 @@ public struct ShannonConversationView: View {
             ShannonThreadListSheet(
                 model: model,
                 yousu: yousu,
+                cameraOthersPresent: cameraOthersPresent,
                 selectedThreadId: model.selectedThreadId,
                 openTalk: openTalkFromThreadList,
                 openWork: openWorkFromThreadList,

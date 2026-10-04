@@ -89,8 +89,9 @@ extension ShannonConversationView {
         }
     }
 
-    /// Her stories that wait for a reaction, and her proposals and budget request that wait for a decision.
-    var shannonWaitingCount: Int { yousu.now.waitingItems.count }
+    /// What waits for the owner: her stories, proposals and budget request, and work tasks that wait for a
+    /// permission. The same list as the 「シャノン」 card and its tile (`ShannonNowModel.waiting(approvals:)`).
+    var shannonWaitingCount: Int { yousu.now.waiting(approvals: yousuApprovals).count }
 
     func workspaceContent(_ palette: ShannonPalette) -> some View {
         Group {

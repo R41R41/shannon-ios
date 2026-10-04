@@ -21,7 +21,7 @@ extension ShannonConversationView {
                     value: connectionModel.connectedDevices.isEmpty ? "" : ShannonGeneratedStrings.adminDevicesCount(count: String(connectionModel.connectedDevices.count)),
                     symbol: "laptopcomputer.and.iphone",
                     palette: palette
-                ) { showsConnectionDetails = true }
+                ) { showsConnectedDevices = true }
                 .accessibilityHint(ShannonGeneratedStrings.adminDevicesHint)
             }
             settingsValueButton(

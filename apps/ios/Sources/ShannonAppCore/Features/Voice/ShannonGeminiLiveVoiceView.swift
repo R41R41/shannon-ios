@@ -57,7 +57,8 @@ public struct ShannonGeminiLiveVoiceView: View {
             VStack(spacing: ShannonSpacing.small) {
                 header(palette)
                 if let appLook {
-                    ShannonAppLookStateBadge(coordinator: appLook, othersPresent: model.participantMode != .owner)
+                    ShannonAppLookStateBadge(coordinator: appLook, othersPresent: ShannonAppLookVisibleState.othersPresent(
+                        callIsLive: model.phase != .idle, participantMode: model.participantMode))
                 }
                 GeometryReader { proxy in
                     ScrollView {

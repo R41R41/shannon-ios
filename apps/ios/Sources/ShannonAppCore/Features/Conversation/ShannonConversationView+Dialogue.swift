@@ -18,7 +18,7 @@ extension ShannonConversationView {
                     // The camera's state, always there over the dialogue display (A7): 切／見てよい／いま見ています.
                     HStack {
                         Spacer(minLength: 0)
-                        ShannonAppLookStateBadge(coordinator: model.appLook)
+                        ShannonAppLookStateBadge(coordinator: model.appLook, othersPresent: cameraOthersPresent)
                     }
                     .padding(.horizontal, ShannonSpacing.large)
                     .padding(.top, ShannonSpacing.extraSmall)

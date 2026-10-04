@@ -54,6 +54,12 @@ public final class ShannonNowModel {
         return items
     }
 
+    /// What waits for the owner, as one list: what she waits for, then work tasks that wait for a permission.
+    /// The 「シャノン」 card, ようす, the 「シャノン」 tile and the top-left dot all count this one list.
+    public func waiting(approvals: [ShannonNowWaitingItem]) -> [ShannonNowWaitingItem] {
+        waitingItems + approvals
+    }
+
     /// What she is doing in her own time: the server's own sentence for the owner.
     public var ownTimeLine: String? {
         guard let ownTime else { return nil }

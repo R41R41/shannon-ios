@@ -3095,7 +3095,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Admin.swift#adminSection",
             "apps/ios/Sources/ShannonAppCore/Features/Settings/ShannonConversationView+Settings.swift#adminSection"
           ],
-          "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は「接続」と同じ画面を開く。"
+          "note": "設定の先頭（シャノンの札の下）に 管理: 運用・接続中の端末・配信・診断。「接続と詳細」は無くした（A5）。接続中の端末は端末の一覧と解除だけを、設定 › 接続 はこの端末の接続（状態、確認、この端末の解除）を開く（2026-10-05）。"
         },
         "macos": {
           "status": "no",

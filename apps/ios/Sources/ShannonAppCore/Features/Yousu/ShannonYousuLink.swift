@@ -60,6 +60,31 @@ public enum ShannonYousuLink {
     @MainActor private static var pending: Request?
 }
 
+/// What a link moves out of the way so that its place is what the owner sees. Pure, so it can be tested.
+/// - The call screen is never covered: the link waits until it is minimised or the call ends.
+/// - ようす (「シャノン › ようす」) is a page of the workspace: the thread list, Settings and a work task close.
+/// - 運用 is in Settings: the thread list and a work task close, and Settings comes up once they have gone.
+struct ShannonLinkRoute: Equatable {
+    var waitsForCallScreen = false
+    var closesThreadList = false
+    var closesSettings = false
+    var closesWorkTask = false
+    var presentsSettingsAfterDismissal = false
+
+    static func make(_ request: ShannonYousuLink.Request, callScreen: Bool, threadList: Bool, settings: Bool, workTask: Bool) -> Self {
+        guard !callScreen else { return Self(waitsForCallScreen: true) }
+        switch request {
+        case .yousu:
+            return Self(closesThreadList: threadList, closesSettings: settings, closesWorkTask: workTask)
+        case .ops:
+            return Self(
+                closesThreadList: threadList, closesWorkTask: workTask,
+                presentsSettingsAfterDismissal: !settings && (threadList || workTask)
+            )
+        }
+    }
+}
+
 /// Whether the app is in front, asked of the system itself.
 @MainActor
 enum ShannonYousuForeground {

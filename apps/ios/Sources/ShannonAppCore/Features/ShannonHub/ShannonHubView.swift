@@ -18,7 +18,7 @@ struct ShannonHubView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private var autonomy: ShannonAutonomyModel { memory.autonomy }
-    private var waiting: [ShannonNowWaitingItem] { yousu.now.waitingItems + approvals }
+    private var waiting: [ShannonNowWaitingItem] { yousu.now.waiting(approvals: approvals) }
 
     var body: some View {
         let palette = ShannonPalette.resolve(colorScheme)
