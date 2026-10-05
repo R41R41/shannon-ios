@@ -39,8 +39,11 @@ public final class ShannonLive2DStage {
     public private(set) var calmsInPage = false
     /// Seconds from starting the page to its `ready`, for the body screen's diagnostics.
     public private(set) var lastLoadSeconds: Double?
-    /// The body chosen, shown and asked for (`ShannonLive2DStage+Body.swift`).
-    var bodySwitch = ShannonLive2DBodySwitch(chosen: .current(), offered: ShannonLive2DStage.bundledBodies)
+    /// The body the page shows and the bodies it has: the bundled page's until `ready`, then its own (`[.human]` for an
+    /// older page). Mirrors of `bodySwitch`, written only when they change (`ShannonLive2DStage+Body.swift`).
+    public internal(set) var body: ShannonLive2DBody = .human
+    public internal(set) var bodies: [ShannonLive2DBody] = ShannonLive2DStage.bundledBodies
+    @ObservationIgnored var bodySwitch = ShannonLive2DBodySwitch(chosen: .current(), offered: ShannonLive2DStage.bundledBodies)
 
     /// Touches and reaction moments from the page. One listener: the touch coordinator.
     @ObservationIgnored public var onTouchMessage: (@MainActor (ShannonLive2DMessage) -> Void)?
@@ -162,6 +165,7 @@ public final class ShannonLive2DStage {
 
     /// Where the screen in front wants her, and whether it lets her be touched.
     var frontHost: (layout: ShannonLive2DLayout, touchEnabled: Bool)? { hosts.last.map { ($0.layout, $0.touchEnabled) } }
+    var frontContainer: ShannonLive2DPlatformView? { hosts.last?.container }
 
     func applyHost() { frontHost.map { ShannonLive2DStagePolicy.hostCommands(layout: $0.layout, touchEnabled: $0.touchEnabled) }?.forEach(send) }
 
@@ -243,7 +247,8 @@ public final class ShannonLive2DStage {
                 guard ShannonLive2DStagePolicy.mayRest(reduceMotion: self.reduceMotion, lowPower: self.lowPower, calmsInPage: self.pageCalms),
                       self.status == .ready, self.activeHost != nil else { return }
                 if ShannonLive2DStagePolicy.rests(
-                    calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown,
+                    // A switch of body under way is not idleness: a paused page would not finish it.
+                    calm: true, phase: self.phase, idleSeconds: Date().timeIntervalSince(self.lastActivityAt), fingerDown: self.fingerDown || self.bodySwitch.pending != nil,
                     calmsInPage: self.pageCalms) {
                     self.isResting = true
                     self.refreshPaused()
@@ -378,12 +383,12 @@ public final class ShannonLive2DStage {
     }
 
     /// The page failed, lost its drawing context, or its process ended: one reload, then an honest failure.
-    func recover(generation failed: Int) {
+    func recover(generation failed: Int, ignoringSpacing: Bool = false) {
         guard failed == generation else { return }
         let now = Date()
         // A page that was drawing and broke is given another start; one that never became ready is not reloaded for ever.
         failuresWithoutReady = status == .ready ? 0 : failuresWithoutReady + 1
-        let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: lastReloadAt, now: now, failuresWithoutReady: failuresWithoutReady)
+        let mayReload = ShannonLive2DStagePolicy.mayReload(lastReloadAt: ignoringSpacing ? nil : lastReloadAt, now: now, failuresWithoutReady: failuresWithoutReady)
         release()
         guard mayReload, !hosts.isEmpty else {
             status = hosts.isEmpty ? .unloaded : .failed
@@ -413,7 +418,6 @@ public final class ShannonLive2DStage {
             failuresWithoutReady = 0
             loadProgress = 1
             status = .ready
-            dispatch(.ready(bodies: bodies, shown: body)) // a choice made while it loaded, or a page that ignored `?body=`
             detectCalm(generation: received)
             if let mood { send(.setMood(valence: mood.valence, arousal: mood.arousal, openness: mood.openness)) }
             if let presence { send(.setPresence(presence)) }
@@ -422,6 +426,7 @@ public final class ShannonLive2DStage {
             applyHost()
             refreshPaused()
             lastActivityAt = Date()
+            dispatch(.ready(bodies: bodies, shown: body)) // a choice made while it loaded, or a page that ignored `?body=`
             scheduleRest()
         case let .body(body):
             dispatch(.switched(body))

@@ -10,7 +10,7 @@ import Foundation
 /// - The page of 10:43 answers every `setBody` with `body` and says the body in `contextRestored`. An earlier page
 ///   ignored a `setBody` for the body it showed and could bring back the body it had before a switch when it mended
 ///   a lost surface. So a request is never trusted for ever: one that is not answered within `deadlineSeconds` of
-///   foreground time ends in a reload in the chosen body; and a `contextRestored` without a body is followed by
+///   time in which her figure is seen ends in a reload in the chosen body; and a `contextRestored` without a body is followed by
 ///   asking for the chosen body again (see `contextRestored`).
 struct ShannonLive2DBodySwitch: Equatable, Sendable {
     /// Foreground seconds a switch may take. A switch builds a model from what the page has already read (the first
@@ -31,7 +31,7 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
         case contextRestored(shown: ShannonLive2DBody?)
         /// The web view was let go (no screen showed her, an error, a reload). What the bundled page has stays known.
         case released(bundled: [ShannonLive2DBody])
-        /// One second passed with the app in front.
+        /// One second passed while her figure is seen (`ShannonLive2DBodyPolicy.countsDeadline`).
         case foregroundSecond
     }
 
@@ -40,8 +40,10 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
         case request(ShannonLive2DBody)
         /// The page switched: close the character's mouth and say the layout and the calm again.
         case afterSwitch(ShannonLive2DBody)
-        /// A request went unanswered: reload the page, which starts in the chosen body.
-        case recover
+        /// A request went unanswered: reload the page, which starts in the chosen body. `ignoringSpacing`: the first such
+        /// reload of a switch may come within a minute of another reload (the switch alone must not end as failed);
+        /// a second one for the same switch keeps the usual spacing.
+        case recover(ignoringSpacing: Bool)
     }
 
     var chosen: ShannonLive2DBody
@@ -58,6 +60,9 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
     private(set) var pageReady = false
     /// While the drawing surface is lost, nothing is asked and no time is counted.
     private(set) var surfaceLost = false
+    /// The reload that ignores the spacing has been used for this switch. Kept across the reload itself; given back
+    /// when the page shows the chosen body or the owner chooses another.
+    private(set) var forcedReloadSpent = false
 
     init(chosen: ShannonLive2DBody, offered: [ShannonLive2DBody]) {
         self.chosen = chosen
@@ -70,6 +75,7 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
     mutating func reduce(_ event: Event) -> [Effect] {
         switch event {
         case let .chose(body):
+            if body != chosen { forcedReloadSpent = false }
             chosen = body
             return ask()
         case let .ready(bodies, shown):
@@ -78,10 +84,12 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
             offered = ShannonLive2DBodyPolicy.offered(byReady: bodies)
             self.shown = shown ?? .human
             forget()
+            settleIfChosenShown()
             return ask()
         case let .switched(body):
             shown = body
             forget()
+            settleIfChosenShown()
             return [.afterSwitch(body)] + ask()
         case .contextLost:
             surfaceLost = true
@@ -92,6 +100,7 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
             guard pageReady else { return [] }
             if let shown {
                 self.shown = shown
+                settleIfChosenShown()
                 return ask()
             }
             // The page may have brought back the body it had before a switch: ask for the chosen one again. If it is
@@ -100,7 +109,9 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
             confirming = true
             return [.request(target)]
         case let .released(bundled):
+            let spent = forcedReloadSpent
             self = ShannonLive2DBodySwitch(chosen: chosen, offered: bundled)
+            forcedReloadSpent = spent
             return []
         case .foregroundSecond:
             guard let asked = pending, !surfaceLost else { return [] }
@@ -112,8 +123,14 @@ struct ShannonLive2DBodySwitch: Equatable, Sendable {
                 return ask()
             }
             forget()
-            return [.recover]
+            let bypass = !forcedReloadSpent
+            forcedReloadSpent = true
+            return [.recover(ignoringSpacing: bypass)]
         }
+    }
+
+    private mutating func settleIfChosenShown() {
+        if shown == target { forcedReloadSpent = false }
     }
 
     private mutating func forget() {

@@ -118,20 +118,20 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .human)), [.request(.eyes)])
     }
 
-    func testWhileTheSurfaceIsLostChoicesAreHeldAndTheBodyIsAskedAgainWhenItIsBack() {
-        // The race: her eyes were switched to, then the page's mending brings back the character.
+    func testWhileTheSurfaceIsLostAnotherChoiceIsHeldAndAskedForWhenItIsBack() {
+        // The race of the page of 09:55: her eyes were switched to, then its mending may bring back the character.
         var machine = Self.readySwitch(chosen: .human, shown: .human)
         XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
         XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
         XCTAssertEqual(machine.reduce(.contextLost), [])
-        // Held while the surface is lost; no time counts.
-        XCTAssertEqual(machine.reduce(.chose(.eyes)), [])
-        for _ in 0..<60 { XCTAssertEqual(machine.reduce(.foregroundSecond), []) }
-        // Back, without saying which body: the chosen one is asked again.
-        XCTAssertEqual(machine.reduce(.contextRestored(shown: nil)), [.request(.eyes)])
-        // The page shows the character after all: it switches and says so; the owner's next choice goes through.
-        XCTAssertEqual(machine.reduce(.switched(.eyes)), [.afterSwitch(.eyes)])
-        XCTAssertEqual(machine.reduce(.chose(.human)), [.request(.human)])
+        // A different body chosen during the loss is held (with the surface present it would be asked at once).
+        XCTAssertEqual(machine.reduce(.chose(.human)), [])
+        XCTAssertNil(machine.pending)
+        // Back, without saying which body: the body chosen during the loss is asked for.
+        XCTAssertEqual(machine.reduce(.contextRestored(shown: nil)), [.request(.human)])
+        XCTAssertEqual(machine.reduce(.switched(.human)), [.afterSwitch(.human)])
+        // The owner's next choice goes straight through.
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
 
         // When the page already shows the asked body it stays silent: the question runs out and that body is taken as
         // shown, without a reload, and a choice made meanwhile is asked then.
@@ -159,12 +159,67 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertNil(settled.pending)
     }
 
+    func testNoDeadlineTimeCountsWhileTheSurfaceIsLostAndTheRestoredBodySettlesTheRequest() {
+        var machine = Self.readySwitch(chosen: .human, shown: .human)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
+        XCTAssertEqual(machine.reduce(.contextLost), [])
+        for _ in 0..<(BodySwitch.deadlineSeconds * 2) { XCTAssertEqual(machine.reduce(.foregroundSecond), []) }
+        XCTAssertEqual(machine.waited, 0)
+        XCTAssertEqual(machine.pending, .eyes)
+        // The page of 10:43 says the body it rebuilt with (the latest requested): the request is settled.
+        XCTAssertEqual(machine.reduce(.contextRestored(shown: .eyes)), [])
+        XCTAssertNil(machine.pending)
+        XCTAssertEqual(machine.shown, .eyes)
+    }
+
+    func testAReadyPageHasItsSurfaceAgain() {
+        // The surface was lost and the page was then reloaded: its `ready` ends the loss, so choices are asked again.
+        var machine = Self.readySwitch(chosen: .human, shown: .human)
+        XCTAssertEqual(machine.reduce(.contextLost), [])
+        XCTAssertTrue(machine.surfaceLost)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [])
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .human)), [.request(.eyes)])
+        XCTAssertFalse(machine.surfaceLost)
+    }
+
+    func testAnUnansweredSwitchReloadsOnceIgnoringTheSpacingAndThenKeepsIt() {
+        var machine = Self.readySwitch(chosen: .eyes, shown: .eyes)
+        XCTAssertEqual(machine.reduce(.chose(.human)), [.request(.human)])
+        for _ in 1..<BodySwitch.deadlineSeconds { _ = machine.reduce(.foregroundSecond) }
+        // The first reload of this switch may come within a minute of another one.
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover(ignoringSpacing: true)])
+        // The reloaded page ignores `?body=` and comes up in her eyes: asked again, and again unanswered.
+        XCTAssertEqual(machine.reduce(.released(bundled: Self.bothBodies)), [])
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .eyes)), [.request(.human)])
+        for _ in 1..<BodySwitch.deadlineSeconds { _ = machine.reduce(.foregroundSecond) }
+        // No second bypass for the same switch: the usual spacing decides (failed if within a minute).
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover(ignoringSpacing: false)])
+        // Once the page shows the chosen body, a later switch has its own bypass again.
+        _ = machine.reduce(.released(bundled: Self.bothBodies))
+        XCTAssertEqual(machine.reduce(.ready(bodies: Self.bothBodies, shown: .human)), [])
+        XCTAssertFalse(machine.forcedReloadSpent)
+        XCTAssertEqual(machine.reduce(.chose(.eyes)), [.request(.eyes)])
+        for _ in 1..<BodySwitch.deadlineSeconds { _ = machine.reduce(.foregroundSecond) }
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover(ignoringSpacing: true)])
+    }
+
+    func testDeadlineSecondsCountOnlyWhileHerFigureCanBeSeen() {
+        XCTAssertTrue(ShannonLive2DBodyPolicy.countsDeadline(appActive: true, showing: true, windowVisible: true))
+        XCTAssertFalse(ShannonLive2DBodyPolicy.countsDeadline(appActive: false, showing: true, windowVisible: true))
+        XCTAssertFalse(ShannonLive2DBodyPolicy.countsDeadline(appActive: true, showing: false, windowVisible: true))
+        // The Mac: a minimised or covered window is not seen, though the app is not hidden.
+        XCTAssertFalse(ShannonLive2DBodyPolicy.countsDeadline(appActive: true, showing: true, windowVisible: false))
+        // A spacing that is ignored is a reload whatever the last one was, but never for a page that keeps failing.
+        XCTAssertTrue(ShannonLive2DStagePolicy.mayReload(lastReloadAt: nil, now: Date()))
+        XCTAssertFalse(ShannonLive2DStagePolicy.mayReload(lastReloadAt: nil, now: Date(), failuresWithoutReady: 2))
+    }
+
     func testAnUnansweredSwitchEndsInAReloadAfterItsDeadline() {
         // The page ignored the request (it believed it showed that body already): the request is not kept for ever.
         var machine = Self.readySwitch(chosen: .eyes, shown: .eyes)
         XCTAssertEqual(machine.reduce(.chose(.human)), [.request(.human)])
         for _ in 1..<BodySwitch.deadlineSeconds { XCTAssertEqual(machine.reduce(.foregroundSecond), []) }
-        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover])
+        XCTAssertEqual(machine.reduce(.foregroundSecond), [.recover(ignoringSpacing: true)])
         XCTAssertNil(machine.pending)
         XCTAssertEqual(BodySwitch.deadlineSeconds, 30)
     }

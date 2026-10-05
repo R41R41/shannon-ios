@@ -23,6 +23,12 @@ enum ShannonLive2DBodyPolicy {
         calmsInPage && body.hasCharacterRig
     }
 
+    /// Seconds of a pending switch count only while her figure can be seen: the app in front, a screen showing her, and
+    /// that screen's window visible (on the Mac: not minimised, not hidden behind other windows).
+    static func countsDeadline(appActive: Bool, showing: Bool, windowVisible: Bool) -> Bool {
+        appActive && showing && windowVisible
+    }
+
     /// What the app says again after the page switched: the character's mouth closed (her eyes have none), where the
     /// screen in front wants her, and the calm when the page has it.
     static func commandsAfterSwitch(
@@ -48,11 +54,6 @@ extension ShannonLive2DStage {
         return ShannonLive2DBodyPolicy.bundled(files: version["files"] as? [String] ?? [])
     }()
 
-    /// The body the page shows (the character or her eyes alone), as far as its messages tell.
-    public var body: ShannonLive2DBody { bodySwitch.shown }
-    /// The bodies the page has: the bundled page's until it says `ready`, then its own (`[.human]` for an older page).
-    public var bodies: [ShannonLive2DBody] { bodySwitch.offered }
-
     /// Whether 目だけ can be chosen with this page.
     public var offersEyes: Bool { bodies.contains(.eyes) }
 
@@ -63,6 +64,8 @@ extension ShannonLive2DStage {
 
     /// A body the page has not shown yet is loaded first; until the page says `body`, the other one stays.
     public func setBody(_ value: ShannonLive2DBody) {
+        // Every change of any setting of the app arrives here: only a change of this one is news.
+        guard value != bodySwitch.chosen else { return }
         dispatch(.chose(value))
     }
 
@@ -70,7 +73,11 @@ extension ShannonLive2DStage {
 
     /// Feeds what happened to the switch and carries out what it says.
     func dispatch(_ event: ShannonLive2DBodySwitch.Event) {
-        for effect in bodySwitch.reduce(event) {
+        let effects = bodySwitch.reduce(event)
+        // The switch itself is not observed (it counts seconds); screens see the body and bodies only when they change.
+        if body != bodySwitch.shown { body = bodySwitch.shown }
+        if bodies != bodySwitch.offered { bodies = bodySwitch.offered }
+        for effect in effects {
             switch effect {
             case let .request(body):
                 noteActivity()
@@ -82,14 +89,14 @@ extension ShannonLive2DStage {
                     to: body, host: frontHost, calm: calmsInPage ? (reduceMotion, lowPower) : nil
                 ).forEach(send)
                 noteActivity()
-            case .recover:
+            case let .recover(ignoringSpacing):
                 NSLog("[ShannonBody] the page did not answer a switch of body; reloading it in the chosen body")
-                recover(generation: generation)
+                recover(generation: generation, ignoringSpacing: ignoringSpacing)
             }
         }
     }
 
-    /// Counts the foreground seconds of a pending request, so that an unanswered one ends (`deadlineSeconds`).
+    /// Counts the seconds of a pending request in which her figure is seen, so that an unanswered one ends (`deadlineSeconds`).
     private func watchBodyRequest() {
         bodyRequestWatch?.cancel()
         let watched = generation
@@ -97,9 +104,20 @@ extension ShannonLive2DStage {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self, self.generation == watched, self.bodySwitch.pending != nil else { return }
-                if self.appActive { self.dispatch(.foregroundSecond) }
+                if self.figureIsSeen { self.dispatch(.foregroundSecond) }
             }
         }
+    }
+
+    /// Whether her figure can be seen now (see `ShannonLive2DBodyPolicy.countsDeadline`).
+    var figureIsSeen: Bool {
+        let window = frontContainer?.window
+#if canImport(UIKit)
+        let windowVisible = window != nil
+#else
+        let windowVisible = window.map { $0.occlusionState.contains(.visible) && !$0.isMiniaturized } ?? false
+#endif
+        return ShannonLive2DBodyPolicy.countsDeadline(appActive: appActive, showing: activeHost != nil, windowVisible: windowVisible)
     }
 
     /// The setting (設定 › すがた › 体, Talk's display options, the Mac's settings and body sheet) is followed once,

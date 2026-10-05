@@ -92,11 +92,23 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   the character's mouth and says the layout and the calm again (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
 - A request is never kept for ever. The page of 10:43 answers every `setBody` with `body`, also for the body it already
   shows; an earlier page (09:55) ignored such a call without a word, and a wrong belief about the shown body could then
-  hold every later choice. The stage keeps the fallback for any page that does not answer. A pending request is forgotten on
-  `body`, `ready` and a release (an error's reload included), and one that is not answered within 30 seconds of
-  foreground time (`ShannonLive2DBodySwitch.deadlineSeconds`; shorter than the 90 seconds of a load, since a switch
-  only builds a model from what the page has already read) ends in `recover()`, which reloads the page in the chosen
-  body.
+  hold every later choice. The stage keeps the fallback for any page that does not answer. A pending request is
+  forgotten on `body`, `ready` and a release (an error's reload included). One that is not answered within 30 seconds
+  (`ShannonLive2DBodySwitch.deadlineSeconds`; shorter than the 90 seconds of a load, since a switch only builds a
+  model from what the page has already read) ends in `recover()`. Only seconds in which her figure can be seen count
+  (`ShannonLive2DBodyPolicy.countsDeadline`): the app in front, a screen showing her, and that screen's window visible
+  (on the Mac: not minimised and not covered, `NSWindow.occlusionState`), and never while the surface is lost. While a
+  switch is under way the figure is not paused to rest. What `recover()` then does:
+  - With a screen showing her, the page is reloaded and starts in the chosen body. The first such reload of a switch
+    ignores the one-reload-a-minute spacing, so that a switch alone never ends as failed; a second unanswered request
+    for the same switch keeps the spacing: within a minute of the last automatic reload her figure is shown as
+    failed with 「もう一度読み込む」 and the Waterlight Eye stands in, otherwise it is reloaded again. The bypass comes back
+    once the page shows the chosen body or the owner chooses another. A page that failed twice without becoming ready
+    is not reloaded, bypass or not.
+  - With no screen showing her (which the counting above makes all but impossible), the page is let go (`.unloaded`)
+    and the next screen that shows her loads it in the chosen body.
+- Her switch is not observed by the screens: the stage keeps it unobserved and mirrors `body` and `bodies` only when
+  they change, and a change of another setting of the app does not reach it (the setting is compared first).
 - A lost drawing surface: the page's own mending may bring back the body it had before a switch, after `body` was
   already sent. While the surface is lost nothing is asked and no time counts; a choice made then is held. On
   `contextRestored` the pending request is forgotten. The page of 10:43 rebuilds the surface with the latest requested
