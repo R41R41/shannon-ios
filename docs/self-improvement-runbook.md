@@ -114,6 +114,8 @@ Before a schema or persistence change:
 
 Recovery means restoring the backed-up database and the previous source files, then restarting the same affected services.
 
+Release order: when a client relies on a new server field or flag (for example `roomLook` on `GET /v1/initiatives`, which the Mac notifications read), deploy the server first and ship the iPhone or Mac build after it; clients still judge an older server on the safe side, but the server is never the one that lags.
+
 ## Shannon's activity loop
 
 The loop (Syzygy ADR-0002 step 3) is `services/api/src/autonomyWorker.ts`, run as `shannon-ios-autonomy.service`. It is off until all three hold: the server switch, no owner pause, and a dedicated credential.
