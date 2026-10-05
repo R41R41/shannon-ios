@@ -38,6 +38,17 @@ export class StudyAetherLinks {
       CREATE INDEX IF NOT EXISTS study_aether_links_document ON study_aether_links (scope_key, document_id);
       CREATE TRIGGER IF NOT EXISTS study_aether_links_no_update BEFORE UPDATE ON study_aether_links
         BEGIN SELECT RAISE(ABORT, 'STUDY_AETHER_LINK_APPEND_ONLY'); END;
+      CREATE TABLE IF NOT EXISTS study_aether_pending (
+        scope_key TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        aether_version INTEGER NOT NULL,
+        operation TEXT NOT NULL CHECK (operation IN ('create', 'update')),
+        piece_id TEXT,
+        kind TEXT CHECK (kind IS NULL OR kind IN ('story', 'note')),
+        change_note TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, document_id, aether_version)
+      );
     `);
     // Additive: a reaction names the Aether document and version it was about, when the piece lives in Aether.
     const columns = database.prepare(`PRAGMA table_info('study_feedback')`).all() as unknown as Array<{ name: string }>;
@@ -91,11 +102,51 @@ export class StudyAetherLinks {
   }
 
   /**
+   * A write of hers that Aether took, noted the moment it answered and cleared when its local half commits (`clearPending`).
+   * Should that commit be lost, the next sync knows the document or version as hers: it is linked with her own change note,
+   * as the kind she wrote, and never read as a change the owner made.
+   */
+  notePending(scopeKey: string, write: { documentId: string; aetherVersion: number; operation: 'create' | 'update'; pieceId?: string; kind?: 'story' | 'note'; changeNote: string }, at: string): void {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO study_aether_pending (scope_key, document_id, aether_version, operation, piece_id, kind, change_note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(scopeKey, write.documentId, write.aetherVersion, write.operation, write.pieceId ?? null, write.kind ?? null, write.changeNote, at);
+  }
+
+  /** Her write that made this version of the document, if its local half has not committed yet. */
+  pending(scopeKey: string, documentId: string, aetherVersion: number): { operation: 'create' | 'update'; pieceId?: string; kind?: 'story' | 'note'; changeNote: string } | null {
+    const row = this.database.prepare(`
+      SELECT operation, piece_id, kind, change_note FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND aether_version = ?
+    `).get(scopeKey, documentId, aetherVersion) as unknown as { operation: 'create' | 'update'; piece_id: string | null; kind: 'story' | 'note' | null; change_note: string } | undefined;
+    return row ? { operation: row.operation, ...(row.piece_id ? { pieceId: row.piece_id } : {}), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note } : null;
+  }
+
+  /** Her create that made this document, if its local half has not committed yet. */
+  pendingCreate(scopeKey: string, documentId: string): { aetherVersion: number; kind?: 'story' | 'note'; changeNote: string } | null {
+    const row = this.database.prepare(`
+      SELECT aether_version, kind, change_note FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND operation = 'create' ORDER BY aether_version LIMIT 1
+    `).get(scopeKey, documentId) as unknown as { aether_version: number; kind: 'story' | 'note' | null; change_note: string } | undefined;
+    return row ? { aetherVersion: Number(row.aether_version), ...(row.kind ? { kind: row.kind } : {}), changeNote: row.change_note } : null;
+  }
+
+  /** The writes of a document up to a version are settled (committed, or adopted by a sync). */
+  clearPending(scopeKey: string, documentId: string, upToVersion: number): void {
+    this.database.prepare(`DELETE FROM study_aether_pending WHERE scope_key = ? AND document_id = ? AND aether_version <= ?`).run(scopeKey, documentId, upToVersion);
+  }
+
+  /** Stories that are open (下書き or 見せてもいい) and not in her trash, for the open-story limit of an adoption. */
+  openStories(scopeKey: string): number {
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM study_pieces WHERE scope_key = ? AND kind = 'story' AND status IN ('draft', 'ready') AND deleted_at IS NULL
+    `).get(scopeKey) as unknown as { count: number };
+    return Number(row.count);
+  }
+
+  /**
    * A version that was made in Aether (the owner edited the document, or a write of hers whose local half was lost): it is
-   * appended as her next local version, exactly as Aether returned it, and linked. A story becomes a draft again, as after a
+   * appended as her next local version, exactly as Aether returned it, and linked; a write of hers keeps her change note. A story becomes a draft again, as after a
    * revision of hers, and the owner keeps reading the version she showed; a note stays readable at its newest version.
    */
-  adoptVersion(scopeKey: string, pieceId: string, change: { title: string; body: string; aetherVersion: number; documentId: string }, at: string): number | null {
+  adoptVersion(scopeKey: string, pieceId: string, change: { title: string; body: string; aetherVersion: number; documentId: string; changeNote?: string }, at: string): number | null {
     const row = this.database.prepare(`SELECT kind, version, status FROM study_pieces WHERE scope_key = ? AND piece_id = ?`).get(scopeKey, pieceId) as unknown as { kind: string; version: number; status: string } | undefined;
     if (!row) return null;
     const version = Number(row.version) + 1;
@@ -106,20 +157,29 @@ export class StudyAetherLinks {
         readable_version = CASE WHEN ? THEN ? ELSE readable_version END
       WHERE scope_key = ? AND piece_id = ?
     `).run(change.title, change.body, version, at, note ? 1 : 0, note ? 1 : 0, version, scopeKey, pieceId);
-    this.appendVersion(scopeKey, pieceId, version, change.title, change.body, AETHER_SIDE_CHANGE, at);
+    this.appendVersion(scopeKey, pieceId, version, change.title, change.body, change.changeNote ?? AETHER_SIDE_CHANGE, at);
     this.link(scopeKey, pieceId, version, change.documentId, change.aetherVersion, at);
+    this.clearPending(scopeKey, change.documentId, change.aetherVersion);
     return version;
   }
 
-  /** A story of hers that is in Aether's study but not in Shannon's (written by a step whose local half was lost): kept as a draft. */
-  adoptStory(scopeKey: string, document: { documentId: string; aetherVersion: number; title: string; body: string }, at: string): string {
+  /**
+   * A piece of hers that is in Aether but not in Shannon's study: a write whose local half was lost (her kind and change note
+   * from `notePending`), or a story found in her study in Aether. A note is readable; a story is a draft, or put away when
+   * her open stories are at their limit, so an adoption never goes past it.
+   */
+  adoptPiece(scopeKey: string, document: { documentId: string; aetherVersion: number; title: string; body: string; kind: 'story' | 'note'; changeNote?: string },
+    openStoryLimit: number, at: string): string {
     const id = randomUUID();
+    const note = document.kind === 'note';
+    const full = !note && this.openStories(scopeKey) >= openStoryLimit;
     this.database.prepare(`
-      INSERT INTO study_pieces (scope_key, piece_id, kind, title, body, status, version, readable_version, pursuit_id, sources_json, created_at, updated_at)
-      VALUES (?, ?, 'story', ?, ?, 'draft', 1, NULL, NULL, '[]', ?, ?)
-    `).run(scopeKey, id, document.title, document.body, at, at);
-    this.appendVersion(scopeKey, id, 1, document.title, document.body, AETHER_SIDE_CHANGE, at);
+      INSERT INTO study_pieces (scope_key, piece_id, kind, title, body, status, version, readable_version, pursuit_id, sources_json, created_at, updated_at, put_away_by)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, NULL, '[]', ?, ?, ?)
+    `).run(scopeKey, id, document.kind, document.title, document.body, note ? 'ready' : full ? 'put_away' : 'draft', note ? 1 : null, at, at, full ? 'shannon' : null);
+    this.appendVersion(scopeKey, id, 1, document.title, document.body, document.changeNote ?? AETHER_SIDE_CHANGE, at);
     this.link(scopeKey, id, 1, document.documentId, document.aetherVersion, at);
+    this.clearPending(scopeKey, document.documentId, document.aetherVersion);
     return id;
   }
 

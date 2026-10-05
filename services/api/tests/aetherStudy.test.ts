@@ -269,6 +269,33 @@ describe('her study in Aether', () => {
     expect((await get(`/v1/autonomy/study/pieces/${id}`)).status).toBe(200);
   });
 
+  it('links a write of hers whose local half was lost as hers: her kind, her change note, within the open-story limit', async () => {
+    const { fake, call, store, service, clock } = await harness();
+    const aether = service.studyAether!;
+    // A note Aether took, and the process stopped before Shannon's commit.
+    await aether.create(scope, { kind: 'note', title: '光のメモ', body: '光は数えられる。', changeNote: '読んだあとのメモ。' }, aetherIdempotencyKey('lost-note'));
+    // A revision of a story Aether took, also without its commit.
+    const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
+    const storyId = /id: ([0-9a-f-]{36})/u.exec(created.text)![1]!;
+    await aether.update(scope, store.study.get(scope, storyId)!, { body: `${STORY}続き。`, changeNote: 'ボクが続きを足しました。' }, aetherIdempotencyKey('lost-revise'));
+    // Her open stories are at their limit when a lost story draft is found.
+    for (let index = 0; index < 11; index += 1) store.study.create(scope, { kind: 'story', title: `下書き${index}`, body: STORY }, clock.at);
+    await aether.create(scope, { kind: 'story', title: '迷子の下書き', body: STORY, changeNote: '最初の稿です。' }, aetherIdempotencyKey('lost-story'));
+
+    await call('study.list', {});
+    const note = store.study.list(scope).find(piece => piece.title === '光のメモ')!;
+    expect(note).toMatchObject({ kind: 'note', status: 'ready', readableVersion: 1 });
+    expect(store.study.versions(scope, note.id)[0]!.changeNote).toBe('読んだあとのメモ。');
+    expect(store.study.versions(scope, storyId).at(-1)).toMatchObject({ version: 2, changeNote: 'ボクが続きを足しました。', body: `${STORY}続き。` });
+    const lost = store.study.list(scope).find(piece => piece.title === '迷子の下書き')!;
+    expect(lost).toMatchObject({ kind: 'story', status: 'put_away', putAwayBy: 'shannon' });
+    expect(store.study.list(scope).filter(piece => piece.kind === 'story' && (piece.status === 'draft' || piece.status === 'ready'))).toHaveLength(12);
+    expect(JSON.stringify(store.study.list(scope).flatMap(piece => store.study.versions(scope, piece.id)))).not.toContain(AETHER_SIDE_CHANGE);
+    // Each was linked once, and nothing is pending any more.
+    expect(fake.inFolder()).toHaveLength(3);
+    for (const document of fake.inFolder()) expect(store.study.aether.pendingCreate(scope, document.id)).toBeNull();
+  });
+
   it('keeps the owner\'s reaction keyed by the Aether document and version he read', async () => {
     const { fake, call, store, post, clock } = await harness();
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });

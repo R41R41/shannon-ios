@@ -156,7 +156,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string, ae
           const created = store.study.create(context.scopeKey, { kind, title, body, ...(changeNote ? { changeNote } : {}), ...(pursuitId ? { pursuitId } : {}) }, now());
           if (typeof created !== 'string' && context.memory.turnKey) remember(context.memory.turnKey, created.id, title);
           return created;
-        }, { newId: true, ...(aether ? { aether: { scopeKey: context.scopeKey, push: signal => aether.create({ kind, title: title.replace(/\s+/gu, ' ').trim(), body: body.trim() }, key(context, 'study.create', input), signal) } } : {}) });
+        }, { newId: true, ...(aether ? { aether: { scopeKey: context.scopeKey, push: signal => aether.create(context.scopeKey, { kind, title: title.replace(/\s+/gu, ' ').trim(), body: body.trim(), ...(changeNote ? { changeNote } : {}) }, key(context, 'study.create', input), signal) } } : {}) });
     },
     'study.update': (input, context) => {
       const found = piece(context, input);
@@ -277,7 +277,7 @@ export function studyExecutors(store: SQLiteAutonomyStore, now: () => string, ae
       `書斎の${recordLabel(found)}を直しました（第${found.version + 1}稿）。`,
       () => store.study.revise(context.scopeKey, found.id, change, now()), { link: `shannon-study://${found.id}`, ...(aether ? { aether: {
         scopeKey: context.scopeKey,
-        push: (signal?: AbortSignal) => aether.update(context.scopeKey, found, { body: change.body.trim(), ...(change.title ? { title: change.title.replace(/\s+/gu, ' ').trim() } : {}) }, key(context, `study.revise:${found.version}`, input), signal),
+        push: (signal?: AbortSignal) => aether.update(context.scopeKey, found, { body: change.body.trim(), changeNote: change.changeNote, ...(change.title ? { title: change.title.replace(/\s+/gu, ' ').trim() } : {}) }, key(context, `study.revise:${found.version}`, input), signal),
       } } : {}) });
   }
 }

@@ -3,7 +3,7 @@ import {
 } from './aetherAccess.js';
 import type { SQLiteAutonomyStore } from './autonomyStore.js';
 import type { StudyAetherLink } from './studyAetherLinks.js';
-import type { StudyPiece, StudyPieceKind, StudyPieceOrigin } from './studyStore.js';
+import { STUDY_LIMITS, type StudyPiece, type StudyPieceKind } from './studyStore.js';
 
 /**
  * Her study in Aether (Syzygy ADR-0007 and its revision of 2026-10-06, owner decision): her stories are documents tagged
@@ -13,9 +13,11 @@ import type { StudyPiece, StudyPieceKind, StudyPieceOrigin } from './studyStore.
  *
  * The order of a write is always the same: first Aether (outside any transaction, with `baseVersion` and an idempotency key),
  * then, in the transaction that records it, her local version and its link (`commit`). A write Aether refused writes nothing
- * here; a stale `baseVersion` brings the newer Aether text in first (`refresh`), so her next try starts from it. A write whose
- * local half was lost is found by the next `sync`: a newer Aether version is adopted as a version of the piece, and an unknown
- * story in her study as a new draft.
+ * here; a stale `baseVersion` brings the newer Aether text in first (`refresh`), so her next try starts from it. The moment
+ * Aether takes a write it is noted as pending (`notePending`) and the local commit clears it; a write whose local half was
+ * lost is found by the next `sync` and linked as hers (her kind, her change note, within the open-story limit), never read
+ * as a change of the owner's. Only a process that stops between Aether's answer and that note leaves a document the sync
+ * does not know as hers: a story is then adopted like one the owner put in her study, a note stays a document of her folder.
  *
  * Pieces that have not moved yet (no link) stay in Shannon and are written there; they move only through the migration,
  * after the owner has seen what moves (`studyMigration.ts`). Her notes about a look at the room and what she jotted after an
@@ -33,24 +35,23 @@ export class StudyAether {
     return this.store.study.aether.current(scopeKey, pieceId);
   }
 
-  /** A new piece goes to Aether, except her notes about the room and after an unanswered message. */
-  movesNew(origin?: StudyPieceOrigin): boolean {
-    return origin === undefined;
-  }
-
-  create(draft: { kind: StudyPieceKind; title: string; body: string }, key: string, signal?: AbortSignal): Promise<AetherWriteResult> {
-    return this.access.create({ title: draft.title, body: draft.body, inStudy: draft.kind === 'story', idempotencyKey: key }, signal);
+  async create(scopeKey: string, draft: { kind: StudyPieceKind; title: string; body: string; changeNote?: string }, key: string, signal?: AbortSignal): Promise<AetherWriteResult> {
+    const written = await this.access.create({ title: draft.title, body: draft.body, inStudy: draft.kind === 'story', idempotencyKey: key }, signal);
+    this.store.study.aether.notePending(scopeKey, { documentId: written.documentId, aetherVersion: written.version, operation: 'create', kind: draft.kind, changeNote: draft.changeNote || '最初の稿です。' }, this.now());
+    return written;
   }
 
   /** A new version of a piece that lives in Aether; null for a piece that has not moved (it is written in Shannon only). */
-  async update(scopeKey: string, piece: StudyPiece, change: { title?: string; body: string }, key: string, signal?: AbortSignal): Promise<AetherWriteResult | null> {
+  async update(scopeKey: string, piece: StudyPiece, change: { title?: string; body: string; changeNote?: string }, key: string, signal?: AbortSignal): Promise<AetherWriteResult | null> {
     const link = this.link(scopeKey, piece.id);
     if (!link) return null;
     try {
-      return await this.access.update({
+      const written = await this.access.update({
         documentId: link.documentId, baseVersion: link.aetherVersion, body: change.body,
         ...(change.title !== undefined && change.title !== piece.title ? { title: change.title } : {}), idempotencyKey: key,
       }, signal);
+      this.store.study.aether.notePending(scopeKey, { documentId: written.documentId, aetherVersion: written.version, operation: 'update', pieceId: piece.id, changeNote: change.changeNote || '書き直しました。' }, this.now());
+      return written;
     } catch (error) {
       // What changed in Aether since is brought in, so that her next try starts from it.
       if (['STALE_VERSION', 'NOT_FOUND'].includes(aetherErrorCode(error))) await this.refresh(scopeKey, piece.id, signal).catch(() => 'unknown');
@@ -78,6 +79,7 @@ export class StudyAether {
   commit(scopeKey: string, piece: Pick<StudyPiece, 'id' | 'version'>, write: AetherWriteResult): void {
     this.store.study.aether.link(scopeKey, piece.id, piece.version, write.documentId, write.version, this.now());
     this.store.study.aether.nameFeedbackDocument(scopeKey, piece.id, write.documentId);
+    this.store.study.aether.clearPending(scopeKey, write.documentId, write.version);
   }
 
   /**
@@ -118,7 +120,9 @@ export class StudyAether {
     const changed = document.version > link.aetherVersion;
     this.store.transaction(() => {
       this.store.study.aether.setDeleted(scopeKey, pieceId, false, this.now());
-      if (changed) this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: document.version, documentId: document.documentId }, this.now());
+      // A version she wrote herself whose local half was lost keeps her change note; anything else is a change made in Aether.
+      const hers = this.store.study.aether.pending(scopeKey, document.documentId, document.version);
+      if (changed) this.store.study.aether.adoptVersion(scopeKey, pieceId, { title: document.title, body: document.body, aetherVersion: document.version, documentId: document.documentId, ...(hers ? { changeNote: hers.changeNote } : {}) }, this.now());
     });
     return changed ? 'changed' : 'current';
   }
@@ -150,15 +154,24 @@ export class StudyAether {
         if (link) this.seenDeleted.set(link.documentId, listed.get(link.documentId)?.version ?? link.aetherVersion);
       }
     }
+    // Unknown documents of her folder: a write of hers whose local half was lost (a story or a note), or a story in her study.
     const known = new Set([...links.values()].map(link => link.documentId));
-    for (const entry of entries.filter(item => item.inStudy && !known.has(item.documentId) && this.seenDeleted.get(item.documentId) !== item.version).slice(0, STUDY_AETHER_SYNC.adopt)) {
+    const hers = (documentId: string) => this.store.study.aether.pendingCreate(scopeKey, documentId);
+    for (const entry of entries.filter(item => !known.has(item.documentId) && this.seenDeleted.get(item.documentId) !== item.version
+      && (item.inStudy || hers(item.documentId))).slice(0, STUDY_AETHER_SYNC.adopt)) {
       let document: AetherDocument;
       try { document = await this.readWhole(entry.documentId, signal); } catch (error) {
         if (aetherErrorCode(error) === 'NOT_FOUND') { this.seenDeleted.set(entry.documentId, entry.version); continue; }
         throw error;
       }
-      if (!document.inStudy || this.store.study.aether.pieceFor(scopeKey, document.documentId)) continue;
-      this.store.transaction(() => this.store.study.aether.adoptStory(scopeKey, { documentId: document.documentId, aetherVersion: document.version, title: document.title, body: document.body }, this.now()));
+      const created = hers(document.documentId);
+      const kind = created?.kind ?? (document.inStudy ? 'story' as const : null);
+      if (!kind || this.store.study.aether.pieceFor(scopeKey, document.documentId)) continue;
+      this.store.transaction(() => this.store.study.aether.adoptPiece(scopeKey, {
+        documentId: document.documentId, aetherVersion: document.version, title: document.title, body: document.body, kind,
+        // Her own note only when the version is the one she wrote; a later change in Aether is the owner's.
+        ...(created && document.version === created.aetherVersion ? { changeNote: created.changeNote } : {}),
+      }, STUDY_LIMITS.openStories, this.now()));
       counts.adopted += 1;
     }
     return counts;

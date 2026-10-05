@@ -249,7 +249,7 @@ function prepareNote(dependencies: StepDependencies, cycle: AutonomyLoopCycle, s
       const question = text(reply?.question, 120);
       const questionWhy = text(reply?.questionWhy, 400);
       // With Aether her note goes to 「シャノン用フォルダ」 first; what Aether refused is not kept here either.
-      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.create({ kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
+      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'note', title: clip(title, 80), body: body.slice(0, STUDY_LIMITS.noteBody).trim() }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'note', reading.id), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: 'メモを書きましたが、Aetherのシャノン用フォルダに置けませんでした。', reasonCode: pushed.reasonCode };
       return {
         outcome: 'done', usage, summary: `メモ「${clip(title, 60)}」を書斎に書きました。`,
@@ -287,7 +287,7 @@ function prepareDraft(dependencies: StepDependencies, cycle: AutonomyLoopCycle, 
       const body = story(reply?.body);
       if (!title || !body) return { outcome: 'failed', summary: '物語を書こうとしましたが、下書きになりませんでした。', usage };
       // With Aether the story goes to 「シャノンの書斎」 first (`inStudy: true`), the canonical copy.
-      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.create({ kind: 'story', title: clip(title, 80), body }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
+      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.create(cycle.scopeKey, { kind: 'story', title: clip(title, 80), body, changeNote: text(reply?.note, STUDY_LIMITS.changeNote) ?? '最初の稿です。' }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'draft', title), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語の下書きを書きましたが、Aetherの書斎に置けませんでした。', reasonCode: pushed.reasonCode };
       return {
         // The title stays hers until she calls the piece 「見せてもいい」.
@@ -329,7 +329,7 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
       if (!body || !change) return { outcome: 'failed', summary: '物語を直そうとしましたが、次の稿になりませんでした。', usage };
       const title = text(reply?.title, 60) ?? piece.title;
       // A story that lives in Aether is revised there first, from the version she read (`baseVersion`); a stale one brings the newer text in.
-      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
+      const pushed = adapters.aether ? await aetherStep(() => adapters.aether!.update(cycle.scopeKey, piece, { title: clip(title, 80), body, changeNote: change }, studyWriteKey(cycle.scopeKey, `loop:${cycle.id}`, 'revise', piece.id, String(piece.version)), signal)) : null;
       if (pushed && 'reasonCode' in pushed) return { outcome: 'failed', usage, summary: '物語を直しましたが、Aetherの書斎に書けませんでした。', reasonCode: pushed.reasonCode };
       return {
         outcome: 'done', usage, link: `shannon-study://${piece.id}`,
