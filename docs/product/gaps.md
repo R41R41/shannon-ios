@@ -6,6 +6,8 @@
 
 > **2026-10-05 追記（気持ちの種類のアイコン）**: 所有者の決定で `talk.emotion-kind-icons` が増えた（iPhone と Mac はある、Windows は予定）。機能は 142 件、遅れている所は 126 か所。
 
+> **2026-10-05 追記（目だけの体）**: 所有者の決定で行が 3 つ増えた。`body.choice`（体を選ぶ 人の姿／目だけ。iPhone と Windows はある）、`body.small-eyes`（小さくしたときは目だけにする。Windows だけの窓の機能、デスクトップの追加）、`desktop.stream-output-body`（配信用の出力も選んだ体で。デスクトップの追加）。機能は 145 件、遅れている所は 127 か所。増えた 1 か所は `body.choice` の Mac（`partial`）: Mac は 設定 › すがた と「からだを開く」のシートで体を選べるが、効くのはシートだけで、Mac のトークには姿が無い。ほかの `body.*` の Mac と同じ遅れで、A15（Mac のトークの右に姿を出す）で閉じる。`--accept-gaps` で `parity-baseline.json` に入れた。
+
 2026-10-03。Apple 側は `c40a65e`（main）のコード、Windows 側は同じ日に読んだ `shannon-desktop`（VM の `~/handoff/shannon-desktop-src.zip`）から。画面は動かしていない（ビルドもシミュレーターも使っていない）。コードと文書を読んだ結果。
 
 機能ごとの細かい状態は [`feature-matrix.md`](feature-matrix.md)（127 件）。ここは、そのうち所有者の目に入るずれを、目立つ順にまとめたもの。

@@ -2439,6 +2439,67 @@
       }
     },
     {
+      "id": "body.choice",
+      "area": "body",
+      "title": "体を選ぶ（人の姿／目だけ）",
+      "description": "Live2D の姿の体を、人の姿（既定）と目だけ（水色の目が 2 つだけのシャノン。表情と、聞く・考える・話すを目の形と動きで伝える）から選ぶ。設定 › すがた › 体。目だけは触ると、目のあたりをつつくだけ（なでる・くすぐる・手をつなぐは無い）。所有者の決定（2026-10-05）。",
+      "surfaces": {
+        "ios": {
+          "status": "yes",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonForm.swift#ShannonLive2DBody",
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DStage+Body.swift#setBody",
+            "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonConversationView+Workspace.swift#figureDisplayOptions"
+          ],
+          "note": "設定 › すがた の「体」と、トークの表示の切り替えボタンの長押し。体のページを ?body=eyes で始め、setBody で切り替える。目だけのときは映し方を出さない。説明の「（iPhone の目と同じ動き）」は「（水の光の目と同じ動き）」にした。"
+        },
+        "macos": {
+          "status": "partial",
+          "evidence": [
+            "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection",
+            "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift"
+          ],
+          "note": "設定 › すがた と「からだを開く」のシートで選べるが、効くのはシートだけ。Mac のトークには姿が無い（A15）。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx",
+            "shannon-desktop:src/embed/main.ts"
+          ],
+          "read": "2026-10-05",
+          "note": "設定 › すがた › 体（人の姿／目だけ）。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。"
+        }
+      }
+    },
+    {
+      "id": "body.small-eyes",
+      "area": "body",
+      "title": "小さくしたときは、目だけにする",
+      "description": "体の大きさが 60% 未満のとき、人の姿を選んでいても目だけで出す（既定は入。設定 › すがた の「小さくしたときは、目だけにする」。出ている間は「いまは小さいので、目だけで出ています。」）。窓の大きさの機能。所有者の決定（2026-10-05）。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iPhone の姿は画面の中にあり、所有者が大きさを決める窓が無い（2 本の指の拡大は、向き合う表示の中の映し方）。目だけにしたいときは 設定 › すがた › 体 で選ぶ。"
+        },
+        "macos": {
+          "status": "no",
+          "note": "Mac には、窓で立つ体がまだ無い（デスクトップに立つ体を SwiftUI で作るとき、ADR-0004）。「からだを開く」のシートは窓の大きさで体を変えない。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:src/desk/views/SettingsView.tsx",
+            "shannon-desktop:src/bodySize.ts"
+          ],
+          "read": "2026-10-05",
+          "note": "既定は入、しきい値 60%。体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。"
+        }
+      }
+    },
+    {
       "id": "body.waterlight-eye",
       "area": "body",
       "title": "水の光の目",
@@ -2503,7 +2564,7 @@
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonLive2DHostView.swift"
           ],
-          "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。"
+          "note": "映し方と位置を戻すは、トークの表示の切り替えボタンの長押しと 設定 › すがた（A6）。2 本の指で大きさと位置。 目だけのときは映し方を出さない（体のページが大きさと位置だけを使う）。"
         },
         "macos": {
           "status": "partial",
@@ -3266,14 +3327,14 @@
       "id": "settings.figure",
       "area": "settings",
       "title": "設定 › すがた",
-      "description": "姿の切り替え、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。",
+      "description": "姿の切り替え、体（人の姿／目だけ）、映し方（全身・上半身）、体に起きたことをシャノンに伝える、触れたときの返事を、1 つの区画に置く。",
       "surfaces": {
         "ios": {
           "status": "yes",
           "evidence": [
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonFigureSettingsSection.swift"
           ],
-          "note": "姿、映し方、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
+          "note": "姿、体（人の姿／目だけ、2026-10-05）、映し方（人の姿のときだけ）、位置を戻す、トークで姿を見る、体に起きたことを伝える、触れたときの返事（A6）。"
         },
         "macos": {
           "status": "partial",
@@ -3281,7 +3342,7 @@
             "apps/macos-app/ShannonDesk/Features/Settings/ShannonDesktopRootView+Settings.swift",
             "apps/ios/Sources/ShannonAppCore/Features/Body/ShannonBodyScreen.swift#ShannonFormSettingsSection"
           ],
-          "note": "姿の切り替えと「からだを開く」だけ。"
+          "note": "姿の切り替え、体（人の姿／目だけ、2026-10-05）と「からだを開く」だけ。"
         },
         "windows": {
           "status": "partial",
@@ -3693,6 +3754,33 @@
             "shannon-desktop:src/renderer/stream.ts"
           ],
           "read": "2026-10-03"
+        }
+      }
+    },
+    {
+      "id": "desktop.stream-output-body",
+      "area": "desktop",
+      "title": "配信用の出力も、選んだ体で出す",
+      "description": "配信用の出力（OBS）のシャノンは、デスクトップの体と同じ体（人の姿／目だけ）で出る。所有者の決定（2026-10-05）。",
+      "scope": "desktop",
+      "surfaces": {
+        "ios": {
+          "status": "not_applicable",
+          "reason": "配信用の出力は、この PC の中の URL へ出す仕組み。iPhone には持っていかない（desktop.stream-output）。"
+        },
+        "macos": {
+          "status": "planned",
+          "branch": "未定",
+          "note": "配信用の出力を Mac へ移すとき（desktop.stream-output）に一緒に入れる。"
+        },
+        "windows": {
+          "status": "yes",
+          "evidence": [
+            "shannon-desktop:electron/streamServer.ts",
+            "shannon-desktop:src/renderer/stream.ts"
+          ],
+          "read": "2026-10-05",
+          "note": "体のスレッドの知らせ（2026-10-05）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。"
         }
       }
     },
