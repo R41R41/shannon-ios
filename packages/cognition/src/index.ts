@@ -136,6 +136,7 @@ export {
   isReactionEmotion,
   isShannonEmotionKind,
   resolveShannonEmotionState,
+  shannonEmotionSign,
   type ResolveShannonEmotionInput,
 } from './emotionState.js';
 export {
@@ -153,6 +154,49 @@ export {
   type ShannonTouchFeeling,
   type ShannonTouchFeelingStep,
 } from './touchEmotion.js';
+// Syzygy ADR-0006 stage 1 (影): the prediction layer and the new dynamics, computed beside the current ones and read by nothing that acts.
+export {
+  SHANNON_PREDICTION_COEFFICIENTS,
+  SHANNON_PREDICTION_DOMAINS,
+  createPredictionModel,
+  isPredictionDomain,
+  observeOutcome,
+  predictOutcome,
+  scaleVariance,
+  transformedOutcome,
+  type Prediction,
+  type PredictionDomain,
+  type PredictionDomainSpec,
+  type PredictionFamily,
+  type PredictionModel,
+  type PredictionObservation,
+  type PredictionQuery,
+  type PredictionUpdate,
+} from './prediction.js';
+export {
+  SHANNON_AFFECT_COEFFICIENTS,
+  SHANNON_AFFECT_DYNAMICS,
+  advanceAffect,
+  createAffectDynamics,
+  deterministicNormal,
+  episodeBoundaryMs,
+  impulseAffect,
+  isStableMoodTilt,
+  learnEpisodeGap,
+  moodLoopGain,
+  perceivedOutcome,
+  projectAffect,
+  reconsolidateTrace,
+  stationaryBand,
+  traceStrength,
+  withinEpisodeProbability,
+  type AffectCoefficient,
+  type AffectDynamicsState,
+  type AffectOutcome,
+  type AffectProjection,
+  type EmotionalTrace,
+  type EpisodeBoundaryModel,
+} from './affectDynamics.js';
 export { isMeaningfulInterest, filterMeaningfulInterests } from './interests.js';
 export {
   deriveResonantInterest,
