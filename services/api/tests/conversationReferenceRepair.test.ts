@@ -24,11 +24,12 @@ function fixture() {
   return { ...deps, notes, run };
 }
 
+// A note goes to Aether only when Aether is named (owner decision 2026-10-05, memoPlace.test.ts); the references are the same.
 describe('source-bound conversation references', () => {
   it('saves the prior owner content, not the words さっきの話, to a note proposal', () => {
     const f = fixture();
     f.conversationStore.appendTurn('owner', 'thread', '旅行の写真は日付ごとに整理する。', 'いいね', earlier);
-    const result = f.run('さっきの話をノートに保存して');
+    const result = f.run('さっきの話をAetherに保存して');
     expect(f.notes[0]?.content).toBe('旅行の写真は日付ごとに整理する。');
     expect(f.notes[0]?.reason).toContain('source');
     expect(result?.receipt).toMatchObject({ capability: 'aether.propose', status: 'proposed' });
@@ -47,7 +48,7 @@ describe('source-bound conversation references', () => {
 
   it('asks for missing or ambiguous references instead of creating literal proposals', () => {
     const f = fixture();
-    expect(f.run('これをノートにして')?.reply).toContain('どの内容');
+    expect(f.run('これをAetherのノートにして')?.reply).toContain('どの内容');
     expect(f.run('さっきの話をタスクにして')?.receipt).toBeUndefined();
     expect(f.notes).toHaveLength(0);
     expect(f.organizeStore.list('owner', 'thread')).toHaveLength(0);
@@ -59,14 +60,14 @@ describe('source-bound conversation references', () => {
   it('does not borrow another thread, stale content, hidden experience, or assistant assertions', () => {
     const f = fixture();
     f.conversationStore.appendTurn('owner', 'other', '別スレッドの秘密', '了解', earlier);
-    expect(f.run('これをノートにして')?.receipt).toBeUndefined();
+    expect(f.run('これをAetherのノートにして')?.receipt).toBeUndefined();
     f.conversationStore.appendTurn('owner', 'thread', '古い内容', '新しい作り話', '2026-09-23T12:00:00.000Z');
-    expect(f.run('これをノートにして')?.receipt).toBeUndefined();
+    expect(f.run('これをAetherのノートにして')?.receipt).toBeUndefined();
     const source = f.conversationStore.appendTurn('owner', 'thread', '忘れた内容', '保存しよう', earlier);
     f.stateStore.apply('owner', { type: 'memory-control-upserted', control: {
       memoryId: source.id, kind: 'experience', status: 'forgotten', pinned: false, updatedAt: at, changeReason: 'test',
     } });
-    expect(f.run('これをノートにして')?.receipt).toBeUndefined();
+    expect(f.run('これをAetherのノートにして')?.receipt).toBeUndefined();
     expect(f.notes).toHaveLength(0);
   });
 
@@ -107,7 +108,7 @@ describe('source-bound conversation references', () => {
       for (const prefix of ['この', 'その', 'さっきの', '先ほどの']) {
         const f = fixture();
         f.conversationStore.appendTurn('owner', 'thread', '旅行の写真を整理する', '了解', earlier);
-        expect(f.run(`${prefix}${noun}をノートにして`)?.receipt, `${prefix}${noun}`).toBeDefined();
+        expect(f.run(`${prefix}${noun}をAetherのノートにして`)?.receipt, `${prefix}${noun}`).toBeDefined();
         expect(f.notes[0]?.content, `${prefix}${noun}`).toBe('旅行の写真を整理する');
       }
     }
@@ -146,7 +147,7 @@ describe('source-bound conversation references', () => {
     expect(first).toMatchObject({ status: 200, body: { organizeSession: { items: [{ title: '旅行の写真を整理する' }] } } });
     expect(await api.dispatch({ method: 'POST', path: '/v1/voice/live/delegations', body })).toEqual(first);
     expect(f.organizeStore.list('owner', 'thread')).toHaveLength(1);
-    const text = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'これをノートにして' } });
+    const text = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'owner', threadId: 'thread', message: 'これをAetherのノートにして' } });
     expect(text).toMatchObject({ status: 200 });
     expect(f.notes[0]?.content).toBe('旅行の写真を整理する');
   });
@@ -182,7 +183,7 @@ describe('source-bound conversation references', () => {
   it('does not silently resolve older references or unspecified parts into the latest message', () => {
     const f = fixture();
     f.conversationStore.appendTurn('owner', 'thread', '旅行の写真を整理する', '了解', earlier);
-    for (const text of ['昨日の話をノートにして', 'これの要点をタスクにして', '写真のそれをノートにして']) {
+    for (const text of ['昨日の話をAetherのノートにして', 'これの要点をタスクにして', '写真のそれをAetherのノートにして']) {
       expect(f.run(text)?.receipt, text).toBeUndefined();
     }
     expect(f.notes).toHaveLength(0);

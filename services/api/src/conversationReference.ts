@@ -48,7 +48,7 @@ export function resolveConversationContent(
   if (!Number.isFinite(age) || age < 0 || age > 15 * 60_000 || text.length > maximumCharacters
     || text.length < 3 || hasUnresolvedConversationReference(text)
     || /[?？]|(?:教えて|調べて|どう思う|どちら|どっち|どこ|何を|何が|例えば|もし|仮に)/u.test(text)
-    || /(?:タスクにして|タスクに追加して|(?:ノート|メモ)に(?:して|残して|保存して)|覚えておいて|忘れないで|リマインドして)(?:ね|ください)?[。！!]?$/u.test(text)
+    || /(?:タスクにして|タスクに追加して|(?:ノート|メモ|Aether|エーテル|ノートアプリ)に(?:して|残して|保存して)|メモして|覚えておいて|忘れないで|リマインドして)(?:ね|ください)?[。！!]?$/u.test(text)
     || /^(?:はい|うん|そう|ありがとう|了解|お願いします)[。！!]?$/u.test(text)) return clarify;
   if (purpose === 'task' && (
     text.split(/[。！？!?\n]/u).filter(part => part.trim()).length > 1

@@ -1,5 +1,6 @@
 import { mentionsSuiteProduct, suiteProductPattern } from '@shannon/cognition';
 import type { AetherContextReader } from './aetherContext.js';
+import { memoNotForAether } from './memoPlace.js';
 import type { VoyagerCatalog } from './organize.js';
 import { reminderCapabilityBoundary } from './reminderCapability.js';
 import type { ShannonWebSource } from './chatModel.js';
@@ -63,9 +64,9 @@ export function withCapabilitySources<T extends { webSources?: ShannonWebSource[
 const NOTE_WORDS = /ノート|メモ/u;
 const TASK_WORDS = /タスク|to.?do|やること/iu;
 
-/** The owner named Aether (Latin or Japanese) or used a note word. */
+/** The owner named Aether (Latin or Japanese) or used a note word, not in a memo he asks her to make. */
 export function asksAboutNotes(message: string): boolean {
-  return NOTE_WORDS.test(message) || mentionsSuiteProduct(message, 'aether');
+  return (NOTE_WORDS.test(message) && !memoNotForAether(message)) || mentionsSuiteProduct(message, 'aether');
 }
 
 /** The owner named Voyager (Latin or Japanese) or used a task word. */

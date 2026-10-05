@@ -1,10 +1,12 @@
-import type { CompanionStateStore, ShannonActionReceipt } from '@shannon/cognition';
+import { visibleMemoryText, type CompanionStateStore, type ShannonActionReceipt } from '@shannon/cognition';
 import type { ConversationStore } from './conversationStore.js';
 import type { OrganizeSession, OrganizeStore } from './organize.js';
 import type { AetherProposalStore } from './aetherProposal.js';
 import type { AgentTask, AgentTaskStore } from './agentTaskStore.js';
 import { applyExplicitCommitmentCommand } from './commitmentCommands.js';
-import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent } from './conversationReference.js';
+import { contentPreview, containsUnresolvedConversationReference, resolveConversationContent, type ResolvedConversationContent } from './conversationReference.js';
+import { aetherNoteRequest, asksWhichPlace, memoRequestContent, type AetherNoteRequest } from './memoPlace.js';
+import { TOOL_FOLLOW_UP_MILLISECONDS } from './shannonToolTurns.js';
 import { ShannonMemoryService } from './memoryService.js';
 import { forgetCitedMemories } from './memoryForgetCommand.js';
 import type { CognitiveIntentStore } from './cognitiveIntent.js';
@@ -60,10 +62,10 @@ export function executeConversationCommand(
     return { organizeSession: session, reply: `「${session.items[0]?.title}」のタスク案を作りました。トークの整理カードで確認して反映してください。タスク本体はまだ変更していません。`,
       receipt: { id: session.id, capability: 'voyager.propose', status: 'proposed', summary: '確認待ちのタスク案', occurredAt: session.createdAt } };
   }
-  const note = text.match(/^(?:[「"])?([\s\S]{1,6000}?)(?:[」"])?を(?:ノート|メモ)に(?:残して|保存して|して)$/u);
-  if (note) {
-    const resolved = resolveConversationContent(note[1]!, scopeKey, threadId, at,
-      dependencies.stateStore.snapshot(scopeKey), dependencies.conversationStore, 6_000);
+  // Only a note that names Aether goes there; an unqualified 「メモを作って」 is the model's to place, or to ask about.
+  const aether = aetherNoteRequest(text);
+  const resolved = aether && aetherNoteContent(aether, scopeKey, threadId, at, dependencies);
+  if (resolved) {
     if ('clarification' in resolved) return { reply: resolved.clarification };
     if (!dependencies.aetherProposals?.configured) return { reply: 'ノートの提案先がまだつながっていないので、保存できていません。設定でノート連携を確認してください。' };
     try {
@@ -100,6 +102,29 @@ export function executeConversationCommand(
     : '約束の期限を変更しました。記憶の詳細で確認できます。',
     receipt: { id: memory.match(/id=([^;]+)/u)?.[1] ?? utterance.id, capability: 'memory.control',
       status: 'completed', summary: action ?? 'memory updated', occurredAt: at } };
+}
+
+/**
+ * What an Aether note keeps: its own words; what he just said (「Aetherにメモして」); or, when he answers her question
+ * where (「書斎・PCのフォルダ・Aetherのどこに作りますか？」 → 「Aetherに」), the memo he asked for just before it.
+ * Null when the words are not a request to Aether here.
+ */
+function aetherNoteContent(
+  request: AetherNoteRequest, scopeKey: string, threadId: string, at: string, dependencies: ConversationCommandDependencies,
+): ResolvedConversationContent | null {
+  const snapshot = dependencies.stateStore.snapshot(scopeKey);
+  const resolve = (value: string) => resolveConversationContent(value, scopeKey, threadId, at, snapshot, dependencies.conversationStore, 6_000);
+  if ('content' in request) return resolve(request.content);
+  const [asked, question] = dependencies.conversationStore.conversationHistory(scopeKey, threadId).slice(-2);
+  const answering = asked?.role === 'user' && question?.role === 'assistant' && asksWhichPlace(question.content)
+    && Date.parse(at) - Date.parse(question.observedAt) <= TOOL_FOLLOW_UP_MILLISECONDS;
+  if (!answering) return request.bare === 'request' ? resolve('それ') : null;
+  const content = memoRequestContent(asked.content);
+  if (!content || containsUnresolvedConversationReference(content)
+    || (asked.sourceExperienceId && !visibleMemoryText(snapshot, asked.sourceExperienceId, asked.content))) {
+    return { clarification: 'Aetherに残すことを、「〇〇をAetherに残して」と言ってもらえますか？ まだ何も送っていません。' };
+  }
+  return { content, sourceMessageIds: [asked.id], referenced: true };
 }
 
 function executeAgentWorkCommand(

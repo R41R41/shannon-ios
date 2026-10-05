@@ -32,6 +32,7 @@ export {
 export {
   SHANNON_CAPABILITIES,
   SHANNON_LIMITATIONS,
+  SHANNON_MEMO_PLACE_RULE,
   SHANNON_ROOM_LOOK_RULES,
   shannonCapabilityPrompt,
   type ShannonCapability,

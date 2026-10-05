@@ -1,4 +1,5 @@
 import { mentionsSuiteProduct } from '@shannon/cognition';
+import { memoNotForAether } from './memoPlace.js';
 import { wantsPlaceDiscovery } from './placeDiscovery.js';
 import {
   explicitWebRequestPattern, internalStatusPattern, mandatorySkillPatterns, VOICE_SKILLS,
@@ -9,7 +10,10 @@ export function applyMandatorySkillFloors(
   scores: Record<VoiceSkill, number>,
   input: VoiceDecisionInput,
 ): void {
+  // 「メモを作って」 is not a request about Aether unless Aether is named: her study and her folder take memos too.
+  const memoElsewhere = memoNotForAether(input.transcript);
   for (const skill of VOICE_SKILLS) {
+    if (skill === 'aether_notes' && memoElsewhere) continue;
     if (mandatorySkillPatterns[skill]?.test(input.transcript)) scores[skill] = Math.max(scores[skill], 1);
   }
   // Aether/Voyager/Shannon status lives in the owner's own notes, tasks and agent work, not on

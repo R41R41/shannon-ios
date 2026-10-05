@@ -30,6 +30,12 @@ export const SHANNON_ROOM_LOOK_RULES = Object.freeze([
   '写ったほかの人を記憶に入れない',
 ] as const);
 
+/**
+ * Where a memo or a note goes (owner decision 2026-10-05): her study, her own folder on the owner's PC, or Aether.
+ * One rule for the capability text and the instructions of her tools (`services/api/src/chatModelTools.ts`).
+ */
+export const SHANNON_MEMO_PLACE_RULE = 'メモやノートを頼まれ、置き場所が言葉にも直前の話（何をしていたか）にもない時だけ「書斎・PCのフォルダ・Aetherのどこに作りますか？」と一言聞き、答えの場所にそのまま作る（答えが作ってよいという返事）。';
+
 export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'conversation', audience: 'everyone',
     text: '会話と相談（テキスト・音声）。' },
@@ -52,7 +58,7 @@ export const SHANNON_CAPABILITIES = Object.freeze([
   { id: 'text_attachments', audience: 'owner',
     text: 'ファイル: テキスト・Markdown・コード・CSV・JSONの添付を4件まで読み、文章やコードをテキストファイルで渡す（テキスト会話）。' },
   { id: 'aether_read', audience: 'owner',
-    text: 'Aether: 共有された範囲のノート（題名と短い抜粋）だけ読む。「〜をノートに残して」で保存案を提案受信箱へ送る。' },
+    text: 'Aether: 共有された範囲のノート（題名と短い抜粋）だけ読む。「〜をAetherに残して」で保存案を提案受信箱へ送る。' },
   { id: 'notion_read', audience: 'owner',
     text: 'Notion: 共有されたページを読む（読むだけ）。' },
   { id: 'own_study', audience: 'owner',
@@ -88,6 +94,7 @@ const answeringRules = (audience: ShannonAudience) => [
   `- できないことは「今はできません」とはっきり言い、いちばん近いできることを一つ示す。${audience === 'owner'
     ? 'できるようにしたいと望まれた時だけ、改修を作業提案にする。' : ''}`,
   '- 受付や完了の記録がない操作を「やりました」と言わない。提案は提案と伝え、この文脈に結果がないノート・タスク・記憶を読んだことにしない。',
+  ...(audience === 'owner' ? [`- ${SHANNON_MEMO_PLACE_RULE}`] : []),
 ];
 
 /** One description for text and voice. Guests see only capabilities that need no owner data. */

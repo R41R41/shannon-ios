@@ -54,9 +54,10 @@ describe('canonical Shannon persona', () => {
     expect(shannonPersonaPrompt('owner').length).toBeLessThanOrEqual(650);
     expect(shannonSuitePrompt().length).toBeLessThanOrEqual(420);
     // +125 on 2026-10-02: the look through the app. 2026-10-03: +74, it does not announce a look by itself; and the phone call
-    // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision).
-    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_251);
-    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_187);
+    // line with no count of messages a day (owner decisions). 2026-10-05: +154, her study and her folder through her tools (owner decision);
+    // +109 the same day, the rule that asks where a memo goes (owner decision, SHANNON_MEMO_PLACE_RULE).
+    expect(shannonCapabilityPrompt('owner').length).toBeLessThanOrEqual(2_360);
+    expect(SHANNON_CORE_PROMPT.length).toBeLessThanOrEqual(3_296);
     expect(SHANNON_ONE_LINE_VOICE.length).toBeLessThanOrEqual(140);
   });
 });

@@ -111,7 +111,7 @@ export const skillInstructions: Readonly<Record<VoiceSkill, string>> = {
   place_discovery: 'Does the user want to find, compare, or use specific places, shops, facilities, or map locations, possibly together with weather, travel, memory, or tasks?',
   conversation_memory: 'Does answering well require the owner\'s remembered preferences, prior experiences, promises, relationships, or earlier conversation context?',
   daily_mind: 'Would Shannon\'s current daily reflection or ongoing personal context materially improve this reply?',
-  aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether (エーテル), the owner\'s writing and notes app?',
+  aether_notes: 'Does the utterance ask about notes, memos, or information explicitly shared from Aether (エーテル), the owner\'s writing and notes app? A request to make or write a memo or note that does not name Aether is not this skill.',
   voyager_tasks: 'Does the utterance ask to find, inspect, discuss, or update tasks or to-do items stored in Voyager (ボイジャー), the owner\'s task app?',
   agent_status: 'Does the utterance ask about the status, completion, failure, approval, or progress of Codex or agent work?',
   device_context: 'Does answering require the device\'s current local time, timezone, or one-time location?',

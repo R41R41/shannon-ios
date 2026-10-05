@@ -1,4 +1,5 @@
 import { lstatSync, readFileSync } from 'node:fs';
+import { memoNotForAether } from './memoPlace.js';
 
 export interface AetherContextReader {
   promptFor(scopeKey: string, message: string): string;
@@ -81,7 +82,8 @@ function parseSnapshot(value: unknown): AetherContextSnapshot | null {
 }
 
 function selectNotes(notes: readonly AetherNoteContext[], message: string): AetherNoteContext[] {
-  const asksForAether = /aether|エーテル|メモ|ノート/i.test(message);
+  // A memo he asks her to make (「メモを作って」) is not a question about Aether's notes unless Aether is named.
+  const asksForAether = /aether|エーテル/i.test(message) || (/メモ|ノート/u.test(message) && !memoNotForAether(message));
   const queryUnits = units(message);
   return notes.map((note, index) => {
     const noteUnits = units(`${note.title} ${note.excerpt} ${note.tags.join(' ')}`);

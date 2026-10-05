@@ -81,7 +81,7 @@ While the model writes, a sentence is sent once the characters that decide its e
 | `audience: "others"` | `start`, sentences, `done` | after the turn is complete | |
 | `SHANNON_CHAT_STREAM_EARLY=off`, or a model that cannot stream (`local-stub`) | `start`, sentences, `done` | after the turn is complete | |
 | Reply with a source list (a Notion read) | single `done` | after | `sources` |
-| Explicit command (a fixed reply: 「〜をタスクにして」, 「〜をノートに残して」, an answer to a reminder, a work or memory command) or an organize turn (整理して) | single `done` | after | `command` |
+| Explicit command (a fixed reply: 「〜をタスクにして」, 「〜をAetherに残して」 (Aether named; an unqualified memo is the model's to place or ask about), an answer to a reminder, a work or memory command) or an organize turn (整理して) | single `done` | after | `command` |
 | Request with `attachments` | single `done` | after | `attachments` |
 | Request with `webSearch: true` | single `done` | after | `web_search` |
 | Place search (a place request; `uiBlocks: place_search`) | single `done` | after | `place_search` |

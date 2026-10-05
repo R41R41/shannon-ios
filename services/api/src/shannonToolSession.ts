@@ -10,6 +10,7 @@ import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type Tool
 import { toolSessionMemory } from './shannonToolTypes.js';
 import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
+import { asksWhichPlace, memoNotForAether, namesMemoPlace } from './memoPlace.js';
 
 /**
  * The tools of one conversation turn, for the model adapter (`chatModelTools.ts`). Owner decision 2026-10-05: her
@@ -17,7 +18,7 @@ import type { TurnDeadline } from './turnDeadline.js';
  * 「友人も一緒」, or with anyone else present the turn has no tools at all and nothing of them can be said to others.
  *
  * Text offers them in every turn the owner alone reads (unless it forces a web search). Voice offers them when the
- * words are about her writing or her folder (`asksAboutOwnThings`), and to the follow-ups of such a talk
+ * words are about her writing or her folder (`asksAboutOwnThings`) or ask for a memo without naming Aether, and to the follow-ups of such a talk
  * (`voiceToolOffer`), so that an ordinary spoken turn keeps its speed. `ownerAlone: 'others'` is the owner's own call
  * with someone else listening: a voice turn that would be offered tools is told in one line that they are withheld.
  *
@@ -45,8 +46,10 @@ export function conversationTools(
   if (ownerAlone === 'others' || server.audience.othersKnown(scopeKey)) return { toolsWithheld: true };
   // Words that could not be trusted write nothing: an uncertain turn reads only. With no score at all (the router fell
   // back), a write waits for his explicit yes to a reply of hers that asked for it (「はい、お願いします」).
+  // His answer to her question where a memo goes (「書斎に」) is such a yes too.
   const writes = surface === 'text' || voice.trust === 'reliable'
-    || (voice.trust === 'unknown' && confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId));
+    || (voice.trust === 'unknown' && ((confirms(words) && lastReplyAsksToConfirm(server, scopeKey, threadId))
+      || (namesMemoPlace(words) && lastReplyAsks(server, scopeKey, threadId, asksWhichPlace))));
   const definitions = runner.offered(surface, 'owner_alone').filter(tool => writes || tool.effect === 'read');
   if (!definitions.length) return {};
   const trace = server.turns?.open(scopeKey, threadId, words, offer === 'asked', voice.utteranceId);
@@ -115,17 +118,21 @@ export function asksToConfirmToolAction(reply: string): boolean {
  * something she would do with them. Otherwise null: the turn keeps the plain path's speed.
  */
 export function voiceToolOffer(words: string, server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): 'asked' | 'follow_up' | null {
-  if (asksAboutOwnThings(words)) return 'asked';
+  // A memo he asks for may go to her study or her folder (or she asks where): not only Aether (owner decision 2026-10-05).
+  if (asksAboutOwnThings(words) || memoNotForAether(words)) return 'asked';
   if (server.turns?.recent(scopeKey, threadId)) return 'follow_up';
-  return lastReplyAsksToConfirm(server, scopeKey, threadId) ? 'follow_up' : null;
+  return lastReplyAsks(server, scopeKey, threadId, reply => asksToConfirmToolAction(reply) || asksWhichPlace(reply)) ? 'follow_up' : null;
 }
 
-/** Her newest message in the Talk, in the last ten minutes, asked him to confirm something she would do with her tools. */
-function lastReplyAsksToConfirm(server: Partial<ConversationToolServer>, scopeKey: string, threadId: string): boolean {
+const lastReplyAsksToConfirm = (server: Partial<ConversationToolServer>, scopeKey: string, threadId: string) =>
+  lastReplyAsks(server, scopeKey, threadId, asksToConfirmToolAction);
+
+/** Her newest message in the Talk, in the last ten minutes, asked him something about her tools (to confirm, or where). */
+function lastReplyAsks(server: Partial<ConversationToolServer>, scopeKey: string, threadId: string, asks: (reply: string) => boolean): boolean {
   let last: StoredConversationMessage | undefined;
   try { last = server.lastMessage?.(scopeKey, threadId); } catch { last = undefined; }
   const recent = last?.role === 'assistant' && Date.parse(server.now?.() ?? '') - Date.parse(last.observedAt) < TOOL_FOLLOW_UP_MILLISECONDS;
-  return recent && asksToConfirmToolAction(last!.content);
+  return recent && asks(last!.content);
 }
 
 /** A short, explicit yes: 「はい、お願いします」「うん、やって」「いいよ」. Nothing that adds or changes what is asked. */
