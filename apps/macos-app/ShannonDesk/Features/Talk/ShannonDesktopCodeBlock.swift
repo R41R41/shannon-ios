@@ -26,14 +26,14 @@ struct DesktopCodeBlockView: View {
         let collapsible = ShannonCodeBlockLayout.isCollapsible(lineCount: lines.count)
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
                 Text(ShannonCodeSyntax.displayName(for: language) ?? "コード")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannonDesktop(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 Button(action: copy) {
                     Label(didCopy ? "コピー済み" : "コピー", systemImage: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannonDesktop(.caption).weight(.semibold))
                         .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .foregroundStyle(didCopy ? Color.shannonSuccess : Color.secondary)
                 }
@@ -41,16 +41,16 @@ struct DesktopCodeBlockView: View {
                 .help("コードをクリップボードへコピー")
                 .accessibilityLabel(didCopy ? "コピー済み" : "コードをコピー")
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.top, ShannonDesktopSpacing.small)
+            .padding(.bottom, ShannonDesktopSpacing.extraSmall)
 
             ScrollView(.horizontal) {
                 Text(joined(lines.prefix(visible)))
-                    .font(.system(.body, design: .monospaced))
+                    .font(.shannonDesktop(.body).monospaced())
                     .fixedSize(horizontal: true, vertical: false)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, ShannonDesktopSpacing.medium)
                     .padding(.bottom, collapsible ? 4 : 12)
             }
             .mask {
@@ -75,7 +75,7 @@ struct DesktopCodeBlockView: View {
                         hidden > 0 ? "残り\(hidden)行を表示" : "折りたたむ",
                         systemImage: hidden > 0 ? "chevron.down" : "chevron.up"
                     )
-                    .font(.caption.weight(.semibold))
+                    .font(.shannonDesktop(.caption).weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 28)
                     .contentShape(Rectangle())
                 }
@@ -83,8 +83,8 @@ struct DesktopCodeBlockView: View {
                 .padding(.bottom, 6)
             }
         }
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08), lineWidth: 0.5) }
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
+        .overlay { RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium).stroke(Color.primary.opacity(0.08), lineWidth: 0.5) }
         .task(id: copyCount) {
             guard copyCount > 0 else { return }
             try? await Task.sleep(for: .seconds(1.6))
