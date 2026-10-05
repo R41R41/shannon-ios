@@ -267,7 +267,13 @@ describe('the review of 2026-10-05', () => {
     expect(uncertain.request.tools?.definitions.every(tool => tool.effect === 'read')).toBe(true);
     // Even a write the model asks for anyway does not run in that turn.
     const refused = JSON.parse(await uncertain.request.tools!.call('folder_create', JSON.stringify({ path: 'x.md', content: 'x' })));
-    expect(refused).toMatchObject({ ok: false, failure: 'not_offered' });
+    expect(refused).toMatchObject({ ok: false, failure: 'not_offered', why: expect.stringContaining('聞き取りが確かでない') });
+    // A dotted name is not an offered provider name, read or write (re-review 1); each refusal says its own reason.
+    for (const name of ['folder.create', 'study.update', 'folder.list']) {
+      const dotted = JSON.parse(await uncertain.request.tools!.call(name, JSON.stringify({ id: 'x', path: 'x.md', content: 'x', body: 'x', changeNote: 'x' })));
+      expect(dotted, name).toMatchObject({ ok: false, failure: 'not_offered', why: '道具の名前の形が違う' });
+    }
+    expect(JSON.parse(await uncertain.request.tools!.call('shell_run', '{}'))).toMatchObject({ failure: 'not_offered', why: 'そういう名前の道具はない' });
     // An uncertain yes is not a yes; a reliable one is.
     expect((await say('うーん、はい')).request.tools?.writesWithheld).toBe(true);
     const yes = await say('はい、お願いします');
@@ -275,6 +281,10 @@ describe('the review of 2026-10-05', () => {
     expect(operations.map(operation => operation.operation)).toEqual(['list', 'create', 'delete']);
     expect(confirms('はい、お願いします')).toBe(true);
     expect(confirms('はい、でも別のファイルを消して')).toBe(false);
+    // 「いいです」 alone may be a no; before お願い or して it is a yes (re-review 3).
+    expect(confirms('いいです')).toBe(false);
+    expect(confirms('いいです。')).toBe(false);
+    expect(confirms('いいです、お願いします')).toBe(true);
   });
 
   it('tells her line of reading only, and with no score writes only after an explicit yes to a reply that asked', async () => {

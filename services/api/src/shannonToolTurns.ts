@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { TurnBackgroundService } from './backgroundUpdates.js';
 import { saidKey, sameWords } from './bodyLookTurnWait.js';
-import { TRACE_CALLS, UNLINKED_TURN, type ToolTraceCall, type ToolTraceRecord } from './shannonToolTrace.js';
+import { TRACE_CALLS, UNLINKED_TURN, saidDigest, type ToolTraceCall, type ToolTraceRecord } from './shannonToolTrace.js';
 
 /** Where traces are kept: the SQLite store in production (`sqliteToolTraces.ts`), memory otherwise. */
 export interface ToolTraceStore {
@@ -95,7 +95,7 @@ export class ToolTurnLog {
       if (open.calls.length >= TRACE_CALLS) return;
       open.calls.push(call);
       try {
-        this.store.saveToolTrace(open.scopeKey, { turnId: open.provisionalId, threadId: open.threadId, recordedAt: open.recordedAt, asked: open.asked, calls: [...open.calls] });
+        this.store.saveToolTrace(open.scopeKey, { turnId: open.provisionalId, threadId: open.threadId, recordedAt: open.recordedAt, asked: open.asked, calls: [...open.calls], saidDigest: saidDigest(open.said) });
         open.persisted = true;
       } catch { /* the call stands; only the memory of it is lost */ }
     } };

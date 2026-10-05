@@ -8,7 +8,7 @@ import { authorizeToolCall } from './shannonToolGate.js';
 import { validToolInput } from './shannonToolInput.js';
 import type { PreparedToolCall, ToolExecutionContext, ToolExecutor } from './shannonToolTypes.js';
 import {
-  offeredTools, shannonTool, toolFailure, toolForSurface, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
+  offeredTools, shannonTool, toolFailure, toolForSurface, toolFromProviderName, type ShannonToolDefinition, type ToolAudience, type ToolResult, type ToolSurface,
 } from './shannonTools.js';
 
 /**
@@ -65,6 +65,14 @@ export class ShannonToolRunner {
     } catch {
       return { tool, result: toolFailure('failed', 'うまく準備できなかった。', { retryable: true }) };
     }
+  }
+
+  /** A call from a conversation that the turn refused before it reached here (a name it does not offer): recorded, not run. */
+  refused(name: string, scopeKey: string, result: ToolResult): ToolResult {
+    try {
+      this.recorder.recordConversationAction(scopeKey, { summary: `会話の中で道具「${(toolFromProviderName(name) ?? shannonTool(name))?.name ?? '不明'}」を使おうとしましたが、使えませんでした。`, tool: name.slice(0, 120), outcome: 'failed', reasonCode: 'not_offered' });
+    } catch { /* the refusal stands */ }
+    return result;
   }
 
   /** One call from a conversation: run, commit, record. Never throws. */

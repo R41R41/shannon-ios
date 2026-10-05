@@ -18,6 +18,7 @@ export function ensureToolTraceSchema(database: DatabaseSync): void {
       recorded_at TEXT NOT NULL,
       asked INTEGER NOT NULL,
       calls_json TEXT NOT NULL,
+      said_digest TEXT,
       PRIMARY KEY (scope_key, turn_id)
     );
     CREATE INDEX IF NOT EXISTS conversation_tool_traces_thread ON conversation_tool_traces (scope_key, thread_id, recorded_at);
@@ -26,10 +27,10 @@ export function ensureToolTraceSchema(database: DatabaseSync): void {
 
 export function insertToolTrace(database: DatabaseSync, scopeKey: string, record: ToolTraceRecord): void {
   database.prepare(`
-    INSERT INTO conversation_tool_traces (scope_key, turn_id, thread_id, recorded_at, asked, calls_json)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO conversation_tool_traces (scope_key, turn_id, thread_id, recorded_at, asked, calls_json, said_digest)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(scope_key, turn_id) DO UPDATE SET calls_json = excluded.calls_json, asked = excluded.asked
-  `).run(scopeKey, record.turnId, record.threadId, record.recordedAt, record.asked ? 1 : 0, JSON.stringify(boundedTraceCalls(record.calls)));
+  `).run(scopeKey, record.turnId, record.threadId, record.recordedAt, record.asked ? 1 : 0, JSON.stringify(boundedTraceCalls(record.calls)), record.saidDigest ?? null);
 }
 
 export function deleteToolTraces(database: DatabaseSync, scopeKey: string, turnIds: readonly string[]): void {
@@ -54,7 +55,7 @@ export function toolTraceRetentionBoundary(now: string): string | null {
   return Number.isFinite(at) ? new Date(at - TOOL_TRACE_RETENTION_MILLISECONDS).toISOString() : null;
 }
 
-interface ToolTraceRow { turn_id: string; thread_id: string; recorded_at: string; asked: number; calls_json: string }
+interface ToolTraceRow { turn_id: string; thread_id: string; recorded_at: string; asked: number; calls_json: string; said_digest: string | null }
 
 export function selectToolTraces(database: DatabaseSync, scopeKey: string, threadId: string | null, query: { turnIds?: readonly string[]; since?: string }): readonly ToolTraceRecord[] {
   const turnIds = (query.turnIds ?? []).slice(0, MAXIMUM_READ);
@@ -64,13 +65,13 @@ export function selectToolTraces(database: DatabaseSync, scopeKey: string, threa
   ];
   if (!conditions.length) return [];
   const rows = database.prepare(`
-    SELECT turn_id, thread_id, recorded_at, asked, calls_json FROM conversation_tool_traces
+    SELECT turn_id, thread_id, recorded_at, asked, calls_json, said_digest FROM conversation_tool_traces
     WHERE scope_key = ? AND (? IS NULL OR thread_id = ?) AND (${conditions.join(' OR ')})
     ORDER BY recorded_at DESC LIMIT ${threadId === null ? 5_000 : MAXIMUM_READ}
   `).all(scopeKey, threadId, threadId, ...turnIds, ...(query.since !== undefined ? [query.since] : [])) as unknown as ToolTraceRow[];
   return Object.freeze(rows.map(row => {
     let calls: unknown = [];
     try { calls = JSON.parse(row.calls_json); } catch { calls = []; }
-    return Object.freeze({ turnId: row.turn_id, threadId: row.thread_id, recordedAt: row.recorded_at, asked: row.asked === 1, calls: Object.freeze(boundedTraceCalls(calls)) });
+    return Object.freeze({ turnId: row.turn_id, threadId: row.thread_id, recordedAt: row.recorded_at, asked: row.asked === 1, calls: Object.freeze(boundedTraceCalls(calls)), ...(row.said_digest ? { saidDigest: row.said_digest } : {}) });
   }));
 }

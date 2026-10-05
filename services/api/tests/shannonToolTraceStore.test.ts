@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { OWNER_AUDIENCE } from '@shannon/cognition';
+import { OWNER_AUDIENCE, UNKNOWN_GUEST_PRESENCE } from '@shannon/cognition';
 import { TurnRefinementProcessor } from '../src/backgroundUpdates.js';
 import { conversationReplay } from '../src/conversationWindow.js';
 import { ShannonMemoryService } from '../src/memoryService.js';
@@ -82,6 +82,46 @@ describe('the stored traces of her tools', () => {
     expect(JSON.stringify(kept)).not.toContain('転職活動中');
     expect(JSON.stringify(kept)).toContain('stories/');
     store.close();
+  });
+
+  it('keeps every valid trace of a Talk with more than 200 turns (re-review 2)', () => {
+    const { open } = sqlite();
+    const store = open();
+    for (let index = 0; index < 250; index += 1) {
+      const observedAt = new Date(Date.parse(at) - (300 - index) * 60_000).toISOString();
+      const turn = store.appendTurn('owner', 'talk', `フォルダを見て ${index}`, `見ました ${index}`, observedAt, { capturedStateVersion: 0, messageEmotion: emotion });
+      store.saveToolTrace('owner', { turnId: turn.id, threadId: 'talk', recordedAt: observedAt, asked: true, calls: [list(`entry-${index}/`)] });
+    }
+    sweepToolTraces(store, at);
+    expect(store.toolTraces('owner', null, { since: '' })).toHaveLength(250);
+    store.close();
+  });
+
+  it('links a Talk-only trace to its turn after a restart, and drops it with a turn others heard or one forgotten (re-review 4)', () => {
+    const { open } = sqlite();
+    const store = open();
+    const before = new ToolTurnLog(store, () => at);
+    const create = (path: string): ToolTraceCall => ({ tool: 'folder.create', target: path, ok: true });
+    before.open('owner', 'talk', '試しにメモを作って', false).called(create('memo.md'));
+    before.open('owner', 'talk', '別のファイルも作って、内緒で', false).called(create('other.md'));
+    before.open('owner', 'talk', '途中で切れた話', false).called(create('cut.md'));
+    // The API restarts: nothing holds the pending turns. The client stores two of them a few seconds later.
+    store.close();
+    const reopened = open();
+    const later = new Date(Date.parse(at) + 5_000).toISOString();
+    const stored = reopened.appendTurn('owner', 'talk', '試しにメモを作って。', '作りました。', later, { capturedStateVersion: 0, messageEmotion: emotion });
+    reopened.appendTurn('owner', 'talk', '別のファイルも作って、内緒で', '作りました。', later,
+      { capturedStateVersion: 0, messageEmotion: emotion, audience: UNKNOWN_GUEST_PRESENCE, speaker: 'unknown' });
+    sweepToolTraces(reopened, later);
+    const kept = reopened.toolTraces('owner', 'talk', { since: '' });
+    expect(kept.find(record => record.turnId === stored.id)?.calls).toEqual([create('memo.md')]);
+    expect(JSON.stringify(kept)).not.toContain('other.md');
+    // The reply that was cut off keeps its Talk-only trace.
+    expect(kept.filter(record => record.turnId.startsWith('unstored:')).map(record => record.calls[0]!.target)).toEqual(['cut.md']);
+    const after = new ToolTurnLog(reopened, () => later);
+    expect(conversationReplay('text', reopened.snapshot('owner'), reopened, 'owner', 'talk', OWNER_AUDIENCE, {}, after).request('').systemPrompt)
+      .toContain('- 2つ前の返事: folder.create「memo.md」 → できた');
+    reopened.close();
   });
 
   it('does not merge a repeated short yes into an earlier turn that was never stored, and links by utterance id first', () => {

@@ -8,7 +8,7 @@ import type { ShannonToolRunner } from './shannonToolRunner.js';
 import { toolTraceCall } from './shannonToolTrace.js';
 import { InMemoryToolTraces, TOOL_FOLLOW_UP_MILLISECONDS, ToolTurnLog, type ToolTraceStore } from './shannonToolTurns.js';
 import { toolSessionMemory } from './shannonToolTypes.js';
-import { ownToolsEnabled, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
+import { ownToolsEnabled, providerToolName, shannonTool, toolFailure, toolFromProviderName, toolResultForModel } from './shannonTools.js';
 import type { TurnDeadline } from './turnDeadline.js';
 
 /**
@@ -55,16 +55,23 @@ export function conversationTools(
   const session = { definitions, maximumCalls: CONVERSATION_TOOL_CALLS } as unknown as ShannonModelToolSession;
   Object.defineProperty(session, 'deadline', { enumerable: false, value: deadline });
   if (!writes) Object.defineProperty(session, 'writesWithheld', { enumerable: false, value: true });
+  /** A call of a name this turn does not offer, with the reason that is true for it. */
+  const refuse = (providerName: string): string => {
+    const tool = toolFromProviderName(providerName) ?? shannonTool(providerName);
+    const refusal = !tool ? { why: 'そういう名前の道具はない', wouldWork: '出してある道具の名前（folder_list のような形）で呼ぶ' }
+      : !toolFromProviderName(providerName) ? { why: '道具の名前の形が違う', wouldWork: `${providerToolName(tool.name)} という名前で呼ぶ` }
+        : !writes && tool.effect === 'write' ? { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' }
+          : { why: 'この返事ではその道具は出していない', wouldWork: '出してある道具だけを使う' };
+    return toolResultForModel(runner.refused(providerName.slice(0, 80), scopeKey, toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false, refusal })));
+  };
+  Object.defineProperty(session, 'refuse', { enumerable: false, value: refuse });
   // Not enumerable: two turns that offer the same tools are the same request (what the model is asked), whoever runs the calls.
   Object.defineProperty(session, 'call', {
     enumerable: false,
     value: async (providerName: string, argumentsJson: string, signal?: AbortSignal, timeMilliseconds?: number) => {
       const tool = toolFromProviderName(providerName);
-      // A tool of the registry that this turn does not offer (a write after words that could not be trusted) is not run.
-      if (tool && !definitions.some(item => item.name === tool.name)) {
-        return toolResultForModel(toolFailure('not_offered', 'この返事ではその道具は出していない。', { retryable: false,
-          refusal: { why: '聞き取りが確かでないので、書く・消す道具は出していない', wouldWork: 'ライ氏がはっきり確かめた次の返事で' } }));
-      }
+      // Only a provider name this turn offers runs (`folder.create` is not `folder_create`); a refusal is recorded like any call.
+      if (!tool || !definitions.some(item => item.name === tool.name)) return refuse(providerName);
       // What must reach nobody but the owner, read at the moment of the call; a list that cannot be read is null, and writes are then refused.
       // Read once a turn; a list that could not be read is tried again at the next call.
       if (!check) { try { check = server.secrets?.(scopeKey); } catch { check = null; } }
@@ -122,7 +129,8 @@ function lastReplyAsksToConfirm(server: Partial<ConversationToolServer>, scopeKe
 }
 
 /** A short, explicit yes: 「はい、お願いします」「うん、やって」「いいよ」. Nothing that adds or changes what is asked. */
-const YES = /^(?:はい|うん|ええ|おう|いいよ|いいです|いいね|どうぞ|お願い|おねがい|やって|頼む|たのむ|オッケー|ok|了解|そうして)(?:お願い|おねがい|します|して|です|ね|よ|やって|どうぞ|ください|いいよ|いいです|頼む)*$/u;
+// 「いいです」 alone may be a no (「いいです、やめておきます」 shortened); it is a yes only before お願い or して.
+const YES = /^(?:はい|うん|ええ|おう|いいよ|いいね|どうぞ|お願い|おねがい|やって|頼む|たのむ|オッケー|ok|了解|そうして|いいです(?=お願い|おねがい|して))(?:お願い|おねがい|します|して|です|ね|よ|やって|どうぞ|ください|いいよ|頼む)*$/u;
 
 export function confirms(words: string): boolean {
   const said = words.normalize('NFKC').toLowerCase().replace(/[\s\p{P}]/gu, '');

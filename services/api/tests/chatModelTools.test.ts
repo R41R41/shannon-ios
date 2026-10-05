@@ -42,6 +42,23 @@ function scriptedFetch(responses: unknown[]) {
 const base = { scopeKey: 'owner', systemPrompt: '[テスト]', history: [], message: '書斎に何がある？' };
 
 describe('her tools in a text turn', () => {
+  it('runs only the names the request offers: a dotted or unknown name is refused without running (re-review 1)', async () => {
+    const tools = session();
+    const refused: string[] = [];
+    const value = { ...tools.value, refuse: (name: string) => { refused.push(name); return JSON.stringify({ ok: false, failure: 'not_offered', name }); } };
+    let round = 0;
+    const sent: Array<Record<string, unknown>> = [];
+    await withToolRounds({ input: [] }, value, async body => {
+      sent.push(body);
+      round += 1;
+      return round === 1 ? { output: [functionCall('study.list', '{}', 'c1'), functionCall('folder_create', '{}', 'c2'), functionCall('study_list', '{}', 'c3')] } : { output: [message(TURN)] };
+    }, { isAnswer: envelope => !functionCallsOf(envelope).length, outOfTime: () => 'out' });
+    expect(tools.calls.map(call => call.name)).toEqual(['study_list']);
+    expect(refused).toEqual(['study.list', 'folder_create']);
+    const outputs = (sent[1]!.input as Array<Record<string, unknown>>).filter(item => item.type === 'function_call_output').map(item => JSON.parse(String(item.output)).failure);
+    expect(outputs).toEqual(['not_offered', 'not_offered', undefined]);
+  });
+
   it('offers the registry as functions, runs what the model asks for, and asks again with the result', async () => {
     const tools = session();
     const { fetcher, bodies } = scriptedFetch([

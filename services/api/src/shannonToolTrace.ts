@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SecretCheck } from './conversationSecrets.js';
 import { clip } from './shannonToolTypes.js';
 import type { ToolResult } from './shannonTools.js';
@@ -36,11 +37,18 @@ export interface ToolTraceRecord {
   /** A voice turn offered tools because the owner asked about her things; keeps the follow-up window open. */
   asked: boolean;
   calls: readonly ToolTraceCall[];
+  /** A trace not linked to a stored turn yet: a digest of the owner's words, so the sweep can link it after a restart. */
+  saidDigest?: string;
 }
 
 export const TRACE_CALLS = 6;
 /** The turn id of a trace whose turn is not in the Talk (yet): linked to the Talk only (`shannonToolTurns.ts`). */
 export const UNLINKED_TURN = 'unstored:';
+
+/** The digest of the owner's words as `saidKey` writes them (`bodyLookTurnWait.ts`); the words themselves are never stored. */
+export function saidDigest(said: string): string {
+  return createHash('sha256').update(`shannon-tool-trace\n${said}`).digest('hex');
+}
 export const TRACE_NAMES = 12;
 const NAME_CHARACTERS = 60;
 /** A study name is a short title, its stage and its whole id (a UUID is 36 characters). */

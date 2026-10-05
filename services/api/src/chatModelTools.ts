@@ -22,6 +22,8 @@ export interface ShannonModelToolSession {
   readonly deadline: TurnDeadline;
   /** A spoken turn whose words could not be trusted: only her reading tools are offered, and she is told why. */
   readonly writesWithheld?: boolean;
+  /** The result for a call of a name this turn does not offer, recorded as refused. Absent: a fixed `not_offered`. */
+  readonly refuse?: (providerName: string) => string;
 }
 
 /** A conversation turn uses at most this many tools. */
@@ -32,6 +34,9 @@ export const VOICE_TOOL_OUTPUT_TOKENS = 2_400;
 /** In voice, after her first waiting phrase, this long with nothing heard brings a second fixed phrase. */
 export const VOICE_SECOND_PHRASE_AFTER_MILLISECONDS = 15_000;
 export const VOICE_SECOND_PHRASE = 'もう少し待ってくださいね。';
+
+/** A call of a name the request did not offer: nothing ran. */
+const NOT_OFFERED = JSON.stringify({ ok: false, text: 'この返事ではその道具は出していない。', failure: 'not_offered', retryable: false });
 
 /** A call that was not run because the turn's time ran short: nothing of it happened. */
 export const SKIPPED_FOR_TIME = JSON.stringify({ ok: false, text: '時間が足りず実行しなかった（何もしていない）。', failure: 'timeout', retryable: true });
@@ -159,6 +164,7 @@ export async function withToolRounds(
 ): Promise<unknown> {
   if (!session) return send(body);
   const deadline = session.deadline;
+  const offered = new Set(session.definitions.map(tool => providerToolName(tool.name)));
   const input = Array.isArray(body.input) ? [...body.input as unknown[]] : [];
   let used = 0;
   let toolsOff = false;
@@ -220,6 +226,9 @@ export async function withToolRounds(
         // The answer's reserve is reached: the rest of this response's calls are not run.
         output = SKIPPED_FOR_TIME;
         toolsOff = true;
+      } else if (!offered.has(call.name)) {
+        // Only the names offered in this request run, whatever the model writes (`folder.create` is not offered).
+        output = session.refuse?.(call.name) ?? NOT_OFFERED;
       } else {
         output = await session.call(call.name, call.arguments, options.signal, callTime);
         used += 1;
