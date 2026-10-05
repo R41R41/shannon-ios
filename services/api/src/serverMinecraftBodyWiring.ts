@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ShannonDevicePrincipal } from './deviceAuth.js';
+import { namesDesktopBody } from './desktopBodyIdentity.js';
 import { SQLiteGameExperiences } from './gameBodyMemory.js';
 import { configuredMinecraftBody } from './minecraftBodyContract.js';
 import { MinecraftBodyRequests } from './minecraftBodyRequests.js';
@@ -36,6 +37,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
   return {
     configuration,
     requests,
+    /** Her Minecraft body's token: never given a desktop-body identity (`desktopBodyIdentity.ts`). */
+    isGameDevice: isGameBody,
     /** `ShannonBodyOptions.game`: the one device whose game events are taken. */
     game: configuration ? { deviceId: configuration.deviceId, ownerScopeKey: configuration.ownerScopeKey, experiences } : null,
     /** The game-chat route, once the conversation kernel it answers through exists. */
@@ -53,7 +56,8 @@ export function createMinecraftBodyWiring(environment: Readonly<Record<string, s
      * body itself). True when it answered.
      */
     async serve(request: IncomingMessage, response: ServerResponse, path: string, principal: ShannonDevicePrincipal | null): Promise<boolean> {
-      if (isGameBody(principal) && !gameBodyMayCall(request.method, path)) {
+      // Never as another body either: the header that gives an app's desktop body a device of its own is refused.
+      if (isGameBody(principal) && (!gameBodyMayCall(request.method, path) || namesDesktopBody(request.headers['x-shannon-body']))) {
         sendJson(response, 403, { error: 'GAME_BODY_DEVICE_DENIED', message: 'Her Minecraft body may call its own routes, game events and presence only.' });
         return true;
       }

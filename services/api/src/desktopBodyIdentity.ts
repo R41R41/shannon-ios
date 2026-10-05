@@ -38,7 +38,12 @@ export function desktopBodyMaySpeakOn(method: string | undefined, path: string):
   return method === 'GET' && path === '/v1/initiatives';
 }
 
-/** The device a paired request speaks for: its own, or its desktop body's on the routes above. */
-export function requestDeviceId(deviceId: string, header: string | readonly string[] | undefined, method: string | undefined, path: string): string {
-  return namesDesktopBody(header) && desktopBodyMaySpeakOn(method, path) ? desktopBodyDeviceId(deviceId) : deviceId;
+/**
+ * The device a paired request speaks for: its own, or its desktop body's on the routes above. `mayDerive` is false for a
+ * device that may never be another body (her Minecraft body, which `serverMinecraftBodyWiring.ts` refuses with the header).
+ */
+export function requestDeviceId(
+  deviceId: string, header: string | readonly string[] | undefined, method: string | undefined, path: string, mayDerive = true,
+): string {
+  return mayDerive && namesDesktopBody(header) && desktopBodyMaySpeakOn(method, path) ? desktopBodyDeviceId(deviceId) : deviceId;
 }

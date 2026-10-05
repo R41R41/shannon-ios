@@ -46,8 +46,9 @@ describe('the request identity', () => {
       expect(desktopBodyMaySpeakOn(method, path)).toBe(false);
       expect(requestDeviceId(MAC, 'desktop', method, path)).toBe(MAC);
     }
-    // Without the header nothing changes.
+    // Without the header nothing changes, and a device that may not derive one never does (her Minecraft body).
     expect(requestDeviceId(MAC, undefined, 'GET', '/v1/body/presence')).toBe(MAC);
+    expect(requestDeviceId(MAC, 'desktop', 'GET', '/v1/body/presence', false)).toBe(MAC);
   });
 });
 
@@ -146,5 +147,35 @@ describe('the Mac app and its desktop body', () => {
     // The Mac app reads no presence; for the Windows desktop and the Mac body alike the Mac call is elsewhere.
     expect((await h.presence(PC)).ownerCallElsewhere?.active).toBe(true);
     expect((await h.presence(MAC_BODY)).ownerCallElsewhere?.active).toBe(true);
+  });
+});
+
+describe('her Minecraft body and the header (review of A17, B1)', () => {
+  const GAME = 'minebot-dev';
+  it('stays the game body under a derived identity: nothing but game_only, no audience noted, no call, no feeling', async () => {
+    const clock = { at: START };
+    const now = () => clock.at;
+    const store = new SQLiteBodyStore(':memory:');
+    const stateStore = new InMemoryCompanionStateStore(now);
+    const api = createLocalApiKernel(now, { stateStore, conversationStore: new InMemoryConversationStore(), body: { store, game: { deviceId: GAME, ownerScopeKey: scope } } });
+    await api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', deviceId: PC, body: { scopeKey: scope, expressions: [], gestures: [], flags: {}, surface: 'windows' } });
+    const derived = desktopBodyDeviceId(GAME);
+    const before = stateStore.snapshot(scope).emotion;
+    const put = await api.dispatch({ method: 'PUT', path: '/v1/body/capabilities', deviceId: derived, body: { scopeKey: scope, expressions: [], gestures: [], flags: {}, surface: 'mac' } });
+    expect(put.status).toBe(403);
+    const sent = await api.dispatch({ method: 'POST', path: '/v1/body/events', deviceId: derived, body: { scopeKey: scope, events: [
+      { id: 'g-call', type: 'callStarted', audience: 'owner', occurredAt: START },
+      { id: 'g-pet', type: 'pet', audience: 'owner', occurredAt: START },
+      { id: 'g-death', type: 'game.died', audience: 'others', occurredAt: START, cause: 'minecraft:lava' },
+    ] } });
+    expect((sent.body as { results: unknown[] }).results).toEqual([
+      { id: 'g-call', status: 'ignored', reason: 'game_only' }, { id: 'g-pet', status: 'ignored', reason: 'game_only' },
+      { id: 'g-death', status: 'ignored', reason: 'not_game_body' },
+    ]);
+    await api.dispatch({ method: 'GET', path: '/v1/body/presence', deviceId: derived, query: new URLSearchParams({ scopeKey: scope, audience: 'others' }) });
+    expect(store.othersPresent(scope, clock.at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds)).toBe(false);
+    const presence = (await api.dispatch({ method: 'GET', path: '/v1/body/presence', deviceId: PC, query: new URLSearchParams({ scopeKey: scope }) })).body as BodyPresence;
+    expect(presence.ownerCallElsewhere).toEqual({ active: false });
+    expect(stateStore.snapshot(scope).emotion).toEqual(before);
   });
 });
