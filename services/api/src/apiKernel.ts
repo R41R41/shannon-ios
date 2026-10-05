@@ -105,7 +105,8 @@ import {
   type VoyagerTaskProjection,
 } from './organize.js';
 import { InMemoryVoiceIdentityStore, type ShannonVoiceIdentityStore } from './voiceIdentity.js';
-import { OwnOutreach, type OwnOutreachReader } from './ownOutreach.js'; import type { VoiceSessionCalls } from './ownerCallElsewhere.js';
+import { OwnOutreach, type OwnOutreachReader } from './ownOutreach.js';
+import { voiceSessionCalls } from './ownerCallElsewhere.js';
 export interface ShannonApiKernelOptions {
   chatModel?: ShannonChatModel;
   voiceDecision?: VoiceDecisionGateway;
@@ -204,8 +205,7 @@ export class ShannonApiKernel {
     this.toolServer = conversationToolServer(this.body, this.stateStore, this.conversationStore, this.now);
     this.background = this.toolServer.turns.watching(this.background); // Each stored turn takes what her tools did with it.
   }
-
-  /** A voice session while the owner is in a call elsewhere: `refused` notes nothing; `created` notes one that was made. */ get voiceSessions(): VoiceSessionCalls { const calls = this.body.ownerCalls; return { refused: (scope, device, mode) => calls.refuses(scope, device, mode, this.now()), created: (scope, device) => calls.noteVoice(scope, device, this.now(), 'session') }; }
+  get voiceSessions() { return voiceSessionCalls(this.body.ownerCalls, this.now); } // A voice session while the owner is in a call elsewhere.
   realtimeVoiceSession(scopeKey: string, requestedThreadId?: string, options: {
     clientDelegation?: boolean;
     participantMode?: VoiceParticipantMode;

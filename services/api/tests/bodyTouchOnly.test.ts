@@ -104,7 +104,8 @@ describe('a body that only feels touch', () => {
     // Nor does an audience it sends on a presence read.
     await h.presence(PHONE, { audience: 'others' });
     expect(h.othersPresent()).toBe(false);
-    // The desktop body's event does, as before, and a later touch on the phone alone does not undo it.
+    // The desktop body's event does, once it is registered as her body, and a later touch on the phone alone does not undo it.
+    await h.register(PC, {});
     expect((await h.touch('pc-1', 'others', PC)).status).toBe(200);
     expect(h.othersPresent()).toBe(true);
     h.clock.at = new Date(Date.parse(START) + 60_000).toISOString();

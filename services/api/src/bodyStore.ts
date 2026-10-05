@@ -185,13 +185,16 @@ export class SQLiteBodyStore {
     const reports = this.database.prepare('SELECT audience FROM body_audience WHERE scope_key = ? AND reported_at >= ? AND reported_at <= ?')
       .all(scopeKey, new Date(time - freshMilliseconds).toISOString(), at) as unknown as Array<{ audience: string }>;
     if (reports.length) return reports.some(report => report.audience === 'others');
-    // A touch-only body (the phone) says who was around the phone, not who can see her window: its events do not stand in.
-    const touchOnly = this.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG);
+    // Only her full bodies stand in: a touch-only body (the phone) or an unregistered app says who was around it, not who can
+    // see her window. Call events stand in for nothing: the phone reports its calls whatever its registration (2026-10-05).
+    const touchOnly = new Set(this.devicesWithFlag(scopeKey, BODY_TOUCH_ONLY_FLAG));
+    const bodies = this.devices(scopeKey).filter(device => !touchOnly.has(device));
+    if (!bodies.length) return false;
     const latest = this.database.prepare(`
       SELECT audience FROM body_events WHERE scope_key = ? AND occurred_at >= ? AND occurred_at <= ?
-        ${touchOnly.length ? `AND device_id NOT IN (${touchOnly.map(() => '?').join(', ')})` : ''}
+        AND device_id IN (${bodies.map(() => '?').join(', ')}) AND event_type NOT IN ('callStarted', 'callEnded')
       ORDER BY occurred_at DESC, received_at DESC LIMIT 1
-    `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at, ...touchOnly) as unknown as { audience: string } | undefined;
+    `).get(scopeKey, new Date(time - eventWindowMilliseconds).toISOString(), at, ...bodies) as unknown as { audience: string } | undefined;
     return latest?.audience === 'others';
   }
 

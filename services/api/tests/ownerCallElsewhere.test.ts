@@ -174,6 +174,13 @@ describe('presence.ownerCallElsewhere', () => {
     expect((await h.presence()).ownerCallElsewhere?.active).toBe(true);
   });
 
+  it('reads a callStarted stamped by a phone clock a few minutes fast, as the store keeps it', async () => {
+    const h = await registered(harness());
+    const fast = new Date(Date.parse(START) + 3 * MINUTE).toISOString();
+    expect((await h.call(PHONE, 'callStarted', fast)).body).toMatchObject({ stored: 1 });
+    expect((await h.presence()).ownerCallElsewhere).toEqual({ active: true, since: fast, surface: 'ios' });
+  });
+
   it('counts her call he answered on the iPhone from the moment of the answer', async () => {
     const h = await registered(harness());
     h.answered.push({ deviceId: PHONE, answeredAt: START });

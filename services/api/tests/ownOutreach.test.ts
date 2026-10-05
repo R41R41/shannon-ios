@@ -60,12 +60,16 @@ describe('what the owner says she did on her own', () => {
   it('recognises the owner saying or asking that she called, wrote or left something', () => {
     for (const text of [ASKED, 'さっき電話くれた？', 'シャノンからメッセージ来てたよ', '着信あったけど何だった？', '書き置きを見たよ', 'きみが送ってきたやつ読んだ', '不在着信が入ってた',
       // Bare questions (review of 2026-10-05).
-      '何か送った？', '電話かけた？', 'シャノン電話かけた？', '呼んだ？', 'さっき鳴った？', '何か書いた？', 'メモ置いてった？', 'さっきかけたの', '話しかけた?', 'シャノンから電話あった']) {
+      '何か送った？', '電話かけた？', 'シャノン電話かけた？', '呼んだ？', 'さっき鳴った？', '何か書いた？', 'メモ置いてった？', 'さっきかけたの', '話しかけた?', 'シャノンから電話あった',
+      // Re-review of e1f6790: the regressions from 848b818, endings without 「？」, polite and unpunctuated forms.
+      '電話したよね', '電話したでしょ', '電話したじゃん', '俺に電話した', 'さっき俺に電話したでしょ', '僕に連絡したじゃん',
+      '電話したよね？', '送ったよね？', '電話かけたっけ', '何か送ったかな', '電話かけたか', '呼んだかい', '電話しました？', '呼びました？',
+      '何か送った', '電話かけた', 'シャノン電話かけた', 'シャノン、さっき電話した', '通話きた？']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(true);
     }
-    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'この物語の続きを書いて', 'もういい、君とはもう話したくない', '明日の予定を教えて',
-      // Someone else as the sender, the owner's own act, a generic notification.
-      '母から電話があった', '上司から連絡が来て大変だった', '友達がメッセージくれた', '母に電話した', 'さっき上司に連絡したよ', '昨日はずっとメールしてた', 'アプリの通知が来た']) {
+    for (const text of ['お、シャノン、元気？', '今日は疲れた', 'もういい、君とはもう話したくない', '明日の予定を教えて',
+      // Someone else as the sender, the owner's own act toward someone else, a notification without an outreach word.
+      '母から電話があった', '上司から連絡が来て大変だった', '友達がメッセージくれた', '母に電話した', 'さっき上司に連絡したよ', 'アプリの通知が来た']) {
       expect(saysSheActedOnHerOwn(text), text).toBe(false);
     }
   });

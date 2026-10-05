@@ -385,6 +385,10 @@ describe('other people are present', () => {
     const others = (at: string) => body.othersPresent(scope, at, BODY_LIMITS.audienceFreshMilliseconds, BODY_LIMITS.audienceEventWindowMilliseconds);
     const at = (minutes: number) => new Date(Date.parse(START) + minutes * MINUTE).toISOString();
     expect(others(START)).toBe(false);
+    // Since 2026-10-05 only a registered full body's events stand in; an unregistered device's do not.
+    body.record(scope, 'body-pc', { id: 'e0', type: 'pet', audience: 'others', occurredAt: START }, START, '2026-10-02');
+    expect(others(at(1))).toBe(false);
+    body.saveCapabilities(scope, 'body-pc', { expressions: [], gestures: [], flags: {} }, START);
     // An event with `others`, and no report since: others for thirty minutes.
     body.record(scope, 'body-pc', { id: 'e1', type: 'pet', audience: 'others', occurredAt: START }, START, '2026-10-02');
     expect(others(at(10))).toBe(true);

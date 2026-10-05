@@ -14,8 +14,24 @@ final class ShannonVoiceCallPresenceTests: XCTestCase {
         }
     }
 
-    private func presence(_ reporter: Reporter?, mayReport: Bool = true) -> ShannonVoiceCallPresence {
+    private var suites: [String] = []
+
+    override func tearDown() {
+        for suite in suites { UserDefaults().removePersistentDomain(forName: suite) }
+        suites = []
+        super.tearDown()
+    }
+
+    private func presence(_ reporter: Reporter?, mayReport: Bool = true, defaults: UserDefaults? = nil) -> ShannonVoiceCallPresence {
         let presence = ShannonVoiceCallPresence()
+        if let defaults {
+            presence.defaults = defaults
+        } else {
+            let suite = "shannon.tests.call-presence.\(UUID().uuidString)"
+            suites.append(suite)
+            presence.defaults = UserDefaults(suiteName: suite)!
+        }
+        presence.holdBackgroundTime = { _ in {} }
         presence.configure(scopeKey: "owner", reporter: reporter, mayReport: { mayReport })
         presence.now = { Date(timeIntervalSince1970: 1_791_200_000) }
         presence.retryDelay = { _ in }
@@ -78,6 +94,61 @@ final class ShannonVoiceCallPresenceTests: XCTestCase {
         await presence.settle()
         sent = await reporter.sent
         XCTAssertEqual(sent.map(\.type), [.callStarted])
+    }
+
+    func testKeepsAnEndThatDidNotGetThroughAndSendsItAgainLaterWithTheSameContent() async {
+        let reporter = Reporter()
+        let presence = presence(reporter)
+        presence.began(audience: .owner)
+        await presence.settle()
+        XCTAssertEqual(presence.pending().map(\.occurredAt), [nil], "the end is owed from the start of the call")
+        for _ in 0..<3 { await reporter.failNext(URLError(.notConnectedToInternet)) }
+        presence.ended()
+        await presence.settle()
+        var sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted])
+        let kept = presence.pending()
+        XCTAssertEqual(kept.count, 1)
+        presence.resendUndelivered(scopeKey: "owner", reporter: reporter)
+        await presence.settle()
+        sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted, .callEnded])
+        XCTAssertEqual(sent[1].occurredAt, kept[0].occurredAt)
+        XCTAssertTrue(presence.pending().isEmpty)
+    }
+
+    func testSendsTheEndOfACallTheAppWasClosedInAtTheNextLaunchButNeverTheRunningCallsEnd() async {
+        let suite = "shannon.tests.call-presence.\(UUID().uuidString)"
+        suites.append(suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        let reporter = Reporter()
+        let before = presence(reporter, defaults: defaults)
+        before.began(audience: .owner)
+        await before.settle()
+        // The running call's end is not sent on a return to the foreground.
+        before.resendUndelivered(scopeKey: "owner", reporter: reporter)
+        await before.settle()
+        var sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted])
+        // The app was closed during the call; the next launch sends its end.
+        let after = presence(nil, defaults: defaults)
+        after.resendUndelivered(scopeKey: "owner", reporter: reporter)
+        await after.settle()
+        sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callStarted, .callEnded])
+        XCTAssertEqual(sent[1].id, sent[0].id.replacingOccurrences(of: "-started", with: "-ended"))
+        XCTAssertEqual(sent[1].occurredAt, "2026-10-05T11:33:20.000Z")
+        XCTAssertTrue(after.pending().isEmpty)
+    }
+
+    func testASessionCancelledBeforeTheCallBeganIsEnded() async {
+        let reporter = Reporter()
+        let presence = presence(reporter)
+        presence.abandoned(audience: .owner)
+        await presence.settle()
+        let sent = await reporter.sent
+        XCTAssertEqual(sent.map(\.type), [.callEnded])
+        XCTAssertTrue(presence.pending().isEmpty)
     }
 
     func testTheEventCarriesOnlyTheFieldsOfAPlainEvent() throws {
