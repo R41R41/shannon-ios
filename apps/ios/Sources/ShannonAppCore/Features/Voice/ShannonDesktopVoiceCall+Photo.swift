@@ -24,7 +24,8 @@ extension ShannonDesktopVoiceCall {
         case .undetermined:
             Task { @MainActor [weak self] in
                 let granted = await ShannonAppLookSystemCamera.requestAccess()
-                guard let self, self.holdsMicrophone else { return }
+                // The call may have ended, or a friend joined, while the system asked.
+                guard let self, self.holdsMicrophone, self.canSharePhoto else { return }
                 if granted { self.workspace.showsCamera = true } else { self.workspace.cameraErrorMessage = ShannonGeneratedStrings.voiceMacCameraDenied }
             }
         case .denied:
