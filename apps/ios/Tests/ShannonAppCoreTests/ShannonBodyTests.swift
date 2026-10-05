@@ -27,7 +27,7 @@ final class ShannonBodyTests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().appendingPathComponent("NOTICE.txt").path))
         let version = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("version.json"))) as? [String: Any]
-        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-04T19:22:15.824Z")
+        XCTAssertEqual(version?["modelUpdatedAt"] as? String, "2026-10-05T06:58:16.654Z")
     }
 
     func testCommandsAreGuardedCallsWithEncodedArguments() {

@@ -10,10 +10,10 @@ one shared `WKWebView`.
 | | |
 | --- | --- |
 | Location | `apps/ios/Sources/ShannonAppCore/Live2D/embed/` (copied as a folder: `.copy("Live2D")` in `apps/ios/Package.swift`) |
-| `version` | `0.1.0+202610041927` |
-| `builtAt` | `2026-10-04T19:27:38.622Z` |
-| `modelUpdatedAt` | `2026-10-04T19:22:15.824Z` (the boots texture redrawn; otherwise the build of 2026-10-04 with the face texture at full resolution; same `window.shannonBody` API and messages as the build of 2026-10-02) |
-| Size | about 20.4 MB, of which `assets.js` is 19.6 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
+| `version` | `0.1.0+202610050701` |
+| `builtAt` | `2026-10-05T07:01:55.203Z` |
+| `modelUpdatedAt` | `2026-10-05T06:58:16.654Z` (bundled 2026-10-05 by the owner's decision to carry the newest page. Against the build of 2026-10-04: the model and textures in `assets.js`, and the eye-open parameters `ParamEyeLOpen` / `ParamEyeROpen` gain the keys 0.5 and 0.7 in `embed.js`; `README.md`, `embed.html`, `embed.css` and `live2d/` are byte-identical. Same `window.shannonBody` API and messages as the build of 2026-10-02) |
+| Size | about 20.5 MB, of which `assets.js` is 19.6 MB (it holds the model and its two textures, 4096×4096 and 2048×2048, as base64); about 14.6 MB zipped |
 | Licence note | `apps/ios/Sources/ShannonAppCore/Live2D/NOTICE.txt` |
 
 `ShannonBodyTests.testTheEmbedPageIsBundledAsAFolderWithItsFilesInPlace` checks that the files are in the
