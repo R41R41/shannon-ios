@@ -51,8 +51,11 @@ export interface InitiativeMessage {
   readAt?: string;
   /** Set when the message is what she says about one look at the room (`bodyLook.ts`). */
   bodyLookId?: string;
-  /** True when the message is about what she saw of the room (`roomLookSource.ts`): a notice outside the Talk must not quote it. */
-  roomLook?: true;
+  /**
+   * Whether the message is about what she saw of the room (`roomLookSource.ts`): a notice outside the Talk must not
+   * quote it. Always sent by this store (true or false), so a client can tell this server from one without the field.
+   */
+  roomLook?: boolean;
   /** `reach_out` with its `reason` when she started the message on her own from her own activity (`reachOutDelivery.ts`). */
   kind?: 'reach_out'; reason?: string;
 }
@@ -278,7 +281,7 @@ export class SQLiteInitiativeStore implements InitiativeInbox {
       createdAt: String(row.created_at),
       ...(row.read_at ? { readAt: String(row.read_at) } : {}),
       ...(bodyLookIdOfSource(row.source_item_id) ? { bodyLookId: bodyLookIdOfSource(row.source_item_id)! } : {}), ...reachOutOfSource(row.source_item_id),
-      ...(isRoomLookSource(row.source_item_id) ? { roomLook: true as const } : {}),
+      roomLook: isRoomLookSource(row.source_item_id),
     })));
   }
 

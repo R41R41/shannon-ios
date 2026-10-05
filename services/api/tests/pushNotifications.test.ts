@@ -76,7 +76,7 @@ describe('push notification delivery', () => {
       const inbox = new SQLiteInitiativeStore(path);
       const [message] = inbox.unreadMessages('owner');
       inbox.close();
-      expect(message?.roomLook === true).toBe(roomLook);
+      expect(message?.roomLook).toBe(roomLook);
       const push = new SQLitePushNotificationStore(path, () => '2026-09-03T03:01:00.000Z');
       push.register({ deviceId: 'iphone-1', scopeKey: 'owner', displayName: 'RyoのiPhone' }, 'ab'.repeat(32), 'sandbox');
       expect(push.pending()[0]?.content === 'ライ氏、部屋のことでひとことあります。').toBe(roomLook);
