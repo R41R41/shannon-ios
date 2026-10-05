@@ -2,7 +2,7 @@
 
 What Shannon's body must send and may read. The body is the Live2D desktop application on the owner's Windows PC (facial expressions, idle gestures, shoulders, tears; it can be streamed through OBS). Her mind is this server. The body lives in another repository; this document and the contract test `services/api/tests/body.test.ts` are what it is built against. The vocabulary and bounds are in `services/api/src/bodyContract.ts`.
 
-Everything here is additive: routes and tables are only added. Two changes of 2026-10-02 alter what an existing message does: a touch event now moves her feeling and is remembered (see [When she is touched](#when-she-is-touched)), and her capability description gained one line about her body.
+Everything here is additive: routes and tables are only added. Two changes of 2026-10-02 alter what an existing message does: a touch event now moves her feeling and is remembered (see [When she is touched](#when-she-is-touched)), and her capability description gained one line about her body. A change of 2026-10-05 alters one more: `callStarted` / `callEnded` from a body that only feels touch are stored instead of answering `ignored` / `touch_only`, and her voice requests may be refused with `409 OWNER_IN_CALL_ELSEWHERE` (see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)).
 
 The contract in one paragraph: the body **reports facts** (`POST /v1/body/events`), **polls a snapshot** of what to show (`GET /v1/body/presence`), **registers what it can express** (`PUT /v1/body/capabilities`), **reads fixed lines** it may show at a suitable moment (`GET /v1/body/nudges`), **answers one look at the room** when the snapshot asks for it (`POST /v1/body/looks/{id}`), and **says what it did with a message she started on her own** (`POST /v1/body/reach-outs/{id}/delivery`). It also **asks whether she says something when she is touched** (`POST /v1/body/reactions`). The server never calls the body and never generates a reply because of an event. Two routes call a model: the answer to a look, and a reaction to a touch; no other route here does.
 
@@ -88,7 +88,7 @@ Retry the same batch with the same `id`s on a network failure or `5xx`. An `id` 
   ```
 
   Only the touch types and `ownerReturned` appear. An event appears for 30 minutes after `occurredAt`, at most three lines (one per type, the newest first, with a count), and the wording is fixed on the server from the type and the numbers. The block is read at the turn and nothing is written: it is in every owner text turn inside the window, and gone after it.
-- `ownerAway` and `ownerReturned` are also read by her activity loop after a message of hers, as "he is away" / "he is back" (the newest of the last hour, whatever its `audience`). `callStarted`, `callEnded`, `windowHidden`, `windowShown` and `appStarted` are stored and used for nothing else yet.
+- `ownerAway` and `ownerReturned` are also read by her activity loop after a message of hers, as "he is away" / "he is back" (the newest of the last hour, whatever its `audience`). `callStarted` and `callEnded` tell another body that the owner is in a call on this device (added 2026-10-05; see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)); a body's own call never counts for that. `windowHidden`, `windowShown` and `appStarted` are stored and used for nothing else yet.
 - **A touch event moves her feeling and is remembered** (owner decision 2026-10-02), exactly as a touch that arrives through `POST /v1/body/reactions` does, and each touch `id` counts once across the two routes: see [When she is touched](#when-she-is-touched). The other event types change nothing of her state.
 - **No reply is produced by an event.** No model is called, no message is added to a conversation, and no notification is sent. She is free not to mention it in her next reply. Her words for a touch come only from `POST /v1/body/reactions`.
 - Voice calls and the platform bridge do not receive the block.
@@ -128,7 +128,8 @@ A read-only snapshot of what the body should show. Reading it changes nothing of
   "study": { "awaitingReaction": 1 },
   "capabilities": { "expressions": ["smile"], "gestures": ["stretch"], "flags": { "tears": true }, "updatedAt": "2026-10-02T02:00:00.000Z" },
   "look": null,
-  "reachOut": { "pending": 1, "latestId": "0b6f…" }
+  "reachOut": { "pending": 1, "latestId": "0b6f…" },
+  "ownerCallElsewhere": { "active": false }
 }
 ```
 
@@ -146,6 +147,7 @@ A read-only snapshot of what the body should show. Reading it changes nothing of
 | `capabilities` | what this device registered, or `null` | `PUT /v1/body/capabilities` |
 | `look` | `{ id, requestedAt, expiresAt }` \| `null`; absent while looks are switched off | A look this device is asked to take now. See [Looking at the room](#looking-at-the-room). |
 | `reachOut` | `{ pending, latestId? }`; absent on a server that does not deliver them | Unread messages she started on her own. See [A message she starts on her own](#a-message-she-starts-on-her-own). |
+| `ownerCallElsewhere` | `{ active, since?, surface? }`; absent while switched off on the server | Added 2026-10-05. The owner is in a voice call with her on another of his apps. See [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere). |
 
 `doing` is `idle` unless the loop is running (enabled, not paused, reporting in, budget left) and its latest step was recorded within the last 3 minutes. Then: thinking about what to do next → `thinking`; reading a public page or a shared Notion page → `reading`; writing a note → `noting`; writing a story draft → `drafting`; revising → `revising`; marking a story 「見せてもいい」 or telling the owner → `showing`. Putting a draft away is `idle`. The body should treat an unknown `doing` or `expression` as `idle` / `neutral`.
 
@@ -153,7 +155,7 @@ The emotion source has one input from the body: a touch (a touch event, or a rea
 
 ### Polling
 
-There is no stream and no push (see [Not built](#not-built)). Poll every `pollAfterSeconds`: 10, or 3 for a minute after a text turn and while a look is open.
+There is no stream and no push (see [Not built](#not-built)). Poll every `pollAfterSeconds`: 10, or 3 for a minute after a text turn and while a look is open, or 5 while `ownerCallElsewhere.active` is true (the smaller wins).
 
 - `etag` identifies the content (everything except `changedAt`). Send the last one back as `?etag=<etag>`; when nothing changed the answer is short:
 
@@ -641,7 +643,7 @@ else of a body. With it the device may use two routes exactly as the desktop bod
 fields, limits, idempotency and audience rules:
 
 - `POST /v1/body/reactions` (the registration is what lifts `403 BODY_REACTION_NOT_A_BODY`);
-- `POST /v1/body/events` with the touch types (`pet`, `tickle`, `poke`, `holdHand`; the page has no `carry`). Every other event type from such a device answers `ignored` with `reason: touch_only` and is not stored: the phone cannot write "he is back at the PC".
+- `POST /v1/body/events` with the touch types (`pet`, `tickle`, `poke`, `holdHand`; the page has no `carry`), and, since 2026-10-05, `callStarted` / `callEnded` for a call on the phone itself (see [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere)). Every other event type from such a device answers `ignored` with `reason: touch_only` and is not stored: the phone cannot write "he is back at the PC".
 
 What a touch does to her is unchanged: her feeling moves, she remembers it, and she may say one line. The budgets are the shared ones: 120 body requests a minute per device, 12 reaction requests a minute and 2,000 stored events a day **per scope**, so touches on the phone and on the desktop body count together.
 
@@ -670,6 +672,44 @@ What the phone does:
   - **Voice** — 「声で返す」 while Talk's dialogue display with her figure is what he sees (Talk in front in the dialogue display, nothing over it: no sheet, cover, call screen or picker; this replaced "the body screen is up" when the body screen was folded into Talk, decision 2026-10-03, roadmap A6), the Live2D form, the owner alone (not inside the five-minute hold after someone else was listening), and nothing else holding the app's sound (a voice conversation, dictation, a call from her that rings or runs, one of her own messages being said): the bubble, and the line is spoken in her voice (the speech stream of a voice conversation, in the audio session category of her earphone messages), with her figure in the speaking phase and her mouth following the sound. Then the microphone opens for `listenSeconds` as an ordinary voice conversation on `message.threadId`. If he answers, the first delegation and the stored turn carry `reactionId` exactly as in [If he answers](#if-he-answers), and the conversation goes on in the call screen. If he does not, the call ends and nothing is stored. Without microphone permission she speaks and no window opens (the app never asks for the microphone from a touch). Her voice has to begin within 6 seconds of the answer, or the line stays a bubble; only a line said to its end is listened for. Leaving the dialogue display (switching to the scroll display, another page, or anything coming over it) or the app, switching to 「文字で返す」, switching 「体に起きたことをシャノンに伝える」 off, or choosing the Waterlight form stops her voice and closes the microphone at once. Her spoken line and its window count as a conversation for her own messages through the earphones: none is said over them. The session is prepared and given back through the earphone standby (`ShannonStandbyAudio.beginSpeech` / `endSpeech`): after a touch line the session's category is the standby's own (`.playback` mixing with other audio) when standby runs, and otherwise the session is deactivated and its previous category put back; a voice conversation and dictation set their own category when they start.
   - During a voice conversation the page asks for no reaction (its phase is not idle), as on the desktop body, and the call screen's figure takes no touch.
 - The Mac app shows her figure and sends nothing: no registration, no touch, no voice.
+- Separately from touch, and whatever 「体に起きたことをシャノンに伝える」 says, the iPhone app sends `callStarted` when a voice session was made and `callEnded` when the call ends or fails (`ShannonVoiceCallPresence`; audience `others` in a 「友人も一緒」 call), so that her desktop body knows he is in a call there. See [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere).
+
+## When the owner is in a call elsewhere
+
+Added 2026-10-05 (production incident of that day: the owner was in a voice call with her on his iPhone and said 「お、シャノン、元気？」; the desktop body's wake listener heard his own 「シャノン」 at 10:34:34Z, started its own call, and then transcribed her iPhone speech from the phone's speaker as his turns). Additive: a body that does not read the field and does not expect the code works as before. `ownerCallElsewhere.ts` holds the rules.
+
+```json
+"ownerCallElsewhere": { "active": true, "since": "2026-10-05T10:34:02.000Z", "surface": "ios" }
+```
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `active` | boolean | The owner is in a voice call with her on another device. Always present. |
+| `since` | ISO 8601, only while `active` | When that call began (the earliest, if more than one). |
+| `surface` | `ios` \| `mac`, only while `active`, optional | Which of his apps it is, when the server can tell: the device's own body registration (`surface: "iphone"` → `ios`, `"mac"` → `mac`), else what it reported for private listening (`kind`), else `ios` for a device registered for her calls (VoIP, only the iPhone app has one). Absent when none of these is known. |
+
+**When a device is in a call.**
+
+- **A device that reports its calls** (a `callStarted` or `callEnded` of its own in the last 2 hours): from its `callStarted` to its `callEnded`, the newest of the two on the device's own clock deciding (at the same instant the end wins). The iPhone app reports both for every voice conversation, as soon as the session is made and when the call ends (`ShannonVoiceCallPresence`), whether or not it reports touches. A `callStarted` whose `callEnded` never arrives stops counting **2 hours** after its `occurredAt`, or once the server has seen nothing of that device's voice (its `callStarted`, a session, a turn) for **30 minutes** (the app was killed mid-call). After its `callEnded`, the device counts again only for a voice session the server made after that end arrived (compared on the server's clock, so a phone clock that is off does not matter), until its next `callStarted` arrives. A device registered as a body that only feels touch (the phone) may send these two events (before 2026-10-05 they answered `ignored` / `touch_only`); so may any other paired device, registered or not (the Mac app has no voice call today).
+- **Any other device:** while the server sees its voice conversation with her — a session made (`POST /v1/voice/gemini/cascade/sessions`, noted only after it was made), a turn delegated (`POST /v1/voice/gemini/cascade/delegations`, `…/delegations/stream`), in owner or guest mode, or a call from her that it answered (`docs/incoming-call-contract.md`; from the moment of the answer) — until **3 minutes** pass without any of them. Sessions and turns are kept in the API process's memory: after a restart they are empty until the next turn (it fails open). This is the fallback for an app that predates the call events.
+
+Never counted: **the device that reads presence** (its own call is not elsewhere), and **any device registered as her full body** (the desktop): a wake on the desktop never marks the owner as in a call.
+
+**What the body must do.** While `active` is true, keep the wake-name listener closed and start no call. Poll at the faster `pollAfterSeconds` (5). When it turns false, open the listener again.
+
+**`409 OWNER_IN_CALL_ELSEWHERE`.** While the owner is in a call elsewhere, a voice request **from a device registered as her full body**, in owner mode (`participantMode` absent or `"owner"`), is refused:
+
+| Route | Refused with |
+| --- | --- |
+| `POST /v1/voice/gemini/cascade/sessions` | `409`, before any session or token is made |
+| `POST /v1/voice/gemini/cascade/delegations` | `409`, before anything is read or written |
+| `POST /v1/voice/gemini/cascade/delegations/stream` | `409` as a plain JSON answer, before any NDJSON line |
+
+```json
+{ "error": "OWNER_IN_CALL_ELSEWHERE", "message": "The owner is in a voice call on another device." }
+```
+
+The body ends the turn silently. Nothing is stored for a refused request: no turn, no thread, no history, no reaction link, and the request does not count as the body's own call. Never refused: the iPhone and Mac apps (also with their own `callStarted`, and also while the desktop is in a call), a guest call (`participantMode: "guest"`), and a request whose device the server does not know (a fixed-token caller): when the device is missing the server does not block (fail open). The stored-turn route (`…/turns`) is not refused.
 
 ## Errors
 
@@ -685,6 +725,7 @@ Body: `{ "error": "<code>", "message": "…" }`.
 | 404 | `NOT_FOUND` | Unknown path under `/v1/body/`, including `/v1/body/presence/stream`. | No |
 | 403 / 404 / 409 / 410 | `REACH_OUT_…` | See [What the body did with her message](#what-the-body-did-with-her-message). | No |
 | 405 | `METHOD_NOT_ALLOWED` | `PUT` anywhere but `/v1/body/capabilities`, or another method. | No |
+| 409 | `OWNER_IN_CALL_ELSEWHERE` | A voice session or turn from her body while the owner is in a call on another of his apps. See [When the owner is in a call elsewhere](#when-the-owner-is-in-a-call-elsewhere). | No; end the turn silently and wait for `ownerCallElsewhere.active` to turn false |
 | 413 | `REQUEST_TOO_LARGE` | Body above 64 KiB (535,384 bytes for a look answer). | No |
 | 429 | `RATE_LIMITED` | More than 120 body requests from the device in a minute, or more than 12 reaction requests in the scope in a minute. | After a minute |
 
@@ -695,6 +736,8 @@ A refused or failed request must never stop the body from showing her.
 `SHANNON_BODY_INGEST=off` (also `false`, `0`, `disabled`) on the API makes `POST /v1/body/events` answer `403 BODY_INGEST_DISABLED` and keeps already stored events out of conversation turns. Presence, capabilities and nudges keep working. It is an app setting: changing it needs a restart, not a deployment. Unset means on.
 
 `SHANNON_BODY_LOOK=off` (same values) switches off looking at the room only: a look is never offered to the model, `presence` has no `look` field, and `POST /v1/body/looks/{id}` answers `403 BODY_LOOK_DISABLED`. `SHANNON_BODY_INGEST=off` switches looks off as well. `SHANNON_BODY_LOOK_PER_HOUR` (default 6) sets the server's limit an hour; `SHANNON_BODY_LOOK_PER_DAY` (default: none) may set one a day. `SHANNON_BODY_LOOK_PRESENCE_FRESH_SECONDS` (default 75) is how recent the camera device's presence read must be for a look in conversation. `SHANNON_VOICE_ROOM_LOOK=off` switches off looks from voice turns only; text turns and her own time are unchanged.
+
+`SHANNON_OWNER_CALL_ELSEWHERE=off` (same values) removes `ownerCallElsewhere` from presence and refuses nothing with `OWNER_IN_CALL_ELSEWHERE`. Unset means on.
 
 `SHANNON_BODY_REACTIONS=off` (same values) switches off everything a touch does beyond being stored: `POST /v1/body/reactions` answers `403 BODY_REACTIONS_DISABLED`, a touch (by either route) moves no feeling and leaves no memory, and `reactionId` on a voice turn is ignored. Events are stored and shown in the `[体に起きたこと]` block as before. `SHANNON_BODY_INGEST=off` switches reactions off as well. `SHANNON_BODY_REACTION_LISTEN_SECONDS` (default 6, 0–30) sets `listenSeconds`; `SHANNON_BODY_REACTION_DEADLINE_MS` (default 3800, 200–4000) sets when the server gives up waiting for the model.
 

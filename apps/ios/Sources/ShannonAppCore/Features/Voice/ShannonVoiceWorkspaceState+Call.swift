@@ -32,6 +32,18 @@ extension ShannonVoiceWorkspaceState {
         geminiVoiceModel.guestPeriodEnded = { [weak self] period in
             self?.remember(period, threadID: context.threadID, using: conversationModel)
         }
+        // Her desktop body is told that he is in a call here, so that it does not take her voice from this phone for his.
+        ShannonVoiceCallPresence.shared.configure(
+            scopeKey: conversationModel.scopeKey,
+            reporter: conversationModel.client as? any ShannonBodyCallReporting,
+            mayReport: { [weak conversationModel] in conversationModel.map { !$0.isDesignPreview } ?? false })
+        geminiVoiceModel.callReported = { [weak geminiVoiceModel] active in
+            if active {
+                ShannonVoiceCallPresence.shared.began(audience: geminiVoiceModel?.participantMode == .guest ? .others : .owner)
+            } else {
+                ShannonVoiceCallPresence.shared.ended()
+            }
+        }
         // The one look an owner turn may ask for; however the call began, it is taken the same way.
         geminiVoiceModel.performAppLook = { [conversationModel] ask in await conversationModel.performAppLook(ask) }
         // One minute without a word from either side, while the app is in the background, ends the call as 終了 does.

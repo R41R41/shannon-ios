@@ -77,6 +77,8 @@ public final class ShannonGeminiLiveSessionModel {
     var interruptionGeneration = 0
     /// Ends the call the way the owner's own 終了 does. Set by the owner of the call.
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
+    /// Told `true` once a session was made and `false` when the call ends or fails (`ShannonVoiceCallPresence`). Set by the owner of the call.
+    var callReported: (@MainActor (Bool) -> Void)?
     /// Takes the one look an owner turn asked for and returns what she says about it. Set by the owner of the call.
     var performAppLook: (@MainActor (ShannonAppLookAskDTO) async -> String?)?
     private static let inputPreferenceDefaultsKey = "shannon.voice.input-preference"
@@ -148,6 +150,7 @@ public final class ShannonGeminiLiveSessionModel {
             failedStage = "audio"
             guard sessionGenerationID == generation else { return }
             session = created
+            callReported?(true)
             model = created.model
             voice = created.voice
             ShannonVoiceDiagnostics.shared.record("gemini.session.created", metadata: [
@@ -211,7 +214,10 @@ public final class ShannonGeminiLiveSessionModel {
         setKeepsScreenAwake(false)
         finalizeTask = nil
         duckRestoreTask = nil
-        if session != nil { recordSessionSummary() }
+        if session != nil {
+            recordSessionSummary()
+            callReported?(false)
+        }
         transport?.stop()
         transport = nil
         session = nil
@@ -472,6 +478,8 @@ public final class ShannonGeminiLiveSessionModel {
         textSendState.preservePendingText(
             message: "接続が切れたため送信を中断しました。入力は残しています。"
         )
+        // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
+        if session != nil { callReported?(false) }
         responseTask?.cancel()
         responseTask = nil
         responseGenerationID = nil

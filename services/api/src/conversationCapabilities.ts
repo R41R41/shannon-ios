@@ -7,6 +7,7 @@ import type { ShannonWebSource } from './chatModel.js';
 import { asksAboutNotion, notionTurnProjection } from './notionConversation.js';
 import type { NotionSource } from './notionSource.js';
 import type { OwnerUpcoming } from './ownerUpcoming.js';
+import type { OwnOutreach } from './ownOutreach.js';
 
 export type NotionTurnReader = NotionSource;
 
@@ -17,6 +18,8 @@ export interface ConversationReadCapabilities {
   notion?: NotionTurnReader | null;
   /** What is coming up for the owner: calendar, promises with a due time, dated tasks. Read only when the turn asks about the schedule. */
   upcoming?: Pick<OwnerUpcoming, 'promptFor'> | null;
+  /** What she did on her own to reach the owner. Read only when the turn says she did; it follows `upcoming`'s audience. */
+  ownOutreach?: Pick<OwnOutreach, 'promptFor'> | null;
 }
 
 export interface ConversationCapabilitySelection {
@@ -24,7 +27,10 @@ export interface ConversationCapabilitySelection {
   voyagerTasks?: boolean;
   /** False whenever anyone other than the owner may hear or read the reply. */
   notion?: boolean;
-  /** `guarded`: someone else can see or hear the reply, so each line is marked as owner-private. `false` reads nothing. */
+  /**
+   * `guarded`: someone else can see or hear the reply, so each line is marked as owner-private. `false` reads nothing.
+   * The same audience decides what she is told of her own outreach (`ownOutreach.ts`): `guarded` keeps times, not words.
+   */
   upcoming?: boolean | 'guarded';
 }
 
@@ -91,6 +97,12 @@ export function conversationCapabilityPrompt(
   // The promise is stored after the reply, so the reply must not claim a clock alarm she cannot ring.
   const reminderBoundary = reminderCapabilityBoundary(message);
   if (reminderBoundary) sections.push(reminderBoundary);
+  // 「そっちからかけてきたじゃん」: what she actually did on her own, on the turn that says she did. Ahead of notes and
+  // upcoming items, so the 6,000-character cap below never cuts it; it follows the audience of upcoming items.
+  if (selection.upcoming !== false) {
+    const own = dependencies.ownOutreach?.promptFor(scopeKey, message, selection.upcoming === 'guarded' ? 'others' : 'owner');
+    if (own) sections.push(own);
+  }
   if (selection.aetherNotes !== false) {
     try {
       const notes = dependencies.aetherContext?.promptFor(scopeKey, message);

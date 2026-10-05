@@ -10,12 +10,13 @@ import {
   OpenAITranscriptionError,
 } from './openaiTranscriptionSession.js';
 import { readJson, sendJson } from './serverHttp.js';
+import { OWNER_IN_CALL_ELSEWHERE_RESPONSE } from './ownerCallElsewhere.js';
 
 type ConsumeAllowance = (deviceId: string) => boolean;
 
 export function createGeminiLiveRoute(
   environment: Readonly<Record<string, string | undefined>>,
-  kernel: Pick<ShannonApiKernel, 'realtimeVoiceSession'>,
+  kernel: Pick<ShannonApiKernel, 'realtimeVoiceSession' | 'voiceSessions'>,
   consumeAllowance: ConsumeAllowance,
 ) {
   const gateway = createConfiguredGeminiLiveGateway(environment);
@@ -56,6 +57,10 @@ export function createGeminiLiveRoute(
     if (participantMode !== 'owner' && participantMode !== 'guest') {
       return sendJson(response, 400, { error: 'INVALID_REQUEST', message: 'participant mode is invalid' });
     }
+    // Her body does not start a call while the owner talks with her on one of his apps (docs/body-contract.md).
+    if (kernel.voiceSessions.refused(principal.scopeKey, principal.deviceId, participantMode)) {
+      return sendJson(response, OWNER_IN_CALL_ELSEWHERE_RESPONSE.status, OWNER_IN_CALL_ELSEWHERE_RESPONSE.body);
+    }
     const session = kernel.realtimeVoiceSession(principal.scopeKey, requestedThreadId, {
       clientDelegation: true,
       participantMode,
@@ -78,6 +83,8 @@ export function createGeminiLiveRoute(
         });
       response.setHeader('cache-control', 'no-store');
       response.setHeader('pragma', 'no-cache');
+      // Only a session that was made is this device's voice conversation (`ownerCallElsewhere.ts`).
+      kernel.voiceSessions.created(principal.scopeKey, principal.deviceId);
       sendJson(response, 200, result);
     } catch (error) {
       if (error instanceof OpenAITranscriptionError) {
