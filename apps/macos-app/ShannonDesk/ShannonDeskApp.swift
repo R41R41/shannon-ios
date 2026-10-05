@@ -244,6 +244,8 @@ private struct ShannonDesktopSettingsScene: View {
             }
         }
         .formStyle(.grouped)
+        .font(.shannonDesktop(.body))
+        .tint(Color.shannonActionColor)
         .padding(ShannonDesktopSpacing.extraLarge)
         .frame(width: 540, height: 420)
         .task { await worldSubscriptions.reload() }
