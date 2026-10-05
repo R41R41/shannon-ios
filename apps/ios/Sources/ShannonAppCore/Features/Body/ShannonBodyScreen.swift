@@ -34,7 +34,7 @@ public struct ShannonBodyScreen: View {
     private var stage: ShannonLive2DStage { .shared }
     private var form: ShannonForm { ShannonForm(rawValue: formRawValue) ?? .waterlight }
     private var usesLive2D: Bool { form == .live2d && ShannonLive2DStage.isAvailable }
-    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
+    private var chosenBody: ShannonLive2DBody { .displayed(rawValue: bodyRawValue) }
     private var showsLive2D: Bool { usesLive2D && stage.status == .ready && stage.activeHost == hostID }
     private var face: ShannonFace { bodyModel?.face ?? ShannonFace(expression: .calm) }
 
@@ -191,7 +191,7 @@ public struct ShannonBodyScreen: View {
 
             // Kept in place for both forms so that switching never moves the screen.
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                Picker(ShannonBodyCopy.bodyTitle, selection: $bodyRawValue) {
+                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection($bodyRawValue)) {
                     ForEach(ShannonLive2DBody.allCases) { body in
                         Text(body.japaneseName).tag(body.rawValue)
                     }
@@ -205,7 +205,7 @@ public struct ShannonBodyScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .disabled(!usesLive2D)
+            .disabled(!usesLive2D || !stage.offersEyes)
             .opacity(usesLive2D ? 1 : 0.45)
 
             HStack(spacing: ShannonSpacing.medium) {
@@ -286,7 +286,7 @@ public struct ShannonFormSettingsSection: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
-    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
+    private var chosenBody: ShannonLive2DBody { .displayed(rawValue: bodyRawValue) }
 
     public init(openBody: (() -> Void)? = nil, showsTouchSwitch: Bool = true) {
         self.openBody = openBody
@@ -305,7 +305,7 @@ public struct ShannonFormSettingsSection: View {
             .accessibilityHint(ShannonBodyCopy.formHint)
             .accessibilityIdentifier("settings-body-form")
             // 設定 › すがた › 体, as on the desktop and the iPhone. Kept in place for both forms.
-            Picker(selection: $bodyRawValue) {
+            Picker(selection: ShannonLive2DBody.selection($bodyRawValue)) {
                 ForEach(ShannonLive2DBody.allCases) { body in
                     Text(body.japaneseName).tag(body.rawValue)
                 }
@@ -315,7 +315,7 @@ public struct ShannonFormSettingsSection: View {
                     Text(explanation)
                 }
             }
-            .disabled(!usesLive2D)
+            .disabled(!usesLive2D || !ShannonLive2DStage.shared.offersEyes)
             .help(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
             .accessibilityIdentifier("settings-body-kind")
             if let openBody {

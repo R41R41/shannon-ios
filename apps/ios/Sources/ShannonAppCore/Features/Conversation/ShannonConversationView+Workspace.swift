@@ -79,14 +79,16 @@ extension ShannonConversationView {
         }
         .pickerStyle(.menu)
         if formRawValue == ShannonForm.live2d.rawValue, ShannonLive2DStage.isAvailable {
-            Picker(ShannonBodyCopy.bodyTitle, selection: $figureBodyRawValue) {
-                ForEach(ShannonLive2DBody.allCases) { body in
-                    Text(body.japaneseName).tag(body.rawValue)
+            if ShannonLive2DStage.shared.offersEyes {
+                Picker(ShannonBodyCopy.bodyTitle, selection: ShannonLive2DBody.selection($figureBodyRawValue)) {
+                    ForEach(ShannonLive2DBody.allCases) { body in
+                        Text(body.japaneseName).tag(body.rawValue)
+                    }
                 }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.menu)
             // Her eyes alone are not framed: the page sizes and places them only.
-            if figureBodyRawValue != ShannonLive2DBody.eyes.rawValue {
+            if ShannonLive2DBody.displayed(rawValue: figureBodyRawValue).hasCharacterRig {
                 Picker(ShannonBodyCopy.layoutTitle, selection: $figureLayoutRawValue) {
                     Text(ShannonBodyCopy.layoutFull).tag(ShannonLive2DLayout.Mode.full.rawValue)
                     Text(ShannonBodyCopy.layoutBust).tag(ShannonLive2DLayout.Mode.bust.rawValue)

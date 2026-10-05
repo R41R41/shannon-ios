@@ -17,7 +17,7 @@ struct ShannonFigureSettingsSection: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var usesLive2D: Bool { formRawValue == ShannonForm.live2d.rawValue && ShannonLive2DStage.isAvailable }
-    private var chosenBody: ShannonLive2DBody { ShannonLive2DBody(rawValue: bodyRawValue) ?? .human }
+    private var chosenBody: ShannonLive2DBody { .displayed(rawValue: bodyRawValue) }
     /// 映し方 frames the character; her eyes alone are only sized and moved.
     private var offersLayoutMode: Bool { usesLive2D && chosenBody.hasCharacterRig }
 
@@ -35,7 +35,7 @@ struct ShannonFigureSettingsSection: View {
             .accessibilityIdentifier("settings-body-form")
 
             // Kept in place for both forms so that switching never moves the list.
-            Picker(selection: $bodyRawValue) {
+            Picker(selection: ShannonLive2DBody.selection($bodyRawValue)) {
                 ForEach(ShannonLive2DBody.allCases) { body in
                     Text(body.japaneseName).tag(body.rawValue)
                 }
@@ -54,7 +54,7 @@ struct ShannonFigureSettingsSection: View {
                     Image(systemName: chosenBody == .eyes ? "eyes" : "person")
                 }
             }
-            .disabled(!usesLive2D)
+            .disabled(!usesLive2D || !ShannonLive2DStage.shared.offersEyes)
             .accessibilityHint(usesLive2D ? "" : ShannonBodyCopy.bodyOnlyLive2D)
             .accessibilityIdentifier("settings-body-kind")
 

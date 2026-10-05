@@ -67,8 +67,24 @@ enum ShannonLive2DStagePolicy {
         return components.url ?? page
     }
 
-    /// A mouth level worth a call: any change of note, and always the return to zero.
-    static func sendsMouthLevel(_ level: Double, last: Double) -> Bool {
-        level <= 0 ? last > 0 : abs(level - last) >= 0.03
+    /// A mouth level worth a call: any change of note, and always the return to zero. Her eyes alone have no mouth.
+    static func sendsMouthLevel(_ level: Double, last: Double, body: ShannonLive2DBody = .human) -> Bool {
+        guard body.hasCharacterRig else { return false }
+        return level <= 0 ? last > 0 : abs(level - last) >= 0.03
+    }
+
+    /// A gesture the page named, for the character only: her eyes alone have no arms.
+    static func playsGesture(_ gesture: String, known: [String], body: ShannonLive2DBody) -> Bool {
+        body.hasCharacterRig && known.contains(gesture)
+    }
+
+    /// Where the screen in front wants her, and whether she may be touched there.
+    static func hostCommands(layout: ShannonLive2DLayout, touchEnabled: Bool) -> [ShannonLive2DCommand] {
+        [.setLayout(layout), .setTouchEnabled(touchEnabled)]
+    }
+
+    /// Reduce Motion: no gestures of her own and no sway. Low Power Mode: half the frames.
+    static func calmCommands(reduceMotion: Bool, lowPower: Bool) -> [ShannonLive2DCommand] {
+        [.setIdle(gestures: !reduceMotion, sway: reduceMotion ? 0 : 1), .setFrameRate(frameRate(lowPower: lowPower))]
     }
 }

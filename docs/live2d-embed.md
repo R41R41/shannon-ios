@@ -79,11 +79,23 @@ stays inside the folder as delivered and is not copied anywhere else in the repo
   (the long press of the display button) and in the Mac's body sheet. It is a per-device setting
   (`ShannonLive2DBody`, key `shannon.body.live2d-body`) with a meaning only in the Live2D form; the default is 人の姿.
 - The page is started in the chosen body (`embed.html?body=eyes`, `ShannonLive2DStagePolicy.pageURL`), so that her
-  eyes alone never load the character first. Every figure that wants her says the chosen body to the one page
-  (`ShannonLive2DStage.setBody`); a body the page has not shown yet is loaded while the other stays, and the page
-  says `body` when it switched. `ready` carries `bodies` and `body`. If the shown body and the chosen one differ (a
-  choice made while the page loaded or switched), the stage asks again. Faces, mood and phase carry over in the page;
-  the app says the layout and the calm again after a switch, and closes the character's mouth.
+  eyes alone never load the character first. The stage follows a later change of the setting by itself, once, at the
+  moment it is made (`UserDefaults.didChangeNotification`, `ShannonLive2DStage+Body.swift`), wherever it is made and
+  whether or not a figure is on screen; a page kept alive with no screen showing her has switched before she is seen.
+- One switch at a time (`ShannonLive2DBodyPolicy.request`): a body the page has not shown yet is loaded while the other
+  stays, and the page says `body` when it switched. While a switch is under way nothing else is asked for, so the
+  page never loads a model twice (each holds a large texture); a choice made meanwhile is asked for when `body`
+  arrives. The pending request is forgotten on `body`, `ready` and a release (a reload). `ready` carries `bodies` and
+  `body`: if the shown body and the chosen one differ, the stage asks then. Faces, mood and phase carry over in the
+  page; after a switch the app closes the character's mouth and says the layout and the calm again
+  (`ShannonLive2DBodyPolicy.commandsAfterSwitch`).
+- `bodies`: before the page is loaded, the bundled page's (`version.json` lists `model-eyes/`); after `ready`, the
+  page's own (none named means the character only). A body the page does not have is never asked for, its choice is
+  shown as 人の姿, and 体 is not offered.
+- A switch that fails: the page reports `error` without a code, which goes through `recover()` like any other error.
+  The page is reloaded in the chosen body, unless another automatic reload happened within the last 60 seconds or the
+  page failed twice without becoming ready; then her figure is shown as failed with 「もう一度読み込む」 and the
+  Waterlight Eye stands in.
 - With her eyes alone the page ignores `setMouthLevel`, `play` and `setIdle`, and `setLayout` uses only `scale` and the
   offsets. The app sends no mouth level and no gesture then. Because the page's own calm does not reach the eyes, an
   idle figure is paused into a still picture under Reduce Motion (after five seconds) as a page without that calm

@@ -36,10 +36,87 @@ final class ShannonBodyTests: XCTestCase {
         XCTAssertFalse(ShannonLive2DBody.eyes.hasCharacterRig)
         // Her eyes alone are only poked: the settings do not offer stroking, tickling or holding hands there.
         XCTAssertEqual(ShannonBodyCopy.settingsExplanation(body: .human), ShannonBodyCopy.settingsExplanation)
-        let eyes = ShannonBodyCopy.settingsExplanation(body: .eyes)
-        XCTAssertTrue(eyes.hasPrefix("目だけのときは、目のあたりを軽くつつけます"))
-        XCTAssertFalse(eyes.contains("頭をなでる"))
-        XCTAssertTrue(eyes.hasSuffix("カメラは使いません。"))
+        XCTAssertEqual(
+            ShannonBodyCopy.settingsExplanation(body: .eyes),
+            "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
+                + "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。"
+                + "オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。")
+    }
+
+    // MARK: Her body (the character or her eyes alone)
+
+    func testOnlyOneBodySwitchIsUnderWayAtATime() {
+        typealias Body = ShannonLive2DBodyPolicy
+        let both: [ShannonLive2DBody] = [.human, .eyes]
+        // Nothing pending: ask for the chosen body unless it is shown.
+        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: both), .eyes)
+        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: nil, offered: both))
+        // A switch under way: nothing more is asked, whatever the owner taps meanwhile and however many figures ask
+        // (eyes shown, the character loading, 目だけ then 人の姿: the character is not asked for twice).
+        XCTAssertNil(Body.request(chosen: .human, shown: .eyes, pending: .human, offered: both))
+        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: .human, offered: both))
+        // When the page says it shows the character, the latest choice is asked for once.
+        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: both), .eyes)
+        // A body the page does not have is never asked for; the character stays.
+        XCTAssertNil(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: [.human]))
+        XCTAssertEqual(Body.effective(.eyes, offered: [.human]), .human)
+        XCTAssertEqual(Body.effective(.eyes, offered: both), .eyes)
+    }
+
+    func testReadyTellsWhichBodiesThePageHasAndTheChoiceIsFollowedFromThere() {
+        typealias Body = ShannonLive2DBodyPolicy
+        // An older page names no bodies: it has the character only, and the eyes are not asked for.
+        XCTAssertEqual(Body.offered(byReady: []), [.human])
+        XCTAssertNil(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: Body.offered(byReady: [])))
+        // The page of 09:55 started without `?body=` (or the owner chose meanwhile): the chosen body is asked for.
+        let offered = Body.offered(byReady: [.human, .eyes])
+        XCTAssertEqual(Body.request(chosen: .eyes, shown: .human, pending: nil, offered: offered), .eyes)
+        XCTAssertNil(Body.request(chosen: .eyes, shown: .eyes, pending: nil, offered: offered))
+        // Before it is loaded, the bundled page's bodies come from its file list.
+        XCTAssertEqual(Body.bundled(files: ["model/Shannon.moc3", "model-eyes/Shannon_Eyes_v2.moc3"]), [.human, .eyes])
+        XCTAssertEqual(Body.bundled(files: ["model/Shannon.moc3"]), [.human])
+        XCTAssertEqual(ShannonLive2DStage.bundledBodies, [.human, .eyes])
+    }
+
+    func testAfterASwitchTheMouthLayoutAndCalmAreSaidAgain() {
+        let layout = ShannonLive2DLayout(mode: .bust, scale: 1.4, offsetX: 10, contained: true)
+        XCTAssertEqual(
+            ShannonLive2DBodyPolicy.commandsAfterSwitch(to: .human, host: (layout, true), calm: (reduceMotion: true, lowPower: true)),
+            [.setMouthLevel(0), .setLayout(layout), .setTouchEnabled(true), .setIdle(gestures: false, sway: 0), .setFrameRate(30)])
+        // Her eyes alone have no mouth; a page without its own calm is not told one; no screen, no layout.
+        XCTAssertEqual(
+            ShannonLive2DBodyPolicy.commandsAfterSwitch(to: .eyes, host: (layout, false), calm: nil),
+            [.setLayout(layout), .setTouchEnabled(false)])
+        XCTAssertEqual(ShannonLive2DBodyPolicy.commandsAfterSwitch(to: .eyes, host: nil, calm: nil), [])
+        XCTAssertEqual(
+            ShannonLive2DStagePolicy.calmCommands(reduceMotion: false, lowPower: false), [.setIdle(gestures: true, sway: 1), .setFrameRate(0)])
+    }
+
+    func testHerEyesAloneBecomeAStillPictureUnderReduceMotion() {
+        typealias Policy = ShannonLive2DStagePolicy
+        // The page's calm reaches the character only.
+        XCTAssertTrue(ShannonLive2DBodyPolicy.pageCalms(calmsInPage: true, body: .human))
+        XCTAssertFalse(ShannonLive2DBodyPolicy.pageCalms(calmsInPage: true, body: .eyes))
+        XCTAssertFalse(ShannonLive2DBodyPolicy.pageCalms(calmsInPage: false, body: .human))
+        // The character under Reduce Motion is calmed by the page and keeps drawing.
+        XCTAssertFalse(Policy.mayRest(reduceMotion: true, lowPower: false, calmsInPage: ShannonLive2DBodyPolicy.pageCalms(calmsInPage: true, body: .human)))
+        // Her eyes alone under Reduce Motion: a still picture after five idle seconds, never with a finger on her.
+        let eyesCalm = ShannonLive2DBodyPolicy.pageCalms(calmsInPage: true, body: .eyes)
+        XCTAssertTrue(Policy.mayRest(reduceMotion: true, lowPower: false, calmsInPage: eyesCalm))
+        XCTAssertTrue(Policy.rests(calm: true, phase: .idle, idleSeconds: 5, calmsInPage: eyesCalm))
+        XCTAssertFalse(Policy.rests(calm: true, phase: .idle, idleSeconds: 4.9, calmsInPage: eyesCalm))
+        XCTAssertFalse(Policy.rests(calm: true, phase: .idle, idleSeconds: 30, fingerDown: true, calmsInPage: eyesCalm))
+        XCTAssertFalse(Policy.mayRest(reduceMotion: false, lowPower: false, calmsInPage: eyesCalm))
+    }
+
+    func testHerEyesAloneAreSentNoMouthLevelAndNoGesture() {
+        typealias Policy = ShannonLive2DStagePolicy
+        XCTAssertTrue(Policy.sendsMouthLevel(0.5, last: 0, body: .human))
+        XCTAssertFalse(Policy.sendsMouthLevel(0.5, last: 0, body: .eyes))
+        XCTAssertFalse(Policy.sendsMouthLevel(0, last: 0.5, body: .eyes))
+        XCTAssertTrue(Policy.playsGesture("wave", known: ["wave"], body: .human))
+        XCTAssertFalse(Policy.playsGesture("wave", known: ["wave"], body: .eyes))
+        XCTAssertFalse(Policy.playsGesture("spin", known: ["wave"], body: .human))
     }
 
     // MARK: The embed page

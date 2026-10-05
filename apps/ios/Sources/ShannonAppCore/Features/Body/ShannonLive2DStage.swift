@@ -41,8 +41,8 @@ public final class ShannonLive2DStage {
     public private(set) var lastLoadSeconds: Double?
     /// The body the page shows (the character or her eyes alone), as the page last said it.
     public internal(set) var body: ShannonLive2DBody = .human
-    /// The bodies the page has; empty for a page that has only the character.
-    public private(set) var bodies: [ShannonLive2DBody] = []
+    /// The bodies the page has: the bundled page's until it says `ready`, then its own (`[.human]` for an older page).
+    public internal(set) var bodies: [ShannonLive2DBody] = ShannonLive2DStage.bundledBodies
 
     /// Touches and reaction moments from the page. One listener: the touch coordinator.
     @ObservationIgnored public var onTouchMessage: (@MainActor (ShannonLive2DMessage) -> Void)?
@@ -78,6 +78,8 @@ public final class ShannonLive2DStage {
     @ObservationIgnored private var lastHeardAt = Date()
     /// The body the owner chose (設定 › すがた › 体). The page is started in it and switched to it when they differ.
     @ObservationIgnored var desiredBody = ShannonLive2DBody.current()
+    /// The body asked for with `setBody` that the page has not yet said it shows. One switch at a time.
+    @ObservationIgnored var requestedBody: ShannonLive2DBody?
 
     private init() {}
 
@@ -163,11 +165,10 @@ public final class ShannonLive2DStage {
         refreshPaused()
     }
 
-    func applyHost() {
-        guard let host = hosts.last else { return }
-        send(.setLayout(host.layout))
-        send(.setTouchEnabled(host.touchEnabled))
-    }
+    /// Where the screen in front wants her, and whether it lets her be touched.
+    var frontHost: (layout: ShannonLive2DLayout, touchEnabled: Bool)? { hosts.last.map { ($0.layout, $0.touchEnabled) } }
+
+    func applyHost() { frontHost.map { ShannonLive2DStagePolicy.hostCommands(layout: $0.layout, touchEnabled: $0.touchEnabled) }?.forEach(send) }
 
     // MARK: Driving (the calls into the page are in `ShannonLive2DStage+Driving.swift`)
 
@@ -217,8 +218,7 @@ public final class ShannonLive2DStage {
     /// Low Power Mode: half the frames. Sent again whenever either setting changes.
     func applyCalm() {
         guard calmsInPage else { return }
-        send(.setIdle(gestures: !reduceMotion, sway: reduceMotion ? 0 : 1))
-        send(.setFrameRate(ShannonLive2DStagePolicy.frameRate(lowPower: lowPower)))
+        ShannonLive2DStagePolicy.calmCommands(reduceMotion: reduceMotion, lowPower: lowPower).forEach(send)
     }
 
     /// The page's version does not say which calls it has, so it is asked.
@@ -273,8 +273,7 @@ public final class ShannonLive2DStage {
         sentPaused = nil
         lastMouthLevel = 0
         loadStartedAt = Date()
-        // The setting is the authority: it may have changed while no screen showed her.
-        desiredBody = ShannonLive2DBody.current()
+        desiredBody = ShannonLive2DBody.current() // the setting may have changed while no screen showed her
 
         let bridge = ShannonLive2DBridge(stage: self, generation: generation, folder: folder)
         let configuration = WKWebViewConfiguration()
@@ -367,7 +366,8 @@ public final class ShannonLive2DStage {
         bridge = nil
         calmsInPage = false
         body = .human
-        bodies = []
+        bodies = Self.bundledBodies
+        requestedBody = nil
         loadProgress = 0
         sentPaused = nil
         isResting = false
@@ -414,8 +414,9 @@ public final class ShannonLive2DStage {
             self.modelUpdatedAt = modelUpdatedAt
             self.expressions = expressions
             self.gestures = gestures
-            self.bodies = bodies
+            self.bodies = ShannonLive2DBodyPolicy.offered(byReady: bodies)
             self.body = body ?? .human // an older page has only the character
+            requestedBody = nil
             lastLoadSeconds = loadStartedAt.map { Date().timeIntervalSince($0) }
             failuresWithoutReady = 0
             loadProgress = 1
@@ -429,8 +430,7 @@ public final class ShannonLive2DStage {
             refreshPaused()
             lastActivityAt = Date()
             scheduleRest()
-            // The owner chose another body while the page loaded (or the page did not take the start parameter).
-            if self.body != desiredBody { send(.setBody(desiredBody)) }
+            requestBodyIfNeeded() // a choice made while the page loaded, or a page that ignored `?body=`
         case let .body(body):
             bodyChanged(to: body)
         case let .loading(progress):
@@ -461,6 +461,7 @@ public final class ShannonLive2DStage {
     private func observeSystem() {
         guard !observing else { return }
         observing = true
+        observeChosenBody()
         let system = ShannonLive2DSystem.current
         reduceMotion = system.reduceMotion
         lowPower = system.lowPower
