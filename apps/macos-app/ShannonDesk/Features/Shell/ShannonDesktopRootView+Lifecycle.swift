@@ -34,9 +34,8 @@ extension ShannonDesktopRootView {
                     await conversation.refreshAgentProjectProvisioning()
                     await conversation.refreshInitiatives()
                     await ShannonDesktopNotifier.shared.start()
-                    if !voiceCall.session.hidesOwnerScreens {
-                        ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
-                    }
+                    ShannonDesktopNotifier.shared.update(
+                        desktopNotices, readSucceeded: noticesReadSucceeded, held: voiceCall.session.hidesOwnerScreens)
                     openNotificationTarget()
                 }
                 restoreSelectedTaskIfAvailable()
@@ -67,15 +66,19 @@ extension ShannonDesktopRootView {
             }
             .onChange(of: desktopNoticeKeys) {
                 // 「友人も一緒」: what she or the work says is held until the period ends (and posted then).
-                guard connection.isConnected, !conversation.isDesignPreview, !voiceCall.session.hidesOwnerScreens else { return }
-                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
+                guard connection.isConnected, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(
+                    desktopNotices, readSucceeded: noticesReadSucceeded, held: voiceCall.session.hidesOwnerScreens)
             }
             // The first successful read after a failed one may be what takes the baseline.
             .onChange(of: noticesReadSucceeded) {
-                guard noticesReadSucceeded, !conversation.isDesignPreview, !voiceCall.session.hidesOwnerScreens else { return }
-                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true)
+                guard noticesReadSucceeded, !conversation.isDesignPreview else { return }
+                ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: true, held: voiceCall.session.hidesOwnerScreens)
             }
             .onChange(of: voiceCall.session.hidesOwnerScreens) {
+                // 「友人も一緒」 began: the sidebar's search, which he typed, is cleared with the list it filtered.
+                if voiceCall.session.hidesOwnerScreens { searchText = "" }
+                // It ended: what was held is posted now.
                 guard !voiceCall.session.hidesOwnerScreens, connection.isConnected, !conversation.isDesignPreview else { return }
                 ShannonDesktopNotifier.shared.update(desktopNotices, readSucceeded: noticesReadSucceeded)
             }
