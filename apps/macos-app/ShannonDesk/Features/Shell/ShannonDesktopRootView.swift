@@ -11,6 +11,10 @@ public struct ShannonDesktopRootView: View {
     let worldSubscriptions: ShannonWorldSubscriptionModel
     let release: ShannonTestFlightDeliveryModel
     let appIcon: ShannonAppIconModel
+    /// The app's voice conversation (A16), shown in Talk over the composer.
+    let voiceCall: ShannonDesktopVoiceCall
+    /// This window, as the voice conversation counts the windows that can stop it.
+    @State var windowID = UUID()
 
     @SceneStorage("shannon.desktop.destination") var restoredDestinationRawValue: String?
     @SceneStorage("shannon.desktop.selectedThread") var restoredThreadID: String?
@@ -60,6 +64,8 @@ public struct ShannonDesktopRootView: View {
     @AppStorage("shannon.desktop.agent.model") var selectedAgentModel = ""
     @AppStorage("shannon.desktop.agent.reasoning") var agentReasoningRawValue = ShannonAgentReasoningEffort.high.rawValue
     @FocusState var isThreadSearchFocused: Bool
+    /// 設定 › 声: Gemini or ElevenLabs, read at the start of each voice conversation (A16).
+    @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -71,7 +77,8 @@ public struct ShannonDesktopRootView: View {
         voiceIdentity: ShannonVoiceIdentityModel,
         worldSubscriptions: ShannonWorldSubscriptionModel,
         release: ShannonTestFlightDeliveryModel,
-        appIcon: ShannonAppIconModel
+        appIcon: ShannonAppIconModel,
+        voiceCall: ShannonDesktopVoiceCall
     ) {
         let defaults = UserDefaults.standard
         let initialChrome = ShannonDesktopWindowRestoration.windowChrome(
@@ -94,6 +101,7 @@ public struct ShannonDesktopRootView: View {
         self.worldSubscriptions = worldSubscriptions
         self.release = release
         self.appIcon = appIcon
+        self.voiceCall = voiceCall
     }
 
     public var body: some View {
@@ -154,6 +162,12 @@ public struct ShannonDesktopRootView: View {
         }
         // Her figure and touches, kept in step with the conversation (A15). Outside the inspector, so that
         // the 「すがた」 panel and 設定 › すがた read the same body model.
-        .shannonBodyAttachment(bodyModel, conversation: conversation, memory: memory)
+        .shannonBodyAttachment(bodyModel, conversation: conversation, memory: memory, voiceCall: voiceCall)
+        // The call ends when its last window closes: nothing else on screen could stop it (A16).
+        .onAppear {
+            voiceCall.attach(conversation: conversation)
+            voiceCall.windowAppeared(windowID)
+        }
+        .onDisappear { voiceCall.windowDisappeared(windowID) }
     }
 }

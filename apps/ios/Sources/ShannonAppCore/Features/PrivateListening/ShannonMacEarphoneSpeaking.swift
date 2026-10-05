@@ -2,7 +2,8 @@
 import SwiftUI
 @preconcurrency import AVFoundation
 
-/// Hears the owner's answer on the Mac, which has no voice conversation of its own.
+/// Hears the owner's answer on the Mac after a message she said through his earphones. This stays a short
+/// exchange of its own and is not the Mac's voice conversation (A16), which the owner starts himself.
 ///
 /// After her line the microphone records for the answer window. If he speaks, what he said is
 /// transcribed and answered through the voice conversation's own server path (the one her desktop body
@@ -34,7 +35,8 @@ final class ShannonMacAnswerListener: ShannonReachOutListening {
         guard Self.microphoneIsPermitted else { return }
         var threadID = message.threadId
         for _ in 0..<Self.maximumTurns {
-            guard stillPrivate(), !conversationModel.isSending,
+            // A voice conversation or dictation the owner started holds the microphone: his answer is heard there.
+            guard stillPrivate(), !conversationModel.isSending, !(ShannonSpeechArbiter.shared.sessionInUse?() ?? false),
                   let recording = await recordAnswer(window: TimeInterval(seconds)) else { return }
             do {
                 let transcript = try await conversationModel.transcribeVoice(recording)
@@ -130,8 +132,12 @@ final class ShannonMacEarphoneController {
         }
         reachOuts.speaker = speaker
         reachOuts.listener = listener
-        // She does not speak while a message of his is on its way.
-        reachOuts.isConversationActive = { [conversationModel] in conversationModel.isSending }
+        // She does not speak while a message of his is on its way, into a voice conversation or dictation (A16),
+        // or over her own line for a touch.
+        reachOuts.isConversationActive = { [conversationModel] in
+            let arbiter = ShannonSpeechArbiter.shared
+            return conversationModel.isSending || (arbiter.sessionInUse?() ?? false) || arbiter.touchLineHoldsSound
+        }
         listening.stateEvaluated = { [weak self, weak listening] in self?.keepAwake(listening?.canBeOffered ?? false) }
         keepAwake(listening.canBeOffered)
     }

@@ -131,7 +131,13 @@ extension ShannonDesktopRootView {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
             }
 
-            DesktopComposer(model: conversation)
+            // The voice conversation sits over the composer while it is on (A16).
+            ShannonDesktopVoiceCallBar(call: voiceCall, conversation: conversation) { taskID in
+                selectedTaskID = taskID
+                showAuxiliaryPanel(.task)
+            }
+
+            DesktopComposer(model: conversation, voiceCall: voiceCall, startCall: startVoiceCall)
                 .background {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(.ultraThinMaterial)
@@ -163,6 +169,12 @@ extension ShannonDesktopRootView {
             )
             .allowsHitTesting(false)
         }
+    }
+
+    /// 音声会話を開始: a call on the Talk in front, with her figure beside the conversation (「姿は会話の横」).
+    func startVoiceCall() {
+        voiceCall.start(threadID: conversation.selectedThreadId)
+        showAuxiliaryPanel(.figure)
     }
 
     var talkHeader: some View {

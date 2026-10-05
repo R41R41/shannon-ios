@@ -13,6 +13,8 @@ struct ShannonDeskApp: App {
     @State private var appIconModel: ShannonAppIconModel
     @State private var calendarSharingModel: ShannonCalendarSharingModel
     @State private var privateListeningModel: ShannonPrivateListeningModel
+    /// The voice conversation (A16), one for the app: it outlives the page and the window it was started from.
+    @State private var voiceCall = ShannonDesktopVoiceCall()
     @AppStorage(ShannonAppearanceMode.storageKey) private var appearanceRawValue = ShannonAppearanceMode.system.rawValue
 
     init() {
@@ -83,7 +85,8 @@ struct ShannonDeskApp: App {
                 voiceIdentity: voiceIdentityModel,
                 worldSubscriptions: worldSubscriptionModel,
                 release: releaseModel,
-                appIcon: appIconModel
+                appIcon: appIconModel,
+                voiceCall: voiceCall
             )
             .preferredColorScheme(preferredColorScheme)
             .shannonCalendarSharing(calendarSharingModel, syncsOnForeground: false)

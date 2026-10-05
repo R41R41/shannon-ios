@@ -18,10 +18,21 @@ extension ShannonDesktopRootView {
             case .earphones:
                 ShannonPrivateListeningSettingsSection()
             case .voice:
-                Section(ShannonGeneratedStrings.settingsSectionVoice) {
-                    LabeledContent("方式", value: "Gemini")
-                    Text("声はShannonサーバー側のGemini設定から一貫して適用されます。")
+                // The voice of a voice conversation, of her words through the earphones and of a touch (A16), as on the iPhone.
+                Section {
+                    Picker(ShannonGeneratedStrings.voiceMacProvider, selection: $speechProviderRawValue) {
+                        ForEach(ShannonSpeechProvider.allCases) { provider in
+                            Text(provider.japaneseName).tag(provider.rawValue)
+                        }
+                    }
+                    .help(ShannonGeneratedStrings.voiceMacProviderHint)
+                    .accessibilityHint(ShannonGeneratedStrings.voiceMacProviderHint)
+                    .accessibilityIdentifier("settings-voice-provider")
+                    Text(ShannonGeneratedStrings.voiceMacProviderNote)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
+                } header: {
+                    Text(ShannonGeneratedStrings.settingsSectionVoice)
                 }
             case .calendar:
                 ShannonCalendarSharingSettingsSection()

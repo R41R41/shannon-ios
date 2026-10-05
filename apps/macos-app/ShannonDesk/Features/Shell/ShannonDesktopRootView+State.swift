@@ -115,7 +115,7 @@ extension ShannonDesktopRootView {
             case .task:
                 taskInspector
             case .figure:
-                ShannonTalkFigurePanel(conversation: conversation, memory: memory)
+                ShannonTalkFigurePanel(conversation: conversation, memory: memory, voice: voiceCall.session)
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
