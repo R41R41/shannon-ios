@@ -236,21 +236,33 @@ final class ShannonLive2DContainerView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         guard let onLayoutChange, touchEnabled else { return super.scrollWheel(with: event) }
-        let next: ShannonLive2DLayout
-        if event.modifierFlags.contains(.command) {
-            let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 200 : event.scrollingDeltaY / 20
-            next = figureLayout.adjusted(scaleBy: max(0.5, 1 + Double(step)), movedBy: .zero, in: bounds.size)
-        } else {
-            let factor: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
-            // The page's y grows downwards, as AppKit's scroll delta does for natural scrolling.
-            next = figureLayout.adjusted(
-                scaleBy: 1, movedBy: CGSize(width: event.scrollingDeltaX * factor, height: event.scrollingDeltaY * factor), in: bounds.size
-            )
-        }
+        let next = Self.scrolled(
+            figureLayout, deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY,
+            precise: event.hasPreciseScrollingDeltas, inverted: event.isDirectionInvertedFromDevice,
+            scales: event.modifierFlags.contains(.command), in: bounds.size
+        )
         guard next != figureLayout else { return }
         figureLayout = next
         ShannonLive2DStage.shared.update(host: hostID, layout: next, touchEnabled: touchEnabled)
         onLayoutChange(next)
+    }
+
+    /// A scroll moves her the way the fingers (or the wheel) go, whatever the owner's scroll direction
+    /// setting: AppKit's delta follows the content, so it is turned back when it is not inverted from the
+    /// device. With ⌘, moving up makes her larger. The page's y grows downwards.
+    static func scrolled(
+        _ layout: ShannonLive2DLayout, deltaX: CGFloat, deltaY: CGFloat, precise: Bool, inverted: Bool,
+        scales: Bool, in bounds: CGSize
+    ) -> ShannonLive2DLayout {
+        let sign: CGFloat = inverted ? 1 : -1
+        let fingerX = deltaX * sign
+        let fingerY = deltaY * sign
+        if scales {
+            let step = precise ? fingerY / 200 : fingerY / 20
+            return layout.adjusted(scaleBy: max(0.5, 1 - Double(step)), movedBy: .zero, in: bounds)
+        }
+        let factor: CGFloat = precise ? 1 : 8
+        return layout.adjusted(scaleBy: 1, movedBy: CGSize(width: fingerX * factor, height: fingerY * factor), in: bounds)
     }
 
     @objc private func magnified(_ recognizer: NSMagnificationGestureRecognizer) {
