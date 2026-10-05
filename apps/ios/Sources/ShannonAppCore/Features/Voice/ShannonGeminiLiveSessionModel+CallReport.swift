@@ -13,4 +13,21 @@ extension ShannonGeminiLiveSessionModel {
         callIsReported = false
         callReported?(false)
     }
+
+    /// もう一度つなぐ, and the reconnect of the same call: a new session with what was said kept.
+    public func retry() async {
+        guard let createSession, let performDelegation, let performStreamingDelegation,
+              let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
+        await start(
+            participantMode: participantMode,
+            speechProvider: speechProvider,
+            preservePendingInput: true,
+            createSession: createSession,
+            performDelegation: performDelegation,
+            performStreamingDelegation: performStreamingDelegation,
+            streamSpeech: streamSpeech,
+            commitTurn: commitTurn,
+            handleDelegationResponse: handleDelegationResponse
+        )
+    }
 }

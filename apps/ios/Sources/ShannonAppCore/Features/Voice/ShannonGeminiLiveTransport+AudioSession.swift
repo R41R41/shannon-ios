@@ -16,6 +16,13 @@ extension ShannonGeminiLiveTransport {
     /// `.goAway` with this reason means the audio could not be brought back, not that the network dropped.
     static let audioFailure = "audio"
 
+    /// Tells the call once that its audio cannot be kept running; later failures of this transport add nothing.
+    func reportAudioFailure() {
+        guard !reportedAudioFailure, !stopped else { return }
+        reportedAudioFailure = true
+        eventHandler(.goAway(Self.audioFailure))
+    }
+
     func removeAudioObservers() {
         audioObservers.forEach(NotificationCenter.default.removeObserver)
         audioObservers.removeAll()
@@ -43,7 +50,7 @@ extension ShannonGeminiLiveTransport {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.refused",
                 metadata: ["code": String((error as NSError).code), "ending": String(endingCallOnFailure)])
             // The session could not be taken back: for a caller that only asks, the interruption is simply still going on.
-            if endingCallOnFailure { eventHandler(.goAway(Self.audioFailure)) }
+            if endingCallOnFailure { reportAudioFailure() }
             return false
         }
         do {
@@ -56,7 +63,7 @@ extension ShannonGeminiLiveTransport {
             // The session is ours again and the audio still does not run: that is a failure, never "still interrupted".
             ShannonVoiceDiagnostics.shared.record("gemini.audio.resume.failed",
                 metadata: ["code": String((error as NSError).code)])
-            eventHandler(.goAway(Self.audioFailure))
+            reportAudioFailure()
             return false
         }
         if interrupted {
@@ -80,7 +87,7 @@ extension ShannonGeminiLiveTransport {
         // takes over, and a second failure soon after is shown.
         guard engineRestarts.allows(at: ProcessInfo.processInfo.systemUptime) else {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.exhausted")
-            eventHandler(.goAway(Self.audioFailure))
+            reportAudioFailure()
             return
         }
         do {
@@ -90,7 +97,7 @@ extension ShannonGeminiLiveTransport {
         } catch {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.engine.restart.failed",
                 metadata: ["code": String((error as NSError).code)])
-            eventHandler(.goAway(Self.audioFailure))
+            reportAudioFailure()
         }
     }
 }
@@ -152,7 +159,7 @@ extension ShannonGeminiLiveTransport {
                         self.resumeAudio()
                     } else {
                         // The other audio did not hand the session back. The call ends where the owner can see it.
-                        self.eventHandler(.goAway(Self.audioFailure))
+                        self.reportAudioFailure()
                     }
                 @unknown default:
                     break
@@ -179,7 +186,7 @@ extension ShannonGeminiLiveTransport {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !self.stopped else { return }
-                self.eventHandler(.goAway(Self.audioFailure))
+                self.reportAudioFailure()
             }
         })
     }

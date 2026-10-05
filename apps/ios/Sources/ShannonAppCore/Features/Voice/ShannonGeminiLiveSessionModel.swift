@@ -61,8 +61,8 @@ public final class ShannonGeminiLiveSessionModel {
     var ttsCostUsd: Double = 0
     private var didRecordCaptureStart = false
     private var didRecordFirstQueuedChunk = false
-    private var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
-    private var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
+    var createSession: (@MainActor (ShannonVoiceParticipantMode) async throws -> ShannonGeminiLiveSessionDTO)?
+    var performDelegation: (@MainActor (String, ShannonVoiceUserUtteranceDTO?, ShannonVoiceParticipantMode) async throws -> ShannonLiveVoiceDelegationResponseDTO)?
     var performStreamingDelegation: ShannonVoiceStreamingDelegation?
     var streamSpeech: (@MainActor (String, String?) async throws -> ShannonGeminiSpeechStream)?
     var commitTurn: (@MainActor (String, String) async throws -> Void)?
@@ -77,6 +77,12 @@ public final class ShannonGeminiLiveSessionModel {
     var backgroundSilence = ShannonVoiceBackgroundSilence()
     var backgroundWatchTask: Task<Void, Never>?
     var lastAudioReconnectAt: Date?
+    /// A reconnect of the same call is queued or running (`queueSameCallReconnect`).
+    var sameCallReconnectQueued = false
+    /// Whether the app declares why it uses the microphone (the test host does not).
+    var microphoneUsageIsDeclared: @MainActor () -> Bool = {
+        ShannonVoiceUsageDescriptionPolicy.isPresent(Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription"))
+    }
     /// The Mac's watch for an engine that runs but delivers no microphone buffers (`+CaptureWatch.swift`).
     var captureWatch = ShannonVoiceCaptureWatch()
     var captureWatchTask: Task<Void, Never>?
@@ -141,9 +147,7 @@ public final class ShannonGeminiLiveSessionModel {
         failureRecovery = nil
         phase = .requestingPermission
 
-        guard ShannonVoiceUsageDescriptionPolicy.isPresent(
-            Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription")
-        ) else {
+        guard microphoneUsageIsDeclared() else {
             fail("音声機能の設定が不足しています。アプリを更新してください。", recovery: .updateRequired)
             return
         }
@@ -252,22 +256,6 @@ public final class ShannonGeminiLiveSessionModel {
         callStartedAt = nil
         audioLevel = 0
         playbackLevel = 0
-    }
-
-    public func retry() async {
-        guard let createSession, let performDelegation, let performStreamingDelegation,
-              let streamSpeech, let commitTurn, let handleDelegationResponse else { return }
-        await start(
-            participantMode: participantMode,
-            speechProvider: speechProvider,
-            preservePendingInput: true,
-            createSession: createSession,
-            performDelegation: performDelegation,
-            performStreamingDelegation: performStreamingDelegation,
-            streamSpeech: streamSpeech,
-            commitTurn: commitTurn,
-            handleDelegationResponse: handleDelegationResponse
-        )
     }
 
     @discardableResult

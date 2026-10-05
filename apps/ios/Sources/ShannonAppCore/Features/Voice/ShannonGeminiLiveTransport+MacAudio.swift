@@ -81,7 +81,7 @@ extension ShannonGeminiLiveTransport {
             if self.audioStarted, ShannonMacVoiceInputRouting.lost(self.appliedInputUID, devices: ShannonMacAudioDevices.inputs()) {
                 ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.lost")
                 self.appliedInputUID = nil
-                self.eventHandler(.goAway(Self.audioFailure))
+                self.reportAudioFailure()
                 return
             }
             try? self.applyInputPreference()

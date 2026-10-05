@@ -74,9 +74,7 @@ extension ShannonGeminiLiveSessionModel {
         inputState = inputState.choosing(deviceID: id)
         ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.selected", metadata: ["automatic": String(id == nil)])
         guard transport != nil, phase != .idle, phase != .failed else { return }
-        interruptResponse()
-        phase = .reconnecting
-        Task { @MainActor [weak self] in await self?.retry() }
+        queueSameCallReconnect()
     }
 }
 #endif

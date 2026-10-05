@@ -53,6 +53,8 @@ final class ShannonGeminiLiveTransport {
     var audioObservers: [NSObjectProtocol] = []
     /// In-place engine restarts after a configuration change, bounded (`ShannonVoiceEngineRestartBudget`).
     var engineRestarts = ShannonVoiceEngineRestartBudget()
+    /// `goAway(audioFailure)` was sent; a transport sends it at most once.
+    var reportedAudioFailure = false
 #if os(macOS)
     /// The Mac microphone the owner chose (Core Audio's unique id); nil is the system's input.
     var inputDeviceID: String?
