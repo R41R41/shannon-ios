@@ -178,6 +178,21 @@ final class ShannonGeminiLiveMuteTests: XCTestCase {
         XCTAssertNil(model.callStartedAt)
     }
 
+    func testSwitchingToAFriendClearsTheOwnersWordsFromTheScreen() {
+        let model = ShannonGeminiLiveSessionModel()
+        model.phase = .listening
+        model.userTranscript = "明日の歯医者、何時だっけ"
+        model.shannonTranscript = "10時からです、ライ氏。"
+        model.textSendState = .failed(text: "内緒の話", message: "送れませんでした")
+        model.switchParticipantMode(to: .guest, origin: .control)
+        XCTAssertEqual(model.participantMode, .guest)
+        XCTAssertEqual(model.userTranscript, "")
+        XCTAssertEqual(model.shannonTranscript, "")
+        XCTAssertEqual(model.textSendState, .idle)
+        XCTAssertNil(model.textSendState.failedText)
+        model.stop()
+    }
+
     func testPhaseLabelDoesNotNameTheProvider() {
         XCTAssertFalse(ShannonGeminiLivePhase.connecting.japaneseLabel.contains("Gemini"))
     }

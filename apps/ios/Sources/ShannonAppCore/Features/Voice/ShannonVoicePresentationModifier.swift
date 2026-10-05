@@ -70,8 +70,12 @@ struct ShannonVoicePresentationModifier: ViewModifier {
         // Whether a call screen is up anywhere, for the links that must not close what is under it.
         .onChange(of: isPresented, initial: true) { workspace.setCallScreen(presenterID, isUp: isPresented) }
         .onDisappear { workspace.setCallScreen(presenterID, isUp: false) }
-        // A spoken switch happens in the session, so an unshared photo is cleared here too.
-        .onChange(of: geminiVoiceModel.participantMode) { workspace.clearPhoto() }
+        // A spoken switch happens in the session, so an unshared photo is cleared here too. Into 「友人も一緒」,
+        // owner text that failed to send and was put back into the call's composer is not left there either.
+        .onChange(of: geminiVoiceModel.participantMode) {
+            workspace.clearPhoto()
+            if geminiVoiceModel.participantMode == .guest { workspace.typedMessage = "" }
+        }
         // A call that ended without this sheet's 終了 (silence in the background, no answer to her own line) closes it too.
         .onChange(of: workspace.callEndRevision) { isPresented = false }
 #if DEBUG

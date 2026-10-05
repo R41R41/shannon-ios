@@ -26,6 +26,13 @@ extension ShannonGeminiLiveSessionModel {
             userTranscript = ""
             shannonTranscript = ""
             textSendState = .idle
+        } else {
+            // Into 「友人も一緒」: the owner's words and her last reply on screen, and owner text that failed to
+            // send, are not left for the others at the table to read. What he said and was not yet answered stays
+            // pending and is answered in the in-call context.
+            userTranscript = ""
+            shannonTranscript = ""
+            textSendState = .idle
         }
         participantMode = mode
         ShannonVoiceDiagnostics.shared.record("gemini.participant.switched",
