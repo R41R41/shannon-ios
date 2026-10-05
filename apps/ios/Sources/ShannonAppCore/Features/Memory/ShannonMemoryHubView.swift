@@ -63,7 +63,7 @@ struct ShannonMemoryHubList: View {
             .listRowBackground(surface)
 
             Text("続けている目的")
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
                 .accessibilityAddTraits(.isHeader)
                 .listRowBackground(surface)
@@ -100,7 +100,7 @@ struct ShannonMemoryHubList: View {
                         ShannonCognitionView(model: model)
                     } label: {
                         Text("ほか\(overview.hiddenActiveIntentCount)件の目的")
-                            .font(.callout)
+                            .font(.shannon(.callout))
                             .foregroundStyle(palette.action)
                             .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                     }
@@ -199,15 +199,15 @@ struct ShannonMemoryNowHeader: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("いま")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.brandPresence)
                 Text(moodText)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let line = overview.thinkingLine {
                     Text(line)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                         .accessibilityLabel("考えていること、\(line)")
@@ -237,12 +237,12 @@ struct ShannonMemoryIntentPill: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(palette.textPrimary)
                     .lineLimit(3)
                 if let detail, !detail.isEmpty {
                     Text(detail)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                 }
@@ -293,10 +293,10 @@ struct ShannonMemoryManagementRow: View {
                 Text("記憶の管理")
                     .foregroundStyle(palette.textPrimary)
                 Text(summary)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Text("保存した記憶・忘れた記憶の訂正・完了・取り消し・復元")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
         } icon: {

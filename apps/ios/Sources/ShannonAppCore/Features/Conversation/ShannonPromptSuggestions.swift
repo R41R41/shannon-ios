@@ -90,12 +90,12 @@ struct ShannonPromptSuggestionList: View {
                 } label: {
                     HStack(spacing: ShannonSpacing.medium) {
                         Image(systemName: suggestion.symbol)
-                            .font(.callout.weight(.semibold))
+                            .font(.shannon(.callout).weight(.semibold))
                             .foregroundStyle(palette.action)
                             .frame(width: 24)
                             .accessibilityHidden(true)
                         Text(suggestion.text)
-                            .font(.subheadline)
+                            .font(.shannon(.subheadline))
                             .foregroundStyle(palette.textPrimary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)

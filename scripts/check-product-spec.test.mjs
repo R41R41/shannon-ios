@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  openCells, repository, run, validateBaseline, validateMatrix, validateStrings, validateTokens,
+  notBuildingMatch, openCells, repository, run, validateBaseline, validateMatrix, validateStrings, validateTokens,
 } from './check-product-spec.mjs';
 import {
-  outputs, readSources, renderStringsSwift, renderStringsTs, renderTokensCss, renderTokensSwift, staleOutputs, stringParams, swiftIdentifier, swiftLiteral,
+  outputs, readSources, renderStringsSwift, renderStringsSwiftFiles, renderStringsTs, renderTokensCss, renderTokensSwift, staleOutputs, stringParams, swiftAreaFileThreshold, swiftIdentifier, swiftLiteral,
 } from './generate-product-spec.mjs';
 
 /** A repository that holds exactly the given files. */
@@ -55,9 +55,16 @@ test('the product spec of this repository passes its own check', () => {
 test('every generated file is produced from the three sources', () => {
   assert.deepEqual(Object.keys(outputs(readSources())).sort(), [
     // The same Swift, compiled into the shared Apple package (A3).
+    // The copy is split by area (500-line ceiling): large areas get a file of their own.
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonDesignTokens.generated.swift',
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Ops.generated.swift',
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Task.generated.swift',
+    'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings+Yousu.generated.swift',
     'apps/ios/Sources/ShannonAppCore/DesignSystem/Generated/ShannonStrings.generated.swift',
     'design/generated/ShannonDesignTokens.generated.swift',
+    'design/generated/ShannonStrings+Ops.generated.swift',
+    'design/generated/ShannonStrings+Task.generated.swift',
+    'design/generated/ShannonStrings+Yousu.generated.swift',
     'design/generated/ShannonStrings.generated.swift',
     'design/generated/shannon-strings.ja.ts',
     'design/generated/shannon-tokens.css',
@@ -107,6 +114,30 @@ test('ids are unique and each status carries what it requires', () => {
   assert.match(text, /planned needs the branch/u);
   assert.match(text, /not_applicable needs a reason/u);
   assert.match(text, /unknown needs a note/u);
+});
+
+test('a feature the owner decided not to build fails, by any name, width or spacing, in notes and ids too', () => {
+  const items = [{ name: '同調率', aliases: ['同調度', 'シンクロ率', 'sync rate'], decided: '2026-10-05' }, { name: '判断の内訳', aliases: ['判断内訳', 'decision breakdown'], decided: '2026-10-05' }];
+  const check = (overrides) => validateMatrix({ ...matrix([feature(overrides)]), notBuilding: { about: 'x', items } }, fakeRepository(files)).failures.join('\n');
+  assert.match(check({ title: '同調率を見る' }), /talk\.text-chat: the owner decided not to build 「同調率」/u);
+  assert.match(check({ description: '同 調 度 を出す' }), /not to build 「同調率」/u);
+  assert.match(check({ description: 'ｼﾝｸﾛ率の表示' }), /not to build 「同調率」/u);
+  assert.match(check({ description: 'Shows the Sync-Rate.' }), /not to build 「同調率」/u);
+  assert.match(check({ id: 'talk.decision-breakdown' }), /not to build 「判断の内訳」/u);
+  const noted = feature();
+  noted.surfaces.windows = { ...noted.surfaces.windows, note: '判断内訳のパネルも出す' };
+  assert.match(validateMatrix({ ...matrix([noted]), notBuilding: { about: 'x', items } }, fakeRepository(files)).failures.join('\n'), /not to build 「判断の内訳」/u);
+  assert.equal(check({}), '');
+  assert.equal(notBuildingMatch(items[0], ['同調して返す']), false);
+});
+
+test('a string is adopted only when that very key is read from the generated strings', () => {
+  const entry = { key: 'ops.status.running', text: '動いている', apple: 'Ops.swift', windows: 'shannon-desktop:src/desk/opsText.ts' };
+  const strings = { windowsRead: '2026-10-03', strings: [entry] };
+  assert.deepEqual(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsStatusRunning)' })), []);
+  // Another key of the same file does not stand for this one.
+  assert.match(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsStatusRunningLate)' })).join('\n'), /no longer contains/u);
+  assert.deepEqual(validateStrings(strings, fakeRepository({ 'Ops.swift': 'Text(ShannonGeneratedStrings.opsTitle); "動いている"' })), []);
 });
 
 test('a feature folder that no cell names fails: a feature went in without the spec', () => {
@@ -264,7 +295,26 @@ test('an Apple-only sentence needs no Windows place but must be in its Apple sou
   assert.match(validateStrings(only({ apple: 'new' }), repo).join('\n'), /Apple-only and needs the Apple source/u);
   assert.match(validateStrings(only({ windows: 'shannon-desktop:x.ts' }), repo).join('\n'), /Apple-only and names a Windows place/u);
   assert.match(validateStrings(only({ text: 'ほかの文' }), repo).join('\n'), /no longer contains/u);
-  assert.match(validateStrings(only({ only: 'windows' }), repo).join('\n'), /only must be "apple"/u);
+  assert.match(validateStrings(only({ only: 'both' }), repo).join('\n'), /only must be "apple" or "windows"/u);
+});
+
+test('a Windows-only sentence names its Windows place, no Apple place, and is left out of the Swift', () => {
+  const repo = fakeRepository({});
+  const only = (entry) => ({ windowsRead: '2026-10-03', strings: [{ key: 'ops.confirm.holdShortPress', text: 'ボタンを押し続けると決まります。', windows: 'shannon-desktop:src/desk/views/OpsView.tsx', only: 'windows', ...entry }] });
+  assert.deepEqual(validateStrings(only({}), repo), []);
+  assert.match(validateStrings(only({ apple: 'Ops.swift' }), repo).join('\n'), /Windows-only and names an Apple place/u);
+  assert.match(validateStrings(only({ windows: undefined }), repo).join('\n'), /Windows-only and needs windows/u);
+  assert.doesNotMatch(renderStringsSwift(only({})), /opsConfirmHoldShortPress/u);
+  assert.match(renderStringsTs(only({})), /"ops\.confirm\.holdShortPress": "ボタンを押し続けると決まります。",/u);
+});
+
+test('a large area of strings gets a Swift file of its own, as an extension of the same enum', () => {
+  const many = { windowsRead: '2026-10-03', strings: Array.from({ length: swiftAreaFileThreshold }, (_, index) => ({ key: `yousu.line${index}`, text: `行${index}`, apple: 'Now.swift', windows: 'shannon-desktop:x.tsx' })) };
+  many.strings.push({ key: 'app.name', text: 'シャノン', apple: 'App.swift', windows: 'shannon-desktop:x.tsx' });
+  const files = renderStringsSwiftFiles(many);
+  assert.deepEqual(Object.keys(files), ['ShannonStrings.generated.swift', 'ShannonStrings+Yousu.generated.swift']);
+  assert.match(files['ShannonStrings.generated.swift'], /public enum ShannonGeneratedStrings \{\n {4}\/\/\/ `app\.name`/u);
+  assert.match(files['ShannonStrings+Yousu.generated.swift'], /extension ShannonGeneratedStrings \{\n {4}\/\/\/ `yousu\.line0`\n {4}public static let yousuLine0 = "行0"/u);
 });
 
 test('the repository reader lists feature folders', () => {

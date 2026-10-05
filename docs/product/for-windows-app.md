@@ -156,3 +156,11 @@
 - Windows に無い: 頭の中（記憶・約束・人・目的・日記）、ようす、トークの検索・題名の変更・アーカイブ・添付・コピー・送り直し、「覚えました」の行、整理の提案、外観の切り替え、予定の共有、情報源、通話のミュート・写真・途中での「友人も一緒」、ほかの端末の解除、水の光の目（二つの姿の切り替え）、長押しの承認。
 
 細かくは `docs/product/feature-matrix.md`。違っていたら、知らせてほしい。
+
+## 7. 2026-10-05 に足した文と行（W5 の知らせを受けて）
+
+- 文（`shannon-strings.ja.ts`）: 承認 `task.approval.session`・`confirmOnce`・`confirmSession`・`confirmSessionMessage`・`holdTarget*`・`holdHintClick`、`hold.progress`、`common.back`。運用 `ops.confirm.hold`・`ops.confirm.holdShortPress`。続きが必要 `task.status.needsOwner`・`task.needsOwner.*`・`task.waitingCount`。提案と中止の確認 `autonomy.proposal.*`・`task.cancel.*`（3 つとも、所有者の決定）。ようす `yousu.*`（iPhone の言葉。W6 で使う）。直接書いている同じ文は、key で引くように替えてほしい。
+- `only: "windows"` は Windows にだけある文（Swift には出ない）。Mac にも要るようになったら、こちらで外す。
+- 一覧表: `tasks.needs-owner`、`voice.wake-name`、`yousu.mood-history`、`yousu.mood-trend`（線の名前は、そのあと所有者が決めた。下の「気分の推移」）、`body.touch-parts`、`study.tools`、`folder.tools`（Windows のフォルダの仕組みを取り決めの v2 に）。読み上げは前からある `talk.reply-read-aloud` に書いた（既定は全部）。Windows の列の場所（ファイル）は、知らせに名前が無いものは、2026-10-03 に読んだ同じ画面のファイルにしてある。違っていたら知らせてほしい。
+- 作らないもの: 「同調率」「判断の内訳」（`feature-matrix.json` の `notBuilding`）。
+- 気分の推移（2026-10-05、所有者が選んだ）: 文 `yousu.moodTrend.*`（見出し、24時間／7日、3 本の線の名前「気分の明るさ」「元気さ」「心の開き」（決定）、読み上げの言葉、読み上げの文の形、「まだ記録がありません」、「読めませんでした」）。**言葉の分け方（調整役の決定、2026-10-05）**: 気分の明るさは 明るめ／ふつう／低め（`level.bright`）、元気さと心の開きは 高め／ふつう／低め（`level.high` の文を「高め」に変えた。key はそのまま）。本体の答えに `carryIn`（窓の前のいちばん新しい点。窓の始まりから最初の点まで保つ）が足された（`docs/mood-history-contract.md`）。窓の右端は答えの `generatedAt`。iPhone と Mac も、同じ段の線・同じ線の形（実線・長い破線・点線）で描く。ふつうの線（真ん中）は、各値のふだんの値（気分の明るさ 0、元気さ 0.30、心の開き 0.35）に置いた。Windows の描き方と違っていたら知らせてほしい。

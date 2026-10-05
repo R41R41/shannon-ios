@@ -61,9 +61,9 @@ public struct ShannonGeminiVoiceView: View {
                     Spacer()
                     VStack(spacing: 2) {
                         Text("Gemini音声 · 試験版")
-                            .font(.headline)
+                            .font(.shannon(.headline))
                         Text("ターン制")
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                     }
                     Spacer()
@@ -80,7 +80,7 @@ public struct ShannonGeminiVoiceView: View {
                 .frame(maxWidth: 440)
 
                 Text(voiceModel.phase.japaneseLabel)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
 
                 if !userTranscript.isEmpty {
                     transcriptCard("あなた", text: userTranscript, palette: palette)
@@ -90,18 +90,18 @@ public struct ShannonGeminiVoiceView: View {
                 }
                 if let errorMessage = voiceModel.errorMessage {
                     Text(errorMessage)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.danger)
                         .multilineTextAlignment(.center)
                 }
 
                 if let latestSpeech {
                     Text("\(latestSpeech.model) · \(latestSpeech.voice) · 約$\(latestSpeech.estimatedCostUsd.formatted(.number.precision(.fractionLength(5))))")
-                        .font(.caption.monospacedDigit())
+                        .font(.shannon(.caption).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                 } else {
                     Text("音声はサーバー側のGemini 3.8 Flash-Liteで生成します")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                 }
 
@@ -120,7 +120,7 @@ public struct ShannonGeminiVoiceView: View {
                 .accessibilityLabel(primaryLabel)
 
                 Text(primaryHint)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
             }
             .padding(.horizontal, ShannonSpacing.large)
@@ -178,10 +178,10 @@ public struct ShannonGeminiVoiceView: View {
     private func transcriptCard(_ speaker: String, text: String, palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(speaker)
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
             Text(text)
-                .font(.body)
+                .font(.shannon(.body))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(ShannonSpacing.medium)

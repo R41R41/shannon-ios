@@ -41,7 +41,7 @@ struct ShannonGeminiLiveStatusPresentation: Equatable, Sendable {
         let error = errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
         let notice = error?.isEmpty == false ? error : nil
         title = switch phase {
-        case .idle: "音声会話を開始"
+        case .idle: ShannonGeneratedStrings.voiceStart
         case .requestingPermission: "マイクを準備中"
         case .connecting: "接続しています"
         case .listening: isMuted ? "ミュート中" : "聞いています"
@@ -164,19 +164,19 @@ struct ShannonGeminiLiveStatusView: View {
                     ShannonGeminiLiveLevelBar(level: level, phase: phase, palette: palette)
                 case .muted:
                     Image(systemName: "mic.slash.fill")
-                        .font(.body.weight(.semibold))
+                        .font(.shannon(.body).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                         .accessibilityHidden(true)
                 case .none:
                     EmptyView()
                 }
                 Text(presentation.title)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .multilineTextAlignment(.center)
             }
             if let detail = presentation.detail {
                 Text(detail)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(detailColor)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

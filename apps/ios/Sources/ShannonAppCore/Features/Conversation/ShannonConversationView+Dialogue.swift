@@ -85,7 +85,7 @@ extension ShannonConversationView {
 
             // 「いま：〈気持ち〉・〈していること〉」, as the body screen said it under her.
             Text(ShannonBodyCopy.nowLine(face: bodyModel.face, doing: bodyModel.doingLine))
-                .font(.callout)
+                .font(.shannon(.callout))
                 .foregroundStyle(palette.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, ShannonSpacing.medium)
@@ -137,7 +137,7 @@ extension ShannonConversationView {
                 if !dynamicTypeSize.isAccessibilitySize {
                     HStack(spacing: 6) {
                         Text("シャノン")
-                            .font(.callout.weight(.semibold))
+                            .font(.shannon(.callout).weight(.semibold))
                         Text("·")
                         Text(model.currentFace.japaneseName)
                     }
@@ -163,7 +163,7 @@ extension ShannonConversationView {
     private func dialogueUserLine(_ palette: ShannonPalette) -> some View {
         if !dynamicTypeSize.isAccessibilitySize, let userMessage = latestUserMessage {
             Text("あなた：\(userMessage.text)")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .lineLimit(2)
                 .padding(.horizontal, ShannonSpacing.medium)
@@ -213,7 +213,7 @@ extension ShannonConversationView {
                                     dialogueIsExpanded ? "閉じる" : "続きを読む",
                                     systemImage: dialogueIsExpanded ? "chevron.up" : "chevron.down"
                                 )
-                                .font(.caption2.weight(.medium))
+                                .font(.shannon(.caption2).weight(.medium))
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(palette.textSecondary)
@@ -232,7 +232,7 @@ extension ShannonConversationView {
                                     )
                                 }
                             }
-                            .font(.caption2.weight(.semibold))
+                            .font(.shannon(.caption2).weight(.semibold))
                             .frame(
                                 minWidth: ShannonTouchTarget.minimum,
                                 minHeight: ShannonTouchTarget.minimum
@@ -246,7 +246,7 @@ extension ShannonConversationView {
                         toggleDisplayMode()
                     } label: {
                         Label("会話全体を読む", systemImage: "text.bubble")
-                            .font(.caption.weight(.semibold))
+                            .font(.shannon(.caption).weight(.semibold))
                             .frame(minHeight: ShannonTouchTarget.minimum)
                     }
                     .buttonStyle(.plain)

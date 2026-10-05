@@ -2,11 +2,12 @@
 // Guards the one product spec that the iOS, macOS and Windows apps of Shannon follow (Syzygy ADR-0004).
 // It fails when
 //   - the feature matrix is malformed, an id repeats, or a cell lacks what its status requires;
+//   - a feature or a string brings back something the owner decided not to build (notBuilding);
 //   - an iOS or macOS cell says `yes` or `partial` but its evidence (a source path, optionally `#Symbol`) is gone;
 //   - a feature folder of the Apple apps is not named by any cell (a feature added without the matrix);
 //   - the set of cells that are behind (`no`, `partial`, `planned`, `unknown`) differs from the accepted baseline;
 //   - the design tokens drift from the values the iOS app uses today, or break the no-brand-colour rule;
-//   - a shared string is no longer in the Apple source it names;
+//   - a shared string is no longer in the Apple source it names (a Windows-only one needs its Windows place);
 //   - a generated file is stale.
 // `--accept-gaps` rewrites the baseline after the owner has decided about a new gap or a gap has closed.
 // See docs/product/README.md.
@@ -28,6 +29,18 @@ const hexPattern = /^#[0-9A-Fa-f]{6}$/u;
 const stringKeyPattern = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/u;
 
 function isText(value) { return typeof value === 'string' && value.trim().length > 0; }
+
+/** Text as it is compared with the not-built list: full and half width alike, case and spacing and separators ignored. */
+export function normalisedForSearch(text) {
+  return String(text ?? '').normalize('NFKC').toLowerCase().replace(/[\s\-_.・･]/gu, '');
+}
+
+/** Whether any of the texts names an item the owner decided not to build, by its name or one of its aliases. */
+export function notBuildingMatch(item, texts) {
+  const terms = [item?.name, ...(item?.aliases ?? [])].filter(isText).map(normalisedForSearch);
+  const haystack = texts.filter(isText).map(normalisedForSearch);
+  return terms.some((term) => haystack.some((text) => text.includes(term)));
+}
 function repositoryPath(value) { return isText(value) && !value.startsWith('/') && !value.split('/').includes('..'); }
 
 /** A file reader over the repository: `exists(path)` and `text(path)` (null when absent). */
@@ -121,6 +134,15 @@ export function validateMatrix(matrix, repo) {
     }
     if (feature.scope === 'desktop' && feature.surfaces.ios.status === 'yes') failures.push(`${id}: a desktop extra that iOS has is not an extra; remove the scope`);
     if (surfaces.every((surface) => ['no', 'not_applicable'].includes(feature.surfaces[surface].status))) failures.push(`${id}: no surface has or plans this feature`);
+  }
+  // What the owner decided not to build stays out of the matrix.
+  for (const item of matrix.notBuilding?.items ?? []) {
+    if (!isText(item.name) || !datePattern.test(item.decided ?? '')) { failures.push(`feature matrix: notBuilding needs a name and the date decided (${JSON.stringify(item)})`); continue; }
+    if (item.aliases !== undefined && (!Array.isArray(item.aliases) || !item.aliases.every(isText))) failures.push(`feature matrix: notBuilding ${item.name} aliases must be a list of words`);
+    for (const feature of matrix.features) {
+      const cells = Object.values(feature.surfaces ?? {}).flatMap((cell) => [cell?.note, cell?.reason]);
+      if (notBuildingMatch(item, [feature.id, feature.title, feature.description, ...cells])) failures.push(`${feature.id}: the owner decided not to build 「${item.name}」 (${item.decided})`);
+    }
   }
   // A feature folder nobody names is a feature that went into one implementation without the spec.
   for (const base of featureFolders) {
@@ -244,6 +266,14 @@ export function validateStrings(strings, repo) {
     identifiers.set(identifier, key);
     if (!isText(entry.text)) { failures.push(`strings: ${key} has no text`); continue; }
     if (/\{[^A-Za-z}]|\{[A-Za-z][A-Za-z0-9]*[^A-Za-z0-9}]/u.test(entry.text)) failures.push(`strings: ${key} has a malformed {placeholder}`);
+    if (entry.only !== undefined && entry.only !== 'apple' && entry.only !== 'windows') failures.push(`strings: ${key} only must be "apple" or "windows"`);
+    if (entry.only === 'windows') {
+      // A sentence of the Windows app that the Apple apps have no place for (often the pointer variant of an iPhone sentence).
+      if (entry.apple !== undefined) failures.push(`strings: ${key} is Windows-only and names an Apple place`);
+      if (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix)) failures.push(`strings: ${key} is Windows-only and needs windows: "${windowsPrefix}<path>"`);
+      if (entry.decided !== undefined && !datePattern.test(entry.decided)) failures.push(`strings: ${key} decided must be a date`);
+      continue;
+    }
     if (entry.decided !== undefined) {
       // Wording the owner decided: an implementation may not show it yet, so say what it shows today.
       if (!datePattern.test(entry.decided)) failures.push(`strings: ${key} decided must be a date`);
@@ -256,7 +286,6 @@ export function validateStrings(strings, repo) {
     } else if (!isText(entry.windows) || !entry.windows.startsWith(windowsPrefix)) {
       failures.push(`strings: ${key} needs windows: "${windowsPrefix}<path>"`);
     }
-    if (entry.only !== undefined && entry.only !== 'apple') failures.push(`strings: ${key} only must be "apple"`);
     if (!isText(entry.apple)) { failures.push(`strings: ${key} needs apple (a source path, branch:<branch>:<path>, or new)`); continue; }
     if (entry.apple === 'new') {
       if (entry.decided === undefined) failures.push(`strings: ${key} has no Apple source; only decided wording may be new`);
@@ -268,7 +297,8 @@ export function validateStrings(strings, repo) {
     }
     const source = repo.text(entry.apple);
     if (source === null) { failures.push(`strings: ${key} names ${entry.apple}, which does not exist`); continue; }
-    if (source.includes('ShannonGeneratedStrings')) continue; // adopted: the app reads the generated value
+    // Adopted: this very key is read from the generated strings in that file (not merely some other key).
+    if (new RegExp(`\\bShannonGeneratedStrings\\.${identifier}\\b`, 'u').test(source)) continue;
     // Every literal piece of the sentence must still be written in the Apple source it was taken from.
     const params = stringParams(entry.text);
     const pieces = entry.text.split(/\{[A-Za-z][A-Za-z0-9]*\}|\n/u).map((piece) => piece.trim()).filter((piece) => piece.length > 0);
@@ -301,6 +331,11 @@ export function run(root = defaultRoot, { acceptGaps = false } = {}) {
   }
   failures.push(...validateTokens(sources.tokens, repo));
   failures.push(...validateStrings(sources.strings, repo));
+  for (const item of sources.matrix.notBuilding?.items ?? []) {
+    for (const entry of sources.strings.strings ?? []) {
+      if (notBuildingMatch(item, [entry.key, entry.text, entry.note])) failures.push(`strings: ${entry.key} brings back 「${item.name}」, which the owner decided not to build (${item.decided})`);
+    }
+  }
   for (const path of staleOutputs(root)) failures.push(`${path} is stale (run: node scripts/generate-product-spec.mjs)`);
   const summary = `${sources.matrix.features?.length ?? 0} features, ${openCells(sources.matrix).length} accepted gaps, ${Object.keys(sources.tokens.color?.roles ?? {}).length} colour roles, ${sources.strings.strings?.length ?? 0} shared strings`;
   return { failures, warnings: matrix.warnings, summary };

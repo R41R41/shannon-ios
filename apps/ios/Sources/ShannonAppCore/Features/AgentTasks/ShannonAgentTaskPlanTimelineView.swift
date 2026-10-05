@@ -24,14 +24,14 @@ struct AgentTaskPlanSection: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                     Label("計画", systemImage: "list.bullet.clipboard")
-                        .font(.headline)
+                        .font(.shannon(.headline))
                         .foregroundStyle(palette.textPrimary)
                     Spacer(minLength: ShannonSpacing.small)
                     Text(ShannonAgentTaskRoomPresentation.planProgress(for: task))
-                        .font(.subheadline.monospacedDigit())
+                        .font(.shannon(.subheadline).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                     Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
+                        .font(.shannon(.caption).weight(.bold))
                         .foregroundStyle(palette.textSecondary)
                         .rotationEffect(.degrees(isExpanded ? 0 : -90))
                 }
@@ -118,12 +118,12 @@ struct AgentTaskPlanTimelineView: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                     Text(ShannonAgentPlanTimeline.completedGroupTitle(count: count))
-                        .font(.body.weight(.medium))
+                        .font(.shannon(.body).weight(.medium))
                         .foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
+                        .font(.shannon(.caption).weight(.bold))
                         .foregroundStyle(palette.textSecondary)
                         .rotationEffect(.degrees(isExpanded ? -180 : 0))
                         .accessibilityHidden(true)
@@ -205,13 +205,13 @@ struct AgentTaskPlanTimelineView: View {
         let isRunning = entry.status == .running
         return HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
             Text(entry.title)
-                .font(.body.weight(isRunning ? .semibold : (entry.status == .completed ? .medium : .regular)))
+                .font(.shannon(.body).weight(isRunning ? .semibold : (entry.status == .completed ? .medium : .regular)))
                 .foregroundStyle(entry.status == .pending ? palette.textSecondary : palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isRunning, !entry.details.isEmpty {
                 Image(systemName: "chevron.down")
-                    .font(.caption.weight(.bold))
+                    .font(.shannon(.caption).weight(.bold))
                     .foregroundStyle(palette.textSecondary)
                     .rotationEffect(.degrees(isExpanded ? -180 : 0))
                     .accessibilityHidden(true)
@@ -262,16 +262,16 @@ struct AgentTaskPlanTimelineView: View {
     private func detailRow(_ detail: ShannonAgentPlanTimeline.Detail) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
             Image(systemName: symbol(for: detail))
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(toneColor(detail.tone))
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text(detail.title)
-                    .font(.callout.weight(.medium))
+                    .font(.shannon(.callout).weight(.medium))
                     .foregroundStyle(palette.textPrimary)
                 if let text = detail.text, !text.isEmpty {
                     Text(text)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(3)
                 }

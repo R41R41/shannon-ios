@@ -6,10 +6,10 @@ import UniformTypeIdentifiers
 extension ShannonDesktopRootView {
     var workOverview: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.extraLarge) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("作業")
-                        .font(.largeTitle.weight(.semibold))
+                        .font(.shannonDesktop(.largeTitle).weight(.semibold))
                     Text("何を目指し、いまどこにいて、次に何をするかを一つの面で見渡します。")
                         .foregroundStyle(.secondary)
                 }
@@ -49,7 +49,7 @@ extension ShannonDesktopRootView {
                 }
             }
             .frame(maxWidth: 900, alignment: .leading)
-            .padding(32)
+            .padding(ShannonDesktopSpacing.huge)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -73,13 +73,13 @@ extension ShannonDesktopRootView {
             if let task = selectedTask {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        HStack(spacing: 10) {
+                        HStack(spacing: ShannonDesktopSpacing.medium) {
                             ShannonAvatarView(expression: task.expression, size: 36)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("現在地")
-                                    .font(.headline)
+                                    .font(.shannonDesktop(.headline))
                                 Text(task.stateName)
-                                    .font(.caption)
+                                    .font(.shannonDesktop(.caption))
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -96,7 +96,7 @@ extension ShannonDesktopRootView {
 
                         if let project = task.projectHint, !project.isEmpty {
                             Label(project, systemImage: "folder")
-                                .font(.caption)
+                                .font(.shannonDesktop(.caption))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .help(project)
@@ -113,7 +113,7 @@ extension ShannonDesktopRootView {
                                     )
                                 }
                             }
-                            .font(.caption)
+                            .font(.shannonDesktop(.caption))
                             .foregroundStyle(.secondary)
                         }
 
@@ -125,7 +125,7 @@ extension ShannonDesktopRootView {
                             if let progress = task.progressFraction {
                                 ProgressView(value: progress)
                                 Text("全\(task.plan.count)工程中 \(task.completedPlanCount)工程完了")
-                                    .font(.caption)
+                                    .font(.shannonDesktop(.caption))
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -159,17 +159,17 @@ extension ShannonDesktopRootView {
                         }
 
                         if let error = conversation.agentTaskActionError(task.id) {
-                            HStack(alignment: .top, spacing: 8) {
+                            HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(Color.shannonAttention)
                                 Text(error)
-                                    .font(.callout)
+                                    .font(.shannonDesktop(.callout))
                                 Spacer(minLength: 8)
                                 Button("閉じる") { conversation.dismissAgentTaskActionError(task.id) }
                                     .buttonStyle(.borderless)
                             }
-                            .padding(12)
-                            .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(ShannonDesktopSpacing.medium)
+                            .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
                         }
 
                         let policy = ShannonDesktopTaskActionPolicy(status: task.status)
@@ -180,7 +180,7 @@ extension ShannonDesktopRootView {
                                 developmentModelPicker
                                 developmentReasoningPicker
                                 Text(developmentRoutingExplanation)
-                                    .font(.caption)
+                                    .font(.shannonDesktop(.caption))
                                     .foregroundStyle(.secondary)
                             }
                             Button("この作業を始める") {
@@ -213,12 +213,12 @@ extension ShannonDesktopRootView {
                                             Text(event.title)
                                             Spacer(minLength: 8)
                                             Text(event.occurredAt, style: .time)
-                                                .font(.caption)
+                                                .font(.shannonDesktop(.caption))
                                                 .foregroundStyle(.tertiary)
                                         }
                                         if let detail = event.detail, !detail.isEmpty {
                                             Text(detail)
-                                                .font(.callout)
+                                                .font(.shannonDesktop(.callout))
                                                 .foregroundStyle(.secondary)
                                                 .lineLimit(4)
                                                 .help(detail)
@@ -235,13 +235,13 @@ extension ShannonDesktopRootView {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(change.displayName)
                                         Text(change.summary)
-                                            .font(.callout)
+                                            .font(.shannonDesktop(.callout))
                                             .foregroundStyle(.secondary)
                                             .lineLimit(3)
                                             .help(change.summary)
                                         if change.additions > 0 || change.deletions > 0 {
                                             Text("+\(change.additions)  −\(change.deletions)")
-                                                .font(.caption.monospacedDigit())
+                                                .font(.shannonDesktop(.caption).monospacedDigit())
                                                 .foregroundStyle(.tertiary)
                                         }
                                     }
@@ -266,7 +266,7 @@ extension ShannonDesktopRootView {
                                             Text(test.name)
                                             if let detail = test.detail, !detail.isEmpty {
                                                 Text(detail)
-                                                    .font(.caption)
+                                                    .font(.shannonDesktop(.caption))
                                                     .foregroundStyle(.secondary)
                                             }
                                         }
@@ -380,16 +380,16 @@ enum DesktopTaskStopConfirmation: Equatable {
 extension ShannonDesktopRootView {
     /// Same decision material as iPhone: the task state word, the reason, and the concrete target.
     func taskApprovalCard(_ task: ShannonAgentTask, approval: ShannonAgentApproval) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.medium) {
             Label(ShannonAgentTaskStatus.waitingApproval.japaneseName, systemImage: "hand.raised.fill")
-                .font(.headline)
+                .font(.shannonDesktop(.headline))
             Text(approval.title)
             Text(approval.reason)
-                .font(.callout)
+                .font(.shannonDesktop(.callout))
                 .foregroundStyle(.secondary)
             if let target = approval.target {
                 Label(target, systemImage: "lock.fill")
-                    .font(.callout.monospaced())
+                    .font(.shannonDesktop(.callout).monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .accessibilityLabel("許可する対象、\(target)")
@@ -414,12 +414,12 @@ extension ShannonDesktopRootView {
             Text(approval.denyStopsTask
                 ? "この実行先では、許可しないと作業全体が止まります。"
                 : "「許可しない」はこの操作だけを断り、シャノンは別の進め方を探すか、次の一手を残して止まります。")
-                .font(.caption)
+                .font(.shannonDesktop(.caption))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(14)
-        .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .padding(ShannonDesktopSpacing.large)
+        .background(Color.shannonAttention.opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
     }
 
     func performTaskStop(_ confirmation: DesktopTaskStopConfirmation) {

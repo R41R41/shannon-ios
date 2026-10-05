@@ -106,7 +106,7 @@ struct ShannonGeminiLiveCallControls: View {
             .accessibilityAddTraits(showsTextComposer ? .isSelected : [])
         case .end:
             Button(role: .destructive, action: end) {
-                label("終了", systemImage: "phone.down.fill", fill: palette.danger, foreground: palette.onAction)
+                label(ShannonGeneratedStrings.voiceEnd, systemImage: "phone.down.fill", fill: palette.danger, foreground: palette.onAction)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("音声会話を終了する")
@@ -158,7 +158,7 @@ struct ShannonGeminiLiveCallControls: View {
         let neutral = fill == nil
         return VStack(spacing: ShannonSpacing.extraSmall) {
             Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
+                .font(.shannon(.title3).weight(.semibold))
                 .foregroundStyle(foreground ?? palette.textPrimary)
                 .frame(width: size, height: size)
                 .background(fill ?? palette.textPrimary.opacity(0.08), in: Circle())
@@ -168,7 +168,7 @@ struct ShannonGeminiLiveCallControls: View {
                     }
                 }
             Text(title)
-                .font(.footnote.weight(.medium))
+                .font(.shannon(.footnote).weight(.medium))
                 .foregroundStyle(palette.textPrimary)
                 .lineLimit(1)
                 .fixedSize()

@@ -32,7 +32,7 @@ struct ShannonCalendarSharingSectionContent: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ShannonCalendarSharingCopy.toggleTitle)
                         Text(ShannonCalendarSharingCopy.statusText(model.status))
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("calendar-sharing-status")
                     }

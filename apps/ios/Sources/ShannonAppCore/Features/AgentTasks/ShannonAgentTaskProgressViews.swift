@@ -14,17 +14,17 @@ struct AgentTaskCommandActivityCard: View {
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title(for: activity.status))
-                        .font(.callout.weight(.semibold))
+                        .font(.shannon(.callout).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     Text(event.title)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: symbol(for: activity.status))
                     .foregroundStyle(color(for: activity.status))
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
             }
             .padding(ShannonSpacing.medium)
             .background(color(for: activity.status).opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonShape.large))
@@ -120,15 +120,15 @@ struct AgentTaskTimelineRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(event.title).font(.body.weight(.medium))
+                    Text(event.title).font(.shannon(.body).weight(.medium))
                     Spacer()
                     Text(event.occurredAt.formatted(date: .omitted, time: .shortened))
-                        .font(.caption2.monospacedDigit())
+                        .font(.shannon(.caption2).monospacedDigit())
                         .foregroundStyle(palette.textSecondary)
                 }
                 if let detail = event.detail {
                     Text(detail)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                 }
             }

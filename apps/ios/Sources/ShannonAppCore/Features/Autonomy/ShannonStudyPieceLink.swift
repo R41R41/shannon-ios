@@ -47,16 +47,16 @@ public struct ShannonStudyPieceLinkCard: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(link.title.isEmpty ? "シャノンの物語" : link.title)
-                            .font(.callout.weight(.semibold))
+                            .font(.shannon(.callout).weight(.semibold))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
                         Text("書斎で読む")
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }

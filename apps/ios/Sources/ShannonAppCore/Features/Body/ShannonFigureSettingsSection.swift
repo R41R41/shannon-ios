@@ -62,7 +62,7 @@ struct ShannonFigureSettingsSection: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ShannonBodyCopy.reportsTouchTitle)
                         Text(touchStatus)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .accessibilityIdentifier("body-touch-status")
                     }

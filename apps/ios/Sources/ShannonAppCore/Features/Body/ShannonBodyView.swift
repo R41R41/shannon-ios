@@ -148,7 +148,7 @@ struct ShannonBodyLineBubble: View {
         Group {
             if let line {
                 Text(line.text)
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textPrimary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)

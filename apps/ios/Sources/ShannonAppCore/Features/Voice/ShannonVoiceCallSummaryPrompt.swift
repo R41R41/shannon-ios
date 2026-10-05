@@ -19,12 +19,12 @@ struct ShannonVoiceCallMemoryCard: View {
         let shape = RoundedRectangle(cornerRadius: ShannonShape.large, style: .continuous)
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             Label(state.title, systemImage: state.symbol)
-                .font(.subheadline.weight(.semibold))
+                .font(.shannon(.subheadline).weight(.semibold))
                 .labelStyle(.titleAndIcon)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text(state.detail)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             actions

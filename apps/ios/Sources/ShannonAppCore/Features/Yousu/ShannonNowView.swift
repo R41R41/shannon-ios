@@ -38,13 +38,18 @@ public struct ShannonNowView: View {
             if let message = model.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(palette.onAttentionTint)
                         .listRowBackground(palette.attentionTint)
                 }
             }
             waitingSection(palette: palette)
             feelingSection(palette: palette)
+#if !os(macOS)
+            if model.moodTrend.isAvailable {
+                Section { ShannonMoodTrendPanel(model: model.moodTrend, palette: palette) }
+            }
+#endif
             if model.ownTime != nil { ownTimeSection(palette: palette) }
             if let now = model.now {
                 bodySection(now.body, palette: palette)
@@ -53,14 +58,21 @@ public struct ShannonNowView: View {
         }
         .overlay {
             if !model.didLoad, model.isLoading {
-                ProgressView("ようすを確認中")
+                ProgressView(ShannonGeneratedStrings.yousuLoading)
             }
         }
-        .refreshable { await model.reload() }
+        .refreshable {
+            async let trend: Void = model.moodTrend.reload()
+            await model.reload()
+            await trend
+        }
         // Read when the page appears and when the app comes back to the front; never in the background.
         .task(id: scenePhase == .active) {
             guard scenePhase == .active else { return }
+            // The trend is read beside the page, not as part of it: the page shows as soon as its own reads answer.
+            async let trend: Void = model.moodTrend.reload()
             await model.reload()
+            await trend
         }
     }
 
@@ -72,7 +84,7 @@ public struct ShannonNowView: View {
         Section {
             if items.isEmpty {
                 Label(ShannonGeneratedStrings.shannonCardNothingWaiting, systemImage: "checkmark.circle")
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
             } else {
                 NavigationLink {
@@ -80,7 +92,7 @@ public struct ShannonNowView: View {
                 } label: {
                     HStack(spacing: ShannonSpacing.medium) {
                         Text("\(items.count)")
-                            .font(.footnote.weight(.bold))
+                            .font(.shannon(.footnote).weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(palette.onAction)
                             .padding(.horizontal, 7)
@@ -88,15 +100,15 @@ public struct ShannonNowView: View {
                             .background(palette.action, in: Capsule())
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("待っていること")
-                                .font(.body.weight(.semibold))
+                            Text(ShannonGeneratedStrings.yousuWaitingTitle)
+                                .font(.shannon(.body).weight(.semibold))
                             Text(ShannonNowText.waitingSummary(items))
-                                .font(.footnote)
+                                .font(.shannon(.footnote))
                                 .foregroundStyle(palette.textSecondary)
                         }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("待っていること、\(items.count)件、\(ShannonNowText.waitingSummary(items))")
+                    .accessibilityLabel(ShannonGeneratedStrings.yousuWaitingAccessibility(count: String(items.count), summary: ShannonNowText.waitingSummary(items)))
                 }
             }
         }
@@ -111,36 +123,52 @@ public struct ShannonNowView: View {
         let presentFace = feeling?.present?.face
         let lingering = (feeling?.lingering ?? []).compactMap { ShannonNowText.lingeringLabel($0) }
         Section {
-            HStack(alignment: .center, spacing: ShannonSpacing.large) {
-                ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                    Text(moodFace?.japaneseName ?? "まだ分かりません")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(palette.textPrimary)
-                    if let presentFace {
-                        Text("いまの気持ち：\(presentFace.japaneseName)")
-                            .font(.callout)
-                            .foregroundStyle(palette.textPrimary)
-                    }
-                    ForEach(lingering, id: \.self) { label in
-                        Text("まだ残っている気持ち：\(label)")
-                            .font(.footnote)
-                            .foregroundStyle(palette.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+#if os(macOS)
+            // Wide: the trend stands next to the feeling card (owner's pick, 2026-10-05).
+            HStack(alignment: .top, spacing: ShannonSpacing.extraLarge) {
+                feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                    .frame(minWidth: 220, maxWidth: 320, alignment: .leading)
+                if model.moodTrend.isAvailable {
+                    ShannonMoodTrendPanel(model: model.moodTrend, palette: palette)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.vertical, ShannonSpacing.extraSmall)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(feelingAccessibilityLabel(mood: moodFace, present: presentFace, lingering: lingering))
             .listRowBackground(palette.intelligenceSoft)
+#else
+            feelingCard(palette: palette, moodFace: moodFace, presentFace: presentFace, lingering: lingering)
+                .listRowBackground(palette.intelligenceSoft)
+#endif
         }
     }
 
+    private func feelingCard(palette: ShannonPalette, moodFace: ShannonFace?, presentFace: ShannonFace?, lingering: [String]) -> some View {
+        HStack(alignment: .center, spacing: ShannonSpacing.large) {
+            ShannonAvatarView(expression: (presentFace ?? moodFace)?.expression ?? .neutral, size: 64)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
+                Text(moodFace?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)
+                    .font(.shannon(.title3).weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                if let presentFace {
+                    Text(ShannonGeneratedStrings.yousuFeelingPresent(name: presentFace.japaneseName))
+                        .font(.shannon(.callout))
+                        .foregroundStyle(palette.textPrimary)
+                }
+                ForEach(lingering, id: \.self) { label in
+                    Text(ShannonGeneratedStrings.yousuFeelingLingering(label: label))
+                        .font(.shannon(.footnote))
+                        .foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, ShannonSpacing.extraSmall)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(feelingAccessibilityLabel(mood: moodFace, present: presentFace, lingering: lingering))
+    }
+
     private func feelingAccessibilityLabel(mood: ShannonFace?, present: ShannonFace?, lingering: [String]) -> String {
-        var parts = ["シャノンの気分、\(mood?.japaneseName ?? "まだ分かりません")"]
+        var parts = [ShannonGeneratedStrings.yousuMoodAccessibility(mood: mood?.japaneseName ?? ShannonGeneratedStrings.yousuMoodUnknown)]
         if let present { parts.append("いまの気持ち、\(present.japaneseName)") }
         parts += lingering.map { "まだ残っている気持ち、\($0)" }
         return parts.joined(separator: "。")
@@ -151,39 +179,39 @@ public struct ShannonNowView: View {
     @ViewBuilder
     private func ownTimeSection(palette: ShannonPalette) -> some View {
         if let ownTime = model.ownTime {
-            Section("自分の時間") {
+            Section(ShannonGeneratedStrings.yousuOwnTimeTitle) {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     if let line = model.ownTimeLine {
                         Text(line)
-                            .font(.body.weight(.medium))
+                            .font(.shannon(.body).weight(.medium))
                             .foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let reason = model.restReason {
-                        Text("シャノンのことば：\(reason)")
-                            .font(.footnote)
+                        Text(ShannonGeneratedStrings.yousuOwnTimeHerWords(reason: reason))
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let latest = model.latestActivity {
                         Text("\(ShannonYousuTime.clock(latest.occurredAt)) \(latest.summary)")
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityLabel("最近したこと、\(ShannonYousuTime.clock(latest.occurredAt))、\(latest.summary)")
+                            .accessibilityLabel(ShannonGeneratedStrings.yousuOwnTimeLatestAccessibility(time: ShannonYousuTime.clock(latest.occurredAt), summary: latest.summary))
                     }
                 }
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                     ProgressView(value: ownTime.budget.fraction)
                         .tint(palette.action)
                         .accessibilityHidden(true)
-                    Text("今日の予算 \(ownTime.budget.usedLabel)")
-                        .font(.footnote)
+                    Text(ShannonGeneratedStrings.yousuOwnTimeBudget(used: ownTime.budget.usedLabel))
+                        .font(.shannon(.footnote))
                         .monospacedDigit()
                         .foregroundStyle(palette.textSecondary)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("今日の予算、\(ShannonAutonomyFormat.yen(ownTime.budget.capYen))のうち\(ShannonAutonomyFormat.yen(ownTime.budget.spentYen))を使いました")
+                .accessibilityLabel(ShannonGeneratedStrings.yousuOwnTimeBudgetAccessibility(cap: ShannonAutonomyFormat.yen(ownTime.budget.capYen), spent: ShannonAutonomyFormat.yen(ownTime.budget.spentYen)))
             }
         }
     }
@@ -191,7 +219,7 @@ public struct ShannonNowView: View {
     // MARK: Her body
 
     private func bodySection(_ body: ShannonNowBodyDTO, palette: ShannonPalette) -> some View {
-        Section("体") {
+        Section(ShannonGeneratedStrings.yousuBodyTitle) {
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.medium) {
                 Image(systemName: body.known && body.present ? "desktopcomputer" : "desktopcomputer.trianglebadge.exclamationmark")
                     .foregroundStyle(palette.textSecondary)
@@ -199,12 +227,12 @@ public struct ShannonNowView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ShannonNowText.bodyLine(body))
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let camera = ShannonNowText.cameraLine(body) {
                         Text(camera)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                     }
                 }
@@ -218,16 +246,16 @@ public struct ShannonNowView: View {
     @ViewBuilder
     private func timelineSection(palette: ShannonPalette) -> some View {
         let events = model.timeline
-        Section("最近のできごと") {
+        Section(ShannonGeneratedStrings.yousuRecentTitle) {
             if events.isEmpty {
-                Text("まだありません")
-                    .font(.callout)
+                Text(ShannonGeneratedStrings.yousuRecentEmpty)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                     let day = ShannonNowText.dayTitle(event.at)
                     let startsDay = index == 0 || ShannonNowText.dayTitle(events[index - 1].at) != day
-                    ShannonNowEventRow(event: event, day: startsDay && !(index == 0 && day == "今日") ? day : nil, spokenDay: day, palette: palette)
+                    ShannonNowEventRow(event: event, day: startsDay && !(index == 0 && day == ShannonGeneratedStrings.yousuDayToday) ? day : nil, spokenDay: day, palette: palette)
                 }
             }
         }
@@ -246,27 +274,27 @@ struct ShannonNowEventRow: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             if let day {
                 Text(day)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityAddTraits(.isHeader)
             }
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(ShannonNowText.timeOfDay(event.at))
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .monospacedDigit()
                     .foregroundStyle(palette.textSecondary)
                 Image(systemName: event.symbolName)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.textSecondary)
                     .frame(width: 20)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(event.title)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textPrimary.opacity(0.85))
                     if let detail = event.detail {
                         Text(detail)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -292,7 +320,7 @@ struct ShannonNowWaitingPage: View {
                 row(item)
             }
         }
-        .navigationTitle("待っていること")
+        .navigationTitle(ShannonGeneratedStrings.yousuWaitingTitle)
     }
 
     @ViewBuilder
@@ -302,7 +330,7 @@ struct ShannonNowWaitingPage: View {
             if let openStudyPiece {
                 Button { openStudyPiece(String(item.id.dropFirst("piece-".count))) } label: { label(item, opens: true) }
                     .buttonStyle(.plain)
-                    .accessibilityHint("書斎で開きます")
+                    .accessibilityHint(ShannonGeneratedStrings.yousuWaitingOpenStudyHint)
             } else {
                 label(item, opens: false)
             }
@@ -316,7 +344,7 @@ struct ShannonNowWaitingPage: View {
             if let openApproval {
                 Button { openApproval(item) } label: { label(item, opens: true) }
                     .buttonStyle(.plain)
-                    .accessibilityHint("作業を開きます")
+                    .accessibilityHint(ShannonGeneratedStrings.yousuWaitingOpenTaskHint)
             } else {
                 label(item, opens: false)
             }
@@ -327,20 +355,20 @@ struct ShannonNowWaitingPage: View {
         HStack(spacing: ShannonSpacing.medium) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.kind.label)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(item.title)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.detail)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             if opens {
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }

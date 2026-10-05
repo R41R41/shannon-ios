@@ -17,7 +17,7 @@ struct DesktopPlanTimelineView: View {
         let entries = ShannonAgentPlanTimeline.entries(for: task)
         VStack(alignment: .leading, spacing: 0) {
             Text(ShannonAgentPlanTimeline.summary(for: task))
-                .font(.caption)
+                .font(.shannonDesktop(.caption))
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 6)
             ForEach(entries) { entry in
@@ -35,7 +35,7 @@ struct DesktopPlanTimelineView: View {
         let canExpand = isRunning && !entry.details.isEmpty
         let isExpanded = canExpand && !collapsedRunningIDs.contains(entry.id)
 
-        return HStack(alignment: .top, spacing: 8) {
+        return HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
             VStack(spacing: 0) {
                 node(entry).padding(.top, 5)
                 if !entry.isLast {
@@ -76,10 +76,10 @@ struct DesktopPlanTimelineView: View {
                     ForEach(Array(entry.details.enumerated()), id: \.offset) { _, detail in
                         Label {
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(detail.title).font(.callout)
+                                Text(detail.title).font(.shannonDesktop(.callout))
                                 if let text = detail.text, !text.isEmpty {
                                     Text(text)
-                                        .font(.caption)
+                                        .font(.shannonDesktop(.caption))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(3)
                                         .help(text)
@@ -97,8 +97,8 @@ struct DesktopPlanTimelineView: View {
             .padding(.vertical, isRunning ? 7 : 3)
             .background {
                 if isRunning {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12))
+                    RoundedRectangle(cornerRadius: ShannonDesktopRadius.small, style: .continuous)
+                        .fill(Color.shannonActionColor.opacity(0.12))
                 }
             }
             .padding(.bottom, entry.isLast ? 0 : 6)
@@ -116,7 +116,7 @@ struct DesktopPlanTimelineView: View {
                 Circle().fill(Color.shannonSuccess)
                 Image(systemName: "checkmark").font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
             case .running:
-                Circle().fill(Color.accentColor)
+                Circle().fill(Color.shannonActionColor)
                 Text("\(entry.number)").font(.system(size: 10, weight: .bold, design: .rounded)).foregroundStyle(.white)
             case .pending:
                 Circle().strokeBorder(Color.secondary.opacity(0.6), lineWidth: 1.2)

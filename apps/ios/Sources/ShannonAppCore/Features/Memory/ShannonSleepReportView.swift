@@ -11,7 +11,7 @@ struct ShannonSleepReportView: View {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraLarge) {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("\(report.dayKey) の睡眠", systemImage: "moon.stars.fill")
-                        .font(.title2.weight(.semibold))
+                        .font(.shannon(.title2).weight(.semibold))
                     Text("会話を振り返り、急いで結論にせず整理した結果です。")
                         .foregroundStyle(palette.textSecondary)
                 }
@@ -24,12 +24,12 @@ struct ShannonSleepReportView: View {
                 contradictionSection(palette)
                 if let review = report.commitmentReview {
                     VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                        Label("約束の点検", systemImage: "calendar.badge.checkmark").font(.title3.weight(.semibold))
+                        Label("約束の点検", systemImage: "calendar.badge.checkmark").font(.shannon(.title3).weight(.semibold))
                         Text("未完了 \(review.pending)件・完了 \(review.completed)件・取り消し \(review.dismissed)件")
                         Text("期限の確認が必要 \(review.needsDateClarification)件・時刻を過ぎた約束 \(review.overdue)件")
                             .foregroundStyle(palette.textSecondary)
                         Text("睡眠中に勝手に完了にはしません。変更は記憶の詳細から確認できます。")
-                            .font(.caption).foregroundStyle(palette.textSecondary)
+                            .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                     }
                     .padding(ShannonSpacing.large)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -54,14 +54,14 @@ struct ShannonSleepReportView: View {
         _ title: String, symbol: String, changes: [ShannonSleepChangeDTO], palette: ShannonPalette
     ) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-            Label(title, systemImage: symbol).font(.title3.weight(.semibold))
+            Label(title, systemImage: symbol).font(.shannon(.title3).weight(.semibold))
             if changes.isEmpty {
                 Text("今回はありません").foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(changes) { change in
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(change.text).font(.body.weight(.medium))
-                        Text(change.reason).font(.caption).foregroundStyle(palette.textSecondary)
+                        Text(change.text).font(.shannon(.body).weight(.medium))
+                        Text(change.reason).font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                     }
                     .padding(ShannonSpacing.large)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,18 +74,18 @@ struct ShannonSleepReportView: View {
     func contradictionSection(_ palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label("矛盾として保留したこと", systemImage: "arrow.left.arrow.right.circle.fill")
-                .font(.title3.weight(.semibold))
+                .font(.shannon(.title3).weight(.semibold))
             if report.contradictions.isEmpty {
                 Text("今回はありません").foregroundStyle(palette.textSecondary)
             } else {
                 ForEach(report.contradictions) { conflict in
                     VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                        Text("いまの理解").font(.caption.weight(.semibold)).foregroundStyle(palette.action)
+                        Text("いまの理解").font(.shannon(.caption).weight(.semibold)).foregroundStyle(palette.action)
                         Text(conflict.currentText)
                         Divider()
-                        Text("新しく見つけた表現").font(.caption.weight(.semibold)).foregroundStyle(palette.textPrimary)
+                        Text("新しく見つけた表現").font(.shannon(.caption).weight(.semibold)).foregroundStyle(palette.textPrimary)
                         Text(conflict.candidateText)
-                        Text(conflict.reason).font(.caption).foregroundStyle(palette.textSecondary)
+                        Text(conflict.reason).font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                     }
                     .padding(ShannonSpacing.large)
                     .background(palette.creationTint, in: RoundedRectangle(cornerRadius: ShannonShape.large))
@@ -102,9 +102,9 @@ struct MemoryErrorCard: View {
     var body: some View {
         HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(palette.danger)
-            Text(message).font(.callout)
+            Text(message).font(.shannon(.callout))
             Spacer()
-            Button("再試行", action: action).font(.callout.weight(.semibold)).foregroundStyle(palette.action)
+            Button("再試行", action: action).font(.shannon(.callout).weight(.semibold)).foregroundStyle(palette.action)
         }
         .padding(ShannonSpacing.large)
         .background(palette.dangerTint, in: RoundedRectangle(cornerRadius: ShannonShape.large))

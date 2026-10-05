@@ -25,23 +25,23 @@ struct DesktopComposer: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
             if !attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: ShannonDesktopSpacing.small) {
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, attachment in
                             HStack(spacing: 7) {
                                 Image(systemName: "doc.text")
                                     .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(attachment.name)
-                                        .font(.caption.weight(.medium))
+                                        .font(.shannonDesktop(.caption).weight(.medium))
                                         .lineLimit(1)
                                     Text(ByteCountFormatter.string(
                                         fromByteCount: Int64(attachment.text.utf8.count),
                                         countStyle: .file
                                     ))
-                                    .font(.caption2)
+                                    .font(.shannonDesktop(.caption2))
                                     .foregroundStyle(.secondary)
                                 }
                                 Button {
@@ -54,10 +54,10 @@ struct DesktopComposer: View {
                                 .buttonStyle(.plain)
                                 .help("添付を外す")
                             }
-                            .padding(.leading, 10)
+                            .padding(.leading, ShannonDesktopSpacing.medium)
                             .padding(.trailing, 7)
                             .padding(.vertical, 7)
-                            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
                         }
                     }
                 }
@@ -65,7 +65,7 @@ struct DesktopComposer: View {
 
             if let attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(Color.shannonAttention)
             }
 
@@ -73,7 +73,7 @@ struct DesktopComposer: View {
                 HStack(spacing: 7) {
                     Image(systemName: "globe")
                     Text("Webで調べる")
-                        .font(.caption.weight(.medium))
+                        .font(.shannonDesktop(.caption).weight(.medium))
                     Button {
                         usesWebSearch = false
                     } label: {
@@ -83,16 +83,16 @@ struct DesktopComposer: View {
                     .buttonStyle(.plain)
                     .help("Web検索を外す")
                 }
-                .foregroundStyle(Color.accentColor)
-                .padding(.horizontal, 10)
+                .foregroundStyle(Color.shannonActionColor)
+                .padding(.horizontal, ShannonDesktopSpacing.medium)
                 .padding(.vertical, 7)
-                .background(Color.accentColor.opacity(0.10), in: Capsule())
+                .background(Color.shannonActionColor.opacity(0.10), in: Capsule())
             }
 
             TextField("シャノンに話す", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...8)
-                .font(.body)
+                .font(.shannonDesktop(.body))
 
             HStack {
                 Menu {
@@ -116,7 +116,7 @@ struct DesktopComposer: View {
 
                 Spacer()
                 Text("⌘↩︎で送信")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.tertiary)
                 Button {
                     let selectedAttachments = attachments
@@ -141,7 +141,7 @@ struct DesktopComposer: View {
                 .keyboardShortcut(.return, modifiers: .command)
             }
         }
-        .padding(12)
+        .padding(ShannonDesktopSpacing.medium)
         .frame(maxWidth: 780)
         .frame(maxWidth: .infinity)
         .fileImporter(
@@ -178,34 +178,34 @@ struct DesktopTaskSection: View {
 
     var body: some View {
         if !tasks.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.medium) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(.title2.weight(.semibold))
-                    Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                    Text(title).font(.shannonDesktop(.title2).weight(.semibold))
+                    Text(subtitle).font(.shannonDesktop(.callout)).foregroundStyle(.secondary)
                 }
                 VStack(spacing: 0) {
                     ForEach(tasks) { task in
                         Button { select(task) } label: {
-                            HStack(spacing: 14) {
+                            HStack(spacing: ShannonDesktopSpacing.large) {
                                 Image(systemName: task.status.symbolName)
                                     .foregroundStyle(task.status == .waitingApproval ? Color.shannonAttention : .secondary)
                                     .frame(width: 20)
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
-                                        Text(task.title).font(.headline)
+                                        Text(task.title).font(.shannonDesktop(.headline))
                                         Text(task.stateName)
-                                            .font(.caption)
+                                            .font(.shannonDesktop(.caption))
                                             .foregroundStyle(.secondary)
                                     }
                                     Text(task.currentAction ?? task.summary)
-                                        .font(.callout)
+                                        .font(.shannonDesktop(.callout))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                     Label(
                                         ShannonDesktopConversationContext(task: task).title(in: threads),
                                         systemImage: "bubble.left"
                                     )
-                                    .font(.caption)
+                                    .font(.shannonDesktop(.caption))
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(1)
                                 }
@@ -217,16 +217,16 @@ struct DesktopTaskSection: View {
                                 Image(systemName: "chevron.right")
                                     .foregroundStyle(.tertiary)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, ShannonDesktopSpacing.large)
+                            .padding(.vertical, ShannonDesktopSpacing.medium)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .background(selectedTaskID == task.id ? Color.accentColor.opacity(0.08) : .clear)
+                        .background(selectedTaskID == task.id ? Color.shannonActionColor.opacity(0.08) : .clear)
                         if task.id != tasks.last?.id { Divider().padding(.leading, 48) }
                     }
                 }
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
             }
         }
     }
@@ -244,16 +244,16 @@ struct DesktopInspectorSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.shannonDesktop(.caption).weight(.semibold))
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(ShannonDesktopSpacing.medium)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous)
                 .stroke(Color.primary.opacity(0.055), lineWidth: 0.75)
         }
     }
@@ -281,7 +281,7 @@ struct DesktopExpandableText: View {
                     }
                 }
                 .buttonStyle(.link)
-                .font(.caption)
+                .font(.shannonDesktop(.caption))
             }
         }
     }
@@ -293,11 +293,11 @@ struct DesktopTaskStageRail: View {
     var body: some View {
         HStack(spacing: 5) {
             ForEach(progress) { item in
-                VStack(spacing: 4) {
+                VStack(spacing: ShannonDesktopSpacing.extraSmall) {
                     Image(systemName: symbolName(for: item))
                         .foregroundStyle(color(for: item))
                     Text(item.stage.japaneseName)
-                        .font(.caption2)
+                        .font(.shannonDesktop(.caption2))
                         .foregroundStyle(item.state == .current ? .primary : .secondary)
                         .lineLimit(1)
                 }
@@ -305,9 +305,9 @@ struct DesktopTaskStageRail: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, ShannonDesktopSpacing.small)
         .padding(.horizontal, 6)
-        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
     }
 
     private func symbolName(for item: ShannonAgentTaskStageProgress) -> String {
@@ -321,7 +321,7 @@ struct DesktopTaskStageRail: View {
     private func color(for item: ShannonAgentTaskStageProgress) -> Color {
         switch item.state {
         case .pending: .secondary
-        case .current: .accentColor
+        case .current: Color.shannonActionColor
         case .completed: .shannonSuccess
         }
     }
@@ -341,7 +341,7 @@ extension ShannonAgentEventTone {
     var desktopColor: Color {
         switch self {
         case .neutral: .secondary
-        case .progress: .accentColor
+        case .progress: Color.shannonActionColor
         case .success: Color.shannonSuccess
         case .warning: Color.shannonAttention
         case .error: Color.shannonDanger

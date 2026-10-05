@@ -60,10 +60,11 @@ The rule of 「シャノンのいま」 applies: only the owner's own paired dev
 | --- | --- |
 | `hours` | The window applied, ending at `generatedAt`. |
 | `points` | Oldest first. Empty when nothing was recorded in the window (also on a server that never recorded). |
+| `carryIn` | Optional (added 2026-10-05, additive). The newest point stored before the window, in the same shape as a point. It still holds at the window's start, so a client draws it from the start of the window to the first point; a window with no point of its own (she was dormant all of it) still shows her known mood. Absent when nothing was stored before the window, and on a server that predates it. It is not counted in `points`, `maxPoints` or `downsampled`. |
 | `downsampled` | More than `maxPoints` (300) points were stored in the window. The answer keeps the first and the last point and every point at which the face or the present kind changed, and spreads the rest of the budget evenly over the points between; only when the changes alone exceed 300 are they thinned evenly too. |
 | `limits` | The bounds above, so that a client need not hard-code them. |
 
-A point stands for the state from its `at` until the next point. A gap longer than `everyMinutes` means no write happened (she was dormant, or nobody talked to her); a client draws it as unchanged or as a gap, not as missing data.
+A point stands for the state from its `at` until the next point (and `carryIn` from the start of the window until the first point). A gap longer than `everyMinutes` means no write happened (she was dormant, or nobody talked to her); a client draws it as unchanged or as a gap, not as missing data.
 
 **A client must tolerate values it does not know**: an `expression`, a `feeling`, a `kind`. It shows a neutral wording for them and never fails the whole view.
 

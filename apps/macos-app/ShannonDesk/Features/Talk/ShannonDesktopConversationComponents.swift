@@ -14,9 +14,9 @@ struct DesktopMessageView: View {
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(message.text)
                         .textSelection(.enabled)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal, ShannonDesktopSpacing.large)
+                        .padding(.vertical, ShannonDesktopSpacing.medium)
+                        .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.large, style: .continuous))
 
                     HStack(spacing: 5) {
                         Text(message.sentAt.formatted(date: .omitted, time: .shortened))
@@ -26,9 +26,9 @@ struct DesktopMessageView: View {
                                 .buttonStyle(.borderless)
                         }
                     }
-                    .font(.caption2)
+                    .font(.shannonDesktop(.caption2))
                     .foregroundStyle(message.deliveryState == .failed ? Color.shannonDanger : .secondary)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, ShannonDesktopSpacing.extraSmall)
                 }
             }
             .modifier(DesktopConversationOutlineAnchorModifier(
@@ -36,15 +36,15 @@ struct DesktopMessageView: View {
             ))
         } else {
             VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 8) {
+                HStack(spacing: ShannonDesktopSpacing.small) {
                     ShannonAvatarView(expression: message.emotionSnapshot?.expression ?? .neutral, size: 28)
                     Text("シャノン")
-                        .font(.callout.weight(.semibold))
+                        .font(.shannonDesktop(.callout).weight(.semibold))
                     Text((message.emotionSnapshot?.face ?? ShannonFace(expression: .neutral)).japaneseName)
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                     Text("· \(message.sentAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button {
@@ -58,7 +58,7 @@ struct DesktopMessageView: View {
                 }
                 DesktopMarkdownView(source: message.text, messageID: message.id)
                 if !message.artifacts.isEmpty {
-                    VStack(spacing: 8) {
+                    VStack(spacing: ShannonDesktopSpacing.small) {
                         ForEach(Array(message.artifacts.enumerated()), id: \.offset) { _, artifact in
                             DesktopArtifactCard(artifact: artifact)
                         }
@@ -71,23 +71,23 @@ struct DesktopMessageView: View {
                 if let attribution = message.sourceAttribution,
                    let sourceURL = safeSourceURL(attribution.url) {
                     Link(destination: sourceURL) {
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
                             Image(systemName: "link")
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Color.shannonActionColor)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("出典 · \(attribution.title)")
-                                    .font(.caption.weight(.semibold))
+                                    .font(.shannonDesktop(.caption).weight(.semibold))
                                 Text("選んだ理由: \(attribution.reason)")
-                                    .font(.caption2)
+                                    .font(.shannonDesktop(.caption2))
                                     .foregroundStyle(.secondary)
                             }
                             Spacer(minLength: 0)
                             Image(systemName: "arrow.up.right")
-                                .font(.caption2)
+                                .font(.shannonDesktop(.caption2))
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(10)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                        .padding(ShannonDesktopSpacing.medium)
+                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("出典 \(attribution.title)。選んだ理由 \(attribution.reason)")

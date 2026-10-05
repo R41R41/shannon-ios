@@ -19,12 +19,12 @@ struct DesktopConversationOutlineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: ShannonDesktopSpacing.medium) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("会話の目次")
-                        .font(.headline)
+                        .font(.shannonDesktop(.headline))
                     Text("依頼と返答の見出し")
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -34,24 +34,24 @@ struct DesktopConversationOutlineView: View {
                 .buttonStyle(.borderless)
                 .help("補助パネルを閉じる")
             }
-            .padding(14)
+            .padding(ShannonDesktopSpacing.large)
 
             Divider()
 
             if let summary = visibleSummary {
                 DisclosureGroup {
                     Text(summary)
-                        .font(.callout)
+                        .font(.shannonDesktop(.callout))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
+                        .padding(.top, ShannonDesktopSpacing.extraSmall)
                 } label: {
                     Label("会話の要約", systemImage: "text.quote")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannonDesktop(.caption).weight(.semibold))
                 }
-                .padding(12)
-                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
-                .padding(8)
+                .padding(ShannonDesktopSpacing.medium)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium))
+                .padding(ShannonDesktopSpacing.small)
 
                 Divider()
             }
@@ -70,24 +70,24 @@ struct DesktopConversationOutlineView: View {
                                 Button {
                                     select(entry)
                                 } label: {
-                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    HStack(alignment: .firstTextBaseline, spacing: ShannonDesktopSpacing.small) {
                                         Image(systemName: entry.kind == .request ? "person.fill" : "textformat")
-                                            .font(.caption)
-                                            .foregroundStyle(entry.kind == .request ? Color.secondary : Color.accentColor)
+                                            .font(.shannonDesktop(.caption))
+                                            .foregroundStyle(entry.kind == .request ? Color.secondary : Color.shannonActionColor)
                                             .frame(width: 16)
                                         Text(entry.title)
-                                            .font(entry.kind == .request ? .callout.weight(.medium) : .callout)
+                                            .font(entry.kind == .request ? .shannonDesktop(.callout).weight(.medium) : .shannonDesktop(.callout))
                                             .lineLimit(2)
                                             .multilineTextAlignment(.leading)
                                         Spacer(minLength: 0)
                                     }
                                     .padding(.leading, entry.kind == .heading ? CGFloat(max(0, entry.level - 1)) * 12 : 0)
-                                    .padding(.horizontal, 10)
+                                    .padding(.horizontal, ShannonDesktopSpacing.medium)
                                     .padding(.vertical, 7)
                                     .contentShape(Rectangle())
                                     .background(
-                                        activeEntryID == entry.id ? Color.accentColor.opacity(0.12) : .clear,
-                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        activeEntryID == entry.id ? Color.shannonActionColor.opacity(0.12) : .clear,
+                                        in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small, style: .continuous)
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -152,39 +152,39 @@ struct DesktopArtifactCard: View {
         Button {
             isPreviewing = true
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 Image(systemName: ShannonGeneratedArtifact.isMarkdown(artifact) ? "doc.richtext" : "doc.text")
-                    .font(.title3)
-                    .foregroundStyle(Color.accentColor)
+                    .font(.shannonDesktop(.title3))
+                    .foregroundStyle(Color.shannonActionColor)
                     .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
+                    .background(Color.shannonActionColor.opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.small))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(safeFilename)
-                        .font(.callout.weight(.medium))
+                        .font(.shannonDesktop(.callout).weight(.medium))
                         .lineLimit(1)
                     Text(artifact.summary ?? ByteCountFormatter.string(
                         fromByteCount: Int64(artifact.content.utf8.count),
                         countStyle: .file
                     ))
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 }
                 Spacer()
                 Text("プレビュー")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.tertiary)
             }
             .padding(11)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.75)
         }
         .sheet(isPresented: $isPreviewing) {
@@ -206,24 +206,24 @@ struct DesktopArtifactPreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(safeFilename).font(.headline)
+                    Text(safeFilename).font(.shannonDesktop(.headline))
                     Text("保存先を選ぶまでMacには書き込みません")
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if let exportMessage {
                     Text(exportMessage)
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(exportMessage == "保存しました" ? Color.secondary : Color.shannonAttention)
                 }
                 Button("閉じる") { dismiss() }
                 Button("保存…") { isExporting = true }
                     .buttonStyle(.borderedProminent)
             }
-            .padding(16)
+            .padding(ShannonDesktopSpacing.large)
             Divider()
             ScrollView {
                 Group {
@@ -231,12 +231,12 @@ struct DesktopArtifactPreview: View {
                         DesktopMarkdownView(source: artifact.content)
                     } else {
                         Text(artifact.content)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.shannonDesktop(.body).monospaced())
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(24)
+                .padding(ShannonDesktopSpacing.extraLarge)
             }
             .background(Color(nsColor: .textBackgroundColor))
         }
@@ -268,7 +268,7 @@ struct DesktopMarkdownView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.medium) {
             ForEach(Array(ShannonMessageMarkdown.blocks(from: source).enumerated()), id: \.offset) { index, block in
                 blockView(block)
                     .modifier(DesktopConversationOutlineAnchorModifier(id: anchorID(for: block, index: index)))
@@ -288,22 +288,22 @@ struct DesktopMarkdownView: View {
         switch block {
         case .heading(let level, let text):
             Text(ShannonMessageMarkdown.render(text))
-                .font(level <= 2 ? .title3.weight(.semibold) : .headline)
+                .font(level <= 2 ? .shannonDesktop(.title3).weight(.semibold) : .shannonDesktop(.headline))
                 .padding(.top, level <= 2 ? 6 : 2)
         case .bullet(let text):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: ShannonDesktopSpacing.small) {
                 Text("•")
                 Text(ShannonMessageMarkdown.render(text))
             }
         case .numbered(let marker, let text):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: ShannonDesktopSpacing.small) {
                 Text(marker).foregroundStyle(.secondary)
                 Text(ShannonMessageMarkdown.render(text))
             }
         case .quote(let text):
-            HStack(spacing: 10) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.accentColor)
+                    .fill(Color.shannonActionColor)
                     .frame(width: 3)
                 Text(ShannonMessageMarkdown.render(text))
                     .foregroundStyle(.secondary)

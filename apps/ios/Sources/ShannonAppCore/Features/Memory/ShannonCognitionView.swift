@@ -40,7 +40,7 @@ struct ShannonCognitionView: View {
                     }
                 }
                 Text("ここに表示するのは目的・想起・実行結果の要約です。非公開の思考過程は保存しません。")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
 
@@ -104,18 +104,18 @@ struct ShannonCognitionManagementLabel: View {
                 .foregroundStyle(palette.brandPresence)
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text("継続中の目的")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                     .foregroundStyle(palette.textPrimary)
                 Text(summary)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Text("確認・一時停止・完了・再開")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)
@@ -145,17 +145,17 @@ struct ShannonCognitiveIntentRow: View {
         HStack(alignment: .top, spacing: ShannonSpacing.small) {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text(intent.title)
-                    .font(.body.weight(.semibold))
+                    .font(.shannon(.body).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 if intent.desiredOutcome != intent.title {
                     Text(intent.desiredOutcome)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Label(intent.status.japaneseName, systemImage: intent.status.symbolName)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(statusColor)
                 if let work = intent.verifiedWork {
                     verifiedWorkView(work)
@@ -163,10 +163,10 @@ struct ShannonCognitiveIntentRow: View {
                 if let nextStep = intent.nextStep, !nextStep.isEmpty {
                     VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                         Label("次の一手", systemImage: "arrow.right.circle")
-                            .font(.caption.weight(.semibold))
+                            .font(.shannon(.caption).weight(.semibold))
                             .foregroundStyle(palette.action)
                         Text(nextStep)
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -174,29 +174,29 @@ struct ShannonCognitiveIntentRow: View {
                 if let planSteps = intent.planSteps, !planSteps.isEmpty {
                     VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                         Label("計画案", systemImage: "list.number")
-                            .font(.caption.weight(.semibold))
+                            .font(.shannon(.caption).weight(.semibold))
                             .foregroundStyle(palette.brandPresence)
                         ForEach(Array(planSteps.prefix(5).enumerated()), id: \.offset) { index, step in
                             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.extraSmall) {
                                 Text("\(index + 1)")
-                                    .font(.caption2.monospacedDigit().weight(.semibold))
+                                    .font(.shannon(.caption2).monospacedDigit().weight(.semibold))
                                     .foregroundStyle(palette.brandPresence)
                                     .frame(width: 18, height: 18)
                                     .background(palette.intelligenceSoft, in: Circle())
                                 Text(step)
-                                    .font(.caption)
+                                    .font(.shannon(.caption))
                                     .foregroundStyle(palette.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Text("計画は提案です。実行・完了は検証済みの記録で確認します。")
-                            .font(.caption2)
+                            .font(.shannon(.caption2))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Text("更新 \(displayDate(intent.updatedAt))")
-                    .font(.caption2)
+                    .font(.shannon(.caption2))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: ShannonSpacing.small)
@@ -229,15 +229,15 @@ struct ShannonCognitiveIntentRow: View {
     private func verifiedWorkView(_ work: ShannonVerifiedWorkDTO) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             Label("検証済みの作業 · \(work.statusLabel)", systemImage: "checkmark.seal")
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(work.testsFailed > 0 ? palette.danger : palette.success)
             Text(work.title)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             if let currentAction = work.currentAction, !currentAction.isEmpty {
                 Text("いま: \(currentAction)")
-                    .font(.caption2)
+                    .font(.shannon(.caption2))
                     .foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -254,11 +254,11 @@ struct ShannonCognitiveIntentRow: View {
                     .accessibilityLabel("検証済み作業の進捗")
                     .accessibilityValue("\(work.completedPlanSteps) / \(work.totalPlanSteps)")
                 Text("計画 \(work.completedPlanSteps)/\(work.totalPlanSteps)・テスト成功 \(work.testsPassed)・失敗 \(work.testsFailed)")
-                    .font(.caption2.monospacedDigit())
+                    .font(.shannon(.caption2).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
             Text("Agent Hostの記録から同期。目的の完了は自動では確定しません。")
-                .font(.caption2)
+                .font(.shannon(.caption2))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -306,15 +306,15 @@ struct ShannonCognitiveCycleRow: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             HStack(alignment: .firstTextBaseline) {
                 Label(cycle.actionLabel, systemImage: cycle.outcome == "failed" ? "exclamationmark.circle" : "checkmark.circle")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(cycle.outcome == "failed" ? palette.danger : palette.success)
                 Spacer()
                 Text(displayDate(cycle.occurredAt))
-                    .font(.caption2)
+                    .font(.shannon(.caption2))
                     .foregroundStyle(palette.textSecondary)
             }
             Text(cycle.summary)
-                .font(.body)
+                .font(.shannon(.body))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: ShannonSpacing.small) {
@@ -323,7 +323,7 @@ struct ShannonCognitiveCycleRow: View {
                     Label("記憶 \(cycle.recalledMemoryIDs.count)件", systemImage: "brain")
                 }
             }
-            .font(.caption)
+            .font(.shannon(.caption))
             .foregroundStyle(palette.textSecondary)
         }
         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)

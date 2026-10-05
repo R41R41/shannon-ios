@@ -14,7 +14,7 @@ enum ShannonAgentTaskOverviewFilter: String, CaseIterable, Identifiable {
         case .attention: "対応待ち"
         case .active: "進行中"
         case .proposed: "提案"
-        case .finished: "終了"
+        case .finished: ShannonGeneratedStrings.taskGroupFinished
         }
     }
 }
@@ -98,9 +98,9 @@ struct ShannonAgentTaskOverviewView: View {
             }
 
             taskSection("ピン留め", detail: "大切な作業", tasks: projection.pinned, palette: palette)
-            taskSection("いま", detail: "作業中・許可待ち・続きが必要・一時停止中", tasks: projection.active, palette: palette)
-            taskSection("これから", detail: "シャノンからの提案。開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
-            taskSection("終了", detail: "完了・失敗・中止の結果と変更内容", tasks: projection.finished, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupNow, detail: "作業中・許可待ち・続きが必要・一時停止中", tasks: projection.active, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupNext, detail: "シャノンからの提案。開始するかはあなたが決めます", tasks: projection.proposed, palette: palette)
+            taskSection(ShannonGeneratedStrings.taskGroupFinished, detail: "完了・失敗・中止の結果と変更内容", tasks: projection.finished, palette: palette)
         }
 #if os(iOS)
         .listStyle(.insetGrouped)
@@ -124,12 +124,12 @@ struct ShannonAgentTaskOverviewView: View {
     private func overviewHeader(palette: ShannonPalette) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
-                Text("作業")
-                    .font(.largeTitle.bold())
+                Text(ShannonGeneratedStrings.navWork)
+                    .font(.shannon(.largeTitle).bold())
                     .foregroundStyle(palette.textPrimary)
                     .textCase(nil)
                 Text("目指していること、現在地、次の一手をまとめて確認できます。")
-                    .font(.callout)
+                    .font(.shannon(.callout))
                     .foregroundStyle(palette.textSecondary)
                     .textCase(nil)
             }
@@ -191,25 +191,25 @@ struct ShannonAgentTaskOverviewView: View {
                     HStack(alignment: .firstTextBaseline) {
                         if task.isPinned {
                             Image(systemName: "pin.fill")
-                                .font(.caption2)
+                                .font(.shannon(.caption2))
                                 .foregroundStyle(palette.textSecondary)
                         }
                         Text(task.title)
-                            .font(.headline)
+                            .font(.shannon(.headline))
                             .foregroundStyle(palette.textPrimary)
                             .lineLimit(2)
                         Spacer(minLength: ShannonSpacing.small)
                         Text(task.stateName)
-                            .font(.caption2.weight(.semibold))
+                            .font(.shannon(.caption2).weight(.semibold))
                             .foregroundStyle(palette.textSecondary)
                     }
                     Text(task.nextAction.map { "次：\($0)" } ?? task.currentAction ?? task.summary)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(2)
                     if let project = task.projectHint {
                         Label(project, systemImage: "folder")
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                     }
                     if let progress = task.progressFraction {
@@ -246,8 +246,8 @@ struct ShannonAgentTaskOverviewView: View {
                     ForEach(projection.archived) { task in
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(task.title).font(.headline)
-                                Text(task.summary).font(.callout).foregroundStyle(palette.textSecondary).lineLimit(2)
+                                Text(task.title).font(.shannon(.headline))
+                                Text(task.summary).font(.shannon(.callout)).foregroundStyle(palette.textSecondary).lineLimit(2)
                             }
                             Spacer()
                             Button("戻す") {

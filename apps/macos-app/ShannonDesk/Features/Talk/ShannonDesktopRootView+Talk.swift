@@ -83,7 +83,7 @@ extension ShannonDesktopRootView {
                                 .id("organize-session-\(session.id)")
                         }
                         if conversation.isSending {
-                            HStack(spacing: 8) {
+                            HStack(spacing: ShannonDesktopSpacing.small) {
                                 ShannonAvatarView(expression: .thinking, size: 26)
                                 ProgressView().controlSize(.small)
                                 Text(conversation.isSearchingMemory ? "記憶を探しています…" : "考えている…").foregroundStyle(.secondary)
@@ -116,19 +116,19 @@ extension ShannonDesktopRootView {
     }
 
     var conversationBottomOverlay: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ShannonDesktopSpacing.small) {
             if let error = conversation.errorMessage {
-                HStack(spacing: 8) {
+                HStack(spacing: ShannonDesktopSpacing.small) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color.shannonAttention)
-                    Text(error).font(.callout)
+                    Text(error).font(.shannonDesktop(.callout))
                     Spacer()
                     Button("閉じる") { conversation.dismissError() }
                         .buttonStyle(.borderless)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, ShannonDesktopSpacing.large)
+                .padding(.vertical, ShannonDesktopSpacing.small)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ShannonDesktopRadius.medium, style: .continuous))
             }
 
             DesktopComposer(model: conversation)
@@ -166,22 +166,22 @@ extension ShannonDesktopRootView {
     }
 
     var talkHeader: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: ShannonDesktopSpacing.medium) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(conversation.selectedThread?.title ?? "新しいトーク")
-                    .font(.headline)
+                    .font(.shannonDesktop(.headline))
                     .lineLimit(1)
                 Text("会話と作業はiPhoneと同じシャノンへ続きます")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(Color.shannonIntelligenceColor)
                     .frame(width: 7, height: 7)
                 Text(conversation.currentFace.japaneseName)
-                    .font(.callout)
+                    .font(.shannonDesktop(.callout))
                     .foregroundStyle(.secondary)
             }
             Button {

@@ -65,7 +65,7 @@ extension ShannonDesktopRootView {
             }
         }
         .formStyle(.grouped)
-        .padding(24)
+        .padding(ShannonDesktopSpacing.extraLarge)
         .navigationTitle("設定")
         .sheet(isPresented: $showsBody) {
             NavigationStack { ShannonBodyScreen(memory: memory) }

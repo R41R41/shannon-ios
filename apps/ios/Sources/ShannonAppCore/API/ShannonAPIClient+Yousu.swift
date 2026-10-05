@@ -36,9 +36,18 @@ public protocol ShannonYousuServing: Sendable {
     func loadShannonOwnTime(scopeKey: String) async throws -> ShannonNowOwnTimeDTO
     func loadShannonStudyWaiting(scopeKey: String) async throws -> ShannonNowStudyDTO
     func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO
+    /// `GET /v1/shannon/mood-history?hours=` (24 or 168). Only the owner's paired device may read it.
+    func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO
     /// Whose 運用 a reading is: the server, the connection's scope and this pairing. Nil while this app has no
     /// way to be let in (not paired and no developer token): then nothing about 運用 is remembered or marked.
     func opsReportScope(scopeKey: String) -> String?
+}
+
+extension ShannonYousuServing {
+    /// A reader without the mood history answers as an older server does: the trend is left out.
+    public func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
+        throw ShannonAPIError.rejected(status: 404)
+    }
 }
 
 extension ShannonAPIClient: ShannonYousuServing {
@@ -94,6 +103,12 @@ extension ShannonAPIClient: ShannonYousuServing {
 
     public func loadShannonRecentActivity(scopeKey: String) async throws -> ShannonAutonomyActivityDTO {
         try await loadAutonomyActivity(scopeKey: scopeKey, days: 2)
+    }
+
+    public func loadShannonMoodHistory(scopeKey: String, hours: Int) async throws -> ShannonMoodHistoryDTO {
+        try await response(ShannonMoodHistoryDTO.self, for: autonomyGet(
+            "/v1/shannon/mood-history", scopeKey: scopeKey, extra: [URLQueryItem(name: "hours", value: String(hours))]
+        ))
     }
 
     /// `Sat, 03 Oct 2026 07:00:00 GMT` (RFC 9110 IMF-fixdate).

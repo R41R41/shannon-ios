@@ -51,9 +51,9 @@ extension ShannonConversationView {
                     } label: {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("声")
+                                Text(ShannonGeneratedStrings.settingsSectionVoice)
                                 Text("次の通話から反映")
-                                    .font(.footnote)
+                                    .font(.shannon(.footnote))
                                     .foregroundStyle(palette.textSecondary)
                             }
                         } icon: {
@@ -92,7 +92,7 @@ extension ShannonConversationView {
                 Section {
                     if let connectionModel {
                         settingsValueButton(
-                            title: "接続",
+                            title: ShannonGeneratedStrings.settingsConnection,
                             value: ShannonSettingsSummary.connectionLabel(connectionModel.status),
                             symbol: "link",
                             palette: palette
@@ -109,13 +109,13 @@ extension ShannonConversationView {
             .navigationDestination(isPresented: $settingsShowsOps) { adminOpsPage }
             .scrollContentBackground(.hidden)
             .background(palette.canvas)
-            .navigationTitle("設定")
+            .navigationTitle(ShannonGeneratedStrings.navSettings)
 #if os(iOS)
             .navigationBarTitleDisplayMode(.large)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("閉じる") { showsSettings = false }
+                    Button(ShannonGeneratedStrings.commonClose) { showsSettings = false }
                 }
             }
         }
@@ -187,22 +187,22 @@ extension ShannonConversationView {
             HStack(spacing: ShannonSpacing.medium) {
                 ShannonChatAvatarView(expression: model.presentFace.expression, size: 56)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("シャノン")
-                        .font(.title3.weight(.semibold))
+                    Text(ShannonGeneratedStrings.appName)
+                        .font(.shannon(.title3).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     Text(ShannonSettingsSummary.profileSubtitle(
                         voice: settingsVoiceLabel,
                         provider: settingsSpeechProvider
                     ))
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
                     Text("いま：\(model.presentFace.japaneseName)")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 }
                 Spacer(minLength: ShannonSpacing.small)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityHidden(true)
             }
@@ -230,7 +230,7 @@ extension ShannonConversationView {
                         .foregroundStyle(palette.textSecondary)
                         .multilineTextAlignment(.trailing)
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                         .accessibilityHidden(true)
                 }

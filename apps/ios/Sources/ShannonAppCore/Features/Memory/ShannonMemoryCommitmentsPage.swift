@@ -20,7 +20,7 @@ struct ShannonMemoryCommitmentsPage: View {
                             Text("目的と認知履歴")
                                 .foregroundStyle(palette.textPrimary)
                             Text(intentSummary)
-                                .font(.caption)
+                                .font(.shannon(.caption))
                                 .foregroundStyle(palette.textSecondary)
                         }
                     } icon: {
@@ -39,7 +39,7 @@ struct ShannonMemoryCommitmentsPage: View {
                                 .foregroundStyle(palette.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Label(intent.status.japaneseName, systemImage: intent.status.symbolName)
-                                .font(.caption)
+                                .font(.shannon(.caption))
                                 .foregroundStyle(intent.status == .active ? palette.action : palette.attention)
                         }
                         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)

@@ -22,7 +22,7 @@ public struct ShannonAppLookSettingsSection: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(ShannonAppLookCopy.toggleTitle)
                         Text(ShannonAppLookCopy.statusText(enabled: enabled, permission: permission, hasCamera: hasCamera))
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("app-look-status")
                     }

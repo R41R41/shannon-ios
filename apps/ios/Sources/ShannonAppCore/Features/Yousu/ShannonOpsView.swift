@@ -64,7 +64,7 @@ public struct ShannonOpsView: View {
         Section {
             if let message = model.unreachableMessage {
                 Label(message, systemImage: "wifi.exclamationmark")
-                    .font(.callout)
+                    .font(.shannon(.callout))
             } else if !model.didLoad {
                 HStack(spacing: ShannonSpacing.medium) {
                     ProgressView()
@@ -72,8 +72,8 @@ public struct ShannonOpsView: View {
                 }
                 .accessibilityElement(children: .combine)
             } else {
-                Text("運用の報告は、まだ届いていません。")
-                    .font(.callout)
+                Text(ShannonGeneratedStrings.opsNotReported)
+                    .font(.shannon(.callout))
                     .foregroundStyle(.secondary)
             }
         }
@@ -87,30 +87,30 @@ public struct ShannonOpsView: View {
         Section {
             if let message = model.unreachableMessage {
                 ShannonOpsBanner(
-                    title: "サーバーに届きません", message: "\(message) 下は、最後に読めた報告です。", palette: palette
+                    title: ShannonGeneratedStrings.opsAttentionUnreachable, message: "\(message) 下は、最後に読めた報告です。", palette: palette
                 )
             } else if !current {
                 ShannonOpsBanner(
-                    title: "報告が届いていません",
+                    title: ShannonGeneratedStrings.opsAttentionNoReport,
                     message: "最後の報告は \(receivedLabel(withAge: true)) です。サーバーか旧ランタイムが止まっているかもしれません。",
                     palette: palette
                 )
             }
             ShannonOpsReportLine(
-                received: "\(current ? "最新の報告" : "最後の報告") \(receivedLabel(withAge: current))",
+                received: "\(current ? ShannonGeneratedStrings.opsReportLatest : ShannonGeneratedStrings.opsReportLast) \(receivedLabel(withAge: current))",
                 release: snapshot.runtime.release,
                 started: snapshot.runtime.startedAt.isEmpty ? nil : ShannonYousuTime.clock(snapshot.runtime.startedAt)
             )
             notice(palette: palette)
             if !model.openCommands.isEmpty {
                 Label("結果を待っている操作が \(model.openCommands.count) 件あります", systemImage: "hourglass")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
         }
 
         if !groups.services.isEmpty {
-            Section(current ? "サービス" : "サービス（最後の報告のときの状態）") {
+            Section(current ? ShannonGeneratedStrings.opsSectionServices : "\(ShannonGeneratedStrings.opsSectionServices)（最後の報告のときの状態）") {
                 ForEach(groups.services) { serviceRow($0, current: current, palette: palette) }
             }
         }
@@ -126,9 +126,9 @@ public struct ShannonOpsView: View {
             }
         }
         if snapshot.services.isEmpty {
-            Section("サービス") {
-                Text("報告されているサービスはありません。")
-                    .font(.callout)
+            Section(ShannonGeneratedStrings.opsSectionServices) {
+                Text(ShannonGeneratedStrings.opsServicesEmpty)
+                    .font(.shannon(.callout))
                     .foregroundStyle(.secondary)
             }
         }
@@ -147,30 +147,30 @@ public struct ShannonOpsView: View {
                     ) { confirming = ShannonOpsConfirmation(action: $0) }
                 }
             } header: {
-                Text("スケジュール")
+                Text(ShannonGeneratedStrings.opsSectionSchedules)
             } footer: {
                 if model.allowed().scheduleRun {
-                    Text("「今すぐ実行」は、その予定の処理をいま動かします。実際に公開の場（X（Twitter）や YouTube など）へ投稿・返信されます（今日すでに投稿済みでも、もう一度出ます）。")
+                    Text(ShannonGeneratedStrings.opsScheduleNote)
                 }
             }
         }
 
         if let kpi = snapshot.kpi {
-            Section("今日の数字") {
-                LabeledContent("投稿", value: "\(kpi.postsToday) / \(kpi.postsPlanned)")
-                LabeledContent("トークン", value: kpi.tokensToday.formatted(.number.locale(Locale(identifier: "ja_JP"))))
-                LabeledContent("API 呼出", value: "\(kpi.apiCallsToday.formatted(.number.locale(Locale(identifier: "ja_JP")))) 回")
+            Section(ShannonGeneratedStrings.opsSectionKpi) {
+                LabeledContent(ShannonGeneratedStrings.opsKpiPosts, value: "\(kpi.postsToday) / \(kpi.postsPlanned)")
+                LabeledContent(ShannonGeneratedStrings.opsKpiTokens, value: kpi.tokensToday.formatted(.number.locale(Locale(identifier: "ja_JP"))))
+                LabeledContent(ShannonGeneratedStrings.opsKpiApiCalls, value: "\(kpi.apiCallsToday.formatted(.number.locale(Locale(identifier: "ja_JP")))) 回")
             }
         }
 
         if !snapshot.skills.isEmpty {
             Section {
-                DisclosureGroup("スキル（\(snapshot.skills.count) 件）", isExpanded: $showsSkills) {
+                DisclosureGroup(ShannonGeneratedStrings.opsSkills(count: String(snapshot.skills.count)), isExpanded: $showsSkills) {
                     ForEach(snapshot.skills) { skill in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(skill.name).font(.callout.weight(.medium))
+                            Text(skill.name).font(.shannon(.callout).weight(.medium))
                             if !skill.description.isEmpty {
-                                Text(skill.description).font(.footnote).foregroundStyle(.secondary)
+                                Text(skill.description).font(.shannon(.footnote)).foregroundStyle(.secondary)
                             }
                         }
                         .accessibilityElement(children: .combine)
@@ -182,21 +182,21 @@ public struct ShannonOpsView: View {
         if model.commandsSupported {
             Section {
                 if model.commands.isEmpty {
-                    Text("まだ操作はありません。")
-                        .font(.callout)
+                    Text(ShannonGeneratedStrings.opsCommandsEmpty)
+                        .font(.shannon(.callout))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.commands) { ShannonOpsCommandRow(command: $0, palette: palette) }
                 }
             } header: {
-                Text("操作の記録")
+                Text(ShannonGeneratedStrings.opsSectionCommands)
             } footer: {
-                Text("操作は、押してから 5 分以内に実行されなければ取り消され、あとから実行されることはありません。結果が届かなかった操作も、やり直されません。もう一度行うときは、状態を見てから、あらためて押してください。")
+                Text(ShannonGeneratedStrings.opsCommandsFooter)
             }
         } else {
             Section {
-                Text("いまは見るだけです。開始・停止などの操作は、本体の側で止められています。")
-                    .font(.footnote)
+                Text(ShannonGeneratedStrings.opsReadOnly)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
         }
@@ -204,7 +204,7 @@ public struct ShannonOpsView: View {
         if !current, model.commandsSupported {
             Section {
                 Text("報告が届くまで、操作はできません")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .listRowBackground(Color.clear)
@@ -238,7 +238,7 @@ public struct ShannonOpsView: View {
         let servers = model.minebotStartServers(for: service)
         return ShannonOpsRow(
             title: ShannonOpsText.serviceName(service),
-            detail: [service.detail, servers?.isEmpty == true ? "起動するには、先に Minecraft サーバーを開始してください" : nil]
+            detail: [service.detail, servers?.isEmpty == true ? ShannonGeneratedStrings.opsMinebotNeedServer : nil]
                 .compactMap { $0 }.joined(separator: "・"),
             status: service.status,
             statusLabel: current ? ShannonOpsText.statusLabel(service.status) : ShannonOpsText.staleStatusLabel(service.status),

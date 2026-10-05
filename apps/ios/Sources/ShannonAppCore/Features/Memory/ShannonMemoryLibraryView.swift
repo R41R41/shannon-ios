@@ -29,7 +29,7 @@ struct ShannonMemoryLibraryView: View {
                     }
                     if section == .hidden {
                         Text(ShannonMemoryWithholdingCopy.hiddenList)
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                     }
                 }
@@ -61,24 +61,24 @@ struct ShannonMemoryLibraryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
             Text(item.text)
-                .font(.body)
+                .font(.shannon(.body))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             if item.status != .active {
                 Label(item.status == .rejected ? "事実ではないと指定済み" : "会話に使わない記憶",
                       systemImage: item.status == .rejected ? "xmark.seal" : "eye.slash")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             } else if let commitment = item.commitment {
                 Label(commitment.statusLabel, systemImage: "calendar.badge.clock")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.action)
                 Text("期限：\(commitment.dueAt.map(displayDate) ?? commitment.dueDate ?? commitment.dueHint ?? "未定")")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             } else {
                 Label(item.kind.japaneseName, systemImage: item.kind.symbolName)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
         }
@@ -97,18 +97,18 @@ struct ShannonMemoryManagementLabel: View {
                 .foregroundStyle(palette.action)
             VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                 Text("記憶と約束")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                     .foregroundStyle(palette.textPrimary)
                 Text(summary)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Text("内容の訂正・完了・取り消し・復元")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)

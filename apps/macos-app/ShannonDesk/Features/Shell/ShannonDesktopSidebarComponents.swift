@@ -23,19 +23,19 @@ struct DesktopSidebarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
                 Image(systemName: symbol)
                     .frame(width: 18)
                 Text(title)
                 Spacer()
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(.caption.monospacedDigit())
+                        .font(.shannonDesktop(.caption).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 36)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .frame(height: ShannonDesktopMetrics.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -50,25 +50,25 @@ struct DesktopWorkStrip: View {
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 10) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 Label(task.stateName, systemImage: task.stateSymbolName)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannonDesktop(.caption).weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Divider().frame(height: 18)
                 Text(task.currentAction ?? task.summary)
-                    .font(.callout)
+                    .font(.shannonDesktop(.callout))
                     .lineLimit(1)
                 Spacer(minLength: 12)
                 Text("次: \(ShannonDesktopWorkProjection.nextAction(for: task))")
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 38)
+            .padding(.horizontal, ShannonDesktopSpacing.large)
+            .frame(minHeight: ShannonDesktopMetrics.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

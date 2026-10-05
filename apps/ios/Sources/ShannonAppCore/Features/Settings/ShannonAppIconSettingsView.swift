@@ -25,10 +25,10 @@ public struct ShannonAppIconSettingsView: View {
 
                     VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                         Text("アイコンを選ぶ")
-                            .font(.headline)
+                            .font(.shannon(.headline))
                             .foregroundStyle(palette.textPrimary)
                         Text("L06が標準です。選択はこの端末に保存されます。")
-                            .font(.subheadline)
+                            .font(.shannon(.subheadline))
                             .foregroundStyle(palette.textSecondary)
                     }
 
@@ -77,14 +77,14 @@ public struct ShannonAppIconSettingsView: View {
             )
             VStack(alignment: .leading, spacing: 3) {
                 Text("現在のアイコン")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                 Text(model.activeTitle)
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                 if model.activeChoice == .defaultChoice {
                     Text("標準・おすすめ")
-                        .font(.subheadline)
+                        .font(.shannon(.subheadline))
                         .foregroundStyle(palette.action)
                 }
             }
@@ -113,18 +113,18 @@ public struct ShannonAppIconSettingsView: View {
                     )
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.title2)
+                            .font(.shannon(.title2))
                             .foregroundStyle(palette.action)
                             .background(.background, in: Circle())
                             .offset(x: 5, y: -5)
                     }
                 }
                 Text(choice.levelName)
-                    .font(.headline.monospaced())
+                    .font(.shannon(.headline).monospaced())
                 Text(choice.japaneseName)
-                    .font(.callout.weight(.semibold))
+                    .font(.shannon(.callout).weight(.semibold))
                 Text(choice.detail)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)

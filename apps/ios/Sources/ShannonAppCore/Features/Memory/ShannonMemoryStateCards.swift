@@ -11,14 +11,14 @@ struct ShannonCurrentStateCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Label("いまのシャノン", systemImage: "brain.head.profile.fill")
-                        .font(.title3.weight(.semibold))
+                        .font(.shannon(.title3).weight(.semibold))
                     Text("更新 \(displayDate(state.updatedAt))")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                 }
                 Spacer()
                 Text("v\(state.version)")
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.action)
             }
             HStack(spacing: ShannonSpacing.medium) {
@@ -26,10 +26,10 @@ struct ShannonCurrentStateCard: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(currentMood.label)
-                        .font(.title2.weight(.semibold))
+                        .font(.shannon(.title2).weight(.semibold))
                     if let cause = currentMood.cause {
                         Text(cause)
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -40,18 +40,18 @@ struct ShannonCurrentStateCard: View {
             if let focus = dailyMind {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("今日の関心")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.action)
                     Text(focus.topic)
-                        .font(.title3.weight(.medium))
+                        .font(.shannon(.title3).weight(.medium))
                         .foregroundStyle(palette.textPrimary)
                     Text(focus.reason)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                     if let title = focus.sourceTitle, let url = focus.sourceURL, let sourceURL = URL(string: url) {
                         Link(destination: sourceURL) {
                             Label(title, systemImage: "arrow.up.right")
-                                .font(.caption.weight(.medium))
+                                .font(.shannon(.caption).weight(.medium))
                                 .lineLimit(1)
                         }
                     }
@@ -64,13 +64,13 @@ struct ShannonCurrentStateCard: View {
             if !state.activeMemories.isEmpty {
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     Text("頭に浮かんでいること")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                     ForEach(state.activeMemories.prefix(2)) { memory in
                         HStack(alignment: .top, spacing: ShannonSpacing.small) {
                             Circle().fill(palette.action).frame(width: 6, height: 6).padding(.top, 6)
                             Text(memory.summary)
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .foregroundStyle(palette.textPrimary)
                                 .lineLimit(2)
                         }
@@ -95,7 +95,7 @@ struct ShannonCurrentStateCard: View {
                 .padding(.top, ShannonSpacing.medium)
             } label: {
                 Text("状態の詳細")
-                    .font(.callout.weight(.medium))
+                    .font(.shannon(.callout).weight(.medium))
                     .foregroundStyle(palette.textSecondary)
             }
             .tint(palette.action)
@@ -118,10 +118,10 @@ struct ShannonCurrentStateCard: View {
     func stateMeter(_ title: String, value: Double) -> some View {
         VStack(spacing: 5) {
             HStack {
-                Text(title).font(.callout)
+                Text(title).font(.shannon(.callout))
                 Spacer()
                 Text(value.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
             ProgressView(value: min(1, max(0, value))).tint(palette.action)
@@ -139,7 +139,7 @@ struct MemorySimpleSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
-            Label(title, systemImage: symbol).font(.title3.weight(.semibold))
+            Label(title, systemImage: symbol).font(.shannon(.title3).weight(.semibold))
             ForEach(values, id: \.self) { value in
                 Text(value)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,17 +158,17 @@ struct KnowledgeAnswerCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(answer.question)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.action)
                 Spacer()
                 if answer.confirmed {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.action)
                 }
             }
             Text(answer.answer)
-                .font(.body)
+                .font(.shannon(.body))
                 .foregroundStyle(palette.textPrimary)
                 .multilineTextAlignment(.leading)
             HStack {
@@ -176,10 +176,10 @@ struct KnowledgeAnswerCard: View {
                 Spacer()
                 Text(answer.confidence.formatted(.percent.precision(.fractionLength(0))))
             }
-            .font(.caption)
+            .font(.shannon(.caption))
             .foregroundStyle(palette.textSecondary)
             Text("更新 \(displayDate(answer.updatedAt))")
-                .font(.caption2)
+                .font(.shannon(.caption2))
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.large)

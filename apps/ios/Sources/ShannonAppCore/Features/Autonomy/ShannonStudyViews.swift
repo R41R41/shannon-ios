@@ -8,9 +8,9 @@ struct ShannonStudyEntryLabel: View {
     var body: some View {
         HStack(spacing: ShannonSpacing.medium) {
             Image(systemName: "books.vertical").foregroundStyle(tint).accessibilityHidden(true)
-            Text("書斎")
+            Text(ShannonGeneratedStrings.navStudy)
             Spacer(minLength: 0)
-            Text(study.summary).font(.callout).foregroundStyle(.secondary)
+            Text(study.summary).font(.shannon(.callout)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum, alignment: .leading)
         .contentShape(Rectangle())
@@ -33,7 +33,7 @@ public struct ShannonStudyPage: View {
             if let message = study.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonDanger)
                 }
             }
@@ -41,7 +41,7 @@ public struct ShannonStudyPage: View {
             section("メモ", pieces: study.notes, footer: "読んだものについて、シャノンが自分の言葉で書いたメモです。")
             section("しまったもの", pieces: study.putAway, footer: nil)
         }
-        .navigationTitle("書斎")
+        .navigationTitle(ShannonGeneratedStrings.navStudy)
         .overlay {
             if study.pieces.isEmpty, !study.isLoading, study.errorMessage == nil {
                 ContentUnavailableView(
@@ -88,17 +88,17 @@ struct ShannonStudyPieceRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(piece.displayTitle)
-                    .font(.body.weight(.medium))
+                    .font(.shannon(.body).weight(.medium))
                     .foregroundStyle(piece.hidden ? .secondary : .primary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let excerpt = piece.excerpt, !piece.hidden {
                     Text(excerpt)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 Text(piece.hidden ? "\(piece.kindLabel) ・ まだ見せてもらっていません" : piece.statusLine)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -126,7 +126,7 @@ public struct ShannonStudyPiecePage: View {
             if let message = study.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonDanger)
                 }
             }
@@ -138,7 +138,7 @@ public struct ShannonStudyPiecePage: View {
                 if piece.canPutAway { putAwaySection(piece) }
             }
         }
-        .navigationTitle(study.details[pieceID]?.card.displayTitle ?? "書斎")
+        .navigationTitle(study.details[pieceID]?.card.displayTitle ?? ShannonGeneratedStrings.navStudy)
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -166,18 +166,18 @@ public struct ShannonStudyPiecePage: View {
         Section {
             VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                 Text(piece.card.displayTitle)
-                    .font(.title2.weight(.semibold))
+                    .font(.shannon(.title2).weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 Text(piece.card.hidden ? "\(piece.kindLabel) ・ \(piece.statusLabel)" : piece.card.statusLine)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, ShannonSpacing.extraSmall)
             .accessibilityElement(children: .combine)
             if let body = piece.body, !piece.hidden {
                 Text(body)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .lineSpacing(6)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
@@ -226,10 +226,10 @@ public struct ShannonStudyPiecePage: View {
         Section {
             ForEach(piece.versions.reversed()) { version in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("第\(version.version)稿")
-                        .font(.subheadline.weight(.semibold))
+                    Text(ShannonGeneratedStrings.studyVersion(version: String(version.version)))
+                        .font(.shannon(.subheadline).weight(.semibold))
                     Text(version.changeNote)
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.vertical, ShannonSpacing.extraSmall)
@@ -256,7 +256,7 @@ public struct ShannonStudyPiecePage: View {
                             sentReaction = false
                         } label: {
                             Label(choice.label, systemImage: isSelected ? "\(choice.symbolName).fill" : choice.symbolName)
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
                         }
                         .buttonStyle(.bordered)
@@ -265,20 +265,20 @@ public struct ShannonStudyPiecePage: View {
                         .accessibilityIdentifier("study-reaction-\(choice.id)")
                     }
                 }
-                TextField("ひとこと（なくても送れます）", text: $comment, axis: .vertical)
+                TextField(ShannonGeneratedStrings.studyReactionPlaceholder, text: $comment, axis: .vertical)
                     .lineLimit(2...6)
                     .frame(minHeight: ShannonTouchTarget.minimum)
                     .accessibilityLabel("感想のひとこと")
                     .accessibilityHint("\(ShannonStudyLimits.comment)文字まで。書かなくても送れます")
                 if comment.count > ShannonStudyLimits.comment {
                     Text("\(ShannonStudyLimits.comment)文字までです（いま\(comment.count)文字）。")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonAttention)
                 }
                 HStack {
                     if sentReaction {
                         Label("感想を送りました", systemImage: "checkmark.circle")
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -303,15 +303,15 @@ public struct ShannonStudyPiecePage: View {
             }
             ForEach(piece.feedback.reversed()) { feedback in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(feedback.reactionLabel)（第\(feedback.version)稿に）")
-                        .font(.subheadline.weight(.semibold))
+                    Text("\(feedback.reactionLabel)（\(ShannonGeneratedStrings.studyVersion(version: String(feedback.version)))に）")
+                        .font(.shannon(.subheadline).weight(.semibold))
                     if !feedback.comment.isEmpty {
                         Text(feedback.comment)
-                            .font(.callout)
+                            .font(.shannon(.callout))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(feedback.statusLabel)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, ShannonSpacing.extraSmall)

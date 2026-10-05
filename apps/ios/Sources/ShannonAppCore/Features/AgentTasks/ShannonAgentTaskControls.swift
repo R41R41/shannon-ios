@@ -29,7 +29,7 @@ struct AgentTaskControlBar: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: ShannonSpacing.extraSmall) {
             TextField("シャノンへの追加の指示", text: $text, axis: .vertical)
-                .font(.body)
+                .font(.shannon(.body))
                 .lineLimit(1...4)
                 .padding(.horizontal, 10)
                 .frame(minHeight: ShannonTouchTarget.minimum)
@@ -77,7 +77,7 @@ struct AgentTaskStatusBadge: View {
 
     var body: some View {
         Label(task.stateName, systemImage: task.needsOwnerToContinue ? task.stateSymbolName : task.stage.symbolName)
-            .font(.caption2.weight(.bold))
+            .font(.shannon(.caption2).weight(.bold))
             .foregroundStyle(foreground)
             .padding(.horizontal, ShannonSpacing.small)
             .frame(minHeight: 25)

@@ -9,13 +9,13 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 ## 件数
 
-機能は全部で 134 件。
+機能は全部で 141 件。
 
 | 画面 | ○ ある | △ 一部 | × ない | — 当てはまらない | 予定 | ？ 不明 |
 |---|---:|---:|---:|---:|---:|---:|
-| iOS | 114 | 3 | 8 | 9 | 0 | 0 |
-| macOS | 64 | 17 | 40 | 4 | 9 | 0 |
-| Windows | 63 | 22 | 42 | 6 | 0 | 1 |
+| iOS | 117 | 3 | 9 | 10 | 2 | 0 |
+| macOS | 64 | 20 | 41 | 4 | 12 | 0 |
+| Windows | 68 | 21 | 41 | 6 | 4 | 1 |
 
 ## 構成（入口）（`structure`）
 
@@ -60,7 +60,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `talk.dictation` | **声で入力する（音声入力）** 入力欄に、声で文字を入れる。 | ○ | × | × |
 | `talk.dialogue-mode` | **姿と向き合って話す表示（からだ）** トークの表示を、履歴の一覧と、シャノンの姿と向き合う表示とで切り替える。広い画面では、姿が会話の右の補助パネル（目次・現在地と切り替え）に立つ。姿は「すがた」の設定に従う。 | ○ | × | △ |
 | `talk.sentence-stream` | **返事が文ごとに届く** 返事を待たずに、最初の一文から出す（声や字幕向け）。 | × | × | △ |
-| `talk.reply-read-aloud` | **文字の返事を声で読み上げる** 文字で話したときの返事を、声でも読む。 | × | × | ○ |
+| `talk.reply-read-aloud` | **文字の返事を声で読み上げる（既定は全部）** 文字で話したときの返事を、声でも読む。既定は全部を読む（長さの上限なし）。 | × | × | ○ |
 | `talk.outline-summary` | **会話の目次と要約**【デスクトップの追加】 長い会話の見出しを横に並べ、押すとその場所へ移る。 | × | ○ | × |
 | `talk.artifact-export` | **作ってくれた文書をファイルに保存**【デスクトップの追加】 文書を、選んだ場所へ保存する。 | × | ○ | × |
 
@@ -81,6 +81,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `talk.sentence-stream` iOS（×）: トークは、返事が全部できてから出す。
 - `talk.sentence-stream` Windows（△）: 身体の窓だけ。管理画面のトークは一度に出る。
 - `talk.reply-read-aloud` iOS（×）: 文字のトークの返事を読み上げる設定は見つからない（声は音声会話とイヤホンの話しかけだけ）。
+- `talk.reply-read-aloud` Windows（○）: 2026-10-05 12:00 に 350 字の上限を外し、既定で全部を読むようにした（体のスレッドで所有者が決めた）。Windows body thread report 2026-10-05。
 
 ## 声の会話（`voice`）
 
@@ -100,6 +101,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `voice.task-in-call` | **通話中に作業を頼む** 声で作業を頼むと、作業の提案が出て、押して始められる。 | ○ | × | ○ |
 | `voice.location-in-call` | **通話中にいまいる場所を伝える**【iPhone だけ】 許可した場合だけ、いまいる場所を通話に添える。 | ○ | × | × |
 | `voice.diagnostics` | **音声の診断** 声の処理にかかった時間を見て、コピーする。 | ○ | × | × |
+| `voice.wake-name` | **「シャノン」と呼んで話しかける**【デスクトップの追加】 名前を呼ばれたら聞き始める（ADR-0002 の追記。カメラは常に取らない）。置き場所は 設定 › 声 と、待っている間の体の足もとの印。 | × | × | 予定 |
 
 - `voice.conversation` macOS（×）: Mac には音声会話が無い（ShannonGeminiLiveSessionModelUnavailable）。
 - `voice.conversation` Windows（△）: 身体の窓だけ（「話す」「切る」）。管理画面には無い。
@@ -111,6 +113,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `voice.background-continue` Windows（△）: 窓を隠しても続く。無言で切れるまでが 5 分で、iPhone の 1 分と違う。
 - `voice.minimised-call` Windows（△）: 身体の窓と管理画面が別の窓なので、通話しながら管理画面を見られる。小さくする操作そのものは無い。
 - `voice.location-in-call` Windows（×）: README の「まだのこと」に、声の会話での位置は無いとある。
+- `voice.wake-name` iOS（×）: iPhone と Mac は、Windows で測ってから決める（2026-10-05）。
+- `voice.wake-name` macOS（×）: iPhone と Mac は、Windows で測ってから決める（2026-10-05）。
+- `voice.wake-name` Windows（予定）: ブランチ `shannon-desktop（体のスレッド）`。方法 A（Silero VAD と ReazonSpeech の hotword）を所有者が採った（2026-10-05）。常駐に入れる前に、体が話している最中と音楽での誤反応を測り、見た目を所有者が確かめる。Windows body thread report 2026-10-05。
 
 ## 作業（`tasks`）
 
@@ -127,14 +132,19 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `tasks.proposal-start` | **作業の提案を始める・やめる** 会話で頼んだ作業の提案を見て、始めるか決める。 | ○ | ○ | ○ |
 | `tasks.notice-in-talk` | **トークの上の作業の知らせ** 許可待ちや結果を、トークの上に小さく出し、押すと作業を開く。 | ○ | △ | △ |
 | `tasks.open-origin-thread` | **作業から元の会話を開く** 作業を頼んだトークへ戻る。 | ○ | ○ | ○ |
-| `tasks.hold-to-confirm` | **長く効く許可は、長押しで決める** 「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。 | ○ | × | × |
+| `tasks.hold-to-confirm` | **長く効く許可は、長押しで決める** 「この作業中」と、ネットワーク・権限の「今回だけ許可」は、押し続けて決める（0.6 秒）。キーボードや支援技術では、同じ文の確認で決める。 | ○ | × | ○ |
+| `tasks.needs-owner` | **続きが必要** 実行先が持ち主の対応を待って止まった作業を「続きが必要」と見分け（pauseReason、無ければ currentAction）、橙の印と次の一手を出す。 | ○ | △ | ○ |
 
 - `tasks.search-filter-pin-archive` macOS（△）: 開発の画面にだけ検索・絞り込み・ピン留め・アーカイブがある。「作業全体」には無い。
 - `tasks.approval` macOS（△）: 「今回だけ許可」と「許可しない」だけ。「この作業中は許可」が無い。
+- `tasks.approval` Windows（○）: 今回だけ許可／この作業中／許可しない（W5）。Windows body thread report 2026-10-05。
 - `tasks.notice-in-talk` macOS（△）: サイドバーの件数と、トークの横の「現在地」で分かる。トークの上の知らせは無い。
 - `tasks.notice-in-talk` Windows（△）: Windows の通知と、身体のしぐさで知らせる。管理画面のトークの上には出ない。
 - `tasks.hold-to-confirm` macOS（×）: ボタンを 1 回押すだけ。決定（2026-10-03）で、Mac も長押しにする。
-- `tasks.hold-to-confirm` Windows（×）: ボタンを 1 回押すだけ。決定（2026-10-03）で、Windows も長押しにする。
+- `tasks.hold-to-confirm` Windows（○）: 0.6 秒押し続けて決める: 「この作業中」のすべてと、外部接続・権限の「今回だけ許可」（知らない種類も）。クリック・キーボード・スクリーンリーダーでは、iPhone と同じ文の確認。動きを減らす設定では「押し続けています… N%」。運用の操作も、窓の中の確認で同じ形（W5。ソースに入り、所有者が見た目を確かめてから常駐アプリへ。04:15 に起動し直した）。Windows body thread report 2026-10-05。
+- `tasks.needs-owner` iOS（○）: 作業の現在地に「次にあなたがすること」の枠。トークの上の知らせ「続きが必要：〈題名〉」。
+- `tasks.needs-owner` macOS（△）: 「続きが必要」の作業を、注意の要る作業として数え、状態の名前を出す。次の一手の枠と通知は無い（通知は A13）。
+- `tasks.needs-owner` Windows（○）: 「続きが必要です」の枠と次の一手、橙の印、OS の通知（W5）。Windows body thread report 2026-10-05。
 
 ## 自律活動（`autonomy`）
 
@@ -150,6 +160,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `autonomy.model-choices` | **使うモデル** 何にどのモデルを使っているかを見る。 | ○ | ○ | ○ |
 | `autonomy.activity-record` | **したことの記録** シャノンが自分からしたことを、日ごとに読む（書き換えも消去もできない）。 | ○ | ○ | ○ |
 
+- `autonomy.proposals` iOS（○）: 確認の言葉は、決まった「「〈題名〉」を作業として始めますか？」／「作業として始める」（2026-10-05）にまだなっていない（いまは「この提案を開始しますか？」／「開始する」）。
+- `autonomy.proposals` macOS（○）: 確認の言葉は、決まった「「〈題名〉」を作業として始めますか？」／「作業として始める」（2026-10-05）にまだなっていない（いまは「この提案を開始しますか？」／「開始する」）。
+- `autonomy.proposals` Windows（○）: 始める前に確認する（W5。「「〈題名〉」を作業として始めますか？」と目的・触れる所、「作業として始める」）。Windows body thread report 2026-10-05。
+
 ## 書斎（`study`）
 
 決まった構成での場所: シャノン › 書斎
@@ -161,6 +175,11 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `study.reaction` | **感想を返す** 感想の種類を選び、ひとことを添えて送る。 | ○ | ○ | ○ |
 | `study.put-away` | **しまうよう伝える** 作品をしまうよう、シャノンに伝える（文章と記録は残る）。 | ○ | ○ | ○ |
 | `study.open-from-talk` | **トークから作品を開く** シャノンが見せてくれた物語を、トークの中の札から開く。 | ○ | ○ | × |
+| `study.tools` | **書斎を道具で使う** シャノンが会話と自分の時間の中で、自分の書斎の作品を読み・書き足す（道具。自分のものなので承認は要らない）。 | 予定 | 予定 | 予定 |
+
+- `study.tools` iOS（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。アプリで見るのは、いまの書斎の画面。
+- `study.tools` macOS（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。
+- `study.tools` Windows（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。管理画面の書斎で読む。
 
 ## 頭の中（記憶）（`memory`）
 
@@ -190,12 +209,20 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `yousu.now` | **シャノンのいま** 気分、残っている気持ち、自分の時間にしていること、体のようす、最近のできごと（見た・触れられた・話しかけた）を 1 画面で見る。 | ○ | × | △ |
 | `yousu.waiting` | **待っていること** 感想待ち・判断待ち・許可待ちを、1 か所に集める。 | ○ | × | △ |
 | `yousu.recent-events` | **最近のできごとの記録** 部屋を見た・断った、触れられた、話しかけてどう届いたか、を時刻順に読む。 | ○ | × | △ |
+| `yousu.mood-history` | **気分の記録** シャノンの気分の記録（14 日分）を本体から読む（GET /v1/shannon/mood-history。所有者の端末だけ）。 | ○ | △ | ○ |
+| `yousu.mood-trend` | **気分の推移** 気分の記録を、気分の明るさ（実線・青）／元気さ（長い破線・橙）／心の開き（点線・緑）の 3 本の段の線で見る。24時間／7日 の切り替えと凡例。画面に数字は出さない。読み上げは 明るめ／ふつう／低め（所有者の決定、2026-10-05）。 | ○ | △ | ○ |
 
 - `yousu.now` iOS（○）: 「シャノン」の先頭のカードから開く。シャノンのいまだけ（運用の切り替えは無くした。A4・A5）。
 - `yousu.now` macOS（×）: ブランチは iPhone の入口だけを足している。Mac のサイドバーには入口が無い。
 - `yousu.now` Windows（△）: 身体が「いま」を読んで顔としぐさに出す。一覧で読む画面は無い。
 - `yousu.waiting` Windows（△）: 身体が、判断待ちの作業と見せたい物語をしぐさで知らせる。一覧は無い。
 - `yousu.recent-events` Windows（△）: カメラで見た・断った記録だけが設定にある（この PC の中の記録）。触れ合いと話しかけの記録は無い。
+- `yousu.mood-history` iOS（○）: 24 時間と 7 日を読む。403・404 のときは「気分の推移」を出さない。ほかの失敗（500・429・届かない・読み取れない）は区画を残して「読めませんでした」（前に読めた線は残す）。端末の中には記録しない。
+- `yousu.mood-history` macOS（△）: 共通の ようす の画面で読む。Mac のサイドバーに ようす の入口が入るのは A10。
+- `yousu.mood-history` Windows（○）: 本体の記録を読み、読めないときは PC の中の記録に戻ってその旨を出す（Windows だけ）。evidence のファイルは 2026-10-03 に読んだ presence を読む所で、読む所のファイル名は知らせに無い。Windows body thread report 2026-10-05。
+- `yousu.mood-trend` iOS（○）: シャノン › ようす の、気持ちのカードのすぐ下。
+- `yousu.mood-trend` macOS（△）: 共通の ようす の画面で、気持ちのカードの横に広く出す。Mac の ようす の入口は A10。
+- `yousu.mood-trend` Windows（○）: 13:06 に入った（同じ段の線・線の形・言葉）。evidence のファイル名は知らせに無い（入口のファイルを書いた）。Windows body thread report 2026-10-05。
 
 ## 運用（`ops`）
 
@@ -214,8 +241,11 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 - `ops.status` iOS（○）: 設定 › 管理 › 運用（A5）。
 - `ops.service-control` iOS（○）: iPhone は確認の画面で長押しして決める。 設定 › 管理 › 運用（A5）。
+- `ops.service-control` Windows（○）: 窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。
 - `ops.minebot-start` iOS（○）: 設定 › 管理 › 運用（A5）。
+- `ops.minebot-start` Windows（○）: 窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。
 - `ops.schedule-run` iOS（○）: 設定 › 管理 › 運用（A5）。
+- `ops.schedule-run` Windows（○）: 窓の中の確認（iPhone と同じ文）で、決定ボタン「長押しで開始／停止／起動／実行」を押し続けて決める。短く押すと「ボタンを押し続けると決まります。」（W5）。Windows body thread report 2026-10-05。
 - `ops.kpi-skills` iOS（○）: 設定 › 管理 › 運用（A5）。
 - `ops.command-record` iOS（○）: 設定 › 管理 › 運用（A5）。
 - `ops.minebot-task` iOS（○）: 設定 › 管理 › 運用（A5）。
@@ -234,6 +264,7 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | `body.presence-on-body` | **体に「いま」が出る** 気分、残っている気持ち、自分の時間にしていることが、体の顔としぐさに出る。 | ○ | × | ○ |
 | `body.layout` | **映し方（全身・上半身）と大きさ・位置** 体のどこを映すかと、大きさ・位置を変える。 | ○ | △ | △ |
 | `body.idle-gestures` | **何もしていない時のしぐさ** 気分・時刻・していることに合わせて、自分からしぐさをする。 | ○ | △ | ○ |
+| `body.touch-parts` | **触れた部位を見分ける** 体のページの当たり判定で、どこに・どう触れたか（頭・髪・頬・肩・手・触れられたくない所など）を見分け、受け取り方はシャノンが決める（ADR-0005）。 | 予定 | 予定 | 予定 |
 
 - `body.live2d` iOS（○）: トークの向き合う表示に大きく立つ。空のトークの小さな姿と音声会話にも出る。別の「からだ」の画面は A6 で無くした。
 - `body.live2d` macOS（△）: 設定 › すがた の「からだを開く」のシートで見るだけ。トークの会話の横に出すのは A15。
@@ -247,6 +278,9 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `body.layout` Windows（△）: 大きさ（40〜500%、画面いっぱい）と置き場所。映し方の切り替えは無い。
 - `body.idle-gestures` iOS（○）: 体のページのしぐさ。
 - `body.idle-gestures` macOS（△）: 体のページのしぐさは出るが、見られるのは「からだを開く」のシートだけ。
+- `body.touch-parts` iOS（予定）: ブランチ `未定`。体のページを当たり判定の入った版に替え、触れたことの取り決めに部位・触り方・親を足すとき（受け取るのは所有者の許可を取ってから）。
+- `body.touch-parts` macOS（予定）: ブランチ `未定`。iPhone と同じ体のページ。トークの横に姿が立つ A15 のあと。
+- `body.touch-parts` Windows（予定）: ブランチ `未定`。当たり判定のメッシュは、体のページ（modelUpdatedAt 2026-10-05T03:26:23Z）に入り、常駐に入った（12:31）。まだ使っていない。Windows body thread report 2026-10-05。
 
 ## 触る（`touch`）
 
@@ -365,12 +399,12 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 | id | 機能 | iOS | macOS | Windows |
 |---|---|:-:|:-:|:-:|
 | `notifications.push` | **通知** 新しい許可待ちの作業、シャノンからの話、結果を、通知で知らせる。 | ○ | × | △ |
-| `notifications.badge` | **未確認の数** 未確認の作業と未読の話の数を、アイコンと入口に出す。 | ○ | ○ | △ |
+| `notifications.badge` | **未確認の数** 未確認の作業と未読の話の数を、アイコンと入口に出す。 | ○ | ○ | ○ |
 | `notifications.open-target` | **通知から、その作業やトークを開く** 通知を押すと、そのものが開く。 | ○ | — | ○ |
 
 - `notifications.push` macOS（×）: Mac のアプリには通知のコードが無い。
-- `notifications.push` Windows（△）: 新しい判断待ちの作業と、身体を隠している間の「シャノンから」。作業の結果の通知は無い。
-- `notifications.badge` Windows（△）: 「シャノンから」の印だけ。作業の件数は出ない。
+- `notifications.push` Windows（△）: 新しい判断待ちの作業、続きが必要な作業（題「続きが必要な作業があります」、本文「〈題名〉：〈次の一手〉」。作業 id × pauseSequence ごとに 1 回、押すとその作業を開く）、身体を隠している間の「シャノンから」。作業の結果の通知は無い。Windows body thread report 2026-10-05。
+- `notifications.badge` Windows（○）: サイドバーの「作業」の数 = 許可待ち＋続きが必要（読み上げ「あなたを待っている作業 N 件」）と、「シャノンから」の印。体の吹き出しは許可待ちだけ。Windows body thread report 2026-10-05。
 - `notifications.open-target` macOS（—）: 通知そのものが無い（notifications.push）。
 
 ## 配信（TestFlight）（`delivery`）
@@ -384,6 +418,18 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 
 - `delivery.testflight` Windows（—）: Apple の配信の仕組み。Windows アプリの配り方（release/ のフォルダー）とは別。
 - `delivery.request-release` Windows（—）: Apple のアプリの配信。
+
+## 専用フォルダ（`folder`）
+
+決まった構成での場所: 設定 › 専用フォルダ（デスクトップ）。したことは シャノン › 自律活動 の記録
+
+| id | 機能 | iOS | macOS | Windows |
+|---|---|:-:|:-:|:-:|
+| `folder.tools` | **専用フォルダを道具で使う**【デスクトップの追加】 シャノンが自分の専用フォルダ（Windows の PC と Mac）を読み・直す（道具。上書きの前に屑かごへ。取り決めは docs/host-folder-contract.md の v2）。 | — | 予定 | 予定 |
+
+- `folder.tools` iOS（—）: フォルダは PC の中。iPhone では、したことの記録で読む。
+- `folder.tools` macOS（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。Mac の SwiftUI のアプリには専用フォルダがまだ無い（desktop.folder-host）。
+- `folder.tools` Windows（予定）: ブランチ `codex/shannon/own-study-and-folder-tools`。サーバーで作業中。Windows のフォルダの仕組みを取り決めの v2（読む・直す・待ち受け）にする必要がある（体のスレッド）。
 
 ## デスクトップだけのもの（`desktop`）
 
@@ -417,3 +463,10 @@ Apple 側（iOS・macOS）は `5943c29`（2026-10-05）のコード、Windows �
 - `desktop.pc-presence` macOS（予定）: ブランチ `未定`。デスクトップの体を SwiftUI で作るときに入れる。
 - `desktop.menu-shortcuts` iOS（—）: iPhone にはメニューバーが無い。
 - `desktop.menu-shortcuts` Windows（△）: Enter で送信、Shift+Enter で改行、Ctrl+ホイールで大きさ。画面を移る近道は無い。
+
+## 作らないもの
+
+作らないと所有者が決めたもの。行を足さない。どの画面にも出さない。検証は、名前と aliases を、全角・半角、大文字・小文字、空白と区切りを無視して、行（id、名前、説明、各画面の note・reason）と文（key、文、note）から探す。
+
+- **同調率**（2026-10-05。別の呼び方: 同調度、シンクロ率、sync rate）: 所有者の決定。UI にも出さない（体のスレッドへ伝えた）。
+- **判断の内訳**（2026-10-05。別の呼び方: 判断内訳、decision breakdown）: 所有者の決定。UI にも出さない（体のスレッドへ伝えた）。

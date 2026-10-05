@@ -29,12 +29,12 @@ struct ShannonTypingIndicator: View {
                 ShannonChatAvatarView(expression: expression, size: 54)
                 VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                     HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
-                        Text(isSearchingMemory ? "記憶を探しています…" : "考えている…")
-                            .font(.callout)
+                        Text(isSearchingMemory ? ShannonGeneratedStrings.talkSearchingMemory : ShannonGeneratedStrings.talkThinking)
+                            .font(.shannon(.callout))
                             .foregroundStyle(palette.textSecondary)
                         if let label = ShannonThinkingElapsed.label(seconds: elapsed) {
                             Text(label)
-                                .font(.caption.monospacedDigit())
+                                .font(.shannon(.caption).monospacedDigit())
                                 .foregroundStyle(palette.textSecondary)
                                 .contentTransition(reduceMotion ? .identity : .numericText(value: Double(elapsed)))
                         }

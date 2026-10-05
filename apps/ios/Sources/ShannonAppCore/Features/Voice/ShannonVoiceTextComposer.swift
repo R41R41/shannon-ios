@@ -26,7 +26,7 @@ struct ShannonVoiceTextComposer: View {
                             .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     } else {
                         Image(systemName: "arrow.up")
-                            .font(.body.weight(.semibold))
+                            .font(.shannon(.body).weight(.semibold))
                             .frame(width: ShannonTouchTarget.minimum, height: ShannonTouchTarget.minimum)
                     }
                 }
@@ -47,7 +47,7 @@ struct ShannonVoiceTextComposer: View {
 
             if let message = model.textSendErrorMessage {
                 Text(message)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.danger)
             }
         }

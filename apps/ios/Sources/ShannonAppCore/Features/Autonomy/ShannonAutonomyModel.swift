@@ -57,7 +57,7 @@ public final class ShannonAutonomyModel {
 
     /// One line for a settings or hub row.
     public var summary: String {
-        guard let overview else { return isLoading ? "読み込み中…" : "未取得" }
+        guard let overview else { return isLoading ? ShannonGeneratedStrings.commonLoading : "未取得" }
         if waitingCount > 0 { return "確認待ち \(waitingCount)件" }
         if overview.control.state != "active" || overview.loop?.state == "preparing" { return overview.stateLabel }
         return "今日 \(overview.budget.usedLabel)"

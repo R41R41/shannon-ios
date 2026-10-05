@@ -26,7 +26,7 @@ struct ShannonAppearanceSettingsView: View {
                                 .frame(width: 44, height: 44)
                                 .background(palette.subtleSurface, in: Circle())
                             Text(mode.japaneseName)
-                                .font(.body.weight(.medium))
+                                .font(.shannon(.body).weight(.medium))
                                 .foregroundStyle(palette.textPrimary)
                             Spacer()
                             if appearanceModeRawValue == mode.rawValue {

@@ -103,25 +103,25 @@ struct ShannonHubView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: ShannonSpacing.extraSmall) {
                     Text(ShannonGeneratedStrings.navNow)
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.textSecondary)
                     Text(moodFace?.japaneseName ?? "まだ分かりません")
-                        .font(.title3.weight(.semibold))
+                        .font(.shannon(.title3).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                     if let line = yousu.now.ownTimeLine {
                         Text(line)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(waitingLine)
-                        .font(.callout.weight(waiting.isEmpty ? .regular : .semibold))
+                        .font(.shannon(.callout).weight(waiting.isEmpty ? .regular : .semibold))
                         .foregroundStyle(waiting.isEmpty ? palette.textSecondary : palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityHidden(true)
             }

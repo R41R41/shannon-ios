@@ -98,8 +98,8 @@ public enum ShannonAppLookEncoder {
 
 /// Copy of the look, in one place.
 public enum ShannonAppLookCopy {
-    public static let sectionTitle = "カメラ"
-    public static let toggleTitle = "会話中にシャノンがカメラで見る"
+    public static let sectionTitle = ShannonGeneratedStrings.settingsSectionCamera
+    public static let toggleTitle = ShannonGeneratedStrings.lookSetting
     public static let toggleHint = "オンにすると、アプリを開いて話している時に、見てと言われた時や気になった時だけシャノンがカメラで1枚見ます。オフにすると見ません"
     public static let explanation = "アプリを開いて話している時に「これ見れる？」と言われた時や、話の流れで気になった時に、シャノンがカメラで1枚だけ見ます。見た時は「いま見ました」と小さな画像を表示します。写した画像は一度見るために送るだけで、端末にもシャノンのサーバーにも保存しません。アプリが画面に出ていない間は見ません。"
     public static let openSettingsTitle = "カメラの権限を設定で開く"

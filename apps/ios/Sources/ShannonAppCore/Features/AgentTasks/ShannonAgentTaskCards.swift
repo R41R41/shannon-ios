@@ -103,12 +103,12 @@ struct ShannonAgentTaskCardView: View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             HStack(alignment: .firstTextBaseline, spacing: ShannonSpacing.small) {
                 Text(task.title)
-                    .font(.callout.weight(.semibold))
+                    .font(.shannon(.callout).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                     .lineLimit(2)
                 Spacer(minLength: ShannonSpacing.small)
                 Label(presentation.statusText, systemImage: presentation.symbolName)
-                    .font(.caption2.weight(.bold))
+                    .font(.shannon(.caption2).weight(.bold))
                     .foregroundStyle(palette.brandPresence)
                     .padding(.horizontal, ShannonSpacing.small)
                     .frame(minHeight: 22)
@@ -116,7 +116,7 @@ struct ShannonAgentTaskCardView: View {
             }
 
             Text(task.summary)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .lineLimit(3)
 
@@ -159,23 +159,23 @@ struct ShannonAgentTaskCardView: View {
         return Button(action: open) {
             HStack(spacing: ShannonSpacing.small) {
                 Image(systemName: presentation.symbolName)
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(tint)
                     .frame(width: 20)
                     .accessibilityHidden(true)
                 Text(task.title)
-                    .font(.subheadline.weight(isActive ? .semibold : .regular))
+                    .font(.shannon(.subheadline).weight(isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? palette.textPrimary : palette.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: ShannonSpacing.small)
                 Text(presentation.statusText)
-                    .font(.caption.weight(isActive ? .semibold : .regular))
+                    .font(.shannon(.caption).weight(isActive ? .semibold : .regular))
                     .foregroundStyle(presentation.tone == .action ? palette.textSecondary : tint)
                     .monospacedDigit()
                     .lineLimit(1)
                     .fixedSize()
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.bold))
+                    .font(.shannon(.caption2).weight(.bold))
                     .foregroundStyle(palette.textSecondary)
                     .accessibilityHidden(true)
             }

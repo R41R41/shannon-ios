@@ -11,15 +11,15 @@ struct ShannonDiaryCard: View {
                     .foregroundStyle(palette.action)
                 Spacer()
                 Text(report.dayKey)
-                    .font(.caption.monospacedDigit())
+                    .font(.shannon(.caption).monospacedDigit())
                     .foregroundStyle(palette.textSecondary)
             }
             Text(title)
-                .font(.body.weight(.semibold))
+                .font(.shannon(.body).weight(.semibold))
                 .foregroundStyle(palette.textPrimary)
                 .lineLimit(2)
             Text(summary)
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .lineLimit(3)
             Spacer(minLength: 0)
@@ -28,7 +28,7 @@ struct ShannonDiaryCard: View {
                 Spacer()
                 Image(systemName: "chevron.right")
             }
-            .font(.caption.weight(.semibold))
+            .font(.shannon(.caption).weight(.semibold))
             .foregroundStyle(palette.action)
         }
         .padding(ShannonSpacing.large)
@@ -82,11 +82,11 @@ struct ActivityTimelineRow: View {
                 .frame(width: 36, height: 36)
                 .background(palette.subtleSurface, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title).font(.body.weight(.semibold))
+                Text(item.title).font(.shannon(.body).weight(.semibold))
                 if let detail = item.detail, !detail.isEmpty {
-                    Text(detail).font(.callout).foregroundStyle(palette.textSecondary).lineLimit(3)
+                    Text(detail).font(.shannon(.callout)).foregroundStyle(palette.textSecondary).lineLimit(3)
                 }
-                Text(displayDate(item.occurredAt)).font(.caption).foregroundStyle(palette.textSecondary)
+                Text(displayDate(item.occurredAt)).font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
             }
             Spacer()
         }
@@ -117,18 +117,18 @@ struct MemoryCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
                     Text(item.kind.japaneseName)
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .foregroundStyle(palette.action)
                     if item.pinned { Image(systemName: "pin.fill").foregroundStyle(palette.attention) }
                     if item.status != .active {
                         Text(item.status == .rejected ? "事実ではない" : "忘れる")
-                            .font(.caption2.weight(.semibold))
+                            .font(.shannon(.caption2).weight(.semibold))
                             .padding(.horizontal, 7).padding(.vertical, 3)
                             .background(palette.dangerTint, in: Capsule())
                     }
                 }
                 Text(item.text)
-                    .font(.body)
+                    .font(.shannon(.body))
                     .foregroundStyle(item.status == .active ? palette.textPrimary : palette.textSecondary)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -138,7 +138,7 @@ struct MemoryCard: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                 }
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
             }
         }
@@ -165,9 +165,9 @@ struct SleepSummaryCard: View {
                 .background(palette.userMessage, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
                 Text("眠っている間に考えたこと")
-                    .font(.headline)
+                    .font(.shannon(.headline))
                 Text(sleepSummary(report))
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
             }
             Spacer()

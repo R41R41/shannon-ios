@@ -235,7 +235,7 @@ extension Color {
         dark: ShannonColorTokens.Dark.danger
     )
 
-    private static func adaptive(light: UInt, dark: UInt) -> Color {
+    static func adaptive(light: UInt, dark: UInt) -> Color {
 #if canImport(UIKit)
         Color(UIColor { traits in
             UIColor(shannonHex: traits.userInterfaceStyle == .dark ? dark : light)

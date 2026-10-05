@@ -21,7 +21,7 @@ public struct ShannonAutonomyActivityPage: View {
             if let message = model.errorMessage {
                 Section {
                     Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonDanger)
                 }
             }
@@ -34,7 +34,7 @@ public struct ShannonAutonomyActivityPage: View {
             ForEach(model.days) { day in
                 Section {
                     Text(day.summary)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("この日のまとめ、\(day.summary)")
                     ForEach(day.entries) { entry in
@@ -47,12 +47,12 @@ public struct ShannonAutonomyActivityPage: View {
             if model.days.isEmpty, model.overview != nil {
                 Section("記録") {
                     Text("まだ記録はありません。シャノンが自分から動くと、いつ・何を・どこで・いくらでしたかがここに残ります。")
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(.secondary)
                 }
             }
         }
-        .navigationTitle(isHub ? ShannonGeneratedStrings.navAutonomy : "したことの記録")
+        .navigationTitle(isHub ? ShannonGeneratedStrings.navAutonomy : ShannonGeneratedStrings.autonomyActivityTitle)
         .overlay {
             if model.overview == nil, model.isLoading {
                 ProgressView("記録を確認中")
@@ -88,7 +88,7 @@ public struct ShannonAutonomyActivityPage: View {
                         ShannonPursuitLine(pursuit: pursuit, palette: ShannonPalette.resolve(colorScheme))
                     }
                     if model.featuredPursuits.isEmpty {
-                        Text(model.overview == nil ? (model.errorMessage ?? "読み込み中…") : "いま続けているものはありません")
+                        Text(model.overview == nil ? (model.errorMessage ?? ShannonGeneratedStrings.commonLoading) : "いま続けているものはありません")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -126,12 +126,12 @@ public struct ShannonAutonomyActivityPage: View {
                     .accessibilityHidden(true)
                 if overview.budget.extraYen > 0 {
                     Text("今日だけ\(ShannonAutonomyFormat.yen(overview.budget.extraYen))増やしています。")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                 }
                 if overview.budget.exhausted {
                     Label("今日の上限に達しました。お金のかかることは明日まで止まります。", systemImage: "exclamationmark.circle")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(Color.shannonAttention)
                 }
             }
@@ -143,7 +143,7 @@ public struct ShannonAutonomyActivityPage: View {
                 budgetRequestRow(request, maximum: overview.maximumExtraYen)
             }
         } header: {
-            Text("今日の予算")
+            Text(ShannonGeneratedStrings.autonomyBudgetToday)
         } footer: {
             Text("モデルとAPIの利用料だけが対象です。1ドル\(Int(overview.budget.yenPerUsd))円で換算しています。")
         }
@@ -153,11 +153,11 @@ public struct ShannonAutonomyActivityPage: View {
     private func budgetRequestRow(_ request: ShannonAutonomyBudgetRequestDTO, maximum: Double) -> some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             Label("シャノンからのお願い", systemImage: "hand.raised")
-                .font(.subheadline.weight(.semibold))
+                .font(.shannon(.subheadline).weight(.semibold))
             Text(request.reason)
                 .fixedSize(horizontal: false, vertical: true)
             Text("希望：あと\(ShannonAutonomyFormat.yen(request.requestedYen)) ・ \(request.statusLabel)")
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(.secondary)
             if request.isPending {
                 let upper = max(100, min(maximum, max(request.requestedYen, 100)))
@@ -170,11 +170,11 @@ public struct ShannonAutonomyActivityPage: View {
                 .frame(minHeight: ShannonTouchTarget.minimum)
                 .accessibilityHint("今日だけ増やす額を、100円ずつ変えます")
                 HStack {
-                    Button("見送る", role: .destructive) {
+                    Button(ShannonGeneratedStrings.autonomyDecline, role: .destructive) {
                         Task { await model.decideBudgetRequest(request, approve: false) }
                     }
                     Spacer()
-                    Button("今日だけ増やす") {
+                    Button(ShannonGeneratedStrings.autonomyBudgetApproveToday) {
                         Task { await model.decideBudgetRequest(request, approve: true, amountYen: amount(for: request, upper: upper)) }
                     }
                     .buttonStyle(.borderedProminent)
@@ -205,20 +205,20 @@ public struct ShannonAutonomyActivityPage: View {
             Section {
                 ForEach(proposals) { proposal in
                     VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-                        Text(proposal.title).font(.headline)
+                        Text(proposal.title).font(.shannon(.headline))
                         Text(proposal.reason)
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityLabel("シャノンの理由、\(proposal.reason)")
                         Text(proposal.goal)
-                            .font(.callout)
+                            .font(.shannon(.callout))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Text([proposal.coreAreaSummary, proposal.statusLabel].compactMap { $0 }.joined(separator: " ・ "))
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                         if proposal.isWaiting {
                             HStack {
-                                Button("見送る", role: .destructive) {
+                                Button(ShannonGeneratedStrings.autonomyDecline, role: .destructive) {
                                     Task { await model.decideProposal(proposal, start: false) }
                                 }
                                 Spacer()
@@ -235,7 +235,7 @@ public struct ShannonAutonomyActivityPage: View {
                     .padding(.vertical, ShannonSpacing.extraSmall)
                 }
             } header: {
-                Text("シャノンからの提案")
+                Text(ShannonGeneratedStrings.autonomyProposalsTitle)
             } footer: {
                 Text("シャノンが自分の活動から出した提案です。あなたが開始するまで、何も始まりません。")
             }
@@ -258,12 +258,12 @@ struct ShannonAutonomyActivityRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let detail = entry.detail, !detail.isEmpty {
                         Text(detail)
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(([ShannonAutonomyFormat.time(entry.occurredAt)].filter { !$0.isEmpty } + [entry.metadataLine]).joined(separator: " ・ "))
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -274,14 +274,14 @@ struct ShannonAutonomyActivityRow: View {
                         ShannonStudyPiecePage(study: study, pieceID: pieceID)
                     } label: {
                         Text("書斎で開く")
-                            .font(.footnote)
+                            .font(.shannon(.footnote))
                             .foregroundStyle(Color.shannonActionColor)
                             .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                     }
                     .accessibilityHint("この時に書いたものを書斎で開きます")
                 } else if let link = entry.link, let url = URL(string: link), url.scheme == "https" {
                     Link(entry.tool == "study.read" ? "読んだページを開く" : "作ったものを開く", destination: url)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .frame(minHeight: ShannonTouchTarget.minimum, alignment: .leading)
                 }
             }

@@ -18,13 +18,13 @@ struct AgentTaskStatusRow: View {
                 ShannonAvatarView(expression: task.expression, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.stageDescription)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.shannon(.subheadline).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     if !task.summary.isEmpty {
                         // Stopped and finished work shows its whole summary: it is the report, not a ticker.
                         Text(task.summary)
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                             .lineLimit(ShannonAgentTaskReport.leadsRoom(for: task) ? nil : 2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -57,10 +57,10 @@ struct AgentTaskRoomSubtitle: ViewModifier {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 0) {
                         Text(title)
-                            .font(.headline)
+                            .font(.shannon(.headline))
                             .foregroundStyle(palette.textPrimary)
                         Text(subtitle)
-                            .font(.caption)
+                            .font(.shannon(.caption))
                             .foregroundStyle(palette.textSecondary)
                     }
                     .lineLimit(1)

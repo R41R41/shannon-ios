@@ -18,11 +18,11 @@ struct ShannonVoiceDiagnosticsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShannonSpacing.large) {
                     Text("会話内容や音声は記録せず、音声入力を開始した時の処理段階だけを端末内に保存します。")
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
 
                     Text(report.isEmpty ? "まだ診断ログはありません。" : report)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.shannon(.caption, design: .monospaced))
                         .foregroundStyle(palette.textPrimary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)

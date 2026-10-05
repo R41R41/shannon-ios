@@ -6,10 +6,10 @@ import UniformTypeIdentifiers
 extension ShannonDesktopRootView {
     var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
                 ShannonAvatarView(expression: conversation.currentExpression, size: 28)
                 Text("シャノン")
-                    .font(.headline)
+                    .font(.shannonDesktop(.headline))
                 Spacer()
                 Button {
                     Task {
@@ -22,9 +22,9 @@ extension ShannonDesktopRootView {
                 .buttonStyle(.borderless)
                 .help("新しいトーク")
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.top, ShannonDesktopSpacing.medium)
+            .padding(.bottom, ShannonDesktopSpacing.small)
 
             List(selection: sidebarSelection) {
                 Section("ワークスペース") {
@@ -55,7 +55,7 @@ extension ShannonDesktopRootView {
                         }
                     } header: {
                         Label("シャノンから", systemImage: "sparkles")
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(Color.shannonIntelligenceColor)
                     }
                 }
 
@@ -65,9 +65,9 @@ extension ShannonDesktopRootView {
                     }
                     if threadProjection.allVisible.isEmpty {
                         Text("一致するトークはありません")
-                            .font(.callout)
+                            .font(.shannonDesktop(.callout))
                             .foregroundStyle(.secondary)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, ShannonDesktopSpacing.small)
                     }
                 }
 
@@ -102,20 +102,20 @@ extension ShannonDesktopRootView {
                 Button {
                     showsConnection = true
                 } label: {
-                    HStack(spacing: 9) {
+                    HStack(spacing: ShannonDesktopSpacing.small) {
                         Image(systemName: connection.isConnected ? "checkmark.circle.fill" : "link.badge.plus")
                             .foregroundStyle(connection.isConnected ? Color.shannonSuccess : Color.secondary)
                         Text(connection.statusLabel)
                             .lineLimit(1)
                         Spacer()
                     }
-                    .padding(.horizontal, 10)
-                    .frame(height: 36)
+                    .padding(.horizontal, ShannonDesktopSpacing.medium)
+                    .frame(height: ShannonDesktopMetrics.rowHeight)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            .padding(8)
+            .padding(ShannonDesktopSpacing.small)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -132,7 +132,7 @@ extension ShannonDesktopRootView {
                 Spacer()
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(.caption.monospacedDigit())
+                        .font(.shannonDesktop(.caption).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -144,13 +144,13 @@ extension ShannonDesktopRootView {
     }
 
     func threadRow(_ thread: ChatThreadDTO, showsInitiativeSignal: Bool) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: ShannonDesktopSpacing.small) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(thread.title)
                     .lineLimit(1)
                 if let context = ShannonDesktopThreadSearch.matchContext(for: thread, query: searchText) {
                     Text(context)
-                        .font(.caption)
+                        .font(.shannonDesktop(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -158,8 +158,8 @@ extension ShannonDesktopRootView {
             Spacer(minLength: 4)
             if showsInitiativeSignal {
                 Image(systemName: "sparkles")
-                    .font(.caption2)
-                    .foregroundStyle(Color.accentColor)
+                    .font(.shannonDesktop(.caption2))
+                    .foregroundStyle(Color.shannonIntelligenceColor)
                     .accessibilityLabel("シャノンからの新しい話")
             }
         }

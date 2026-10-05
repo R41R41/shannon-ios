@@ -17,26 +17,26 @@ struct ShannonGeneratedArtifactCard: View {
         } label: {
             HStack(spacing: ShannonSpacing.medium) {
                 Image(systemName: ShannonGeneratedArtifact.isMarkdown(artifact) ? "doc.richtext" : "doc.text")
-                    .font(.title3)
+                    .font(.shannon(.title3))
                     .foregroundStyle(palette.action)
                     .frame(width: 36, height: 36)
                     .background(palette.action.opacity(0.10), in: RoundedRectangle(cornerRadius: ShannonShape.small))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(safeFilename)
-                        .font(.callout.weight(.semibold))
+                        .font(.shannon(.callout).weight(.semibold))
                         .foregroundStyle(palette.textPrimary)
                         .lineLimit(1)
                     Text(artifact.summary ?? ByteCountFormatter.string(
                         fromByteCount: Int64(artifact.content.utf8.count),
                         countStyle: .file
                     ))
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
             }
             .padding(ShannonSpacing.medium)
@@ -79,7 +79,7 @@ struct ShannonGeneratedArtifactPreview: View {
                         ShannonRichMarkdownText(source: artifact.content, palette: palette)
                     } else {
                         Text(artifact.content)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.shannon(.body, design: .monospaced))
                             .textSelection(.enabled)
                     }
                 }
@@ -91,7 +91,7 @@ struct ShannonGeneratedArtifactPreview: View {
             .safeAreaInset(edge: .bottom) {
                 if let exportMessage {
                     Text(exportMessage)
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(exportMessage == "保存しました" ? palette.success : palette.attention)
                         .padding(.horizontal, ShannonSpacing.medium)
                         .padding(.vertical, ShannonSpacing.small)

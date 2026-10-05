@@ -18,7 +18,7 @@ struct ShannonPlaceMapCard: View {
         let palette = ShannonPalette.resolve(colorScheme)
         VStack(alignment: .leading, spacing: ShannonSpacing.small) {
             Label("場所の候補", systemImage: "map")
-                .font(.subheadline.weight(.semibold))
+                .font(.shannon(.subheadline).weight(.semibold))
                 .foregroundStyle(palette.textPrimary)
 
             if let first = pins.first {
@@ -36,7 +36,7 @@ struct ShannonPlaceMapCard: View {
                     .frame(maxWidth: .infinity, minHeight: 80)
             } else {
                 Text("地図上の位置を確認できませんでした。候補のリンクから確認できます。")
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
             }
 
@@ -54,8 +54,8 @@ struct ShannonPlaceMapCard: View {
                 if let url = safeURL(place.mapUrl) {
                     Link(destination: url) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(place.name).font(.callout.weight(.medium))
-                            Text(place.address).font(.caption).foregroundStyle(palette.textSecondary)
+                            Text(place.name).font(.shannon(.callout).weight(.medium))
+                            Text(place.address).font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
@@ -81,10 +81,10 @@ struct ShannonPlaceMapCard: View {
                         if let url = safeURL(place.mapUrl) {
                             Link(destination: url) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(place.name).font(.headline)
-                                    Text(place.address).font(.subheadline)
+                                    Text(place.name).font(.shannon(.headline))
+                                    Text(place.address).font(.shannon(.subheadline))
                                     if !place.reason.isEmpty {
-                                        Text(place.reason).font(.caption)
+                                        Text(place.reason).font(.shannon(.caption))
                                     }
                                 }
                             }

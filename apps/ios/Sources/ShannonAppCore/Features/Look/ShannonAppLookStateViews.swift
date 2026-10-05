@@ -85,7 +85,7 @@ struct ShannonAppLookStateBadge: View {
         let palette = ShannonPalette.resolve(colorScheme)
         ShannonAppLookStateReader(coordinator: coordinator, othersPresent: othersPresent) { state in
             Label(state.line, systemImage: state.symbol)
-                .font(.caption.weight(state == .looking ? .semibold : .regular))
+                .font(.shannon(.caption).weight(state == .looking ? .semibold : .regular))
                 .foregroundStyle(state == .looking ? palette.textPrimary : palette.textSecondary)
                 .lineLimit(1)
                 .padding(.horizontal, ShannonSpacing.small)

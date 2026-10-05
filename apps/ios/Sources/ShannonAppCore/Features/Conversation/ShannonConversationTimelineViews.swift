@@ -17,10 +17,10 @@ struct ShannonEmptyConversation: View {
             hero
             VStack(spacing: ShannonSpacing.extraSmall) {
                 Text("おかえり")
-                    .font(.title3.weight(.semibold))
+                    .font(.shannon(.title3).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
                 Text("今日はどこから始める？")
-                    .font(.subheadline)
+                    .font(.shannon(.subheadline))
                     .foregroundStyle(palette.textSecondary)
             }
             .multilineTextAlignment(.center)
@@ -78,7 +78,7 @@ struct ShannonConversationDayDivider: View {
         HStack(spacing: ShannonSpacing.medium) {
             Rectangle().fill(palette.divider.opacity(0.52)).frame(height: 0.5)
             Text(label)
-                .font(.caption2.weight(.medium))
+                .font(.shannon(.caption2).weight(.medium))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize()
             Rectangle().fill(palette.divider.opacity(0.52)).frame(height: 0.5)
@@ -106,10 +106,10 @@ struct ShannonContextReferenceCard: View {
                 .foregroundStyle(palette.brandPresence)
             VStack(alignment: .leading, spacing: 3) {
                 Text("思い出したこと")
-                    .font(.caption2.weight(.semibold))
+                    .font(.shannon(.caption2).weight(.semibold))
                     .foregroundStyle(palette.brandPresence)
                 Text(memory.summary)
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .foregroundStyle(palette.textSecondary)
                     .lineLimit(2)
             }
@@ -170,7 +170,7 @@ struct ShannonMessageRow: View {
                 )
 
                 Text("シャノン")
-                    .font(.callout.weight(.semibold))
+                    .font(.shannon(.callout).weight(.semibold))
                     .foregroundStyle(palette.textPrimary)
 
                 if let face = message.emotionSnapshot?.face {
@@ -183,7 +183,7 @@ struct ShannonMessageRow: View {
 
                 Button(action: copyMessage) {
                     Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.caption.weight(.semibold))
+                        .font(.shannon(.caption).weight(.semibold))
                         .frame(width: 34, height: 34)
                         .contentShape(Rectangle())
                 }
@@ -191,13 +191,13 @@ struct ShannonMessageRow: View {
                 .foregroundStyle(palette.textSecondary)
                 .accessibilityLabel(didCopy ? "コピーしました" : "シャノンの回答をコピー")
             }
-            .font(.caption2)
+            .font(.shannon(.caption2))
             .foregroundStyle(palette.textSecondary)
 
             if ShannonVoiceCallSummaryNote.isNote(message.text) {
                 // A record of a 「友人も一緒」 call the owner chose to keep, not something Shannon said in Talk.
                 Label(ShannonVoiceCallSummaryNote.label, systemImage: "person.2.fill")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.textSecondary)
                     .padding(.horizontal, ShannonSpacing.small)
                     .padding(.vertical, 4)
@@ -227,20 +227,20 @@ struct ShannonMessageRow: View {
                 Link(destination: sourceURL) {
                     HStack(alignment: .top, spacing: ShannonSpacing.small) {
                         Image(systemName: "link")
-                            .font(.caption.weight(.semibold))
+                            .font(.shannon(.caption).weight(.semibold))
                             .foregroundStyle(palette.action)
                             .frame(width: 22, height: 22)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("出典 · \(attribution.title)")
-                                .font(.caption.weight(.semibold))
+                                .font(.shannon(.caption).weight(.semibold))
                                 .foregroundStyle(palette.textPrimary)
                             Text("選んだ理由: \(attribution.reason)")
-                                .font(.caption2)
+                                .font(.shannon(.caption2))
                                 .foregroundStyle(palette.textSecondary)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right")
-                            .font(.caption2.weight(.semibold))
+                            .font(.shannon(.caption2).weight(.semibold))
                             .foregroundStyle(palette.textSecondary)
                     }
                     .padding(.horizontal, ShannonSpacing.medium)
@@ -268,7 +268,7 @@ struct ShannonMessageRow: View {
 
             VStack(alignment: .trailing, spacing: 5) {
                 Text(ShannonMessageMarkdown.render(message.text))
-                    .font(.body)
+                    .font(.shannon(.body))
                     .lineSpacing(3)
                     .textSelection(.enabled)
                     .foregroundStyle(palette.onUserMessage)
@@ -284,7 +284,7 @@ struct ShannonMessageRow: View {
                     Text(message.sentAt.formatted(date: .omitted, time: .shortened))
                     deliveryIcon(palette)
                 }
-                .font(.caption2)
+                .font(.shannon(.caption2))
                 .foregroundStyle(message.deliveryState == .failed ? palette.danger : palette.textSecondary)
                 .padding(.horizontal, ShannonSpacing.extraSmall)
             }

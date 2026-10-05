@@ -184,6 +184,134 @@ export const shannonStrings = {
   "ops.connectionInvalid": "接続が無効になりました。もう一度接続してください。",
   "talk.dictation.waitsForCall": "音声会話がマイクを使っている間は、音声入力を始められません",
   "talk.display.facing": "向き合う",
+  "task.approval.session": "この作業中",
+  "task.approval.confirmOnce": "今回だけ{kind}を許可しますか？",
+  "task.approval.confirmSession": "この作業が終わるまで{kind}を許可しますか？",
+  "task.approval.confirmSessionMessage": "この作業が終わるまで有効です。",
+  "task.approval.holdTargetAllow": "許可ボタン",
+  "task.approval.holdTargetSession": "「この作業中」",
+  "task.approval.holdHint": "{target}は長押しで決定。タップすると確認してから決定します。",
+  "task.approval.holdHintClick": "{target}は長押しで決定。クリックすると確認してから決定します。",
+  "hold.progress": "押し続けています… {percent}%",
+  "hold.hint": "長押しで決定します。タップすると確認してから決定します",
+  "common.back": "戻る",
+  "ops.confirm.hold": "長押しで{command}",
+  "ops.confirm.holdShortPress": "ボタンを押し続けると決まります。",
+  "task.status.needsOwner": "続きが必要",
+  "task.needsOwner.heading": "続きが必要です",
+  "task.needsOwner.notificationTitle": "続きが必要な作業があります",
+  "task.needsOwner.notificationBody": "{title}：{next}",
+  "task.needsOwner.notificationWhileStreaming": "管理画面で確認してください。",
+  "task.waitingCount": "あなたを待っている作業 {count} 件",
+  "task.notice.headline": "{state}：{title}",
+  "autonomy.proposal.confirmQuestion": "「{title}」を作業として始めますか？",
+  "autonomy.proposal.confirmStart": "作業として始める",
+  "task.cancel.confirmQuestion": "「{title}」を中止しますか？",
+  "task.cancel.confirm": "中止",
+  "yousu.loading": "ようすを確認中",
+  "yousu.waiting.title": "待っていること",
+  "yousu.waiting.accessibility": "待っていること、{count}件、{summary}",
+  "yousu.waiting.summaryPart": "{kind} {count}",
+  "yousu.waiting.kind.reaction": "感想",
+  "yousu.waiting.kind.decision": "判断",
+  "yousu.waiting.kind.approval": "許可",
+  "yousu.waiting.storyFallback": "シャノンの物語",
+  "yousu.waiting.awaitingReaction": "シャノンが感想を待っています",
+  "yousu.waiting.budgetRequest": "今日の予算を{amount}増やすお願い",
+  "yousu.waiting.decideInAutonomy": "自律活動で決められます",
+  "yousu.waiting.proposal": "シャノンからの提案。自律活動で決められます",
+  "yousu.waiting.openStudyHint": "書斎で開きます",
+  "yousu.waiting.openTaskHint": "作業を開きます",
+  "yousu.mood.unknown": "まだ分かりません",
+  "yousu.mood.accessibility": "シャノンの気分、{mood}",
+  "yousu.feeling.present": "いまの気持ち：{name}",
+  "yousu.feeling.lingering": "まだ残っている気持ち：{label}",
+  "yousu.feeling.faint": "少し{name}",
+  "yousu.feeling.since": "{feeling}（{since}から）",
+  "yousu.ownTime.title": "自分の時間",
+  "yousu.ownTime.herWords": "シャノンのことば：{reason}",
+  "yousu.ownTime.latestAccessibility": "最近したこと、{time}、{summary}",
+  "yousu.ownTime.budget": "今日の予算 {used}",
+  "yousu.ownTime.budgetAccessibility": "今日の予算、{cap}のうち{spent}を使いました",
+  "yousu.body.title": "体",
+  "yousu.body.unknown": "デスクトップの体のようすは、まだ届いていません",
+  "yousu.body.present": "体はデスクトップに出ています",
+  "yousu.body.absent": "体はいま、デスクトップに出ていません",
+  "yousu.body.absentSince": "体はいま、デスクトップに出ていません（最後は {clock}）",
+  "yousu.recent.title": "最近のできごと",
+  "yousu.recent.empty": "まだありません",
+  "yousu.day.today": "今日",
+  "yousu.day.yesterday": "昨日",
+  "yousu.day.unknown": "日時不明",
+  "yousu.look.seenThroughApp": "アプリのカメラで見た",
+  "yousu.look.seenRoom": "部屋を見た",
+  "yousu.look.looking": "見ているところ",
+  "yousu.look.refused": "見るのを断った",
+  "yousu.look.discarded": "見たものを使わなかった",
+  "yousu.look.failed": "見られなかった",
+  "yousu.look.tried": "見ようとした",
+  "yousu.look.askedByOwner": "あなたの頼み",
+  "yousu.look.askedByHerself": "シャノンが見たくなって",
+  "yousu.look.throughApp": "アプリのカメラ",
+  "yousu.lookCode.cameraOff": "カメラが切だった",
+  "yousu.lookCode.windowHidden": "体の窓が出ていなかった",
+  "yousu.lookCode.busy": "カメラがほかで使われていた",
+  "yousu.lookCode.noCamera": "カメラがなかった",
+  "yousu.lookCode.denied": "カメラの許可がなかった",
+  "yousu.lookCode.failed": "うまく撮れなかった",
+  "yousu.lookCode.timeout": "時間切れ",
+  "yousu.lookCode.othersPresent": "ほかの人がいた",
+  "yousu.lookCode.rateLimited": "見る回数の上限だった",
+  "yousu.lookCode.modelFailed": "見たものを言葉にできなかった",
+  "yousu.lookCode.background": "アプリが前に出ていなかった",
+  "yousu.lookCode.declined": "今回は許可しなかった",
+  "yousu.lookCode.switchedOff": "アプリのカメラが切だった",
+  "yousu.lookCode.interrupted": "話が先へ進んだ",
+  "yousu.lookCode.tooSoon": "見たばかりだった",
+  "yousu.touch.pet": "撫でられた",
+  "yousu.touch.tickle": "くすぐられた",
+  "yousu.touch.poke": "つつかれた",
+  "yousu.touch.carry": "抱えられた",
+  "yousu.touch.holdHand": "手をつないだ",
+  "yousu.touch.other": "触れられた",
+  "yousu.touch.count": "{name}（{count}回）",
+  "yousu.touch.answered": "ひとこと返した",
+  "yousu.reachOut.sent": "話しかけた",
+  "yousu.reachOut.followUp": "もう一度話しかけた",
+  "yousu.reachOut.deliveryUnknown": "届き方は、まだ分かりません",
+  "yousu.delivery.bodySpoken": "体の声で届いた",
+  "yousu.delivery.bodyShown": "体に表示された",
+  "yousu.delivery.bodyAway": "席を外していて、体では届かなかった",
+  "yousu.delivery.bodyHidden": "体の窓が出ていなくて、届かなかった",
+  "yousu.delivery.bodyMuted": "体の「話しかける」が切で、届かなかった",
+  "yousu.delivery.body": "体",
+  "yousu.delivery.appRead": "トークで読んだ",
+  "yousu.delivery.appShown": "アプリに表示された",
+  "yousu.delivery.app": "アプリ",
+  "yousu.delivery.earphonesIphone": "イヤホンで届いた（iPhone）",
+  "yousu.delivery.earphonesMac": "イヤホンで届いた（Mac）",
+  "yousu.delivery.earphonesSpoken": "イヤホンで届いた",
+  "yousu.delivery.earphones": "イヤホン",
+  "yousu.delivery.callAnswered": "電話で届いた",
+  "yousu.delivery.callUnanswered": "電話に出なかった",
+  "yousu.delivery.callDeclined": "電話を断った",
+  "yousu.delivery.callFailed": "電話がつながらなかった",
+  "yousu.delivery.callRinging": "電話を鳴らしているところ",
+  "yousu.delivery.call": "電話",
+  "yousu.delivery.other": "ほかの方法",
+  "yousu.moodTrend.title": "気分の推移",
+  "yousu.moodTrend.range.day": "24時間",
+  "yousu.moodTrend.range.week": "7日",
+  "yousu.moodTrend.line.valence": "気分の明るさ",
+  "yousu.moodTrend.line.arousal": "元気さ",
+  "yousu.moodTrend.line.openness": "心の開き",
+  "yousu.moodTrend.level.bright": "明るめ",
+  "yousu.moodTrend.level.high": "高め",
+  "yousu.moodTrend.level.normal": "ふつう",
+  "yousu.moodTrend.level.low": "低め",
+  "yousu.moodTrend.summary": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+  "yousu.moodTrend.empty": "まだ記録がありません",
+  "yousu.moodTrend.unreadable": "読めませんでした",
 } as const;
 
 export type ShannonStringKey = keyof typeof shannonStrings;
@@ -401,6 +529,440 @@ export const shannonDecidedWording: Readonly<Record<string, { decided: string; w
   "task.approvalNeeded": {
     "decided": "2026-10-05",
     "windowsBefore": "許可が必要です"
+  },
+  "autonomy.proposal.confirmQuestion": {
+    "decided": "2026-10-05",
+    "windowsBefore": "「{title}」を作業として始めますか？"
+  },
+  "autonomy.proposal.confirmStart": {
+    "decided": "2026-10-05",
+    "windowsBefore": "作業として始める"
+  },
+  "task.cancel.confirmQuestion": {
+    "decided": "2026-10-05",
+    "windowsBefore": "「{title}」を中止しますか？",
+    "macBefore": "シャノンの作業を中止しますか？"
+  },
+  "task.cancel.confirm": {
+    "decided": "2026-10-05",
+    "windowsBefore": "中止",
+    "macBefore": "シャノンの作業を中止"
+  },
+  "yousu.loading": {
+    "decided": "2026-10-03",
+    "windowsBefore": "ようすを確認中"
+  },
+  "yousu.waiting.title": {
+    "decided": "2026-10-03",
+    "windowsBefore": "待っていること"
+  },
+  "yousu.waiting.accessibility": {
+    "decided": "2026-10-03",
+    "windowsBefore": "待っていること、{count}件、{summary}"
+  },
+  "yousu.waiting.summaryPart": {
+    "decided": "2026-10-03",
+    "windowsBefore": "{kind} {count}"
+  },
+  "yousu.waiting.kind.reaction": {
+    "decided": "2026-10-03",
+    "windowsBefore": "感想"
+  },
+  "yousu.waiting.kind.decision": {
+    "decided": "2026-10-03",
+    "windowsBefore": "判断"
+  },
+  "yousu.waiting.kind.approval": {
+    "decided": "2026-10-03",
+    "windowsBefore": "許可"
+  },
+  "yousu.waiting.storyFallback": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンの物語"
+  },
+  "yousu.waiting.awaitingReaction": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンが感想を待っています"
+  },
+  "yousu.waiting.budgetRequest": {
+    "decided": "2026-10-03",
+    "windowsBefore": "今日の予算を{amount}増やすお願い"
+  },
+  "yousu.waiting.decideInAutonomy": {
+    "decided": "2026-10-03",
+    "windowsBefore": "自律活動で決められます"
+  },
+  "yousu.waiting.proposal": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンからの提案。自律活動で決められます"
+  },
+  "yousu.waiting.openStudyHint": {
+    "decided": "2026-10-03",
+    "windowsBefore": "書斎で開きます"
+  },
+  "yousu.waiting.openTaskHint": {
+    "decided": "2026-10-03",
+    "windowsBefore": "作業を開きます"
+  },
+  "yousu.mood.unknown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "まだ分かりません"
+  },
+  "yousu.mood.accessibility": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンの気分、{mood}"
+  },
+  "yousu.feeling.present": {
+    "decided": "2026-10-03",
+    "windowsBefore": "いまの気持ち：{name}"
+  },
+  "yousu.feeling.lingering": {
+    "decided": "2026-10-03",
+    "windowsBefore": "まだ残っている気持ち：{label}"
+  },
+  "yousu.feeling.faint": {
+    "decided": "2026-10-03",
+    "windowsBefore": "少し{name}"
+  },
+  "yousu.feeling.since": {
+    "decided": "2026-10-03",
+    "windowsBefore": "{feeling}（{since}から）"
+  },
+  "yousu.ownTime.title": {
+    "decided": "2026-10-03",
+    "windowsBefore": "自分の時間"
+  },
+  "yousu.ownTime.herWords": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンのことば：{reason}"
+  },
+  "yousu.ownTime.latestAccessibility": {
+    "decided": "2026-10-03",
+    "windowsBefore": "最近したこと、{time}、{summary}"
+  },
+  "yousu.ownTime.budget": {
+    "decided": "2026-10-03",
+    "windowsBefore": "今日の予算 {used}"
+  },
+  "yousu.ownTime.budgetAccessibility": {
+    "decided": "2026-10-03",
+    "windowsBefore": "今日の予算、{cap}のうち{spent}を使いました"
+  },
+  "yousu.body.title": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体"
+  },
+  "yousu.body.unknown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "デスクトップの体のようすは、まだ届いていません"
+  },
+  "yousu.body.present": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体はデスクトップに出ています"
+  },
+  "yousu.body.absent": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体はいま、デスクトップに出ていません"
+  },
+  "yousu.body.absentSince": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体はいま、デスクトップに出ていません（最後は {clock}）"
+  },
+  "yousu.recent.title": {
+    "decided": "2026-10-03",
+    "windowsBefore": "最近のできごと"
+  },
+  "yousu.recent.empty": {
+    "decided": "2026-10-03",
+    "windowsBefore": "まだありません"
+  },
+  "yousu.day.today": {
+    "decided": "2026-10-03",
+    "windowsBefore": "今日"
+  },
+  "yousu.day.yesterday": {
+    "decided": "2026-10-03",
+    "windowsBefore": "昨日"
+  },
+  "yousu.day.unknown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "日時不明"
+  },
+  "yousu.look.seenThroughApp": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリのカメラで見た"
+  },
+  "yousu.look.seenRoom": {
+    "decided": "2026-10-03",
+    "windowsBefore": "部屋を見た"
+  },
+  "yousu.look.looking": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見ているところ"
+  },
+  "yousu.look.refused": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見るのを断った"
+  },
+  "yousu.look.discarded": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見たものを使わなかった"
+  },
+  "yousu.look.failed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見られなかった"
+  },
+  "yousu.look.tried": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見ようとした"
+  },
+  "yousu.look.askedByOwner": {
+    "decided": "2026-10-03",
+    "windowsBefore": "あなたの頼み"
+  },
+  "yousu.look.askedByHerself": {
+    "decided": "2026-10-03",
+    "windowsBefore": "シャノンが見たくなって"
+  },
+  "yousu.look.throughApp": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリのカメラ"
+  },
+  "yousu.lookCode.cameraOff": {
+    "decided": "2026-10-03",
+    "windowsBefore": "カメラが切だった"
+  },
+  "yousu.lookCode.windowHidden": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体の窓が出ていなかった"
+  },
+  "yousu.lookCode.busy": {
+    "decided": "2026-10-03",
+    "windowsBefore": "カメラがほかで使われていた"
+  },
+  "yousu.lookCode.noCamera": {
+    "decided": "2026-10-03",
+    "windowsBefore": "カメラがなかった"
+  },
+  "yousu.lookCode.denied": {
+    "decided": "2026-10-03",
+    "windowsBefore": "カメラの許可がなかった"
+  },
+  "yousu.lookCode.failed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "うまく撮れなかった"
+  },
+  "yousu.lookCode.timeout": {
+    "decided": "2026-10-03",
+    "windowsBefore": "時間切れ"
+  },
+  "yousu.lookCode.othersPresent": {
+    "decided": "2026-10-03",
+    "windowsBefore": "ほかの人がいた"
+  },
+  "yousu.lookCode.rateLimited": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見る回数の上限だった"
+  },
+  "yousu.lookCode.modelFailed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見たものを言葉にできなかった"
+  },
+  "yousu.lookCode.background": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリが前に出ていなかった"
+  },
+  "yousu.lookCode.declined": {
+    "decided": "2026-10-03",
+    "windowsBefore": "今回は許可しなかった"
+  },
+  "yousu.lookCode.switchedOff": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリのカメラが切だった"
+  },
+  "yousu.lookCode.interrupted": {
+    "decided": "2026-10-03",
+    "windowsBefore": "話が先へ進んだ"
+  },
+  "yousu.lookCode.tooSoon": {
+    "decided": "2026-10-03",
+    "windowsBefore": "見たばかりだった"
+  },
+  "yousu.touch.pet": {
+    "decided": "2026-10-03",
+    "windowsBefore": "撫でられた"
+  },
+  "yousu.touch.tickle": {
+    "decided": "2026-10-03",
+    "windowsBefore": "くすぐられた"
+  },
+  "yousu.touch.poke": {
+    "decided": "2026-10-03",
+    "windowsBefore": "つつかれた"
+  },
+  "yousu.touch.carry": {
+    "decided": "2026-10-03",
+    "windowsBefore": "抱えられた"
+  },
+  "yousu.touch.holdHand": {
+    "decided": "2026-10-03",
+    "windowsBefore": "手をつないだ"
+  },
+  "yousu.touch.other": {
+    "decided": "2026-10-03",
+    "windowsBefore": "触れられた"
+  },
+  "yousu.touch.count": {
+    "decided": "2026-10-03",
+    "windowsBefore": "{name}（{count}回）"
+  },
+  "yousu.touch.answered": {
+    "decided": "2026-10-03",
+    "windowsBefore": "ひとこと返した"
+  },
+  "yousu.reachOut.sent": {
+    "decided": "2026-10-03",
+    "windowsBefore": "話しかけた"
+  },
+  "yousu.reachOut.followUp": {
+    "decided": "2026-10-03",
+    "windowsBefore": "もう一度話しかけた"
+  },
+  "yousu.reachOut.deliveryUnknown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "届き方は、まだ分かりません"
+  },
+  "yousu.delivery.bodySpoken": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体の声で届いた"
+  },
+  "yousu.delivery.bodyShown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体に表示された"
+  },
+  "yousu.delivery.bodyAway": {
+    "decided": "2026-10-03",
+    "windowsBefore": "席を外していて、体では届かなかった"
+  },
+  "yousu.delivery.bodyHidden": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体の窓が出ていなくて、届かなかった"
+  },
+  "yousu.delivery.bodyMuted": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体の「話しかける」が切で、届かなかった"
+  },
+  "yousu.delivery.body": {
+    "decided": "2026-10-03",
+    "windowsBefore": "体"
+  },
+  "yousu.delivery.appRead": {
+    "decided": "2026-10-03",
+    "windowsBefore": "トークで読んだ"
+  },
+  "yousu.delivery.appShown": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリに表示された"
+  },
+  "yousu.delivery.app": {
+    "decided": "2026-10-03",
+    "windowsBefore": "アプリ"
+  },
+  "yousu.delivery.earphonesIphone": {
+    "decided": "2026-10-03",
+    "windowsBefore": "イヤホンで届いた（iPhone）"
+  },
+  "yousu.delivery.earphonesMac": {
+    "decided": "2026-10-03",
+    "windowsBefore": "イヤホンで届いた（Mac）"
+  },
+  "yousu.delivery.earphonesSpoken": {
+    "decided": "2026-10-03",
+    "windowsBefore": "イヤホンで届いた"
+  },
+  "yousu.delivery.earphones": {
+    "decided": "2026-10-03",
+    "windowsBefore": "イヤホン"
+  },
+  "yousu.delivery.callAnswered": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話で届いた"
+  },
+  "yousu.delivery.callUnanswered": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話に出なかった"
+  },
+  "yousu.delivery.callDeclined": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話を断った"
+  },
+  "yousu.delivery.callFailed": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話がつながらなかった"
+  },
+  "yousu.delivery.callRinging": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話を鳴らしているところ"
+  },
+  "yousu.delivery.call": {
+    "decided": "2026-10-03",
+    "windowsBefore": "電話"
+  },
+  "yousu.delivery.other": {
+    "decided": "2026-10-03",
+    "windowsBefore": "ほかの方法"
+  },
+  "yousu.moodTrend.title": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の推移"
+  },
+  "yousu.moodTrend.range.day": {
+    "decided": "2026-10-05",
+    "windowsBefore": "24時間"
+  },
+  "yousu.moodTrend.range.week": {
+    "decided": "2026-10-05",
+    "windowsBefore": "7日"
+  },
+  "yousu.moodTrend.line.valence": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の明るさ"
+  },
+  "yousu.moodTrend.line.arousal": {
+    "decided": "2026-10-05",
+    "windowsBefore": "元気さ"
+  },
+  "yousu.moodTrend.line.openness": {
+    "decided": "2026-10-05",
+    "windowsBefore": "心の開き"
+  },
+  "yousu.moodTrend.level.bright": {
+    "decided": "2026-10-05",
+    "windowsBefore": "明るめ"
+  },
+  "yousu.moodTrend.level.high": {
+    "decided": "2026-10-05",
+    "windowsBefore": "高め"
+  },
+  "yousu.moodTrend.level.normal": {
+    "decided": "2026-10-05",
+    "windowsBefore": "ふつう"
+  },
+  "yousu.moodTrend.level.low": {
+    "decided": "2026-10-05",
+    "windowsBefore": "低め"
+  },
+  "yousu.moodTrend.summary": {
+    "decided": "2026-10-05",
+    "windowsBefore": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}"
+  },
+  "yousu.moodTrend.empty": {
+    "decided": "2026-10-05",
+    "windowsBefore": "まだ記録がありません"
+  },
+  "yousu.moodTrend.unreadable": {
+    "decided": "2026-10-05",
+    "windowsBefore": "読めませんでした"
   }
 };
 

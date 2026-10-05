@@ -76,7 +76,7 @@ struct ShannonPrivateListeningSectionContent: View {
             .accessibilityIdentifier("settings-earphone-speaking")
             if model.speaksEnabled, !model.microphoneIsPermitted {
                 Text(ShannonPrivateListeningCopy.microphoneDenied)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
 #if os(iOS)
@@ -119,7 +119,7 @@ struct ShannonPrivateListeningSectionContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 Text(status)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier(identifier)
             }
@@ -138,12 +138,12 @@ struct ShannonPrivateListeningSectionContent: View {
                 Text(ShannonPrivateListeningCopy.currentOutputTitle)
                 if model.outputs.isEmpty {
                     Text(ShannonPrivateListeningCopy.noOutput)
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(model.outputs, id: \.id) { output in
                     Text("\(output.name)：\(ShannonPrivateListeningCopy.outputDescription(output, registered: model.registered, wiredCountsAsPrivate: model.wiredCountsAsPrivate))")
-                        .font(.footnote)
+                        .font(.shannon(.footnote))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -169,7 +169,7 @@ struct ShannonPrivateListeningSectionContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(earphones.name)
                 Text(ShannonPrivateListeningCopy.registeredTitle)
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(.secondary)
             }
         }

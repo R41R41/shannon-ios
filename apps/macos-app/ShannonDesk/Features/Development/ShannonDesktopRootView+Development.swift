@@ -45,7 +45,7 @@ extension ShannonDesktopRootView {
 
     var developmentCompactTaskBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
+            HStack(spacing: ShannonDesktopSpacing.medium) {
                 developmentTaskMenu
                 TextField("作業を検索", text: $developmentTaskSearchText)
                     .textFieldStyle(.roundedBorder)
@@ -53,7 +53,7 @@ extension ShannonDesktopRootView {
                 developmentTaskFilterMenu
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
                 HStack {
                     developmentTaskMenu
                     Spacer()
@@ -63,7 +63,7 @@ extension ShannonDesktopRootView {
                     .textFieldStyle(.roundedBorder)
             }
         }
-        .padding(10)
+        .padding(ShannonDesktopSpacing.medium)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -103,18 +103,18 @@ extension ShannonDesktopRootView {
         VStack(spacing: 0) {
             HStack {
                 Label("作業", systemImage: "list.bullet")
-                    .font(.headline)
+                    .font(.shannonDesktop(.headline))
                 Spacer()
                 developmentTaskFilterMenu
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.top, ShannonDesktopSpacing.medium)
 
-            HStack(spacing: 8) {
+            HStack(spacing: ShannonDesktopSpacing.small) {
                 TextField("作業を検索", text: $developmentTaskSearchText)
                     .textFieldStyle(.roundedBorder)
             }
-            .padding(10)
+            .padding(ShannonDesktopSpacing.medium)
 
             Divider()
 
@@ -122,9 +122,9 @@ extension ShannonDesktopRootView {
                 if workProjection.pinned.isEmpty && workProjection.active.isEmpty
                     && workProjection.proposed.isEmpty && workProjection.finished.isEmpty {
                     Text("会話から開発を依頼すると、ここに作業が表示されます。")
-                        .font(.callout)
+                        .font(.shannonDesktop(.callout))
                         .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, ShannonDesktopSpacing.small)
                 }
                 if !workProjection.pinned.isEmpty {
                     Section("ピン留め") {
@@ -169,7 +169,7 @@ extension ShannonDesktopRootView {
                     Text("· \(project)")
                 }
             }
-            .font(.caption)
+            .font(.shannonDesktop(.caption))
             .foregroundStyle(.secondary)
         }
         .tag(task.id)
@@ -198,7 +198,7 @@ extension ShannonDesktopRootView {
     }
 
     var developmentToolPicker: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: ShannonDesktopSpacing.medium) {
             Picker("開発ツール", selection: $selectedDevelopmentTool) {
                 ForEach(DesktopDevelopmentTool.allCases) { tool in
                     Label(tool.title, systemImage: tool.symbolName).tag(tool)
@@ -210,13 +210,13 @@ extension ShannonDesktopRootView {
             Spacer(minLength: 0)
             if let task = selectedTask {
                 Label(task.stateName, systemImage: task.status.symbolName)
-                    .font(.caption)
+                    .font(.shannonDesktop(.caption))
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("作業状態、\(task.stateName)")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, ShannonDesktopSpacing.medium)
+        .padding(.vertical, ShannonDesktopSpacing.small)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -226,7 +226,7 @@ extension ShannonDesktopRootView {
             VStack(spacing: 0) {
                 developmentTaskSummary(task)
                     .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, ShannonDesktopSpacing.large)
                 Divider()
 
                 switch selectedDevelopmentTool {
@@ -304,13 +304,13 @@ extension ShannonDesktopRootView {
     }
 
     func developmentTaskSummary(_ task: ShannonAgentTask) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ShannonDesktopSpacing.small) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ShannonDesktopSpacing.extraSmall) {
                     Label(task.title, systemImage: task.status.symbolName)
-                        .font(.headline)
+                        .font(.shannonDesktop(.headline))
                     Text(task.currentAction ?? task.summary)
-                        .font(.callout)
+                        .font(.shannonDesktop(.callout))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }

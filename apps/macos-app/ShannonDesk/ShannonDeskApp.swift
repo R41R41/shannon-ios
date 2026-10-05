@@ -244,7 +244,9 @@ private struct ShannonDesktopSettingsScene: View {
             }
         }
         .formStyle(.grouped)
-        .padding(24)
+        .font(.shannonDesktop(.body))
+        .tint(Color.shannonActionColor)
+        .padding(ShannonDesktopSpacing.extraLarge)
         .frame(width: 540, height: 420)
         .task { await worldSubscriptions.reload() }
         .sheet(isPresented: $showsWorldSubscriptions) {

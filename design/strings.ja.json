@@ -1,7 +1,7 @@
 {
   "version": 1,
   "locale": "ja",
-  "about": "Shannon の画面の文言の唯一の定義。ここだけを直し、scripts/generate-product-spec.mjs で design/generated/ を作り直す。入っているのは、(1) Apple 側と Windows 側で同じ文になっているもの、(2) 所有者が決めた言葉（decided に日付がある）。まだ決まっていない違いは docs/product/copy-differences.md にある。",
+  "about": "Shannon の画面の文言の唯一の定義。ここだけを直し、scripts/generate-product-spec.mjs で design/generated/ を作り直す。入っているのは、(1) Apple 側と Windows 側で同じ文になっているもの、(2) 所有者が決めた言葉（decided に日付がある）、(3) どちらか一方にだけある文（only）。まだ決まっていない違いは docs/product/copy-differences.md にある。",
   "rules": [
     "key は変えない（アプリのコードが key で参照する）。文を変えるときは text だけを変える。",
     "{name} のような波かっこは、差し込む値。",
@@ -10,7 +10,8 @@
     "windows は shannon-desktop の中の場所（このリポジトリからは確かめられない。読んだ日は windowsRead）。",
     "状態と結果の文は中立に書く。シャノンの台詞にする文は、ボク・ライ氏・です・ますの声にする（packages/cognition/src/persona.ts）。",
     "decided がある文は、所有者が決めた言葉。windowsNow は Windows がいま出している言葉、macNow は Mac がいま出している言葉（違うなら直す）。apple が new のものは、まだどのコードにも無い新しい言葉。",
-    "only が \"apple\" の文は、Apple 側（iPhone・Mac）にだけある文（Windows にまだ置き場所が無いもの）。windows は書かず、apple に書いてある場所にあることだけを確かめる。新しい画面の文は、まずここに入れる。"
+    "only が \"apple\" の文は、Apple 側（iPhone・Mac）にだけある文（Windows にまだ置き場所が無いもの）。windows は書かず、apple に書いてある場所にあることだけを確かめる。新しい画面の文は、まずここに入れる。",
+    "only が \"windows\" の文は、Windows にだけある文（多くは、iPhone の文のポインターの形。例「タップ」→「クリック」）。apple は書かず、windows に場所を書く。Swift には出さない。Mac に同じ文が要るようになったら、only を外して apple を書く。"
   ],
   "windowsRead": "2026-10-03",
   "strings": [
@@ -777,7 +778,7 @@
     {
       "key": "nav.memory",
       "text": "頭の中",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Conversation/ShannonThreadListSheet.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/ShannonHub/ShannonHubView.swift",
       "decided": "2026-10-03",
       "windowsNow": "（無い）"
     },
@@ -851,7 +852,7 @@
     {
       "key": "voice.name",
       "text": "音声会話",
-      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLiveStatusPresentation.swift",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Voice/ShannonGeminiLivePhase+Workspace.swift",
       "decided": "2026-10-03",
       "windows": "shannon-desktop:src/desk/views/SettingsView.tsx",
       "windowsNow": "音声会話"
@@ -1246,6 +1247,1016 @@
       "apple": "apps/ios/Sources/ShannonAppCore/Domain/Appearance/ShannonAppearanceModels.swift",
       "only": "apple",
       "note": "トークの、姿と向き合って話す表示の名前（もう 1 つは一覧の表示。そこへ戻るボタンは「履歴」）。表示の切り替えボタンは「向き合う表示へ切り替える」、説明は「向き合う表示」。所有者の決定（2026-10-05）: 名前を 1 つにする。それまでアプリは「対話」、仕様は「向き合う表示」と、2 つの名前があった。「対話」は一覧の表示も会話なので紛らわしく、「向き合う」は見えるもの（こちらを向いた姿）を言う。"
+    },
+    {
+      "key": "task.approval.session",
+      "text": "この作業中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "許可の 3 つの選択のまん中のボタン。確認の決定ボタンは「この作業中は許可」（task.approval.allowSession）。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.approval.confirmOnce",
+      "text": "今回だけ{kind}を許可しますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "長押しの代わりに、クリック・キーボード・読み上げで押したときの確認。kind は許可の種類（ネットワーク、権限など）。Windows の担当の知らせ（2026-10-05、W5）。Windows のファイルは、2026-10-03 に読んだ同じ画面のもの（知らせにファイル名は無い）。"
+    },
+    {
+      "key": "task.approval.confirmSession",
+      "text": "この作業が終わるまで{kind}を許可しますか？",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "Windows の担当の知らせ（2026-10-05、W5）。Windows のファイルは、2026-10-03 に読んだ同じ画面のもの（知らせにファイル名は無い）。"
+    },
+    {
+      "key": "task.approval.confirmSessionMessage",
+      "text": "この作業が終わるまで有効です。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "Windows の担当の知らせ（2026-10-05、W5）。Windows のファイルは、2026-10-03 に読んだ同じ画面のもの（知らせにファイル名は無い）。"
+    },
+    {
+      "key": "task.approval.holdTargetAllow",
+      "text": "許可ボタン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "長押しの一文の {target}。外部接続・権限の「今回だけ許可」も長押しのとき。"
+    },
+    {
+      "key": "task.approval.holdTargetSession",
+      "text": "「この作業中」",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "長押しの一文の {target}。「今回だけ許可」は押すだけで決まるとき。"
+    },
+    {
+      "key": "task.approval.holdHint",
+      "text": "{target}は長押しで決定。タップすると確認してから決定します。",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskApprovalViews.swift",
+      "only": "apple",
+      "note": "iPhone の文。広い画面では「タップ」が「クリック」になる（task.approval.holdHintClick）。Mac は A11 で、クリックの文にする。"
+    },
+    {
+      "key": "task.approval.holdHintClick",
+      "text": "{target}は長押しで決定。クリックすると確認してから決定します。",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "only": "windows",
+      "note": "task.approval.holdHint のポインターの形（同じ文で「タップ」を「クリック」に）。Windows の担当の知らせ（2026-10-05、W5）。Mac は A11 で同じ文にする。"
+    },
+    {
+      "key": "hold.progress",
+      "text": "押し続けています… {percent}%",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "動きを減らす設定のとき、押し続けている間のボタンの字。0.6 秒で決まる。Windows の担当の知らせ（2026-10-05、W5）。Windows のファイルは、2026-10-03 に読んだ同じ画面のもの（知らせにファイル名は無い）。"
+    },
+    {
+      "key": "hold.hint",
+      "text": "長押しで決定します。タップすると確認してから決定します",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+      "only": "apple",
+      "note": "長押しのボタンの手がかり（読み上げ）。"
+    },
+    {
+      "key": "common.back",
+      "text": "戻る",
+      "apple": "apps/ios/Sources/ShannonAppCore/DesignSystem/ShannonHoldToConfirmButton.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "確認の取り消しのボタン。"
+    },
+    {
+      "key": "ops.confirm.hold",
+      "text": "長押しで{command}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonOpsText.swift",
+      "windows": "shannon-desktop:src/desk/views/OpsView.tsx",
+      "note": "運用の確認の決定ボタン。command は 開始／停止／起動／実行（予定は「今すぐ実行」ではなく「実行」）。Windows は窓の中の確認で、同じ文。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "ops.confirm.holdShortPress",
+      "text": "ボタンを押し続けると決まります。",
+      "windows": "shannon-desktop:src/desk/views/OpsView.tsx",
+      "only": "windows",
+      "note": "運用の決定ボタンを短く押したときの一文。iPhone は短く押すと確認のダイアログが出るので、この文は無い。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.status.needsOwner",
+      "text": "続きが必要",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/AgentTaskStatus.swift",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "note": "持ち主の対応が要る一時停止（pauseReason が needs_owner。無ければ currentAction があるか）。印は橙。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.needsOwner.heading",
+      "text": "続きが必要です",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "only": "windows",
+      "note": "作業の現在地の枠の見出し。下に次の一手。iPhone の同じ枠の見出しは「次にあなたがすること」（copy-differences.md の 21）。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.needsOwner.notificationTitle",
+      "text": "続きが必要な作業があります",
+      "windows": "shannon-desktop:electron/main.ts",
+      "only": "windows",
+      "note": "OS の通知の題。作業 id × pauseSequence ごとに 1 回。押すとその作業を開く。iPhone のアプリの中の知らせの見出しは「続きが必要：〈題名〉」（task.notice.headline）で、別の文として両方残す（copy-differences.md）。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.needsOwner.notificationBody",
+      "text": "{title}：{next}",
+      "windows": "shannon-desktop:electron/main.ts",
+      "only": "windows",
+      "note": "OS の通知の本文。next は次の一手（無ければ summary）。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.needsOwner.notificationWhileStreaming",
+      "text": "管理画面で確認してください。",
+      "windows": "shannon-desktop:electron/main.ts",
+      "only": "windows",
+      "note": "配信の出力を出している間の、通知の本文（題名と次の一手を画面に出さない）。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.waitingCount",
+      "text": "あなたを待っている作業 {count} 件",
+      "windows": "shannon-desktop:src/desk/App.tsx",
+      "only": "windows",
+      "note": "サイドバーの「作業」の数の読み上げ。数は 許可待ち＋続きが必要。体の吹き出しは許可待ちだけ。Windows の担当の知らせ（2026-10-05、W5）。"
+    },
+    {
+      "key": "task.notice.headline",
+      "text": "{state}：{title}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/AgentTasks/ShannonAgentTaskNotice.swift",
+      "only": "apple",
+      "note": "トークの上の作業の知らせの見出し。例「続きが必要：〈題名〉」「許可待ち：〈題名〉」。Windows の OS の通知の題（task.needsOwner.notificationTitle）とは別。"
+    },
+    {
+      "key": "autonomy.proposal.confirmQuestion",
+      "text": "「{title}」を作業として始めますか？",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windows": "shannon-desktop:src/desk/views/AutonomyView.tsx",
+      "windowsNow": "「{title}」を作業として始めますか？",
+      "note": "シャノンからの提案を始める前の確認（3 つとも。所有者の決定、2026-10-05）。下に目的と、触れる所を添える。iPhone と Mac のいまは「この提案を開始しますか？」と「「〈題名〉」を作業として開始します。進み具合は作業の一覧で確認できます。」（ShannonAutonomyActivityPage.swift）。"
+    },
+    {
+      "key": "autonomy.proposal.confirmStart",
+      "text": "作業として始める",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windows": "shannon-desktop:src/desk/views/AutonomyView.tsx",
+      "windowsNow": "作業として始める",
+      "note": "その確認の決定ボタン。iPhone と Mac のいまは「開始する」。"
+    },
+    {
+      "key": "task.cancel.confirmQuestion",
+      "text": "「{title}」を中止しますか？",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "windowsNow": "「{title}」を中止しますか？",
+      "macNow": "シャノンの作業を中止しますか？",
+      "note": "作業を中止する前の確認（3 つとも。所有者の決定、2026-10-05）。iPhone のいまも「シャノンの作業を中止しますか？」（ShannonAgentTaskRoomView.swift）。"
+    },
+    {
+      "key": "task.cancel.confirm",
+      "text": "中止",
+      "apple": "new",
+      "decided": "2026-10-05",
+      "windows": "shannon-desktop:src/desk/views/WorkView.tsx",
+      "windowsNow": "中止",
+      "macNow": "シャノンの作業を中止",
+      "note": "その確認の決定ボタン。iPhone のいまも「シャノンの作業を中止」。"
+    },
+    {
+      "key": "yousu.loading",
+      "text": "ようすを確認中",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "ようすを確認中",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.title",
+      "text": "待っていること",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "待っていること",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.accessibility",
+      "text": "待っていること、{count}件、{summary}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "待っていること、{count}件、{summary}",
+      "note": "読み上げ。summary は yousu.waiting.summaryPart を「・」でつないだもの。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.summaryPart",
+      "text": "{kind} {count}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "{kind} {count}",
+      "note": "「感想 1・判断 2」の 1 つ分。kind は 感想／判断／許可 の順。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.kind.reaction",
+      "text": "感想",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "感想",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.kind.decision",
+      "text": "判断",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "判断",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.kind.approval",
+      "text": "許可",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "許可",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.storyFallback",
+      "text": "シャノンの物語",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンの物語",
+      "note": "題名の無い物語。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.awaitingReaction",
+      "text": "シャノンが感想を待っています",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンが感想を待っています",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.budgetRequest",
+      "text": "今日の予算を{amount}増やすお願い",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "今日の予算を{amount}増やすお願い",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.decideInAutonomy",
+      "text": "自律活動で決められます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "自律活動で決められます",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.proposal",
+      "text": "シャノンからの提案。自律活動で決められます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowModel.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンからの提案。自律活動で決められます",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.openStudyHint",
+      "text": "書斎で開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "書斎で開きます",
+      "note": "読み上げの手がかり。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.waiting.openTaskHint",
+      "text": "作業を開きます",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "作業を開きます",
+      "note": "読み上げの手がかり。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.mood.unknown",
+      "text": "まだ分かりません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "まだ分かりません",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.mood.accessibility",
+      "text": "シャノンの気分、{mood}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンの気分、{mood}",
+      "note": "読み上げ。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.feeling.present",
+      "text": "いまの気持ち：{name}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "いまの気持ち：{name}",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.feeling.lingering",
+      "text": "まだ残っている気持ち：{label}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "まだ残っている気持ち：{label}",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.feeling.faint",
+      "text": "少し{name}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "少し{name}",
+      "note": "強さが 0.35 より弱い気持ち。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.feeling.since",
+      "text": "{feeling}（{since}から）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "{feeling}（{since}から）",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.ownTime.title",
+      "text": "自分の時間",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "自分の時間",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.ownTime.herWords",
+      "text": "シャノンのことば：{reason}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンのことば：{reason}",
+      "note": "休んでいる理由（シャノンの言葉そのまま）。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.ownTime.latestAccessibility",
+      "text": "最近したこと、{time}、{summary}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "最近したこと、{time}、{summary}",
+      "note": "読み上げ。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.ownTime.budget",
+      "text": "今日の予算 {used}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "今日の予算 {used}",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.ownTime.budgetAccessibility",
+      "text": "今日の予算、{cap}のうち{spent}を使いました",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "今日の予算、{cap}のうち{spent}を使いました",
+      "note": "読み上げ。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.body.title",
+      "text": "体",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.body.unknown",
+      "text": "デスクトップの体のようすは、まだ届いていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "デスクトップの体のようすは、まだ届いていません",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.body.present",
+      "text": "体はデスクトップに出ています",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体はデスクトップに出ています",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.body.absent",
+      "text": "体はいま、デスクトップに出ていません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体はいま、デスクトップに出ていません",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.body.absentSince",
+      "text": "体はいま、デスクトップに出ていません（最後は {clock}）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体はいま、デスクトップに出ていません（最後は {clock}）",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.recent.title",
+      "text": "最近のできごと",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "最近のできごと",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.recent.empty",
+      "text": "まだありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowView.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "まだありません",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.day.today",
+      "text": "今日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "今日",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.day.yesterday",
+      "text": "昨日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "昨日",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.day.unknown",
+      "text": "日時不明",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "日時不明",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.seenThroughApp",
+      "text": "アプリのカメラで見た",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリのカメラで見た",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.seenRoom",
+      "text": "部屋を見た",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "部屋を見た",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.looking",
+      "text": "見ているところ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見ているところ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.refused",
+      "text": "見るのを断った",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見るのを断った",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.discarded",
+      "text": "見たものを使わなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見たものを使わなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.failed",
+      "text": "見られなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見られなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.tried",
+      "text": "見ようとした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見ようとした",
+      "note": "知らない結果のとき。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.askedByOwner",
+      "text": "あなたの頼み",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "あなたの頼み",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.askedByHerself",
+      "text": "シャノンが見たくなって",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "シャノンが見たくなって",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.look.throughApp",
+      "text": "アプリのカメラ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリのカメラ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.cameraOff",
+      "text": "カメラが切だった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "カメラが切だった",
+      "note": "見られなかった理由（サーバーの code）。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.windowHidden",
+      "text": "体の窓が出ていなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体の窓が出ていなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.busy",
+      "text": "カメラがほかで使われていた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "カメラがほかで使われていた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.noCamera",
+      "text": "カメラがなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "カメラがなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.denied",
+      "text": "カメラの許可がなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "カメラの許可がなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.failed",
+      "text": "うまく撮れなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "うまく撮れなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.timeout",
+      "text": "時間切れ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "時間切れ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.othersPresent",
+      "text": "ほかの人がいた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "ほかの人がいた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.rateLimited",
+      "text": "見る回数の上限だった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見る回数の上限だった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.modelFailed",
+      "text": "見たものを言葉にできなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見たものを言葉にできなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.background",
+      "text": "アプリが前に出ていなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリが前に出ていなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.declined",
+      "text": "今回は許可しなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "今回は許可しなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.switchedOff",
+      "text": "アプリのカメラが切だった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリのカメラが切だった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.interrupted",
+      "text": "話が先へ進んだ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "話が先へ進んだ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.lookCode.tooSoon",
+      "text": "見たばかりだった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "見たばかりだった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.pet",
+      "text": "撫でられた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "撫でられた",
+      "note": "サーバーが部位まで知っているときは、サーバーの一文（「頬をつつかれた」など）をそのまま出す。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.tickle",
+      "text": "くすぐられた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "くすぐられた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.poke",
+      "text": "つつかれた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "つつかれた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.carry",
+      "text": "抱えられた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "抱えられた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.holdHand",
+      "text": "手をつないだ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "手をつないだ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.other",
+      "text": "触れられた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "触れられた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.count",
+      "text": "{name}（{count}回）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "{name}（{count}回）",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.touch.answered",
+      "text": "ひとこと返した",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "ひとこと返した",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.reachOut.sent",
+      "text": "話しかけた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "話しかけた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.reachOut.followUp",
+      "text": "もう一度話しかけた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "もう一度話しかけた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.reachOut.deliveryUnknown",
+      "text": "届き方は、まだ分かりません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "届き方は、まだ分かりません",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.bodySpoken",
+      "text": "体の声で届いた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体の声で届いた",
+      "note": "話しかけが、どこにどう届いたか。知らない届き方は、分かる所までの名前（体・アプリ・イヤホン・電話）か「ほかの方法」。 所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.bodyShown",
+      "text": "体に表示された",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体に表示された",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.bodyAway",
+      "text": "席を外していて、体では届かなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "席を外していて、体では届かなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.bodyHidden",
+      "text": "体の窓が出ていなくて、届かなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体の窓が出ていなくて、届かなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.bodyMuted",
+      "text": "体の「話しかける」が切で、届かなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体の「話しかける」が切で、届かなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.body",
+      "text": "体",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "体",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.appRead",
+      "text": "トークで読んだ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "トークで読んだ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.appShown",
+      "text": "アプリに表示された",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリに表示された",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.app",
+      "text": "アプリ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "アプリ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.earphonesIphone",
+      "text": "イヤホンで届いた（iPhone）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "イヤホンで届いた（iPhone）",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.earphonesMac",
+      "text": "イヤホンで届いた（Mac）",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "イヤホンで届いた（Mac）",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.earphonesSpoken",
+      "text": "イヤホンで届いた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "イヤホンで届いた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.earphones",
+      "text": "イヤホン",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "イヤホン",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.callAnswered",
+      "text": "電話で届いた",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話で届いた",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.callUnanswered",
+      "text": "電話に出なかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話に出なかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.callDeclined",
+      "text": "電話を断った",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話を断った",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.callFailed",
+      "text": "電話がつながらなかった",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話がつながらなかった",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.callRinging",
+      "text": "電話を鳴らしているところ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話を鳴らしているところ",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.call",
+      "text": "電話",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "電話",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.delivery.other",
+      "text": "ほかの方法",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonNowText.swift",
+      "decided": "2026-10-03",
+      "windowsNow": "ほかの方法",
+      "note": "所有者の決定（2026-10-03、言葉は iPhone のもの）に従い、iPhone の ようす（シャノンのいま）の言葉を 2026-10-05 に入れた。Windows の W6 も、この言葉で作った（体のスレッドの知らせ、2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.title",
+      "text": "気分の推移",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の推移",
+      "note": "シャノン › ようす の、気持ちのカードのすぐ下の区画の見出し。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.range.day",
+      "text": "24時間",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "24時間",
+      "note": "区画の右上の切り替え。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.range.week",
+      "text": "7日",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "7日",
+      "note": "所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.valence",
+      "text": "気分の明るさ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の明るさ",
+      "note": "線の名前（valence）。実線、押せるものの青（action）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.arousal",
+      "text": "元気さ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "元気さ",
+      "note": "線の名前（arousal）。長い破線、橙（attention）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.line.openness",
+      "text": "心の開き",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "心の開き",
+      "note": "線の名前（openness）。点線、緑（success）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.bright",
+      "text": "明るめ",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "明るめ",
+      "note": "気分の明るさの読み上げの言葉。ふだんの値（0）より 0.2 以上高い。所有者が比較ページで選んだ（2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.high",
+      "text": "高め",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "高め",
+      "note": "元気さ・心の開きの読み上げの言葉。ふだんの値（元気さ 0.30、心の開き 0.35）より 0.2 以上高い。気分の明るさは「明るめ」（yousu.moodTrend.level.bright）。言葉の分け方は調整役の決定（2026-10-05、「元気さは明るめ」は読みにくいため）。所有者が比較ページで選んだ（2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.normal",
+      "text": "ふつう",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "ふつう",
+      "note": "3 本とも同じ。ふだんの値から ±0.2 の内。所有者が比較ページで選んだ（2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.level.low",
+      "text": "低め",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "低め",
+      "note": "3 本とも同じ。ふだんの値より 0.2 以上低い。所有者が比較ページで選んだ（2026-10-05）。"
+    },
+    {
+      "key": "yousu.moodTrend.summary",
+      "text": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrend.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "気分の明るさは{valence}、元気さは{arousal}、心の開きは{openness}",
+      "note": "読み上げ（VoiceOver・スクリーンリーダー）。いちばん新しい点の言葉。画面に数字は出さない。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.empty",
+      "text": "まだ記録がありません",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "まだ記録がありません",
+      "note": "記録が空のとき。403・404 のときは区画ごと出さない（iPhone・Mac）。ほかの失敗（500・429・届かない・読み取れない）は「読めませんでした」（yousu.moodTrend.unreadable）。 所有者が比較ページで選んだ（2026-10-05。名前は B、形は B、置き場所は A）。Windows の体も同じ言葉で出している（13:06）。"
+    },
+    {
+      "key": "yousu.moodTrend.unreadable",
+      "text": "読めませんでした",
+      "apple": "apps/ios/Sources/ShannonAppCore/Features/Yousu/ShannonMoodTrendView.swift",
+      "decided": "2026-10-05",
+      "windowsNow": "読めませんでした",
+      "note": "記録が読めなかったとき（500・429・届かない・読み取れない）。区画と切り替えは残し、次に開いたときに読み直す。403・404 のときは区画を出さない。"
     }
   ]
 }

@@ -11,10 +11,10 @@ struct AgentTaskNextActionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: ShannonSpacing.medium) {
             Label("次にあなたがすること", systemImage: "arrow.uturn.forward.circle.fill")
-                .font(.caption.weight(.bold))
+                .font(.shannon(.caption).weight(.bold))
                 .foregroundStyle(palette.attention)
             Text(task.nextAction ?? "残っている工程を確認してください。")
-                .font(.headline)
+                .font(.shannon(.headline))
                 .foregroundStyle(palette.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -33,7 +33,7 @@ struct AgentTaskNextActionCard: View {
             .disabled(isBusy)
             .accessibilityHint("シャノンが止まったところから作業を続けます")
             Text("済んだら「作業を再開」。別の進め方にするときは、下の欄から指示を送ると、その内容で再開します。")
-                .font(.caption)
+                .font(.shannon(.caption))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -71,12 +71,12 @@ struct AgentTaskFollowUpCard: View {
                         .buttonStyle(.bordered)
                         .controlSize(.large)
                     Text("「修正を頼む」「続きを頼む」は、元のトーク「\(sourceThreadTitle)」の入力欄に下書きを入れます。送信するまで何も始まりません。")
-                        .font(.caption)
+                        .font(.shannon(.caption))
                         .foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("この作業を頼んだトークは、この端末にありません。新しいトークで、作業名を添えて頼み直せます。")
-                        .font(.callout)
+                        .font(.shannon(.callout))
                         .foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -110,10 +110,10 @@ struct AgentTaskResultSection: View {
                                 Image(systemName: testSymbol(test.status))
                                     .foregroundStyle(test.status == .failed ? palette.danger : palette.action)
                                     .accessibilityHidden(true)
-                                Text(test.name).font(.callout)
+                                Text(test.name).font(.shannon(.callout))
                                 Spacer()
                                 Text(test.detail ?? testWord(test.status))
-                                    .font(.caption)
+                                    .font(.shannon(.caption))
                                     .foregroundStyle(test.status == .failed ? palette.danger : palette.textSecondary)
                             }
                             .accessibilityElement(children: .combine)
@@ -127,7 +127,7 @@ struct AgentTaskResultSection: View {
                     VStack(alignment: .leading, spacing: ShannonSpacing.small) {
                         ForEach(report.unresolved, id: \.self) { item in
                             Label(item, systemImage: "circle.dashed")
-                                .font(.callout)
+                                .font(.shannon(.callout))
                                 .foregroundStyle(palette.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -143,31 +143,31 @@ struct AgentTaskResultSection: View {
                 .foregroundStyle(palette.action)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(change.displayName).font(.callout.weight(.semibold))
+                Text(change.displayName).font(.shannon(.callout).weight(.semibold))
                 if let path = change.path, path != change.displayName {
                     Text(path)
-                        .font(.caption2.monospaced())
+                        .font(.shannon(.caption2).monospaced())
                         .foregroundStyle(palette.textSecondary)
                         .textSelection(.enabled)
                 }
-                Text(change.summary).font(.caption).foregroundStyle(palette.textSecondary)
+                Text(change.summary).font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                 if let diff = change.diffPreview, !diff.isEmpty {
                     DisclosureGroup("差分を表示") {
                         ScrollView(.horizontal) {
                             Text(diff)
-                                .font(.caption2.monospaced())
+                                .font(.shannon(.caption2).monospaced())
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.top, ShannonSpacing.small)
                         }
                     }
-                    .font(.caption)
+                    .font(.shannon(.caption))
                     .tint(palette.action)
                 }
             }
             Spacer()
             Text("+\(change.additions) −\(change.deletions)")
-                .font(.caption2.monospacedDigit())
+                .font(.shannon(.caption2).monospacedDigit())
                 .foregroundStyle(palette.textSecondary)
         }
         .padding(ShannonSpacing.medium)

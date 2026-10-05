@@ -7,17 +7,17 @@ extension ShannonMemoryDetailView {
     ) -> some View {
         let next: ShannonMemorySensitivityDTO = disclosure.sensitivity == .sensitive ? .ordinary : .sensitive
         return VStack(alignment: .leading, spacing: ShannonSpacing.small) {
-            Text("ほかの人がいる場での扱い").font(.headline)
+            Text("ほかの人がいる場での扱い").font(.shannon(.headline))
             LabeledContent("話した時", value: disclosure.audience)
             LabeledContent("扱い") {
                 Label(disclosure.sensitivity.japaneseName, systemImage: disclosure.sensitivity.symbolName)
                     .foregroundStyle(disclosure.sensitivity == .sensitive ? palette.attention : palette.textPrimary)
             }
             Text(disclosure.decidedBy == "owner" ? disclosure.sensitivity.chosenExplanation : disclosure.sensitivity.explanation)
-                .font(.caption).foregroundStyle(palette.textSecondary)
+                .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(ShannonMemoryDisclosureCopy.reason(disclosure))
-                .font(.caption).foregroundStyle(palette.textSecondary)
+                .font(.shannon(.caption)).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if item.status == .active {
                 Button {

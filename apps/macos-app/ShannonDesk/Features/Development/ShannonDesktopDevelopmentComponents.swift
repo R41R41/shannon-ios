@@ -14,7 +14,7 @@ struct DevelopmentAddRepositorySheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("GitHubリポジトリを追加").font(.title2.weight(.semibold))
+                Text("GitHubリポジトリを追加").font(.shannonDesktop(.title2).weight(.semibold))
                 Text("Agent Host専用の作業領域へ取得します。元のリポジトリや既存チェックアウトは変更しません。")
                     .foregroundStyle(.secondary)
             }
@@ -36,11 +36,11 @@ struct DevelopmentAddRepositorySheet: View {
                     : "HTTPSのGitHub URLだけを受け付けます。非公開リポジトリは選択したAgent HostのGitHub権限を使います。",
                 systemImage: "checkmark.shield"
             )
-            .font(.caption)
+            .font(.shannonDesktop(.caption))
             .foregroundStyle(.secondary)
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
+                    .font(.shannonDesktop(.callout))
                     .foregroundStyle(Color.shannonDanger)
             }
             HStack {
@@ -51,7 +51,7 @@ struct DevelopmentAddRepositorySheet: View {
                     .disabled(isAdding || !input.isValid)
             }
         }
-        .padding(24)
+        .padding(ShannonDesktopSpacing.extraLarge)
         .frame(width: 520)
         .interactiveDismissDisabled(isAdding)
     }
@@ -69,7 +69,7 @@ struct DevelopmentRouteBadge: View {
             Circle().fill(statusColor).frame(width: 7, height: 7)
             Text(host.map { "\($0.displayName) · \($0.status.japaneseName)" } ?? "実行先なし")
         }
-        .font(.caption.weight(.medium))
+        .font(.shannonDesktop(.caption).weight(.medium))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(host.map { "実行先、\($0.displayName)、\($0.status.japaneseName)" } ?? "実行先なし")
     }
@@ -97,7 +97,7 @@ struct DevelopmentGitPane: View {
             LabeledContent("未コミット変更", value: "\(project?.changes.count ?? task.changes.count)件")
             LabeledContent("実行ホスト", value: host?.displayName ?? task.assignedHostID ?? "未割り当て")
             Label("ブランチとworktreeは、選択したAgent Hostの安全境界内で管理します。", systemImage: "checkmark.shield")
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.shannonDesktop(.callout)).foregroundStyle(.secondary)
             Button("作業ブランチを用意", action: requestBranch).disabled(!canRequest)
         }
     }
@@ -129,9 +129,9 @@ struct DevelopmentPaneHeader: View {
 
     var body: some View {
         Label(title, systemImage: symbol)
-            .font(.headline)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .font(.shannonDesktop(.headline))
+            .padding(.horizontal, ShannonDesktopSpacing.medium)
+            .padding(.vertical, ShannonDesktopSpacing.medium)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: .windowBackgroundColor))
     }
@@ -166,10 +166,10 @@ struct DevelopmentPane<Content: View>: View {
 
     var body: some View {
         GroupBox {
-            VStack(alignment: .leading, spacing: 14) { content }
+            VStack(alignment: .leading, spacing: ShannonDesktopSpacing.large) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label(title, systemImage: symbol).font(.headline)
+            Label(title, systemImage: symbol).font(.shannonDesktop(.headline))
         }
     }
 }

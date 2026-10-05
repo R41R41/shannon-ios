@@ -40,7 +40,7 @@ public struct ShannonTurnCaptureList: View {
             }
             if let failure {
                 Label(failure, systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
+                    .font(.shannon(.footnote))
                     .foregroundStyle(palette.danger)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -88,7 +88,7 @@ public struct ShannonTurnCaptureList: View {
                     if capture.kind == .knowledge { confirming = capture } else { undo(capture) }
                 }
                 .buttonStyle(.borderless)
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .tint(palette.action)
                 .frame(minWidth: ShannonTurnCaptureMetrics.minimumTarget, minHeight: ShannonTurnCaptureMetrics.minimumTarget)
                 .contentShape(Rectangle())
@@ -113,7 +113,7 @@ public struct ShannonTurnCaptureList: View {
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.footnote)
+        .font(.shannon(.footnote))
         .frame(maxWidth: .infinity, minHeight: ShannonTurnCaptureMetrics.minimumTarget, alignment: .leading)
         .contentShape(Rectangle())
     }
@@ -144,11 +144,11 @@ public struct ShannonTurnCaptureList: View {
                 .buttonStyle(.bordered)
                 .accessibilityHint("あとでもう一度だけ声をかけます。時刻は選べません")
             }
-            .font(.subheadline)
+            .font(.shannon(.subheadline))
             .disabled(pending)
         } else if let status = Self.reminderStatus(reminder) {
             Label(status.text, systemImage: status.symbol)
-                .font(.footnote)
+                .font(.shannon(.footnote))
                 .foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 28, alignment: .leading)

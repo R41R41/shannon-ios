@@ -79,7 +79,7 @@ struct ShannonCodeBlock: View {
                 // One Text keeps selection continuous across lines.
                 Text(Self.joined(lines.prefix(visible)))
                 .fixedSize(horizontal: true, vertical: false)
-                .font(.system(.callout, design: .monospaced))
+                .font(.shannon(.callout, design: .monospaced))
                 .lineSpacing(3)
                 .foregroundStyle(palette.textPrimary)
                 .textSelection(.enabled)
@@ -107,7 +107,7 @@ struct ShannonCodeBlock: View {
                         hidden > 0 ? "残り\(hidden)行を表示" : "折りたたむ",
                         systemImage: hidden > 0 ? "chevron.down" : "chevron.up"
                     )
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .foregroundStyle(palette.action)
                     .frame(maxWidth: .infinity, minHeight: ShannonTouchTarget.minimum)
                     .contentShape(Rectangle())
@@ -134,13 +134,13 @@ struct ShannonCodeBlock: View {
     private var header: some View {
         HStack(spacing: ShannonSpacing.small) {
             Text(ShannonCodeSyntax.displayName(for: language) ?? "コード")
-                .font(.caption.weight(.semibold))
+                .font(.shannon(.caption).weight(.semibold))
                 .foregroundStyle(palette.textSecondary)
                 .lineLimit(1)
             Spacer(minLength: ShannonSpacing.small)
             Button(action: copy) {
                 Label(didCopy ? "コピー済み" : "コピー", systemImage: didCopy ? "checkmark" : "doc.on.doc")
-                    .font(.caption.weight(.semibold))
+                    .font(.shannon(.caption).weight(.semibold))
                     .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                     .foregroundStyle(didCopy ? palette.onSuccessTint : palette.textSecondary)
                     .padding(.horizontal, ShannonSpacing.medium)

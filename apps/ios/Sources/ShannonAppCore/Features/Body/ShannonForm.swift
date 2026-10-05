@@ -42,8 +42,8 @@ public enum ShannonBodyPreference {
 public enum ShannonBodyCopy {
     /// The Mac's body sheet only, until her figure stands beside the conversation there (roadmap A15).
     public static let screenTitle = "からだ"
-    public static let sectionTitle = "すがた"
-    public static let formTitle = "すがた"
+    public static let sectionTitle = ShannonGeneratedStrings.settingsFigure
+    public static let formTitle = ShannonGeneratedStrings.settingsFigure
     public static let formHint = ShannonGeneratedStrings.settingsFigureFormHint
     /// The Mac's settings only (A15).
     public static let openScreenTitle = "からだを開く"
