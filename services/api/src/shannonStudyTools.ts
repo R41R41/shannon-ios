@@ -32,6 +32,15 @@ const DUPLICATE_MILLISECONDS = 15 * 60_000;
 const SYNC_MILLISECONDS = 4_000;
 
 export function studyExecutors(store: SQLiteAutonomyStore, now: () => string, aether: StudyAether | null = null): Readonly<Record<string, ToolExecutor>> {
+  // Her study is in Aether for one scope only (the owner's, `aetherStudyScope`); every other scope keeps the SQLite study.
+  const local = buildStudyExecutors(store, now, null);
+  if (!aether) return local;
+  const remote = buildStudyExecutors(store, now, aether);
+  return Object.freeze(Object.fromEntries(Object.keys(local).map(name => [name,
+    ((input, context) => (aether.covers(context.scopeKey) ? remote : local)[name]!(input, context)) satisfies ToolExecutor])));
+}
+
+function buildStudyExecutors(store: SQLiteAutonomyStore, now: () => string, aether: StudyAether | null): Readonly<Record<string, ToolExecutor>> {
   /** What each owner message's turns created, for a retry of the same message (in this process, 15 minutes). */
   const recent = new Map<string, { id: string; title: string; at: number }[]>();
   /** Parts appended for each owner message (in this process, 15 minutes), so a retry does not append them twice. */

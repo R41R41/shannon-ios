@@ -15,7 +15,7 @@
  *
  * The token is read from the environment and never printed.
  */
-import { configuredAetherAccess } from '../src/aetherAccess.js';
+import { aetherStudyScope, configuredAetherAccess } from '../src/aetherAccess.js';
 import { autonomyDayKey, configuredAutonomy } from '../src/autonomyBudget.js';
 import { SQLiteAutonomyStore } from '../src/autonomyStore.js';
 import { configuredDatabasePath } from '../src/sqliteStore.js';
@@ -27,16 +27,22 @@ const option = (name: string): string | undefined => {
   return at >= 0 ? args[at + 1] : undefined;
 };
 const databasePath = option('--database') ?? configuredDatabasePath();
-const scope = option('--scope');
+// Only the owner's scope moves (`SHANNON_OWNER_SCOPE_KEY`, default `owner`): Aether has one シャノン用フォルダ. Every other scope keeps the SQLite study.
+const scope = aetherStudyScope(process.env);
+if (option('--scope') && option('--scope') !== scope) {
+  console.error(`Aetherへ移せるのは scope「${scope}」の書斎だけです（SHANNON_OWNER_SCOPE_KEY）。何も変えていません。`);
+  process.exit(2);
+}
 
 if (!args.includes('--apply')) {
   let plans: ReadonlyMap<string, ReturnType<typeof migrationPlan>>;
-  try { plans = readOnlyMigrationPlan(databasePath, scope); } catch {
+  try { plans = readOnlyMigrationPlan(databasePath); } catch {
     console.error(`データベースを読み取り専用で開けませんでした（${databasePath}）。何も変えていません。`);
     process.exit(2);
   }
-  if (!plans.size) console.log('書斎には何もありません。');
-  for (const [scopeKey, items] of plans) console.log(`${migrationReport(scopeKey, items)}\n`);
+  console.log(`${migrationReport(scope, plans.get(scope) ?? [])}\n`);
+  const others = [...plans.keys()].filter(key => key !== scope);
+  if (others.length) console.log(`ほかの scope（${others.join('、')}）の書斎は移さず、Shannonに残ります。`);
 } else if (!args.includes('--services-not-on-aether')) {
   console.error('--apply は、APIと自律サービスがまだAetherを使っていない時（SHANNON_AETHER_API_URL を設定する前）か、両方を止めている時に、--services-not-on-aether をつけて実行してください。何も移していません。');
   process.exit(2);
@@ -49,7 +55,7 @@ if (!args.includes('--apply')) {
   const store = new SQLiteAutonomyStore(databasePath);
   try {
     const config = configuredAutonomy(process.env, { databasePath });
-    for (const scopeKey of scope ? [scope] : store.study.aether.scopes()) {
+    for (const scopeKey of [scope]) {
       const outcome = await applyMigration(store, access, scopeKey, { now: () => new Date().toISOString(), dayKey: at => autonomyDayKey(at, config) });
       console.log(migrationReport(scopeKey, migrationPlan(store, scopeKey), true));
       for (const failure of outcome.failed) console.log(`移せなかったもの: ${failure.pieceId}（${failure.code}）`);

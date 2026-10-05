@@ -114,7 +114,7 @@ export function prepareThinking(dependencies: StepDependencies, cycle: AutonomyL
     remainingReads: Math.max(0, config.maximumPublicReadsPerDay - readsToday), maximumSteps,
     readingSeeds: loop.readingSeeds, notionAvailable: dependencies.notion !== undefined,
     // The v1 copy step only while her study is Shannon's (Syzygy ADR-0007 revised: with Aether, stories are never put in the PC folder).
-    folderAvailable: !service.studyAether && service.folder.available(cycle.scopeKey, at),
+    folderAvailable: !service.studyAether?.covers(cycle.scopeKey) && service.folder.available(cycle.scopeKey, at),
     lookAvailable: lookNow && !rethink.looked, ownNotes: agentic,
     reachOut: reachOuts > 0 ? { remaining: reachOuts, upcoming: upcomingLines(dependencies, cycle.scopeKey, at) } : null,
   });

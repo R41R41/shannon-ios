@@ -258,10 +258,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * The one scope whose study lives in Aether: the owner's (`SHANNON_OWNER_SCOPE_KEY`, default `owner`, the variable the owner's
+ * other single-scope features use). Aether has one シャノン用フォルダ, so only one scope's study can move there; every other
+ * scope keeps the SQLite study, and the migration moves this scope only.
+ */
+export function aetherStudyScope(environment: Environment): string {
+  return environment.SHANNON_OWNER_SCOPE_KEY?.trim() || 'owner';
+}
+
+/**
  * Aether as the API process wires it: the client (null while `SHANNON_AETHER_API_URL` or `SHANNON_AETHER_SHANNON_TOKEN` is
  * unset) and the owner's proposal inbox (null while `SHANNON_AETHER_PROPOSAL_DIR` is unset).
  */
-export function configuredAetherPorts(environment: Environment, now: () => string): { access: AetherAccess | null; proposals: FileAetherProposalStore | null } {
+export function configuredAetherPorts(environment: Environment, now: () => string): { access: AetherAccess | null; proposals: FileAetherProposalStore | null; studyScopeKey: string } {
   const directory = environment.SHANNON_AETHER_PROPOSAL_DIR?.trim();
-  return { access: configuredAetherAccess(environment), proposals: directory ? new FileAetherProposalStore(directory, now) : null };
+  return { access: configuredAetherAccess(environment), proposals: directory ? new FileAetherProposalStore(directory, now) : null, studyScopeKey: aetherStudyScope(environment) };
 }

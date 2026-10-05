@@ -75,11 +75,12 @@ export class StudyDesk {
     private readonly aether: StudyAether | null = null,
   ) {}
 
-  get aetherConfigured(): boolean { return this.aether !== null; }
+  /** Whether this scope's study lives in Aether (one scope only, the owner's). */
+  aetherCovers(scopeKey: string): boolean { return this.aether?.covers(scopeKey) ?? false; }
 
   /** The overview after bringing in what Aether has (or, when it cannot be reached, from what Shannon has, saying so). */
   async overviewFresh(scopeKey: string): Promise<StudyOverview> {
-    if (!this.aether) return this.overview(scopeKey);
+    if (!this.aether?.covers(scopeKey)) return this.overview(scopeKey);
     // An app read accepts a sync that finished a moment ago (several screens open at once share one).
     const reached = await syncedWithin(this.aether, scopeKey, ROUTE_SYNC_MILLISECONDS, undefined, ROUTE_FRESH_MILLISECONDS);
     return Object.freeze({ ...this.overview(scopeKey), source: { kind: 'aether' as const, reached } });

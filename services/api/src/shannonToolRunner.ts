@@ -58,7 +58,7 @@ export class ShannonToolRunner {
     private readonly aether: ToolAetherPorts = {},
   ) {
     const folderTools = folderExecutors(folder, scopeKey => roomLookGuard(store.study.roomLookTexts(scopeKey, ROOM_LOOK_GUARD.notes)));
-    this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools) : folderTools),
+    this.executors = Object.freeze({ ...studyExecutors(store, now, aether.study ?? null), ...(aether.study ? withoutStories(store, folderTools, aether.study) : folderTools),
       ...minecraftExecutors(minecraft), ...aetherExecutors(aether.proposals ?? null) });
   }
 
@@ -73,7 +73,7 @@ export class ShannonToolRunner {
       : tool.domain === 'minecraft_body' ? minecraftToolOffered(this.minecraft, tool, scopeKey)
         : tool.domain === 'aether_proposal' ? this.aether.proposals?.configured === true && Boolean(this.aether.access)
           : tool.name.startsWith('aether') ? Boolean(this.aether.access) : true);
-    return this.aether.study ? tools.map(aetherStudyTool) : tools;
+    return this.aether.study && (scopeKey === undefined || this.aether.study.covers(scopeKey)) ? tools.map(aetherStudyTool) : tools;
   }
 
   /** The gate, the input check, and the executor's preparation. A result here is the call's answer: nothing ran. */
@@ -150,8 +150,9 @@ export { STUDY_REJECTIONS };
  * revised): a file write that carries a run of one of her stories is refused. Like the room-look check it catches copying,
  * not a retelling.
  */
-function withoutStories(store: SQLiteAutonomyStore, executors: Readonly<Record<string, ToolExecutor>>): Readonly<Record<string, ToolExecutor>> {
+function withoutStories(store: SQLiteAutonomyStore, executors: Readonly<Record<string, ToolExecutor>>, study: StudyAether): Readonly<Record<string, ToolExecutor>> {
   const guarded = (executor: ToolExecutor): ToolExecutor => (input, context) => {
+    if (!study.covers(context.scopeKey)) return executor(input, context);
     const content = typeof input.content === 'string' ? input.content : '';
     let carries = false;
     try { carries = roomLookGuard(store.study.list(context.scopeKey, 500, 'include').filter(piece => piece.kind === 'story').map(piece => piece.body))(content); } catch { carries = true; }

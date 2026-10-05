@@ -38,13 +38,23 @@ export class StudyAether {
   /** When the last sync of a scope finished (this process's clock), for a caller that accepts a recent one. */
   private readonly finished = new Map<string, number>();
 
-  constructor(private readonly store: SQLiteAutonomyStore, readonly access: AetherAccess, private readonly now: () => string) {}
+  constructor(
+    private readonly store: SQLiteAutonomyStore, readonly access: AetherAccess, private readonly now: () => string,
+    /** The one scope whose study lives in Aether (`aetherStudyScope`, the owner's); every other scope keeps the SQLite study. */
+    readonly scopeKey = 'owner',
+  ) {}
+
+  /** Whether this scope's study lives in Aether. Nothing here reads, writes or adopts for any other scope. */
+  covers(scopeKey: string): boolean {
+    return scopeKey === this.scopeKey;
+  }
 
   link(scopeKey: string, pieceId: string): StudyAetherLink | null {
-    return this.store.study.aether.current(scopeKey, pieceId);
+    return this.covers(scopeKey) ? this.store.study.aether.current(scopeKey, pieceId) : null;
   }
 
   async create(scopeKey: string, draft: { kind: StudyPieceKind; title: string; body: string; changeNote?: string }, key: string, signal?: AbortSignal): Promise<AetherWriteResult> {
+    if (!this.covers(scopeKey)) throw new AetherAccessError('INVALID_REQUEST');
     const written = await this.access.create({ title: draft.title, body: draft.body, inStudy: draft.kind === 'story', idempotencyKey: key }, signal);
     this.store.study.aether.notePending(scopeKey, { documentId: written.documentId, aetherVersion: written.version, operation: 'create', kind: draft.kind, changeNote: draft.changeNote || '最初の稿です。' }, this.now());
     return written;
@@ -167,6 +177,7 @@ export class StudyAether {
    * `maxAgeMilliseconds` accepts a run that finished that recently instead of starting another (the app's reads).
    */
   sync(scopeKey: string, signal?: AbortSignal, options: { maxAgeMilliseconds?: number } = {}): Promise<StudyAetherSyncCounts> {
+    if (!this.covers(scopeKey)) return Promise.resolve({ changed: 0, deleted: 0, adopted: 0 });
     const finished = this.finished.get(scopeKey);
     if (options.maxAgeMilliseconds && finished !== undefined && Date.now() - finished < options.maxAgeMilliseconds) return Promise.resolve({ changed: 0, deleted: 0, adopted: 0 });
     let run = this.running.get(scopeKey);

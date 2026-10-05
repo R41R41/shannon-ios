@@ -65,7 +65,7 @@ export interface AutonomyServiceDependencies {
   /** Her Minecraft body's request queue (phase 4, `docs/minecraft-body-contract.md`). Only the API process has it; her own time never asks her body. */
   minecraftBody?: MinecraftRequestPort | null;
   /** Aether (Syzygy ADR-0007 revised): her study's text and her Aether folder, and the owner's proposal inbox; absent, none of it. */
-  aether?: Pick<ToolAetherPorts, 'access' | 'proposals'>;
+  aether?: Pick<ToolAetherPorts, 'access' | 'proposals'> & { studyScopeKey?: string };
 }
 
 export interface RecordedDecision extends AutonomyDecision {
@@ -115,7 +115,7 @@ export class ShannonAutonomyService {
     this.now = dependencies.now;
     this.announcer = dependencies.announcer ?? new DisabledAutonomyAnnouncer();
     this.resolvePath = dependencies.resolvePath ?? resolvePhysicalPath;
-    this.studyAether = dependencies.aether?.access ? new StudyAether(this.store, dependencies.aether.access, this.now) : null;
+    this.studyAether = dependencies.aether?.access ? new StudyAether(this.store, dependencies.aether.access, this.now, dependencies.aether.studyScopeKey) : null;
     this.study = new StudyDesk(this.store, at => autonomyDayKey(at, this.config), this.now,
       this.config.maximumReachOutFollowUpsPerDay > 0 ? { timeZone: this.config.timeZone, ...(dependencies.ownerFirstActiveAfter ? { ownerFirstActiveAfter: dependencies.ownerFirstActiveAfter } : {}) } : null, this.studyAether);
     this.folder = new HostFolderDesk(this.store, this.config, this.now, this);

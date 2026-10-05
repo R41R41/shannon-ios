@@ -18,12 +18,12 @@ export function dispatchStudyRequest(request: ApiRequest, study: StudyDesk): Api
     const scopeKey = request.query?.get('scopeKey');
     if (!validScopeKey(scopeKey)) return badRequest('scopeKey is required');
     if (request.path === '/v1/autonomy/study') {
-      return study.aetherConfigured ? study.overviewFresh(scopeKey).then(body => ({ status: 200, body })) : { status: 200, body: study.overview(scopeKey) };
+      return study.aetherCovers(scopeKey) ? study.overviewFresh(scopeKey).then(body => ({ status: 200, body })) : { status: 200, body: study.overview(scopeKey) };
     }
     const pieceMatch = request.path.match(/^\/v1\/autonomy\/study\/pieces\/([^/]+)$/u);
     if (!pieceMatch) return undefined;
     const id = decodeURIComponent(pieceMatch[1] ?? '');
-    return study.aetherConfigured ? study.pieceFresh(scopeKey, id).then(result) : result(study.piece(scopeKey, id));
+    return study.aetherCovers(scopeKey) ? study.pieceFresh(scopeKey, id).then(result) : result(study.piece(scopeKey, id));
   }
 
   if (request.method !== 'POST') return undefined;

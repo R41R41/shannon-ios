@@ -401,6 +401,23 @@ describe('her study in Aether', () => {
     expect(store.study.feedback(scope, id)[0]).toMatchObject({ aetherDocumentId: document.id, aetherVersion: 1 });
   });
 
+  it('keeps every scope but the owner\'s on the SQLite study', async () => {
+    const { fake, service, store } = await harness();
+    const other = 'friend-scope';
+    const memory = toolSessionMemory();
+    const created = await service.tools.call('study.create', JSON.stringify({ kind: 'story', title: '友だちの話', body: STORY }), { scopeKey: other, surface: 'text', audience: 'owner_alone', memory });
+    expect(created.ok).toBe(true);
+    const id = /id: ([0-9a-f-]{36})/u.exec(created.text)![1]!;
+    expect(fake.requests).toEqual([]);
+    expect(store.study.aether.current(other, id)).toBeNull();
+    expect(service.tools.offered('text', 'owner_alone', other).find(tool => tool.name === 'study.list')!.description).toContain('正本はシャノンのデータベース');
+    await service.studyAether!.sync(other);
+    expect(fake.requests).toEqual([]);
+    const response = dispatchStudyRequest({ method: 'GET', path: '/v1/autonomy/study', query: new URLSearchParams({ scopeKey: other }) }, service.study);
+    expect(response).not.toBeInstanceOf(Promise);
+    expect((response as { body: object }).body).not.toHaveProperty('source');
+  });
+
   it('falls back to the SQLite study, unchanged, while Aether is not configured', async () => {
     const { call, store, service } = await harness({ aether: false });
     const created = await call('study.create', { kind: 'story', title: '灯台の話', body: STORY });
