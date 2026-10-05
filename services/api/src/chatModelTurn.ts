@@ -28,10 +28,12 @@ import { TOOLS_WITHHELD_INSTRUCTIONS, providerFunctionTools, toolInstructions } 
  * body and read the same way (`chatModelGolden.test.ts` holds both to recorded bytes). Key
  * order is part of the request; do not reorder.
  *
- * The instructions run from what never changes to what changes every turn, so the provider's
- * prompt cache holds their start (Syzygy ADR-0003 principle 4): her identity, the fixed blocks
- * of this adapter, the blocks fixed for a Talk (her reply's feeling, her tools), what she knows
- * of the owner, and last the turn's own blocks (`chatTurnContextBlocks`).
+ * The request runs from what never changes to what changes every turn, so the provider's prompt
+ * cache holds as much of its start as it can (Syzygy ADR-0003 principle 4). The instructions are
+ * her identity, the fixed blocks of this adapter, the blocks fixed for a Talk (her reply's
+ * feeling, her tools) and what she knows of the owner. The turn's own blocks
+ * (`chatTurnContextBlocks`) are one developer message after the history and just before the
+ * owner's words, so the replayed history is part of the prefix the next turn repeats.
  */
 export function chatTurnRequestBody(
   model: string, request: ShannonChatModelRequest, agentHostHint: string | undefined,
@@ -46,10 +48,10 @@ export function chatTurnRequestBody(
       ...(request.offerReplyFeeling ? [REPLY_FEELING_INSTRUCTIONS] : []),
       ...(offersTools(request) ? [toolInstructions(request.tools!, false)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
       ...(request.profilePrompt ? [request.profilePrompt] : []),
-      ...chatTurnContextBlocks(request),
     ].join('\n\n'),
     input: [
       ...request.history.map(item => ({ role: item.role, content: item.content })),
+      ...turnContextMessage(chatTurnContextBlocks(request)),
       {
         role: 'user',
         content: request.attachments?.length
@@ -182,6 +184,11 @@ export function chatTurnContextBlocks(request: ShannonChatModelRequest): string[
     ...(request.priorThreadSummary ? [priorThreadSummaryInstructions(request.priorThreadSummary)] : []),
     ...(request.generateThreadTitle ? [THREAD_TITLE_INSTRUCTIONS] : []),
   ];
+}
+
+/** The turn's blocks as the one developer message that follows the history; nothing when there are none. */
+export function turnContextMessage(blocks: readonly string[]): Array<{ role: 'developer'; content: string }> {
+  return blocks.length ? [{ role: 'developer', content: blocks.join('\n\n') }] : [];
 }
 
 export type ParsedChatTurn = ReturnType<typeof parseStructuredTurn>;

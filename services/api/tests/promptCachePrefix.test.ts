@@ -1,0 +1,113 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SHIRITORI_TURNS, ShiritoriGame } from '../../../packages/evaluation/src/reach/index.js';
+import { createLocalApiKernel } from '../src/apiKernel.js';
+import type { ShannonChatModelRequest } from '../src/chatModel.js';
+import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { SQLiteShannonStore } from '../src/sqliteStore.js';
+import { ScriptedShiritoriModel } from './reach/reachConversation.js';
+
+vi.setConfig({ testTimeout: 120_000 });
+afterEach(() => { vi.unstubAllEnvs(); });
+
+type Body = { instructions: string; input: Array<{ role: string; content: unknown }>; tools?: unknown; text: { format: unknown } };
+
+/** The parts of a text-chat provider body, each as one string. */
+function parts(request: ShannonChatModelRequest) {
+  const body = chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as Body;
+  return {
+    tools: JSON.stringify(body.tools ?? []), schema: JSON.stringify(body.text.format), instructions: body.instructions,
+    input: body.input.map(item => `${item.role}\n${typeof item.content === 'string' ? item.content : JSON.stringify(item.content)}`),
+  };
+}
+
+/** Two orders a provider may render a body in: tools and schema before the instructions, or after them. */
+const ORDERS = {
+  toolsFirst: (p: ReturnType<typeof parts>) => [p.tools, p.schema, p.instructions, ...p.input].join('\u0000'),
+  instructionsFirst: (p: ReturnType<typeof parts>) => [p.instructions, p.tools, p.schema, ...p.input].join('\u0000'),
+};
+
+function commonPrefix(left: string, right: string): number {
+  let index = 0;
+  while (index < left.length && index < right.length && left[index] === right[index]) index += 1;
+  return index;
+}
+
+/** The share of each request that repeats the start of the request before it, over a whole thread. */
+function prefixShare(requests: readonly ShannonChatModelRequest[], order: (p: ReturnType<typeof parts>) => string): number {
+  const bodies = requests.map(request => order(parts(request)));
+  let shared = 0;
+  let total = 0;
+  for (let index = 1; index < bodies.length; index += 1) {
+    shared += commonPrefix(bodies[index - 1]!, bodies[index]!);
+    total += bodies[index]!.length;
+  }
+  return Math.round(shared / total * 1000) / 1000;
+}
+
+/**
+ * One Talk of `games` shiritori games of the reach measure (a), one after the other, through the kernel over a SQLite
+ * store (so her knowledge projection is there too), and every request the model was given.
+ */
+async function shiritoriThread(games: number): Promise<ShannonChatModelRequest[]> {
+  const inner = new ScriptedShiritoriModel();
+  const requests: ShannonChatModelRequest[] = [];
+  const directory = mkdtempSync(join(tmpdir(), 'shannon-prefix-'));
+  let clock = Date.parse('2026-10-05T10:00:00.000Z');
+  const now = () => new Date(clock).toISOString();
+  const store = new SQLiteShannonStore({ path: join(directory, 'prefix.sqlite'), now });
+  const api = createLocalApiKernel(now, { chatModel: { mode: inner.mode, model: inner.model,
+    generate: request => { requests.push(request); return inner.generate(request); } }, stateStore: store, conversationStore: store, knowledgeStore: store });
+  try {
+    for (let round = 0; round < games; round += 1) {
+      const game = new ShiritoriGame();
+      for (let turn = 1; turn <= SHIRITORI_TURNS; turn += 1) {
+        clock += 20_000;
+        const response = await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: 'prefix:owner', threadId: 'prefix-shiritori', message: game.ownerMessage(turn) } });
+        game.recordReply(turn, { reply: String((response.body as { reply?: unknown }).reply ?? ''), historyComplete: true });
+        await new Promise(resolve => setImmediate(resolve));
+        await api.waitForBackground('prefix:owner');
+      }
+    }
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+  return requests;
+}
+
+/** Characters of `order`'s rendering of `request` up to the end of its replayed history. */
+function throughHistory(request: ShannonChatModelRequest, order: (p: ReturnType<typeof parts>) => string): number {
+  const p = parts(request);
+  return order({ ...p, input: p.input.slice(0, request.history.length) }).length;
+}
+
+describe('the provider prompt cache (Syzygy ADR-0003 principle 4)', () => {
+  it('repeats, from one turn of a Talk to the next, her identity, the fixed blocks, the tools, the schema and the history', async () => {
+    const requests = await shiritoriThread(1);
+    expect(requests).toHaveLength(SHIRITORI_TURNS);
+    for (const request of requests) {
+      const body = chatTurnRequestBody('gpt-5.6-luna', request, 'shannon-mac') as Body;
+      // What changes every turn is not in the instructions: it is one developer message after the history.
+      expect(body.instructions).not.toContain('[Shannon shared state');
+      expect(body.instructions).not.toContain('[Current cognitive context');
+      expect(body.input.at(-2)).toEqual({ role: 'developer', content: expect.stringMatching(/^\[Shannon shared state v\d+\]/u) });
+      expect(body.input.at(-1)?.role).toBe('user');
+    }
+    for (const order of Object.values(ORDERS)) {
+      // The first turn asks for a title, which adds a field to the schema; from the second turn on nothing before the history changes.
+      for (let index = 2; index < requests.length; index += 1) {
+        const [before, after] = [requests[index - 1]!, requests[index]!];
+        // Nothing fell out of the window: the next history begins with the whole history before it.
+        expect(after.history.slice(0, before.history.length)).toEqual(before.history);
+        expect(commonPrefix(order(parts(before)), order(parts(after)))).toBeGreaterThanOrEqual(throughHistory(before, order));
+      }
+    }
+    // Measured on the base of this change (54cec9a): 0.647 with the tools and schema rendered first, 0.187 with the
+    // instructions first, because the shared state followed her identity at the top of the instructions.
+    expect(prefixShare(requests, ORDERS.toolsFirst)).toBeGreaterThan(0.85);
+    expect(prefixShare(requests, ORDERS.instructionsFirst)).toBeGreaterThan(0.85);
+  });
+});

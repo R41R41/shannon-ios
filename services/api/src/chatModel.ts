@@ -18,7 +18,7 @@ import {
   type VoiceStreamBounds,
 } from './chatModelVoiceStream.js';
 import { completeSpokenSentences } from './spokenSentences.js';
-import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn } from './chatModelTurn.js';
+import { chatTurnRequestBody, chatTurnResult, offersTools, parsedChatTurn, turnContextMessage } from './chatModelTurn.js';
 import { streamedVoiceToolTurn } from './chatModelVoiceTools.js';
 import { ChatSentenceSplitter } from './chatSentenceSplitter.js';
 import { PartialAnswerError, RoundTimer, type RoundTime } from './turnDeadline.js';
@@ -427,17 +427,16 @@ export class OpenAIResponsesChatModel implements ShannonChatModel {
     const tools = this.voiceTools(request);
     return {
       model: this.model,
-      // Fixed first, what changes last (`ShannonPromptLayers`).
+      // Fixed first, what changes last (`ShannonPromptLayers`): the turn's blocks follow the history, as in text chat.
       instructions: [
         request.systemPrompt,
         VOICE_REPLY_INSTRUCTIONS,
         ...(tools ? [toolInstructions(tools, true)] : request.toolsWithheld ? [TOOLS_WITHHELD_INSTRUCTIONS] : []),
         ...(request.profilePrompt ? [request.profilePrompt] : []),
-        ...(request.turnContext ? [request.turnContext] : []),
-        ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : []),
       ].join('\n\n'),
       input: [
         ...request.history.map(item => ({ role: item.role, content: item.content })),
+        ...turnContextMessage([...(request.turnContext ? [request.turnContext] : []), ...(request.useWebSearch ? [WEB_SEARCH_INSTRUCTIONS] : [])]),
         { role: 'user', content: request.message },
       ],
       reasoning: { effort: complex ? 'low' : 'none' },
