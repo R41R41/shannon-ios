@@ -58,6 +58,7 @@ final class ShannonGeminiLiveTransport {
     var stopObservingDevices: (() -> Void)?
     /// The microphone set on the input unit before voice processing; nil for the system's input.
     var appliedInputDevice: AudioDeviceID?
+    var appliedInputUID: String?
     /// The microphone behind voice processing's aggregate, as Core Audio reports it once the audio runs.
     var heardInputName: String?
 #endif

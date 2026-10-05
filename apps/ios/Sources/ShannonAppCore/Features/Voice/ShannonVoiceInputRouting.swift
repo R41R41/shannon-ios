@@ -56,4 +56,10 @@ public enum ShannonMacVoiceInputRouting {
         }
         return Resolution(deviceID: selectedID, isPreferenceUnavailable: false)
     }
+
+    /// The microphone a running call was set to is no longer connected (nil: the call uses the system's input).
+    public static func lost(_ appliedID: String?, devices: [ShannonVoiceInputDevice]) -> Bool {
+        guard let appliedID else { return false }
+        return !devices.contains { $0.id == appliedID }
+    }
 }

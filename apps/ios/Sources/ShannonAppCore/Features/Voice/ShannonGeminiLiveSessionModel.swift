@@ -77,6 +77,9 @@ public final class ShannonGeminiLiveSessionModel {
     var backgroundSilence = ShannonVoiceBackgroundSilence()
     var backgroundWatchTask: Task<Void, Never>?
     var lastAudioReconnectAt: Date?
+    /// The Mac's watch for an engine that runs but delivers no microphone buffers (`+CaptureWatch.swift`).
+    var captureWatch = ShannonVoiceCaptureWatch()
+    var captureWatchTask: Task<Void, Never>?
     var interruptionGeneration = 0
     /// Ends the call the way the owner's own 終了 does. Set by the owner of the call.
     var endAfterBackgroundSilence: (@MainActor () -> Void)?
@@ -228,6 +231,7 @@ public final class ShannonGeminiLiveSessionModel {
         setKeepsScreenAwake(false)
         finalizeTask = nil
         duckRestoreTask = nil
+        stopWatchingCapture()
         if session != nil {
             recordSessionSummary()
             callReported?(false)
@@ -301,6 +305,7 @@ public final class ShannonGeminiLiveSessionModel {
             phase = .listening
             // Awake only while the call is live: a failed or abandoned start must not keep the device up.
             setKeepsScreenAwake(true)
+            watchCapture()
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
         case .speechStarted:
@@ -326,8 +331,7 @@ public final class ShannonGeminiLiveSessionModel {
             interruptResponse()
             scheduleFinalization(turnComplete: false)
         case let .goAway(reason):
-            if reason == ShannonGeminiLiveTransport.audioFailure, reconnectAfterAudioFailure() { return }
-            fail("音声会話の接続が終了しました。もう一度つないでください。", recovery: .reconnect)
+            if reason == ShannonGeminiLiveTransport.audioFailure { audioFailed() } else { connectionEnded() }
         }
     }
 
@@ -336,6 +340,7 @@ public final class ShannonGeminiLiveSessionModel {
     }
 
     private func handleCapture(rms: Float, seconds: Double, started: Bool, ended: Bool, chunks: Int) {
+        captureWatch.buffer(at: ProcessInfo.processInfo.systemUptime)
         if !didRecordCaptureStart {
             didRecordCaptureStart = true
             ShannonVoiceDiagnostics.shared.record("gemini.audio.capture.started")
@@ -470,6 +475,7 @@ public final class ShannonGeminiLiveSessionModel {
         // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
         if session != nil { callReported?(false) }
         setKeepsScreenAwake(false)
+        stopWatchingCapture()
         responseTask?.cancel()
         responseTask = nil
         responseGenerationID = nil

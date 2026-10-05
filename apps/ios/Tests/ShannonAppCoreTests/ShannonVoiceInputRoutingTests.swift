@@ -54,6 +54,37 @@ final class ShannonMacVoiceInputRoutingTests: XCTestCase {
             .init(deviceID: nil, isPreferenceUnavailable: true))
     }
 
+    func testAChosenMicrophoneThatGoesAwayMidCallIsLost() {
+        XCTAssertFalse(ShannonMacVoiceInputRouting.lost(nil, devices: []), "the system's input is never lost this way")
+        XCTAssertFalse(ShannonMacVoiceInputRouting.lost("usb-mic", devices: devices))
+        XCTAssertTrue(ShannonMacVoiceInputRouting.lost("usb-mic", devices: [devices[0]]))
+    }
+
+    func testALiveCallThatHearsNoBuffersIsDeaf() {
+        var watch = ShannonVoiceCaptureWatch()
+        XCTAssertFalse(watch.isDeaf(at: 100), "not watched")
+        watch.buffer(at: 100)
+        XCTAssertNil(watch.lastBufferAt, "buffers before the watch are not counted")
+        watch.start(at: 100)
+        XCTAssertFalse(watch.isDeaf(at: 105))
+        XCTAssertTrue(watch.isDeaf(at: 106.5), "started but deaf")
+        watch.buffer(at: 106)
+        XCTAssertFalse(watch.isDeaf(at: 111))
+        XCTAssertTrue(watch.isDeaf(at: 112.5))
+        watch.stop()
+        XCTAssertFalse(watch.isDeaf(at: 200))
+    }
+
+    @MainActor
+    func testASecondAudioFailureSoonAfterIsShownInsteadOfReconnectingAgain() {
+        let model = ShannonGeminiLiveSessionModel()
+        model.phase = .listening
+        model.lastAudioReconnectAt = Date()
+        model.audioFailed()
+        XCTAssertEqual(model.phase, .failed)
+        XCTAssertEqual(model.failureRecovery, .reconnect)
+    }
+
     func testTheLabelSaysWhenTheChosenMicrophoneCannotBeUsed() {
         let state = ShannonVoiceInputState(
             activeInputName: "MacBook Proのマイク", isPreferenceUnavailable: true, devices: devices, selectedDeviceID: "usb-mic")

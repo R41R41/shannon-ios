@@ -28,6 +28,7 @@ extension ShannonGeminiLiveTransport {
     /// processing then builds its aggregate from that input. Nothing is set on the voice-processing unit itself.
     func prepareInputDevice() {
         appliedInputDevice = nil
+        appliedInputUID = nil
         let resolution = ShannonMacVoiceInputRouting.resolve(selectedID: inputDeviceID, devices: ShannonMacAudioDevices.inputs())
         if resolution.isPreferenceUnavailable, !preferenceUnavailable {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.input.fallback", metadata: ["preference": "device"])
@@ -37,6 +38,7 @@ extension ShannonGeminiLiveTransport {
               let unit = audioEngine.inputNode.audioUnit else { return }
         if ShannonMacAudioDevices.setCurrentDevice(device, on: unit) {
             appliedInputDevice = device
+            appliedInputUID = uid
         } else {
             ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.refused")
             preferenceUnavailable = true
@@ -74,6 +76,14 @@ extension ShannonGeminiLiveTransport {
         })
         stopObservingDevices = ShannonMacAudioDevices.observeChanges { [weak self] in
             guard let self, !self.stopped else { return }
+            // The chosen microphone went away under the running call: an audio failure, so the call reconnects
+            // once onto the system's input (and says the choice cannot be used) instead of going on deaf.
+            if self.audioStarted, ShannonMacVoiceInputRouting.lost(self.appliedInputUID, devices: ShannonMacAudioDevices.inputs()) {
+                ShannonVoiceDiagnostics.shared.record("gemini.audio.input.device.lost")
+                self.appliedInputUID = nil
+                self.eventHandler(.goAway(Self.audioFailure))
+                return
+            }
             try? self.applyInputPreference()
         }
     }
