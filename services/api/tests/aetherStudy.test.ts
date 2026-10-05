@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AetherAccessError, HttpAetherAccess, type AetherAccess, aetherIdempotencyKey, configuredAetherAccess, configuredAetherPorts } from '../src/aetherAccess.js';
-import { SHANNON_AETHER_ACCESS_CAPABILITY, shannonCapabilityPrompt } from '@shannon/cognition';
+import { SHANNON_AETHER_ACCESS_CAPABILITY, SHANNON_MINECRAFT_BODY_CAPABILITY, shannonCapabilityPrompt } from '@shannon/cognition';
 import { withToolCapabilityLines } from '../src/shannonAetherTools.js';
 import { FileAetherProposalStore } from '../src/aetherProposal.js';
 import { configuredAutonomy } from '../src/autonomyBudget.js';
@@ -14,7 +14,7 @@ import { createLocalApiKernel } from '../src/apiKernel.js';
 import { dispatchStudyRequest } from '../src/apiStudyRoutes.js';
 import type { ShannonChatModel, ShannonChatModelRequest, ShannonChatModelResult, ShannonVoiceModelRequest } from '../src/chatModel.js';
 import { toolInstructions } from '../src/chatModelTools.js';
-import { chatTurnRequestBody } from '../src/chatModelTurn.js';
+import { chatTurnRequestBody, offersTools } from '../src/chatModelTurn.js';
 import { conversationTools, type ConversationToolServer } from '../src/shannonToolSession.js';
 import { gatedAether } from '../src/shannonToolGate.js';
 import { toolSessionMemory } from '../src/shannonToolTypes.js';
@@ -25,6 +25,7 @@ import type { StudyPiece } from '../src/studyStore.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { FakeAether, TOKEN } from './fakeAetherServer.js';
 import { STORY_BODY, loopHarness, runUntilIdle } from './autonomyLoopHarness.js';
+import { promptOf } from './modelPrompt.js';
 import { prepareStep } from '../src/autonomyLoopSteps.js';
 
 const scope = 'owner';
@@ -729,4 +730,21 @@ describe('the Aether capability line in the layered request (merge of prompt-cac
     expect(voice.history.map(item => item.content).join('\n')).not.toContain(line);
   });
 
+  it('is left out of a turn that searches the web, which the adapter sends without tools', async () => {
+    const { service, clock } = await harness();
+    const model = new CapturingModel();
+    const api = createLocalApiKernel(() => clock.at, { autonomy: service, chatModel: model });
+    await api.dispatch({ method: 'POST', path: '/v1/chat', body: { scopeKey: scope, threadId: 'aether-web', message: '今日の天気は？', webSearch: true } });
+    const request = model.requests.at(-1) as ShannonChatModelRequest;
+    expect(request.useWebSearch).toBe(true);
+    expect(offersTools(request)).toBe(false);
+    expect(promptOf(request)).not.toContain(line);
+    // The rule itself, as voice applies it: the tools are dropped by the adapter on a web-search turn, so is the line.
+    const prompt = shannonCapabilityPrompt('owner');
+    const tools = { definitions: [{ name: 'aether.search' }, { name: 'minecraft.request' }] };
+    expect(withToolCapabilityLines({ systemPrompt: prompt, tools }).systemPrompt).toContain(line);
+    expect(withToolCapabilityLines({ systemPrompt: prompt, tools }).systemPrompt).toContain(SHANNON_MINECRAFT_BODY_CAPABILITY.text);
+    expect(withToolCapabilityLines({ systemPrompt: prompt, tools, useWebSearch: true }).systemPrompt).toBe(prompt);
+    expect(withToolCapabilityLines({ systemPrompt: prompt, tools, placeSearch: { spoken: false } }).systemPrompt).toBe(prompt);
+  });
 });
