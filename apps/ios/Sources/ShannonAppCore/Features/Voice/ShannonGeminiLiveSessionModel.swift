@@ -116,7 +116,6 @@ public final class ShannonGeminiLiveSessionModel {
         stop()
         backgroundSilence.speech(at: Date())
         guestCall = retainedGuestCall
-        setKeepsScreenAwake(true)
         pendingTurns = retained
         isMicrophoneMuted = retainedMute
         callStartedAt = retainedStart
@@ -300,6 +299,8 @@ public final class ShannonGeminiLiveSessionModel {
         switch event {
         case .sessionReady:
             phase = .listening
+            // Awake only while the call is live: a failed or abandoned start must not keep the device up.
+            setKeepsScreenAwake(true)
             if callStartedAt == nil { callStartedAt = Date() }
             backgroundSilence.speech(at: Date())
         case .speechStarted:
@@ -468,6 +469,7 @@ public final class ShannonGeminiLiveSessionModel {
         )
         // A failed call is no longer a call on this device; a retry makes a new session and reports it again.
         if session != nil { callReported?(false) }
+        setKeepsScreenAwake(false)
         responseTask?.cancel()
         responseTask = nil
         responseGenerationID = nil

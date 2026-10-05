@@ -98,6 +98,18 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertEqual(call.session.phase, .idle)
     }
 
+    func testTheMacStaysAwakeOnlyWhileTheCallIsLive() {
+        let session = ShannonGeminiLiveSessionModel()
+        XCTAssertNil(session.awakeActivity, "nothing is held before the call is ready")
+        session.setKeepsScreenAwake(true)
+        XCTAssertNotNil(session.awakeActivity)
+        session.fail("x")
+        XCTAssertNil(session.awakeActivity, "a failed call lets the Mac sleep")
+        session.setKeepsScreenAwake(true)
+        session.stop()
+        XCTAssertNil(session.awakeActivity)
+    }
+
     // MARK: Elsewhere (owner decision 2026-10-06, option B)
 
     func testTheRowSaysTheCallAndItsPhase() {
