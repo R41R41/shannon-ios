@@ -40,7 +40,14 @@ final class ShannonBodyTests: XCTestCase {
             ShannonBodyCopy.settingsExplanation(body: .eyes),
             "目だけのときは、目のあたりを軽くつつけます（なでる・くすぐる・手をつなぐは、ありません）。"
                 + "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。"
-                + "オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。")
+                + "オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
+                + ShannonBodyCopy.touchOnThisDevice)
+        // The Mac also says who a touch reaches as (A15); the iPhone adds nothing.
+#if os(macOS)
+        XCTAssertEqual(ShannonBodyCopy.touchOnThisDevice, ShannonGeneratedStrings.settingsFigureTouchMac)
+#else
+        XCTAssertEqual(ShannonBodyCopy.touchOnThisDevice, "")
+#endif
     }
 
     // MARK: Her body (the character or her eyes alone)

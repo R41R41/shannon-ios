@@ -85,7 +85,7 @@ public enum ShannonBodyCopy {
     public static let displayMenuHint = ShannonGeneratedStrings.talkDisplayMenuHint
     public static let reportsTouchTitle = "体に起きたことをシャノンに伝える"
     public static let reportsTouchHint = "オンにすると、Live2Dの姿に触れたことがシャノンに届きます"
-    public static let settingsExplanation = touchWaysHuman + touchPrivacy
+    public static let settingsExplanation = touchWaysHuman + touchPrivacy + touchOnThisDevice
     /// How she can be touched, by body: the eyes can only be poked.
     static let touchWaysHuman = "Live2Dの姿は指で触れられます（頭をなでる、つつく、くすぐる、手をつなぐ）。"
     static let touchPrivacy = "「体に起きたことをシャノンに伝える」がオフの間は、この端末の中で動くだけで、何も送りません。オンにすると、触れた種類・長さ・強さ・時刻だけがシャノンに届き、気持ちが動いて、ひとこと返すことがあります。カメラは使いません。"
