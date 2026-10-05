@@ -88,8 +88,9 @@ extension ShannonDesktopBody {
         }
         ownerInCallElsewhere = presence.ownerCallElsewhere?.active ?? false
         let waiting = presence.study?.awaitingReaction ?? 0
-        // One more story waits for his reaction: the line of that moment, when it may be said.
-        if waiting > awaitingReaction { enqueue { await self.sayNudge("awaitingReaction") } }
+        // One more story waits for his reaction: the line of that moment, when it may be said. Not for what was already
+        // waiting when the body first read her (a launch, a new pairing).
+        if let known = awaitingReaction, waiting > known { enqueue { await self.sayNudge("awaitingReaction") } }
         awaitingReaction = waiting
         if let look = presence.look, !answeredLooks.contains(look.id) {
             answeredLooks.insert(look.id)

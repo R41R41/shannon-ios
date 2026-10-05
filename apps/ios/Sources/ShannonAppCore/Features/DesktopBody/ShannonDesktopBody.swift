@@ -77,7 +77,8 @@ public final class ShannonDesktopBody {
     @ObservationIgnored var etag: String?
     @ObservationIgnored var registeredCamera: Bool?
     @ObservationIgnored var lastReachOutID: String?
-    @ObservationIgnored var awaitingReaction = 0
+    /// Stories waiting for his reaction at the last read; nil until the first read since launch.
+    @ObservationIgnored var awaitingReaction: Int?
     @ObservationIgnored var looksTaken: [Date] = []
     @ObservationIgnored var answeredLooks: Set<String> = []
     @ObservationIgnored var lastCarryAskAt: Date?
