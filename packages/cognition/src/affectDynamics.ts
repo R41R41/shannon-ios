@@ -16,8 +16,9 @@ import type { ShannonEmotion } from './types.js';
  * - Mood (§2.3, Eldar & Niv 2015): mood ← mood + η_m (error − mood), and a perceived outcome is outcome × f^mood.
  *   The attractor of valence moves by w_δ × mood. f is fixed at 1 in this stage (owner answer 6).
  * - Emotional memory (§2.4): a trace per key, strength × (1 + t/τ)^(−ψ) on the awake clock (Wickelgren 1974,
- *   Wixted & Ebbesen 1991, Wixted 2004, Rubin & Wenzel 1996), with a smaller ψ for an event of high arousal
- *   (McGaugh 2004, Yonelinas & Ritchey 2015) and ψ kept apart for pleasant and unpleasant (Walker, Skowronski &
+ *   Wixted & Ebbesen 1991, Wixted 2004, Rubin & Wenzel 1996), with the smaller ψ for an event whose |impulse| is
+ *   0.72 or more (McGaugh 2004, Yonelinas & Ritchey 2015: arousing events fade slowly; the impulse, which is also the
+ *   event's arousal impulse, stands in for arousal at encoding) and ψ kept apart for pleasant and unpleasant (Walker, Skowronski &
  *   Thompson 2003). A trace lives while it is above the stationary band; there is no count limit. A new outcome of
  *   the same key recalls it, and a recalled trace is rewritten by the error at the learning rate of that key
  *   (reconsolidation: Nader, Schafe & LeDoux 2000; Sevenster, Beckers & Kindt 2013).

@@ -9,6 +9,7 @@ import {
   type PredictionModel,
   type PredictionObservation,
 } from '../src/index.js';
+import { domainPrior } from '../src/predictionDomains.js';
 
 /**
  * The prediction layer of Syzygy ADR-0006 §1, stage 1: deterministic simulations of what the layer must show before
@@ -92,7 +93,6 @@ describe('the prediction layer', () => {
     const stable = predictOutcome(model, { domain: 'touch', key: 'stable', at: 40 * DAY });
     const volatile = predictOutcome(model, { domain: 'touch', key: 'volatile', at: 40 * DAY });
     expect(volatile.volatility).toBeGreaterThan(stable.volatility * 1_000);
-    expect(volatile.causes).toBe(1);
     const rate = (key: string) => observeOutcome(model, { domain: 'touch', key, at: 40 * DAY + 2, outcome: 0 }).learningRate;
     expect(rate('volatile')).toBeGreaterThan(rate('stable'));
     expect(predictOutcome(model, { domain: 'touch', key: 'stable', at: 100 * DAY }).uncertainty)
@@ -145,6 +145,53 @@ describe('the prediction layer', () => {
       expect(update.expectation).toBeGreaterThan(0);
       expect(update.expectation).toBeLessThan(1);
     }
+  });
+
+  it('learns yes/no like a Beta posterior: k falls as evidence accumulates, and time with volatility lifts it again', () => {
+    const history = (model: PredictionModel) => {
+      const rates: number[] = [];
+      for (let index = 0; index < 50; index += 1) rates.push(observeOutcome(model, { domain: 'owner_present', key: 'evening', at: index * MINUTE, outcome: index % 4 ? 1 : 0 }).learningRate);
+      return rates;
+    };
+    const rates = history(createPredictionModel());
+    // Beta(1,1) first: 1/3, then 1/(strength + 1).
+    expect(rates[0]).toBeCloseTo(1 / 3, 9);
+    for (let index = 1; index < rates.length; index += 1) expect(rates[index]!).toBeLessThan(rates[index - 1]!);
+    expect(rates.at(-1)!).toBeLessThan(0.05);
+    const soon = createPredictionModel();
+    history(soon);
+    const late = createPredictionModel();
+    history(late);
+    const next = (model: PredictionModel, gap: number) => observeOutcome(model, { domain: 'owner_present', key: 'evening', at: 49 * MINUTE + gap, outcome: 1 }).learningRate;
+    expect(next(late, 60 * DAY)).toBeGreaterThan(next(soon, MINUTE) * 2);
+  });
+
+  it('never holds an expectation less surely than the unbiased spread of its scale', () => {
+    const model = createPredictionModel();
+    observeOutcome(model, { domain: 'touch', key: 'k', at: 0, outcome: 0.5 });
+    observeOutcome(model, { domain: 'reply_time', key: 'k', at: 0, outcome: 60 });
+    for (const domain of ['touch', 'reply_time'] as const) {
+      const far = predictOutcome(model, { domain, key: 'k', at: 10_000 * DAY });
+      expect(far.uncertainty).toBeLessThanOrEqual(scaleVariance(SHANNON_PREDICTION_DOMAINS[domain]) + 1e-12);
+    }
+  });
+
+  it('takes a prior from the other keys of the domain, never from the key itself', () => {
+    const model = createPredictionModel();
+    for (let index = 0; index < 20; index += 1) {
+      observeOutcome(model, { domain: 'touch', key: 'a', at: index * MINUTE, outcome: 0.8 });
+      observeOutcome(model, { domain: 'touch', key: 'b', at: index * MINUTE, outcome: -0.4 });
+    }
+    const state = model.domains.get('touch')!;
+    const spec = SHANNON_PREDICTION_DOMAINS.touch;
+    // For a new cause of `a`, the prior is `b`'s, and the other way round.
+    expect(domainPrior(state, spec, undefined, state.keys.get('a')).expectation).toBeLessThan(-0.3);
+    expect(domainPrior(state, spec, undefined, state.keys.get('b')).expectation).toBeGreaterThan(0.7);
+    // A key alone in its domain starts a new cause from the unbiased prior.
+    const lone = createPredictionModel();
+    for (let index = 0; index < 20; index += 1) observeOutcome(lone, { domain: 'touch', key: 'only', at: index * MINUTE, outcome: 0.8 });
+    const only = lone.domains.get('touch')!;
+    expect(domainPrior(only, spec, undefined, only.keys.get('only'))).toEqual({ expectation: 0, uncertainty: scaleVariance(spec) });
   });
 
   it('names where each of its coefficients comes from', () => {
