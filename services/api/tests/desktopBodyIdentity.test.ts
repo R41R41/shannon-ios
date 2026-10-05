@@ -6,7 +6,7 @@ import { SQLiteBodyStore } from '../src/bodyStore.js';
 import { isFullBody } from '../src/bodyTouchOnly.js';
 import { InMemoryConversationStore } from '../src/conversationStore.js';
 import {
-  DESKTOP_BODY_HEADER, DESKTOP_BODY_HEADER_VALUE, desktopBodyDeviceId, desktopBodyMaySpeakOn, namesDesktopBody, requestDeviceId,
+  DESKTOP_BODY_HEADER, DESKTOP_BODY_HEADER_VALUE, desktopBodyDeviceId, desktopBodyMaySpeakOn, mayHaveDesktopBody, namesDesktopBody, requestDeviceId,
 } from '../src/desktopBodyIdentity.js';
 import type { BodyPresence } from '../src/shannonBody.js';
 
@@ -48,7 +48,9 @@ describe('the request identity', () => {
     }
     // Without the header nothing changes, and a device that may not derive one never does (her Minecraft body).
     expect(requestDeviceId(MAC, undefined, 'GET', '/v1/body/presence')).toBe(MAC);
-    expect(requestDeviceId(MAC, 'desktop', 'GET', '/v1/body/presence', false)).toBe(MAC);
+    expect(requestDeviceId(MAC, 'desktop', 'GET', '/v1/body/presence', () => false)).toBe(MAC);
+    // Asked only when the header and the route call for a body.
+    expect(requestDeviceId(MAC, undefined, 'GET', '/v1/body/presence', () => { throw new Error('not asked'); })).toBe(MAC);
   });
 });
 
@@ -96,6 +98,21 @@ describe('the Mac app and its desktop body', () => {
     const h = await registered();
     expect(isFullBody(h.store.capabilities(scope, MAC_BODY))).toBe(true);
     expect(isFullBody(h.store.capabilities(scope, MAC))).toBe(false);
+  });
+
+  it('a desktop body registers on the Mac as a full body, nothing else; only a device on the Mac (or unregistered) has one', async () => {
+    const h = harness();
+    const put = (body: Record<string, unknown>) => h.send('PUT', '/v1/body/capabilities', { expressions: [], gestures: [], flags: {}, ...body }, MAC_BODY);
+    expect((await put({ surface: 'windows' })).status).toBe(400);
+    expect((await put({})).status).toBe(400);
+    expect((await put({ surface: 'mac', flags: { touchOnly: true } })).status).toBe(400);
+    expect(h.store.capabilities(scope, MAC_BODY)).toBeNull();
+    expect((await put({ surface: 'mac', flags: { camera: true } })).status).toBe(200);
+    // The phone's figure and a Windows body never derive one (server.ts asks this of the device's own registration).
+    expect(mayHaveDesktopBody(undefined)).toBe(true);
+    expect(mayHaveDesktopBody('mac')).toBe(true);
+    expect(mayHaveDesktopBody('iphone')).toBe(false);
+    expect(mayHaveDesktopBody('windows')).toBe(false);
   });
 
   it('(a) a Mac voice call quiets the Windows desktop, and the Mac body sees it as the owner in a call', async () => {

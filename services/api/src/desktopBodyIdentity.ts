@@ -24,6 +24,13 @@ export const DESKTOP_BODY_SUFFIX = '.desktop-body';
 
 /** The body identity of a paired app's desktop window. */
 export const desktopBodyDeviceId = (deviceId: string): string => `${deviceId}${DESKTOP_BODY_SUFFIX}`;
+export const isDesktopBodyDeviceId = (deviceId: string): boolean => deviceId.endsWith(DESKTOP_BODY_SUFFIX);
+
+/**
+ * Only the Mac app has a desktop body. A device whose own registration names another place (the phone's figure,
+ * `iphone`; a Windows body) is never given one; a device with no registration, or one on the Mac, may be.
+ */
+export const mayHaveDesktopBody = (ownSurface: string | undefined): boolean => ownSurface === undefined || ownSurface === 'mac';
 
 /** Whether the header names the desktop body. Any other value, or none, is the app. */
 export function namesDesktopBody(header: string | readonly string[] | undefined): boolean {
@@ -39,11 +46,13 @@ export function desktopBodyMaySpeakOn(method: string | undefined, path: string):
 }
 
 /**
- * The device a paired request speaks for: its own, or its desktop body's on the routes above. `mayDerive` is false for a
- * device that may never be another body (her Minecraft body, which `serverMinecraftBodyWiring.ts` refuses with the header).
+ * The device a paired request speaks for: its own, or its desktop body's on the routes above. `mayDerive` is asked only
+ * then, and says no for a device that may never be another body (her Minecraft body, which `serverMinecraftBodyWiring.ts`
+ * refuses with the header; a device registered somewhere other than the Mac, `mayHaveDesktopBody`).
  */
 export function requestDeviceId(
-  deviceId: string, header: string | readonly string[] | undefined, method: string | undefined, path: string, mayDerive = true,
+  deviceId: string, header: string | readonly string[] | undefined, method: string | undefined, path: string,
+  mayDerive: () => boolean = () => true,
 ): string {
-  return mayDerive && namesDesktopBody(header) && desktopBodyMaySpeakOn(method, path) ? desktopBodyDeviceId(deviceId) : deviceId;
+  return namesDesktopBody(header) && desktopBodyMaySpeakOn(method, path) && mayDerive() ? desktopBodyDeviceId(deviceId) : deviceId;
 }

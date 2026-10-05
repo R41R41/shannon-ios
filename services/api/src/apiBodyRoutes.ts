@@ -92,6 +92,8 @@ export function dispatchBodyRequest(request: ApiRequest, body: ShannonBody): Api
     const saved = body.saveCapabilities(scopeKey, deviceId, capabilities);
     // Her Minecraft body is identified by SHANNON_MINECRAFT_BODY_JSON alone and never registers (docs/minecraft-body-contract.md).
     if (saved === 'game_body') return { status: 403, body: { error: 'GAME_BODY_CAPABILITIES_DENIED', message: 'The Minecraft body does not register body capabilities.' } };
+    // An app's desktop body (desktopBodyIdentity.ts) is a full body on the Mac and nothing else.
+    if (saved === 'desktop_body_shape') return badRequest('a desktop body registers surface "mac" and no touchOnly');
     return { status: 200, body: saved };
   }
   return { status: 404, body: { error: 'NOT_FOUND' } };

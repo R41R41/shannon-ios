@@ -110,7 +110,7 @@ describe('S1: the token of her Minecraft body reaches its own routes only', () =
     expect(gate).toBeLessThan(server.indexOf('url.pathname === SHANNON_NOW_PATH'));
     expect(server).toContain('if (!minecraft.refusesConsole(request, response, deviceAuth)) await opsRoute(');
     // Review of A17, B1: no desktop-body identity is ever derived for the game token, and it is derived after the gate.
-    expect(server).toContain("url.pathname, !minecraft.isGameDevice(principal))");
+    expect(server).toContain("url.pathname, () => !minecraft.isGameDevice(principal) && mayHaveDesktopBody(");
     expect(server.indexOf('requestDeviceId(principal.deviceId')).toBeGreaterThan(gate);
   });
 });

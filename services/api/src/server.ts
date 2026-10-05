@@ -51,7 +51,7 @@ import { SQLiteStudyShowing } from './autonomyShowing.js';
 import { ShannonAutonomyService } from './autonomyService.js';
 import { SQLiteAutonomyStore } from './autonomyStore.js';
 import { BODY_CAPABILITIES_PATH, isBodyRoute } from './apiBodyRoutes.js';
-import { requestDeviceId } from './desktopBodyIdentity.js';
+import { mayHaveDesktopBody, requestDeviceId } from './desktopBodyIdentity.js';
 import { bodyIngestEnabled } from './bodyContract.js';
 import { SQLiteBodyStore } from './bodyStore.js';
 import { isFullBody } from './bodyTouchOnly.js';
@@ -328,7 +328,7 @@ const server = createServer(async (request, response) => {
     const body = request.method !== 'GET' && !calendarDelete ? await readJson(request, url.pathname === VOICE_CALL_MEMORY_PATH ? 192 * 1024 : bodyLookRequestBytes(url.pathname) ?? calendarRequestBytes(url.pathname) ?? hostStepRequestBytes(url.pathname) ?? 64 * 1024) : undefined;
     const query = new URLSearchParams(url.searchParams);
     if (principal) query.set('scopeKey', principal.scopeKey);
-    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname, !minecraft.isGameDevice(principal)) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
+    const deviceId = principal ? requestDeviceId(principal.deviceId, request.headers['x-shannon-body'], request.method, url.pathname, () => !minecraft.isGameDevice(principal) && mayHaveDesktopBody(bodyStore.surface(principal.scopeKey, principal.deviceId))) : undefined; // Her desktop body in an app speaks for a device of its own (desktopBodyIdentity.ts).
     if (principal && deviceId !== principal.deviceId) response.setHeader('x-shannon-body', 'desktop'); // Says to the app that its body was heard as one.
     if (url.pathname === '/v1/devices') {
       handleDeviceManagement(request, response, body, principal, { deviceAuth, pushStore, revoked: deviceId => incomingCallRoute?.invalidateDevice(deviceId) });

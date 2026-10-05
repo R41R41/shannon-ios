@@ -18,7 +18,7 @@ import type { BodyReactionSpeaker } from './bodyReactionModel.js';
 import { SQLiteBodyReactionStore } from './bodyReactionStore.js';
 import { BodyTouches, type BodyTouchDependencies } from './bodyTouch.js';
 import { BODY_TOUCH_ONLY_FLAG, isFullBody, isTouchOnlyBody } from './bodyTouchOnly.js';
-import { desktopBodyDeviceId } from './desktopBodyIdentity.js';
+import { desktopBodyDeviceId, isDesktopBodyDeviceId } from './desktopBodyIdentity.js';
 import { bodyPlace, bodySurfaceMark, touchPartPhrase, type BodySurface } from './bodyTouchWords.js';
 import { ConversationLooks } from './conversationLooks.js';
 import { OWNER_CALL_LIMITS, OwnerCalls, type OwnerCallDependencies, type OwnerCallElsewhere, type OwnerCallSurface } from './ownerCallElsewhere.js';
@@ -334,8 +334,9 @@ export class ShannonBody {
    * Registers what a body can express. Her Minecraft body (the device of `SHANNON_MINECRAFT_BODY_JSON`) never registers:
    * it is identified by that device id alone, so it can never become a full or a touch-only body (`game_body`).
    */
-  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities | 'game_body' {
+  saveCapabilities(scopeKey: string, deviceId: string, capabilities: BodyCapabilities): StoredBodyCapabilities | 'game_body' | 'desktop_body_shape' {
     if (this.isGameBody(deviceId)) return 'game_body';
+    if (isDesktopBodyDeviceId(deviceId) && (capabilities.surface !== 'mac' || isTouchOnlyBody(capabilities))) return 'desktop_body_shape';
     return this.store.saveCapabilities(scopeKey, deviceId, capabilities, this.dependencies.now());
   }
 
