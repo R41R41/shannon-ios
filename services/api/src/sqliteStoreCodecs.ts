@@ -1,4 +1,4 @@
-import { restoreCompanionState, type CompanionStateSnapshot, type MemoryDisclosure, type ShannonMessageEmotion } from '@shannon/cognition';
+import { isShannonEmotionKind, restoreCompanionState, type CompanionStateSnapshot, type MemoryDisclosure, type ShannonMessageEmotion } from '@shannon/cognition';
 import type { BackgroundJobPayload } from './backgroundJobStore.js';
 import type { ShannonGeneratedArtifact, ShannonTaskDecision } from './chatModel.js';
 import { boundedRecalledMemoryIds, type ShannonSourceAttribution, type StoredConversationMessage } from './conversationStore.js';
@@ -43,7 +43,7 @@ export function parseMessageMetadata(raw: string): MessageMetadata | null {
   const row = value as MessageMetadata;
   return {
     ...(Number.isSafeInteger(row.stateVersion) ? { stateVersion: row.stateVersion } : {}),
-    ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: row.messageEmotion } : {}),
+    ...(validMessageEmotion(row.messageEmotion) ? { messageEmotion: storedMessageEmotion(row.messageEmotion) } : {}),
     ...(validTaskDecision(row.taskDecision) ? { taskDecision: row.taskDecision } : {}),
     ...(validGeneratedArtifacts(row.artifacts) ? { artifacts: row.artifacts } : {}),
     ...(validSourceAttribution(row.sourceAttribution) ? { sourceAttribution: row.sourceAttribution } : {}),
@@ -147,6 +147,13 @@ export function validMessageEmotion(value: unknown): value is ShannonMessageEmot
     && typeof row.arousal === 'number'
     && typeof row.openness === 'number'
     && typeof row.expression === 'string';
+}
+
+/** A stored face as it is returned: a `kind` this server does not know (a row written by a newer one) is left out, the face stays. */
+function storedMessageEmotion(emotion: ShannonMessageEmotion): ShannonMessageEmotion {
+  if (emotion.kind === undefined || isShannonEmotionKind(emotion.kind)) return emotion;
+  const { kind: _unknown, ...face } = emotion;
+  return face;
 }
 
 export function parseJson(raw: string): unknown {

@@ -649,8 +649,9 @@ describe('the kill switch SHANNON_CHAT_FEELING_STRENGTH=off', () => {
     // ccf29d6 (incoming call) after that merge, whose capability text made each system prompt 376 characters longer again; and on
     // the own-tools branch (2026-10-05), whose capability text is 154 characters longer and whose owner-alone requests carry
     // the definitions of her tools (`shannonTools.ts`; re-recorded after the review fixes of the same day changed their wording, and again when the study tools took a title too);
-    // and on the memo-place branch (2026-10-05), whose capability text names Aether for its note command and asks where a memo goes.
-    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('3fe2ff5922de5bc1d30535987163c6e86e6fe54ff98f0a41435fceda06aef437');
+    // and on the memo-place branch (2026-10-05), whose capability text names Aether for its note command and asks where a memo goes;
+    // and on the emotion-kind branch (2026-10-05), whose `messageEmotion` carries `kind` (with every `kind` left out the trace is 3fe2ff59…).
+    expect(createHash('sha256').update(JSON.stringify(off.seen)).digest('hex')).toBe('73f9d624b20fc7d4f82b32e89368c360c5a13daf6993dfb7f25714f1b473f30c');
     for (const request of off.seen.requests) expect(request).not.toHaveProperty('offerReplyFeeling');
     // What 7e227e6 does with these four turns: a cue is 0.52 and a mood, no cue is nothing, and nothing lingers for days.
     expect(off.h.state().lingering).toMatchObject([{ kind: 'sulky', span: 'mood', strength: 0.52 }]);

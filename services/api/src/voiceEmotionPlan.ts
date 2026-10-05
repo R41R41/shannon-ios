@@ -1,5 +1,5 @@
 import {
-  deriveShannonFace, faceForEmotionKind, isShannonEmotionKind, normalizeShannonExpressiveEmotion,
+  deriveShannonFace, faceForEmotionKind, isShannonEmotionKind, messageEmotionKind, normalizeShannonExpressiveEmotion,
   type ReplyEmotion, type ShannonEmotion, type ShannonExpressiveEmotion, type ShannonMessageEmotion,
 } from '@shannon/cognition';
 import type { VoiceTurnDecision } from './voiceDecision.js';
@@ -12,12 +12,16 @@ const BASELINE_MOOD: ShannonEmotion = { valence: 0, arousal: 0.3, openness: 0.35
  * `expression` and `feeling` are the face of the same per-turn emotion the
  * voice acts with, so the call Eye and the voice cannot disagree. `mood` is the
  * owner's continuous mood; a guest call passes none and nothing is stored.
+ * `kind` (the feeling that decided the face, by the rule of the stored face) is
+ * added only for the owner's own call: a 「友人も一緒」 guest call keeps the face alone.
  */
 export function voicePlanResponse(
   decision: VoiceTurnDecision,
   emotion?: ShannonExpressiveEmotion,
   mood: ShannonEmotion = BASELINE_MOOD,
+  options: { guest?: boolean } = {},
 ): Record<string, unknown> {
+  const kind = options.guest ? undefined : messageEmotionKind(emotion);
   const selectedWaitingDirection = waitingDirectionFor(decision);
   const waitingDirection = emotion?.overrideReason === 'grief'
     ? { ...selectedWaitingDirection, scenario: 'support' as const, variant: 'warm' as const }
@@ -37,7 +41,7 @@ export function voicePlanResponse(
     affect: emotion?.primary ?? decision.affect,
     affectIntensity: emotion?.intensity ?? decision.affectIntensity,
     delivery: emotion ? deliveryForEmotion(emotion, decision.delivery) : decision.delivery,
-    ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion) } : {}),
+    ...(emotion ? { emotion: planEmotion(emotion), ...deriveShannonFace(mood, emotion), ...(kind ? { kind } : {}) } : {}),
     selectedSkills: decision.selectedSkills,
     skillScores: decision.skillScores,
     waitingPhrase,
@@ -100,5 +104,5 @@ export function storedVoiceFace(resolved: ReplyEmotion, voiced: { primary: strin
   if (!voiced || !isShannonEmotionKind(voiced.primary) || voiced.primary === 'neutral' || voiced.intensity < 0.3
     || feeling.continued !== true || feeling.primary === voiced.primary || feeling.overrideReason) return resolved.messageEmotion;
   const { valence, arousal, openness } = resolved.messageEmotion;
-  return Object.freeze({ valence, arousal, openness, ...faceForEmotionKind(voiced.primary) });
+  return Object.freeze({ valence, arousal, openness, ...faceForEmotionKind(voiced.primary), kind: voiced.primary });
 }

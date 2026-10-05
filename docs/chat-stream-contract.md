@@ -45,6 +45,12 @@ It is a field on the existing route, not a second route, so authentication, the 
 
 There is no per-sentence emotion. Text chat has one face per reply (`messageEmotion`, computed from the whole reply); it is in `done.response`. The voice route's `voicePlan` is a per-turn acting plan from a different source and is not reused here.
 
+`messageEmotion` is `{ valence, arousal, openness, expression, feeling?, kind? }`. `kind` (added 2026-10-05, owner decision: finer emotion icons) is the reply's own feeling from `SHANNON_EMOTION_KINDS`, present exactly when the face comes from that feeling (not `neutral`, not hidden) and absent when the face comes from the quiet mood. It is optional and additive: the face (`expression`, `feeling`) is always there and means what it did; a client that does not know `kind`, or does not know its value, shows the face. Older apps (Build 138) and the Windows body ignore it. The same object is returned by `GET /v1/conversation` for stored replies.
+
+```json
+{"type":"done","response":{"reply":"ふふん、ボクの勝ちですね。","messageEmotion":{"valence":0.31,"arousal":0.52,"openness":0.44,"expression":"determined","feeling":"proud","kind":"triumphant"},"…":"…"}}
+```
+
 ### Ordering
 
 - Streamed turn: exactly one `start`, then one or more `sentence` lines with `index` rising by one from 0, then exactly one `done` or one `error`. `start` is written together with the first sentence, never alone. Nothing follows `done` or `error`; the client need not wait for the connection to close.
@@ -139,5 +145,6 @@ Unchanged. The whole request must arrive within 30 seconds. The model call has o
 | `completed` | `response` | Terminal. `response` is the body of `POST /v1/voice/gemini/cascade/delegations` for this turn. |
 | `error` | `status`, optional `code` | Terminal. The reply failed. `code: "content_filter"`: the provider withheld it, and a client drops what it was saying. Without a code, sentences already said may be kept as a reply cut off (the iPhone does so from Build 137). A `502` before any line carries the same optional `code` in its JSON body. |
 
+- **The kind of the face** (2026-10-05). A `voicePlan` (in `plan`, `segment` and `completed`) carries `kind` beside `expression` and `feeling`, by the rule of `messageEmotion.kind` above, only in the owner's call: a 「友人も一緒」 guest call (`participantMode: "guest"`) gets the face alone. The voice turn route stores and returns `messageEmotion` with `kind` by the same rule. Optional; ignore it if unknown.
 - **A reply cut at its length limit** (owner decision 2026-10-05). When the model stops at its output ceiling, the turn still ends with `completed`. The reply ends at its last complete sentence: the unfinished sentence is in no `segment` and not in `response.reply`, and `response.truncated` is `true` (absent otherwise). If not one sentence was finished, the words written are kept and sent as one `segment`. The non-streaming `/delegations` response is cut and marked the same way. A client that does not know the field treats the turn as an ordinary completed reply, which it is.
 - **Timeouts.** The model call of a streamed voice reply has no total limit: 20 seconds to its first word (30 seconds when the turn searches the web) and 30 seconds with nothing arriving afterwards. Text chat keeps the single 30-second budget above.

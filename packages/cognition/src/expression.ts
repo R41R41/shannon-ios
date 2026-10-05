@@ -41,6 +41,12 @@ export interface ShannonMessageEmotion extends ShannonFace {
   valence: number;
   arousal: number;
   openness: number;
+  /**
+   * The reply's own feeling, finer than the face (owner decision 2026-10-05: a client shows its icon when it has
+   * one, and the face otherwise). Present exactly when the face comes from that feeling: visible and not neutral.
+   * Absent when the face comes from the quiet mood. Additive: a client that does not know it shows the face.
+   */
+  kind?: ShannonEmotionKind;
 }
 
 const face = (expression: ShannonExpression, feeling?: ShannonFeeling): ShannonFace =>
@@ -114,9 +120,15 @@ export function deriveShannonFace(
   return faceForMood(mood);
 }
 
+/** The kind a message carries with its face: the feeling that decided the face, never the quiet mood's. */
+export function messageEmotionKind(feeling?: ShannonExpressiveEmotion): ShannonEmotionKind | undefined {
+  return feeling && feeling.primary !== 'neutral' && feeling.visibility !== 'hidden' ? feeling.primary : undefined;
+}
+
 export function createShannonMessageEmotion(
   mood: ShannonEmotion,
   feeling?: ShannonExpressiveEmotion,
 ): ShannonMessageEmotion {
-  return Object.freeze({ ...mood, ...deriveShannonFace(mood, feeling) });
+  const kind = messageEmotionKind(feeling);
+  return Object.freeze({ ...mood, ...deriveShannonFace(mood, feeling), ...(kind ? { kind } : {}) });
 }
