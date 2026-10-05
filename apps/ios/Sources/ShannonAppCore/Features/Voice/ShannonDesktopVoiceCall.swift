@@ -37,6 +37,10 @@ public final class ShannonDesktopVoiceCall {
     @ObservationIgnored var windowObservers: [NSObjectProtocol] = []
     /// The window the owner used last: トークに戻る brings this one back.
     @ObservationIgnored weak var lastMainWindow: NSWindow?
+    /// The windows that show the app's root view, by root view (`window(_:hosts:)`).
+    @ObservationIgnored var windowHosts: [UUID: DesktopWindowRef] = [:]
+    /// Opens a new window on Talk, for トークに戻る when no window of the app can be brought back. Set by the app.
+    @ObservationIgnored public var openTalkWindow: (@MainActor () -> Void)?
 
     @ObservationIgnored private(set) weak var conversation: ShannonConversationModel?
     @ObservationIgnored private var windows: Set<UUID> = []
@@ -157,6 +161,7 @@ public final class ShannonDesktopVoiceCall {
     /// A window went away. When the last one is gone the call ends, as nothing on screen could stop it.
     public func windowDisappeared(_ id: UUID) {
         windows.remove(id)
+        windowHosts[id] = nil
         guard windows.isEmpty, isShown else { return }
         let grace = lastWindowGrace
         Task { @MainActor [weak self] in
@@ -190,5 +195,10 @@ public final class ShannonDesktopVoiceCall {
             self.notice = ShannonVoiceBackgroundCopy.endedAfterSilence
         }
     }
+}
+
+/// A window held weakly: closing it is never delayed by the call.
+struct DesktopWindowRef {
+    weak var window: NSWindow?
 }
 #endif

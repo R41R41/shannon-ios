@@ -36,16 +36,32 @@ extension ShannonDesktopVoiceCall {
     }
 
     /// トークに戻る: the window comes back (unhidden, out of the Dock) and shows Talk.
-    /// The window is the one the owner last used (or, if that is gone, any window of the app that can be).
+    /// The window is one that shows the app's root view and is visible or in the Dock: the one the owner used
+    /// last, else another. With none, a new window opens on Talk.
     public func returnToTalk() {
         let app = NSApplication.shared
-        let window = lastMainWindow.flatMap { $0.canBecomeMain ? $0 : nil }
-            ?? app.windows.first { $0.canBecomeMain && ($0.isVisible || $0.isMiniaturized) }
         if app.isHidden { app.unhide(nil) }
-        if let window, window.isMiniaturized { window.deminiaturize(nil) }
         app.activate()
-        window?.makeKeyAndOrderFront(nil)
+        guard let window = Self.windowToReturnTo(hosts: rootWindows, last: lastMainWindow) else {
+            openTalkWindow?()
+            return
+        }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        window.makeKeyAndOrderFront(nil)
         NotificationCenter.default.post(name: .shannonDesktopReturnToTalk, object: window)
+    }
+
+    /// The windows that show the app's root view now.
+    var rootWindows: [NSWindow] { windowHosts.values.compactMap(\.window) }
+
+    /// The window of the root view `id` (nil: it has none yet, or no longer).
+    public func window(_ window: NSWindow?, hosts id: UUID) {
+        if let window { windowHosts[id] = DesktopWindowRef(window: window) } else { windowHosts[id] = nil }
+    }
+
+    static func windowToReturnTo(hosts: [NSWindow], last: NSWindow?) -> NSWindow? {
+        let usable = hosts.filter { $0.isVisible || $0.isMiniaturized }
+        return usable.first { $0 === last } ?? usable.first
     }
 
     /// Re-reads whether a window is on screen.

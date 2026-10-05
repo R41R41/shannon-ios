@@ -291,6 +291,24 @@ final class ShannonDesktopVoiceCallTests: XCTestCase {
         XCTAssertFalse(menuBar.isShown)
     }
 
+    func testReturningToTalkPicksAWindowOfTheAppThatCanComeBack() {
+        let call = ShannonDesktopVoiceCall()
+        XCTAssertNil(ShannonDesktopVoiceCall.windowToReturnTo(hosts: [], last: nil), "none: a new window opens on Talk")
+        let hidden = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        let shown = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        shown.orderFront(nil)
+        defer { shown.orderOut(nil) }
+        let first = UUID(), second = UUID()
+        call.window(hidden, hosts: first)
+        call.window(shown, hosts: second)
+        XCTAssertTrue(ShannonDesktopVoiceCall.windowToReturnTo(hosts: call.rootWindows, last: hidden) === shown,
+                      "a closed or ordered-out window is never picked, even if it was used last")
+        XCTAssertTrue(ShannonDesktopVoiceCall.windowToReturnTo(hosts: call.rootWindows, last: shown) === shown)
+        call.windowAppeared(second)
+        call.windowDisappeared(second)
+        XCTAssertFalse(call.rootWindows.contains { $0 === shown }, "a root view that went away hosts nothing")
+    }
+
     private func settle() async {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))

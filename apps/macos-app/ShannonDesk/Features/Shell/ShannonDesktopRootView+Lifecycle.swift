@@ -84,7 +84,7 @@ extension ShannonDesktopRootView {
                 if let target = note.object as? NSWindow, let mine = hostWindow.window, target !== mine { return }
                 selectDestination(.talk)
             }
-            .background(DesktopWindowReader(box: hostWindow))
+            .background(DesktopWindowReader(box: hostWindow) { window in voiceCall.window(window, hosts: windowID) })
     }
 
     /// Keeps what a window restores current as the selection changes.
@@ -140,14 +140,21 @@ final class DesktopWindowBox {
 
 struct DesktopWindowReader: NSViewRepresentable {
     let box: DesktopWindowBox
+    /// Told the window whenever it is found or changes.
+    var found: (NSWindow?) -> Void = { _ in }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { [weak view] in box.window = view?.window }
+        DispatchQueue.main.async { [weak view] in
+            box.window = view?.window
+            found(view?.window)
+        }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        if box.window !== nsView.window { box.window = nsView.window }
+        guard box.window !== nsView.window else { return }
+        box.window = nsView.window
+        found(nsView.window)
     }
 }

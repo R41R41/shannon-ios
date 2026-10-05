@@ -70,6 +70,7 @@ public struct ShannonDesktopRootView: View {
     @AppStorage(ShannonSpeechProvider.storageKey) var speechProviderRawValue = ShannonSpeechProvider.gemini.rawValue
     @AppStorage(ShannonAppearanceMode.storageKey) var appearanceRawValue = ShannonAppearanceMode.system.rawValue
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.openWindow) var openWindow
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     public init(
@@ -169,6 +170,12 @@ public struct ShannonDesktopRootView: View {
         .onAppear {
             voiceCall.attach(conversation: conversation)
             voiceCall.windowAppeared(windowID)
+            // トークに戻る with no window to bring back opens one on Talk.
+            let openWindow = openWindow
+            voiceCall.openTalkWindow = {
+                UserDefaults.standard.set(DesktopDestination.talk.rawValue, forKey: ShannonDesktopWindowRestoration.lastDestinationKey)
+                openWindow(id: "main")
+            }
         }
         .onDisappear { voiceCall.windowDisappeared(windowID) }
     }
