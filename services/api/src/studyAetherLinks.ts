@@ -45,6 +45,14 @@ export class StudyAetherLinks {
         deleted_at TEXT NOT NULL,
         PRIMARY KEY (scope_key, piece_id, document_id)
       );
+      CREATE TABLE IF NOT EXISTS study_aether_too_long (
+        scope_key TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        piece_id TEXT,
+        aether_version INTEGER NOT NULL,
+        noted_at TEXT NOT NULL,
+        PRIMARY KEY (scope_key, document_id)
+      );
       CREATE TABLE IF NOT EXISTS study_aether_pending (
         scope_key TEXT NOT NULL,
         document_id TEXT NOT NULL,
@@ -141,6 +149,33 @@ export class StudyAetherLinks {
    */
   noteDeleted(scopeKey: string, pieceId: string, documentId: string, at: string): void {
     this.database.prepare(`INSERT OR IGNORE INTO study_aether_deletions (scope_key, piece_id, document_id, deleted_at) VALUES (?, ?, ?, ?)`).run(scopeKey, pieceId, documentId, at);
+  }
+
+  /**
+   * A document of her folder longer than Shannon reads whole, at that Aether version (and the piece it is, if any): kept as a
+   * diagnostic record, read by every process (her own time skips revising such a piece, so no paid call is made for it), and
+   * cleared once the document reads whole again.
+   */
+  noteTooLong(scopeKey: string, documentId: string, aetherVersion: number, pieceId: string | null, at: string): void {
+    this.database.prepare(`
+      INSERT INTO study_aether_too_long (scope_key, document_id, piece_id, aether_version, noted_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (scope_key, document_id) DO UPDATE SET piece_id = COALESCE(excluded.piece_id, piece_id), aether_version = excluded.aether_version, noted_at = excluded.noted_at
+    `).run(scopeKey, documentId, pieceId, aetherVersion, at);
+  }
+
+  /** The Aether version at which this document was too long, or null. */
+  tooLongVersion(scopeKey: string, documentId: string): number | null {
+    const row = this.database.prepare(`SELECT aether_version FROM study_aether_too_long WHERE scope_key = ? AND document_id = ?`).get(scopeKey, documentId) as unknown as { aether_version: number } | undefined;
+    return row ? Number(row.aether_version) : null;
+  }
+
+  /** Whether the document of this piece is too long to read whole (her own time does not revise it). */
+  tooLongPiece(scopeKey: string, pieceId: string): boolean {
+    return Boolean(this.database.prepare(`SELECT 1 FROM study_aether_too_long WHERE scope_key = ? AND piece_id = ?`).get(scopeKey, pieceId));
+  }
+
+  clearTooLong(scopeKey: string, documentId: string): void {
+    this.database.prepare(`DELETE FROM study_aether_too_long WHERE scope_key = ? AND document_id = ?`).run(scopeKey, documentId);
   }
 
   /** Her create that made this document, if its local half has not committed yet. */

@@ -32,7 +32,8 @@ export type AetherAccessErrorCode =
   | 'TOO_LONG';
 
 export class AetherAccessError extends Error {
-  constructor(readonly code: AetherAccessErrorCode) { super(`AETHER_${code}`); }
+  /** `version`: for `TOO_LONG`, the Aether version that was too long. */
+  constructor(readonly code: AetherAccessErrorCode, readonly version?: number) { super(`AETHER_${code}`); }
 }
 
 export function aetherErrorCode(error: unknown): AetherAccessErrorCode {

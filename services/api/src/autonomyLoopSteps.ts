@@ -310,6 +310,8 @@ function prepareRevision(dependencies: StepDependencies, cycle: AutonomyLoopCycl
   const { store } = dependencies;
   const piece = step.pieceId ? store.study.get(cycle.scopeKey, step.pieceId) : null;
   if (!piece || piece.kind !== 'story' || piece.status === 'put_away') return null;
+  // Its Aether document is longer than she reads whole: no paid revision that could not be written anyway.
+  if (store.study.aether.tooLongPiece(cycle.scopeKey, piece.id)) return null;
   // Reader feedback goes to this revising step, and is marked used only when the revision is saved.
   const feedback = store.study.pendingFeedback(cycle.scopeKey, piece.id);
   const call = paidCall(dependencies, cycle.scopeKey, 'prose', revisePrompt({

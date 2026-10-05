@@ -23,6 +23,7 @@ import type { StudyPiece } from '../src/studyStore.js';
 import { TEXT_TURN_DEADLINE, TurnDeadline } from '../src/turnDeadline.js';
 import { FakeAether, TOKEN } from './fakeAetherServer.js';
 import { STORY_BODY, loopHarness, runUntilIdle } from './autonomyLoopHarness.js';
+import { prepareStep } from '../src/autonomyLoopSteps.js';
 
 const scope = 'owner';
 const STORY = `雨の日の図書館で、だれも借りない本が一冊だけ光っていた。${'ページをめくる音が、静かな部屋に少しずつ広がっていく。'.repeat(4)}`;
@@ -369,9 +370,16 @@ describe('her study in Aether', () => {
     expect(counts.skipped?.map(item => item.documentId).sort()).toEqual([document.id, long.id].sort());
     expect(store.study.versions(scope, id)).toHaveLength(2);
     expect(store.study.aether.pieceFor(scope, long.id)).toBeNull();
-    // Her next whole-body write from the shorter text is refused as stale, so the longer document is never overwritten.
-    expect(await call('study.update', { id, body: '短い本文。', changeNote: '直しました。' })).toMatchObject({ ok: false, failure: 'conflict' });
+    // It is noted for every process, her write is refused and she is told why, and the longer document is never overwritten.
+    expect(store.study.aether.tooLongPiece(scope, id)).toBe(true);
+    const refused = await call('study.update', { id, body: '短い本文。', changeNote: '直しました。' });
+    expect(refused).toMatchObject({ ok: false, failure: 'limit', text: expect.stringContaining('長すぎて') });
     expect([...fake.documents.get(document.id)!.body]).toHaveLength(120_000);
+    // Shortened again in Aether: it reads whole, is taken in, and the note is gone.
+    fake.ownerEdit(document.id, { body: `${STORY}短くした。` });
+    await call('study.list', {});
+    expect(store.study.aether.tooLongPiece(scope, id)).toBe(false);
+    expect(store.study.get(scope, id)!.body).toBe(`${STORY}短くした。`);
   });
 
   it('holds a study search with others present to hits placed in her study inside her folder', async () => {
@@ -485,6 +493,22 @@ describe('her own time with Aether', () => {
     await runUntilIdle(slow.loop);
     expect(slow.store.study.list(scope)).toEqual([]);
     expect(slow.entries().find(entry => entry.tool === 'study.draft')).toMatchObject({ outcome: 'failed', reasonCode: expect.stringMatching(/^aether_/u) });
+  });
+});
+
+describe('her own time and a document too long to read whole', () => {
+  it('plans no paid revision of such a story', async () => {
+    const fake = new FakeAether();
+    servers.push(fake);
+    const { store, service, config, loopConfig, model, reader, showing, clock } = loopHarness({ aether: await fake.access() });
+    const piece = store.study.create(scope, { kind: 'story', title: '長い話', body: STORY_BODY }, clock.at) as StudyPiece;
+    store.study.aether.link(scope, piece.id, 1, 'doc_long', 1, clock.at);
+    const cycle = store.loop.startCycle(scope, '2026-10-02', 'activity', [], clock.at);
+    expect(prepareStep({ store, service, config, loop: loopConfig, model, reader, showing }, cycle, { kind: 'revise', pieceId: piece.id, intent: '直す' }, clock.at)).not.toBeNull();
+    store.study.aether.noteTooLong(scope, 'doc_long', 2, piece.id, clock.at);
+    expect(prepareStep({ store, service, config, loop: loopConfig, model, reader, showing }, cycle, { kind: 'revise', pieceId: piece.id, intent: '直す' }, clock.at)).toBeNull();
+    expect(model.calls).toEqual([]);
+    store.loop.endCycle(cycle.id, 'test', clock.at);
   });
 });
 
