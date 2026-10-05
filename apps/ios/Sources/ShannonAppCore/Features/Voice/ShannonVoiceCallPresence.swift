@@ -11,8 +11,10 @@ import Foundation
 ///
 /// An end must not be lost, or the desktop stays quiet until the server's own limit: it is kept on the device
 /// (`UserDefaults`, a few small records) from the moment the call starts, sent under a little background time when
-/// the call ends, and sent again at the next launch or return to the foreground if it did not get through, also for
-/// a call the app was closed in. The events are sent in order, each retried a few times on a network failure.
+/// the call ends, and sent again when a new call begins or the conversation view next becomes active, if it did not
+/// get through. The end of a call the app was killed in has no time of its own: it is stamped with a time before
+/// this run began (never "now", which could be after a live call's start and end that call on the server, as when
+/// her call is answered from the lock screen). The events are sent in order, each retried a few times.
 @MainActor
 public final class ShannonVoiceCallPresence {
     public static let shared = ShannonVoiceCallPresence()
@@ -38,8 +40,13 @@ public final class ShannonVoiceCallPresence {
     private var call: (id: String, audience: ShannonBodyAudience)?
     private var sending: Task<Void, Never>?
     private var inFlight = Set<String>()
+    /// When this process first used the presence: an end without a time that this run did not start belongs to a dead run.
+    let runStartedAt: Date
+    private var startedThisRun = Set<String>()
 
-    init() {}
+    init(runStartedAt: Date = Date()) {
+        self.runStartedAt = runStartedAt
+    }
 
     /// The conversation's own client and scope, set when a call begins. Without a client that reports calls, nothing is sent.
     func configure(scopeKey: String, reporter: (any ShannonBodyCallReporting)?, mayReport: @escaping @MainActor () -> Bool) {
@@ -51,11 +58,19 @@ public final class ShannonVoiceCallPresence {
     /// A voice session was made. A call already running is not started twice.
     func began(audience: ShannonBodyAudience) {
         guard call == nil, reporter != nil, mayReport() else { return }
+        let start = now()
+        // Ends a killed run still owes are stamped before this call's start and sent ahead of it, so none can end it.
+        for var end in pending() where end.occurredAt == nil && !startedThisRun.contains(end.id) && !inFlight.contains(end.id) {
+            end.occurredAt = timestamp(min(runStartedAt, start.addingTimeInterval(-1)))
+            keep(end)
+            sendEnd(end)
+        }
         let id = UUID().uuidString.lowercased()
         call = (id, audience)
+        startedThisRun.insert("call-\(id)-ended")
         // From now on the end is owed, also if the app is closed during the call.
         keep(PendingEnd(id: "call-\(id)-ended", audience: audience, occurredAt: nil, scopeKey: scopeKey))
-        send(ShannonBodyCallEventDTO(id: "call-\(id)-started", type: .callStarted, audience: audience, occurredAt: timestamp()))
+        send(ShannonBodyCallEventDTO(id: "call-\(id)-started", type: .callStarted, audience: audience, occurredAt: timestamp(start)))
     }
 
     /// The call ended, or failed. Only a call that was reported as started is reported as ended.
@@ -75,15 +90,17 @@ public final class ShannonVoiceCallPresence {
         sendEnd(end)
     }
 
-    /// At launch and on return to the foreground: sends every end that did not get through, except the running call's.
+    /// When the conversation view becomes active: sends every end that did not get through, except the running call's,
+    /// with the conversation's current client (a client of before a new pairing is not kept).
     func resendUndelivered(scopeKey: String, reporter: (any ShannonBodyCallReporting)?) {
-        if self.reporter == nil, let reporter { configure(scopeKey: scopeKey, reporter: reporter, mayReport: { true }) }
+        if let reporter { self.reporter = reporter }
+        if self.scopeKey.isEmpty { self.scopeKey = scopeKey }
         guard self.reporter != nil else { return }
         let running = call.map { "call-\($0.id)-ended" }
         for var end in pending() where end.id != running && !inFlight.contains(end.id) {
             if end.occurredAt == nil {
-                // The app was closed during that call: it ended by now.
-                end.occurredAt = timestamp()
+                // A call of this run that ended without telling us ended by now; one of a killed run, before this run began.
+                end.occurredAt = timestamp(startedThisRun.contains(end.id) ? now() : runStartedAt)
                 keep(end)
             }
             sendEnd(end)
@@ -112,10 +129,10 @@ public final class ShannonVoiceCallPresence {
         if ends.isEmpty { defaults.removeObject(forKey: Self.pendingKey) } else if let data = try? JSONEncoder().encode(ends) { defaults.set(data, forKey: Self.pendingKey) }
     }
 
-    private func timestamp() -> String {
+    private func timestamp(_ date: Date? = nil) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: now())
+        return formatter.string(from: date ?? now())
     }
 
     private func sendEnd(_ end: PendingEnd) {
